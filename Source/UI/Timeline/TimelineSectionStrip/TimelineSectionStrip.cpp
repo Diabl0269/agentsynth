@@ -240,7 +240,7 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         const float scale = motion_.growScale(block.id);
         if (scale < 1.0f) {
             const float width = rect.getWidth() * scale;
-            rect = motion_.growsFromRight() ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
+            rect = motion_.growsFromRight(block.id) ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
         }
         if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
             alpha *= kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
@@ -257,15 +257,13 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         }
     }
 
-    if (motion_.hasExitGhost()) {
-        const auto& ghost = motion_.exitGhost();
-        const float scale = motion_.exitScale();
-        const auto rect =
-            ghost.bounds.withSizeKeepingCentre(ghost.bounds.getWidth() * scale, ghost.bounds.getHeight() * scale);
+    for (const auto& exit : motion_.exitFrames()) {
+        const auto& bounds = exit.ghost.bounds;
+        const auto rect = bounds.withSizeKeepingCentre(bounds.getWidth() * exit.scale, bounds.getHeight() * exit.scale);
         Block shell;
-        shell.name = ghost.name;
-        shell.colour = ghost.colour;
-        paintBlock(g, shell, rect, motion_.exitAlpha(), nameFont, countFont);
+        shell.name = exit.ghost.name;
+        shell.colour = exit.ghost.colour;
+        paintBlock(g, shell, rect, exit.alpha, nameFont, countFont);
     }
 
     if (makeDragging_) {

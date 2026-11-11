@@ -189,13 +189,19 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         // while the card shows that pad.
         juce::Slider* ringKnob = si >= 0 && sliders[si]->isVisible() ? sliders[si] : nullptr;
         auto ringBounds = ringKnob != nullptr ? ringKnob->getBounds() : juce::Rectangle<int>();
+        float panelAlpha = 1.0f;
         if (si < 0)
             if (const auto pad = padKnobForTarget(*target); pad.slider != nullptr) {
                 ringKnob = pad.slider;
                 ringBounds = pad.bounds;
+                // The card paints the ring, so it fades with the pad panel by hand: a pad pick cross-fades the panel,
+                // and a ring at full alpha over an empty panel would pop in before its knob.
+                if (const auto* panel = pad.slider->getParentComponent())
+                    panelAlpha = panel->getAlpha();
             }
         if (ringKnob == nullptr)
             continue;
+        const AlphaLayer panelLayer(g, panelAlpha);
 
         const auto* param = mod->parameterForModTarget(*target);
         float baseNorm = param != nullptr ? param->getValue() : 0.5f;

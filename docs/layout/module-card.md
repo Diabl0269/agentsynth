@@ -218,8 +218,8 @@ layout adds it.
 
 A run of consecutive `presentation: tab` sections in a layout is drawn as one **tab strip** with one
 tab's controls under it (`CardBodyTabs.cpp`, laid out by `CardBodyLayout.cpp`;
-[module-card-layout.md](module-card-layout.md#rendering)). The Wavetable's code default is the only one
-with tabs today; a stored layout keeps them.
+[module-card-layout.md](module-card-layout.md#rendering)). The Wavetable, Pluck and Mallet code defaults
+have tabs; a stored layout keeps them.
 
 - **Geometry.** The strip spans the content width, `kRowHeight` tall, `kTabStripGap` below where the
   run's first section stands; the selected tab's section follows after `kTabStripGap`, laid out like any section (a tab draws
@@ -229,9 +229,12 @@ with tabs today; a stored layout keeps them.
 - **Hidden tabs.** The other tabs' widgets are hidden but keep their bounds, bindings, MIDI Learn and
   automation; a hidden knob paints no modulation ring and takes no cable drop (it is off the card for
   `CardBodyPlan::isOnCard`).
-- **Jacks.** A knob on a tab never binds its CV jack, selected or not (`getModTargetKnobAnchor`; the
-  size estimate applies the same rule): the jack stays in the gutter, so the jack layout and the
-  content top are the same on every tab. A cable dropped on the visible knob still connects to its jack.
+- **Jacks and cables.** A knob on a tab never binds its CV jack, selected or not
+  (`knobAnchorForVisibleInputJack`; the size estimate applies the same rule): the jack stays in the gutter, so the
+  jack layout and the content top are the same on every tab. While its tab is shown, the knob has its own landing
+  dot (a Tab stop after the knob, the focus ring, a title and tooltip) and its cables end on it; on another tab they
+  end on the jack, or, for a knob-only target, park apart at the card's left edge by the strip, and a switch glides
+  the ends ([cables](cables.md#knob-landing)).
 - **The strip.** A `CardSegmentedSwitch`, componentID `cardTabStrip`: joined buttons with connected
   edges, the look the Wavetable's own strip had. One Tab stop between the controls above it and the
   tab's controls; Left/Right step through the tabs and stop at the ends, Home/End jump to the first and

@@ -34,6 +34,9 @@ public:
         std::function<juce::Colour(synth::ui::ModuleCategory)> categoryColour;
         /** Strokes `cable` (its ends already moved) with the canvas' wire look at `alpha`. */
         std::function<void(juce::Graphics&, const VisibleCable&, float alpha)> paintCable;
+        /** The module card of `nodeUid` on the canvas now: a re-sync that rebuilt the cards gives the fold the new
+         *  one to hold. Unset: a rebuilt card is not held. */
+        std::function<juce::Component*(uint32_t nodeUid)> moduleFor;
     };
 
     /** One module of the macro: where its card stands on the open canvas and where its box sits on the closed card.
@@ -77,6 +80,13 @@ public:
         double delayMs = 0.0;
         /** Nested macros fold together: every level of a tree of N runs on a clock 1/N as long (Timeline::scale). */
         double timeScale = 1.0;
+        /** The outermost macro whose change started this plan's tree, and what that change left it as: collapsed, or
+         *  gone (`rootRemoved`). A re-sync keeps the plan running while the model still says so. */
+        juce::String rootId;
+        bool rootCollapsed = true;
+        bool rootRemoved = false;
+        /** An unfold whose card was still gliding starts this far off `card` (and its boxes) and eases onto it. */
+        juce::Point<float> startShift;
     };
 
     /** What is captured before a collapse or expand changes the canvas, to be turned into a Plan once it has: for an
@@ -84,6 +94,7 @@ public:
     struct Before {
         bool wasCollapsed = false;
         juce::Rectangle<int> hull, card;
+        juce::Point<int> cardOffset; // how far off `card` the closed card is drawn (the glide still moves it)
         std::vector<Module> modules;
     };
 
@@ -103,7 +114,8 @@ public:
     const Hooks& hooks() const noexcept { return hooks_; }
 
     /** The animation lands at once (arm() returns false) unless the canvas shows (or a test forces it) and animations
-     *  are not Off. Lands any fold already running first. */
+     *  are not Off. A fold already running goes on, on the same clock; one of the same macros (or modules) is dropped
+     *  for the new plan, which starts from where the caller captured them drawn. */
     bool arm(std::vector<Plan> plans);
     bool isLive() const noexcept { return !lives_.empty(); }
     /** Whether arm() would animate right now: the canvas shows (or a test forces it) and animations are not Off. A
@@ -111,6 +123,13 @@ public:
     bool wouldAnimate() const;
     /** Shows every held card, drops all state and repaints. */
     void land() noexcept;
+    /** Lands only the plans `stale` picks (their cards shown, their ghosts gone); the rest keep running. */
+    void landWhere(const std::function<bool(const Plan&)>& stale);
+    /** Holds back again every card a running plan holds, after a re-sync decided visibility from the model. */
+    void reassertHolds();
+    /** Module `nodeUid` as the fold draws it now (its rect this frame and its picture); nothing when no plan flies it.
+     */
+    std::optional<Module> drawnModule(uint32_t nodeUid) const;
     /** Runs `fn` once every held card is shown again: at once when no fold runs, else when the fold lands. */
     void whenSettled(std::function<void()> fn);
 
@@ -162,9 +181,16 @@ private:
         Plan plan;
         synth::ui::macro_fold::Timeline timeline;
         std::vector<char> landed;
+        double startMs = 0.0; // the shared clock when this plan was armed
+        struct Shift {
+            juce::Point<float> from, to;
+            float p0 = 0.0f; // the flight's progress when it was retargeted
+        };
+        std::vector<Shift> shifts; // per module, once a later change moved where it lands
+        Shift outlineShift;
     };
 
-    double localMs(const Live& live) const noexcept { return elapsed_ - live.plan.delayMs; }
+    double localMs(const Live& live) const noexcept { return elapsed_ - live.startMs - live.plan.delayMs; }
     const Live* liveFor(const juce::String& macroId) const noexcept;
     float handover(const Live& live) const noexcept;
     float nestedAlpha(const Live& live, size_t index) const noexcept;
@@ -172,6 +198,8 @@ private:
     juce::Rectangle<float> moduleRect(const Live& live, size_t index) const noexcept;
     std::vector<juce::Rectangle<float>> moduleRects(const Live& live) const;
     juce::Rectangle<float> outline(const Live& live) const noexcept;
+    float outlineProgress(const Live& live) const noexcept;
+    void retargetRunning(const std::vector<Plan>& incoming);
     int indexOf(const Live& live, uint32_t nodeUid) const noexcept;
     std::optional<DrawnCable> expandCable(const Live& live, const VisibleCable& cable) const;
     std::optional<DrawnCable> collapseCable(const Live& live, const VisibleCable& cable) const;
@@ -181,6 +209,9 @@ private:
     void applySideEffects();
     void frameAt(float t);
     void release(bool stopDriver) noexcept;
+    static void showCards(Live& live) noexcept;
+    void hold(juce::Component* c) const;
+    void startDriver();
     bool canAnimate() const;
 
     Hooks hooks_;
@@ -188,6 +219,7 @@ private:
     synth::ui::AnimationDriver driver_;
     double elapsed_ = 0.0;
     double total_ = 0.0;
+    double driverFromMs_ = 0.0; // the clock when the driver last (re)started: its 0..1 spans from here to total_
     bool reduced_ = false;
     bool forceAnimate_ = false;
     std::vector<std::function<void()>> settled_;

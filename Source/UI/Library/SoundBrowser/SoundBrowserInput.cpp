@@ -1,5 +1,6 @@
 // SoundBrowserInput.cpp -- mouse (hover, click, double-click, path parts) and keyboard (selection, folders, favourites,
 // jumping to the search field) for the Sounds view, including the keys the search field hands over.
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
@@ -32,8 +33,10 @@ int SoundBrowserComponent::getRowIndexAt(juce::Point<int> p) const {
 juce::String SoundBrowserComponent::tooltipForRow(int index) const {
     const auto& row = rows_[(size_t)index];
     if (row.kind == RowKind::Sound)
-        return row.entry->path + "\nDrag it onto a Sampler or an audio track, or press Return to load it into the "
-                                 "selected one.";
+        return row.entry->path +
+               "\nDrag it onto a Sampler or an audio track, or press Return to load it into the "
+               "selected one. " +
+               previewKeyText() + " plays or stops it.";
     if (row.kind == RowKind::Hint)
         return kDefaultTooltip;
     if (row.kind == RowKind::GetPack)
@@ -198,7 +201,26 @@ void SoundBrowserComponent::jumpToSearchWith(juce::juce_wchar character) {
     search_.moveCaretToEnd();
 }
 
+bool SoundBrowserComponent::handlePreviewKey(const juce::KeyPress& key) {
+    const auto binding =
+        shortcuts_ != nullptr ? shortcuts_->getBinding("soundPreviewToggle") : SoundPreviewFooter::kDefaultPreviewKey;
+    if (!ShortcutManager::keyPressMatches(binding, key))
+        return false;
+    togglePreview(); // with nothing to play the key is still ours: it is not the song's
+    return true;
+}
+
+// Esc steps back out of the panel wherever the keyboard is: a panel control, the list and the search box all end here.
+bool SoundBrowserComponent::closeFiltersWithEscape(const juce::KeyPress& key) {
+    if (!key.isKeyCode(juce::KeyPress::escapeKey) || key.getModifiers().isAnyModifierKeyDown() || !filtersOpen_)
+        return false;
+    setFiltersOpen(false);
+    return true;
+}
+
 bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
+    if (handlePreviewKey(key))
+        return true;
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     if (key.isKeyCode(juce::KeyPress::downKey) || key.isKeyCode(juce::KeyPress::returnKey)) {
@@ -209,9 +231,11 @@ bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
     }
     if (key.isKeyCode(juce::KeyPress::escapeKey)) {
         if (search_.getText().isNotEmpty())
-            setQuery({});
-        else
-            focusList();
+            setQuery({}); // the first Esc clears; the next closes the panel and returns to the list
+        else {
+            closeFiltersWithEscape(key);
+            focusListStop(false);
+        }
         return true;
     }
     return false;
@@ -221,12 +245,10 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     // A key that bubbled up from a child (the Filters button, the chips, the panel): only Esc closes the panel.
     auto* focused = juce::Component::getCurrentlyFocusedComponent();
     if (focused != nullptr && focused != this && isParentOf(focused)) {
-        if (key.isKeyCode(juce::KeyPress::escapeKey) && !key.getModifiers().isAnyModifierKeyDown() && filtersOpen_) {
-            setFiltersOpen(false);
-            return true;
-        }
-        return false;
+        return handlePreviewKey(key) || closeFiltersWithEscape(key); // the panel's own Esc lands the focus on Filters
     }
+    if (handlePreviewKey(key) || handleFooterTab(key, false))
+        return true;
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0))
         return goUp();
     const auto mods = key.getModifiers();
@@ -283,6 +305,10 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         setQuery({});
         return true;
     }
+    if (closeFiltersWithEscape(key)) {
+        focusListStop(false);
+        return true;
+    }
     const auto ch = key.getTextCharacter();
     if ((ch == 'f' || ch == 'F') && selected_ >= 0 && !favouriteKeyOf(rows_[(size_t)selected_]).isEmpty()) {
         toggleSelectedFavourite();
@@ -292,8 +318,9 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         jumpToSearchWith(ch);
         return true;
     }
-    if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0)
-        return rows_[(size_t)selected_].kind == RowKind::Sound ? togglePreview() : activateSelectedAction();
+    // Plain Space on a sound is the song's play key (the app takes it); the preview is Shift+Space (handlePreviewKey).
+    if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0 && rows_[(size_t)selected_].kind != RowKind::Sound)
+        return activateSelectedAction();
     if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) && selected_ >= 0) {
         if (rows_[(size_t)selected_].kind == RowKind::GetPack && rows_[(size_t)selected_].busy)
             return toggleDownload(selected_);

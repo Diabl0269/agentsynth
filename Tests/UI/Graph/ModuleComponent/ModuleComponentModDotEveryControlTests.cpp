@@ -10,9 +10,11 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModCableExemptions.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
@@ -83,6 +85,9 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
         {
             GraphEditor editor(engine);
             editor.setSize(1600, 1200);
+            // As the app wires it: a control whose right-click menu holds only MIDI Learn (a Drum Kit pad knob) has
+            // one.
+            editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
             auto& graph = engine.getGraph();
             auto moduleNode = graph.addNode(synth::AIStateMapper::createModule(typeName));
             auto* mb = moduleNode != nullptr ? dynamic_cast<ModuleBase*>(moduleNode->getProcessor()) : nullptr;
@@ -93,6 +98,11 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
             auto lfo = graph.addNode(std::make_unique<LFOModule>());
             lfo->properties.set("x", 20);
             lfo->properties.set("y", 100);
+            // A Drum Kit pad knob is a target once a cable claims its slot: claim the picked pad's knobs, so a press on
+            // their dots is walked like any other control's.
+            if (auto* kit = dynamic_cast<DrumKitModule*>(mb))
+                for (const char* field : {"Level", "Tune", "Decay", "Start"})
+                    kit->bindModSlot(juce::String("pad1") + field);
             for (const auto& target : mb->getModulationTargets())
                 engine.addModRouting(lfo->nodeID, 0, moduleNode->nodeID, target.channelIndex);
             editor.updateComponents();
@@ -106,28 +116,51 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
                 continue; // a module drawn without a card (the Attenuverter's knob is the cable's midpoint)
             ASSERT_NE(content, nullptr);
 
-            for (const auto& target : mb->getModulationTargets()) {
-                auto* button = card->getModDotButton(target.channelIndex);
-                const auto anchor = card->getModTargetKnobAnchor(target.channelIndex);
-                if (button == nullptr || button->getKnob() == nullptr || !anchor.has_value() ||
-                    button->getKnob()->getBounds().isEmpty() || !button->getKnob()->isVisible())
-                    continue; // no dot is drawn: a hidden page, a tabbed knob, a control the card does not show
-                DotControl dot;
-                dot.typeName = typeName;
-                dot.targetName = target.name;
-                dot.kind = widgetKind(*button->getKnob());
-                dot.card = card;
-                dot.editor = &editor;
-                dot.channel = target.channelIndex;
-                dot.node = moduleNode->nodeID;
-                dot.anchor = *anchor;
-                const auto where = content->getLocalPoint(card, anchor->roundToInt());
-                dot.hit = content->getComponentAt(where);
-                if (dot.hit != nullptr)
-                    dot.local = dot.hit->getLocalPoint(content, where);
-                dot.geometry = juce::String(" dot ") + anchor->toString() + " control " +
-                               button->getKnob()->getBounds().toString() + " card " + card->getLocalBounds().toString();
-                visit(dot);
+            // Every tab of every tab strip in turn, so a knob on a tab not shown by default is reached too.
+            std::vector<std::pair<int, int>> views{{-1, -1}};
+            if (auto* body = card->getCardBody())
+                for (int g = 0; g < (int)body->getPlan().tabGroups.size(); ++g)
+                    for (int t = 0; t < (int)body->getPlan().tabGroups[(size_t)g].sections.size(); ++t)
+                        views.emplace_back(g, t);
+            std::set<int> visited;
+            for (const auto& [group, tab] : views) {
+                if (group >= 0) {
+                    card->getCardBody()->selectTab(group, tab);
+                    editor.timerCallback();
+                }
+                for (const auto& target : mb->getModulationTargets()) {
+                    if (visited.count(target.channelIndex) > 0)
+                        continue;
+                    auto* button = card->getModDotButton(target.channelIndex);
+                    const auto anchor = card->getModTargetKnobAnchor(target.channelIndex);
+                    if (button == nullptr || button->getKnob() == nullptr || !anchor.has_value() ||
+                        button->getKnob()->getBounds().isEmpty() || !button->getKnob()->isVisible()) {
+                        if (auto* shown = dynamic_cast<juce::Slider*>(
+                                card->getCardBody() != nullptr ? card->getCardBody()->findWidget(target.paramId)
+                                                               : nullptr);
+                            shown != nullptr && shown->isVisible() && card->getCardBody()->isTabbed(*shown))
+                            ADD_FAILURE() << typeName << " / " << target.name << ": a knob on the shown tab has no dot";
+                        continue; // no dot is drawn: a hidden page, a control the card does not show
+                    }
+                    visited.insert(target.channelIndex);
+                    DotControl dot;
+                    dot.typeName = typeName;
+                    dot.targetName = target.name;
+                    dot.kind = widgetKind(*button->getKnob());
+                    dot.card = card;
+                    dot.editor = &editor;
+                    dot.channel = target.channelIndex;
+                    dot.node = moduleNode->nodeID;
+                    dot.anchor = *anchor;
+                    const auto where = content->getLocalPoint(card, anchor->roundToInt());
+                    dot.hit = content->getComponentAt(where);
+                    if (dot.hit != nullptr)
+                        dot.local = dot.hit->getLocalPoint(content, where);
+                    dot.geometry = juce::String(" dot ") + anchor->toString() + " control " +
+                                   button->getKnob()->getBounds().toString() + " card " +
+                                   card->getLocalBounds().toString();
+                    visit(dot);
+                }
             }
         }
         engine.shutdown();
@@ -177,7 +210,9 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
             clicked.size() == 1 && dot.card->getModTargetKnobAnchor(clicked.front()).has_value() &&
             dot.card->getModTargetKnobAnchor(clicked.front())->getDistanceFrom(dot.anchor) < 1.0f;
         if (clicked.size() == 1 && (clicked.front() == dot.channel || sharesTheSpot))
-            ++pressedPerKind[dot.kind];
+            ++pressedPerKind[dot.channel >= DrumKitModule::kPadModSlotBase && dot.typeName == "Drum Kit"
+                                 ? "drum pad knob"
+                                 : dot.kind];
         else
             unclaimed.push_back(dot.typeName + " / " + dot.targetName + " (" + dot.kind + ", pressed " +
                                 juce::String(typeid(*dot.hit).name()) + ")," + dot.geometry + ", clicks " +
@@ -187,6 +222,7 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
     EXPECT_GT(pressedPerKind["knob"], 0) << "the sweep must reach knobs";
     EXPECT_GT(pressedPerKind["horizontal fader"], 0) << "the sweep must reach horizontal faders";
     EXPECT_GT(pressedPerKind["vertical fader"], 0) << "the sweep must reach vertical faders";
+    EXPECT_GE(pressedPerKind["drum pad knob"], 3) << "the sweep must reach the picked drum pad's knobs";
     EXPECT_TRUE(unclaimed.empty()) << "presses on a painted mod dot that no gesture claimed:\n"
                                    << juce::StringArray(unclaimed.data(), (int)unclaimed.size()).joinIntoString("\n");
 }

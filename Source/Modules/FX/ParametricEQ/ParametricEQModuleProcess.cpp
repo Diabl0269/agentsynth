@@ -61,10 +61,14 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
         // Dry pass-through; clear CV channels so mod signals don't leak downstream as audio.
         for (int ch = kNumAudioChannels; ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, buffer.getNumSamples());
+        if (auto* vb = getVisualBuffer(); vb != nullptr && buffer.getNumChannels() > 0)
+            vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
         return;
     }
     if (isMuted()) {
         buffer.clear();
+        if (auto* vb = getVisualBuffer())
+            vb->pushConstant(0.0f, buffer.getNumSamples());
         return;
     }
 

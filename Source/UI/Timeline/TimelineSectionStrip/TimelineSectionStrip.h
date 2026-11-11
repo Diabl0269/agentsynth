@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
@@ -212,6 +213,7 @@ public:
     // Where a block is drawn now, in beats: its start, eased toward where the drag in flight moves it.
     double getDrawnStartBeatForTest(synth::PlacementId id) const;
     juce::Rectangle<float> getDragGhostBoundsForTest() const;
+    float getDragGhostAlphaForTest() const { return dragGhostAlpha(); }
     // The placements a drag in flight carries, in time order (one unless a multi-selection is dragged).
     std::vector<synth::PlacementId> getDragMembersForTest() const;
     // Where the ghost of drag member `index` is drawn now (the grabbed one is getDragGhostBoundsForTest()).
@@ -263,6 +265,7 @@ private:
     void commitBlockDrop(synth::SectionDropMode mode);
     std::optional<Block> blockOf(synth::PlacementId id) const;
     juce::Rectangle<float> memberGhostRect(std::size_t index) const;
+    float dragGhostAlpha() const;
     void clearDropPlan();
     std::vector<sectionstrip::PlacedSpan> placedSpans() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
@@ -315,7 +318,6 @@ private:
 
     // Motion (TimelineSectionStripMotion.cpp)
     void trackChangesForMotion();
-    std::optional<SectionStripMotion::Ghost> ghostOf(synth::PlacementId id) const;
     void paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
                     const juce::Font& nameFont, const juce::Font& countFont, bool chipHot = false) const;
 
@@ -386,6 +388,11 @@ private:
     std::map<std::int64_t, double> knownPlacements_;
     std::int64_t lastReplaceCount_ = 0;
     std::int64_t lastStampRevision_ = 0;
+    std::int64_t lastSectionEditRevision_ = 0;
+    RestoreWatch restoreWatch_; // whether a replaced doc is an undo or redo (moves like an edit) or a load
+    AppUndoManager* watchedUndo_ = nullptr;
+    // Each block's picture at the last change: what a block that is gone at the next one shrinks away from.
+    std::map<std::int64_t, SectionStripMotion::Ghost> lastGhosts_;
     bool motionPrimed_ = false;
     bool growFromRight_ = false; // set by a make-drag that started on the span's right half
     SectionStripMotion motion_{*this, [this] { repaint(); }};

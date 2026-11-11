@@ -131,8 +131,10 @@ public:
     void selectTab(int group, int tab);
     /** Runs after a tab switch has re-laid the card out (the on-card layout editor re-reads its outlines). */
     std::function<void()> onTabSelected;
-    /** True for a widget in a tab section, selected or not: its CV jack stays in the card's gutter. */
+    /** True for a widget in a tab section, selected or not: a CV jack of its own stays in the card's gutter. */
     bool isTabbed(const juce::Component& widget) const;
+    /** The strip of the tab group `widget` sits in, or null when it is in none. */
+    juce::Component* tabStripOf(const juce::Component& widget) const;
 
     // ---- The More row ----------------------------------------------------------------------------
     bool hasMoreRow() const { return !plan_.more.empty(); }

@@ -48,7 +48,7 @@ TEST(TimelineSectionStripMotionTest, ANewBlockGrowsInFromTheSideTheDragStartedAn
     auto& motion = f.strip.getMotionForTest();
     const auto made = f.newest();
     ASSERT_TRUE(motion.isGrowingForTest()) << "the animator is started";
-    EXPECT_FALSE(motion.growsFromRight());
+    EXPECT_FALSE(motion.growsFromRight(made));
     EXPECT_LT(motion.growScale(made), 0.1f) << "frame zero is nearly nothing";
     EXPECT_FLOAT_EQ(motion.growAlpha(made), 1.0f);
     EXPECT_DOUBLE_EQ(motion.getGrowDurationMsForTest(), SectionStripMotion::kGrowMs);
@@ -65,7 +65,7 @@ TEST(TimelineSectionStripMotionTest, ADragFromTheRightEdgeGrowsFromTheRight) {
     MotionScope scope;
     MotionFixture f;
     f.dragAcross(32.0, 28.0); // right to left
-    EXPECT_TRUE(f.strip.getMotionForTest().growsFromRight());
+    EXPECT_TRUE(f.strip.getMotionForTest().growsFromRight(f.newest()));
 }
 
 TEST(TimelineSectionStripMotionTest, UnderReduceMotionAGrowIsAShortFadeAndTheWidthIsFinalAtOnce) {
@@ -103,11 +103,11 @@ TEST(TimelineSectionStripMotionTest, DeletingABlockShrinksItsPictureTowardItsCen
     ASSERT_TRUE(f.strip.applySectionMenuChoice(f.second, TimelineSectionStrip::SectionMenuChoice::DeleteWithBars));
     auto& motion = f.strip.getMotionForTest();
     ASSERT_TRUE(motion.hasExitGhost());
-    EXPECT_FLOAT_EQ(motion.exitScale(), 1.0f);
+    EXPECT_FLOAT_EQ(motion.exitFrames().front().scale, 1.0f);
     motion.stepForTest(0.0);
     motion.stepForTest(90.0);
-    EXPECT_LT(motion.exitScale(), 1.0f);
-    EXPECT_GT(motion.exitScale(), 0.0f);
+    EXPECT_LT(motion.exitFrames().front().scale, 1.0f);
+    EXPECT_GT(motion.exitFrames().front().scale, 0.0f);
     motion.stepForTest(400.0);
     EXPECT_FALSE(motion.hasExitGhost());
     EXPECT_FALSE(motion.isAnimating());
@@ -121,8 +121,8 @@ TEST(TimelineSectionStripMotionTest, UnderReduceMotionADeleteFadesInsteadOfShrin
     ASSERT_TRUE(motion.hasExitGhost());
     motion.stepForTest(0.0);
     motion.stepForTest(40.0);
-    EXPECT_FLOAT_EQ(motion.exitScale(), 1.0f);
-    EXPECT_LT(motion.exitAlpha(), 1.0f);
+    EXPECT_FLOAT_EQ(motion.exitFrames().front().scale, 1.0f);
+    EXPECT_LT(motion.exitFrames().front().alpha, 1.0f);
 }
 
 TEST(TimelineSectionStripMotionTest, UndoingADeleteGrowsTheBlockBackButALoadDoesNot) {

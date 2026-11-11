@@ -38,6 +38,10 @@ class PortConnectionsPanel final
     : public ModDotPage
     , private juce::Timer {
 public:
+    // Wider than the knob's panel: its modulation rows are one line and the fader keeps its width
+    // (ModDotSourceRow::kMinBar) beside the 90 px name, the percent, curve, timeline and remove buttons, with the
+    // scroll bar's 10 px in or out.
+    static constexpr int kWidth = 336;
     static constexpr int kTitleHeight = 30;
     static constexpr int kBottomPad = 6;
     static constexpr int kScrollBar = 10;

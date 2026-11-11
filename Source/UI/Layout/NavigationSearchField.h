@@ -12,11 +12,20 @@ namespace synth::ui {
 class NavigationSearchField : public juce::TextEditor {
 public:
     std::function<bool(const juce::KeyPress&)> onNavigationKey;
+    /** Returns true when it used a Shift+Space the macOS input system was about to type as a space. */
+    std::function<bool()> onShiftSpaceTyped;
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (onNavigationKey && onNavigationKey(key))
             return true;
         return juce::TextEditor::keyPressed(key);
+    }
+
+    void insertTextAtCaret(const juce::String& text) override {
+        if (onShiftSpaceTyped && text == " " && juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown() &&
+            onShiftSpaceTyped())
+            return;
+        juce::TextEditor::insertTextAtCaret(text);
     }
 };
 

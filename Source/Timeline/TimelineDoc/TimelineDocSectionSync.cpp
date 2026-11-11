@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace synth {
 
@@ -223,8 +224,11 @@ void TimelineDoc::eraseLanePoints(double startBeat, double endBeat) {
 }
 
 // Writes `source` (relative content) over the span at targetStart on one track and its lanes. Raw edits only: the
-// caller is inside a mutation.
-void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, double targetStart, double length) {
+// caller is inside a mutation. With `keepFree` (a move: the source clips were just deleted), a clip that cannot keep a
+// held clip's id keeps its own, and its notes theirs, when nothing in the doc has it, so a moved clip is still the same
+// clip to everything keyed by its id (the lane's glide, the selection after an undo); a copy always gets new ids.
+void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, double targetStart, double length,
+                             UsedIds* keepFree) {
     const double targetEnd = targetStart + length;
     std::vector<Clip> empty;
     const auto found = source.clips.find(track.id.value);
@@ -235,17 +239,18 @@ void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, doubl
         if (track.clips[i].startBeat >= targetStart && track.clips[i].startBeat < targetEnd)
             held.push_back(i);
 
-    const auto fresh = [&](Clip copy) {
+    const auto fresh = [&](Clip copy, bool keepIds) {
         copy.startBeat += targetStart;
         for (auto& note : copy.notes)
-            note.id = NoteId{nextNoteId++};
+            if (!keepIds || !keepFree->notes.insert(note.id.value).second)
+                note.id = NoteId{nextNoteId++};
         return copy;
     };
 
     if (held.size() == wanted.size()) {
         for (size_t i = 0; i < held.size(); ++i) {
             const auto keepId = track.clips[held[i]].id;
-            track.clips[held[i]] = fresh(wanted[i]);
+            track.clips[held[i]] = fresh(wanted[i], false);
             track.clips[held[i]].id = keepId;
         }
     } else if (static_cast<int>(track.clips.size() - held.size() + wanted.size()) <= kMaxClipsPerTrack) {
@@ -253,8 +258,10 @@ void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, doubl
         for (auto it = held.rbegin(); it != held.rend(); ++it)
             track.clips.erase(track.clips.begin() + static_cast<std::ptrdiff_t>(*it));
         for (const auto& clip : wanted) {
-            auto copy = fresh(clip);
-            copy.id = ClipId{nextClipId++};
+            const bool keep = keepFree != nullptr && keepFree->clips.insert(clip.id.value).second;
+            auto copy = fresh(clip, keep);
+            if (!keep)
+                copy.id = ClipId{nextClipId++}; // minted ids are past every id in the doc, so never claimed
             track.clips.push_back(std::move(copy));
         }
     }
@@ -278,9 +285,20 @@ void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, doubl
     }
 }
 
-void TimelineDoc::stampContent(const PlacementContent& source, double targetStart, double length) {
+// The used ids are gathered once for the whole stamp, doc-wide, so a kept id is unique across every track.
+void TimelineDoc::stampContent(const PlacementContent& source, double targetStart, double length, bool keepFreeIds) {
+    std::optional<UsedIds> used;
+    if (keepFreeIds) {
+        used.emplace();
+        for (const auto& track : tracks)
+            for (const auto& clip : track.clips) {
+                used->clips.insert(clip.id.value);
+                for (const auto& note : clip.notes)
+                    used->notes.insert(note.id.value);
+            }
+    }
     for (auto& track : tracks)
-        stampTrack(track, source, targetStart, length);
+        stampTrack(track, source, targetStart, length, used ? &*used : nullptr);
 }
 
 // ----------------------------------------------------------------- the sync --

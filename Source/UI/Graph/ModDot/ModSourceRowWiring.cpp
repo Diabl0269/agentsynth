@@ -20,7 +20,7 @@ void applyModAmount(GraphEditor& editor, juce::AudioProcessorGraph::NodeID atten
 // timeline" goes through the mod dot's controller, the one reveal every surface uses.
 void wireModSourceRow(ModDotSourceRow& row, GraphEditor& editor, juce::AudioProcessorGraph::NodeID card,
                       int destChannel, std::function<void()> afterTypedAmount) {
-    wireModCurveChip(row.curveChip(), editor, row.attenuverterId(), row.source().sourceName);
+    wireModCurveChip(row.curveChip(), editor, row.attenuverterId(), row.source().spokenName());
     row.onGestureBegin = [&editor](ModDotSourceRow&) { editor.beginModAmountGesture(); };
     row.onAmountDragged = [&editor](ModDotSourceRow& r, float amount) {
         applyModAmount(editor, r.attenuverterId(), amount);

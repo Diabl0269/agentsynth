@@ -1,10 +1,11 @@
-// TimelineClipLaneArea -- an undo or redo that moves or trims clips: each is drawn gliding from where it was to its
-// restored place (KeyedRectTween, keyed by clip id), the doc geometry final at once. The class is declared in
-// TimelineClipLaneArea.h.
+// TimelineClipLaneArea -- an undo or redo, a section edit or a repeat stamp that moves or trims clips: each is drawn
+// gliding from where it was to its new place (KeyedRectTween, keyed by clip id), the doc geometry final at once. The
+// class is declared in TimelineClipLaneArea.h.
 
 #include "AppUndoManager.h"
 #include "TimelineClipLaneArea.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 
 namespace synth::ui {
 
@@ -43,9 +44,10 @@ double TimelineClipLaneArea::getDrawnNoteXForTest(synth::ClipId id, int index) c
     return 0.0;
 }
 
-// Runs at the end of every refresh from the doc. A restore (see RestoreWatch) glides the clips whose start, length or
-// row differ from the last sync, and works out from the notes' relative starts how their notes ride along; any other
-// change lands at once.
+// Runs at the end of every refresh from the doc. A restore (see RestoreWatch), a finished section edit (move, place,
+// delete with its bars) and a repeat stamp move the clips they changed: glideChangedClips. Any other change lands at
+// once. A refresh between the steps of a section edit keeps the last sync, so the edit's last step is compared with
+// the state before its first and a moved clip glides instead of leaving and coming back.
 void TimelineClipLaneArea::glideRestoredClips() {
     bool restored = false;
     if (undoManager_ != watchedUndo_) {
@@ -54,6 +56,9 @@ void TimelineClipLaneArea::glideRestoredClips() {
     } else if (undoManager_ != nullptr) {
         restored = restoreWatch_.take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
     }
+    const auto change = doc_ != nullptr ? enterExit_->classify(*doc_, restored) : ClipLaneChange{};
+    if (change.intermediate)
+        return;
 
     std::map<std::int64_t, ClipPlace> now;
     std::map<std::int64_t, std::vector<synth::ClipNoteStart>> noteStartsNow;
@@ -68,24 +73,15 @@ void TimelineClipLaneArea::glideRestoredClips() {
     for (const auto& [id, place] : clipPlaces_)
         if (now.find(id) == now.end())
             clipGlide_->erase(id);
+    enterExit_->dropReturned([&](std::int64_t id) { return now.find(id) != now.end(); });
 
-    if (restored) {
-        const auto layout = getRowLayout();
-        const auto rectOf = [&](const ClipPlace& p) {
-            return computeClipRect(viewState_, layout, p.row, p.start, p.length).toFloat();
-        };
-        for (const auto& [id, place] : now) {
-            const auto was = clipPlaces_.find(id);
-            if (was == clipPlaces_.end() || was->second == place)
-                continue;
-            noteGlide_[id] =
-                synth::classifyClipNoteGlide(was->second.length, place.length, clipNoteStarts_[id], noteStartsNow[id]);
-            clipGlide_->retarget(id, clipGlide_->drawnAt(id, rectOf(was->second)), rectOf(place), true);
-        }
-    }
+    if (change.animates)
+        glideChangedClips(change, now, noteStartsNow);
     std::erase_if(noteGlide_, [&](const auto& kv) { return now.find(kv.first) == now.end(); });
     clipPlaces_ = std::move(now);
     clipNoteStarts_ = std::move(noteStartsNow);
+    if (doc_ != nullptr)
+        enterExit_->remember(*doc_);
 }
 
 } // namespace synth::ui

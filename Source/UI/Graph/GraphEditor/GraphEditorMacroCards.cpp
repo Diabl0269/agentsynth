@@ -27,7 +27,14 @@
 // MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
 // MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
 void GraphEditor::syncMacroCards() {
-    cardGlide_.fold().land(); // a macro still folding lands first: this pass decides which cards show
+    // A fold the model has left behind (its macro gone, or toggled back) lands first; any other goes on, so a second
+    // Cmd+Z mid-fold leaves the first fold running (docs/layout/macro-fold-motion.md "Interruption").
+    cardGlide_.fold().landWhere([this](const MacroFoldAnimator::Plan& plan) {
+        const auto* root = macros.find(plan.rootId);
+        if (plan.rootRemoved)
+            return root != nullptr;
+        return root == nullptr || root->collapsed != plan.rootCollapsed || !macros.isVisible(plan.rootId);
+    });
     auto& cards = content.getMacroCards();
 
     // 1. Remove cards for macros that no longer exist.
@@ -85,6 +92,7 @@ void GraphEditor::syncMacroCards() {
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
         comp->setVisible(uuid.isEmpty() || !owners.hiddenByCollapse(uuid));
     }
+    cardGlide_.fold().reassertHolds(); // this pass showed every card the model shows; a running fold holds its own
 }
 
 // Theme colour for a module category, matching how the canvas colours cables/cards by

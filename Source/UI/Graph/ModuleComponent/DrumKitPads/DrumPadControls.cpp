@@ -124,6 +124,9 @@ void DrumPadControls::releaseBindings() {
 // The knobs re-attach to the pad's own parameters, so a drag on them is the parameter's gesture: the card's
 // parameter listener makes it one undo step, like any card knob.
 void DrumPadControls::bind(int index) {
+    // Once per pad change, before the knobs leave the old pad, so its cable ends glide from where they are drawn.
+    if (index != bound_ && bound_ >= 0 && onBeforeRebind)
+        onBeforeRebind();
     bound_ = index;
     if (pending_ < 0)
         target_ = index;

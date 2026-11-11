@@ -41,10 +41,12 @@ public:
     void showPad(int index, bool animate);
     /** The pad the knobs are bound to now (during a cross-fade, the old one until the panel is clear). */
     int boundPad() const noexcept { return bound_; }
+    /** Test seam: lands the running cross-fade step (the fade-out binds the new pad). */
+    void completeFadeForTest() { fade_.completeForTest(); }
     /** Re-reads the bound pad's name, note, kind and whether it plays a recording. */
     void refresh();
 
-    juce::Slider& knob(DrumKitModule::PadParam which) noexcept { return knobs_[(size_t)which]; }
+    CardKnobSlider& knob(DrumKitModule::PadParam which) noexcept { return knobs_[(size_t)which]; }
     juce::Label& nameLabel() noexcept { return name_; }
     juce::Label& noteLabel() noexcept { return note_; }
     SamplerInstrumentPicker& soundButton() noexcept { return sound_; }
@@ -67,6 +69,8 @@ public:
 
     /** After every bind or refresh: `knob` drives `param` (the bound pad's), with its tooltip set. */
     std::function<void(juce::Slider& knob, juce::RangedAudioParameter* param)> onKnobBound;
+    /** Just before the knobs move from one pad to another. */
+    std::function<void()> onBeforeRebind;
 
     /** The kit is already freed: leaks the knobs' attachments rather than detaching them from its parameters. */
     void releaseBindings();

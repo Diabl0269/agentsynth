@@ -144,8 +144,8 @@ public:
     /** The fold of a macro's modules into its closed card and back, drawn by the same overlay. */
     MacroFoldAnimator& fold() noexcept;
     const MacroFoldAnimator& fold() const noexcept;
-    /** Drops the delete/undo ghosts of the cards in `nodeUids` and puts a hidden one back: a macro fold animates
-     *  them instead (an undo of a collapse would otherwise also shrink every member away). */
+    /** Drops the delete/undo ghosts and glides of the cards in `nodeUids` and puts a hidden one back: a macro fold
+     *  animates them instead (an undo of a collapse would otherwise also shrink every member away). */
     void dropGhostsFor(const std::vector<uint32_t>& nodeUids);
     /** Test seam: advances the phased timeline to `elapsedMs` (what the driver does each frame). */
     void applyTimelineAtMs(double elapsedMs);

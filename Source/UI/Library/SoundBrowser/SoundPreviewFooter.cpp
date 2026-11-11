@@ -2,9 +2,13 @@
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ReducedMotion.h"
 
 namespace synth::ui {
+
+const juce::KeyPress SoundPreviewFooter::kDefaultPreviewKey(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier,
+                                                            0);
 
 SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(wave_);
@@ -12,13 +16,22 @@ SoundPreviewFooter::SoundPreviewFooter() {
 
     play_.setComponentID("soundPreviewPlay"); // a stable name for test mode: the title changes with the state
     play_.setTitle("Play preview");
-    play_.setTooltip("Play or stop the preview (Space)");
+    setPreviewKeyText(ShortcutManager::keyPressToDisplayString(kDefaultPreviewKey));
     play_.onClick = [this] {
         if (onTogglePlay)
             onTogglePlay();
         syncPlayState();
     };
     addAndMakeVisible(play_);
+
+    // Child order is the keyboard order: it follows the layout, Play, Match key, Auto-play, volume.
+    matchKey_.setTitle("Match key");
+    matchKey_.setTooltip("Play loops in the song's key");
+    matchKey_.onClick = [this] {
+        if (onMatchKeyChanged)
+            onMatchKeyChanged(matchKey_.getToggleState());
+    };
+    addAndMakeVisible(matchKey_);
 
     autoPlay_.setTitle("Auto-play");
     autoPlay_.setTooltip("Play a sound when you select it");
@@ -28,14 +41,6 @@ SoundPreviewFooter::SoundPreviewFooter() {
             onAutoPlayChanged(autoPlay_.getToggleState());
     };
     addAndMakeVisible(autoPlay_);
-
-    matchKey_.setTitle("Match key");
-    matchKey_.setTooltip("Play loops in the song's key");
-    matchKey_.onClick = [this] {
-        if (onMatchKeyChanged)
-            onMatchKeyChanged(matchKey_.getToggleState());
-    };
-    addAndMakeVisible(matchKey_);
 
     using Player = synth::soundbrowser::SoundPreviewPlayer;
     volume_.setTitle("Preview volume");
@@ -57,6 +62,10 @@ SoundPreviewFooter::SoundPreviewFooter() {
 SoundPreviewFooter::~SoundPreviewFooter() {
     playTimer_.stopTimer();
     shapeAnim_.stop(vblank_);
+}
+
+void SoundPreviewFooter::setPreviewKeyText(const juce::String& keyText) {
+    play_.setTooltip("Play or stop the preview (" + keyText + ")");
 }
 
 void SoundPreviewFooter::setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) {

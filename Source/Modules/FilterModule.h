@@ -143,11 +143,15 @@ public:
         // below so both see a filled Right leg exactly as if the user had cabled it.
         applyLeftRightNormalling(buffer, polyParam->get() ? MAX_VOICES : 1);
 
-        if (isBypassed())
+        if (isBypassed()) {
+            // The dry signal leaves the module untouched, so the views show exactly that.
+            pushVisuals(buffer, buffer.getNumSamples());
             return;
+        }
 
         if (isMuted()) {
             buffer.clear();
+            pushVisuals(buffer, buffer.getNumSamples());
             return;
         }
 
@@ -181,11 +185,7 @@ public:
         // both legs — see applyOutputLevelSplit.
         applyOutputLevelSplit(buffer, polyParam->get() ? MAX_VOICES : 1, kRightBase);
 
-        // Push voice 0 to visual buffer
-        if (auto* vb = getVisualBuffer()) {
-            vb->pushBlock(buffer.getReadPointer(0), numSamples);
-        }
-        spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
+        pushVisuals(buffer, numSamples);
 
         // Clear CV channels to prevent leaking to downstream modules. Bounded at kRightBase: the
         // Audio R block sits above the CV inputs, so running to getNumChannels() would erase the
@@ -752,6 +752,16 @@ private:
                 lastPlayedPitchHz.store(hz, std::memory_order_relaxed);
             voicePitchSeen[(size_t)v] = hz;
         }
+    }
+
+    /** Feeds voice 0 / Left to the scope and the spectrum; every path out of the block (active, bypassed, muted) calls
+       it so a silent filter shows silence rather than its last audible block. */
+    void pushVisuals(const juce::AudioBuffer<float>& buffer, int numSamples) {
+        if (buffer.getNumChannels() == 0 || numSamples == 0)
+            return;
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
+        spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
     }
 
     void applyFilterType(int typeIndex) {

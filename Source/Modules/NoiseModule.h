@@ -42,11 +42,15 @@ public:
         // A pure source has no dry path, so bypass clears too; two branches per the bypass/mute contract.
         if (isBypassed()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 

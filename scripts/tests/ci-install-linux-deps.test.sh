@@ -41,7 +41,7 @@ write_runner_mirrorlist() { # write_runner_mirrorlist <file>
 
 # A fake apt-get that logs its invocations and fails whenever the mirror list still names Azure,
 # standing in for the real failure mode: apt stalling until the timeout kills it (exit 124).
-make_fake_apt() { # make_fake_apt <dir> <mode: mirror-sensitive|always-ok|always-fail>
+make_fake_apt() { # make_fake_apt <dir> <mode: mirror-sensitive|canonical-down|always-ok|always-fail>
     local dir="$1" mode="$2"
     cat >"$dir/apt-get" <<EOF
 #!/usr/bin/env bash
@@ -56,6 +56,12 @@ printf '\n' >>"$dir/calls.log"
 case "$mode" in
   always-ok)   exit 0 ;;
   always-fail) exit 124 ;;
+  canonical-down)
+    # Both Canonical mirrors dead: fail while any ubuntu.com host is listed.
+    if grep -q ubuntu.com "$dir/apt-mirrors.txt" 2>/dev/null; then
+      exit 124
+    fi
+    exit 0 ;;
   mirror-sensitive)
     if grep -q azure.archive.ubuntu.com "$dir/apt-mirrors.txt" 2>/dev/null; then
       exit 124
@@ -104,6 +110,29 @@ check "sick mirror: warns, so the outage is visible in the log" "warning annotat
 check "sick mirror: update, retried update, then install" "apt call sequence" \
     "$(cut -d' ' -f1 "$S/calls.log" | tr '\n' ',')" "update,update,install,"
 
+# --- both Canonical mirrors down: third tier switches to kernel.org ------------------------
+C="$WORK/canonical-down"; mkdir -p "$C"
+write_runner_mirrorlist "$C/apt-mirrors.txt"
+make_fake_apt "$C" canonical-down
+status="$(run_script "$C")"
+check "both mirrors down: recovers via fallback and exits 0" "exit status" "$status" "0"
+check "both mirrors down: every entry is the fallback mirror" "kernel.org entries" \
+    "$(grep -c '^https://mirrors.edge.kernel.org/ubuntu/$' "$C/apt-mirrors.txt")" "2"
+check "both mirrors down: no azure remnant" "azure mentions" \
+    "$(grep -c azure "$C/apt-mirrors.txt")" "0"
+check "both mirrors down: no Canonical host remains" "ubuntu.com mentions" \
+    "$(grep -c ubuntu.com "$C/apt-mirrors.txt")" "0"
+# Switching at the second failed update keeps the dead install tiers (300 s caps each) out of the
+# step's 15 min ceiling: three updates, then one install that already runs on the fallback.
+check "both mirrors down: switches before any install times out" "apt sub-commands" \
+    "$(cut -d' ' -f1 "$C/calls.log" | tr '\n' ',')" "update,update,update,install,"
+
+# --- Azure-only outage stops at archive.ubuntu.com, never reaches kernel.org -----------------
+check "sick mirror: never touches the fallback mirror" "kernel.org entries" \
+    "$(grep -c kernel.org "$S/apt-mirrors.txt")" "0"
+check "healthy mirror: never touches the fallback mirror" "kernel.org entries" \
+    "$(grep -c kernel.org "$H/apt-mirrors.txt")" "0"
+
 # --- mirror list not where we expect: warn about that specifically, still try --------------
 M="$WORK/nomirrorfile"; mkdir -p "$M"
 make_fake_apt "$M" always-fail
@@ -111,7 +140,7 @@ status="$(run_script "$M")"
 check "absent mirror list: does not silently pass" "exit status" \
     "$([ "$status" != "0" ] && echo nonzero || echo zero)" "nonzero"
 check "absent mirror list: says it could not find one" "warning annotations" \
-    "$(grep -c 'No apt mirror list found' "$M/out.log")" "2"
+    "$(grep -c 'No apt mirror list found' "$M/out.log")" "4"
 
 # --- a genuinely broken package set must not be papered over ------------------------------
 F="$WORK/broken"; mkdir -p "$F"

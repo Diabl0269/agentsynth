@@ -95,12 +95,16 @@ public:
             // Dry pass-through on ch0; clear trigger + CV channels so they don't leak downstream.
             for (int ch = 1; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             resetMeters();
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             resetMeters();
             return;
         }

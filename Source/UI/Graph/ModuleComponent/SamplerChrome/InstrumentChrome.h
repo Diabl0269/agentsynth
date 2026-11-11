@@ -11,6 +11,8 @@ class AppUndoManager;
 
 namespace synth::ui {
 
+class CardKnobSlider;
+
 class InstrumentChrome {
 public:
     struct Host {
@@ -27,6 +29,11 @@ public:
         std::function<void(int note, const juce::String& padName, std::function<void()> proceed)> confirmHidePad;
         /** Drum Kit: a picked-pad knob now drives `param`, so its right-click MIDI Learn targets that pad. */
         std::function<void(juce::Component& knob, juce::RangedAudioParameter* param)> rebindLearnable;
+        /** Drum Kit: gives a picked-pad knob the card's ring, mod dot and cable gestures, once; `knob` outlives the
+         * card's use. */
+        std::function<void(CardKnobSlider& knob)> wireKnob;
+        /** Drum Kit: the pad knobs are about to show another pad, which moves where its cables end. */
+        std::function<void()> cableEndsMove;
     };
 
     virtual ~InstrumentChrome() = default;
