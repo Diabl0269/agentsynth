@@ -207,12 +207,13 @@ def _check_mark(args, index, name, seen):
 
 
 def _check_glide(args, index, name, record, seen):
-    """A `glide` step: {name: slug, do: {<command>: {args}}, frames: 4..40}, only in a recorded scenario."""
+    """A `glide` step: {name: slug, do: {<command>: {args}}, then?: {<command>: {args}}, frames: 4..40}, only in a
+    recorded scenario. `then` is a second command sent straight after `do`, while the motion `do` started still runs."""
     where = "%s: step %d (glide)" % (name, index)
     if not record:
         raise ScenarioError("%s needs `record: true`: it films the motion" % where)
-    if not set(args) <= {"name", "do", "frames", "crop", "instant"} or not {"name", "do"} <= set(args):
-        raise ScenarioError("%s takes `name`, `do` and optionally `frames` and `crop`, got %r" % (where, sorted(args)))
+    if not set(args) <= {"name", "do", "then", "frames", "crop", "instant"} or not {"name", "do"} <= set(args):
+        raise ScenarioError("%s takes `name`, `do` and optionally `then`, `frames` and `crop`, got %r" % (where, sorted(args)))
     crop = args.get("crop")
     if crop is not None and (not isinstance(crop, dict) or set(crop) != {"x", "y", "w", "h"}
                              or not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in crop.values())
@@ -221,11 +222,14 @@ def _check_glide(args, index, name, record, seen):
     if not isinstance(args["name"], str) or not MARK_NAME.match(args["name"]) or args["name"] in seen:
         raise ScenarioError("%s: `name` must be a unique slug of lower-case letters, digits and dashes, got %r" % (where, args["name"]))
     seen.add(args["name"])
-    action = args["do"]
-    if not isinstance(action, dict) or len(action) != 1 or not isinstance(next(iter(action.values())) or {}, dict):
-        raise ScenarioError("%s: `do` must be one command with a mapping of arguments, got %r" % (where, action))
-    if next(iter(action)) in RUNNER_STEPS:
-        raise ScenarioError("%s: `do` must be a protocol command (click, key, ...), got %r" % (where, next(iter(action))))
+    for key in ("do", "then"):
+        if key not in args:
+            continue
+        action = args[key]
+        if not isinstance(action, dict) or len(action) != 1 or not isinstance(next(iter(action.values())) or {}, dict):
+            raise ScenarioError("%s: `%s` must be one command with a mapping of arguments, got %r" % (where, key, action))
+        if next(iter(action)) in RUNNER_STEPS:
+            raise ScenarioError("%s: `%s` must be a protocol command (click, key, ...), got %r" % (where, key, next(iter(action))))
     frames = args.get("frames", GLIDE_DEFAULT_FRAMES)
     if isinstance(frames, bool) or not isinstance(frames, int) or not 4 <= frames <= 40:
         raise ScenarioError("%s: `frames` must be an integer from 4 to 40, got %r" % (where, frames))
@@ -563,6 +567,9 @@ class Runner:
         timeout = command_args.pop("timeoutMs", None)
         started = time.time()
         reply = self.app.call(command, timeout_ms=timeout, **command_args) if timeout else self.app.call(command, **command_args)
+        if args.get("then"):
+            (then_command, then_args), = args["then"].items()
+            self.app.call(then_command, **dict(then_args or {}))
         first = len(self.recorder.frames)
         for _ in range(args.get("frames", GLIDE_DEFAULT_FRAMES)):
             self.recorder.frame(self.app, GLIDE_HOLD_SECONDS)

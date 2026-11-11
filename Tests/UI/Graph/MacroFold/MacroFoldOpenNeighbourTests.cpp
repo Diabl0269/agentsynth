@@ -20,6 +20,8 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
+#include <iostream>
+#include <map>
 
 namespace {
 
@@ -211,6 +213,220 @@ protected:
         return together;
     }
 
+    // What draws a module card this frame and where: the fold's ghost, the glide's picture or the real card. More
+    // than one drawer is a doubled card; none, while the card is meant to show, a missing one.
+    struct Drawn {
+        int owners = 0;
+        int owner = 0; // 1 the fold, 2 the glide, 3 the real card
+        juce::Rectangle<float> rect;
+        float alpha = 1.0f;
+        bool onScreen = false;
+        float restWidth = 0.0f;
+    };
+    Drawn drawnModule(juce::Component& card, uint32_t uid) {
+        Drawn d;
+        const auto foldRect = fold().moduleRectFor(uid);
+        const bool real = card.isVisible() && card.getAlpha() > 0.0f;
+        if (!fold().isReduced() && !foldRect.isEmpty() && (fold().isHeld(uid) || !card.isVisible())) {
+            ++d.owners;
+            d.owner = 1;
+            d.rect = foldRect;
+        }
+        // The glide draws a picture only of a card it hid (alpha 0); one whose path stays off screen is drawn real.
+        if (const auto g = glide().currentRectFor(&card); !g.isEmpty() && card.isVisible() && !real) {
+            ++d.owners;
+            d.owner = 2;
+            d.rect = g.toFloat();
+        }
+        if (real) {
+            ++d.owners;
+            d.owner = 3;
+            d.rect = card.getBounds().toFloat();
+            d.alpha = card.getAlpha();
+        }
+        return d;
+    }
+    std::map<juce::String, Drawn> drawnAll() {
+        std::map<juce::String, Drawn> out;
+        const auto& canvasComp = *editor().getModuleComponents().getFirst()->getParentComponent();
+        const auto view = canvasComp.getLocalArea(&editor(), editor().getLocalBounds()).toFloat();
+        for (auto* c : editor().getModuleComponents())
+            if (c != nullptr) {
+                auto d = drawnModule(*c, c->getNodeId().uid);
+                d.onScreen = d.rect.intersects(view);
+                d.restWidth = static_cast<float>(c->getWidth());
+                out[c->getComponentID()] = d;
+            }
+        for (const auto& m : editor().getMacros().getAll())
+            if (auto* card = editor().getMacroController().getMacroCardForTest(m.id)) {
+                // Every drawer of a macro card counts: the real card, the glide's picture of it (drawn whether or not
+                // the card still shows), the border an opening fold grows out of it, or its box in a parent's fold.
+                Drawn d;
+                d.onScreen = true;
+                const auto add = [&d](int owner, juce::Rectangle<float> r) {
+                    ++d.owners;
+                    d.owner = owner;
+                    d.rect = r;
+                };
+                const bool real = card->isVisible() && card->getAlpha() > 0.0f;
+                if (const auto g = glide().currentRectFor(card); !g.isEmpty() && !real)
+                    add(2, g.toFloat());
+                if (const auto o = fold().expandOutlineFor(m.id); o && !o->isEmpty())
+                    add(1, o->toFloat());
+                else if (const auto box = fold().nestedRectFor(m.id); !box.isEmpty())
+                    add(1, box);
+                if (real) {
+                    const auto g = glide().currentRectFor(card);
+                    add(3, (g.isEmpty() ? card->getBounds() : g).toFloat());
+                    d.alpha = card->getAlpha();
+                }
+                out["macro " + m.name + " " + m.id] = d;
+            }
+        return out;
+    }
+
+    // Opens Macro then Macro2 (settled), then presses Cmd+Z twice, the second `gapMs` after the first, or (redo) undoes
+    // both, settles, and presses Cmd+Shift+Z twice. Every 20 ms frame: no card drawn twice or missing; at the second
+    // press nothing moves, fades or vanishes (the running fold and glide go on from where they are drawn); between
+    // frames no card jumps further than `maxStepPx`. Returns the largest step seen.
+    float checkTwoStepsMidMotion(Motion motion, bool redo, double gapMs = 40.0, float maxStepPx = 1.0e9f) {
+        setMotion(Motion::off);
+        apply(Change::unfoldMacro);
+        land();
+        apply(Change::unfoldMacro2);
+        land();
+        auto& undo = mc_->getUndoManager();
+        if (redo) {
+            EXPECT_TRUE(undo.undo());
+            EXPECT_TRUE(undo.undo());
+            land();
+        }
+        const auto step = [&] { EXPECT_TRUE(redo ? undo.redo() : undo.undo()); };
+        setMotion(motion);
+        const juce::String what = juce::String(redo ? "redo twice" : "undo twice") + ", " + motionName(motion);
+
+        double glideArmedAt = 0.0;
+        int glideArms = glide().armCount();
+        double lastFoldMs = 0.0;
+        const auto advance = [&](double ms, double sinceLast) {
+            if (glide().armCount() != glideArms) {
+                glideArms = glide().armCount();
+                glideArmedAt = ms;
+            }
+            if (glide().isLive() && ms - glideArmedAt >= 160.0)
+                glide().finish(); // what the driver's last frame does
+            else if (glide().isLive())
+                editor().advanceCardGlideForTest(static_cast<float>((ms - glideArmedAt) / 160.0));
+            if (fold().isLive()) {
+                lastFoldMs = fold().elapsedMs() + sinceLast;
+                if (lastFoldMs >= fold().totalMs())
+                    fold().land();
+                else
+                    fold().applyAtMs(lastFoldMs);
+            }
+        };
+        const auto checkOwners = [&](const std::map<juce::String, Drawn>& now, const juce::String& where) {
+            for (const auto& [name, d] : now)
+                if (d.owners > 1)
+                    ADD_FAILURE() << name << " is drawn " << d.owners << " times, " << where;
+            if (fold().isReduced() && fold().isLive())
+                return; // Reduce Motion fades cards in from alpha 0
+            for (auto* c : editor().getModuleComponents())
+                if (c != nullptr && c->isVisible() && c->getAlpha() <= 0.0f && glide().currentRectFor(c).isEmpty() &&
+                    fold().moduleRectFor(c->getNodeId().uid).isEmpty())
+                    ADD_FAILURE() << c->getComponentID() << " is hidden with nothing drawing it, " << where;
+        };
+
+        step();
+        advance(0.0, 0.0);
+        bool second = false;
+        if (gapMs <= 0.0) { // the second press before any frame is drawn
+            second = true;
+            step();
+            advance(0.0, 0.0);
+        }
+        auto prev = drawnAll();
+        float largest = 0.0f;
+        std::map<juce::String, float> lastStep;
+        for (double ms = 20.0; ms <= 1500.0; ms += 20.0) {
+            const auto where = what + " at " + juce::String(ms) + " ms";
+            advance(ms, 20.0);
+            auto now = drawnAll();
+            checkOwners(now, where);
+            for (const auto& [name, d] : now) {
+                const auto it = prev.find(name);
+                if (it == prev.end() || d.owners == 0 || it->second.owners == 0 || !(d.onScreen || it->second.onScreen))
+                    continue; // off screen nothing shows, so nothing can pop
+                const auto a = it->second.rect, b = d.rect;
+                const float jump =
+                    std::max({std::abs(a.getX() - b.getX()), std::abs(a.getY() - b.getY()),
+                              std::abs(a.getRight() - b.getRight()), std::abs(a.getBottom() - b.getBottom())});
+                // A handover (a glide's picture to the landed card) may move as far as the tween's last step did.
+                if (d.owner != it->second.owner && jump > lastStep[name] + 3.0f)
+                    ADD_FAILURE() << name << " jumps " << jump << " px as its drawer changes (" << it->second.owner
+                                  << " to " << d.owner << "), " << where;
+                lastStep[name] = jump;
+                largest = std::max(largest, jump);
+                if (jump > maxStepPx)
+                    ADD_FAILURE() << name << " jumps " << jump << " px in one frame, " << where;
+            }
+            prev = std::move(now);
+            if (!second && ms + 0.5 >= gapMs) {
+                second = true;
+                const auto before = drawnAll();
+                step();
+                advance(ms, 0.0);
+                const auto after = drawnAll();
+                checkOwners(after, where + " (second press)");
+                for (const auto& [name, b] : before) {
+                    const auto it = after.find(name);
+                    const auto a = it == after.end() ? Drawn{} : it->second;
+                    // A closing macro's port widget goes at once, after one step as after two (the fold draws no
+                    // ports); any other card must never vanish.
+                    const bool port = name.startsWith("card:Macro In") || name.startsWith("card:Macro Out");
+                    // Under Reduce Motion and Off nothing travels: each step puts the cards in place at once (and
+                    // fades what comes and goes), so only a fade that falls back counts there.
+                    const bool travels = motion == Motion::full;
+                    if (travels && b.owners > 0 && a.owners == 0 && !port)
+                        ADD_FAILURE() << name << " vanishes at the second press, " << where;
+                    else if (a.owners == 0 || !(a.onScreen || b.onScreen))
+                        continue;
+                    else if (travels && b.owners > 0 &&
+                             (b.rect.getPosition().getDistanceFrom(a.rect.getPosition()) > 2.0f ||
+                              std::abs(b.rect.getWidth() - a.rect.getWidth()) > 2.0f))
+                        ADD_FAILURE() << name << " jumps at the second press from " << b.rect.toString() << " (drawer "
+                                      << b.owner << ") to " << a.rect.toString() << " (drawer " << a.owner << "), "
+                                      << where;
+                    else if (b.owners > 0 && std::abs(b.alpha - a.alpha) > 0.05f)
+                        ADD_FAILURE() << name << " fades from " << b.alpha << " to " << a.alpha
+                                      << " at the second press, " << where;
+                }
+                for (const auto& [name, a] : after) {
+                    const auto it = before.find(name);
+                    // An opening macro's module shows first as a small box on its card, growing out of it.
+                    const bool grows = a.owner == 1 && a.rect.getWidth() < a.restWidth * 0.5f;
+                    if (a.owners > 0 && (it == before.end() || it->second.owners == 0) && motion == Motion::full &&
+                        !grows)
+                        ADD_FAILURE() << name << " pops in at the second press (drawer " << a.owner << " at "
+                                      << a.rect.toString() << "), " << where;
+                }
+                prev = after;
+            }
+            if (second && !glide().isLive() && !fold().isLive())
+                break;
+        }
+        EXPECT_TRUE(second);
+        EXPECT_FALSE(fold().isLive()) << what << ": the folds settle";
+        for (auto* c : editor().getModuleComponents())
+            if (c != nullptr && c->isVisible())
+                EXPECT_FLOAT_EQ(c->getAlpha(), 1.0f) << c->getComponentID() << " settles whole, " << what;
+        const auto* m1 = editor().getMacros().find(macro_);
+        const auto* m2 = editor().getMacros().find(macro2_);
+        EXPECT_TRUE(m1 != nullptr && m2 != nullptr && m1->collapsed == !redo && m2->collapsed == !redo) << what;
+        land();
+        return largest;
+    }
+
     std::unique_ptr<MainComponent> mc_;
     juce::File copy_;
     juce::String macro_, macro2_;
@@ -250,4 +466,34 @@ TEST_F(MacroFoldCableSlideOpenNeighbour, EveryKeptCableIsDrawnOnceInEveryFrameOf
         checkEveryFrame(Motion::full, change);
         land();
     }
+}
+
+// Regression test for FRO1664: a second Cmd+Z while the first fold ran landed that fold and restarted the glide.
+// Cmd+Z twice quickly: the first fold used to land at once (its modules vanished and its card popped in) and the second
+// started from where the cards stood at rest, not where they were drawn.
+class MacroFoldSecondStepMidMotion : public Fro830Canvas {};
+
+// The same two steps with a wait between them set the bar: pressed 40 ms apart, no frame moves a card much further
+// than a frame of the slow pair does (a little more is the first fold bending towards where the second moved its card).
+constexpr float kQuickStepAllowance = 1.25f;
+TEST_F(MacroFoldSecondStepMidMotion, UndoTwiceQuicklyFoldsBothMacrosWithoutAPop) {
+    const float slow = checkTwoStepsMidMotion(Motion::full, /*redo=*/false, /*gapMs=*/600.0);
+    const float quick = checkTwoStepsMidMotion(Motion::full, /*redo=*/false, 40.0, slow * kQuickStepAllowance);
+    std::cout << "[ undo twice ] largest step " << quick << " px (" << slow << " with a wait)\n";
+    checkTwoStepsMidMotion(Motion::full, /*redo=*/false, /*gapMs=*/0.0, slow * kQuickStepAllowance);
+}
+
+TEST_F(MacroFoldSecondStepMidMotion, RedoTwiceQuicklyUnfoldsBothMacrosWithoutAPop) {
+    const float slow = checkTwoStepsMidMotion(Motion::full, /*redo=*/true, /*gapMs=*/600.0);
+    const float quick = checkTwoStepsMidMotion(Motion::full, /*redo=*/true, 40.0, slow * kQuickStepAllowance);
+    std::cout << "[ redo twice ] largest step " << quick << " px (" << slow << " with a wait)\n";
+    checkTwoStepsMidMotion(Motion::full, /*redo=*/true, /*gapMs=*/0.0, slow * kQuickStepAllowance);
+}
+
+TEST_F(MacroFoldSecondStepMidMotion, ReduceMotionAndOffTakeTwoQuickStepsWithoutAPop) {
+    for (const auto motion : {Motion::reduced, Motion::off})
+        for (const bool redo : {false, true}) {
+            SCOPED_TRACE(motionName(motion));
+            checkTwoStepsMidMotion(motion, redo);
+        }
 }

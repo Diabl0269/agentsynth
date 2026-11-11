@@ -234,7 +234,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 | `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
-| `glide: {name, do, frames?, crop?}` | sends `do` (one command), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks) |
+| `glide: {name, do, then?, frames?, crop?}` | sends `do` (one command) and, when given, `then` (one more command, sent straight after it while the first motion still runs: a second Cmd+Z mid-fold), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks) |
 
 `stale_pixel_check: true` (or `{ignore: [ids], settle_ms: 1500}`) follows the window from launch and runs
 `checkStalePixels` after every step that can change it (not after `wait`, `expect`, `getState`, `list`, `screenshot`, or

@@ -63,6 +63,13 @@ void CardGlideAnimator::setHooks(Hooks hooks) {
     foldHooks.visibleCables = hooks_.visibleCables;
     foldHooks.categoryColour = hooks_.categoryColour;
     foldHooks.paintCable = hooks_.paintCable;
+    foldHooks.moduleFor = [this](uint32_t nodeUid) -> juce::Component* {
+        if (hooks_.cards)
+            for (const auto& e : hooks_.cards())
+                if (e.nodeUid == nodeUid)
+                    return e.comp;
+        return nullptr;
+    };
     fold_->setHooks(std::move(foldHooks));
 }
 
