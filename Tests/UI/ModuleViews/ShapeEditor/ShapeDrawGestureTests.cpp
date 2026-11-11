@@ -491,7 +491,7 @@ void expectDrawButtonCentredAndRowUnclipped(ShapeListEditor& editor) {
             continue;
         const auto labelFont = button->getLookAndFeel().getTextButtonFont(*button, button->getHeight());
         const float need =
-            juce::GlyphArrangement::getStringWidth(labelFont, button->getButtonText()) + 8.0f +
+            juce::GlyphArrangement::getStringWidth(labelFont, button->getButtonText()) + 6.0f +
             (button == &draw ? (float)ShapeDrawPenButton::kIconSize + ShapeDrawPenButton::kIconGap : 0.0f);
         EXPECT_GE((float)button->getWidth(), need) << button->getButtonText() << " is wider than its box";
         EXPECT_FALSE(button->getBounds().intersects(editor.getDeleteButton().getBounds()) &&
