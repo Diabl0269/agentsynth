@@ -566,6 +566,12 @@ void AppUndoManager::setGraphEditor(GraphEditor* ge) { graphEditor = ge; }
 
 // The serial counts here so it can never drift from what the undo stack actually holds. The step is sized inside
 // perform(), against the graph snapshot cache's counts, so a graph step costs only the nodes its edit changed.
+// A card's row open state rides in the transaction its gesture's edits opened, so one Cmd+Z undoes it with them. Make
+// the action's perform() a no-op when the change is already made.
+bool AppUndoManager::recordUiAction(std::unique_ptr<juce::UndoableAction> action) {
+    return performAction(action.release());
+}
+
 bool AppUndoManager::performAction(juce::UndoableAction* action) {
     ++editSerial_;
     const undo_size::KnownSizes known([this](const void* id) { return graphSnapshots_.knownSize(id); });

@@ -34,6 +34,9 @@ public:
 
     juce::UndoManager& getUndoManager() { return undoManager; }
 
+    /** Appends a UI-only action to the open transaction; its perform() runs now. */
+    bool recordUiAction(std::unique_ptr<juce::UndoableAction> action);
+
     /**
      * @brief Records a graph-structural mutation (add/remove module, connect/disconnect).
      *
