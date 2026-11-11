@@ -32,23 +32,23 @@ steps:
   - expect: {id: "Filter shapes: Filter", exists: true}
   - screenshot: {id: window, name: main-window-answers-with-the-shape-window-open}
   - mouseDown: {id: window, x: 72, y: 273}                     # the "eh" row in the Shapes list
-  - mouseMoveHeld: {id: window, x: 110, y: 273}
-  - mouseMoveHeld: {id: window, x: 200, y: 273}
-  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 200}
-  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 110, y: 215}  # empty space in the window's map
+  - mouseMoveHeld: {id: window, x: 110, y: 273, captured: true}
+  - mouseMoveHeld: {id: window, x: 200, y: 273, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 200, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 110, y: 215, captured: true}  # empty space in the window's map
   - wait: {settleMs: 300}
   - screenshot: {id: "Filter shapes: Filter", name: drag-over-empty-space}
-  - mouseUp: {id: "Filter shapes: Filter", x: 110, y: 215}
+  - mouseUp: {id: "Filter shapes: Filter", x: 110, y: 215, captured: true}
   - wait: {settleMs: 600}
   - screenshot: {id: "Filter shapes: Filter", name: dropped-eh-adds-a-shape}
   - mouseDown: {id: window, x: 72, y: 303}                     # the "ih" row
-  - mouseMoveHeld: {id: window, x: 110, y: 303}
-  - mouseMoveHeld: {id: window, x: 200, y: 303}
-  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 110}
-  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 100, y: 98}   # the "ah" dot
+  - mouseMoveHeld: {id: window, x: 110, y: 303, captured: true}
+  - mouseMoveHeld: {id: window, x: 200, y: 303, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 110, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 100, y: 98, captured: true}   # the "ah" dot
   - wait: {settleMs: 300}
   - screenshot: {id: "Filter shapes: Filter", name: drag-over-the-ah-dot}
-  - mouseUp: {id: "Filter shapes: Filter", x: 100, y: 98}
+  - mouseUp: {id: "Filter shapes: Filter", x: 100, y: 98, captured: true}
   - wait: {settleMs: 600}
   - screenshot: {id: "Filter shapes: Filter", name: dropped-ih-stamps-ah}
   - key: {keys: escape, target: "Filter shapes: Filter"}

@@ -47,7 +47,8 @@ popup_motion::Style motionStyle(juce::Component::SafePointer<juce::Component> an
     opened it (MorphShapesCard::detach), or by deleteOpenModalDialogs() on quit. */
 class ShapeEditorDialog final
     : public juce::DialogWindow
-    , private SoundDragState::Listener {
+    , private SoundDragState::Listener
+    , private juce::ComponentListener {
 public:
     ShapeEditorDialog(juce::DialogWindow::LaunchOptions& options)
         : juce::DialogWindow(
@@ -62,7 +63,10 @@ public:
         SoundDragState::addListener(this);
     }
 
-    ~ShapeEditorDialog() override { SoundDragState::removeListener(this); }
+    ~ShapeEditorDialog() override {
+        stopWatchingWindows();
+        SoundDragState::removeListener(this);
+    }
 
     /** The title bar's button fades the window out first; a close that already faded it (closeHostingWindow calls
         this from its fade's end) hides it at once. */
@@ -90,12 +94,48 @@ private:
 
     // A drag hit-tests the windows in the order they were last brought forward, and a press in the main window to
     // start the drag brings that one forward under this one: raised again (without the keyboard), a drop over this
-    // window lands here.
+    // window lands here. The container also hides its drag image just before it looks for the drop target, and the OS
+    // then activates the main window again; every window brought forward from the drag's start until the release has
+    // finished is put back under this one.
     void soundDragChanged() override {
-        if (SoundDragState::isShapeActive() && isVisible() && !closing_)
+        if (SoundDragState::isShapeActive() && isVisible() && !closing_) {
+            watchOtherWindows();
+            toFront(false);
+        } else if (watching_ && !SoundDragState::isShapeActive()) {
+            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<ShapeEditorDialog>(this)] {
+                if (safe != nullptr)
+                    safe->stopWatchingWindows();
+            });
+        }
+    }
+
+    void componentBroughtToFront(juce::Component& other) override {
+        if (watching_ && &other != this && isVisible() && !closing_)
             toFront(false);
     }
 
+    void watchOtherWindows() {
+        if (watching_)
+            return;
+        watching_ = true;
+        auto& desktop = juce::Desktop::getInstance();
+        for (int i = 0; i < desktop.getNumComponents(); ++i)
+            if (auto* window = desktop.getComponent(i); window != nullptr && window != this) {
+                window->addComponentListener(this);
+                watched_.add(window);
+            }
+    }
+
+    void stopWatchingWindows() {
+        watching_ = false;
+        for (auto& window : watched_)
+            if (window != nullptr)
+                window->removeComponentListener(this);
+        watched_.clear();
+    }
+
+    juce::Array<juce::Component::SafePointer<juce::Component>> watched_;
+    bool watching_ = false;
     bool closing_ = false;
 };
 } // namespace

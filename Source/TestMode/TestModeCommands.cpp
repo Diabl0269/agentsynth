@@ -167,9 +167,11 @@ StepResult sendHeldMouse(const juce::var& args, bool buttonDown, bool arriveFirs
     if (error.isNotEmpty())
         return StepResult::failed(error);
     const auto point = localPointArg(args, *found.component, "x", "y");
-    if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left}, error))
+    // `captured: true`: the held-button steps go to the window the press happened in, as the OS sends them.
+    const bool captured = static_cast<bool>(args.getProperty("captured", false));
+    if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left, captured}, error))
         return StepResult::failed(error);
-    if (!sendMouse({found.component, point, keys, buttonDown, Button::left}, error))
+    if (!sendMouse({found.component, point, keys, buttonDown, Button::left, captured}, error))
         return StepResult::failed(error);
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
