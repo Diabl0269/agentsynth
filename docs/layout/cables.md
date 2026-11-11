@@ -149,12 +149,16 @@ predictable offset from the ring, never a hand-rolled approximation.
 `ModulationTarget::channelIndex`), set for every cable kind so they also serve as the
 [hover-correlation](#hover) key.
 
-**Fallback — the gutter jack, unchanged.** A knob on a hidden tab page (`getModTargetKnobAnchor`
-returns `nullopt` the same way `getModRingSliderIndex` does) is not knob-bound for layout purposes
-either — `ModuleComponent::isInputJackKnobBound` says false, so the jack stays drawn and a cable
-still lands there, rather than painting a landing dot over empty card. A knob-only target (Level's sibling Pan,
-the shared Mix) draws no jack, so while its knob is folded into the More row its cable ends at the left edge of the
-More button (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
+**Fallback when the knob is out of view.** A knob on a tab that is not shown paints no ring and no dot, and its
+cable cannot end on it. A target that also has a gutter jack (most Wavetable knobs) keeps that jack drawn on every tab
+(`knobAnchorForVisibleInputJack` never binds a tabbed knob's jack, so the jack column is the same on every tab), and
+its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
+Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
+left edge, 10 px in, level with the tab strip (an unpicked Drum Kit pad: the top of the pad panel). Several parked
+cables on one card each take their own place, 6 px apart in channel order and kept inside the card
+(`ModuleComponent::parkedCableEnd`, ranked in `GraphEditor::reanchorCablesToKnobTargets`), so they never meet at one
+point. A parked end draws no landing dot. A knob-only target of a folded More row ends at the left edge of the More
+button instead (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
 re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.
@@ -198,6 +202,11 @@ A control that also has a gutter jack keeps its knob until the fade ends, since 
 then, so when a fold begins `CableEndGlide::begin` asks the card where that jack will sit (`ModuleComponent::foldedJackCentre`:
 the drawn column with the jack added back, by the same math as `getPortCenter`) and the end glides to that place, so it
 does not jump when the fade ends. Each frame repaints the canvas and the glide stops repainting when it ends.
+
+A tab switch (`CardBody::selectTab`) and a Drum Kit pad pick move ends the same way through
+`ModuleComponent::glideCableEnds` (`CableEndGlide::beginMove`): the old tab's cables leave their knobs for the parked
+place or the gutter jack while the new tab's cables arrive on their knobs, over the fade-in time with `easeOutCubic`,
+a plain short move under Reduce Motion and at once under Animations Off.
 
 ## Hit-testing
 

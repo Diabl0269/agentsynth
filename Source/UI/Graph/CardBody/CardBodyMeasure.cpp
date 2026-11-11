@@ -28,7 +28,8 @@ using namespace cardbody;
 // The knob a modulation target lands on, by the card's own rule (ModuleComponent::
 // sliderIndexForModTarget): the knob of its bound parameter, else the knob named like the jack. Only a
 // knob on the card counts: placed in a shown section (a swapped-out one keeps its cell), never one in
-// the folded More row, and never one in a tab section (ModuleComponent::getModTargetKnobAnchor).
+// the folded More row, and never one in a tab section: its cable lands on it while its tab shows, but its jack
+// keeps its gutter row on every tab (ModuleComponent::knobAnchorForVisibleInputJack).
 bool targetHasShownKnob(const CardBodyPlan& plan, ModuleBase& module, const ModulationTarget& target) {
     const auto* bound = module.parameterForModTarget(target);
     for (int i = 0; i < (int)plan.items.size(); ++i) {

@@ -500,10 +500,10 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         if (const auto pad = si < 0 ? padKnobForTarget(target) : PadKnob{}; pad.slider != nullptr)
             return modRingPointForNorm(modRingCentreFor(*pad.slider, pad.bounds.toFloat()),
                                        modRingRadiusFor(pad.bounds.toFloat()) + knobLandingRadiusOffset(), 0.0f);
-        // A knob in a tab section never takes its jack's cable: its tab can be switched away, and
-        // a jack that moved between the gutter and the knob on every tab click would move the
-        // card's jack layout with it. Its jack stays in the gutter; a drop on the knob still lands.
-        if (si < 0 || (cardBody_ != nullptr && cardBody_->isTabbed(*sliders[si])))
+        // A knob on a tab lands its cable only while its tab shows (a hidden one answers -1 above); a target with a
+        // gutter jack keeps that jack's row all the same (knobAnchorForVisibleInputJack), so a tab click never moves
+        // the card's jack column.
+        if (si < 0)
             return std::nullopt;
         // A knob-only target in a More row that is fading out already answers for the folded row, so its cable heads
         // for the More button at once (CableEndGlide). A target with a gutter jack keeps its knob until the fade ends,
@@ -524,10 +524,10 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
 
 // True when visible input jack `index` is a ModulationTarget whose knob resolves on this
 // card RIGHT NOW -- recomputed live off getModulationTargets()/mapInputChannel()/
-// sliderIndexForModTarget() every call (poly toggle and Dual I/O change what resolves; a knob in
-// a tab section never binds, getModTargetKnobAnchor), never cached across a layout. A module with no ModulationTarget
-// mapping to `index` (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g. Oscillator's Pitch CV) is
-// never knob-bound, matching the plain gutter behaviour exactly.
+// sliderIndexForModTarget() every call (poly toggle and Dual I/O change what resolves; a tabbed knob
+// with a gutter jack never binds it, knobAnchorForVisibleInputJack), never cached across a layout. A module with no
+// ModulationTarget mapping to `index` (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g.
+// Oscillator's Pitch CV) is never knob-bound, matching the plain gutter behaviour exactly.
 bool ModuleComponent::isInputJackKnobBound(int index) const { return knobAnchorForVisibleInputJack(index).has_value(); }
 
 // Shared by isInputJackKnobBound (the "is it hidden" question) and getPortCenter's redirect
@@ -540,6 +540,8 @@ std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack
     for (const auto& target : mb->getModulationTargets()) {
         if (mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
             continue;
+        if (!target.knobOnly && tabbedKnobFor(target) != nullptr)
+            return std::nullopt; // a tabbed knob's jack keeps its gutter row; the re-anchor pass moves its cable
         return getModTargetKnobAnchor(target.channelIndex);
     }
     return std::nullopt;
@@ -624,24 +626,6 @@ int ModuleComponent::shownRingSliderIndex(int si) const {
     return cardBody_ != nullptr && cardBody_->isSwappedOut(*sliders[si]) ? si : -1;
 }
 
-// A knob-only target draws no jack, so while its knob is folded into the More row a cable has no row to end on: the
-// gutter slot its rank would give it belongs to the next real jack (the Key input, a second Audio row).
-const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) const {
-    auto* mb = dynamic_cast<ModuleBase*>(module);
-    if (mb == nullptr)
-        return nullptr;
-    for (const auto& target : mb->getModulationTargets()) {
-        if (!target.knobOnly || mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
-            continue;
-        const int si = sliderIndexForModTarget(target);
-        if (si >= 0 && sliders[si]->isVisible() && !(cardBody_ != nullptr && cardBody_->isFoldingAway(*sliders[si])))
-            return nullptr;
-        auto* button = findChildWithID("cardMoreRow");
-        return button != nullptr && button->isVisible() ? button : nullptr;
-    }
-    return nullptr;
-}
-
 // The gutter place of input jack `clamped` when the jacks in `drawn` (packed, ascending) are the ones drawn. Shared by
 // getPortCenter and foldedJackCentre, so a jack's place after a fold is the one it takes when the fold has ended.
 juce::Point<int> ModuleComponent::gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const {
@@ -670,26 +654,6 @@ juce::Point<int> ModuleComponent::gutterInputJackCentre(const std::vector<int>& 
         return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
     }
     return {10, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
-}
-
-// A cable landing on a knob whose jack has a gutter row of its own (not knob-only): where that row is once the knob
-// no longer shows, i.e. the drawn column with this jack added back. Null when the cable lands on no such knob.
-std::optional<juce::Point<float>> ModuleComponent::foldedJackCentre(int destChannel) const {
-    auto* mb = dynamic_cast<ModuleBase*>(module);
-    if (mb == nullptr)
-        return std::nullopt;
-    for (const auto& target : mb->getModulationTargets()) {
-        if (target.channelIndex != destChannel)
-            continue;
-        const int visible = mb->getVisibleInputPortCount();
-        const int jack = mb->mapInputChannel(destChannel).visibleJackIndex;
-        if (target.knobOnly || jack < 0 || jack >= visible || !isInputJackKnobBound(jack))
-            return std::nullopt;
-        auto drawn = drawnInputJackIndices();
-        drawn.insert(std::lower_bound(drawn.begin(), drawn.end(), jack), jack);
-        return gutterInputJackCentre(drawn, jack).toFloat();
-    }
-    return std::nullopt;
 }
 
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {

@@ -13,6 +13,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
@@ -106,28 +107,51 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
                 continue; // a module drawn without a card (the Attenuverter's knob is the cable's midpoint)
             ASSERT_NE(content, nullptr);
 
-            for (const auto& target : mb->getModulationTargets()) {
-                auto* button = card->getModDotButton(target.channelIndex);
-                const auto anchor = card->getModTargetKnobAnchor(target.channelIndex);
-                if (button == nullptr || button->getKnob() == nullptr || !anchor.has_value() ||
-                    button->getKnob()->getBounds().isEmpty() || !button->getKnob()->isVisible())
-                    continue; // no dot is drawn: a hidden page, a tabbed knob, a control the card does not show
-                DotControl dot;
-                dot.typeName = typeName;
-                dot.targetName = target.name;
-                dot.kind = widgetKind(*button->getKnob());
-                dot.card = card;
-                dot.editor = &editor;
-                dot.channel = target.channelIndex;
-                dot.node = moduleNode->nodeID;
-                dot.anchor = *anchor;
-                const auto where = content->getLocalPoint(card, anchor->roundToInt());
-                dot.hit = content->getComponentAt(where);
-                if (dot.hit != nullptr)
-                    dot.local = dot.hit->getLocalPoint(content, where);
-                dot.geometry = juce::String(" dot ") + anchor->toString() + " control " +
-                               button->getKnob()->getBounds().toString() + " card " + card->getLocalBounds().toString();
-                visit(dot);
+            // Every tab of every tab strip in turn, so a knob on a tab not shown by default is reached too.
+            std::vector<std::pair<int, int>> views{{-1, -1}};
+            if (auto* body = card->getCardBody())
+                for (int g = 0; g < (int)body->getPlan().tabGroups.size(); ++g)
+                    for (int t = 0; t < (int)body->getPlan().tabGroups[(size_t)g].sections.size(); ++t)
+                        views.emplace_back(g, t);
+            std::set<int> visited;
+            for (const auto& [group, tab] : views) {
+                if (group >= 0) {
+                    card->getCardBody()->selectTab(group, tab);
+                    editor.timerCallback();
+                }
+                for (const auto& target : mb->getModulationTargets()) {
+                    if (visited.count(target.channelIndex) > 0)
+                        continue;
+                    auto* button = card->getModDotButton(target.channelIndex);
+                    const auto anchor = card->getModTargetKnobAnchor(target.channelIndex);
+                    if (button == nullptr || button->getKnob() == nullptr || !anchor.has_value() ||
+                        button->getKnob()->getBounds().isEmpty() || !button->getKnob()->isVisible()) {
+                        if (auto* shown = dynamic_cast<juce::Slider*>(
+                                card->getCardBody() != nullptr ? card->getCardBody()->findWidget(target.paramId)
+                                                               : nullptr);
+                            shown != nullptr && shown->isVisible() && card->getCardBody()->isTabbed(*shown))
+                            ADD_FAILURE() << typeName << " / " << target.name << ": a knob on the shown tab has no dot";
+                        continue; // no dot is drawn: a hidden page, a control the card does not show
+                    }
+                    visited.insert(target.channelIndex);
+                    DotControl dot;
+                    dot.typeName = typeName;
+                    dot.targetName = target.name;
+                    dot.kind = widgetKind(*button->getKnob());
+                    dot.card = card;
+                    dot.editor = &editor;
+                    dot.channel = target.channelIndex;
+                    dot.node = moduleNode->nodeID;
+                    dot.anchor = *anchor;
+                    const auto where = content->getLocalPoint(card, anchor->roundToInt());
+                    dot.hit = content->getComponentAt(where);
+                    if (dot.hit != nullptr)
+                        dot.local = dot.hit->getLocalPoint(content, where);
+                    dot.geometry = juce::String(" dot ") + anchor->toString() + " control " +
+                                   button->getKnob()->getBounds().toString() + " card " +
+                                   card->getLocalBounds().toString();
+                    visit(dot);
+                }
             }
         }
         engine.shutdown();

@@ -47,13 +47,15 @@ int CardBody::getSelectedTab(int group) const {
 }
 
 // A tab switch changes which knobs are on the card, so the cables re-anchor (the graph's content
-// changed) as well as the card re-laying itself out.
+// changed) as well as the card re-laying itself out. The ends glide there (ModuleComponent::glideCableEnds, recorded
+// before the switch): onto the new tab's knobs, and off the old tab's to their jack or to the strip.
 void CardBody::selectTab(int group, int tab) {
     if (group < 0 || group >= (int)plan_.tabGroups.size())
         return;
     auto& tabs = plan_.tabGroups[(size_t)group];
     if (tab < 0 || tab >= (int)tabs.sections.size() || tab == tabs.selected)
         return;
+    card_.glideCableEnds();
     tabs.selected = tab;
     if (auto* strip = dynamic_cast<synth::ui::CardSegmentedSwitch*>(tabs.strip))
         strip->setSelectedIndex(tab, juce::dontSendNotification);
@@ -70,6 +72,14 @@ bool CardBody::isTabbed(const juce::Component& widget) const {
         if (plan_.items[(size_t)i].widget == &widget)
             return plan_.isTabbed(i);
     return false;
+}
+
+juce::Component* CardBody::tabStripOf(const juce::Component& widget) const {
+    for (const auto& item : plan_.items)
+        if (item.widget == &widget && item.section >= 0)
+            if (const int group = plan_.sections[(size_t)item.section].tabGroup; group >= 0)
+                return plan_.tabGroups[(size_t)group].strip;
+    return nullptr;
 }
 
 } // namespace synth

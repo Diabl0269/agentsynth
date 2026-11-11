@@ -2,8 +2,9 @@
 
 // CableEndGlide.h
 //
-// The overlay that lets a modulation cable's end glide, not jump, when a card's More row folds or unfolds: the end
-// moves between the knob it lands on (row open) and the More button (row folded) over the row's fade time. Pure
+// The overlay that lets a modulation cable's end glide, not jump, when a card's More row folds or unfolds (the end
+// moves between the knob it lands on and the More button over the row's fade time), and when a tab or a Drum Kit pad
+// is picked (between the knob and its parked place, see ModuleComponent::parkedCableEnd). Pure
 // paint state: no card bounds ever change. The canvas owns it (graph_editor_paint::CanvasMemo) and
 // GraphEditor::buildVisibleCables() runs applyTo() after the knob re-anchor, like the other cable overlays.
 // docs/layout/cables.md#the-end-glides-when-the-more-row-toggles.
@@ -29,6 +30,9 @@ public:
     /** Call just before `card`'s More row changes state (`unfolding`: the row is about to open). Records where each
      *  cable landing on the card is drawn now and starts the glide; lands at once when nothing animates. */
     void begin(ModuleComponent& card, bool unfolding);
+    /** Call just before a pick moves `card`'s cable ends at once (a tab, a Drum Kit pad): each end glides from where it
+     *  is drawn now to where it lands after the pick, over the fade-in time. */
+    void beginMove(ModuleComponent& card) { begin(card, /*unfolding*/ true); }
 
     /** Moves the end of every gliding cable between its recorded point and its live anchor. */
     void applyTo(std::vector<VisibleCable>& cables) const;
