@@ -357,7 +357,7 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
 
 // The model reads a Drum Kit through its group ids, so the 128 per-pad values stay out of its context.
 juce::String AIIntegrationService::getPatchContext() {
-    juce::var json = AIStateMapper::graphToJSON(audioGraph);
+    juce::var json = AIStateMapper::graphToJSON(audioGraph, /*forModel=*/true);
     if (auto* nodes = json.getProperty("nodes", {}).getArray())
         for (auto& node : *nodes)
             if (node.getProperty("type", {}).toString() == "Drum Kit")

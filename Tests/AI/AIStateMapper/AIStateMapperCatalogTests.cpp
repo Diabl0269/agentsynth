@@ -114,3 +114,32 @@ TEST(AIStateMapperCatalogTest, DescribesInstrumentTracksAndTheirEnvelope) {
 TEST(AIStateMapperCatalogTest, OutputIsDeterministic) {
     EXPECT_EQ(synth::AIStateMapper::getModuleCatalogJson(), synth::AIStateMapper::getModuleCatalogJson());
 }
+
+// Regression test for FRO1696: the catalog names every one of the EQ's 24 bands, each with its type and cut slope.
+TEST(AIStateMapperCatalogTest, ParametricEqListsTwentyFourBandsWithTypesAndSlopes) {
+    const auto eq = parseCatalog().getProperty("modules", {}).getProperty("Parametric EQ", {});
+    ASSERT_TRUE(eq.isObject());
+    for (int band = 1; band <= 24; ++band) {
+        const juce::String prefix = "band" + juce::String(band);
+        for (const char* field : {"On", "Freq", "Gain", "Q", "Type", "Slope"})
+            EXPECT_TRUE(findParam(eq, prefix + field).isObject()) << prefix << field;
+        const auto type = findParam(eq, prefix + "Type");
+        const auto slope = findParam(eq, prefix + "Slope");
+        ASSERT_NE(type.getProperty("choices", {}).getArray(), nullptr) << prefix;
+        EXPECT_EQ(type.getProperty("kind", {}).toString(), "choice");
+        EXPECT_EQ(slope.getProperty("kind", {}).toString(), "choice");
+        const auto* types = type.getProperty("choices", {}).getArray();
+        EXPECT_EQ(types->size(), 8);
+        for (const char* name :
+             {"Low Shelf", "Bell", "High Shelf", "Low Cut", "High Cut", "Notch", "Band Pass", "Tilt"})
+            EXPECT_TRUE(types->contains(juce::var(name))) << prefix << " " << name;
+        const auto* slopes = slope.getProperty("choices", {}).getArray();
+        ASSERT_NE(slopes, nullptr);
+        EXPECT_EQ(slopes->size(), 9);
+        EXPECT_EQ(slopes->getFirst().toString(), "6 dB/oct");
+        EXPECT_EQ(slopes->getLast().toString(), "96 dB/oct");
+    }
+    EXPECT_FALSE(findParam(eq, "band25On").isObject());
+    EXPECT_EQ(findParam(eq, "band1Type").getProperty("default", {}).toString(), "Low Shelf");
+    EXPECT_EQ(findParam(eq, "band5Type").getProperty("default", {}).toString(), "Bell");
+}

@@ -128,10 +128,10 @@ public:
      * unchanged graph emit the same identity. That uuid — not the integer "id", which merge-mode
      * apply can renumber — is what long-lived references (automation lanes, track bindings) key on.
      */
-    static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
+    static juce::var graphToJSON(juce::AudioProcessorGraph& graph, bool forModel = false);
     /** One node's entry in graphToJSON's "nodes" (assigning its uuid the same way); void for a node with no processor.
      */
-    static juce::var nodeToJSON(juce::AudioProcessorGraph::Node& node);
+    static juce::var nodeToJSON(juce::AudioProcessorGraph::Node& node, bool forModel = false);
     /** graphToJSON's "connections" array from one index of the graph's cables; only those `include` accepts, if set. */
     static juce::var
     connectionsToJSON(const ConnectionIndex& cables,

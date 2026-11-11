@@ -434,6 +434,13 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
                     return {false, PatchValidationError::InvalidParameterValue,
                             "Non-finite value for parameter \"" + p->paramID + "\"."};
                 }
+                // An index the list does not have would be clamped to its first or last entry: say so instead.
+                const double index = static_cast<double>(jsonValue);
+                if (index < -0.5 || index > choice->choices.size() - 0.5) {
+                    return {false, PatchValidationError::InvalidChoiceValue,
+                            "Choice index " + juce::String(index) + " is out of range for parameter \"" + p->paramID +
+                                "\" (0 to " + juce::String(choice->choices.size() - 1) + ")."};
+                }
             } else {
                 return {false, PatchValidationError::InvalidParameterValue,
                         "Invalid value for choice parameter \"" + p->paramID + "\"."};
