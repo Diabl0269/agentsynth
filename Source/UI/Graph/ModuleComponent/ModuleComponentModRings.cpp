@@ -9,6 +9,7 @@
 #include "UI/Graph/CardOutline.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
@@ -189,22 +190,33 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         // while the card shows that pad.
         juce::Slider* ringKnob = si >= 0 && sliders[si]->isVisible() ? sliders[si] : nullptr;
         auto ringBounds = ringKnob != nullptr ? ringKnob->getBounds() : juce::Rectangle<int>();
-        float panelAlpha = 1.0f;
-        if (si < 0)
+        // A pad cable's ring follows what its knob draws: the knob's own fade (Reduce Motion), the pick's cross-fade
+        // between the old pad's ring and the new one, and the value the knob is gliding through.
+        float padAlpha = 1.0f;
+        bool padShown = false;
+        if (si < 0) {
             if (const auto pad = padKnobForTarget(*target); pad.slider != nullptr) {
                 ringKnob = pad.slider;
                 ringBounds = pad.bounds;
-                // The card paints the ring, so it fades with the pad panel by hand: a pad pick cross-fades the panel,
-                // and a ring at full alpha over an empty panel would pop in before its knob.
-                if (const auto* panel = pad.slider->getParentComponent())
-                    panelAlpha = panel->getAlpha();
-            }
+                padShown = true;
+                padAlpha =
+                    pad.slider->getAlpha() * (instrumentChrome_ != nullptr ? instrumentChrome_->padRingAlpha() : 1.0f);
+            } else if (instrumentChrome_ != nullptr)
+                if (const auto leaving = instrumentChrome_->leavingPadRing(target->paramId);
+                    leaving && leaving->knob != nullptr) {
+                    ringKnob = leaving->knob;
+                    ringBounds = getLocalArea(ringKnob, ringKnob->getLocalBounds());
+                    padAlpha = leaving->alpha;
+                }
+        }
         if (ringKnob == nullptr)
             continue;
-        const AlphaLayer panelLayer(g, panelAlpha);
+        const AlphaLayer panelLayer(g, padAlpha);
 
         const auto* param = mod->parameterForModTarget(*target);
         float baseNorm = param != nullptr ? param->getValue() : 0.5f;
+        if (padShown)
+            baseNorm = (float)ringKnob->valueToProportionOfLength(ringKnob->getValue());
         // A plugin parameter's own value moves with the modulation; the ring starts from its resting value.
         if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(mod))
             baseNorm = hosted->modSlotBase(target->paramId).value_or(baseNorm);

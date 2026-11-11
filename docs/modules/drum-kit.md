@@ -100,8 +100,16 @@ The group tabs and the Recorded switches are gone from the card (layout revision
     the same for every pad.
   - Decay dims while the pad plays a recording or an instrument.
   - The knobs re-bind to the pad's own parameters, so a drag is one undo step like any card knob.
-  - Switching pads cross-fades the panel: out over 80 ms, in over 160 ms. Under Reduce Motion it is an 80 ms fade in;
-    with Animations Off it is instant.
+  - Switching pads never fades the panel. The name, note and Sound row change at once, and each of the four knobs
+    glides its drawn value (the arc and the value box) from the old pad's value to the new pad's over 160 ms
+    `easeOutCubic`; the parameter itself is final at once. A second pick or an undo mid-glide goes on from the value
+    drawn, and a drag or key press on a knob takes it where it is. Level, Tune and Decay slide sideways when the new
+    pad's kind changes the column widths (a file pad has a fourth column); Start, Plays pitch and Open fade in and out
+    in place (160 ms in, 110 ms out). The picked pad's mod ring fades in as the old pad's fades out and follows the
+    glide. Under Reduce Motion the values land at once and the knobs fade in over 80 ms from a floor of 20%; with
+    Animations Off, or off screen, everything is instant. Undo and redo of a knob change glide the same way
+    (`UndoGlideSurfaces`: "Drum Kit pad knob"); automation and MIDI controllers move the knob frame for frame. Code:
+    `DrumPadControlsGlide.cpp`, tests `DrumKitPadGlideTests.cpp`.
 - **Shown.** Each pad can be hidden: see [Hiding a pad](#hiding-a-pad).
 - **Undo.** A count change is one undo step, and the card resizes to match. So is every Sound choice, a reset, a
   pitch change and a drop.
@@ -219,10 +227,13 @@ right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLear
   over 160 ms; Reduce Motion is an 80 ms fade and Animations Off is instant. The card height follows the rows.
 - A hidden pad stays picked if it was, so the switch can bring it back. Arrow keys, Home and End skip hidden pads.
   A pad's name for a screen reader counts the shown pads ("Cowbell pad, kit sound, 7 of 7").
-- The caption line reads "N hidden" followed by the **Show all** chip: the shared toggle pill (the lane chips' and
-  the card footer's look), 20 px tall, Tab-reachable with the pill's focus ring, Return presses it (Space stays the
-  transport's), named "Show all hidden pads" with a tooltip that says what a press does now. It fades in and out with
-  the count; a pick hint or a drop hint takes the line for its time.
+- The caption line under the grid reads "N hidden" (or "N shown again"); the **Show all** chip sits on the Pads row,
+  between the "Pads" title and the count stepper, at a fixed place (the same x whichever state it is in, so a press
+  never moves it). It is the shared toggle pill (the lane chips' and the card footer's look), 20 px tall, Tab-reachable
+  with the pill's focus ring (Tab goes label, chip, stepper), Return presses it (Space stays the transport's), named
+  "Show all hidden pads" with a tooltip that says what a press does now. It fades in and out with the count; a pick
+  hint or a drop hint takes the caption line for its time and leaves the chip alone. The Pads row starts a
+  `cardbody::kBlockGap` under the Level box, so the stepper never touches its value box.
 - **Show all is a toggle.** The first press switches on every pad, also those beyond the count, and remembers exactly
   the pads it brought back (`Pad::revealed`). The chip is then lit and the caption reads "N shown again"; the second
   press hides exactly those pads again and forgets them. The label stays "Show all" in both states, so the chip never

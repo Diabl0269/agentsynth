@@ -68,8 +68,10 @@ public:
     CardStepper& stepper() noexcept { return stepper_; }
     DrumPadGrid& grid() noexcept { return grid_; }
     DrumPadControls& controls() noexcept { return controls_; }
+    const DrumPadControls& controls() const noexcept { return controls_; }
     juce::Label& caption() noexcept { return caption_; }
-    /** The caption's "Show all" chip, visible while any pad is hidden or Show all can hide them again (then lit). */
+    /** The "Show all" chip on the Pads row, visible while any pad is hidden or Show all can hide them again (then lit).
+     */
     juce::ToggleButton& showAllChip() noexcept { return showAll_; }
     /** The last thing said to a screen reader ("Snare picked"). */
     const juce::String& lastAnnouncement() const noexcept { return lastAnnouncement_; }
@@ -92,6 +94,7 @@ private:
     void chooseFileFor(int index);
     juce::String dropHint() const;
     void placeCaption();
+    void placePadsRow();
     void relayoutIfGridResized();
 
     InstrumentChrome::Host host_;
@@ -102,6 +105,7 @@ private:
     juce::Label caption_{"Pads caption", juce::String()};
     juce::ToggleButton showAll_{"Show all"};
     FadeVisibility showAllFade_{&showAll_};
+    juce::Rectangle<int> padsRow_;
     juce::Rectangle<int> captionRow_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true); // a confirmation can outlive the card
     DrumPadControls controls_;

@@ -68,6 +68,8 @@ public:
     std::function<void(int index, const juce::File& file)> onFileDropped;
     /** The pad a sound drag is over changed (dropTarget()). */
     std::function<void()> onDropTargetChanged;
+    /** Test mode: adds the pads area's own fields (the Pads row's geometry) to this component's state. */
+    std::function<void(juce::DynamicObject& into)> addAreaTestState;
     /** The pad a sound being dragged would land on now, or -1. */
     int dropTarget() const noexcept { return dropTarget_; }
 

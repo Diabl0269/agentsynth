@@ -419,40 +419,6 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoEditSerialTests.cpp
     Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
     Project/UndoRedo/UndoRedoCardTeardownTests.cpp
-    MidiRemote/RemoteModelTests.cpp
-    MidiRemote/RemoteModelPagesTests.cpp
-    MidiRemote/RemoteModelFocusBankTests.cpp
-    MidiRemote/RemoteModelHandshakeTests.cpp
-    MidiRemote/ControllerHandshakeTests.cpp
-    MidiRemote/RemoteEnginePagesTests.cpp
-    MidiRemote/RemoteEngineFocusBankTests.cpp
-    MidiRemote/MidiLearnControllerPagesTests.cpp
-    MidiRemote/MidiLearnControllerFocusBankTests.cpp
-    MidiRemote/RemoteEngineDecodeTests.cpp
-    MidiRemote/RemoteEngineTwoHalfDecodeTests.cpp
-    MidiRemote/RemoteEngineApplyTests.cpp
-    MidiRemote/RemoteEngineFeedbackTests.cpp
-    MidiRemote/RemoteEngineReconcileTests.cpp
-    MidiRemote/RemoteEngineHostedTests.cpp
-    MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
-    MidiRemote/MidiRemoteWorkflowE2ETests.cpp
-    MidiRemote/RemoteEngineThreadingTests.cpp
-    MidiRemote/RemoteEngineLearnTests.cpp
-    MidiRemote/ControllerProfileStoreTests.cpp
-    MidiRemote/MidiRemoteFeedbackOutputsTests.cpp
-    MidiRemote/MidiRemoteLearnBinderTests.cpp
-    MidiRemote/MidiRemoteMappingTests.cpp
-    MidiRemote/MidiLearnControllerAssignTests.cpp
-    MidiRemote/MidiLearnControllerOrphanTests.cpp
-    MidiRemote/ControllerTemplatesTests.cpp
-    MidiRemote/ControllerTemplatesVendorTests.cpp
-    MidiRemote/ControllerDetectTests.cpp
-    MidiRemote/EncoderAutoDetectTests.cpp
-    MidiRemote/MidiLearnControllerTests.cpp
-    MidiRemote/MidiLearnControllerHandshakeTests.cpp
-    MidiRemote/MidiLearnControllerRetargetTests.cpp
-    MidiRemote/MidiLearnControllerHostedParameterTests.cpp
-    MidiRemote/ProfileEditHistoryTests.cpp
     App/E2EWorkflowTests.cpp
     App/E2EPluginCardWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
@@ -994,6 +960,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CustomFilterTests.cmake) # the Filter's Cust
 include(${CMAKE_CURRENT_SOURCE_DIR}/ThemeSweepTests.cmake) # the theme sweep: every dialog, window, card and the shell in all themes
 include(${CMAKE_CURRENT_SOURCE_DIR}/DrumKitPadSoundTests.cmake) # Drum Kit pads playing other modules, sounds and drops
 include(${CMAKE_CURRENT_SOURCE_DIR}/CableFoldTests.cmake) # the More row a cable drag opened folds away again
+include(${CMAKE_CURRENT_SOURCE_DIR}/MidiRemoteTests.cmake) # the MIDI Remote model, engine and MIDI Learn pages
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

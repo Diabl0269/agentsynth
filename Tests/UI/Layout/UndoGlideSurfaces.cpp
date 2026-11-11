@@ -272,6 +272,7 @@ const std::vector<Entry>& surfaces() {
         {"EQ card curve band", true, [] { return makeEqCardCurve(); }},
         {"EQ window curve band", true, [] { return makeEqWindowCurve(); }},
         {"EQ mixer thumbnail curve", true, [] { return makeEqMixerThumbnail(); }},
+        {"Drum Kit pad knob", true, [] { return makeDrumPadKnob(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };

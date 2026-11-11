@@ -1,9 +1,9 @@
-// DrumPadControls.cpp -- the picked pad's panel: binding its knobs to the pad's parameters, the Sound row, the
-// cross-fade between pads, and the dimmed Decay of a pad that plays a recording or another instrument.
+// DrumPadControls.cpp -- the picked pad's panel: binding its knobs to the pad's parameters, the Sound row, and the
+// dimmed Decay of a pad that plays a recording or another instrument. The glide of the knob values and columns between
+// pads is DrumPadControlsGlide.cpp.
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadControls.h"
 #include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
-#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -39,6 +39,26 @@ bool DrumPadControls::ShownSwitch::keyPressed(const juce::KeyPress& key) {
         return true;
     }
     return juce::ToggleButton::keyPressed(key);
+}
+
+// The parameter's own change (a pick, an undo, automation) tells the panel what was shown before it, so the panel can
+// glide; a change the user makes tells it to stop gliding that knob. Which is which: a change that comes from the
+// parameter finds the parameter already at the new value, one from the knob finds it still at the old one.
+void DrumPadControls::PadKnob::valueChanged() {
+    const double before = shown_;
+    shown_ = valueToProportionOfLength(getValue());
+    if (param_ == nullptr)
+        return;
+    const bool fromModel = std::abs(param_->convertTo0to1((float)getValue()) - param_->getValue()) < 1.0e-4f;
+    if (fromModel && onModelValue)
+        onModelValue(before, shown_);
+    else if (!fromModel && onUserValue)
+        onUserValue();
+}
+
+void DrumPadControls::PadKnob::showProportion(double proportion) {
+    shown_ = juce::jlimit(0.0, 1.0, proportion);
+    setValue(proportionOfLengthToValue(shown_), juce::dontSendNotification);
 }
 
 int DrumPadControls::height() {
@@ -91,10 +111,14 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
             onEscape();
     };
     shown_.onClick = [this] {
-        if (target_ >= 0 && onShownChanged)
-            onShownChanged(target_, shown_.getToggleState());
+        if (bound_ >= 0 && onShownChanged)
+            onShownChanged(bound_, shown_.getToggleState());
     };
     addAndMakeVisible(shown_);
+    valueGlide_.onDirty = [this](juce::Rectangle<int>) {
+        applyDrawnValues();
+        repaintCardAroundKnobs();
+    };
     for (size_t f = 0; f < knobs_.size(); ++f) {
         auto& knob = knobs_[f];
         knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -103,6 +127,14 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
             if (onEscape)
                 onEscape();
         };
+        knob.onModelValue = [this, f](double before, double after) { knobFollowedModel(f, before, after); };
+        knob.onUserValue = [this, f] {
+            if (bindingKnobs_)
+                return;
+            released_[f] = true;
+            valueGlide_.erase((KeyedPointTween::Key)f);
+        };
+        knob.onDragStart = knob.onUserValue;
         addAndMakeVisible(knob);
         captions_[f].setText(kFieldWords[f], juce::dontSendNotification);
         captions_[f].setJustificationType(juce::Justification::centred);
@@ -110,7 +142,10 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     }
 }
 
-DrumPadControls::~DrumPadControls() { fade_.stop(); }
+DrumPadControls::~DrumPadControls() {
+    columnDriver_.stop(updater_);
+    ringDriver_.stop(updater_);
+}
 
 // ---- Binding ----
 
@@ -127,22 +162,26 @@ void DrumPadControls::bind(int index) {
     // Once per pad change, before the knobs leave the old pad, so its cable ends glide from where they are drawn.
     if (index != bound_ && bound_ >= 0 && onBeforeRebind)
         onBeforeRebind();
+    const int old = bound_;
     bound_ = index;
-    if (pending_ < 0)
-        target_ = index;
+    bindingKnobs_ = true;
     for (size_t f = 0; f < knobs_.size(); ++f) {
         attachments_[f].reset();
-        if (auto* param = kit_.padParameter(index, (PadParam)f))
+        auto* param = kit_.padParameter(index, (PadParam)f);
+        knobs_[f].setModelParam(param);
+        if (param != nullptr)
             attachments_[f] = std::make_unique<juce::SliderParameterAttachment>(*param, knobs_[f]);
     }
+    bindingKnobs_ = false;
+    if (glideBinding_)
+        startRingFade(old);
     refresh();
 }
 
-// The switch always speaks for the pad picked now, also while the rest of the panel is still fading to it.
 void DrumPadControls::refreshShownSwitch() {
-    if (target_ < 0)
+    if (bound_ < 0)
         return;
-    const auto& pad = kit_.pad(target_);
+    const auto& pad = kit_.pad(bound_);
     shown_.setToggleState(pad.shown, juce::dontSendNotification);
     shown_.setTitle("Shown: " + pad.name);
     shown_.setTooltip("Shown: " + pad.name +
@@ -177,11 +216,13 @@ void DrumPadControls::refresh() {
         decay.getProperties().set(synth::theme::AppLookAndFeel::kDimmedProperty, moot);
         decay.repaint();
     }
-    const bool start = showsStart(pad);
-    knobs_[(size_t)PadParam::Start].setVisible(start);
-    captions_[(size_t)PadParam::Start].setVisible(start);
-    pitch_.setVisible(isInstrument(pad));
-    pitchCaption_.setVisible(isInstrument(pad));
+    // Start, Plays pitch and Open fade in and out with the pad's kind; the layout follows the kind, not the fades.
+    startOn_ = showsStart(pad);
+    pitchOn_ = isInstrument(pad);
+    openOn_ = pitchOn_;
+    fadeStart_.setShown(startOn_);
+    fadePitch_.setShown(pitchOn_);
+    fadeOpen_.setShown(openOn_);
     resized();
     repaint();
 }
@@ -192,50 +233,21 @@ void DrumPadControls::refreshSoundRow(const synth::drums::Pad& pad) {
     sound_.setInstrument(name, detail);
     sound_.setTitle("Sound for " + pad.name + ", " + name + (detail.isNotEmpty() ? ", " + detail : juce::String()));
     sound_.setTooltip("Choose what " + pad.name + " plays: a file, a built-in drum or an instrument (Enter)");
-    open_.setVisible(isInstrument(pad));
     open_.setTexts("Open " + name + " on the canvas", "Show the instrument " + pad.name + " plays on the canvas");
     pitch_.setValueText(synth::drums::noteName(pad.instrumentPitch) + " (" + juce::String(pad.instrumentPitch) + ")");
 }
 
-// Out in 80 ms, the knobs re-bind while the panel is clear, in over 160 ms. Under Reduce Motion the new pad fades in
-// over 80 ms; under Animations Off (or off screen) it lands at once.
+// The panel never fades: the text and the Sound row change at once and the knobs glide to the new pad's values
+// (DrumPadControlsGlide.cpp). Under Animations Off, or off screen, everything lands at once.
 void DrumPadControls::showPad(int index, bool animate) {
-    target_ = index;
-    refreshShownSwitch();
-    if (fade_.isRunning() && pending_ >= 0) {
-        pending_ = index; // still fading out: the newest pick is what fades in
-        return;
-    }
     if (index == bound_) {
         refresh();
         return;
     }
-    if (!animate || bound_ < 0 || !FadeVisibility::canAnimateIn(this)) {
-        fade_.stop();
-        pending_ = -1;
-        setAlpha(1.0f);
-        bind(index);
-        return;
-    }
-    const auto fadeIn = [this](double ms) {
-        fade_.start(updater_, ms, easeOutCubic, [this](float t) { setAlpha(t); }, [this] { setAlpha(1.0f); });
-    };
-    if (prefersReducedMotion()) {
-        bind(index);
-        setAlpha(0.0f);
-        fadeIn(kReducedMs);
-        return;
-    }
-    pending_ = index;
-    const float from = getAlpha();
-    fade_.start(
-        updater_, kFadeOutMs * from, [](float t) { return t; }, [this, from](float t) { setAlpha(from * (1.0f - t)); },
-        [this, fadeIn] {
-            const int next = pending_;
-            pending_ = -1;
-            bind(next);
-            fadeIn(kFadeInMs);
-        });
+    glideBinding_ = animate && bound_ >= 0;
+    armColumns_ = glideBinding_;
+    bind(index);
+    glideBinding_ = armColumns_ = false;
 }
 
 // ---- Layout and painting ----
@@ -249,35 +261,15 @@ void DrumPadControls::resized() {
     area.removeFromTop(kHeaderGap);
     auto row = area.removeFromTop(synth::cardbody::kRowHeight);
     soundLabel_.setBounds(row.removeFromLeft(kSoundLabelWidth));
-    if (open_.isVisible())
+    if (openOn_)
         open_.setBounds(row.removeFromRight(TrackShowModuleButton::kSize)
                             .withSizeKeepingCentre(TrackShowModuleButton::kSize, TrackShowModuleButton::kSize));
-    row.removeFromRight(open_.isVisible() ? kRowGap : 0);
+    row.removeFromRight(openOn_ ? kRowGap : 0);
     sound_.setBounds(row);
     area.removeFromTop(kRowGap);
     shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(96));
     area.removeFromBottom(kShownGap);
     layoutColumns(area);
-}
-
-// Level, Tune, Decay, then Start (a file pad) or Plays pitch (an instrument pad) in a fourth column. Plays pitch
-// takes two fifths of the row so its stepper has room for "C3 (60)" between its buttons.
-void DrumPadControls::layoutColumns(juce::Rectangle<int> area) {
-    const bool start = knobs_[(size_t)PadParam::Start].isVisible();
-    const bool pitch = pitch_.isVisible();
-    const int columns = start || pitch ? 4 : 3;
-    const int colW = area.getWidth() / (pitch ? 5 : columns);
-    for (int f = 0; f < columns; ++f) {
-        auto column = juce::Rectangle<int>(area.getX() + f * colW, area.getY(), colW, area.getHeight());
-        if (f == 3 && pitch) {
-            column.setRight(area.getRight());
-            pitchCaption_.setBounds(column.removeFromTop(synth::cardbody::kLabelHeight));
-            pitch_.setBounds(column.removeFromTop(synth::cardbody::kRowHeight).reduced(2, 0));
-            continue;
-        }
-        captions_[(size_t)f].setBounds(column.removeFromTop(synth::cardbody::kLabelHeight));
-        knobs_[(size_t)f].setBounds(column.removeFromTop(synth::cardbody::kKnobHeight));
-    }
 }
 
 void DrumPadControls::paint(juce::Graphics& g) {
