@@ -24,7 +24,7 @@ TEST_F(GraphEditorTest, ClickingAJackWithThreeCablesOpensAPanelListingThem) {
     for (int i = 0; i < 3; ++i)
         EXPECT_EQ(panel->rowAt(i)->connection().label, f.vcaRowText(i)) << "row " << i;
     EXPECT_TRUE(panel->isDisconnectAllShown());
-    EXPECT_EQ(panel->getWidth(), synth::ui::ModDotPage::kWidth);
+    EXPECT_EQ(panel->getWidth(), synth::ui::PortConnectionsPanel::kWidth);
 }
 
 TEST_F(GraphEditorTest, ThePanelPointsAtTheJackThatWasClicked) {

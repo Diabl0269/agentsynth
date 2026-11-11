@@ -27,9 +27,11 @@ struct PortConnection {
     /** Every drawn cable behind this row, `cable` first: a collapsed stereo pair keeps two raw edges that read as one
      *  connection, and removing the row removes them all. */
     std::vector<GraphEditor::VisibleCable> group;
-    PortRef far;           // the jack at the other end (VISIBLE index; a MIDI jack answers the MIDI channel index)
-    int farRawChannel = 0; // the RAW channel there: a knob's CV channel, what a Knob target is matched by
-    juce::String label;    // "<other module title> . <other port name>" (a macro port: its own name)
+    PortRef far;            // the jack at the other end (VISIBLE index; a MIDI jack answers the MIDI channel index)
+    int farRawChannel = 0;  // the RAW channel there: a knob's CV channel, what a Knob target is matched by
+    juce::String label;     // what the row shows: "<other module> . <other port>", the module left off where it is
+                            // redundant (a macro port: its own name); see docs/layout/cables.md
+    juce::String fullLabel; // always "<other module> . <other port>": the tooltip and the screen-reader name
     juce::Colour colour;
     /** A modulation cable (an attenuverter chain): it has an amount and a response curve, like a source of a knob's
      *  mod dot. Audio, MIDI and plain CV cables have neither. */

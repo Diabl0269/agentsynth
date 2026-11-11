@@ -20,13 +20,16 @@ class ModDotSourceRow final : public juce::Component {
 public:
     static constexpr int kHeight = 34;
 
-    /** How the row is laid out where it is not the knob's sources page. `nameLine` > 0 puts the swatch, name and
-     *  remove button on a top line of that height and the other controls on a line under it (`height` is both). */
+    static constexpr int kElasticName = -1; // Look::nameWidth: the name takes up to kNameMax, the fader keeps kMinBar
+    static constexpr int kNameMax = 90;
+    static constexpr int kMinBar = 48;
+
+    /** How the row is laid out where it is not the knob's sources page: one line, `height` tall, the name `nameWidth`
+     *  wide (elastic by default), the "show in timeline" button only when `timeline`. */
     struct Look {
         int height = kHeight;
-        int nameWidth = 56;
+        int nameWidth = kElasticName;
         bool timeline = true;
-        int nameLine = 0;
     };
     void setLook(const Look& look);
 
@@ -60,6 +63,11 @@ public:
     /** Shows the connection's response curve and opens its editor (wired by the page). */
     ModCurveChip& curveChip() noexcept { return *curveChip_; }
     juce::Button& removeButton() noexcept { return removeButton_; }
+    /** The name's area: elides a long name with '…' and shows the full name as its tooltip. */
+    juce::Component& nameArea() noexcept;
+    juce::Rectangle<int> nameBounds() const noexcept { return nameArea_; }
+    /** What the row draws: the name, or only its port ("Pad 2 level") when "<module> . <port>" does not fit. */
+    juce::String shownName() const;
     /** The same button as its glyph type (what the port connections panel's row hands its callers). */
     ModDotGlyphButton& removeGlyph() noexcept { return removeButton_; }
     bool isEditingAmount() const noexcept { return editor_ != nullptr; }
@@ -76,9 +84,9 @@ public:
 
 private:
     class AmountButton;
+    class NameTip;
     void endAmountEdit(bool apply);
     void applyNames();
-    void layoutTwoLines(int gap);
     void setReadingFocusOrder();
     juce::Rectangle<int> layoutControls(juce::Rectangle<int> r, int gap);
 
@@ -90,6 +98,7 @@ private:
     ModDotAmountBar bar_;
     std::unique_ptr<AmountButton> amountButton_;
     std::unique_ptr<ModCurveChip> curveChip_;
+    std::unique_ptr<NameTip> nameTip_;
     ModDotGlyphButton timelineButton_;
     ModDotGlyphButton removeButton_;
     std::unique_ptr<NavigationSearchField> editor_;

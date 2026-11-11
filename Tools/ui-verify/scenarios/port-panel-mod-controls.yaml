@@ -17,8 +17,8 @@ steps:
   - wait: {}
   - expect: {id: portConnectionsPanel, within_ms: 3000}
   - mark: {check: 1, name: source-jack-rows}
-  # the bar sits on the row's second line; +50% is three quarters along it
-  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 144, fromY: 71, toX: 154, toY: 71}
+  # the bar sits on the row's one line; +50% is three quarters along it
+  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 168, fromY: 45, toX: 150, toY: 45}
   - wait: {}
   - mark: {check: 2, name: amount-dragged}
   - click: {id: "card:VCA", x: 150, y: 12, instant: "the focus ring moves to the canvas panel"}   # click away: the panel closes
@@ -29,8 +29,7 @@ steps:
   - wait: {}
   - mark: {check: 3, name: undo-one-step}
   - key: {keys: tab}   # Disconnect all
-  - key: {keys: tab}   # the first row's remove button
-  - key: {keys: tab}   # its amount bar
+  - key: {keys: tab}   # the first row's amount bar
   - mark: {check: 4, name: tab-reaches-amount-bar}
   - key: {keys: tab}
   - mark: {check: 4, name: tab-reaches-percent}

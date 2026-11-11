@@ -5,8 +5,8 @@
 # What a user does:
 #   1. Opens a project where LFO 1 modulates the VCA's CV and the Filter's Cutoff, and the Oscillator's output feeds
 #      the VCA's audio input and also modulates the Filter's Cutoff.
-#   2. Clicks LFO 1's output dot: two rows, each on two lines (the name, then bar, percent, curve chip and the
-#      show-in-timeline button).
+#   2. Clicks LFO 1's output dot: two rows, each on one line (name, bar, percent, curve chip, show-in-timeline
+#      and remove).
 #   3. Clicks the Oscillator's output dot: the VCA audio row is a plain one-line row; the Filter Cutoff row has the
 #      mod controls.
 motion: true

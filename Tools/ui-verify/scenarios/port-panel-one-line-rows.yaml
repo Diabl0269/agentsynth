@@ -1,0 +1,19 @@
+# A modulation row in a jack's connections panel is one 30 px line: dot, name, amount bar, percent, curve, timeline, bin.
+#
+# What a user does: opens a project where an LFO drives a VCA's CV and a Filter's Cutoff, and clicks the LFO's output
+# dot. The panel lists each target on ONE line (it used to take two) and Tab walks a row left to right.
+motion: true
+record: true
+save_project: "LFO to VCA CV and Filter Cutoff"
+steps:
+  - openProject: {path: "${FIXTURES}/port-panel-mod-rows.agsproj"}
+  - wait: {}
+  - glide: {name: one-line-rows-open, frames: 12, do: {click: {id: "card:LFO 1", x: 268, y: 57}}}
+  - wait: {settleMs: 200}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
+  - expect: {id: "portConnectionsPanel > Show VCA · CV in timeline", showing: true}
+  - mark: {check: 1, name: one-line-rows}
+  - screenshot: {id: portConnectionsPanel, name: one-line-rows-panel}
+  - glide: {name: one-line-rows-closes, frames: 10, do: {key: {keys: escape}}}
+  - expect: {id: portConnectionsPanel, exists: false, within_ms: 2000}
