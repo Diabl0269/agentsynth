@@ -1,0 +1,54 @@
+# Long names in a jack's connections panel and in a knob's mod-dot panel stay on one 30 px line, drop to the port, end
+# in an ellipsis when still too long and show in full as the name's tooltip (the tooltip text is checked by
+# PortPanelModControlsTests; the hidden test mode has no hover tooltip).
+#
+# What a user does: renames the LFO to a long name, wires it to several Drum Kit pad knobs and to Pluck knobs, clicks
+# the LFO's output jack (rows are one line, long targets drop to the port), then Tabs from a pad knob to its mod dot and
+# presses Return: the knob's panel lists the long-named source on one line, ending in an ellipsis.
+motion: true
+record: true
+save_project: "LFO to Drum Kit pads and Pluck"
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-instrument-pad.agsproj"}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "selecting the search text"}
+  - type: {text: lfo, instant: "typed text"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: "card:LFO", x: 30, y: 14, clicks: 2, instant: "the title turns into a text editor"}
+  - key: {keys: cmd+a, instant: "selecting the title"}
+  - type: {text: Rhythm Section Slow Sweep LFO, instant: "typed text"}
+  - key: {keys: return, instant: "the title is committed"}
+  - wait: {}
+  - drag: {from: "card:Rhythm Section Slow Sweep LFO", fromX: 268, fromY: 56, to: "card:Drum Kit > Level: Pluck 1"}
+  - wait: {}
+  - drag: {from: "card:Rhythm Section Slow Sweep LFO", fromX: 268, fromY: 56, to: "card:Drum Kit > Tune: Pluck 1"}
+  - wait: {}
+  - drag: {from: "card:Rhythm Section Slow Sweep LFO", fromX: 268, fromY: 56, to: "card:Pluck > Decay"}
+  - wait: {}
+  - drag: {from: "card:Rhythm Section Slow Sweep LFO", fromX: 268, fromY: 56, to: "card:Pluck > Brightness"}
+  - wait: {}
+  - glide: {name: lfo-jack-panel-opens, frames: 12, do: {click: {id: "card:Rhythm Section Slow Sweep LFO", x: 268, y: 56}}}
+  - wait: {settleMs: 200}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - mark: {check: 1, name: lfo-jack-long-names}
+  - screenshot: {id: portConnectionsPanel, name: lfo-jack-panel}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, exists: false, within_ms: 2000}
+  - click: {id: "card:Drum Kit > Level: Pluck 1", instant: "the click only focuses the knob and the canvas redraws its selection at once"}
+  - wait: {}
+  - key: {keys: tab, instant: "the focus ring jumps to the dot and the canvas redraws its selection"}
+  - expect: {id: "Pad 1 level modulation, 1 source", hasFocus: true, within_ms: 1500}
+  - key: {keys: return, instant: "the dot's key opens the panel on the next redraw"}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: knob-dot-long-names}
+  - screenshot: {id: modDotPopover, name: knob-dot-panel}

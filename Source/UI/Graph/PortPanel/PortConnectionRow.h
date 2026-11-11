@@ -2,8 +2,9 @@
 
 // One connection of the port connections panel: a swatch in the cable's colour, "<module> . <port>" at the far end
 // and a remove button. A modulation cable (an attenuverter chain) is the same row the knob's sources panel draws
-// (ModDotSourceRow: amount bar, typed percent, curve chip, show in timeline) on two lines, the name on top, so a
-// connection offers the same controls everywhere; the panel wires them (ModSourceRowWiring). Hovering the row or
+// (ModDotSourceRow: amount bar, typed percent, curve chip, show in timeline) on one line, so a connection offers the
+// same controls everywhere; the panel wires them (ModSourceRowWiring). A name too long for its area ends in an
+// ellipsis and its tooltip is the full name. Hovering the row or
 // focusing its remove button reports "highlight this cable" so the canvas can show which one it is.
 // docs/layout/cables.md#port-connections-panel.
 
@@ -16,15 +17,14 @@
 
 namespace synth::ui {
 
-class PortConnectionRow final : public juce::Component {
+class PortConnectionRow final
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
-    static constexpr int kHeight = 30;    // an audio, MIDI or plain CV row, and a mod row's name line
-    static constexpr int kModHeight = 56; // a modulation row: the name line, then the controls line
+    static constexpr int kHeight = 30; // every row: an audio, MIDI or CV one and a modulation one are one line
 
-    /** The row's full height: kModHeight for a modulation, else kHeight. */
-    static int heightFor(const PortConnection& connection) noexcept {
-        return connection.isModulation() ? kModHeight : kHeight;
-    }
+    /** The row's full height. The panel tweens a row between 0 and this as it comes and goes. */
+    static int heightFor(const PortConnection&) noexcept { return kHeight; }
 
     explicit PortConnectionRow(const PortConnection& connection);
 

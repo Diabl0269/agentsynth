@@ -128,7 +128,7 @@ TEST_F(ModuleComponentTest, ARowKeepsAGapBetweenItsFaderAmountAndIcons) {
     const auto amount = row.amountButton().getBounds();
     const auto timeline = row.timelineButton().getBounds();
     const auto remove = row.removeButton().getBounds();
-    EXPECT_GT(bar.getWidth(), 60) << "the fader keeps room to drag";
+    EXPECT_GE(bar.getWidth(), ModDotSourceRow::kMinBar) << "the fader keeps room to drag";
     EXPECT_GE(amount.getX() - bar.getRight(), gap);
     EXPECT_GE(timeline.getX() - amount.getRight(), gap);
     EXPECT_GT(remove.getX() - timeline.getRight(), 0);
@@ -165,7 +165,7 @@ TEST_F(ModuleComponentTest, DraggingTheFaderPastItsEndsClampsAndStaysOneUndoStep
     EXPECT_NEAR(f.amount(f.attenId), 1.0f, 1e-4f);
     bar.mouseDrag(clickAt(bar, {(int)bar.xForValue(-0.3f), 5}));
     bar.mouseUp(clickAt(bar, {(int)bar.xForValue(-0.3f), 5}));
-    EXPECT_NEAR(f.amount(f.attenId), -0.3f, 0.011f);
+    EXPECT_NEAR(f.amount(f.attenId), -0.3f, 4.0f / (float)bar.getWidth()) << "within a couple of pixels";
 
     ASSERT_TRUE(f.undo.undo());
     EXPECT_NEAR(f.amount(f.attenId), 0.5f, 1e-4f);

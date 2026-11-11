@@ -20,8 +20,12 @@ struct KnobModSource {
     juce::AudioProcessorGraph::NodeID sourceNodeId; // the real modulator, behind any macro ports
     int sourceChannel = 0;                          // the raw output channel of it the routing reads
     juce::String sourceName;                        // its title (a rename shows), empty if the node is gone
-    float amount = 1.0f;                            // the attenuverter's live "amount", -1..1
+    juce::String fullName; // the unshortened name for a tooltip / screen reader; empty = sourceName
+    float amount = 1.0f;   // the attenuverter's live "amount", -1..1
     bool bypassed = false;
+
+    /** What a tooltip and a screen reader say: `fullName` when the row shows a short form, else `sourceName`. */
+    const juce::String& spokenName() const noexcept { return fullName.isNotEmpty() ? fullName : sourceName; }
 };
 
 /** One AttenuverterChain routing and the knob it lands on, macro ports looked through. */
