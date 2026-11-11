@@ -141,6 +141,9 @@ void ModuleComponent::EqBandRow::bind(int band) {
         const int index = card_.sliders.indexOf(slider);
         if (index >= 0)
             card_.sliderParams.set(index, param);
+        // The old attachment goes first: while it lives, the slider taking the new band's value would write it to the
+        // band the knob just left.
+        attachments_[(size_t)f].reset();
         attachments_[(size_t)f] = std::make_unique<juce::SliderParameterAttachment>(*param, *slider);
         slider->setComponentID(param->getName(100));
         slider->setTitle(param->getName(100));

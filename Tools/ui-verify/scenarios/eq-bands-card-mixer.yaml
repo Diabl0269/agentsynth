@@ -1,0 +1,75 @@
+# FRO1694: the Parametric EQ card and the Mixer show every band. The card keeps the curve and the band strip and one row of
+# the selected band's Freq, Gain and Q knobs, which re-bind when another chip is pressed; the Mixer's EQ thumbnail shows
+# how many bands are on in a badge, and its tooltip says it.
+#
+# What a user does: opens the Parametric EQ window, adds eight bands and types four of them, then adds a ninth and closes the window; presses
+# chip 9 on the card (the knobs now edit band 9), then chip 2 (they go back to band 2); the card keeps its own selection.
+motion: true
+record: true
+save_project: eq-bands-card-mixer
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}                                        # the bottom panel, on the Mixer tab: the strip's EQ thumbnail
+  - wait: {settleMs: 800}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 230, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 100, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 240, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 700, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "High Cut"}
+  - wait: {settleMs: 500}
+  - click: {id: "48 dB/oct"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 520, y: 100, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Notch"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 610, y: 240, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Tilt"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 700, y: 150, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Band Pass"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 770, y: 280, clicks: 2}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, selectedBand: 9}
+  - key: {keys: escape, target: eqWindowCurve}                # the window is modal to the canvas: close it to reach the card and the Mixer
+  - wait: {settleMs: 1000}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 9 bands. Click to open."}}
+  - mark: {check: 1, name: mixer-badge-nine}
+  - glide: {name: card-select-nine, frames: 14, do: {click: {id: "eqCardStrip > eqChip9"}}}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Parametric EQ 2 > B9 Gain", exists: true, within_ms: 2000}
+  - mark: {check: 2, name: card-band-nine}
+  - screenshot: {id: "card:Parametric EQ 2", name: card-band-nine}
+  - click: {id: "eqCardStrip > eqChip2"}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Parametric EQ 2 > B2 Gain", exists: true, within_ms: 2000}
+  - expect: {id: "card:Parametric EQ 2 > B9 Gain", exists: false}
+  - mark: {check: 3, name: card-band-two}
+  - screenshot: {id: "Oscillator 2 EQ curve", name: mixer-thumbnail}
+  - hover: {id: "Oscillator 2 EQ curve"}
+  - wait: {settleMs: 1500}
+  - mark: {check: 4, name: mixer-tooltip}

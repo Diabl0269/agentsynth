@@ -28,6 +28,7 @@
 #include "Modules/VisualBuffer.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "TabOrderHelpers.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Assistant/SignInDialog.h"
@@ -411,10 +412,26 @@ TEST(AccessibilityCoverageTest, MacroAutoPortPromptDialog) {
     EXPECT_TRUE(matchesBaseline("MacroAutoPortPromptDialog", auditAccessibility(dialog)));
 }
 
+// Nine bands of different types on, so every chip, the + chip and the type pill are on screen to be audited.
 TEST(AccessibilityCoverageTest, EQWindow) {
     ParametricEQModule eq;
+    for (int b = 0; b < 9; ++b) {
+        eq.setBandType(b, static_cast<synth::eq::BandType>(b % synth::eq::kNumBandTypes));
+        eq.setBandFreq(b, 60.0f * std::pow(1.6f, (float)b));
+        eq.setBandEnabled(b, true);
+    }
     EQWindow window(eq);
+    window.setSize(820, 470);
     EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
+
+    // Tab reaches the strip's chips (named like "Band 7, Bell, 2.4 kHz") and the type pill, in visual order.
+    window.getCurve().setSelectedBand(2);
+    const auto names = synth::test::walkTabOrder(window).names();
+    EXPECT_TRUE(names.contains("Band 1, Low Shelf, 60 Hz")) << names.joinIntoString(" | ");
+    EXPECT_TRUE(names.contains("Add band")) << names.joinIntoString(" | ");
+    EXPECT_TRUE(names.contains("Band 3 type, High Shelf")) << names.joinIntoString(" | ");
+    for (const auto& name : names)
+        EXPECT_FALSE(name.startsWith("<unnamed")) << name;
 }
 
 // The Filter's shape editor window: the large morph map with its dots, cursor and sliders, the shape chips, the curve

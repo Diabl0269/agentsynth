@@ -69,7 +69,11 @@ juce::String eqBandTypeName(BandType type) {
 
 juce::String eqSlopeText(int slopeDbPerOct) { return juce::String(slopeDbPerOct) + " dB/oct"; }
 
-// Every kind colour is a light hue, so one dark ink reads on all of them in every theme.
-juce::Colour eqBandKindInk(const synth::theme::Colors& colors) noexcept { return colors.iconInk; }
+// Every kind colour is a light hue, so the darker of the icon ink and the text colour reads on all of them: a light
+// theme's icon ink is white (for dark fills) while its text is dark.
+juce::Colour eqBandKindInk(const synth::theme::Colors& colors) noexcept {
+    return colors.iconInk.getPerceivedBrightness() <= colors.textPrimary.getPerceivedBrightness() ? colors.iconInk
+                                                                                                  : colors.textPrimary;
+}
 
 } // namespace synth::ui
