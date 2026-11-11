@@ -1,6 +1,6 @@
 # Popup motion (and the tooltip window every launchDialog dialog hosts, so it is in Core too): the shared soft appear/disappear of menus, call-outs and dialogs, and the
 # Reduce motion query it obeys (ReducedMotion, also read by AppUI: AppUI links Core). In Core (not AppUI) because AppLookAndFeel, which hooks every popup
-# menu and alert window, is compiled into Core. The .mm files are the macOS halves, ARC like
+# menu and alert window (and draws the alert box), is compiled into Core. The .mm files are the macOS halves, ARC like
 # SparkleUpdateManager.mm.
 target_sources(Core PRIVATE
     Source/UI/Layout/PopupMotion.h
@@ -15,6 +15,7 @@ target_sources(Core PRIVATE
     Source/UI/Layout/ReducedMotion.h
     Source/UI/Layout/ReducedMotion.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelWindowMotion.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp
 )
 if(APPLE)
     target_sources(Core PRIVATE Source/UI/Layout/PopupMotionMac.mm Source/UI/Layout/ReducedMotionMac.mm)

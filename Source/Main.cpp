@@ -205,7 +205,8 @@ private:
         }
 
         juce::String message = "Agent Synth quit last time inside " + outcome.plugin.name +
-                               ". Open your project without it? Its card then shows as missing and nothing is lost.";
+                               ". Open your project without it? Its card then stays empty and says it is switched off, "
+                               "and nothing is lost.";
         if (outcome.strikes > 1)
             message += " It has now been blamed " + juce::String(outcome.strikes) + " times.";
         awaitingCrashChoice_ = true;

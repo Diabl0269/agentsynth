@@ -298,6 +298,7 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 **Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
+`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon: a 22 px accent glyph (triangle with "!" for a warning, a circle with "i" or "?") inside the box at `synth::ui::alertIconBounds`, in place of JUCE's oversized translucent shape that stuck out past the corner.
 
 **Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
 opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey

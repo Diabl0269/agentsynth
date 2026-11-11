@@ -97,6 +97,9 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
                 module->publishInstance(std::move(instance));
             }
 
+            if (!module->hasInstance())
+                module->fireLoadFailedEdge();
+
             // Fires last, whatever branch above ran — see onLoadCompleted's own comment for
             // why hasInstance() (not `instance != nullptr`) is the right read here: publishInstance()
             // itself can silently refuse an over-max instance without ever publishing one.
@@ -138,6 +141,9 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
             } else {
                 module->publishInstance(std::move(instance));
             }
+
+            if (!module->hasInstance())
+                module->fireLoadFailedEdge();
 
             // See the description-overload's own comment on this same line.
             if (module->onLoadCompleted)
@@ -398,6 +404,13 @@ void HostedPluginModule::fireInstanceEdge(bool live) {
         else
             observer.hostedInstanceGone();
     });
+}
+
+// Announced for an outright failure and for a refused over-max instance alike: either way the card has
+// no instance to show and getStatusMessage() holds the reason. Kept apart from onLoadCompleted, which
+// the track-creation flow owns.
+void HostedPluginModule::fireLoadFailedEdge() {
+    instanceObservers_.call([](InstanceObserver& observer) { observer.hostedLoadFailed(); });
 }
 
 void HostedPluginModule::scheduleReapRetry() {

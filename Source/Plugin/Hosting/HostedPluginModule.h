@@ -127,6 +127,8 @@ public:
         virtual void hostedInstanceGone() = 0;
         /** Message thread. A new instance has just been published and is live. */
         virtual void hostedInstanceLive() = 0;
+        /** Message thread. A load finished without publishing an instance; getStatusMessage() says why. */
+        virtual void hostedLoadFailed() {}
     };
 
     /** Message thread only. Not owned; the observer must remove itself before it is destroyed. */
@@ -498,6 +500,7 @@ private:
     juce::MidiBuffer restartMidi_;
     std::atomic<bool> voiceResetPending_{false};
     juce::ListenerList<InstanceObserver> instanceObservers_;
+    void fireLoadFailedEdge();
 
     PluginIdentity identity_;
     // Last known plugin state, applied when an instance arrives. Set ONLY by a state restore, and

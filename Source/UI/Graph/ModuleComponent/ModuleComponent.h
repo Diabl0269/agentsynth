@@ -595,6 +595,7 @@ private:
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
+    std::unique_ptr<juce::Label> hostedStatusLabel; // Hosted Plugin: why the load failed, under Open Editor
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
@@ -721,6 +722,8 @@ private:
     void releaseHostedPluginCard();
     // Re-measures the card and asks the canvas to accept its new size.
     void relayoutHostedPluginCard();
+    // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
+    void refreshHostedLoadStatus(bool relayoutOnChange = true);
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
     // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
