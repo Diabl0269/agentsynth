@@ -7,6 +7,7 @@
 # back at beat 1.
 record: true
 motion: true
+pop_check: {undo: false}   # undo off: the scenario holds a point selection that an undo and redo clears
 save_project: lane-hold-steady
 steps:
   - openProject: {path: "${FIXTURES}/lane-hold.agsproj"}

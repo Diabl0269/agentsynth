@@ -11,7 +11,7 @@ save_project: shape-window-draw-size-and-undo
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
   - wait: {settleMs: 600}
-  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - click: {id: window, x: 1019, y: 411, instant: "the focus ring moves to the canvas panel"}                       # the Filter Type combo
   - wait: {settleMs: 600}
   - key: {keys: down}
   - key: {keys: down}

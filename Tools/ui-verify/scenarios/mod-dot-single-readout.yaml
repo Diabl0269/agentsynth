@@ -11,6 +11,7 @@
 #      is the readout and shows the live amount while the button is held; nothing is drawn above-right of the knob.
 #      On release the hover chip is still there (the pointer rests on the knob).
 motion: true
+pop_check: {undo: false}   # undo off: the undo probe moves the pointer off the hovered mod dot
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
   - wait: {}

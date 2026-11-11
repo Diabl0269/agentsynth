@@ -8,6 +8,7 @@
 #      opens, and the module ends selected and centred.
 #   4. Scrolls the canvas away again and presses Audio 1's "Edit on canvas": the view glides to the channel's macro.
 motion: true
+pop_check: {off: "its expects read the card's position in the middle of the fly, which the check's wait for the end of the motion would pass"}
 record: true
 save_project: mixer-insert-fly
 steps:

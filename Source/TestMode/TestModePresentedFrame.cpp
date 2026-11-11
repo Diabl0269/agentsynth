@@ -42,6 +42,8 @@ PresentedFrame& PresentedFrame::shared() {
     return frame;
 }
 
+juce::Image PresentedFrame::paintFullRepaint(juce::Component& window) { return paintFresh(window); }
+
 void PresentedFrame::start(juce::Component& window) {
     window_ = &window;
     image_ = paintFresh(window);
@@ -50,6 +52,7 @@ void PresentedFrame::start(juce::Component& window) {
 
 void PresentedFrame::stop() {
     window_ = nullptr;
+    observer_ = nullptr;
     image_ = {};
 }
 
@@ -59,6 +62,8 @@ void PresentedFrame::notePainted(juce::Component& window, juce::Rectangle<int> a
         return;
     if (image_.getWidth() != window.getWidth() || image_.getHeight() != window.getHeight()) {
         image_ = paintFresh(window); // a resize repaints the whole window
+        if (observer_)
+            observer_(image_);
         return;
     }
     area = area.getIntersection(window.getLocalBounds());
@@ -70,6 +75,8 @@ void PresentedFrame::notePainted(juce::Component& window, juce::Rectangle<int> a
     juce::Graphics g(image_);
     g.reduceClipRegion(area);
     window.paintEntireComponent(g, true);
+    if (observer_)
+        observer_(image_);
 }
 
 PresentedFrame::Difference PresentedFrame::compareWithFullRepaint(const juce::RectangleList<int>& ignore,

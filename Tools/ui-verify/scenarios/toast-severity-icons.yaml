@@ -12,18 +12,18 @@ steps:
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}
-  - key: {keys: cmd+f}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
   - wait: {}
-  - key: {keys: cmd+a}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
   - type: {text: delay}
   - wait: {}
   - key: {keys: down}
   - key: {keys: down}
   - key: {keys: return}
   - wait: {}
-  - key: {keys: cmd+f}
+  - key: {keys: cmd+f, instant: "the caret moves in the library search field"}
   - wait: {}
-  - key: {keys: cmd+a}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
   - type: {text: lfo}
   - wait: {}
   - key: {keys: down}

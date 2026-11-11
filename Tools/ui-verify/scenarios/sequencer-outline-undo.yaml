@@ -11,9 +11,9 @@ steps:
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}
-  - key: {keys: cmd+f}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
   - wait: {}
-  - key: {keys: cmd+a}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
   - type: {text: sequencer}
   - wait: {}
   - key: {keys: down}
@@ -23,8 +23,8 @@ steps:
   - expect: {id: sequencerKey, showing: true, within_ms: 2000}
   - click: {id: Hide Panel}
   - wait: {}
-  - click: {id: stepGrid, x: 20, y: 120}
-  - key: {keys: down}
+  - click: {id: stepGrid, x: 20, y: 120, instant: "the focus ring moves to the canvas panel"}
+  - key: {keys: down, instant: "the selected step cell moves"}
   - wait: {}
   - click: {id: sequencerKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
