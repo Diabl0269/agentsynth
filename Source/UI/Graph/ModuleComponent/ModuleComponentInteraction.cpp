@@ -17,7 +17,6 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
-#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/ControlStyle/ControlStyleMenu.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

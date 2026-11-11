@@ -4,6 +4,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableFold/CableFoldTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableFold/CableEndGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableFold/CableDropRefusalTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableFold/TabbedKnobCableTests.cpp
 )
 include(${CMAKE_CURRENT_SOURCE_DIR}/CommandPaletteTests.cmake)

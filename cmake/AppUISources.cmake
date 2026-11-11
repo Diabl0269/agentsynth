@@ -572,7 +572,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentCableParking.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
     Source/UI/Graph/PortPanel/PortConnector.h
