@@ -1,4 +1,4 @@
-// SoundBrowserPacks.cpp -- the packs you have not downloaded: their rows under Places ("Get more") and at the end of
+// SoundBrowserPacks.cpp -- the packs you have not downloaded: their rows under Places ("Get more") and at the top of
 // search results, the Download / Cancel button painted in the row, and the shared installer's progress. The download is
 // the installer's own job, the same one Settings > Sound packs starts, so both places show the same bar.
 #include "UI/Layout/ChevronTurn.h"
@@ -95,7 +95,7 @@ juce::String SoundBrowserComponent::packSignature() const {
 }
 
 // Rows for the packs offered: under Places a "Get more" heading and one row each; in search results only the packs the
-// query finds, by name or by an instrument's name.
+// query finds (they come first, whatever filter chips are on), by name or by an instrument's name.
 void SoundBrowserComponent::appendOfferedPackRows(const synth::soundbrowser::SoundSnapshot& snap, bool places) {
     const auto offered = offeredPacks(snap);
     if (places) {

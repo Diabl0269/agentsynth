@@ -118,22 +118,49 @@ TEST(SoundPackOffer, GetMoreWaitsForThePackListToLoad) {
     EXPECT_EQ(packs, 1) << "the view follows the installer once the list arrives";
 }
 
-TEST(SoundPackOffer, SearchEndsWithThePacksWhoseNameOrInstrumentsMatch) {
+TEST(SoundPackOffer, SearchStartsWithThePacksWhoseNameOrInstrumentsMatch) {
     OfferRig rig;
     rig.view->setQuery("grand");
     const auto& rows = rig.view->getRows();
-    ASSERT_EQ(rows.size(), 2u);
-    EXPECT_EQ(rows[0].kind, Kind::Sound) << "the sounds come first";
-    EXPECT_EQ(rows[1].kind, Kind::GetPack);
+    ASSERT_EQ(rows.size(), 3u);
+    EXPECT_EQ(rows[0].kind, Kind::Hint);
+    EXPECT_EQ(rows[0].text, "Get more");
+    EXPECT_FALSE(rows[0].navigable()) << "the heading is not a stop";
+    EXPECT_EQ(rows[1].kind, Kind::GetPack) << "the packs come first";
+    EXPECT_TRUE(rows[1].navigable()) << "so Down from the search box lands on the pack";
     EXPECT_TRUE(rows[1].viaInstrument) << "Grand is one of the pack's instruments, not its name";
+    EXPECT_EQ(rows[2].kind, Kind::Sound);
 
     rig.view->setQuery("pack core");
-    ASSERT_EQ(rig.view->getRows().size(), 1u);
-    EXPECT_FALSE(rig.view->getRows()[0].viaInstrument);
+    const auto& packOnly = rig.view->getRows();
+    ASSERT_EQ(packOnly.size(), 3u);
+    EXPECT_EQ(packOnly[0].text, "Get more");
+    EXPECT_FALSE(packOnly[1].viaInstrument);
+    EXPECT_EQ(packOnly[2].text, "No matching sounds") << "a search that finds only packs still says no sound matched";
 
     rig.view->setQuery("zzzz");
     EXPECT_EQ(rig.countOf(Kind::GetPack), 0);
+    ASSERT_EQ(rig.view->getRows().size(), 1u);
     EXPECT_EQ(rig.view->getRows()[0].kind, Kind::Hint);
+    EXPECT_EQ(rig.view->getRows()[0].text, "No matching sounds");
+}
+
+TEST(SoundPackOffer, SearchKeepsThePacksWhileAFilterChipIsOn) {
+    OfferRig rig;
+    rig.view->getFilters().setKind(synth::soundbrowser::SoundKind::OneShot, true);
+    rig.view->setQuery("grand");
+    const auto& rows = rig.view->getRows();
+    ASSERT_GE(rows.size(), 3u);
+    EXPECT_EQ(rows[0].text, "Get more");
+    EXPECT_EQ(rows[1].kind, Kind::GetPack);
+    EXPECT_EQ(rows[2].kind, Kind::Sound) << "the sound still shows, below the pack";
+
+    rig.view->getFilters().setKind(synth::soundbrowser::SoundKind::OneShot, false);
+    rig.view->getFilters().setKind(synth::soundbrowser::SoundKind::Loop, true);
+    rig.view->setQuery("");
+    rig.view->setQuery("grand");
+    EXPECT_EQ(rig.view->getRows()[1].kind, Kind::GetPack) << "no sound passes Loops, the pack is still listed";
+    EXPECT_EQ(rig.countOf(Kind::Sound), 0);
 }
 
 TEST(SoundPackOffer, SearchFindsAPackByTheCategoriesOfItsInstruments) {
