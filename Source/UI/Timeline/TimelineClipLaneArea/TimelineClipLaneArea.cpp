@@ -15,6 +15,7 @@
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
+#include "WaveformSampleCache.h"
 #include <algorithm>
 #include <cmath>
 
@@ -51,7 +52,8 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     : viewState_(viewState)
     , selection_(selection)
     , clipGlide_(std::make_unique<KeyedRectTween>(*this))
-    , enterExit_(std::make_unique<ClipLaneEnterExit>(*this)) {
+    , enterExit_(std::make_unique<ClipLaneEnterExit>(*this))
+    , sampleCache_(std::make_unique<WaveformSampleCache>()) {
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);
@@ -110,8 +112,10 @@ void TimelineClipLaneArea::refreshFromDoc() {
     // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
     // dirty tracking against a mutation we don't otherwise inspect) is not worth building yet.
     peaksCache_.clear();
-    // Same policy, same reasoning, for the asset-existence cache.
+    // Same policy, same reasoning, for the asset-existence cache and the raw-sample blocks (a re-recorded or
+    // replaced file must show its new wave).
     assetExistsCache_.clear();
+    sampleCache_->clear();
     glideRestoredClips();
     repaint();
 }
@@ -130,8 +134,16 @@ void TimelineClipLaneArea::setAssetSampleRateResolver(std::function<double(const
     invalidatePeaksCache(); // a different resolver may answer an already-cached ref differently
 }
 
+// MainComponent wires this to the same file resolution playback uses. See paintWaveformFromSamples.
+void TimelineClipLaneArea::setAssetSamplesResolver(
+    std::function<bool(const juce::String&, std::int64_t, int, juce::AudioBuffer<float>&)> resolver) {
+    sampleCache_->setResolver(std::move(resolver));
+    invalidatePeaksCache();
+}
+
 void TimelineClipLaneArea::invalidatePeaksCache() {
     peaksCache_.clear();
+    sampleCache_->clear();
     // Cleared alongside — see setAssetExistsResolver's comment for why the two caches share
     // every clear point.
     assetExistsCache_.clear();

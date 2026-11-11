@@ -20,7 +20,9 @@ two or more units in `TimelineClipLaneInternal.h`:
 | Unit | Concern |
 |------|---------|
 | `TimelineClipLaneArea.cpp` | Ctor, `TimelineDoc` wiring, row/rect geometry, hit-testing, core `paint()` |
-| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting (each column folds every peak bucket under it; a lighter peak outline with a darker RMS body), live-recording strip |
+| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), the peaks cache, live-recording strip |
+| `TimelineClipLaneWaveform.cpp` | Waveform painting: filled outline and RMS body paths; interpolated peaks zoomed in; the real samples from disk below one bucket per pixel (see app-wiring) |
+| `WaveformSampleCache.*`, `WaveformDraw.h` | The cached raw-sample blocks the zoomed-in waveform reads, the asset-rate sample span, and the filled-path column drawing shared with the live strip |
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
 | `TimelineClipLaneKeyboard.cpp` | Clip keyboard mode: stepping/opening/moving the keyboard clip, its accent ring, its screen-reader description |
