@@ -4,6 +4,7 @@
 // proxy child per block (the MixerInsertList::RowAccessibilityProxy pattern), the tooltips, and the test-mode probe a
 // ui-verify scenario reads.
 
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 #include "ShortcutManager/ShortcutManager.h"
@@ -56,15 +57,17 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessib
 
 // The constructor and destructor live here: Probe is only complete in this file.
 TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
-    : viewState_(viewState) {
+    : viewState_(viewState)
+    , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
     setTitle("Sections");
     setDescription("Sections, 0 sections");
     setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp
+    edgeScroll_.onTick = [this] { edgeScrollTick(); };
     addTestProbe();
 }
 
-TimelineSectionStrip::~TimelineSectionStrip() = default;
+TimelineSectionStrip::~TimelineSectionStrip() { stopEdgeScroll(); }
 
 void TimelineSectionStrip::addTestProbe() {
     probe_ = std::make_unique<Probe>([this](juce::DynamicObject& into) {
@@ -116,12 +119,20 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
                                               block.variationCount > 1 ? letter : juce::String());
         }
     }
+    // The key is named only when it would make something now, and says from what.
+    const juce::String source = makeSectionKeySource ? makeSectionKeySource() : juce::String();
     const juce::KeyPress fallback('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
-    const auto hint = shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
-    return "Drag across bars to make a section" + (hint.isEmpty() ? juce::String() : " (" + hint + ")");
+    const auto hint = source.isEmpty() ? juce::String() : shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
+    return "Drag across bars to make a section" +
+           (hint.isEmpty() ? juce::String() : ", or press " + hint + " to make one from " + source);
 }
 
-juce::String TimelineSectionStrip::getTooltip() { return tooltipAt(getMouseXYRelative().toFloat()); }
+// No tooltip while a drag is held: it would cover the drop line and the blocks making room.
+juce::String TimelineSectionStrip::getTooltip() {
+    if (blockDragging_ || makeDragging_)
+        return {};
+    return tooltipAt(getMouseXYRelative().toFloat());
+}
 
 //==============================================================================
 // One proxy per placement (visible or not: a screen reader walks them all), rebuilt only when what they say changed.

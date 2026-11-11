@@ -196,12 +196,13 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
     const double oldEnd = old.startBeat + length;
     const auto content = contentOf(old.startBeat, length);
 
+    // `newStartBeat` is the start the block has AFTER the move, in the layout the user sees while dragging (the strip's
+    // sectionstrip::planSectionDrop): with make-room its old bars close up first, so a later target is already counted
+    // without them.
     SectionEditScope scope(*this);
-    double target = newStartBeat;
+    const double target = newStartBeat;
     if (mode == SectionDropMode::MakeRoom) {
         deleteTime(old.startBeat, oldEnd, secondsPerBeat); // takes the placement with it; the section stays alive
-        if (newStartBeat > old.startBeat)
-            target = std::max(old.startBeat, newStartBeat - length);
         insertTime(target, length, secondsPerBeat);
     } else {
         deleteRange(trackIds(true), old.startBeat, oldEnd, false, secondsPerBeat);

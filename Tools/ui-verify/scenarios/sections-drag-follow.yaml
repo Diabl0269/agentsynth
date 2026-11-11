@@ -1,0 +1,90 @@
+# Sections drag like timeline tracks: a dragged block's neighbours glide aside to show where it lands, the block
+# lands on the drop line (it used to land a block's length earlier and seem to reappear somewhere else), Shift shows a
+# cover drop before release, a drag held at the strip's edge scrolls the timeline, and Shift+Cmd+J makes a section
+# from the loop with the strip focused (its tooltip says so).
+#
+# What a user does: makes three sections (bar 1, bar 2, bars 3 to 4), drags the first one past the third: the second
+# and third slide left while dragging and it lands after the third, where the line was. Drags it back over the first
+# block with Shift held: the block it would replace dims. Drags a block to the strip's right edge and holds: the
+# timeline scrolls and the drop line keeps following. Sets a loop and presses Shift+Cmd+J with the strip focused.
+record: true
+save_project: sections-drag-follow
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Three sections: bar 1 (x 0..96), bar 2 (96..192), bars 3 and 4 (192..384); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 378, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 378, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:8.000:1/1", within_ms: 2000}
+  - screenshot: {name: 1-three-sections}
+  # Check 1: drag Section 1 (grabbed 40 px in) until its left edge is at x 290, just past Section 3's end once
+  # Section 1's own bar closes up: Sections 2 and 3 glide left and the drop line sits at x 288 (beat 12).
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 150, y: 12}
+  - glide: {name: neighbours-make-room, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}}, frames: 12}
+  - mark: {check: 1, name: drop-line-and-gap}
+  - glide: {name: block-settles-on-line, do: {mouseUp: {id: timelineSectionStrip, x: 330, y: 12}}, frames: 10}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 1, name: landed-where-the-line-was}
+  # Undo glides them back.
+  - glide: {name: undo-glides-back, do: {key: {keys: cmd+z}}, frames: 10}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:8.000:1/1", within_ms: 2000}
+  - key: {keys: cmd+shift+z}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
+  # Check 2: Shift held over Section 2 shows a cover drop (Section 2 dims, nothing moves); released above the strip
+  # it cancels.
+  - mouseDown: {id: timelineSectionStrip, x: 330, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 200, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 44, y: 12, mods: shift}
+  - mark: {check: 2, name: shift-shows-cover}
+  - mouseUp: {id: timelineSectionStrip, x: 44, y: -10, mods: shift}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
+  # Check 4: Shift+Cmd+J with the strip focused. With no range and no loop, a toast says what to do; with the Range
+  # tool's bars drawn on the lane, the strip's tooltip names the key and the key makes a section from them.
+  - click: {id: timelineSectionStrip, x: 1000, y: 12}
+  - key: {keys: cmd+shift+j}
+  - expect: {id: toastState, contains: {message: "Range tool"}, within_ms: 2000}
+  - mark: {check: 4, name: make-section-key-says-what-to-do}
+  - click: {id: timelineToolRange}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 484, fromY: 28, toX: 670, toY: 28, steps: 12}
+  - wait: {}
+  - hover: {id: timelineSectionStrip, x: 1000, y: 12}
+  - expect: {id: timelineSectionStrip, contains: {tooltip: "to make one from the selected bars"}, within_ms: 3000}
+  - mark: {check: 4, name: tooltip-names-the-key}
+  - click: {id: timelineSectionStrip, x: 1000, y: 12}
+  - key: {keys: cmd+shift+j}
+  - wait: {}
+  - expect: {id: timelineSections, contains: {sections: "Section 4:"}, within_ms: 2000}
+  - key: {keys: return}
+  - mark: {check: 4, name: made-from-the-range}
+  - click: {id: timelineToolSelect}
+  # Check 3: Section 2 held at the strip's right edge scrolls the timeline; on release it lands after the others.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 400, y: 12}
+  - glide: {name: edge-scroll, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 1392, y: 12}}, frames: 20}
+  - wait: {settleMs: 1000}
+  - mark: {check: 3, name: edge-scroll-follows}
+  - mouseUp: {id: timelineSectionStrip, x: 1392, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, contains: {sections: "Section 3:0.000:8.000:1/1;Section 1:8.000:4.000:1/1;Section 4:16.000:8.000:1/1;Section 2:"}, within_ms: 2000}

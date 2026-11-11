@@ -83,18 +83,20 @@ inline double nearestBar(double beat, double beatsPerBar) noexcept {
     return std::max(0.0, std::round(beat / beatsPerBar) * beatsPerBar);
 }
 
-/** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start or end snaps to a
- *  neighbour's edge (the closest of every start and end in `others`) when within kBoundarySnapPx, else to the nearest
- *  whole bar; a result strictly inside one of `others` goes to that block's nearer edge (the later one on a tie). */
+/** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start (and, with
+ *  `snapEnd`, its end) snaps to a neighbour's edge (the closest of every start and end in `others`) when within
+ *  kBoundarySnapPx, else to the nearest whole bar; a result strictly inside one of `others` goes to that block's nearer
+ *  edge (the later one on a tie). */
 inline double dropBeat(double rawStart, double lengthBeats, double beatsPerBar, double pixelsPerBeat,
-                       const std::vector<Span>& others) {
+                       const std::vector<Span>& others, bool snapEnd = true) {
     const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
     const double snapBeats = pixelsPerBeat > 0.0 ? kBoundarySnapPx / pixelsPerBeat : 0.0;
     double best = nearestBar(rawStart, bpb);
     double bestDistance = snapBeats + 1.0;
     for (const auto& other : others) {
         const double candidates[] = {other.start, other.end, other.start - lengthBeats, other.end - lengthBeats};
-        for (const double candidate : candidates) {
+        for (int i = 0; i < (snapEnd ? 4 : 2); ++i) {
+            const double candidate = candidates[i];
             const double distance = std::abs(candidate - rawStart);
             if (candidate >= 0.0 && distance <= snapBeats && distance < bestDistance) {
                 best = candidate;

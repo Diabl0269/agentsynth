@@ -4,7 +4,6 @@
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/DrumMachine/DrumLanes.h"
-#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
@@ -72,6 +71,10 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // OUTWARDS through onAudioFileDropped. This class never imports anything itself — it owns no
 // AssetManager and no bundle knowledge, exactly like onRelinkAudioRequested.
 namespace synth::ui {
+
+template <typename T>
+class KeyedTween;
+using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 
 //==============================================================================
 // ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
@@ -153,7 +156,7 @@ class TimelineClipLaneArea
     , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
-    ~TimelineClipLaneArea() override = default;
+    ~TimelineClipLaneArea() override;
 
     void paint(juce::Graphics& g) override;
 
@@ -606,7 +609,7 @@ public:
     juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
     /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
     double getDrawnNoteXForTest(synth::ClipId id, int index) const;
-    KeyedRectTween& getClipGlideForTest() noexcept { return clipGlide_; }
+    KeyedRectTween& getClipGlideForTest() noexcept { return *clipGlide_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -848,7 +851,7 @@ private:
     // The notes' relative starts at the same sync, and how a restore's glide moves each clip's notes (ClipNoteGlide).
     std::map<std::int64_t, std::vector<synth::ClipNoteStart>> clipNoteStarts_;
     std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
-    KeyedRectTween clipGlide_{*this};
+    std::unique_ptr<KeyedRectTween> clipGlide_;
     RestoreWatch restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
