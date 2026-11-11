@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Modules/FX/ParametricEQModule.h"
 #include <array>
 #include <atomic>
 #include <functional>
@@ -41,6 +40,7 @@
 // handleAsyncUpdate() -- the same thread-hop HostedPluginModule::InstanceListener uses for its own
 // audioProcessorChanged callback. paint() reads only the cached result, never the module.
 class AppUndoManager;
+class ParametricEQModule;
 
 namespace synth::ui {
 
@@ -122,7 +122,8 @@ private:
     AppUndoManager* undo_ = nullptr;
     std::atomic<bool> restorePending_{false};
     std::unique_ptr<EqBandGlide> glide_;
-    ParametricEQModule::BandSnapshots lastBands_{};
+    struct LastBands; // the module's last-read band snapshots (defined in the .cpp so this header stays narrow)
+    std::unique_ptr<LastBands> lastBands_;
     float lastOutputGainDb_ = 0.0f;
 
     std::vector<float> cachedMagnitudesDb_;
