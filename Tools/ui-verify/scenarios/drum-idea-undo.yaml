@@ -6,6 +6,7 @@
 #   2. Picks the House starter from Ideas: the hits grow in.
 #   3. Presses Cmd+Z: the House hits shrink out (the clip is empty again). Presses Cmd+Shift+Z: they grow back.
 motion: true
+pop_check: {undo: false}   # undo off: the scenario tests undo itself and needs the undo history untouched
 record: true
 save_project: drum-idea-undo
 steps:

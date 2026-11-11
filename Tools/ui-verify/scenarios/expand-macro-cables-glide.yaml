@@ -10,6 +10,7 @@
 # MacroFoldCableSlide.* covers the first, middle and last frames headlessly (expand, collapse, Reduce Motion, Off).
 # Each mark sits on the landed state, never mid-slide; proof/<glide>-strip.png is the frames across the slide.
 motion: true
+pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the macro fold state its later steps expect
 record: true
 save_project: fro830-test
 steps:

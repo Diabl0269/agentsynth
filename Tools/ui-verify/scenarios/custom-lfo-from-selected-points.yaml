@@ -13,6 +13,7 @@
 # The cursor shape itself is read from the lane's and the mod row's state probes ("tool" is the Range cursor, "arrow" none);
 # the popup menu is its own window, so its PNGs capture the menu.
 motion: true
+pop_check: {undo: false}   # undo off: the scenario holds focus and hover state that the undo probe's click on the toolbar would move
 stale_pixel_check: true
 record: true
 save_project: lane-custom-lfo

@@ -11,7 +11,10 @@ A scenario file is either a list of steps or a mapping with `steps:` and optiona
 instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound, filmed from the `screen` frame: the main window, every other window of the app and the pointer; `record_target: {id: <component id>, scale: N}` films that component instead),
 `save_project: <name>` (<out>/<name>.agsproj, saved after the last step) and `stale_pixel_check: true` (after every step
 that can change the window, what the window shows must equal a full repaint; a mapping {ignore: [ids], settle_ms: N}
-masks components and sets how long paints may settle). One mapping per step, `- <command>: {args}`:
+masks components and sets how long paints may settle), `pop_check` (on by default with `motion: true`: nothing added, removed
+or swapped on screen may land in one frame; `pop_check: {off: "<reason>"}` turns it off, a bare `false` is refused; a mapping
+may also give `ignore: [ids]`, `ms: N` and `undo: false`) and, on a step, `instant: "<reason>"` (that step may pop on purpose).
+Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-pop-check). One mapping per step, `- <command>: {args}`:
 
     - openProject: {path: ${FIXTURES}/macros.agsproj}   # any protocol command (click, drag, key, getState, ...)
     - click: {id: "card:LFO 1", x: 40, y: 12}
@@ -69,6 +72,11 @@ RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
+POP_CHECKED = {"click", "drag", "key", "wheel", "mouseUp", "keyUp"}  # protocol actions that can change the window; a glide's `do` too
+POP_KEYS = {"ignore", "ms", "undo", "off"}
+KNOWN_POPS = os.path.join(HERE, "known-pops.txt")
+KNOWN_STEP = re.compile(r"^(\d+)([ur]?)$")
+UNDO_STEPS = (("u", "undoButton"), ("r", "redoButton"))  # the toolbar buttons: Cmd+Z in a text field would undo its text
 
 
 class ScenarioError(ValueError):
@@ -77,7 +85,7 @@ class ScenarioError(ValueError):
 
 class Scenario:
     def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None,
-                 stale_pixel_check=None, record_target=None):
+                 stale_pixel_check=None, record_target=None, pop_check=None):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
@@ -87,6 +95,7 @@ class Scenario:
         self.save_project = save_project  # write <out>/<save_project>.agsproj after the last step
         self.stale_pixel_check = stale_pixel_check  # None, or {"ignore": [ids], "settle_ms": N}
         self.record_target = record_target  # None (the main window), or {"id": component id, "scale": N} to film one
+        self.pop_check = pop_check  # None (off), or {"ignore": [ids], "ms": N, "undo": bool}: no add, remove or swap lands in one frame
 
 
 def _substitute(value, variables):
@@ -122,6 +131,56 @@ def _stale_pixel_option(value, name):
     return dict(value)
 
 
+def _pop_check_option(document, motion, name):
+    """`pop_check`: on (an empty mapping) by default with `motion: true`, off otherwise. `true`, or a mapping with
+    `ignore`, `ms` and `undo`, turns it on; `{off: "<reason>"}` turns it off. A bare `false` is refused: it needs a reason."""
+    if "pop_check" not in document:
+        return {} if motion else None
+    value = document["pop_check"]
+    if isinstance(value, dict):
+        value = {"off" if key is False else key: item for key, item in value.items()}  # YAML 1.1 reads a bare `off` as False
+    if value is True:
+        return {}
+    if not isinstance(value, dict) or set(value) - POP_KEYS:
+        raise ScenarioError("%s: `pop_check: false` needs a reason: `pop_check: {off: \"<why>\"}` (or true, or a mapping "
+                            "with `ignore`, `ms`, `undo`)" % name)
+    if "off" in value:
+        if set(value) != {"off"} or not isinstance(value["off"], str) or not value["off"].strip():
+            raise ScenarioError("%s: `pop_check.off` is a reason string and stands alone" % name)
+        return None
+    if not isinstance(value.get("ignore", []), list):
+        raise ScenarioError("%s: `pop_check.ignore` must be a list of component ids" % name)
+    ms = value.get("ms", 300)
+    if isinstance(ms, bool) or not isinstance(ms, (int, float)) or ms <= 0:
+        raise ScenarioError("%s: `pop_check.ms` must be a positive number" % name)
+    if not isinstance(value.get("undo", True), bool):
+        raise ScenarioError("%s: `pop_check.undo` must be true or false" % name)
+    return dict(value)
+
+
+def _check_instant(args, index, name):
+    """`instant: "<reason>"` on a step: that step may land in one frame on purpose. The reason must say why."""
+    if "instant" in args and (not isinstance(args["instant"], str) or not args["instant"].strip()):
+        raise ScenarioError("%s: step %d: `instant` needs a reason string saying why it is deliberately instant" % (name, index))
+
+
+def load_known_pops(path=KNOWN_POPS):
+    """known-pops.txt: lines `<scenario> <step>[u|r] <ticket> <reason...>`, `#` comments. {(scenario, step label): (ticket, reason)}."""
+    known = {}
+    if not os.path.isfile(path):
+        return known
+    with open(path, encoding="utf-8") as handle:
+        for number, line in enumerate(handle, 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 3)
+            if len(parts) < 4 or not KNOWN_STEP.match(parts[1]):
+                raise ScenarioError("%s:%d: expected `<scenario> <step>[u|r] <ticket> <reason>`, got %r" % (path, number, line))
+            known[(parts[0], parts[1].lstrip("0") or "0")] = (parts[2], parts[3])
+    return known
+
+
 def _record_target_option(value, name):
     """`record_target: {id: <component id>, scale: N}`: film that component (a popover is a window of its own) instead of
     the main window."""
@@ -152,7 +211,7 @@ def _check_glide(args, index, name, record, seen):
     where = "%s: step %d (glide)" % (name, index)
     if not record:
         raise ScenarioError("%s needs `record: true`: it films the motion" % where)
-    if not set(args) <= {"name", "do", "frames", "crop"} or not {"name", "do"} <= set(args):
+    if not set(args) <= {"name", "do", "frames", "crop", "instant"} or not {"name", "do"} <= set(args):
         raise ScenarioError("%s takes `name`, `do` and optionally `frames` and `crop`, got %r" % (where, sorted(args)))
     crop = args.get("crop")
     if crop is not None and (not isinstance(crop, dict) or set(crop) != {"x", "y", "w", "h"}
@@ -182,12 +241,13 @@ def parse_scenario(text, name="scenario", path=None):
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
     motion = record = False
-    save_project = stale = record_target = None
+    save_project = stale = record_target = pop_check = None
     if isinstance(document, dict):
         stale = _stale_pixel_option(document.get("stale_pixel_check"), name)
         motion = bool(document.get("motion"))
         record = bool(document.get("record"))
         record_target = _record_target_option(document.get("record_target"), name)
+        pop_check = _pop_check_option(document, motion, name)
         if document.get("save_project") is not None:
             save_project = _project_name(document["save_project"], name)
         settings = document.get("settings") or {}
@@ -207,12 +267,13 @@ def parse_scenario(text, name="scenario", path=None):
             args = {}
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
+        _check_instant(args, index, name)
         if command == "mark":
             _check_mark(args, index, name, mark_names)
         if command == "glide":
             _check_glide(args, index, name, record, glide_names)
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target)
+    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target, pop_check)
 
 
 def load_scenarios(target):
@@ -320,8 +381,13 @@ def run_expect(args, app, sleep=time.sleep, clock=time.monotonic):
 
 
 class Runner:
-    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False):
+    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False, known_pops=None):
         self.scenario = scenario
+        known = load_known_pops() if known_pops is None else known_pops
+        self.known_pops = {label: value for (name, label), value in known.items() if name == scenario.name}
+        self.pop_problems = []  # a pop does not stop the run: every one in the scenario is reported together
+        self.pop_seen = set()  # labels of the checked steps (and undo/redo) that ran
+        self.undo_available = None  # None until a watch answers; False when the app reports no undo serial
         self.out_dir = out_dir
         self.app_path = app_path
         self.app_factory = app_factory
@@ -362,6 +428,90 @@ class Runner:
             return "stale pixels after %s: %s" % (command, error)
         self._record(index, "checkStalePixels", args, reply, True)
         return ""
+
+    def _pop_watched(self, command, args):
+        """Whether a step is a protocol action that can change the window, so a watch goes around it."""
+        if self.scenario.pop_check is None or (self.held and command != "mouseUp"):
+            return False
+        if command == "glide":
+            command = next(iter(args["do"]))
+        return command in POP_CHECKED
+
+    def _pop_verdict(self, label, command, reply, instant, folder):
+        """The result of one popWatchCheck: "" when the change animated, was deliberately instant or is a known pop;
+        else the failure message."""
+        self.pop_seen.add(label)
+        known = self.known_pops.get(label)
+        popped = bool(reply.get("changed") and reply.get("pop"))
+        if not popped:
+            if known:
+                # Pop detection depends on which frames the screen caught, so a listed pop can animate on a busy run:
+                # say so, but do not fail the scenario.
+                print("note: step %s did not pop this run: remove it from known-pops.txt if it never does (%s %s)"
+                      % (label, known[0], known[1]), file=sys.stderr)
+            return ""
+        where = "x %d y %d w %d h %d (%d pixels, %d frames seen)" % (
+            reply["regionX"], reply["regionY"], reply["regionW"], reply["regionH"], reply["regionPixels"], reply["framesSeen"])
+        if instant:
+            return ""
+        if known:
+            print("ui-verify: %s: known pop after %s at step %s (%s): %s" % (self.scenario.name, command, label, known[0], known[1]))
+            return ""
+        return ("pop after %s: what changed in %s showed up in one frame instead of animating; see %s "
+                "(before.png, first.png, final.png, differences.png). Animate it, mark the step `instant: <reason>` if it "
+                "is a text or value change, or list it in known-pops.txt" % (command, where, folder))
+
+    def _pop_check(self, index, label, command, instant):
+        """popWatchCheck after a watched action. Returns (reply, failure message)."""
+        option = self.scenario.pop_check
+        folder = os.path.join(self.out_dir, "pop-step-%02d%s" % (index, label[len(str(index)):]))
+        # The toolbar's Undo and Redo buttons light up or dim at once after any edit, by design.
+        args = {"dir": folder, "ignore": list(option.get("ignore", [])) + ["undoButton", "redoButton"]}
+        if "ms" in option:
+            args["ms"] = option["ms"]
+        try:
+            reply = self.app.call("popWatchCheck", **args)
+        except TestModeError as error:
+            self._record(index, "popWatchCheck", args, None, False, str(error))
+            return None, "pop check after %s: %s" % (command, error)
+        message = self._pop_verdict(label, command, reply, instant, folder)
+        self._record(index, "popWatchCheck", args, dict(reply, step=label), not message, message or None)
+        return reply, message
+
+    def _undo_redo(self, index, command, instant):
+        """After an edit: undo, then redo, each under a watch and each must animate too. Returns a failure message."""
+        for suffix, button in UNDO_STEPS:
+            label = "%d%s" % (index, suffix)
+            self.app.call("popWatchStart")
+            self.app.call("click", id=button)
+            self._record(index, "click", {"id": button}, {"step": label}, True)
+            _, message = self._pop_check(index, label, "%s (%s)" % ("undo" if suffix == "u" else "redo", command), instant)
+            if message:
+                self.pop_problems.append("step %s: %s" % (label, message))
+        return ""
+
+    def _step(self, index, command, args, instant=None):
+        """One step, inside a pop watch when it is an action that can change the window. Returns (ok, message)."""
+        watched = self._pop_watched(command, args)
+        if watched:
+            self.app.call("popWatchStart")
+        ok, message = self._do_step(index, command, args)
+        if not ok or not watched:
+            return ok, message
+        reply, message = self._pop_check(index, str(index), command, instant)
+        if message:
+            self.pop_problems.append("step %d: %s" % (index, message))
+            if reply is None:
+                return False, message
+            message = ""
+        edited = reply.get("undoSerialAfter") != reply.get("undoSerialBefore")
+        if self.undo_available is None and "undoSerialBefore" not in reply:
+            self.undo_available = False
+            print("ui-verify: %s: undo and redo are not pop-checked: the app reports no undo serial" % self.scenario.name)
+        if "undoSerialBefore" in reply and edited and self.scenario.pop_check.get("undo", True):
+            self.undo_available = True
+            message = self._undo_redo(index, command, instant)
+        return (False, message) if message else (True, "")
 
     def _record(self, index, command, args, reply, ok, error=None):
         entry = {"scenario": self.scenario.name, "step": index, "cmd": command, "args": args, "reply": reply, "pass": ok}
@@ -443,7 +593,7 @@ class Runner:
         self.marks[-1]["reply"] = reply  # the run log's entry, completed when the clip is cut
         return reply
 
-    def _step(self, index, command, args):
+    def _do_step(self, index, command, args):
         """Runs one step. Returns (ok, error message)."""
         app = self.app
         if command == "expect":
@@ -519,19 +669,47 @@ class Runner:
                 print("ui-verify: %s: no clip for %s: %s" % (self.scenario.name, mark["name"], clip_message),
                       file=sys.stderr)
 
+    def _known_pops_exist(self):
+        """Every listed step must be a step of this scenario that is pop-checked."""
+        steps = self.scenario.steps
+        for label in sorted(self.known_pops):
+            number = int(KNOWN_STEP.match(label).group(1))
+            command = steps[number - 1][0] if 1 <= number <= len(steps) else None
+            if command == "glide":
+                command = next(iter(steps[number - 1][1]["do"]))
+            if command not in POP_CHECKED:
+                return "known-pops.txt lists step %s of %s, which %s" % (
+                    label, self.scenario.name, "does not exist" if command is None else "is %s, not a pop-checked action" % command)
+        return ""
+
     def _run_steps(self):
+        missing = self._known_pops_exist()
+        if missing:
+            return False, missing
         self._launch()
         if self.recorder is not None:
             self.recorder.frame(self.app)
         for index, (command, raw_args) in enumerate(self.scenario.steps, 1):
             args = _substitute(raw_args, self.variables)
+            instant = args.pop("instant", None) if command not in ("expect", "mark") else None
             try:
-                ok, message = self._step(index, command, args)
+                ok, message = self._step(index, command, args, instant)
             except TestModeError as error:
                 self._record(index, command, args, None, False, str(error))
                 return False, "step %d (%s): %s" % (index, command, error)
             if not ok:
                 return False, "step %d: %s" % (index, message)
+        if self.pop_problems:
+            return False, "\n  ".join(self.pop_problems)
+        return self._check_known_pops_ran()
+
+    def _check_known_pops_ran(self):
+        """A listed step that never ran (it moved, or was removed) must not stay listed."""
+        for label, (ticket, _) in sorted(self.known_pops.items()):
+            if label in self.pop_seen or (label[-1] in "ur" and not self.undo_available):
+                continue
+            return False, "known-pops.txt lists step %s of %s (%s), which has no pop check: remove it" % (
+                label, self.scenario.name, ticket)
         return True, ""
 
     def run(self):
@@ -565,6 +743,13 @@ class Runner:
                     handle.write(json.dumps(entry) + "\n")
 
 
+def _stale_known_scenarios():
+    """Scenario names in known-pops.txt that have no file in the scenarios folder."""
+    folder = os.path.join(HERE, "scenarios")
+    names = {os.path.splitext(f)[0] for f in os.listdir(folder)} if os.path.isdir(folder) else set()
+    return sorted({name for name, _ in load_known_pops()} - names)
+
+
 def _print_proof(runner):
     for mark in runner.marks:
         print("  check %d %s: still %s%s" % (mark["check"], mark["name"], mark["still"],
@@ -582,6 +767,14 @@ def main(argv=None):
         scenarios = load_scenarios(options.target)
     except (ScenarioError, OSError) as error:
         print("ui-verify: %s" % error, file=sys.stderr)
+        return 2
+    try:
+        stale = _stale_known_scenarios()
+    except ScenarioError as error:
+        print("ui-verify: %s" % error, file=sys.stderr)
+        return 2
+    if stale:
+        print("ui-verify: known-pops.txt lists scenarios that do not exist: %s" % ", ".join(stale), file=sys.stderr)
         return 2
     failures = 0
     for scenario in scenarios:

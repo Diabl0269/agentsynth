@@ -28,10 +28,10 @@ steps:
   - glide: {name: source-shrink, frames: 6, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: escape}}}
   - wait: {}
   - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
-  - click: {id: automationLaneHeader, button: right}
+  - click: {id: automationLaneHeader, button: right, instant: "the focus ring moves to the canvas panel"}
   - wait: {}
   - key: {keys: down}
-  - glide: {name: addmod-grow, frames: 10, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: return}}}
+  - glide: {name: addmod-grow, frames: 10, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: return}}, instant: "the focus ring moves to the canvas panel"}
   - wait: {}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - mark: {check: 2, name: add-modulator-top}

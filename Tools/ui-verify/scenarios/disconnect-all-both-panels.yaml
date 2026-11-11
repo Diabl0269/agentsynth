@@ -7,6 +7,7 @@
 #   3. Opens the sources panel of the Filter's Cutoff (two LFOs): the same icon is in its title row; clicking it
 #      removes both sources.
 motion: true
+pop_check: {undo: false}   # undo off: the undo probe moves the pointer off the hovered port panel
 record: true
 save_project: disconnect-all-both-panels
 steps:

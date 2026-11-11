@@ -10,9 +10,9 @@ steps:
   - wait: {}
   - key: {keys: cmd+t}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
-  - key: {keys: escape}
+  - key: {keys: escape, instant: "the focus ring moves to or from the timeline panel"}
   - wait: {}
-  - click: {id: window, x: 800, y: 800}
+  - click: {id: window, x: 800, y: 800, instant: "the focus ring moves to the timeline Add button"}
   - key: {keys: j}
   - expect: {id: "Snap off", showing: true, within_ms: 1000}
   - screenshot: {name: toast-j}

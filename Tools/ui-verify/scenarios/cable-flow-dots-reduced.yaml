@@ -3,6 +3,7 @@
 # Reverb and an LFO, and patches the LFO output onto the Reverb's Level, then Auto Arrange. The two screenshots either side of the mark
 # (1.5 s apart) show the dots a little further along.
 motion: true
+pop_check: {off: "animationMode is reduced in this scenario, so changes land at once by design"}
 record: true
 save_project: end
 settings:

@@ -9,6 +9,7 @@
 # Cell centres (local to the grid, 1400 px wide with a 132 px label column, 16 steps of 79.25 px): step n is at
 # x = 132 + 79.25 * (n + 0.5); the Kick row is at y = 62.
 motion: true
+pop_check: {undo: false}   # undo off: the scenario tests undo itself and needs the undo history untouched
 record: true
 save_project: paint-stroke
 steps:

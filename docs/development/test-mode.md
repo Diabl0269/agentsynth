@@ -63,6 +63,8 @@ thread is never blocked and timers and animations run in between.
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
+| `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
+| `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -164,6 +166,35 @@ check itself are not counted.
 
 It sees what JUCE repaints, not what macOS does with it (a backing store that drops a region JUCE asked for is
 invisible to it). A scenario turns it on with `stale_pixel_check`, see [Scenarios](#scenarios).
+
+## No-pop check
+
+Anything added, removed or swapped on screen must animate; it never lands in one frame. `popWatchStart` keeps a full
+paint of the window and, from the same presented frame the [stale-pixel check](#stale-pixels) keeps, a copy of every
+frame the window presents afterwards. `popWatchCheck` waits until `ms` have passed and animations have stopped, paints the
+window afresh, and takes the pixels that differ from the "before" picture (outside `ignore`) as the change. A change
+**pops** when the first presented frame that shows any of it already equals the final picture there (all but 4 pixels or
+1%), or when no presented frame shows it at all. A fade or slide has frames in between (`intermediateFrames`). The check
+answers either way; the runner decides.
+
+A scenario with `motion: true` runs it around every action that can change the window: `click`, `drag` (the whole drag),
+`key`, `wheel`, `mouseUp`, `keyUp` and a `glide`'s `do`. Not checked: runner steps (`type` makes text appear per key
+by design), `hover`, `mouseDown`, `mouseMoveHeld`, `keyDown`, `openProject`, `saveProject`, `restart`, `quit`, `wait`
+and every query. Frames of a `record` video and of a `glide` are still taken before the check.
+
+- `pop_check: {off: "<reason>"}` turns it off for the scenario; a bare `false` is refused. A mapping may also give
+  `ignore: [ids]` (components that change on their own; the toolbar's Undo and Redo buttons are always ignored), `ms` and `undo: false`.
+- `instant: "<reason>"` in a step's arguments (in a `glide`, beside `do`) lets that step pop: a deliberately instant
+  change of text, a value, a selection or a caret. The reason is required and is not sent to the app.
+- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
+  `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
+  `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
+  answers they are skipped and one line says so.
+- `Tools/ui-verify/known-pops.txt` lists pops that exist today, one per line: `<scenario> <step>[u|r] <ticket> <reason>`
+  (`#` starts a comment; start the reason with an area tag such as `[timeline]`). A pop on a listed step passes with a
+  `known pop` line; a listed step that runs and does not pop prints a `note:` to remove its line (a busy run can miss a pop, so it does not fail), and a listed
+  scenario or step that does not exist fails too, so the file only shrinks. A pop on any other step fails the scenario,
+  naming the region and the PNG folder `<out>/pop-step-NN/`.
 
 ## Limits
 
