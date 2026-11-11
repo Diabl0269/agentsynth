@@ -748,6 +748,10 @@ public:
     // Runtime only: counts syncs that rewrote a placement, and names the placements the last mutation rewrote.
     std::int64_t getSectionStampRevision() const noexcept { return sectionStampCount; }
     const std::vector<PlacementId>& getLastStampedPlacements() const noexcept { return lastStampedPlacements; }
+    // Runtime only: bumped once by the last step of a section move, place or delete-with-bars that changed the doc.
+    std::int64_t getSectionEditRevision() const noexcept { return sectionEditCount; }
+    // True between the steps of such an op: a notification then shows a state halfway through it.
+    bool isSectionEditUnfinished() const noexcept { return sectionEditOpen; }
 
     // While one is alive, edits do not copy between placements; the last one to end runs a single sync, and only
     // when it would change something.
@@ -837,8 +841,16 @@ private:
     bool sectionsNeedSync() const;
     PlacementContent contentOf(double startBeat, double lengthBeats) const;
     double sectionLength(SectionId id) const;
-    void stampContent(const PlacementContent& source, double targetStart, double length);
-    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length);
+    // Clip and note ids in the doc; a stamp given one keeps a source clip's ids that are free and claims them.
+    struct UsedIds {
+        std::set<std::int64_t> clips, notes;
+    };
+    void stampContent(const PlacementContent& source, double targetStart, double length, bool keepFreeIds = false);
+    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length,
+                    UsedIds* keepFree = nullptr);
+    bool deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit);
+    void beginSectionEdit() noexcept { sectionEditOpen = true; }
+    void finishSectionEdit() noexcept;
     // Section variations (TimelineDocSectionVariations.cpp).
     void refreshStoredVariations(Section& section);
     PlacementContent variationContent(const Section& section, int letter) const;
@@ -867,6 +879,8 @@ private:
     int sectionSyncSuspended = 0;
     std::int64_t sectionStampCount = 0;
     std::vector<PlacementId> lastStampedPlacements;
+    std::int64_t sectionEditCount = 0;
+    bool sectionEditOpen = false;
     std::set<std::int64_t> storedStale; // runtime only: sections whose variations' stored music needs a refresh
 
     std::int64_t nextTrackId = 1;

@@ -13,6 +13,13 @@ KeyedTweenDirtyProbe& dirtyProbe() {
 
 void setKeyedTweenDirtyProbeForTest(KeyedTweenDirtyProbe probe) { dirtyProbe() = std::move(probe); }
 
+// The probe sees every motion repaint, so the frame-by-frame repaint guard covers pictures drawn beside the tweens.
+void repaintMotionArea(juce::Component& owner, juce::Rectangle<int> area) {
+    if (const auto& probe = dirtyProbe())
+        probe(owner, area);
+    owner.repaint(area);
+}
+
 template <typename T>
 KeyedTween<T>::KeyedTween(juce::Component& owner)
     : owner_(owner)

@@ -75,6 +75,8 @@ namespace synth::ui {
 template <typename T>
 class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
+class ClipLaneEnterExit;
+struct ClipLaneChange;
 
 //==============================================================================
 // ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
@@ -610,6 +612,7 @@ public:
     /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
     double getDrawnNoteXForTest(synth::ClipId id, int index) const;
     KeyedRectTween& getClipGlideForTest() noexcept { return *clipGlide_; }
+    ClipLaneEnterExit& getEnterExitForTest() noexcept { return *enterExit_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -679,6 +682,7 @@ private:
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
     void glideRestoredClips();
+    void paintClipGhosts(juce::Graphics& g, const TimelineRowLayout& layout);
     juce::Rectangle<int> drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const;
     // The x a note's resting `restingX` is drawn at while the clip glides from its old place (RestoreGlide.cpp).
     double glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const;
@@ -848,10 +852,14 @@ private:
         bool operator==(const ClipPlace&) const = default;
     };
     std::map<std::int64_t, ClipPlace> clipPlaces_;
+    using NoteStartsById = std::map<std::int64_t, std::vector<synth::ClipNoteStart>>;
+    void glideChangedClips(const ClipLaneChange& change, const std::map<std::int64_t, ClipPlace>& now,
+                           const NoteStartsById& noteStartsNow);
     // The notes' relative starts at the same sync, and how a restore's glide moves each clip's notes (ClipNoteGlide).
     std::map<std::int64_t, std::vector<synth::ClipNoteStart>> clipNoteStarts_;
     std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
     std::unique_ptr<KeyedRectTween> clipGlide_;
+    std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
     RestoreWatch restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.

@@ -189,7 +189,8 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
 - Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
   `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
   `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
-  answers they are skipped and one line says so.
+  answers they are skipped and one line says so. The click takes focus, so a name field an edit opened (a new
+  section's name) is closed before the next step can type into it: open it again (a double-click) before `type`.
 - `Tools/ui-verify/known-pops.txt` lists pops that exist today, one per line: `<scenario> <step>[u|r] <ticket> <reason>`
   (`#` starts a comment; start the reason with an area tag such as `[timeline]`). A pop on a listed step passes with a
   `known pop` line; a listed step that runs and does not pop prints a `note:` to remove its line (a busy run can miss a pop, so it does not fail), and a listed

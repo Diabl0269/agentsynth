@@ -388,13 +388,7 @@ bool TimelineSectionStrip::dropChangesAnything() const {
 // Writes the drop the plan shows as one undo step and leaves the dropped blocks (or their copies) selected, each ghost
 // settling where its block now starts.
 void TimelineSectionStrip::commitBlockDrop(synth::SectionDropMode mode) {
-    // A cover drop takes the blocks under the landing away: the first of them shrinks out where it was.
-    for (const auto& other : dragPlan_.others)
-        if (other.covered) {
-            if (const auto ghost = ghostOf(synth::PlacementId{other.id}))
-                motion_.startExit(*ghost);
-            break;
-        }
+    // A cover drop takes the blocks under the landing away; each shrinks out where it was (trackChangesForMotion).
     const double target = dragPlan_.landing;
     std::vector<synth::PlacementId> ids;
     for (const auto& member : dragMembers_)

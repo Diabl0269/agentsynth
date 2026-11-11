@@ -110,6 +110,7 @@ public:
             envelopes[v].reset();
             gateTriggers[v].reset();
             previousActive[v] = false;
+            riseSamplesLeft[v] = 0;
         }
         heldNotes.reset();
         lastTriggeredVoice = 0;
@@ -132,6 +133,7 @@ public:
         smoothedVelocity.reset(sampleRate, 0.01);
         smoothedVelocity.setCurrentAndTargetValue(velocityParam->get() * 0.01f);
         velocitySlewStep = 1.0f / (0.005f * (float)sampleRate);
+        riseWindowSamples = (int)(0.01 * sampleRate); // twice Poly MIDI's 5 ms gate rise
         for (int v = 0; v < MAX_VOICES; ++v) {
             voiceVelocity[v] = 1.0f;
             velocityScale[v] = 1.0f;
@@ -295,13 +297,17 @@ public:
 
                     const auto edge = gateTriggers[v].process(gateSample, threshold);
                     if (edge == SchmittTrigger::Edge::Rising) {
-                        armVelocity(v, gateSample, velocityAmount); // the gate level is the velocity
+                        armVelocity(v, gateSample, velocityAmount);
+                        riseSamplesLeft[v] = riseWindowSamples;
                         envelopes[v].noteOn();
                         lastTriggeredVoice = v;
                         if (v == 0)
                             ++firedThisBlock;
                     } else if (edge == SchmittTrigger::Edge::Falling) {
                         envelopes[v].noteOff();
+                        riseSamplesLeft[v] = 0;
+                    } else if (riseSamplesLeft[v] > 0) {
+                        trackGateRise(v, gateSample, velocityAmount);
                     }
                     voiceData[v][smp] = envelopes[v].getNextSample(ep) * velocityScaleFor(v, velocityAmount);
                 }
@@ -515,7 +521,18 @@ private:
         does not start with the loud note's scale. */
     void armVelocity(int voice, float velocity, float amount) noexcept {
         voiceVelocity[voice] = juce::jlimit(0.0f, 1.0f, velocity);
-        if (envelopes[voice].getLevel() <= 1.0e-4f)
+        riseSnapsScale[voice] = envelopes[voice].getLevel() <= 1.0e-4f;
+        if (riseSnapsScale[voice])
+            velocityScale[voice] = 1.0f - amount + amount * voiceVelocity[voice];
+    }
+
+    /** A gate that ramps up (Poly MIDI's rises over 5 ms) is only part-way to its height where it crosses the
+        Threshold, so for a short window after the crossing the velocity follows the highest level the gate
+        reaches. A voice that started from silence takes the new scale at once, as armVelocity does. */
+    void trackGateRise(int voice, float gateSample, float amount) noexcept {
+        --riseSamplesLeft[voice];
+        voiceVelocity[voice] = juce::jmax(voiceVelocity[voice], juce::jlimit(0.0f, 1.0f, gateSample));
+        if (riseSnapsScale[voice])
             velocityScale[voice] = 1.0f - amount + amount * voiceVelocity[voice];
     }
 
@@ -616,6 +633,9 @@ private:
     std::array<float, MAX_VOICES> voiceVelocity{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     std::array<float, MAX_VOICES> velocityScale{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     float velocitySlewStep = 0.01f;
+    int riseWindowSamples = 441;
+    std::array<int, MAX_VOICES> riseSamplesLeft{};
+    std::array<bool, MAX_VOICES> riseSnapsScale{};
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     juce::AudioParameterBool* legatoParam = nullptr;

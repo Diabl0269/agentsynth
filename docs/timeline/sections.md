@@ -241,6 +241,31 @@ section only when its span has the same length and identical content, otherwise 
 placement that strictly contains an insert point stops being a placement and keeps its music. Every op
 validates first and changes nothing when it rejects. Ops that may split or trim audio take `secondsPerBeat`.
 
+## Motion
+
+A section edit moves the music with the blocks instead of popping it, in the clip lanes and on the strip alike.
+
+- **Same clips.** `movePlacement` and `movePlacementsTogether` stamp the moved music back with the clips' and notes'
+  own ids (`stampContent(..., keepFreeIds)`, checked against every id in the doc so none is ever shared); a copy
+  (`placeSection`, `placeSectionsTogether`) and a repeat stamp still get fresh ids. A moved clip is therefore the same
+  clip before and after, and the lane glides it like any other moved clip.
+- **One change per edit.** A compound section op notifies once per step (delete the old bars, open the new ones, stamp
+  the music). `isSectionEditUnfinished()` is true from the op's first step to its last, and the last step bumps
+  `getSectionEditRevision()` (move, place, group move, group place, delete with bars; not `makeSection`, `insertTime`
+  or `deleteTime`; runtime only, never saved). The lane and the strip skip a notification that is unfinished with an
+  unchanged revision, so they diff the finished edit against the state before it.
+- **Clip lanes** (`ClipLaneEnterExit`, `TimelineClipLaneSectionGlide.cpp`): a restore and a finished section edit glide
+  every clip that changed; a repeat stamp glides only the clips in the placements it rewrote (never the one being
+  edited); any other edit lands at once. A clip that arrives grows from its left edge, and one that leaves shrinks
+  toward its centre where it was (180 ms `easeInCubic`, drawn by the real `paintClip`). A clip on a new or deleted track
+  goes with its row, a doc replaced with no clip surviving (a load) moves nothing (an undo or redo is never a load, so
+  redoing the delete of the only clip's section still shrinks it away), more than 64 arriving or leaving
+  clips land at once, and a clip that arrives exactly where one left draws as the same clip. Reduce Motion: moves land
+  and fade in, leaving clips fade over 80 ms; Animations Off or off screen: nothing.
+- **Strip.** `trackChangesForMotion` is the one place a block leaves: every menu delete, Delete key, cover drop, undo
+  and redo shrinks each removed block exactly once, from its picture cached at the last change, gated like the grow
+  (nothing for a load, a replace its `RestoreWatch` does not see as an undo or redo, nor for more than 8 at once). A block whose start changed glides there.
+
 ## File format
 
 Additive, `kFormatVersion` stays 1. `"sections"` is written only when there are sections:

@@ -81,7 +81,6 @@ bool TimelineSectionStrip::deleteSelected(bool keepMusic) {
     auto ids = getSelectedPlacements();
     if (doc_ == nullptr || ids.empty())
         return false;
-    const auto leaving = ghostOf(getSelectedPlacement());
     const double spb = secondsPerBeat();
     bool done = false;
     performEdit([this, &ids, keepMusic, spb, &done] {
@@ -89,9 +88,7 @@ bool TimelineSectionStrip::deleteSelected(bool keepMusic) {
         for (auto it = ids.rbegin(); it != ids.rend(); ++it)
             done |= keepMusic ? doc_->removePlacementKeepMusic(*it) : doc_->deletePlacementAndBars(*it, spb);
     });
-    refresh();
-    if (done && leaving.has_value())
-        motion_.startExit(*leaving);
+    refresh(); // every removed block shrinks away from where it was (trackChangesForMotion)
     return done;
 }
 
