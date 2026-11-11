@@ -23,3 +23,20 @@ type Parametric EQ size 560x432
   child 21 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 23 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 12, 229
+  in 2 12, 229
+  in 3 12, 229
+  in 4 12, 229
+  in 5 36, 305
+  in 6 126, 305
+  in 7 12, 229
+  in 8 12, 229
+  in 9 216, 305
+  in 10 12, 229
+  in 11 12, 229
+  in 12 12, 229
+  in 13 494, 389
+  in 14 3, -3
+  in 15 3, -3
+  out 0 550, 58
