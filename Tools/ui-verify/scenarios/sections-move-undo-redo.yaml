@@ -1,0 +1,77 @@
+# Sections motion: undo and redo of a section move glide the block and the clips of every track between the two
+# places, instead of jumping.
+#
+# What a user does: adds two Oscillator tracks, a one-bar clip on each in bar 1 and a one-bar clip on the first track
+# in bar 2, makes "Chorus" over bar 1 and "Verse" over bar 2, then drags Chorus after Verse. Cmd+Z: both blocks and
+# all three clips glide back; Cmd+Shift+Z: they glide to the moved places again.
+record: true
+motion: true
+save_project: "fro1537 test"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 84, clicks: 2}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 98, y: 28, clicks: 2}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 2:4.000;Clip 1:4.000", within_ms: 2000}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  # Under motion the runner clicks Undo and Redo after every edit (closing the name editor the drag opened), so the
+  # block is named by a double-click.
+  - click: {id: timelineSectionStrip, x: 40, y: 12, clicks: 2}
+  - wait: {}
+  - type: {text: "Chorus"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 136, y: 12, clicks: 2}
+  - wait: {}
+  - type: {text: "Verse"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/1;Verse:4.000:4.000:1/1", within_ms: 2000}
+  # Drag Chorus (grabbed 40 px in) past Verse and let go: Verse and its clip go to bar 1, Chorus and both its clips to bar 2.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 160, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 178, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 178, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Verse:0.000:4.000:1/1;Chorus:4.000:4.000:1/1", within_ms: 2000}
+  # Check 1: Cmd+Z glides both blocks and the clips on both tracks back.
+  - glide: {name: undo-move, do: {key: {keys: cmd+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/1;Verse:4.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 1, name: undo-move}
+  # Check 2: Cmd+Shift+Z glides them to the moved places again.
+  - glide: {name: redo-move, do: {key: {keys: cmd+shift+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Verse:0.000:4.000:1/1;Chorus:4.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 2, name: redo-move}
+  # The project is saved as the check starts: Chorus first.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/1;Verse:4.000:4.000:1/1", within_ms: 2000}

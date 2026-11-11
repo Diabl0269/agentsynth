@@ -14,8 +14,9 @@ using namespace detail;
 // Moves keep the clip's id (a moved section's clips do too), so a clip present before and after glides. A clip that
 // arrives on a track that was already there grows in, and one that leaves from a track that is still there shrinks
 // away; a new or deleted track's clips go with its row's own motion. A doc replaced with no clip surviving is a load:
-// nothing grows or shrinks. A clip that arrives exactly where one left (a repeat rewritten with new ids) is the same
-// clip to the eye, so neither of the pair moves.
+// nothing grows or shrinks. An undo or redo is an edit even when no clip survives it (redoing the delete of the only
+// clip's section), so its clips still come and go with motion. A clip that arrives exactly where one left (a repeat
+// rewritten with new ids) is the same clip to the eye, so neither of the pair moves.
 void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const std::map<std::int64_t, ClipPlace>& now,
                                              const NoteStartsById& noteStartsNow) {
     const auto layout = getRowLayout();
@@ -41,7 +42,7 @@ void TimelineClipLaneArea::glideChangedClips(const ClipLaneChange& change, const
             starts != noteStartsNow.end() ? starts->second : std::vector<synth::ClipNoteStart>{});
         clipGlide_->retarget(id, clipGlide_->drawnAt(id, rectOf(was->second)), rectOf(place), true);
     }
-    if (change.replaced && survivors == 0)
+    if (change.replaced && !change.restored && survivors == 0)
         return;
 
     std::vector<ClipLaneEnterExit::Ghost> leaving;

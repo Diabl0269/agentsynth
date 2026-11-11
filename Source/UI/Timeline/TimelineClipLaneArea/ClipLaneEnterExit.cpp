@@ -40,6 +40,7 @@ ClipLaneEnterExit::Change ClipLaneEnterExit::classify(const synth::TimelineDoc& 
     const auto stamp = doc.getSectionStampRevision();
     const auto replace = doc.getReplaceCount();
     change.replaced = primed_ && replace != seenReplace_;
+    change.restored = restored;
     const bool edited = primed_ && edit != seenEdit_;
     const bool stamped = primed_ && stamp != seenStamp_;
     seenEdit_ = edit;

@@ -112,6 +112,24 @@ TEST(TimelineClipLaneSectionGlide, ARepeatStampGlidesOnlyTheStampedClipsNotTheOn
     EXPECT_EQ(r.drawn(r.c0), r.resting(r.c0));
 }
 
+// Under Reduce Motion the other repeats' clips take their new length at once and fade in; nothing travels.
+TEST(TimelineClipLaneSectionGlide, UnderReduceMotionARepeatStampLandsAndFadesTheOtherRepeats) {
+    ModeGuard reduced(AnimationMode::reduced);
+    SectionRig r;
+    ASSERT_TRUE(r.doc.placeSection(r.verse, 8.0, SectionDropMode::MakeRoom, kSpb).isValid());
+    r.glide().stepForTest(600.0);
+    r.exits().stepForTest(600.0);
+    const auto copy = r.clipsOn(r.a, 8.0, 12.0);
+    ASSERT_EQ(copy.size(), 1u);
+
+    ASSERT_TRUE(r.doc.resizeClip(copy.front(), 2.0));
+    EXPECT_EQ(r.drawn(r.c0), r.resting(r.c0)) << "no travel under Reduce Motion: the new length at once";
+    EXPECT_TRUE(r.glide().isFading()) << "the restamped repeat fades in";
+    EXPECT_TRUE(r.exits().ghosts().empty()) << "the same clip, so nothing leaves";
+    r.glide().stepForTest(600.0);
+    EXPECT_FALSE(r.glide().isAnimating());
+}
+
 TEST(TimelineClipLaneSectionGlide, APlacedCopyGrowsInFromItsLeftEdgeAndADeletedPlacementsClipsShrinkAway) {
     ModeGuard full(AnimationMode::full);
     SectionRig r;
@@ -202,4 +220,44 @@ TEST(TimelineClipLaneSectionGlide, AnOrdinaryClipEditStillLandsAtOnce) {
     EXPECT_TRUE(r.exits().ghosts().empty());
     r.doc.insertTime(0.0, 4.0, kSpb);
     EXPECT_FALSE(r.glide().isAnimating()) << "inserting bars is not a section edit";
+}
+
+// Regression test for FRO1532: an undo or redo that left no clip standing was taken for a load, so redoing the delete
+// of the only clip's section popped the clip away and undoing it popped the clip back.
+TEST(TimelineClipLaneSectionGlide, UndoAndRedoOfDeletingTheOnlyClipsSectionGrowAndShrinkIt) {
+    ModeGuard full(AnimationMode::full);
+    struct OneClip
+        : ClipLaneFixture
+        , TimelineDoc::Listener {
+        ClipId only;
+        OneClip() {
+            const auto track = doc.addTrack(TrackKind::Midi, "A");
+            only = doc.addClip(track, 0.0, 4.0, "only");
+            doc.makeSection(0.0, 4.0, "Intro", 0, kSpb);
+            doc.makeSection(4.0, 8.0, "Verse", 0, kSpb);
+            lane.refreshFromDoc();
+            doc.addListener(this);
+            lane.getClipGlideForTest().forceAnimateForTest(true);
+            lane.getEnterExitForTest().forceAnimateForTest(true);
+        }
+        ~OneClip() override { doc.removeListener(this); }
+        void timelineChanged(const TimelineDoc&) override { lane.refreshFromDoc(); }
+    } r;
+    const auto intro = r.doc.getPlacements().front().id;
+    r.undo.recordTimelineChange(r.doc, [&] { r.doc.deletePlacementAndBars(intro, kSpb); });
+    ASSERT_EQ(r.doc.getClip(r.only), nullptr);
+    ASSERT_TRUE(r.lane.getEnterExitForTest().isExitingForTest()) << "the delete itself shrinks the clip away";
+    r.lane.getEnterExitForTest().stepForTest(600.0);
+
+    ASSERT_TRUE(r.undo.undo());
+    ASSERT_NE(r.doc.getClip(r.only), nullptr);
+    ASSERT_TRUE(r.lane.getClipGlideForTest().isAnimating()) << "undo grows the clip back in";
+    EXPECT_LE(r.lane.getDrawnClipRectForTest(r.only).getWidth(), 1);
+    r.lane.getClipGlideForTest().stepForTest(600.0);
+    EXPECT_EQ(r.lane.getDrawnClipRectForTest(r.only), r.lane.getClipRect(r.only));
+
+    ASSERT_TRUE(r.undo.redo());
+    ASSERT_EQ(r.doc.getClip(r.only), nullptr);
+    ASSERT_TRUE(r.lane.getEnterExitForTest().isExitingForTest()) << "redo shrinks it away again, not a pop";
+    EXPECT_EQ(r.lane.getEnterExitForTest().ghosts().size(), 1u);
 }
