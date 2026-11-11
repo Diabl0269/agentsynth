@@ -8,6 +8,7 @@
 # and the Mixer thumbnail's badge on screen beside the window.
 # EqBandGlide, EqUndoGlideTests and the EQ strip tests cover the same motion headlessly.
 motion: true
+pop_check: {undo: false}   # the runner's undo click would close the type menu a step leaves open for its slope
 record: true
 save_project: eq-bands-strip
 steps:

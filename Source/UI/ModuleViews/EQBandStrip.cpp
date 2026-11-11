@@ -128,6 +128,21 @@ void EQBandStrip::addTestModeState(juce::DynamicObject& into) const {
             labels.add(chip->label());
     into.setProperty("chips", labels);
     into.setProperty("selectedBand", curve_.getSelectedBand() + 1);
+    // The curve beside the strip: its band count, the soloed band (1-based, 0 for none), how strongly that dot's ring
+    // shows and the most any other dot is dimmed (0..1), and the selected band's values (0 when none is selected).
+    const int solo = curve_.getSoloBand();
+    float dimmed = 0.0f;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
+        if (b != solo && curve_.getBands()[(size_t)b].enabled)
+            dimmed = juce::jmax(dimmed, curve_.getSoloLook(b).y);
+    into.setProperty("bandCount", curve_.getModule().getEnabledBandCount());
+    into.setProperty("soloBand", solo + 1);
+    into.setProperty("soloRing", solo >= 0 ? (double)curve_.getSoloLook(solo).x : 0.0);
+    into.setProperty("othersDimmed", (double)dimmed);
+    const int sel = curve_.getSelectedBand();
+    into.setProperty("freqHz", sel >= 0 ? (double)curve_.getBands()[(size_t)sel].freqHz : 0.0);
+    into.setProperty("gainDb", sel >= 0 ? (double)curve_.getBands()[(size_t)sel].gainDb : 0.0);
+    into.setProperty("q", sel >= 0 ? (double)curve_.getBands()[(size_t)sel].q : 0.0);
 }
 
 // The bands that are on, plus the selected band while it is off, in frequency order; equal frequencies keep slot order.

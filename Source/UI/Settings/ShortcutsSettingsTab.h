@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
@@ -55,12 +56,19 @@
 //
 // NOTE: ShortcutsSettingsTab.cpp MUST be added to BOTH the app target AND
 // the test target in CMakeLists.txt (consolidation pass).
-class ShortcutsSettingsTab : public juce::Component {
+class ShortcutsSettingsTab
+    : public juce::Component
+    , public synth::testmode::StateSource {
 public:
     // appProperties (nullable) is where the folded sections are remembered; null keeps them in memory only.
     explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager,
                                   juce::ApplicationProperties* appProperties = nullptr);
     ~ShortcutsSettingsTab() override = default;
+
+    /** Test mode: `sections` (the category names of the headers on screen, top to bottom, comma-separated) and
+     *  `eqRows` (the descriptions of the rows of the EQ category, in table order, comma-separated; empty when the
+     *  section is hidden or folded). */
+    void addTestModeState(juce::DynamicObject& into) const override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

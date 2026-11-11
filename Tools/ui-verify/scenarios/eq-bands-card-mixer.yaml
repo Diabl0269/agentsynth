@@ -5,6 +5,7 @@
 # What a user does: opens the Parametric EQ window, adds eight bands and types four of them, then adds a ninth and closes the window; presses
 # chip 9 on the card (the knobs now edit band 9), then chip 2 (they go back to band 2); the card keeps its own selection.
 motion: true
+pop_check: {undo: false}   # the runner's undo click would close the type menu a step leaves open for its slope
 record: true
 save_project: eq-bands-card-mixer
 steps:

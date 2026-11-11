@@ -70,10 +70,15 @@ public:
 
     ~EQWindow() override = default;
 
-    /** Keeps the hosting window no smaller than the footer needs: the toggle, type pill and hint side by side. */
+    /** Keeps the hosting window no smaller than the footer needs: the toggle, type pill and hint side by side. The
+     *  limits go on after the window has been sized to this content: set while the window is being built, they clamped
+     *  it to the smallest size and the window opened at 480 x 320 instead of 820 x 470. */
     void parentHierarchyChanged() override {
         if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
-            window->setResizeLimits(kMinWidth, kMinHeight, 4000, 4000);
+            juce::MessageManager::callAsync([safe = juce::Component::SafePointer<juce::ResizableWindow>(window)] {
+                if (safe != nullptr)
+                    safe->setResizeLimits(kMinWidth, kMinHeight, 4000, 4000);
+            });
     }
 
     void resized() override {

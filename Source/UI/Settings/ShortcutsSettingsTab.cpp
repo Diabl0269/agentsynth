@@ -65,6 +65,7 @@ void ShortcutsSettingsTab::saveFolds() {
 ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::ApplicationProperties* props)
     : shortcutManager(sm)
     , appProperties(props) {
+    setComponentID("shortcutsSettingsTab");
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Keyboard Shortcuts", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
@@ -500,6 +501,18 @@ bool ShortcutsSettingsTab::isRowVisible(int index) const {
         if (!entry.isHeader && entry.actionIndex == index)
             return true;
     return false;
+}
+
+void ShortcutsSettingsTab::addTestModeState(juce::DynamicObject& into) const {
+    juce::StringArray sections, eqRows;
+    for (const auto& entry : layout)
+        if (entry.isHeader)
+            sections.add(ShortcutManager::getCategoryName(entry.category));
+    for (int i = 0; i < actionIds.size(); ++i)
+        if (ShortcutManager::getCategory(actionIds[i]) == ShortcutCategory::EQ && isRowVisible(i))
+            eqRows.add(getRowDescription(i));
+    into.setProperty("sections", sections.joinIntoString(","));
+    into.setProperty("eqRows", eqRows.joinIntoString(","));
 }
 
 bool ShortcutsSettingsTab::isSectionVisible(ShortcutCategory category) const {

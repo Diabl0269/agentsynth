@@ -233,6 +233,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
+        eqCurveComponent->setComponentID("eqCardCurve");
         wireEqGestureCallbacks(*eqCurveComponent);
         eqCurveComponent->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
         addAndMakeVisible(eqCurveComponent.get());
