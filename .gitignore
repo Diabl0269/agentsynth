@@ -61,3 +61,6 @@ build-*/
 # Local, untracked agent notes
 AGENTS.local.md
 .pr-body.md
+
+__pycache__/
+*.pyc
