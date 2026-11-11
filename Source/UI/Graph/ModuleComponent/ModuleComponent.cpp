@@ -971,3 +971,5 @@ void ModuleComponent::setRasterFrozen(bool frozen) {
 }
 
 bool ModuleComponent::isRasterFrozen() const noexcept { return rasterCache != nullptr && rasterCache->isFrozen(); }
+
+juce::Slider* detail::newCardKnobSlider() { return new synth::ui::CardKnobSlider(); }

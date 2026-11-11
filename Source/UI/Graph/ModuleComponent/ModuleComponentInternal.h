@@ -18,6 +18,10 @@
 
 namespace detail {
 
+/** A new card knob (CardKnobSlider). Defined in ModuleComponent.cpp so a unit that only adopts one need not include
+ *  CardKnobSlider.h and CardControlGestures.h. */
+juce::Slider* newCardKnobSlider();
+
 /** The header's activity LED (an 8 px dot at 6,8) with room for its soft edge: all the RMS tick repaints. */
 inline juce::Rectangle<int> activityLedArea() noexcept { return {4, 6, 12, 12}; }
 
