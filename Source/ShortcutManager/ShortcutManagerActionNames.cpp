@@ -426,6 +426,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Open Context Menu";
     if (actionId == "recolourFocusedItem")
         return "Recolour Focused Item";
+    if (actionId == "soundPreviewToggle")
+        return "Play or Stop the Sound Preview";
     if (const auto name = canvasCardActionName(actionId); name.isNotEmpty())
         return name;
     if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())

@@ -1,5 +1,6 @@
 // SoundBrowserPreview.cpp -- what the Sounds view asks of the preview player: play the selected sound, stop it, Space,
 // the Play/Stop button and the footer's other controls, and keeping the footer's waveform on the selected sound.
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include <algorithm>
@@ -73,7 +74,27 @@ void SoundBrowserComponent::stopPreview() {
         previewPlayer_->stop();
 }
 
+void SoundBrowserComponent::setShortcutManager(ShortcutManager* manager) {
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
+    shortcuts_ = manager;
+    if (shortcuts_ != nullptr)
+        shortcuts_->addChangeListener(this);
+    changeListenerCallback(nullptr);
+}
+
+// A rebind of the preview key shows in the Play/Stop tooltip and the sound rows' tooltips.
+void SoundBrowserComponent::changeListenerCallback(juce::ChangeBroadcaster*) {
+    footer_.setPreviewKeyText(previewKeyText());
+}
+
+juce::String SoundBrowserComponent::previewKeyText() const {
+    return ShortcutManager::keyPressToDisplayString(shortcuts_ != nullptr ? shortcuts_->getBinding("soundPreviewToggle")
+                                                                          : SoundPreviewFooter::kDefaultPreviewKey);
+}
+
 bool SoundBrowserComponent::togglePreview() {
+    ++previewToggles_;
     if (previewPlayer_ == nullptr)
         return false;
     if (previewPlayer_->isPlaying()) {
@@ -102,6 +123,7 @@ void SoundBrowserComponent::addTestModeState(juce::DynamicObject& into) const {
         selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Sound;
     into.setProperty("selectedName", sound ? rows_[(size_t)selected_].text : juce::String());
     into.setProperty("selectedDetail", sound ? rows_[(size_t)selected_].detail : juce::String());
+    into.setProperty("previewToggles", previewToggles_); // how often a key or the button asked the preview to toggle
     into.setProperty("getMoreOpen", isGetMoreShowing());
     into.setProperty("firstRowText", rows_.empty() ? juce::String() : rows_.front().text);
     const auto stop = std::find_if(rows_.begin(), rows_.end(), [](const Row& r) { return r.navigable(); });
