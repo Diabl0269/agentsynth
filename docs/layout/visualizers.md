@@ -93,20 +93,33 @@ A new chip grows out of its own middle; a chip whose band left shrinks into its 
 **Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
 on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags
 and key steps land at once, and Reduce Motion fades the dot instead. See [undo-glide.md](undo-glide.md#points-dots-and-clips).
-The keys themselves are left to the app: the curve ignores any press with Cmd or Ctrl held and `EQWindow` relays them.
+The keys themselves are left to the app: the curve ignores any press with Cmd or Ctrl held (except its own rebindable chords, Cmd+D by default) and `EQWindow` relays them.
 
-**Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Like a
-native control's own keys, these act only inside the focused curve and are not rebindable actions:
+**Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Its verbs are rebindable
+actions in Settings > Shortcuts, section EQ (`eq*` ids, resolved through `ShortcutManager` like the drum grid's; the
+shipped defaults below stand when no manager is installed). They act only inside the focused curve and are tried
+before the app's own commands, so Cmd+D copies the band instead of duplicating the module. See
+[shortcuts.md](../control/shortcuts-eq.md#eq).
 
-| Key | Effect |
+| Key (default) | Effect |
 |---|---|
 | Left / Right | Select the previous / next band (all 24, on or off; stops at the ends). Tabbing in selects band 1 |
-| 1-4 | Select that band and switch it on |
-| Up / Down | Gain +1 / -1 dB on the selected band (Shift: 0.25 dB) |
 | Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that) |
-| Page Up / Page Down | Narrow / widen Q (Shift: a quarter of the step) |
-| Return | Switch the selected band on or off; it stays selected |
-| Delete / Backspace | Switch the selected band off |
+| Alt+Up / Alt+Down | Gain +1 / -1 dB (Shift: 0.25 dB) |
+| Up / Down | Wider / narrower: Q down / up a quarter octave (Shift: a quarter of the step) |
+| S | Solo the selected band (toggle) |
+| T | Open the selected band's type menu beside its dot |
+| + (also Shift+=, number pad +) | Add a Bell in the widest gap |
+| Backspace | Switch the selected band off (it stays selected) |
+| Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
+| 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove; end this curve's solo |
+
+**Solo.** S, the headphones button in the pop-out footer and Option-click on a dot audition one band through
+`ParametricEQModule::setSoloBand`. The soloed dot gets a bright outer ring and the other dots dim, eased through a
+`KeyedTween` (`getSoloLook`; Reduce Motion fades it, Animations Off lands it). While the curve that started a solo
+holds it, the solo follows the selection (and ends when the selected band is off or removed). Escape ends it before the
+window closes. A solo a curve started ends when that curve is destroyed (closing the pop-out), so audio never stays
+soloed with nothing on screen. Another curve's solo on the same module is shown but never ended by this one.
 
 A band that is off is selectable (Return switches it on) but is not moved by the arrows. A press
 that cannot change anything (gain already at its limit) opens no undo step. Every key that edits is
@@ -166,9 +179,9 @@ never shown on hover; the title and description still reach a screen reader.
 `SettingsWindow`; the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`.
 It hosts a second `EQCurveComponent` over the same module at 820x470 (resizable), the band strip under it, and a
 toolbar of the spectrum toggle, an empty reserved slot (`kReservedToolbarSlotWidth`, for the Compare and Suggest
-buttons), the type pill and a gesture hint. Escape closes it. The curve in this window edits with the same keys as the
+buttons), the type pill, the solo (headphones) button and a gesture hint whose tooltip names the live keys. Escape ends a solo the window's curve started, else closes it. The curve in this window edits with the same keys as the
 card's curve (see the EQ curve's Keyboard table above); Tab visits the curve, the band chips, the spectrum
-toggle and the type pill.
+toggle, the type pill and the solo button.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in
 `detachFromProcessor()`** — the window references the module, so leaving it open across a graph

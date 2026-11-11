@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
@@ -158,6 +159,7 @@ void ModuleComponent::openEqWindow() {
 
     content->onAppShortcut = synth::ui::makeAppShortcutRelay(this);
     content->setUndoManager(undoManager);
+    content->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(content.release());

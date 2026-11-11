@@ -693,6 +693,7 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/EQCurveKeyboard.cpp
     Source/UI/ModuleViews/EQCurveInteraction.cpp
     Source/UI/ModuleViews/EQCurvePaint.cpp
+    Source/UI/ModuleViews/EQCurveSolo.cpp
     Source/UI/ModuleViews/EQCurveTypeMenu.cpp
     Source/UI/ModuleViews/EQBandKinds.h
     Source/UI/ModuleViews/EQBandKinds.cpp
@@ -702,6 +703,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/EQBandTypeMenu.cpp
     Source/UI/ModuleViews/EQBandTypePill.h
     Source/UI/ModuleViews/EQBandTypePill.cpp
+    Source/UI/ModuleViews/EQSoloButton.h
+    Source/UI/ModuleViews/EQSoloButton.cpp
     Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h

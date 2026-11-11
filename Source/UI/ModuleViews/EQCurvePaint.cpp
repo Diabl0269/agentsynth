@@ -126,14 +126,16 @@ void EQCurveComponent::paintCurve(juce::Graphics& g, float w, float h) const {
 }
 
 // One numbered dot per ENABLED band: the ring takes the band's kind colour, the selected or hovered dot a halo in the
-// accent. A dot that is arriving or leaving (alpha below 1) is smaller, so it grows from or shrinks into the curve.
+// accent, the soloed one a bright outer ring while the others dim. A dot that is arriving or leaving (alpha below 1) is
+// smaller, so it grows from or shrinks into the curve.
 void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto& band = dotBands_[(size_t)b];
         if (!band.enabled)
             continue;
-        const float dotAlpha = dotAlpha_[(size_t)b];
+        const auto soloLook = getSoloLook(b);
+        const float dotAlpha = dotAlpha_[(size_t)b] * (1.0f - kSoloDim * soloLook.y);
         const auto centre = bandPosition(band);
         const float bx = juce::jlimit(0.0f, w, centre.x);
         const float by = juce::jlimit(0.0f, h, centre.y);
@@ -143,6 +145,11 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
         if (active) {
             g.setColour(colors.accent.withAlpha(0.25f * dotAlpha));
             g.fillEllipse(bx - radius - 4.0f, by - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
+        }
+        if (soloLook.x > 0.0f) {
+            const float outer = radius + 5.0f * soloLook.x;
+            g.setColour(colors.textPrimary.withAlpha(soloLook.x * dotAlpha_[(size_t)b]));
+            g.drawEllipse(bx - outer, by - outer, outer * 2.0f, outer * 2.0f, 2.0f);
         }
         g.setColour(colors.bg1.withMultipliedAlpha(dotAlpha));
         g.fillEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f);

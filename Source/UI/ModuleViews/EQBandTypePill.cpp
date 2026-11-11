@@ -13,7 +13,6 @@ EQBandTypePill::EQBandTypePill(EQCurveComponent& curve)
     : juce::Button("Band type")
     , curve_(curve) {
     setWantsKeyboardFocus(true);
-    setTooltip("Band type: press to change it (right-click a point does the same)");
     onClick = [this] {
         if (curve_.getSelectedBand() >= 0)
             curve_.showTypeMenu(getScreenBounds());
@@ -23,6 +22,12 @@ EQBandTypePill::EQBandTypePill(EQCurveComponent& curve)
 }
 
 EQBandTypePill::~EQBandTypePill() { curve_.removeListener(this); }
+
+juce::String EQBandTypePill::getTooltip() {
+    const auto key = EQCurveComponent::keyHint(curve_.getShortcutManager(), "eqTypeMenu");
+    return "Band type: press to change it" + (key.isEmpty() ? juce::String() : " (" + key + ")") +
+           ", or right-click a point";
+}
 
 void EQBandTypePill::eqCurveChanged() {
     const int band = curve_.getSelectedBand();

@@ -104,6 +104,16 @@ void spliceCommandPaletteRow(std::vector<Entry>& rows) {
     rows.insert(at + 1, Entry{"openCommandPalette", ShortcutCategory::General});
 }
 
+// The Parametric EQ curve's keys, consulted by EQCurveComponent::keyPressed only. Appended last so the
+// category stays contiguous at the end of the table.
+template <class Entry>
+void appendEqRows(std::vector<Entry>& rows) {
+    for (const char* id :
+         {"eqSelectPrev", "eqSelectNext", "eqMoveLeft", "eqMoveRight", "eqMoveUp", "eqMoveDown", "eqWidthUp",
+          "eqWidthDown", "eqSolo", "eqTypeMenu", "eqAddBand", "eqRemoveBand", "eqDuplicateBand"})
+        rows.push_back(Entry{id, ShortcutCategory::EQ});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
     spliceCommandPaletteRow(rows);
@@ -112,6 +122,7 @@ void spliceRows(std::vector<Entry>& rows) {
     spliceTimelineRows(rows);
     spliceDockKeyRows(rows);
     spliceSongKeyRow(rows);
+    appendEqRows(rows);
 }
 
 } // namespace

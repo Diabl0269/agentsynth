@@ -48,7 +48,6 @@ const std::vector<Cell> kNotApplicable = {
     {"Morph map", "shift-extend", "a 2D map has no order to extend along"},
     {"Morph map", "edge-scroll", "the map is drawn whole and a dot clamps inside it"},
     {"EQ curve", "edge-scroll", "the frequency window is fixed"},
-    {"EQ curve", "duplicate", "a band is a slot with its own index: there is no copy of one"},
 };
 
 // Behaviours an editor has not got yet. May only shrink.

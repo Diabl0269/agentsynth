@@ -47,6 +47,8 @@ const char* persistedName(ShortcutCategory category) {
         return "Mixer";
     case ShortcutCategory::LayoutEditor:
         return "LayoutEditor";
+    case ShortcutCategory::EQ:
+        return "EQ";
     }
     return "";
 }

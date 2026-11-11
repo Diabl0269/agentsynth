@@ -152,19 +152,19 @@ TEST(EQCurveKeyboard, TabbingInSelectsTheFirstBandButAClickDoesNot) {
     EXPECT_EQ(rig.curve->getSelectedBand(), 0);
 }
 
-TEST(EQCurveKeyboard, UpAndDownChangeGainOneDbPerPressAsOneGesture) {
+TEST(EQCurveKeyboard, AltUpAndDownChangeGainOneDbPerPressAsOneGesture) {
     EqRig rig;
     rig.press(juce::KeyPress::rightKey); // band 1
-    EXPECT_TRUE(rig.press(juce::KeyPress::upKey));
+    EXPECT_TRUE(rig.press(juce::KeyPress::upKey, kAlt));
     EXPECT_NEAR(rig.band(0).gainDb, 1.0f, 0.01f);
     EXPECT_EQ(rig.starts, 1);
     EXPECT_EQ(rig.ends, 1);
-    rig.press(juce::KeyPress::downKey);
-    rig.press(juce::KeyPress::downKey);
+    rig.press(juce::KeyPress::downKey, kAlt);
+    rig.press(juce::KeyPress::downKey, kAlt);
     EXPECT_NEAR(rig.band(0).gainDb, -1.0f, 0.01f);
     EXPECT_EQ(rig.starts, 3);
     EXPECT_EQ(rig.ends, 3);
-    rig.press(juce::KeyPress::upKey, kShift);
+    rig.press(juce::KeyPress::upKey, kAlt | kShift);
     EXPECT_NEAR(rig.band(0).gainDb, -0.75f, 0.01f);
 }
 
@@ -175,7 +175,7 @@ TEST(EQCurveKeyboard, GainStopsAtTheRangeEndWithoutAnEmptyUndoStep) {
     int starts = 0;
     curve.onGestureStart = [&] { ++starts; };
     curve.keyPressed(key(juce::KeyPress::rightKey));
-    curve.keyPressed(key(juce::KeyPress::upKey));
+    curve.keyPressed(key(juce::KeyPress::upKey, kAlt));
     EXPECT_NEAR(rig.band(0).gainDb, ParametricEQModule::kMaxGainDb, 0.01f);
     EXPECT_EQ(starts, 0);
 }
@@ -250,7 +250,7 @@ TEST(EQCurveKeyboard, TheSpokenValueFollowsTheSelectedBand) {
     rig.press(juce::KeyPress::rightKey);
     rig.press(juce::KeyPress::rightKey);
     EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +3.0 dB, Q 0.7");
-    rig.press(juce::KeyPress::upKey);
+    rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +4.0 dB, Q 0.7");
     rig.press(juce::KeyPress::rightKey);
     EXPECT_EQ(spoken(*rig.curve), "Band 3, Bell, off");

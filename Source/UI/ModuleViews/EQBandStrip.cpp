@@ -37,6 +37,9 @@ public:
     }
 
     int band() const noexcept { return band_; }
+    /** Asked at hover time, so a tooltip that names a key follows a rebind. */
+    std::function<juce::String()> liveTooltip;
+    juce::String getTooltip() override { return liveTooltip ? liveTooltip() : juce::Button::getTooltip(); }
     const juce::String& label() const noexcept { return label_; }
 
     void setContent(const juce::String& label, synth::eq::BandType type, bool on, bool selected) {
@@ -99,7 +102,11 @@ EQBandStrip::EQBandStrip(EQCurveComponent& curve)
     addChip_->setContent("+", synth::eq::BandType::Peak, true, false);
     addChip_->setComponentID("eqAddBand");
     addChip_->setTitle("Add band");
-    addChip_->setTooltip("Add a band in the widest gap between the others");
+    addChip_->liveTooltip = [this] {
+        const auto key = EQCurveComponent::keyHint(curve_.getShortcutManager(), "eqAddBand");
+        return juce::String("Add a band in the widest gap between the others") +
+               (key.isEmpty() ? juce::String() : " (" + key + ")");
+    };
     addChip_->onClick = [this] { curve_.addBandInLargestGap(); };
     addAndMakeVisible(*addChip_);
 

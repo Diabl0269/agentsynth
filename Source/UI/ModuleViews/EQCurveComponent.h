@@ -10,6 +10,7 @@
 #include <memory>
 
 class AppUndoManager;
+class ShortcutManager;
 namespace synth::ui {
 template <typename T>
 class KeyedTween;
@@ -19,9 +20,12 @@ class KeyedTween;
  *
  *  Mouse: double-click empty space adds a band (slots 1-4 by frequency, then the lowest free slot as a Bell),
  *  double-click a dot removes it, drag moves it (x frequency, y gain), scroll over it changes Q, right-click opens
- *  the type menu. Keyboard (the curve is a Tab stop): Left/Right select the previous/next band, 1-4 select a band
- *  and switch it on, Up/Down change gain, Alt+Left/Right frequency, Page Up/Down Q, Return switches it on or off.
- *  Every gesture is one undo step through onGestureStart/onGestureEnd. A screen reader reads the selected band, e.g.
+ *  the type menu, Option-click solos a band. Keyboard (the curve is a Tab stop; the keys in the EQ section of
+ *  Settings are rebindable, shown here with their defaults): Left/Right select the previous/next band, Alt+Left/Right
+ *  a band's frequency, Alt+Up/Down its gain, Up/Down its width (Q), S solos it, T opens its type menu, + adds a band,
+ *  Backspace removes it, Cmd+D duplicates it; Shift makes any step finer. Fixed keys: 1-4 select a band and switch it
+ *  on, Page Up/Down Q, Return switches it on or off, Delete removes, Escape ends a solo this curve started. Every
+ *  gesture is one undo step through onGestureStart/onGestureEnd. A screen reader reads the selected band, e.g.
  *  "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7".
  *
  *  The mouse handlers are thin wrappers over addPointAt / removeBand / dragBandTo / nudgeBandQ, which are public so
@@ -53,6 +57,13 @@ public:
 
     explicit EQCurveComponent(ParametricEQModule& eq);
     ~EQCurveComponent() override;
+
+    /** Resolves the keys through `manager` (null: the shipped defaults). Must outlive this. */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
+    /** The key that runs EQ action `actionId` as it reads now ("S", "Cmd+D"); empty when unbound. */
+    static juce::String keyHint(const ShortcutManager* manager, const char* actionId);
+    juce::String getTooltip() override;
 
     /** Called around every parameter-changing gesture so the host can bracket it in one undo step. Optional. */
     std::function<void()> onGestureStart;
@@ -127,6 +138,22 @@ public:
     /** Sets a band's type, and (for a cut) its slope when `slopeDbPerOct` is not 0, as one undo step. */
     void setBandTypeAndSlope(int band, synth::eq::BandType type, int slopeDbPerOct = 0);
 
+    /** Copies the selected band into the lowest free slot, two semitones higher, as one undo step, and selects the
+     *  copy. False when no band is selected or all 24 are on. */
+    bool duplicateSelectedBand();
+
+    // ---------- solo audition ----------
+
+    /** The band the module is auditioning alone, or -1. */
+    int getSoloBand() const noexcept { return eqModule.getSoloBand(); }
+    /** Solos the selected band, or ends the solo when it already is. False when no enabled band is selected. */
+    bool toggleSoloSelectedBand();
+    /** Whether this curve started the solo now playing (it ends it when it is destroyed). */
+    bool ownsSolo() const noexcept { return ownsSolo_; }
+    /** How strongly band `band`'s dot shows as the soloed one (x, 0..1) and as dimmed by another's solo (y, 0..1). */
+    juce::Point<float> getSoloLook(int band) const;
+    synth::ui::KeyedTween<juce::Point<float>>& getSoloEaseForTest() noexcept;
+
     /** Opens the type menu for the selected band, growing out of `screenArea`; nothing when none is selected. */
     void showTypeMenu(juce::Rectangle<int> screenArea);
     /** The same, growing out of the band's dot. */
@@ -177,6 +204,8 @@ private:
     static constexpr int fftOrder = 10; // 1024-point FFT
     static constexpr int fftSize = 1 << fftOrder;
     static constexpr float kHandleRadius = 7.0f;
+    /** How much of a dot's opacity another band's solo takes away. */
+    static constexpr float kSoloDim = 0.6f;
     /** One wheel notch (deltaY == 1) doubles/halves Q at 1.0; scaled down for finer control. */
     static constexpr float kQScrollSensitivity = 1.5f;
     static constexpr float kSpecMinDb = -80.0f;
@@ -185,6 +214,16 @@ private:
     static constexpr float kSilenceThreshold = 1.0e-5f;
 
     bool ensureSelectedBand();
+    bool matchesAction(const juce::KeyPress& key, const char* actionId) const;
+    bool matchesStepAction(const juce::KeyPress& key, const char* actionId, bool& fine) const;
+    bool handleActionKey(const juce::KeyPress& key);
+    void removeSelectedBand();
+    bool handleFixedKey(const juce::KeyPress& key);
+    void startSolo(int band);
+    void endSolo();
+    void followSelectionSolo();
+    /** Retargets every dot's solo look to the module's solo and tells the listeners when it changed. */
+    void syncSolo();
     int addBandAt(float freqHz, float gainDb);
     void refreshAccessibilityValue();
     void beginGesture() {
@@ -223,6 +262,9 @@ private:
     AppUndoManager* undoManager_ = nullptr;
     juce::ListenerList<Listener> listeners_;
 
+    const ShortcutManager* shortcuts_ = nullptr;
+    bool ownsSolo_ = false;
+    int ownedSoloBand_ = -1;
     int selectedBand = -1;
     juce::String announcedValueText;
     int hoveredBand = -1;

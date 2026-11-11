@@ -17,6 +17,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -218,6 +219,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
         wireEqGestureCallbacks(*eqCurveComponent);
+        eqCurveComponent->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
         addAndMakeVisible(eqCurveComponent.get());
         eqBand_ = std::make_unique<EqBandRow>(*this, *eqMod, *eqCurveComponent);
 

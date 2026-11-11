@@ -16,6 +16,8 @@ public:
 
     void paintButton(juce::Graphics& g, bool over, bool down) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    /** Names the live key that opens the menu, so a rebind shows at the next hover. */
+    juce::String getTooltip() override;
 
     /** The text on the pill now ("Bell"), empty with no band selected. */
     juce::String getPillText() const { return text_; }

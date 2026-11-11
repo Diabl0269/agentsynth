@@ -5,6 +5,7 @@
 #include "PointEditorMatrixDriver.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include <algorithm>
 #include <cmath>
 
 namespace point_matrix {
@@ -60,11 +61,16 @@ public:
     }
 
 private:
+    // The points run in frequency order, not slot order: a duplicate lands in the lowest free slot but two semitones
+    // above its original, so "right after the original along the axis" is a frequency question.
     std::vector<int> enabled() const {
         std::vector<int> bands;
         for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
             if (module_->isBandEnabled(b))
                 bands.push_back(b);
+        const auto snapshots = module_->getBandSnapshots();
+        std::stable_sort(bands.begin(), bands.end(),
+                         [&](int a, int b) { return snapshots[(size_t)a].freqHz < snapshots[(size_t)b].freqHz; });
         return bands;
     }
     ParametricEQModule::BandSnapshot snapshot(int point) const {

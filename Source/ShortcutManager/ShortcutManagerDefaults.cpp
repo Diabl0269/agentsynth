@@ -490,6 +490,27 @@ void ShortcutManager::addDrumMachineDefaultBindings() {
     bindings["drumMachineRowLongerBar"] = juce::KeyPress(juce::KeyPress::rightKey, altShift, 0);
 }
 
+void ShortcutManager::addEqDefaultBindings() {
+    // The defaults EQCurveComponent::keyPressed() falls back to when no manager is installed. Shift on any arrow is
+    // the fine step, so none of these carries it. The plus key has no modifier here: the curve also takes it as Shift+=
+    // (how a US keyboard sends it) and as the numpad plus while this default stands.
+    const auto none = juce::ModifierKeys::noModifiers;
+    const auto alt = juce::ModifierKeys::altModifier;
+    bindings["eqSelectPrev"] = juce::KeyPress(juce::KeyPress::leftKey, none, 0);
+    bindings["eqSelectNext"] = juce::KeyPress(juce::KeyPress::rightKey, none, 0);
+    bindings["eqMoveLeft"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
+    bindings["eqMoveRight"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
+    bindings["eqMoveUp"] = juce::KeyPress(juce::KeyPress::upKey, alt, 0);
+    bindings["eqMoveDown"] = juce::KeyPress(juce::KeyPress::downKey, alt, 0);
+    bindings["eqWidthUp"] = juce::KeyPress(juce::KeyPress::upKey, none, 0);
+    bindings["eqWidthDown"] = juce::KeyPress(juce::KeyPress::downKey, none, 0);
+    bindings["eqSolo"] = juce::KeyPress('s', none, 0);
+    bindings["eqTypeMenu"] = juce::KeyPress('t', none, 0);
+    bindings["eqAddBand"] = juce::KeyPress('+', none, 0);
+    bindings["eqRemoveBand"] = juce::KeyPress(juce::KeyPress::backspaceKey, none, 0);
+    bindings["eqDuplicateBand"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
+}
+
 void ShortcutManager::addPianoRollDefaultBindings() {
     // ---- Piano roll ----
     // Exactly the defaults PianoRollComponent::keyPressed() falls back to when no manager is

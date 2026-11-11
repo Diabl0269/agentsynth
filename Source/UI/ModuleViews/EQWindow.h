@@ -4,6 +4,7 @@
 #include "EQBandStrip.h"
 #include "EQBandTypePill.h"
 #include "EQCurveComponent.h"
+#include "EQSoloButton.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,12 +20,21 @@
  *  a juce::DialogWindow via PopupMotion::launchDialog().
  *
  *  Layout: the curve, the band strip under it (EQBandStrip), then the toolbar: the spectrum toggle, a reserved
- *  empty slot for the Compare and Suggest buttons, the selected band's type pill and the hint.
+ *  empty slot for the Compare and Suggest buttons, the selected band's type pill, the solo (headphones) button and
+ *  the hint.
  *
- *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent), the band chips, the
- *  spectrum toggle and the type pill; Escape closes the window.
+ *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent, S solos and Escape ends a
+ *  solo first), the band chips, the spectrum toggle, the type pill and the solo button; Escape closes the window. A
+ *  solo the window's curve started ends when the window closes.
  */
 class EQWindow : public juce::Component {
+    /** A label whose tooltip is built when the pointer rests on it, so it can name keys as they are bound then. */
+    class LiveTipLabel : public juce::Label {
+    public:
+        std::function<juce::String()> liveTooltip;
+        juce::String getTooltip() override { return liveTooltip ? liveTooltip() : juce::Label::getTooltip(); }
+    };
+
 public:
     explicit EQWindow(ParametricEQModule& eq) {
         curve = std::make_unique<EQCurveComponent>(eq);
@@ -39,6 +49,10 @@ public:
         typePill = std::make_unique<synth::ui::EQBandTypePill>(*curve);
         addAndMakeVisible(*typePill);
 
+        soloButton = std::make_unique<synth::ui::EQSoloButton>(*curve);
+        soloButton->setComponentID("eqWindowSolo");
+        addAndMakeVisible(*soloButton);
+
         spectrumToggle.setButtonText("Show Spectrum");
         spectrumToggle.setTooltip("Draw the live spectrum of the signal behind the curve");
         spectrumToggle.setToggleState(curve->getShowSpectrum(), juce::dontSendNotification);
@@ -46,7 +60,7 @@ public:
         addAndMakeVisible(spectrumToggle);
 
         hint.setText("Double-click adds or removes", juce::dontSendNotification);
-        hint.setTooltip("Double-click the curve to add or remove a band; right-click a band to set its type");
+        hint.liveTooltip = [this] { return hintTooltip(); };
         hint.setJustificationType(juce::Justification::centredLeft);
         hint.setInterceptsMouseClicks(false, true);
         addAndMakeVisible(hint);
@@ -68,12 +82,15 @@ public:
         spectrumToggle.setBounds(footer.removeFromLeft(130));
         footer.removeFromLeft(kFooterGap);
         // The reserved slot gives way first when the window is narrow, so the pill and hint never overlap the toggle.
-        const int slotWidth = std::clamp(footer.getWidth() - kTypePillWidth - kHintMinWidth - 2 * kFooterGap, 0,
-                                         kReservedToolbarSlotWidth);
+        const int slotWidth =
+            std::clamp(footer.getWidth() - kTypePillWidth - kSoloButtonWidth - kHintMinWidth - 3 * kFooterGap, 0,
+                       kReservedToolbarSlotWidth);
         reservedToolbarSlot = footer.removeFromLeft(slotWidth);
         if (slotWidth > 0)
             footer.removeFromLeft(kFooterGap);
         typePill->setBounds(footer.removeFromLeft(kTypePillWidth).withSizeKeepingCentre(kTypePillWidth, 22));
+        footer.removeFromLeft(kFooterGap);
+        soloButton->setBounds(footer.removeFromLeft(kSoloButtonWidth).withSizeKeepingCentre(kSoloButtonWidth, 22));
         footer.removeFromLeft(kFooterGap);
         hint.setBounds(footer);
         area.removeFromBottom(6);
@@ -103,6 +120,9 @@ public:
     /** Lets an undo or redo glide the window's curve (EQCurveComponent::setUndoManager). */
     void setUndoManager(AppUndoManager* manager) { curve->setUndoManager(manager); }
 
+    /** Resolves the curve's keys, and every tooltip that names one, through `manager`. Must outlive this window. */
+    void setShortcutManager(const ShortcutManager* manager) { curve->setShortcutManager(manager); }
+
     /** Forwards the undo bracketing hooks to the hosted curve. */
     void setGestureCallbacks(std::function<void()> onStart, std::function<void()> onEnd) {
         curve->onGestureStart = std::move(onStart);
@@ -112,6 +132,7 @@ public:
     /** Width of the empty toolbar area right of the spectrum toggle, kept for the Compare and Suggest buttons. */
     static constexpr int kReservedToolbarSlotWidth = 220;
     static constexpr int kTypePillWidth = 110;
+    static constexpr int kSoloButtonWidth = 28;
     static constexpr int kFooterGap = 6;
     static constexpr int kMinWidth = 480;
     static constexpr int kMinHeight = 320;
@@ -122,15 +143,36 @@ public:
     EQCurveComponent& getCurve() { return *curve; }
     synth::ui::EQBandStrip& getStrip() { return *strip; }
     synth::ui::EQBandTypePill& getTypePill() { return *typePill; }
+    synth::ui::EQSoloButton& getSoloButton() { return *soloButton; }
+    juce::Label& getHintForTest() { return hint; }
     juce::ToggleButton& getSpectrumToggle() { return spectrumToggle; }
 
 private:
+    juce::String hintTooltip() const {
+        const auto* manager = curve->getShortcutManager();
+        juce::StringArray keys;
+        const auto add = [&](const char* id, const char* what) {
+            const auto key = EQCurveComponent::keyHint(manager, id);
+            if (key.isNotEmpty())
+                keys.add(key + " " + what);
+        };
+        add("eqSolo", "solos");
+        add("eqTypeMenu", "sets the type");
+        add("eqAddBand", "adds");
+        add("eqDuplicateBand", "duplicates");
+        add("eqRemoveBand", "removes");
+        return "Double-click the curve to add or remove a band; right-click a band to set its type; Option-click solos "
+               "it. Keys on the selected band: " +
+               keys.joinIntoString(", ");
+    }
+
     std::unique_ptr<EQCurveComponent> curve;
     std::unique_ptr<synth::ui::EQBandStrip> strip;
     std::unique_ptr<synth::ui::EQBandTypePill> typePill;
+    std::unique_ptr<synth::ui::EQSoloButton> soloButton;
     juce::Rectangle<int> reservedToolbarSlot;
     juce::ToggleButton spectrumToggle;
-    juce::Label hint;
+    LiveTipLabel hint;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EQWindow)
 };

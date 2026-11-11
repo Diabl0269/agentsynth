@@ -187,6 +187,7 @@ void ShortcutManager::resetToDefaults() {
     addPianoRollDefaultBindings();
     addDrumMachineDefaultBindings();
     addLayoutEditorDefaultBindings();
+    addEqDefaultBindings();
 }
 
 // The non-character keys named in words: their key codes are control characters (Return is 13, Escape 27) or sit
@@ -341,6 +342,8 @@ juce::String ShortcutManager::getCategoryName(ShortcutCategory category) {
         return "Mixer";
     case ShortcutCategory::LayoutEditor:
         return "Layout Editor";
+    case ShortcutCategory::EQ:
+        return "EQ";
     case ShortcutCategory::General:
         break;
     }
@@ -350,10 +353,10 @@ juce::String ShortcutManager::getCategoryName(ShortcutCategory category) {
 /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
  *  getActionTable(). */
 const std::vector<ShortcutCategory>& ShortcutManager::getCategoryOrder() {
-    static const std::vector<ShortcutCategory> order{ShortcutCategory::General,     ShortcutCategory::Graph,
-                                                     ShortcutCategory::Timeline,    ShortcutCategory::PianoRoll,
-                                                     ShortcutCategory::DrumMachine, ShortcutCategory::Mixer,
-                                                     ShortcutCategory::LayoutEditor};
+    static const std::vector<ShortcutCategory> order{ShortcutCategory::General,      ShortcutCategory::Graph,
+                                                     ShortcutCategory::Timeline,     ShortcutCategory::PianoRoll,
+                                                     ShortcutCategory::DrumMachine,  ShortcutCategory::Mixer,
+                                                     ShortcutCategory::LayoutEditor, ShortcutCategory::EQ};
     return order;
 }
 

@@ -6,13 +6,18 @@
 
 #include "AppUndoManager.h"
 #include "EqBandGlide.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 
 struct EQCurveComponent::GlideState {
     explicit GlideState(juce::Component& owner)
-        : glide(owner) {}
+        : glide(owner)
+        , soloEase(owner) {}
     synth::ui::EqBandGlide glide;
     synth::ui::RestoreWatch restoreWatch;
+    synth::ui::KeyedPointTween soloEase; // per band: (soloed, dimmed by another's solo), keyed by the band
+    std::array<juce::Point<float>, ParametricEQModule::kMaxBands> soloRest{};
+    int soloApplied = -1;
 };
 
 EQCurveComponent::EQCurveComponent(ParametricEQModule& eq)
@@ -34,13 +39,15 @@ EQCurveComponent::EQCurveComponent(ParametricEQModule& eq)
     setWantsKeyboardFocus(true);
     setTitle("EQ curve");
     setDescription("Parametric EQ response with up to 24 bands");
-    setTooltip("EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, "
-               "Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a "
-               "point, drag to move, scroll for Q, right-click a point for its type");
     startTimerHz(30);
 }
 
-EQCurveComponent::~EQCurveComponent() { stopTimer(); }
+// A solo this curve started ends with it, so audio never stays soloed with nothing on screen to end it.
+EQCurveComponent::~EQCurveComponent() {
+    stopTimer();
+    if (ownsSolo_ && eqModule.getSoloBand() == ownedSoloBand_)
+        eqModule.clearSolo();
+}
 
 synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getBandGlideForTest() noexcept {
     return glide_->glide.tweenForTest();
@@ -48,6 +55,44 @@ synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getBandGlideForTest
 
 synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getTypeMorphForTest() noexcept {
     return glide_->glide.morphTweenForTest();
+}
+
+synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getSoloEaseForTest() noexcept { return glide_->soloEase; }
+
+// A dot's solo look eases between its states like any other drawn change; Reduce Motion fades it in (and lands it out)
+// instead of travelling, Animations Off lands it at once.
+juce::Point<float> EQCurveComponent::getSoloLook(int band) const {
+    const auto rest = glide_->soloRest[(size_t)band];
+    const float alpha = glide_->soloEase.alphaFor(band);
+    return alpha < 1.0f ? rest * alpha : glide_->soloEase.drawnAt(band, rest);
+}
+
+// The module's solo is the truth (another curve on the same EQ, or the audio engine's owner, may change it): a solo
+// this curve started drops its claim when someone else moved it, and is ended when its band went off (an undo can do
+// that).
+void EQCurveComponent::syncSolo() {
+    int solo = eqModule.getSoloBand();
+    if (ownsSolo_ && solo != ownedSoloBand_)
+        ownsSolo_ = false;
+    if (ownsSolo_ && !eqModule.isBandEnabled(solo)) {
+        eqModule.clearSolo();
+        ownsSolo_ = false;
+        solo = -1;
+    }
+    if (solo == glide_->soloApplied)
+        return;
+    glide_->soloApplied = solo;
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
+        const auto key = (synth::ui::KeyedPointTween::Key)b;
+        const juce::Point<float> rest(b == solo ? 1.0f : 0.0f, solo >= 0 && b != solo ? 1.0f : 0.0f);
+        const auto before = glide_->soloRest[(size_t)b];
+        if (rest == before)
+            continue;
+        glide_->soloEase.retarget(key, glide_->soloEase.drawnAt(key, before), rest, true);
+        glide_->soloRest[(size_t)b] = rest;
+    }
+    repaint();
+    listeners_.call([](Listener& l) { l.eqCurveChanged(); });
 }
 
 // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides. While a band's
@@ -104,5 +149,6 @@ void EQCurveComponent::timerCallback() {
     if (bandsDiffer(bands, lastBands) || outputGainDb != lastOutputGainDb)
         syncBands(bands, outputGainDb, restored);
 
+    syncSolo();
     spectrumTick();
 }

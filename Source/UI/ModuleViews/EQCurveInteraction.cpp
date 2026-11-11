@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -77,9 +78,36 @@ int EQCurveComponent::addBandInLargestGap() {
     return addBandAt(std::exp(bestMid), 0.0f);
 }
 
+// The copy takes the original's settings and lands two semitones higher, so it is told apart from it at once. It is
+// written before it switches on, like an added band, so it grows in without ever playing a stale shape.
+bool EQCurveComponent::duplicateSelectedBand() {
+    if (selectedBand < 0 || !eqModule.isBandEnabled(selectedBand))
+        return false;
+    const int slot = eqModule.findFreeBand();
+    if (slot < 0)
+        return false;
+    const auto source = eqModule.getBandSnapshots()[(size_t)selectedBand];
+    beginGesture();
+    eqModule.setBandType(slot, source.type);
+    eqModule.setBandSlope(slot, source.slopeDbPerOct);
+    eqModule.setBandFreq(
+        slot, juce::jlimit(Module::kMinFreq, Module::kMaxFreq, source.freqHz * std::pow(2.0f, 2.0f / 12.0f)));
+    eqModule.setBandGain(slot, source.gainDb);
+    eqModule.setBandQ(slot, source.q);
+    eqModule.setBandEnabled(slot, true);
+    endGesture();
+    refreshFromModule();
+    setSelectedBand(slot);
+    return true;
+}
+
 void EQCurveComponent::removeBand(int band) {
     if (band < 0 || band >= Module::kMaxBands || !eqModule.isBandEnabled(band))
         return;
+    if (eqModule.getSoloBand() == band) {
+        ownsSolo_ = false;
+        eqModule.clearSolo(); // nothing would be left to hear
+    }
     beginGesture();
     eqModule.setBandEnabled(band, false);
     endGesture();
@@ -154,6 +182,8 @@ void EQCurveComponent::setSelectedBand(int band) {
         return;
     selectedBand = band;
     refreshAccessibilityValue();
+    if (ownsSolo_)
+        followSelectionSolo();
     repaint();
     listeners_.call([](Listener& l) { l.eqCurveChanged(); });
 }
@@ -194,6 +224,17 @@ void EQCurveComponent::mouseDown(const juce::MouseEvent& e) {
     dragBand = hitTestBand(e.position);
     if (dragBand < 0)
         return;
+    if (e.mods.isAltDown() &&
+        !e.mods.isPopupMenu()) { // Option-click auditions the dot (and ends it) instead of dragging
+        const int band = std::exchange(dragBand, -1);
+        const bool wasSoloed = eqModule.getSoloBand() == band;
+        setSelectedBand(band);
+        if (wasSoloed)
+            endSolo();
+        else
+            startSolo(band);
+        return;
+    }
     setSelectedBand(dragBand);
     if (e.mods.isPopupMenu()) {
         const int band = dragBand;

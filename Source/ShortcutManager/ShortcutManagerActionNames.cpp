@@ -93,6 +93,37 @@ juce::String drumMachineActionName(const juce::String& actionId) {
     return {};
 }
 
+// The EQ category: the Parametric EQ curve's keys. Empty when `actionId` is not an EQ action.
+juce::String eqActionName(const juce::String& actionId) {
+    if (actionId == "eqSelectPrev")
+        return "Select Previous EQ Band";
+    if (actionId == "eqSelectNext")
+        return "Select Next EQ Band";
+    if (actionId == "eqMoveLeft")
+        return "Move EQ Band Down in Frequency";
+    if (actionId == "eqMoveRight")
+        return "Move EQ Band Up in Frequency";
+    if (actionId == "eqMoveUp")
+        return "Raise EQ Band Gain";
+    if (actionId == "eqMoveDown")
+        return "Lower EQ Band Gain";
+    if (actionId == "eqWidthUp")
+        return "Widen EQ Band";
+    if (actionId == "eqWidthDown")
+        return "Narrow EQ Band";
+    if (actionId == "eqSolo")
+        return "Solo EQ Band";
+    if (actionId == "eqTypeMenu")
+        return "Open EQ Band Type Menu";
+    if (actionId == "eqAddBand")
+        return "Add EQ Band";
+    if (actionId == "eqRemoveBand")
+        return "Remove EQ Band";
+    if (actionId == "eqDuplicateBand")
+        return "Duplicate EQ Band";
+    return {};
+}
+
 juce::String mixerActionName(const juce::String& actionId) {
     if (actionId == "mixerToggleInserts")
         return "Show or Hide Mixer Inserts";
@@ -322,10 +353,10 @@ juce::String clipKeyboardActionName(const juce::String& actionId) {
     return {};
 }
 
-// The Drum Machine, Mixer and Layout Editor categories, tried in turn.
+// The Drum Machine, Mixer, Layout Editor and EQ categories, tried in turn.
 juce::String nonTimelineActionName(const juce::String& actionId) {
-    for (const auto& name :
-         {drumMachineActionName(actionId), mixerActionName(actionId), layoutEditorActionName(actionId)})
+    for (const auto& name : {drumMachineActionName(actionId), mixerActionName(actionId),
+                             layoutEditorActionName(actionId), eqActionName(actionId)})
         if (name.isNotEmpty())
             return name;
     return {};
