@@ -3,9 +3,10 @@
 #
 # What a user does: in a new project (no LFO), opens the Mod Matrix, adds a row, opens its source search and types
 # "lfo". The Create new LFO row shows (the proof frame). Return picks it: an LFO card exists beside the matrix (not under it) and the
-# row's source reads LFO. Cmd+Z takes the LFO and the row's source away in one step; Cmd+Shift+Z brings both back
-# (so the saved project holds the LFO). Both proof clips are glides: the picker filtering in, the LFO card entering.
+# row's source reads LFO. FRO1680: no Cmd+Z here, so the check-2 clip shows the card growing in and not the undo (Tal's
+# note); the undo and redo are covered by ModMatrixPickerTests. Both proof clips are glides: the picker filtering in, the LFO card entering.
 motion: true
+pop_check: {off: "FRO1680: the no-pop undo/redo watch plays inside the proof clip (Tal saw undo, not the card growing); no-pop for the matrix is FRO1709"}
 record: true
 save_project: "fro1155 test"
 steps:
@@ -27,16 +28,8 @@ steps:
   - expect: {id: "modMatrixPicker > Create new LFO", exists: true, within_ms: 2000}
   - mark: {check: 1, name: create-lfo-row}
   - glide: {name: lfo-enters-frames, frames: 16, do: {key: {keys: return}}}
-  - wait: {settleMs: 300}
+  - wait: {settleMs: 100}
   - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
   - expect: {id: "card:LFO", exists: true, within_ms: 2000}
   - expect: {id: modSource, contains: {text: LFO}, within_ms: 2000}
-  - wait: {}
   - mark: {check: 2, name: lfo-created-visible}
-  - glide: {name: lfo-undo-frames, frames: 10, do: {key: {keys: cmd+z}}}   # the card leaves (inside check 2's clip)
-  - wait: {}
-  - expect: {id: "card:LFO", exists: false, within_ms: 2000}
-  - key: {keys: cmd+shift+z}
-  - wait: {}
-  - expect: {id: "card:LFO", exists: true, within_ms: 2000}
-  - expect: {id: modSource, contains: {text: LFO}, within_ms: 2000}

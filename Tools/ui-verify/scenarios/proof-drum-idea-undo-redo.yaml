@@ -1,0 +1,23 @@
+# FRO1608 check 3 (FRO1547): pick House in Ideas, Cmd+Z shrinks the hits out, Cmd+Shift+Z grows them back.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: drum-idea-undo-redo
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - click: {id: drumIdeas}
+  - wait: {}
+  - click: {id: House}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - expect: {id: drumMachineState, hits: "36:0,4,8,12;39:4,12;42:0,2,6,8,10,14;46:2,6,10,14", within_ms: 1500}
+  - glide: {name: undo-frames, frames: 10, do: {key: {keys: cmd+z}}}
+  - glide: {name: redo-frames, frames: 10, do: {key: {keys: cmd+shift+z}}}
+  - expect: {id: drumMachineState, hits: "36:0,4,8,12;39:4,12;42:0,2,6,8,10,14;46:2,6,10,14", within_ms: 1500}
+  - mark: {check: 3, name: undo-then-redo}

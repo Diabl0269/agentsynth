@@ -1,0 +1,13 @@
+# FRO1608 check 5 (FRO1551): hold the Steps up arrow on a sequencer card: the dimmed columns slide smoothly.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: steps-hold
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8}
+  - glide: {name: hold-frames, frames: 16, crop: {x: 300, y: 380, w: 560, h: 300}, do: {mouseDown: {id: "card:Sequencer > Steps", x: 70, y: 12}}}
+  - expect: {id: "card:Sequencer > Steps state", repeating: true, within_ms: 1000}
+  - mark: {check: 5, name: hold-steps-shade-glides}
+  - mouseUp: {id: "card:Sequencer > Steps", x: 70, y: 12}

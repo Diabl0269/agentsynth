@@ -1,0 +1,38 @@
+# FRO1547 check 4: changing Steps per bar on a clip with hits, then Cmd+Z, moves the hits (they shrink out or grow in
+# as the grid changes) instead of snapping.
+#
+# What a user does: opens the project with a Drum Kit track and its empty "Beat 1" clip, opens the drum machine, picks
+# the House idea, changes Steps per bar from 16 to 32, then presses Cmd+Z.
+motion: true
+pop_check: {undo: false}   # undo off: the scenario tests undo itself and needs the undo history untouched
+record: true
+save_project: drum-steps-per-bar-undo
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - click: {id: drumIdeas}
+  - wait: {}
+  - click: {id: House}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {settleMs: 800}
+  - click: {id: Steps per bar}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 400}
+  - key: {keys: down}
+  - wait: {settleMs: 400}
+  - screenshot: {name: 1-menu}
+  - glide: {name: steps-change-frames, frames: 14, do: {key: {keys: return}}}
+  - wait: {settleMs: 800}
+  - expect: {id: Steps per bar, text: "32", within_ms: 1500}
+  - screenshot: {name: 2-changed}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - glide: {name: steps-undo-frames, frames: 12, do: {key: {keys: cmd+z}}}
+  - expect: {id: Steps per bar, text: "16", within_ms: 1500}
+  - mark: {check: 4, name: steps-undo-glides}
