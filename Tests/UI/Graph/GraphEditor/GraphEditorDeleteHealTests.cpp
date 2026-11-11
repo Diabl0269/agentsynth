@@ -6,7 +6,7 @@
 // GraphEditorTestHelpers.h.
 
 #include "AudioEngine/AudioEngine.h"
-#include "GraphEditorTestHelpers.h"
+#include "GraphEditorWiredFixtures.h"
 
 #include "AppUndoManager.h"
 #include "MacroSet.h"

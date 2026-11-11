@@ -11,6 +11,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/DistortionModule.h"
+#include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
