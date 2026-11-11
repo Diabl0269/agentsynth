@@ -360,10 +360,11 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     soundPreview_.prepare(newRate, newBlockSize);
     onFormatChangeStepForTest(2);
 
-    // 3. STREAMER: force every Track Audio ring to miss until the prefetch thread has refilled it at
-    //    the NEW mapping, rather than risk a coincidental hit on content filled under the OLD one.
-    //    See AudioClipStreamer::invalidateAllStreams().
-    clipStreamer_.invalidateAllStreams();
+    // 3. STREAMER: hand it the new rate (its rings are in engine-rate frames and each file's
+    //    resampling ratio depends on it), which also forces every Track Audio ring to miss until the
+    //    prefetch thread has refilled it at the NEW mapping, rather than risk a coincidental hit on
+    //    content filled under the OLD one. See AudioClipStreamer::setEngineSampleRate().
+    clipStreamer_.setEngineSampleRate(newRate);
     onFormatChangeStepForTest(3);
 
     // 4. IN-FLIGHT TAKES: neither an audio take's WAV (fixed header rate, written at whatever rate

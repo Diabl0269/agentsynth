@@ -50,6 +50,8 @@ public:
         std::vector<std::pair<float, float>> buckets;
         /** One RMS value per `buckets` slot (same order), or EMPTY for a version 1 file / data without RMS. */
         std::vector<float> rms;
+        /** The audio file's sample rate (0 = unknown); in-memory only, filled by the caller, never read from .agpk. */
+        double sampleRate = 0.0;
     };
 
     /** Peaks-file magic and version — format, not implementation detail. Bit-identical to the

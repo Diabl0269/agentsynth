@@ -27,9 +27,7 @@ struct EqResponseCurve {
 
     /** The same samples from given band settings: the thumbnail's drawn bands while an undo or redo glides
      *  (EqBandGlide.h). */
-    static std::vector<float>
-    compute(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& bands,
-            float outputGainDb) {
+    static std::vector<float> compute(const ParametricEQModule::BandSnapshots& bands, float outputGainDb) {
         std::vector<float> magnitudes(kNumPoints, 0.0f);
         for (int i = 0; i < kNumPoints; ++i) {
             const float freq = FrequencyGrid::indexToFreq(i, kNumPoints);

@@ -2,8 +2,9 @@
 
 // CurveDrawGesture.h -- the pen on a shape curve: press, drag and release draw a stretch of the curve the way the
 // timeline's lane Draw tool does. Sine, Triangle, Saw and Square fill the dragged span with whole cycles (one per grid
-// cell while the grid is on), Line ramps from press to release, and Free follows the mouse and is thinned on release.
-// Only the points inside the dragged span change; the rest of the curve stays.
+// cell while the grid is on) between the press's and the drag's levels (the default band's height, centred on the
+// press, while the drag stays level), Line ramps from press to release, and Free follows the mouse and is thinned on
+// release. Only the points inside the dragged span change; the rest of the curve stays.
 //
 // The drag's preview and the release's commit both read `result()`, which runs drawOnCurve over the curve as it stood
 // at the press, so what the drag shows is what the drop writes. A release writes ONE gesture bracket (one undo step);
@@ -12,6 +13,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace synth::ui {
 
@@ -53,7 +55,11 @@ public:
 
     void paint(juce::Graphics& g) const;
 
+    /** Below this many pixels between the press's and the drag's levels a periodic shape keeps the default height. */
+    static constexpr float kMinBoxHeightPx = 3.0f;
+
 private:
+    std::pair<float, float> boxLevels(const juce::Point<double>& a, const juce::Point<double>& b) const;
     ShapeDrawStroke stroke(const juce::Point<double>& a, const juce::Point<double>& b) const;
 
     CurveEditorComponent& editor_;

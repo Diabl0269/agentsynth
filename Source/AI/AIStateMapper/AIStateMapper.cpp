@@ -349,18 +349,12 @@ juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node) {
     n->setProperty("id", (int)node.nodeID.uid);
     n->setProperty("type", getFactoryTypeName(processor));
 
-    // Stable per-node identity, generated on first save and persisted back onto the node so
-    // every later save of the same node emits the same string. The integer "id" cannot
-    // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
-    // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
+    // Stable per-node identity, persisted onto the node on first save. Not the integer "id": merge-mode apply
+    // renumbers nodes, and long-lived references (automation lanes, track bindings) key on the uuid.
     n->setProperty("uuid", ensureNodeUuid(&node));
 
-    // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
-    // processor's own name: "type" carries the factory type, and the processor's getName()
-    // is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes
-    // wholesale on every graph change (it even strips trailing digits to renumber). Storing
-    // a custom name there would be clobbered on the next node add. Emitted only when set, so
-    // every un-renamed node's JSON stays byte-identical to before.
+    // User's custom card title, a separate field from the processor's auto-numbered name ("Chorus 2"), which
+    // AudioEngine::updateModuleNames() recomputes on every graph change. Emitted only when set.
     const auto displayName = node.properties["displayName"].toString();
     if (displayName.isNotEmpty())
         n->setProperty("displayName", displayName);
@@ -372,17 +366,20 @@ juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node) {
         if (const auto& value = node.properties[key]; value.isObject())
             n->setProperty(key, value.clone());
 
-    // Params — store denormalized values to match applyJSONToGraph expectations
+    // Params, denormalized (a choice by name). One no surface shows yet is left out at its default (see
+    // detail::isUnexposedParam), so the JSON of a module that gained it is unchanged.
     juce::DynamicObject::Ptr params = new juce::DynamicObject();
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(param);
+                r != nullptr && r->getValue() == r->getDefaultValue() &&
+                detail::isUnexposedParam(*processor, r->paramID))
+                continue;
             if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                // Store choice as string name for readability
                 params->setProperty(choice->paramID, choice->getCurrentChoiceName());
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
                 params->setProperty(boolParam->paramID, boolParam->get());
             } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-                // Store denormalized value
                 float denormalized = ranged->getNormalisableRange().convertFrom0to1(ranged->getValue());
                 params->setProperty(ranged->paramID, denormalized);
             } else {
@@ -615,12 +612,9 @@ void AIStateMapper::applyParamsToNewProcessor(juce::AudioProcessor* processor, c
 
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                            bool trusted, bool skipUnchanged) {
-    // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost
-    // notifies its listeners unconditionally, and one of ours re-anchors a module's cables when
-    // "poly" changes — i.e. it mutates the graph. A snapshot restore re-applies every parameter of
-    // every surviving node, so for that caller the redundant writes are the overwhelming majority.
-    // The tolerance only has to absorb the float round-trip through the JSON's denormalized value;
-    // it is orders of magnitude below any parameter step a user or a model can express.
+    // Writing a value a parameter already holds is not a no-op: setValueNotifyingHost notifies unconditionally, and
+    // a "poly" listener re-anchors cables (mutates the graph). A snapshot restore re-applies every parameter, so it
+    // skips those writes; the tolerance only absorbs the float round-trip through the JSON's denormalized value.
     auto setNormalised = [skipUnchanged](juce::RangedAudioParameter* p, float normalised) {
         if (skipUnchanged && std::abs(p->getValue() - normalised) <= 1.0e-6f)
             return;
@@ -631,7 +625,13 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
     // another for the read: a snapshot restore asks this of every parameter of every node in the project.
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-            if (const auto* found = paramsObj->getProperties().getVarPointer(juce::Identifier(p->paramID))) {
+            const auto* found = paramsObj->getProperties().getVarPointer(juce::Identifier(p->paramID));
+            if (detail::isUnexposedParam(*processor, p->paramID) && (!trusted || found == nullptr)) {
+                if (trusted) // nodeToJSON left it out at its default
+                    setNormalised(p, p->getDefaultValue());
+                continue; // the model never sets one
+            }
+            if (found != nullptr) {
                 const auto& jsonValue = *found;
 
                 if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p)) {

@@ -5,6 +5,7 @@
 #include "UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -90,14 +91,27 @@ ShapeDrawStroke CurveDrawGesture::stroke(const juce::Point<double>& a, const juc
     s.x1 = forward ? b.x : a.x;
     s.y0 = (float)(forward ? a.y : b.y);
     s.y1 = (float)(forward ? b.y : a.y);
-    s.lo = band_.lo;
-    s.hi = band_.hi;
+    const auto [lo, hi] = boxLevels(a, b);
+    s.lo = lo;
+    s.hi = hi;
     const double cell = editor_.drawCellWidth();
     s.cycleWidth = cell > 0.0 ? cell
                               : (editor_.getModel().getMaxX() - editor_.getModel().getMinX()) /
                                     (double)juce::jmax(1, band_.cycles);
     s.freehand = s_->samples;
     return s;
+}
+
+// Like the lane's Draw tool, the press is one corner of the box and the drag the other, so the wave spans the two
+// levels. A drag that barely leaves the press's level keeps the default band's height, centred on the press, so a
+// plain sideways drag still draws a wave rather than a flat line.
+std::pair<float, float> CurveDrawGesture::boxLevels(const juce::Point<double>& a, const juce::Point<double>& b) const {
+    const float heightPx = std::abs(editor_.pixelForDrawPoint(a).y - editor_.pixelForDrawPoint(b).y);
+    if (heightPx >= kMinBoxHeightPx)
+        return {(float)std::min(a.y, b.y), (float)std::max(a.y, b.y)};
+    const float half = std::abs(band_.hi - band_.lo) * 0.5f;
+    const float centre = juce::jlimit(half, 1.0f - half, (float)a.y);
+    return {centre - half, centre + half};
 }
 
 ShapeDrawResult CurveDrawGesture::result() const {
@@ -125,17 +139,25 @@ void CurveDrawGesture::paint(juce::Graphics& g) const {
     const auto drawn = result();
     const auto s = stroke(a_, b_);
 
-    // The stretch being drawn, like the lane's box: a wash with dashed edges.
+    // The stretch being drawn, like the lane's box: a wash with dashed edges. A periodic shape's box spans the levels
+    // it swings between; a Line's spans the whole height.
     if (*pen_ != DrawShape::Free && s.x1 > s.x0) {
         const float x0 = editor_.pixelForDrawPoint({s.x0, 0.0}).x;
         const float x1 = editor_.pixelForDrawPoint({s.x1, 0.0}).x;
-        const auto box = juce::Rectangle<float>(x0, 0.0f, x1 - x0, (float)editor_.getHeight());
+        const bool periodic = isPeriodicShape(*pen_);
+        const float top = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.hi}).y : 0.0f;
+        const float bottom = periodic ? editor_.pixelForDrawPoint({s.x0, (double)s.lo}).y : (float)editor_.getHeight();
+        const auto box = juce::Rectangle<float>(x0, top, x1 - x0, bottom - top);
         g.setColour(colors.accent.withAlpha(0.10f));
         g.fillRect(box);
         const float dash[] = {4.0f, 3.0f};
         g.setColour(colors.accent.withAlpha(0.8f));
         g.drawDashedLine({box.getTopLeft(), box.getBottomLeft()}, dash, 2, 1.0f);
         g.drawDashedLine({box.getTopRight(), box.getBottomRight()}, dash, 2, 1.0f);
+        if (periodic) {
+            g.drawDashedLine({box.getTopLeft(), box.getTopRight()}, dash, 2, 1.0f);
+            g.drawDashedLine({box.getBottomLeft(), box.getBottomRight()}, dash, 2, 1.0f);
+        }
     }
     if (drawn.changed) {
         g.setColour(colors.accent);

@@ -30,7 +30,7 @@ EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) co
     out.dots = resting;
     out.curve = resting;
     out.outputGainDb = outputGain + tween_->offsetFor(kOutputKey).x;
-    for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto i = (size_t)b;
         auto& dot = out.dots[i];
         const auto place = tween_->offsetFor(placeKey(b));
@@ -61,7 +61,7 @@ void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands&
         return;
     }
     const auto now = drawn(before, outputGainBefore);
-    for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto i = (size_t)b;
         const auto& from = now.dots[i];
         const auto& to = after[i];

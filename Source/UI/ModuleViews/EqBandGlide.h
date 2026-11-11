@@ -25,7 +25,7 @@ using KeyedPointTween = KeyedTween<juce::Point<float>>;
 
 class EqBandGlide {
 public:
-    using Bands = std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>;
+    using Bands = ParametricEQModule::BandSnapshots;
 
     /** What is drawn right now, given the resting (real) settings. */
     struct Drawn {
@@ -33,8 +33,8 @@ public:
         Bands dots{};
         /** The bands the response curve is summed from: a fading band's gain is scaled by its presence. */
         Bands curve{};
-        std::array<float, ParametricEQModule::kNumBands> presence{}; // 0..1
-        std::array<float, ParametricEQModule::kNumBands> alpha{};    // dot opacity: presence x the Reduce Motion fade
+        std::array<float, ParametricEQModule::kMaxBands> presence{}; // 0..1
+        std::array<float, ParametricEQModule::kMaxBands> alpha{};    // dot opacity: presence x the Reduce Motion fade
         float outputGainDb = 0.0f;
     };
 
@@ -54,7 +54,7 @@ public:
     KeyedPointTween& tweenForTest() noexcept { return *tween_; }
     static std::int64_t placeKey(int band) noexcept { return band * 2; }     // (log2 frequency, gain)
     static std::int64_t shapeKey(int band) noexcept { return band * 2 + 1; } // (Q, presence)
-    static constexpr std::int64_t kOutputKey = ParametricEQModule::kNumBands * 2;
+    static constexpr std::int64_t kOutputKey = ParametricEQModule::kMaxBands * 2;
 
 private:
     struct Ghost { // where a band an undo took away is still drawn while it fades out
@@ -65,7 +65,7 @@ private:
     };
 
     std::unique_ptr<KeyedPointTween> tween_;
-    std::array<Ghost, ParametricEQModule::kNumBands> ghost_{};
+    std::array<Ghost, ParametricEQModule::kMaxBands> ghost_{};
 };
 
 } // namespace synth::ui

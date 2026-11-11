@@ -1,0 +1,33 @@
+{
+  "id": 1,
+  "type": "Parametric EQ",
+  "uuid": "00000000-0000-4000-8000-0000000000e0",
+  "params": {
+    "bypassed": false,
+    "dualIO": false,
+    "band1On": true,
+    "band1Freq": 119.999992370605469,
+    "band1Gain": 4.5,
+    "band1Q": 1.200000166893005,
+    "band2On": true,
+    "band2Freq": 649.9998779296875,
+    "band2Gain": -6.0,
+    "band2Q": 2.500000238418579,
+    "band3On": false,
+    "band3Freq": 2500.000244140625,
+    "band3Gain": 3.0,
+    "band3Q": 0.899999678134918,
+    "band4On": true,
+    "band4Freq": 9000.0009765625,
+    "band4Gain": -3.499999523162842,
+    "band4Q": 0.500000059604645,
+    "outputGain": -1.999999523162842,
+    "muted": false,
+    "mix": 0.800000011920929,
+    "pan": 0.25
+  },
+  "position": {
+    "x": 120,
+    "y": 80
+  }
+}
