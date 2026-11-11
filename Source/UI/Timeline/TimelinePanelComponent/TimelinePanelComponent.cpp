@@ -15,6 +15,7 @@
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
@@ -272,6 +273,14 @@ TimelinePanelComponent::TimelinePanelComponent()
     // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
     // a real manager is wired, and again on every bindings-changed notification.
     refreshShortcutTooltips();
+
+    // Tab reads the panel top to bottom, left to right. JUCE sorts siblings by top edge, and the Add Track button is
+    // inset from its strip, so with an editor open it would be visited after the editor beside it; every focusable
+    // sibling is named here (one that is missing sorts after all of these).
+    synth::ui::setReadingFocusOrder({&sidePaneButton_, &transportBar_, clipSizingButton_.get(), &followPlayheadButton_,
+                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(),
+                                     &trackHeaderWidthHandle_, &addTrackButton_, &trackHeaderViewport_, &clipLaneArea_,
+                                     &pianoRoll_, &drum_->grid});
 }
 
 // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component --

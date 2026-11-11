@@ -52,12 +52,6 @@ const std::vector<KnownGap> kKnownGaps = {
      "DELIBERATE"},
     // A 2D map: the X slider runs along the bottom and the Y slider up the left edge; X then Y is the natural order.
     {"Shape editor / ShapeWindowMap: Morph X, 0.50 before Morph Y, 0.50", "DELIBERATE"},
-    // The Add Track button sits 2 px below the top edge of the editor beside it (the strip is inset by 2 px), so the
-    // editor sorts first.
-    {"timeline [piano roll open] / TimelinePanelComponent: Piano roll before Add", "TICKET-TBD"},
-    // The Add Track button sits 2 px below the top edge of the editor beside it (the strip is inset by 2 px), so the
-    // editor sorts first.
-    {"timeline [drum machine open] / TimelinePanelComponent: Drum machine grid before Add", "TICKET-TBD"},
 };
 
 std::string tabClassName(const juce::Component& c) {
