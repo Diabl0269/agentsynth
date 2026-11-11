@@ -115,6 +115,7 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
         if (host_.rebindLearnable)
             host_.rebindLearnable(knob, param);
     };
+    controls_.isRestoring = [this] { return host_.undo != nullptr && host_.undo->isRestoring(); };
     controls_.onBeforeRebind = [this] {
         if (host_.cableEndsMove)
             host_.cableEndsMove();

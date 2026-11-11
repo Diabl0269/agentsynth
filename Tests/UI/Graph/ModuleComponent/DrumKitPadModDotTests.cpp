@@ -144,15 +144,11 @@ TEST(DrumKitPadModDot, PickingAPadGlidesTheCableEndsUnderFullMotion) {
     const auto snareFrom = scene.end(1), kickFrom = scene.end(0);
     FadeAnimateGuard guard;
     scene.pick(0);
-    EXPECT_FALSE(scene.glide().isLive()) << "the ends wait while the old pad's knobs fade out";
-    scene.pads().controls().completeFadeForTest(); // the fade-out ends and binds the kick
-    scene.refresh();
-    ASSERT_TRUE(scene.glide().isLive());
+    ASSERT_TRUE(scene.glide().isLive()) << "the knobs are on the kick at once, so the ends start gliding at once";
     EXPECT_LT(scene.end(1).getDistanceFrom(snareFrom), 0.5f) << "the first frame has not moved";
     scene.glide().advanceForTest(0.5f);
     const auto snareMid = scene.end(1), kickMid = scene.end(0);
     scene.glide().completeForTest();
-    scene.pads().controls().completeFadeForTest();
     EXPECT_FALSE(scene.glide().isLive());
     EXPECT_LT(snareMid.getDistanceFrom(snareFrom + (scene.end(1) - snareFrom) * 0.5f), 0.5f);
     EXPECT_LT(kickMid.getDistanceFrom(kickFrom + (scene.end(0) - kickFrom) * 0.5f), 0.5f);
@@ -168,7 +164,6 @@ TEST(DrumKitPadModDot, UnderReduceMotionThePickIsAPlainMove) {
     ASSERT_TRUE(scene.glide().isLive());
     EXPECT_LT(scene.end(0).getDistanceFrom(kickFrom), 0.5f);
     scene.glide().completeForTest();
-    scene.pads().controls().completeFadeForTest();
     EXPECT_FALSE(scene.glide().isLive());
     expectPicked(scene, 0);
 }

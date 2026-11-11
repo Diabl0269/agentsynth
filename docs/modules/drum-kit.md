@@ -100,8 +100,16 @@ The group tabs and the Recorded switches are gone from the card (layout revision
     the same for every pad.
   - Decay dims while the pad plays a recording or an instrument.
   - The knobs re-bind to the pad's own parameters, so a drag is one undo step like any card knob.
-  - Switching pads cross-fades the panel: out over 80 ms, in over 160 ms. Under Reduce Motion it is an 80 ms fade in;
-    with Animations Off it is instant.
+  - Switching pads never fades the panel. The name, note and Sound row change at once, and each of the four knobs
+    glides its drawn value (the arc and the value box) from the old pad's value to the new pad's over 160 ms
+    `easeOutCubic`; the parameter itself is final at once. A second pick or an undo mid-glide goes on from the value
+    drawn, and a drag or key press on a knob takes it where it is. Level, Tune and Decay slide sideways when the new
+    pad's kind changes the column widths (a file pad has a fourth column); Start, Plays pitch and Open fade in and out
+    in place (160 ms in, 110 ms out). The picked pad's mod ring fades in as the old pad's fades out and follows the
+    glide. Under Reduce Motion the values land at once and the knobs fade in over 80 ms from a floor of 20%; with
+    Animations Off, or off screen, everything is instant. Undo and redo of a knob change glide the same way
+    (`UndoGlideSurfaces`: "Drum Kit pad knob"); automation and MIDI controllers move the knob frame for frame. Code:
+    `DrumPadControlsGlide.cpp`, tests `DrumKitPadGlideTests.cpp`.
 - **Shown.** Each pad can be hidden: see [Hiding a pad](#hiding-a-pad).
 - **Undo.** A count change is one undo step, and the card resizes to match. So is every Sound choice, a reset, a
   pitch change and a drop.

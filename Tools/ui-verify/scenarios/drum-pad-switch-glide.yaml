@@ -1,0 +1,59 @@
+# Switching the picked Drum Kit pad made the whole pad panel fade out and back in, so the knobs blinked.
+#
+# What a user does: adds a Drum Kit, sets the Snare's Level and the Kick's Level to different values, then picks the
+# Kick (click) and the Snare (arrow key) in the pad grid. The panel stays put and each knob glides to the new pad's value;
+# Undo of a knob change glides the knob back. DrumKitPadGlideTests step every frame; this checks the real window.
+motion: true
+record: true
+save_project: fro1674 drum kit pads
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - drag: {from: "card:Drum Kit", fromX: 120, fromY: 14, to: window, toX: 520, toY: 100}
+  - wait: {}
+  # Setup: the Snare's Level goes up, the Kick's goes down, so the two pads show different values.
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
+  - drag: {from: "card:Drum Kit > Level: Snare", to: "card:Drum Kit > Level: Snare", fromY: 100, toY: 0, instant: "the knob follows the dragged pointer"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 20, mods: [shift]}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, within_ms: 1500}
+  - drag: {from: "card:Drum Kit > Level: Kick", to: "card:Drum Kit > Level: Kick", fromY: 0, toY: 150, instant: "the knob follows the dragged pointer"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}
+  - wait: {}
+  - getState: {id: "card:Drum Kit > drumPadControls"}
+  - expect: {id: "card:Drum Kit > drumPadControls", boundPad: 2, moving: false, panelAlphaPercent: 100, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: snare-picked}
+  - glide: {name: pick-kick, frames: 10, crop: {x: 380, y: 80, w: 320, h: 640}, do: {click: {id: "card:Drum Kit > drumPads", x: 30, y: 20}}}
+  - wait: {}
+  - getState: {id: "card:Drum Kit > drumPadControls"}
+  # Check 1: the Kick's Level, Tune and Decay glided in and rest on the Kick's values; the panel never faded.
+  - expect: {id: "card:Drum Kit > drumPadControls", boundPad: 1, moving: false, panelAlphaPercent: 100, levelDrawnPercent: 30, levelParamPercent: 30, within_ms: 2000}
+  - mark: {check: 1, name: pick-kick-values-glide}
+  - glide: {name: arrow-snare, frames: 10, crop: {x: 380, y: 80, w: 320, h: 640}, do: {key: {keys: right}}}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPadControls", boundPad: 2, moving: false, panelAlphaPercent: 100, within_ms: 2000}
+  - drag: {from: "card:Drum Kit > Level: Snare", to: "card:Drum Kit > Level: Snare", fromY: 0, toY: 120, instant: "the knob follows the dragged pointer"}
+  - wait: {}
+  - glide: {name: undo-level, frames: 10, crop: {x: 380, y: 80, w: 320, h: 640}, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - getState: {id: "card:Drum Kit > drumPadControls"}
+  # Check 2: Undo of the Level change glided the knob back to its earlier value.
+  - mark: {check: 2, name: undo-glides-back}

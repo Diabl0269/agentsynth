@@ -68,6 +68,7 @@ public:
     CardStepper& stepper() noexcept { return stepper_; }
     DrumPadGrid& grid() noexcept { return grid_; }
     DrumPadControls& controls() noexcept { return controls_; }
+    const DrumPadControls& controls() const noexcept { return controls_; }
     juce::Label& caption() noexcept { return caption_; }
     /** The caption's "Show all" chip, visible while any pad is hidden or Show all can hide them again (then lit). */
     juce::ToggleButton& showAllChip() noexcept { return showAll_; }
