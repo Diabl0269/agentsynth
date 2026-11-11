@@ -89,6 +89,30 @@ public:
     static std::vector<float> aggregateRmsToColumns(const std::vector<float>& rms, int numChannels, int firstBucket,
                                                     int bucketCount, int numColumns);
 
+    /** Like aggregateToColumns, but with fewer buckets than columns the outline is linearly interpolated between bucket
+     *  centres instead of repeating a bucket (no flat steps when zoomed in). Identical to it otherwise. */
+    static std::vector<std::pair<float, float>> smoothToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                int numChannels, int firstBucket, int bucketCount,
+                                                                int numColumns);
+
+    /** RMS twin of smoothToColumns. */
+    static std::vector<float> smoothRmsToColumns(const std::vector<float>& rms, int numChannels, int firstBucket,
+                                                 int bucketCount, int numColumns);
+
+    /** Exact per-column results from raw samples (see PeaksFile.cpp for the column span and channel fold). */
+    struct SampleColumns {
+        std::vector<std::pair<float, float>> minMax;
+        std::vector<float> rms;
+    };
+    /** `block` holds file samples from `blockStart`; column x starts at `firstColumnStartSample + x *
+     * samplesPerColumn`. */
+    static SampleColumns sampleColumns(const juce::AudioBuffer<float>& block, std::int64_t blockStart,
+                                       double firstColumnStartSample, double samplesPerColumn, int numColumns);
+
+    /** Reads `numSamples` frames (all channels, silence past the end) from `startSample`; false if unreadable. */
+    static bool readAudioSamples(const juce::File& audioFile, std::int64_t startSample, int numSamples,
+                                 juce::AudioBuffer<float>& out);
+
     /** Peaks of an already-written audio file (a render), bucketed like a take's; false if unreadable or unwritable. */
     static bool writeForAudioFile(const juce::File& audioFile, const juce::File& peaksFile, int bucketSize);
 

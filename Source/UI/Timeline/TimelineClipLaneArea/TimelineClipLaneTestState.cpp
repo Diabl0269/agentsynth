@@ -1,5 +1,6 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.h"
 
 namespace synth::ui {
 
@@ -31,15 +32,30 @@ juce::String originText(const synth::Clip& clip) {
            juce::String(clip.stretchOrigin->ratio, 3);
 }
 
+const char* waveformSourceName(WaveformSource source) {
+    switch (source) {
+    case WaveformSource::Peaks:
+        return "peaks";
+    case WaveformSource::SampleColumns:
+        return "samples";
+    case WaveformSource::SampleLine:
+        return "line";
+    case WaveformSource::None:
+        break;
+    }
+    return "none";
+}
+
 } // namespace
 
 // `clipAudio`, "Clip 1:Audio/a.wav,0.000,4.000,Audio/orig.wav@0.000*1.500;...": every audio clip's asset, source start
 // in seconds, length in beats and stretch origin ("-" when none), so a scenario can tell which file a clip plays.
 // `clipWaveform`, "Clip 1:columns;Clip 2:summary": what each audio clip's waveform is drawn as (none, summary,
-// columns). `sizingReadout`: the pill an edge drag draws on the clip ("200%" while stretching), empty when none.
-// `clipLengths`, "Clip 1:4.000;Clip 2:2.500": every clip's length in beats, so a scenario can see whether a drag
-// committed. `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a
-// count, because a scenario checking Fit to key needs to see that notes moved, and which way.
+// columns). `waveformSource`: what the last waveform paint drew from (peaks, samples, line, none). `sizingReadout`: the
+// pill an edge drag draws on the clip ("200%" while stretching), empty when none. `clipLengths`, "Clip 1:4.000;Clip
+// 2:2.500": every clip's length in beats, so a scenario can see whether a drag committed. `clipPitches`, "Clip
+// 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a count, because a scenario
+// checking Fit to key needs to see that notes moved, and which way.
 void TimelineClipLaneArea::addTestModeProbe() {
     testModeProbe_ = std::make_unique<ClipPitchesProbe>([this](juce::DynamicObject& into) {
         juce::StringArray clips;
@@ -64,6 +80,7 @@ void TimelineClipLaneArea::addTestModeProbe() {
         into.setProperty("clipLengths", lengths.joinIntoString(";"));
         into.setProperty("clipAudio", audio.joinIntoString(";"));
         into.setProperty("clipWaveform", shapes.joinIntoString(";"));
+        into.setProperty("waveformSource", waveformSourceName(lastWaveformSource_));
         into.setProperty("sizingReadout", sizingReadout());
     });
     testModeProbe_->setBounds(0, 0, 1, 1);

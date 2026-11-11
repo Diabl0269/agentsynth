@@ -309,6 +309,14 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
         const auto file = audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef);
         return file == juce::File() ? 0.0 : synth::AudioClipStreamer::readFileSampleRate(file);
     });
+    // The raw samples of a finished asset, read from the same file playback uses: what the waveform draws when a clip
+    // is zoomed in past one peak bucket per pixel.
+    timelinePanel.getClipLaneArea().setAssetSamplesResolver([this](const juce::String& assetRef,
+                                                                   std::int64_t startSample, int numSamples,
+                                                                   juce::AudioBuffer<float>& out) -> bool {
+        const auto file = audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef);
+        return file != juce::File() && synth::PeaksFile::readAudioSamples(file, startSample, numSamples, out);
+    });
     // Same resolution playback uses, answering existence rather than handing back a File —
     // what paints the missing-asset placeholder instead of an (impossible) waveform.
     timelinePanel.getClipLaneArea().setAssetExistsResolver([this](const juce::String& assetRef) -> bool {

@@ -52,6 +52,46 @@ std::pair<std::int64_t, std::int64_t> columnSpan(std::int64_t count, std::int64_
     return {first, std::max(first, ((x + 1) * count + numColumns - 1) / numColumns - 1)};
 }
 
+// Folds one bucket's channels into a single (min,max): min of mins, max of maxes (the same fold aggregateToColumns
+// uses).
+std::pair<float, float> foldBucket(const std::vector<std::pair<float, float>>& buckets, int numChannels,
+                                   std::int64_t bucketIndex) {
+    float lo = std::numeric_limits<float>::max(), hi = std::numeric_limits<float>::lowest();
+    for (int ch = 0; ch < numChannels; ++ch) {
+        const auto& pair = buckets[(std::size_t)(bucketIndex * numChannels + ch)];
+        lo = std::min(lo, pair.first);
+        hi = std::max(hi, pair.second);
+    }
+    return {lo, hi};
+}
+
+// Where column `x` of `numColumns` sits among `count` buckets (count < numColumns): between the anchor columns of two
+// neighbouring buckets, with the fraction `t` from the first to the second. Bucket b is anchored at the column nearest
+// its centre, (b + 0.5) * numColumns / count - 0.5, so that column carries the bucket's own min/max exactly and no
+// loud bucket is ever drawn lower than it is; columns before the first anchor and after the last hold the end value.
+struct BucketBlend {
+    std::int64_t i0, i1;
+    float t;
+};
+std::int64_t anchorColumn(std::int64_t count, std::int64_t numColumns, std::int64_t bucket) {
+    const double centre = ((double)bucket + 0.5) * (double)numColumns / (double)count - 0.5;
+    return std::clamp<std::int64_t>((std::int64_t)std::llround(centre), 0, numColumns - 1);
+}
+// `next` is the bucket whose anchor is the first one past column `x` (advanced by the caller, columns ascending).
+BucketBlend blendFor(std::int64_t count, std::int64_t numColumns, std::int64_t x, std::int64_t& next) {
+    while (next < count && anchorColumn(count, numColumns, next) <= x)
+        ++next;
+    if (next == 0)
+        return {0, 0, 0.0f};
+    if (next >= count)
+        return {count - 1, count - 1, 0.0f};
+    const std::int64_t a0 = anchorColumn(count, numColumns, next - 1);
+    const std::int64_t a1 = anchorColumn(count, numColumns, next);
+    return {next - 1, next, (float)(x - a0) / (float)(a1 - a0)};
+}
+
+float blendValues(float a, float b, float t) { return a + (b - a) * t; }
+
 } // namespace
 
 //==============================================================================
@@ -264,6 +304,130 @@ std::vector<float> PeaksFile::aggregateRmsToColumns(const std::vector<float>& rm
         columns.push_back(n > 0 ? (float)std::sqrt(sumSquares / (double)n) : 0.0f);
     }
     return columns;
+}
+
+// With at least as many buckets as columns this IS aggregateToColumns. With fewer (zoomed in past one bucket per
+// pixel) a column is the straight line between the two bucket centres around it, so a changing wave reads as a
+// continuous outline rather than one flat step per bucket (the column nearest each bucket centre keeps that bucket's
+// exact min/max, so no peak is lowered). Channels fold per bucket first.
+std::vector<std::pair<float, float>> PeaksFile::smoothToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                int numChannels, int firstBucket, int bucketCount,
+                                                                int numColumns) {
+    if (numChannels <= 0 || numColumns <= 0 || firstBucket < 0)
+        return {};
+    const std::int64_t available = (std::int64_t)(buckets.size() / (std::size_t)numChannels) - firstBucket;
+    const std::int64_t count = std::min<std::int64_t>(bucketCount, available);
+    if (count <= 0)
+        return {};
+    if (count >= numColumns)
+        return aggregateToColumns(buckets, numChannels, firstBucket, bucketCount, numColumns);
+
+    std::vector<std::pair<float, float>> folded;
+    folded.reserve((std::size_t)count);
+    for (std::int64_t b = 0; b < count; ++b)
+        folded.push_back(foldBucket(buckets, numChannels, firstBucket + b));
+
+    std::vector<std::pair<float, float>> columns;
+    columns.reserve((std::size_t)numColumns);
+    std::int64_t next = 0;
+    for (std::int64_t x = 0; x < numColumns; ++x) {
+        const auto [i0, i1, t] = blendFor(count, numColumns, x, next);
+        columns.emplace_back(blendValues(folded[(std::size_t)i0].first, folded[(std::size_t)i1].first, t),
+                             blendValues(folded[(std::size_t)i0].second, folded[(std::size_t)i1].second, t));
+    }
+    return columns;
+}
+
+// The RMS twin of smoothToColumns: the per-bucket RMS (channels folded as aggregateRmsToColumns does) blended between
+// bucket centres when there are fewer buckets than columns, aggregateRmsToColumns otherwise.
+std::vector<float> PeaksFile::smoothRmsToColumns(const std::vector<float>& rms, int numChannels, int firstBucket,
+                                                 int bucketCount, int numColumns) {
+    if (rms.empty() || numChannels <= 0 || numColumns <= 0 || firstBucket < 0)
+        return {};
+    const std::int64_t available = (std::int64_t)(rms.size() / (std::size_t)numChannels) - firstBucket;
+    const std::int64_t count = std::min<std::int64_t>(bucketCount, available);
+    if (count <= 0)
+        return {};
+    if (count >= numColumns)
+        return aggregateRmsToColumns(rms, numChannels, firstBucket, bucketCount, numColumns);
+
+    std::vector<float> folded((std::size_t)count, 0.0f);
+    for (std::int64_t b = 0; b < count; ++b) {
+        double sumSquares = 0.0;
+        for (int ch = 0; ch < numChannels; ++ch) {
+            const double v = rms[(std::size_t)((firstBucket + b) * numChannels + ch)];
+            sumSquares += v * v;
+        }
+        folded[(std::size_t)b] = (float)std::sqrt(sumSquares / (double)numChannels);
+    }
+    std::vector<float> columns;
+    columns.reserve((std::size_t)numColumns);
+    std::int64_t next = 0;
+    for (std::int64_t x = 0; x < numColumns; ++x) {
+        const auto [i0, i1, t] = blendFor(count, numColumns, x, next);
+        columns.push_back(blendValues(folded[(std::size_t)i0], folded[(std::size_t)i1], t));
+    }
+    return columns;
+}
+
+// Exact per-column min/max/RMS from raw samples, the zoomed-in twin of the peaks columns. Column `x` covers the file
+// samples [first + x * spc, first + (x + 1) * spc] (the closing edge sample included, so neighbouring columns share a
+// sample and the outline has no gap). Channels fold exactly as peaks do: min of mins and max of maxes over every
+// channel; RMS is the root of the mean square over every channel and frame. Samples outside `block` read as silence.
+PeaksFile::SampleColumns PeaksFile::sampleColumns(const juce::AudioBuffer<float>& block, std::int64_t blockStart,
+                                                  double firstColumnStartSample, double samplesPerColumn,
+                                                  int numColumns) {
+    SampleColumns out;
+    const int channels = block.getNumChannels();
+    const int frames = block.getNumSamples();
+    if (channels <= 0 || numColumns <= 0 || samplesPerColumn <= 0.0)
+        return out;
+    out.minMax.reserve((std::size_t)numColumns);
+    out.rms.reserve((std::size_t)numColumns);
+    for (int x = 0; x < numColumns; ++x) {
+        const double s0 = firstColumnStartSample + (double)x * samplesPerColumn;
+        const std::int64_t i0 = std::max<std::int64_t>(0, (std::int64_t)std::floor(s0) - blockStart);
+        const std::int64_t i1 =
+            std::min<std::int64_t>(frames - 1, (std::int64_t)std::ceil(s0 + samplesPerColumn) - blockStart);
+        if (i1 < i0) {
+            out.minMax.emplace_back(0.0f, 0.0f);
+            out.rms.push_back(0.0f);
+            continue;
+        }
+        float lo = std::numeric_limits<float>::max(), hi = std::numeric_limits<float>::lowest();
+        double sumSquares = 0.0;
+        for (int ch = 0; ch < channels; ++ch) {
+            const float* data = block.getReadPointer(ch);
+            for (std::int64_t i = i0; i <= i1; ++i) {
+                const float v = data[i];
+                lo = std::min(lo, v);
+                hi = std::max(hi, v);
+                sumSquares += (double)v * (double)v;
+            }
+        }
+        out.minMax.emplace_back(lo, hi);
+        out.rms.push_back((float)std::sqrt(sumSquares / (double)((i1 - i0 + 1) * channels)));
+    }
+    return out;
+}
+
+// One read of `numSamples` frames from `startSample`, all channels, silence past the end of the file.
+bool PeaksFile::readAudioSamples(const juce::File& audioFile, std::int64_t startSample, int numSamples,
+                                 juce::AudioBuffer<float>& out) {
+    if (startSample < 0 || numSamples <= 0)
+        return false;
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    const std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(audioFile));
+    if (reader == nullptr || reader->numChannels == 0)
+        return false;
+    out.setSize((int)reader->numChannels, numSamples);
+    out.clear();
+    const std::int64_t available = reader->lengthInSamples - startSample;
+    if (available <= 0)
+        return true;
+    const int frames = (int)std::min<std::int64_t>(numSamples, available);
+    return reader->read(&out, 0, frames, startSample, true, true);
 }
 
 } // namespace synth

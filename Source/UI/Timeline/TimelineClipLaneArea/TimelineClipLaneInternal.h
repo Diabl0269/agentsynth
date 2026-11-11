@@ -22,6 +22,12 @@ inline constexpr double kMinClipLengthBeats = 0.0625;
 
 inline constexpr int kMinWidthForName = 40;
 
+// A clip this narrow or narrower draws a one-bar waveform summary instead of columns.
+inline constexpr int kMinWidthForWaveform = 24;
+
+// The transport rate assumed when no transport is set (the same 44.1 kHz fallback the audio-take code uses).
+inline constexpr double kFallbackSampleRate = 44100.0;
+
 // bpm fallback when there is no live transport (a headless test, or a TimelineClipLaneArea built
 // with setTransport() never called) — the same "no transport, assume 120 bpm" convention
 // currentBeatsPerBar() uses for beatsPerBar.
