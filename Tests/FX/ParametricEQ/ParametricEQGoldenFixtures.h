@@ -135,10 +135,12 @@ inline void expectMatchesGolden(const juce::String& name, const juce::String& ac
         ASSERT_TRUE(golden.replaceWithText(actual, false, false, "\n"));
     }
     ASSERT_TRUE(golden.existsAsFile()) << "missing golden " << name.toStdString();
-    const auto expected = golden.loadFileAsString();
-    EXPECT_TRUE(sameWithinFloatNoise(expected, actual))
+    // Line ends depend on the checkout and on JUCE's JSON writer (CRLF), so both sides compare as LF.
+    const auto expected = golden.loadFileAsString().replace("\r\n", "\n");
+    const auto produced = actual.replace("\r\n", "\n");
+    EXPECT_TRUE(sameWithinFloatNoise(expected, produced))
         << name.toStdString() << " moved.\nexpected: " << expected.toStdString()
-        << "\nactual:   " << actual.toStdString();
+        << "\nactual:   " << produced.toStdString();
 }
 
 } // namespace eqgolden
