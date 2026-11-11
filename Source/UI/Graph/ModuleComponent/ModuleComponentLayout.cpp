@@ -213,7 +213,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
         blockAbove = true;
         if (apply)
             freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
-        y += blockHeight(responseFade_, 128);
+        y += blockHeight(responseFade_, 120 + synth::cardbody::kBlockGap);
     }
 
     if (spectrumToggle && spectrumToggle->isVisible() && !footer) {

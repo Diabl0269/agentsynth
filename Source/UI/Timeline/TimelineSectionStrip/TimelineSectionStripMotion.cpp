@@ -5,6 +5,7 @@
 // (durations, Reduce Motion, nothing running at rest) are SectionStripMotion's.
 
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
@@ -19,7 +20,9 @@ constexpr float kDropLineWidth = 2.0f;
 
 // Called by refresh() after every doc notification. A placement that was not there before grows in (unless the doc
 // was replaced wholesale, as a load or an undo does: those land at once); a new stamp revision outlines the
-// placements it rewrote.
+// placements it rewrote. A placement whose start changed (an undo or redo of a move, a key move, a menu's make-room)
+// glides from where it was drawn to its new start; a drop being committed skips that, since its plan's glides already
+// head for the same starts.
 void TimelineSectionStrip::trackChangesForMotion() {
     if (doc_ == nullptr) {
         knownPlacements_.clear();
@@ -28,15 +31,21 @@ void TimelineSectionStrip::trackChangesForMotion() {
     }
     const auto replaceCount = doc_->getReplaceCount();
     const auto stampRevision = doc_->getSectionStampRevision();
-    std::set<std::int64_t> now;
+    std::map<std::int64_t, double> now;
     std::vector<synth::PlacementId> added;
     int survivors = 0;
     for (const auto& placement : doc_->getPlacements()) {
-        now.insert(placement.id.value);
-        if (knownPlacements_.count(placement.id.value) == 0)
+        now[placement.id.value] = placement.startBeat;
+        const auto known = knownPlacements_.find(placement.id.value);
+        if (known == knownPlacements_.end()) {
             added.push_back(placement.id);
-        else
-            ++survivors;
+            continue;
+        }
+        ++survivors;
+        if (motionPrimed_ && !hasDragPlan_ && std::abs(known->second - placement.startBeat) > sectionstrip::kBarEpsilon)
+            dropGlide_->retarget(placement.id.value,
+                                 dropGlide_->drawnAt(placement.id.value, {(float)known->second, 0.0f}),
+                                 {(float)placement.startBeat, 0.0f});
     }
     // A load replaces the doc: nearly every id is new and nothing grows. An undo or redo replaces it too, but most of
     // the placements it leaves are the ones already shown, and the one it brings back grows like a new one.
@@ -63,7 +72,8 @@ std::optional<SectionStripMotion::Ghost> TimelineSectionStrip::ghostOf(synth::Pl
 }
 
 // The lifted block (a ghost that follows the pointer at the grab offset while dragging, and glides to where it lands
-// or back to where it was when it settles) and the accent line where a release would drop it.
+// or back to where it was when it settles) and the accent line at the start a release would give it. The line, the
+// gap the other blocks open and the settle's end are all the plan's landing.
 void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
     const float lift = motion_.lift();
     if (!blockDragging_ && lift <= 0.0f)
@@ -73,18 +83,26 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 
     if (dragging && !dragOutside_) {
         g.setColour(colors.accent);
-        g.fillRect((float)xAtBeat(dragTargetBeat_) - kDropLineWidth * 0.5f, 0.0f, kDropLineWidth, (float)getHeight());
+        g.fillRect((float)xAtBeat(dragPlan_.landing) - kDropLineWidth * 0.5f, 0.0f, kDropLineWidth, (float)getHeight());
     }
 
-    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
-    auto rect = dragBlock_.bounds.withX(x).translated(0.0f, -kLiftRaisePx * lift);
-    juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2}).drawForRectangle(g, rect.toNearestInt());
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(11.0f);
     const juce::Font countFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::plain));
     const float alpha = blockDragging_ ? kGhostAlpha : kGhostAlpha * lift;
-    paintBlock(g, dragBlock_, rect, alpha, nameFont, countFont);
-    g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha));
-    g.drawRect(rect, 1.0f);
+    const auto paintGhost = [&](const Block& block, juce::Rectangle<float> at) {
+        const auto rect = at.translated(0.0f, -kLiftRaisePx * lift);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2})
+            .drawForRectangle(g, rect.toNearestInt());
+        paintBlock(g, block, rect, alpha, nameFont, countFont);
+        g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha));
+        g.drawRect(rect, 1.0f);
+    };
+    // The other members of a group drag ride back to back beside the pressed one, which is drawn last, on top.
+    for (std::size_t i = 0; i < dragMembers_.size(); ++i)
+        if (dragMembers_[i].block.id != dragBlock_.id)
+            paintGhost(dragMembers_[i].block, memberGhostRect(i));
+    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
+    paintGhost(dragBlock_, dragBlock_.bounds.withX(x));
 }
 
 } // namespace synth::ui

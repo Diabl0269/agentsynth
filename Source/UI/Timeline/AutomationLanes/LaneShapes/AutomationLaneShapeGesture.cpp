@@ -72,8 +72,10 @@ double AutomationLaneShapeGesture::cycleBeats() const {
     return division > 0.0 ? division : 1.0;
 }
 
+// The owner check matters on a modulator band, whose private doc reuses the real docs' lane ids.
 bool AutomationLaneShapeGesture::rangeIsOnThisLane() const {
-    return laneRange_ != nullptr && laneRange_->isActive() && laneRange_->getLane() == editor_.getActiveLane();
+    return laneRange_ != nullptr && laneRange_->isActive() && laneRange_->getOwner() == &editor_ &&
+           laneRange_->getLane() == editor_.getActiveLane();
 }
 
 juce::Rectangle<float> AutomationLaneShapeGesture::boxRect() const {
@@ -98,7 +100,7 @@ bool AutomationLaneShapeGesture::mouseDown(const juce::MouseEvent& e, std::optio
 
     if (followedTool == EditTool::Range && laneRange_ != nullptr) {
         mode_ = Mode::Range;
-        laneRange_->begin(editor_.getActiveLane(), snappedBeatAt(e.getPosition().x));
+        laneRange_->begin(editor_.getActiveLane(), snappedBeatAt(e.getPosition().x), &editor_);
         return true;
     }
     if (laneRange_ != nullptr)

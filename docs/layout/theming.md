@@ -229,6 +229,35 @@ ratio = (max(L1,L2) + 0.05) / (min(L1,L2) + 0.05)
 
 `Tests/UI/Theme/ThemeTests.cpp` enforces `ratio >= 4.5` for every built-in automatically.
 
+## Colour-code kinds
+
+Every type label in the app is colour-coded: one hue per kind, so a row's kind reads at a glance without reading the
+word. The rule holds for any new kind label (a chip, a tag, a badge naming a type): give it a slot in the table
+below, never the muted text colour. The row tags of the + Add lists and Cmd+K are the first user. A tag is 11 px bold in
+a 17 px box (the 24 px row is unchanged), its outline and text in the kind's hue over a faint wash of the same hue
+(`kTagWashAlpha`, 12 %). The hues are the eight `cableCategory` tokens of the active theme (deepened a step on a light
+theme), so each theme tunes them; `New` uses `textPrimary`. A tag that is not in the table falls back to `textMuted`,
+and a test fails for any tag the code can set that does.
+
+| Tag | Hue slot (`cableCategory`) |
+| --- | --- |
+| Module | Filters |
+| Snippet | Filters |
+| Track | Envelopes |
+| Preset | Modulation FX |
+| Track preset | Modulation FX |
+| Bus preset | Modulation FX |
+| Marker | Sources |
+| Action | Sequencing |
+| Project | Utility |
+| View | Utility |
+| Setting | Utility |
+| New | text (`textPrimary`) |
+
+Kinds that mean nearly the same share a hue: Module and Snippet (a snippet is modules), the three preset tags, and View,
+Setting and Project (the app's own); no other two kinds share a hue. The table lives in `Source/UI/Layout/TagHue.cpp`; `Tests/UI/Layout/TagHueTests.cpp` holds it to
+this table and checks 4.5:1 contrast of every tag on the row and on the highlighted row in all four themes.
+
 ## Where files live, and how reload works
 
 | Location | Description |
@@ -338,6 +367,12 @@ implemented in `AppLookAndFeel`:
   (headless tests, pixel goldens) land on the final state at once, so a draw with no VBlank reads the final
   look. Frames run only while a tween runs and repaint only that button. A `DrawableButton`'s icon image is a
   child the owner tints itself (`setImages`), so it still swaps instantly with the state.
+- **On/off switch** — `synth::ui::SwitchGlide` (`Source/UI/Layout/SwitchGlide.h`) is the one hand-painted switch (a
+  pill with a round knob; the Cmd+K rows use it). The owner holds one, calls `retarget(on, animate)` when its state
+  changes and `paint(g, pill, colours)` from its own paint, with the colours passed in. The knob slides and the fill
+  fades with the same timing as button states (110 ms in, 90 ms out, 80 ms under Reduce Motion, none under
+  Animations: Off); `animate` false (a first bind, another entry on a recycled row) or an owner off screen lands at
+  once. No second switch is painted by hand (`ModMatrixPickerSwitchGlideTests` scans Source for one).
 - **Toolbar button** — `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`) is the top
   bar's button: a group-coloured chip, a multi-role glyph and a caption, painted by
   `AppLookAndFeel::drawToolbarButton` (free function `paintToolbarButton` outside any

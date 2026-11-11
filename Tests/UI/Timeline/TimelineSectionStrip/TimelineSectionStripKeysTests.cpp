@@ -106,6 +106,21 @@ TEST(TimelineSectionStripKeysTest, OptionArrowsMoveTheBlockOneSectionLaterOrEarl
     EXPECT_FALSE(f.undo.undo()) << "one step each";
 }
 
+TEST(TimelineSectionStripKeysTest, OptionRightPastAShorterBlockLandsRightAfterIt) {
+    StripFixture f;
+    f.doc.makeSection(0.0, 8.0, "Intro", 0xff56D4C0, 0.5);
+    f.doc.makeSection(8.0, 12.0, "Verse", 0xff4FC1FF, 0.5);
+    f.doc.makeSection(12.0, 20.0, "Chorus", 0xffC792EA, 0.5);
+    f.strip.refresh();
+    const auto intro = f.doc.getPlacements()[0].id, verse = f.doc.getPlacements()[1].id,
+               chorus = f.doc.getPlacements()[2].id;
+    f.strip.selectPlacement(intro);
+    EXPECT_TRUE(f.strip.keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAlt), 0)));
+    EXPECT_DOUBLE_EQ(f.doc.getPlacement(verse)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getPlacement(intro)->startBeat, 4.0) << "one section later, not past the Chorus";
+    EXPECT_DOUBLE_EQ(f.doc.getPlacement(chorus)->startBeat, 12.0);
+}
+
 TEST(TimelineSectionStripKeysTest, MovingPastEitherEndChangesNothing) {
     ThreeBlocks f;
     f.strip.selectPlacement(f.a);

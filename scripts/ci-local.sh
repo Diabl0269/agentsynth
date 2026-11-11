@@ -251,7 +251,8 @@ gate_key() {
         git ls-files -o --exclude-standard | git hash-object --no-filters --stdin-paths | paste - <(git ls-files -o --exclude-standard)
         printf 'flags fast=%s skip-tests=%s\n' "$FAST" "$SKIP_TESTS"
         [ "$FAST" = true ] && git merge-base origin/main HEAD 2>/dev/null
-        clang-format --version 2>/dev/null
+        # `|| true`: a missing clang-format must reach step 1's install hint, not end the run silently (exit 127).
+        clang-format --version 2>/dev/null || true
     } | git hash-object --stdin
 }
 GATE_STAMP="$STAMP_DIR/gate-$(gate_key)"

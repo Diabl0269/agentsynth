@@ -8,6 +8,7 @@
 #   3. Presses Esc: the panel closes and, with the pointer still on the knob, the chip fades back in.
 # The marks sit right after the click (the chip mid-fall under the opening panel) and once the chip is back.
 motion: true
+pop_check: {undo: false}   # undo off: the scenario rests the pointer on a knob, which the undo probe's toolbar click would move
 record: true
 save_project: mod-chip-hides-on-dot-click
 steps:

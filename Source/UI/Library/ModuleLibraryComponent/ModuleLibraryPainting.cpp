@@ -1,18 +1,49 @@
 // ModuleLibraryPainting.cpp -- paint(): rows, pinned chrome and the search-highlight /
 // chevron / category-icon drawing helpers it calls.
 #include "ModuleLibraryComponent.h"
+#include "ModuleLibrarySnippetRow.h"
 #include "UI/Chrome/Badge/Badge.h"
+#include <cmath>
+
+namespace synth::ui {
+SnippetRowRects snippetRowRects(int contentWidth, int rowY, int rowHeight, int countTextWidth) {
+    constexpr int kLabelLeft = 20;
+    constexpr int kGap = 6;
+    const int badgeW = badgeWidth(BadgeKind::Yours);
+    const int badgeLeft = contentWidth - kSnippetRowRightMargin - badgeW;
+    const int countLeft = badgeLeft - kGap - countTextWidth;
+    SnippetRowRects r;
+    r.badge = {badgeLeft, rowY + (rowHeight - kBadgeHeight) / 2, badgeW, kBadgeHeight};
+    r.count = {countLeft, rowY, countTextWidth, rowHeight};
+    r.label = {kLabelLeft, rowY, juce::jmax(0, countLeft - kGap - kLabelLeft), rowHeight};
+    return r;
+}
+} // namespace synth::ui
 
 namespace {
-// A snippet is always the user's own: its Yours badge sits left of the module count and the label stops before it.
-int snippetLabelWidth(int contentWidth, int badgeW) { return contentWidth - 60 - (badgeW > 0 ? badgeW + 6 : 0); }
+juce::Font snippetCountFont() { return juce::Font(juce::FontOptions(12.0f)); }
 
-void paintSnippetBadge(juce::Graphics& g, const synth::theme::Theme& theme, int contentWidth, int rowY, int rowH) {
-    const int w = synth::ui::badgeWidth(synth::ui::BadgeKind::Yours);
-    synth::ui::paintBadge(g, theme, synth::ui::BadgeKind::Yours,
-                          juce::Rectangle<float>((float)(contentWidth - 44 - 4 - w),
-                                                 (float)rowY + (rowH - synth::ui::kBadgeHeight) * 0.5f, (float)w,
-                                                 (float)synth::ui::kBadgeHeight));
+struct RowLook {
+    juce::Font font;
+    juce::Colour label, muted, accent;
+};
+struct RowSpan {
+    int contentWidth, y, height;
+};
+
+// The name, the "(n)" count left of the Yours badge, and the badge at the row's right margin.
+void paintSnippetRow(juce::Graphics& g, const synth::theme::Theme& theme, const juce::String& name, int moduleCount,
+                     const juce::String& query, RowSpan span, const RowLook& look) {
+    const auto countText = "(" + juce::String(moduleCount) + ")";
+    const auto r = synth::ui::snippetRowRects(
+        span.contentWidth, span.y, span.height,
+        (int)std::ceil(juce::GlyphArrangement::getStringWidth(snippetCountFont(), countText)));
+    synth::ui::drawSearchHighlightedText(g, name, query, r.label, look.font, look.label, look.accent.withAlpha(0.28f),
+                                         look.accent);
+    synth::ui::paintBadge(g, theme, synth::ui::BadgeKind::Yours, r.badge.toFloat());
+    g.setColour(look.muted);
+    g.setFont(snippetCountFont());
+    g.drawText(countText, r.count, juce::Justification::centredRight);
 }
 } // namespace
 
@@ -148,18 +179,16 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             // Greyed out = already in the patch and not addable again.
             const juce::Colour labelColour = enabled ? itemColour : mutedColour.withAlpha(0.5f);
             const juce::Font itemFont(juce::FontOptions(16.0f));
-            const int badgeW = entry.kind == RowKind::Snippet ? synth::ui::badgeWidth(synth::ui::BadgeKind::Yours) : 0;
-            synth::ui::drawSearchHighlightedText(g, entry.text, query,
-                                                 {20, row.y, snippetLabelWidth(contentWidth, badgeW), kItemHeight - 4},
-                                                 itemFont, labelColour, accentColour.withAlpha(0.28f), accentColour);
-
             if (entry.kind == RowKind::Snippet) {
-                paintSnippetBadge(g, synth::theme::themeOf(*this), contentWidth, row.y, kItemHeight - 4);
-                g.setColour(mutedColour);
-                g.setFont(juce::Font(juce::FontOptions(12.0f)));
-                g.drawText("(" + juce::String(entry.moduleCount) + ")", contentWidth - 44, row.y, 34, kItemHeight - 4,
-                           juce::Justification::centredRight);
-            } else if (entry.kind == RowKind::Plugin) {
+                paintSnippetRow(g, synth::theme::themeOf(*this), entry.text, entry.moduleCount, query,
+                                {contentWidth, row.y, kItemHeight - 4},
+                                {itemFont, labelColour, mutedColour, accentColour});
+            } else {
+                synth::ui::drawSearchHighlightedText(g, entry.text, query,
+                                                     {20, row.y, contentWidth - 60, kItemHeight - 4}, itemFont,
+                                                     labelColour, accentColour.withAlpha(0.28f), accentColour);
+            }
+            if (entry.kind == RowKind::Plugin) {
                 // The format tag is load-bearing, not decoration: the same plugin often ships as
                 // both VST3 and AU, and the two are different entries with different state.
                 g.setColour(mutedColour);

@@ -61,8 +61,10 @@ public:
     /** The thing `key` now rests at `to`; it is drawn at `from` (where it is drawn right now, see drawnAt) and eases
      *  there. A key already moving restarts from `from`, so pass drawnAt(key, oldResting) to continue smoothly.
      *  With `fadeWhenReduced` (a restore), Reduce Motion lands the thing at `to` at once and fades it in there over
-     *  control_motion::kReducedMs (alphaFor); Animations Off and a hidden owner land it plain. */
-    void retarget(Key key, T from, T to, bool fadeWhenReduced = false);
+     *  control_motion::kReducedMs (alphaFor); Animations Off and a hidden owner land it plain. `durationMs` is how
+     *  long the shared run lasts from now (every moving key restarts on it), kMs unless a caller's steps come faster.
+     */
+    void retarget(Key key, T from, T to, bool fadeWhenReduced = false, double durationMs = kMs);
     /** Forgets `key` (it lands where it rests). */
     void erase(Key key);
     void clear();
@@ -106,7 +108,7 @@ private:
     bool fadesInstead() const;
     void startFade(Key key, T to);
     void bakeOffsets();
-    void startRun();
+    void startRun(double durationMs);
     void onFrame(float eased);
     void repaintAround(const std::vector<T>& values);
     void requestRepaint(juce::Rectangle<int> area);

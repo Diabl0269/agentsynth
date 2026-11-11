@@ -5,6 +5,8 @@
 // TimelineSectionStrip is declared in TimelineSectionStrip.h.
 
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Timeline/ListSelectionModel.h"
 
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
@@ -14,6 +16,7 @@
 #include "UI/Timeline/SectionColours.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
+#include <algorithm>
 #include <map>
 
 namespace synth::ui {
@@ -37,17 +40,31 @@ void TimelineSectionStrip::setTimelineDoc(synth::TimelineDoc* doc) {
     endMakeDrag(false);
     pressedBlock_ = {};
     blockDragging_ = false;
+    stopEdgeScroll();
+    hasDragPlan_ = false;
+    dragPlan_ = {};
+    settlingIds_.clear();
+    dragMembers_.clear();
+    pendingCollapse_ = {};
+    dropGlide_->clear();
     motion_.stopAll();
     motionPrimed_ = false;
-    selected_ = {};
+    selection_->clear();
+    extendEnd_ = {};
     hovered_ = {};
     doc_ = doc;
     refresh();
 }
 
 void TimelineSectionStrip::refresh() {
-    if (doc_ != nullptr && selected_.isValid() && doc_->getPlacement(selected_) == nullptr)
-        selected_ = {};
+    if (doc_ != nullptr) {
+        std::vector<synth::PlacementId> order;
+        for (const auto& placement : doc_->getPlacements())
+            order.push_back(placement.id);
+        selection_->retainOnly(order);
+        if (extendEnd_.isValid() && doc_->getPlacement(extendEnd_) == nullptr)
+            extendEnd_ = {};
+    }
     if (doc_ != nullptr && hovered_.isValid() && doc_->getPlacement(hovered_) == nullptr)
         hovered_ = {};
     if (renamingPlacement_.isValid() && (doc_ == nullptr || doc_->getPlacement(renamingPlacement_) == nullptr))
@@ -139,13 +156,6 @@ synth::PlacementId TimelineSectionStrip::chipAt(juce::Point<float> pos) const {
     return {};
 }
 
-void TimelineSectionStrip::selectPlacement(synth::PlacementId id) {
-    if (id == selected_)
-        return;
-    selected_ = id;
-    repaint();
-}
-
 //==============================================================================
 void TimelineSectionStrip::resized() {
     if (renameEditor_ != nullptr)
@@ -212,21 +222,34 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(kBlockFontHeight);
     const juce::Font countFont(
         juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kCountFontHeight, juce::Font::plain));
+    const bool movingOriginal = blockDragging_ && !dragCopy_ && !dragCancelled_;
+    const auto anchorId = getSelectedPlacement();
     for (const auto& block : blocks) {
-        auto rect = block.bounds;
+        // The block just dropped is drawn by its settling ghost until that lands; a make-room move's original has left
+        // (its gap is closed in the preview), a cover move's stays as a faint mark of where it was.
+        const bool settling = std::find(settlingIds_.begin(), settlingIds_.end(), block.id) != settlingIds_.end();
+        if (settling && !blockDragging_ && motion_.lift() > 0.0f)
+            continue;
+        const bool carried = movingOriginal && isDragMember(block.id);
+        if (carried && dragMakeRoom_ && hasDragPlan_)
+            continue;
+        const double drawnStart = drawnStartOf(block.id, block.startBeat);
+        auto rect = sectionstrip::blockRect((float)xAtBeat(drawnStart), (float)xAtBeat(drawnStart + block.lengthBeats),
+                                            getHeight());
         float alpha = motion_.growAlpha(block.id);
         const float scale = motion_.growScale(block.id);
         if (scale < 1.0f) {
             const float width = rect.getWidth() * scale;
             rect = motion_.growsFromRight() ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
         }
-        if (blockDragging_ && !dragCopy_ && block.id == pressedBlock_)
-            alpha *= kMovedOriginalAlpha; // the block being moved stays as a faint mark of where it was
+        if (carried || (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
+            alpha *= kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
         paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);
-        if (block.id == selected_) {
+        if (isPlacementSelected(block.id)) {
             g.setColour(colors.accent);
             g.drawRect(rect.expanded(1.0f), 2.0f);
-            paintFocusRing(g, rect.expanded(3.0f), *this);
+            if (block.id == anchorId)
+                paintFocusRing(g, rect.expanded(3.0f), *this);
         }
         if (motion_.isOutlined(block.id)) {
             g.setColour(colors.accent.withAlpha(motion_.outlineAlpha()));

@@ -33,7 +33,8 @@ namespace synth::ui {
  *  parentless CallOutBox is a new top-level window that does not inherit the app's LookAndFeel. */
 class ModMatrixPicker
     : public juce::Component
-    , public AppUndoAware {
+    , public AppUndoAware
+    , public PopoverContent {
 public:
     /** A small icon button at a row's right end ("Show plugin window"). `title` is what a screen reader says. */
     struct RowAction {
@@ -126,6 +127,8 @@ public:
     /** Its rows were listed when it opened and an undo can remove what they name: it closes without picking. */
     void appUndoneOrRedone() override { dismiss(); }
 
+    bool growsFromOpener() const override { return true; }
+
     // ---- Test seams ----
     void setSearchTextForTest(const juce::String& text);
     juce::String getSearchTextForTest() const;
@@ -152,6 +155,8 @@ public:
     bool isActionSelectedForTest() const noexcept { return actionSelected_; }
     /** The on/off state of the nth visible item row (nothing for a plain row). */
     std::optional<bool> getVisibleItemSwitchForTest(int index) const;
+    /** The row's switch as eased right now (0 off .. 1 on); empty for a row with no switch or none on screen. */
+    std::optional<float> getVisibleItemSwitchAmountForTest(int index) const;
     /** The nth visible item's action button component, while its row has one in view (else null). */
     juce::Component* getVisibleItemActionButtonForTest(int index) const;
     int getHeightForTest() const noexcept { return getHeight(); }
@@ -166,6 +171,8 @@ public:
     /** The viewport's top edge, and whether the highlighted row is inside the view. */
     int getViewTopForTest() const noexcept { return viewport_.getViewPositionY(); }
     bool isHighlightInViewForTest() const;
+    /** Whether the list's first line (its first header, else its first row) is a component fully inside the view. */
+    bool isFirstEntryInViewForTest() const;
 
 private:
     class Row;

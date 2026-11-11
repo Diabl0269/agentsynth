@@ -1,5 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
+#include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -210,6 +211,10 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(songKeyField_);
+
+    // The labels and buttons are centred in the strip at different heights, which would sort them by top edge.
+    synth::ui::setReadingFocusOrder({&returnToStartButton_, &playStopButton_, &recordButton_, &loopButton_,
+                                     &metronomeButton_, &countInCombo_, &bpmLabel_, &timeSigLabel_, &songKeyField_});
 }
 
 //==============================================================================

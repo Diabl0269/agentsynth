@@ -2,11 +2,11 @@
 // arrives (added, duplicated, moved here, an undo bringing it back) grows from nothing to its height; one that leaves
 // (deleted, moved to another track, an undo taking it away) shrinks to nothing in its old place, drawn as a picture
 // taken just before it went. A modulator row that arrives (added, moved here from another lane) grows the same way,
-// and one that leaves fades out in a gap that closes. Every height feeds the track layout (extraHeights), so the
-// tracks below glide through the usual onLayoutChanged path. One AnimationDriver steps every tween (160 ms
-// easeOutCubic, retargeted from where each one is when another starts); it lands at once off screen, under Reduce
-// Motion and with Animations off. The room a dragged modulator row makes in another lane steps on the same driver
-// (TimelineAutomationLanesDragGap.cpp). docs/layout/animation.md "Lane blocks and modulator rows".
+// and one that leaves is a picture too, fading out in a gap that closes. Every height feeds the track layout
+// (extraHeights), so the tracks below glide through the usual onLayoutChanged path. One AnimationDriver steps every
+// tween (160 ms easeOutCubic, retargeted from where each one is when another starts); it lands at once off screen,
+// under Reduce Motion and with Animations off. The room a dragged modulator row makes in another lane steps on the same
+// driver (TimelineAutomationLanesDragGap.cpp). docs/layout/animation.md "Lane blocks and modulator rows".
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "AppUndoManager.h"
@@ -33,6 +33,15 @@ TimelineAutomationLanes::BlockPicture::BlockPicture(juce::Image image, float sca
 void TimelineAutomationLanes::BlockPicture::paint(juce::Graphics& g) {
     if (image_.isValid())
         g.drawImageTransformed(image_, juce::AffineTransform::scale(1.0f / scale_));
+}
+
+std::unique_ptr<TimelineAutomationLanes::BlockPicture> TimelineAutomationLanes::pictureOf(juce::Component& parent,
+                                                                                          juce::Rectangle<int> area) {
+    const float scale = juce::Component::getApproximateScaleFactorForComponent(&parent);
+    auto picture = std::make_unique<BlockPicture>(parent.createComponentSnapshot(area, true, scale), scale);
+    parent.addAndMakeVisible(*picture);
+    picture->setBounds(area);
+    return picture;
 }
 
 // The same test every other timeline motion asks: on screen (or forced by a test), and neither Reduce Motion nor Off.
@@ -190,15 +199,9 @@ void TimelineAutomationLanes::retireLaneBlock(synth::LaneId lane, synth::TrackId
     leaving.track = track;
     leaving.after = after;
     leaving.height = placed->second;
-    const float scale = juce::Component::getApproximateScaleFactorForComponent(&headerParent_);
-    const juce::Rectangle<int> area(0, header->getY(), header->getWidth(), leaving.height);
-    leaving.header = std::make_unique<BlockPicture>(headerParent_.createComponentSnapshot(area, true, scale), scale);
-    headerParent_.addAndMakeVisible(*leaving.header);
-    if (auto* editor = editorFor(lane)) {
-        const juce::Rectangle<int> bodyArea(0, editor->getY(), bodies_->getWidth(), leaving.height);
-        leaving.body = std::make_unique<BlockPicture>(bodies_->createComponentSnapshot(bodyArea, true, scale), scale);
-        bodies_->addAndMakeVisible(*leaving.body);
-    }
+    leaving.header = pictureOf(headerParent_, {0, header->getY(), header->getWidth(), leaving.height});
+    if (auto* editor = editorFor(lane))
+        leaving.body = pictureOf(*bodies_, {0, editor->getY(), bodies_->getWidth(), leaving.height});
     leavingLanes_.push_back(std::move(leaving));
     startBlockMotion();
 }
@@ -268,8 +271,9 @@ int TimelineAutomationLanes::leavingRowOffset(const LeavingModulator& leaving) c
     return offset;
 }
 
-// Places the lane's leaving rows of `slot` from `y` down, returning the height they take. A row whose gap has closed
-// (or never opened, under Reduce Motion) stays where it stood while its fade ends.
+// Places the lane's leaving rows of `slot` from `y` down, returning the height they take. Each picture is cut by its
+// gap down to no height (setBounds repaints the old and new bounds every frame, the last one included); one whose gap
+// never opened (Reduce Motion) stays where it stood while its fade ends.
 int TimelineAutomationLanes::placeLeavingRows(synth::LaneId lane, int slot, int y, int width) {
     const int count = modulatorCount(lane);
     int taken = 0;
@@ -277,7 +281,7 @@ int TimelineAutomationLanes::placeLeavingRows(synth::LaneId lane, int slot, int 
         if (leaving->lane != lane || std::min(leaving->slot, count) != slot)
             continue;
         const int height = leavingRowHeight(*leaving);
-        if (height > 0)
+        if (height > 0 || leaving->shrinks)
             leaving->row->setBounds(0, y + taken, width, height);
         taken += height;
     }
@@ -287,7 +291,7 @@ int TimelineAutomationLanes::placeLeavingRows(synth::LaneId lane, int slot, int 
 void TimelineAutomationLanes::placeLeavingBands(const TimelineRowLayout& layout, int scroll) {
     for (const auto& leaving : leaving_) {
         const int height = leavingRowHeight(*leaving);
-        if (height <= 0)
+        if (height <= 0 && !leaving->shrinks)
             continue;
         const auto row = laneRowContentBounds(leaving->lane, layout);
         if (row.isEmpty())

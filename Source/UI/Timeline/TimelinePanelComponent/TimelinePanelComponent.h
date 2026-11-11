@@ -33,7 +33,6 @@
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
-#include "UI/Timeline/TrackSelectionModel.h"
 #include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -57,6 +56,8 @@ class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of 
 struct DrumMachineHost;
 class ModMatrixPicker;      // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
 class TimelineSectionStrip; // Forward declaration (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h)
+template <typename Id>
+class ListSelectionModel; // Forward declaration (Source/UI/Timeline/ListSelectionModel.h): keeps its reach low
 } // namespace ui
 } // namespace synth
 
@@ -432,7 +433,7 @@ public:
     /** Every selected track, in timeline order. A view-state selection (never on TimelineDoc, never undoable); the
      *  primary track (getSelectedTrackId()) may be absent after a Cmd/Ctrl-click took it out. */
     std::vector<synth::TrackId> selectedTracks() const;
-    bool isTrackSelected(synth::TrackId id) const { return trackSelection_.contains(id); }
+    bool isTrackSelected(synth::TrackId id) const;
     /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
     void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
     void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
@@ -642,9 +643,8 @@ private:
     std::vector<synth::TrackId> trackOrder() const;
     // The shared tail of a keyboard move to row `index`: focus, scroll into view, routing pane.
     void focusTrackRowAt(int index);
-    synth::ui::TrackSelectionModel trackSelection_;
-    // A plain press on a track that is one of several selected: the selection collapses to it on release, not on
-    // press, so the same press can drag the whole selection.
+    std::unique_ptr<ListSelectionModel<synth::TrackId>> trackSelection_; // built in the constructor
+    // A plain press on one of several selected tracks: they collapse to it on release, so the press can drag them all.
     synth::TrackId pendingClickCollapse_;
     // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down) -- see its definition
     // in TimelinePanelTrackHeaders.cpp for the clamping rule.

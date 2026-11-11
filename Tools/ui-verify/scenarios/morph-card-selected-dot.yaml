@@ -1,0 +1,49 @@
+# Feature: Pick shape and Edit shapes act on the dot you selected on the card's map, and the buttons sit one panel gap
+# (6 px) above the curve or map, like every other gap on the card.
+#
+# What a user does: sets a Filter to Custom, clicks a dot far from the dark cursor, presses Pick shape and picks a shape
+# (that dot's curve changes, Cmd+Z puts it back), presses Edit shapes (the window opens on that dot).
+record: true
+save_project: morph-card-selected-dot
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+-"}                                       # zoom out so the whole Filter card is in the window
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - drag: {from: window, to: window, fromX: 880, fromY: 367, toX: 880, toY: 110, steps: 15}   # lift it clear of the window bottom
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Filter", name: filter-card-before}
+  - click: {id: morphDot1, x: 11, y: 11}                       # select the right-hand dot, far from the cursor
+  - wait: {settleMs: 400}
+  - key: {keys: return, target: Pick shape}
+  - wait: {settleMs: 800}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Filter", name: filter-card-after-pick}
+  - mark: {check: 1, name: pick-shape-selected-dot}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:Filter", name: filter-card-after-undo}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - screenshot: {id: window, name: card-whole-before-edit}
+  - screenshot: {name: edit-shapes-window}
+  - mark: {check: 2, name: edit-shapes-selected-dot}

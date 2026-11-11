@@ -269,12 +269,37 @@ TEST(EQCurveInteraction, AddPointReturnsMinusOneOnceAllSlotsAreUsed) {
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kShownBands; ++i)
         EXPECT_GE(comp.addPointAt({(float)(40 + i * 60), (float)kCurveHeight * 0.5f}), 0) << "point " << i;
 
-    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kNumBands);
+    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kShownBands);
     EXPECT_EQ(comp.addPointAt({200.0f, 50.0f}), -1) << "a fifth point has nowhere to go";
-    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kNumBands);
+    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kShownBands);
+}
+
+// A slot past the fourth that is on (only a saved patch can do that yet) draws no point, takes no key and is not
+// counted in the spoken summary: the curve still offers exactly the four shown slots.
+TEST(EQCurveInteraction, AHiddenSlotThatIsOnIsNotAPoint) {
+    ParametricEQModule eq;
+    eq.setBandFreq(9, 1000.0f);
+    eq.setBandGain(9, 9.0f);
+    eq.setBandEnabled(9, true);
+    EQCurveComponent comp(eq);
+    comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
+    const float x = EQCurveComponent::freqToXStatic(1000.0f, (float)kCurveWidth);
+    const float y = EQCurveComponent::dbToYStatic(9.0f, (float)kCurveHeight);
+    EXPECT_EQ(comp.hitTestBand({x, y}), -1);
+    const auto emptySummary = [] {
+        ParametricEQModule flat;
+        EQCurveComponent empty(flat);
+        return empty.getAccessibilityValueText();
+    }();
+    EXPECT_EQ(comp.getAccessibilityValueText(), emptySummary);
+    comp.selectBandRelative(+1); // the first press selects slot 1
+    comp.selectBandRelative(+30);
+    EXPECT_EQ(comp.getSelectedBand(), ParametricEQModule::kShownBands - 1);
+    comp.removeBand(9);
+    EXPECT_TRUE(eq.isBandEnabled(9)) << "the curve cannot reach a hidden slot";
 }
 
 TEST(EQCurveInteraction, RemoveBandDisablesItAndClearsSelection) {
@@ -294,7 +319,7 @@ TEST(EQCurveInteraction, RemoveBandDisablesItAndClearsSelection) {
     // Removing an already-disabled or out-of-range band is a no-op, not a crash.
     EXPECT_NO_FATAL_FAILURE(comp.removeBand(band));
     EXPECT_NO_FATAL_FAILURE(comp.removeBand(-1));
-    EXPECT_NO_FATAL_FAILURE(comp.removeBand(ParametricEQModule::kNumBands));
+    EXPECT_NO_FATAL_FAILURE(comp.removeBand(ParametricEQModule::kShownBands));
 }
 
 TEST(EQCurveInteraction, HitTestFindsEnabledHandlesAndIgnoresDisabledOnes) {
@@ -340,7 +365,7 @@ TEST(EQCurveInteraction, DragMovesTheBandInBothFrequencyAndGain) {
     EXPECT_LE(clamped[(size_t)band].gainDb, ParametricEQModule::kMaxGainDb + 0.01f);
 
     EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(-1, {10.0f, 10.0f}));
-    EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(ParametricEQModule::kNumBands, {10.0f, 10.0f}));
+    EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(ParametricEQModule::kShownBands, {10.0f, 10.0f}));
 }
 
 TEST(EQCurveInteraction, ScrollAdjustsQMultiplicatively) {
@@ -369,7 +394,7 @@ TEST(EQCurveInteraction, ScrollAdjustsQMultiplicatively) {
     EXPECT_NEAR(eq.getBandSnapshots()[(size_t)band].q, ParametricEQModule::kMinQ, 0.05f);
 
     EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(-1, 1.0f));
-    EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(ParametricEQModule::kNumBands, 1.0f));
+    EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(ParametricEQModule::kShownBands, 1.0f));
 }
 
 TEST(EQCurveInteraction, EveryEditIsBracketedByExactlyOneGesture) {
@@ -398,7 +423,7 @@ TEST(EQCurveInteraction, EveryEditIsBracketedByExactlyOneGesture) {
     EXPECT_EQ(ends, 3);
 
     // A rejected add (all slots full) must not open a gesture at all.
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kShownBands; ++i)
         comp.addPointAt({(float)(40 + i * 60), 60.0f});
     const int startsAfterFill = starts;
     EXPECT_EQ(comp.addPointAt({210.0f, 60.0f}), -1);
@@ -487,7 +512,7 @@ TEST(EQCurveTest, PaintSmokeWithAllFourBandsAndSpectrum) {
 
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kShownBands; ++i)
         comp.addPointAt({(float)(40 + i * 80), (float)(40 + i * 20)});
 
     ASSERT_TRUE(comp.getShowSpectrum());

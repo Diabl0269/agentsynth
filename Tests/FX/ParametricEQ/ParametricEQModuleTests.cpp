@@ -2,14 +2,16 @@
 // Unit tests for ParametricEQModule (issue #154):
 //   • identity/name/type/port metadata, and that all four bands start DISABLED
 //   • bypass dry pass-through and mute silencing (the two-branch contract)
-//   • enable/disable semantics — a disabled band is a straight wire, in both maths and audio
-//   • band-slot selection for a new point (findBandForNewPoint)
+//   • enable/disable semantics — a disabled band is a straight wire, in both
+//   maths and audio • band-slot selection for a new point (findBandForNewPoint)
 //   • setters clamp to range and round-trip
-//   • analytic response helpers (bandMagnitudeDb / responseDb) against known anchor points
-//   • RBJ biquad coefficients agree with the analytic prototype they are derived from
-//   • real audio: enabling/boosting/cutting a band actually moves that band's energy
-//   • edge cases: zero-length buffer, mono buffer, no prepareToPlay, state round-trip
-// CV modulation lives in ParametricEQCVTests.cpp; shared helpers in ParametricEQTestHelpers.h.
+//   • analytic response helpers (bandMagnitudeDb / responseDb) against known
+//   anchor points • RBJ biquad coefficients agree with the analytic prototype
+//   they are derived from • real audio: enabling/boosting/cutting a band
+//   actually moves that band's energy • edge cases: zero-length buffer, mono
+//   buffer, no prepareToPlay, state round-trip
+// CV modulation lives in ParametricEQCVTests.cpp; shared helpers in
+// ParametricEQTestHelpers.h.
 
 #include "ParametricEQTestHelpers.h"
 #include <gtest/gtest.h>
@@ -68,7 +70,8 @@ TEST(ParametricEQModuleTest, ModulationTargetsCoverEveryContinuousParameter) {
 
 TEST(ParametricEQModuleTest, LogicalPortRolesSplitAudioFromCV) {
     ParametricEQModule eq;
-    // Default Dual I/O off: raw 0/1 collapse onto visible Audio jack 0; CV jacks shift down.
+    // Default Dual I/O off: raw 0/1 collapse onto visible Audio jack 0; CV jacks
+    // shift down.
     auto in0 = eq.mapInputChannel(0);
     EXPECT_EQ(in0.role, PortRole::Audio);
     EXPECT_EQ(in0.visibleJackIndex, 0);
@@ -101,11 +104,16 @@ TEST(ParametricEQModuleTest, RowLabelsNameTheSlotAndItsType) {
 }
 
 TEST(ParametricEQModuleTest, DefaultFrequenciesAscendAcrossSlots) {
-    for (int b = 1; b < kNumBands; ++b)
+    for (int b = 1; b < kShownBands; ++b)
+        EXPECT_GT(ParametricEQModule::defaultFreqFor(b), ParametricEQModule::defaultFreqFor(b - 1)) << "slot " << b;
+    // Slots 5-24 spread on their own ladder, 40 Hz to 16 kHz.
+    EXPECT_NEAR(ParametricEQModule::defaultFreqFor(kShownBands), 40.0f, 0.01f);
+    EXPECT_NEAR(ParametricEQModule::defaultFreqFor(kMaxBands - 1), 16000.0f, 1.0f);
+    for (int b = kShownBands + 1; b < kMaxBands; ++b)
         EXPECT_GT(ParametricEQModule::defaultFreqFor(b), ParametricEQModule::defaultFreqFor(b - 1)) << "slot " << b;
     // Out-of-range indices clamp rather than reading past the array.
     EXPECT_FLOAT_EQ(ParametricEQModule::defaultFreqFor(-5), ParametricEQModule::defaultFreqFor(0));
-    EXPECT_FLOAT_EQ(ParametricEQModule::defaultFreqFor(99), ParametricEQModule::defaultFreqFor(kNumBands - 1));
+    EXPECT_FLOAT_EQ(ParametricEQModule::defaultFreqFor(99), ParametricEQModule::defaultFreqFor(kMaxBands - 1));
 }
 
 // ============================================================================
@@ -115,7 +123,7 @@ TEST(ParametricEQModuleTest, DefaultFrequenciesAscendAcrossSlots) {
 TEST(ParametricEQModuleTest, AllBandsStartDisabled) {
     ParametricEQModule eq;
     EXPECT_EQ(eq.getEnabledBandCount(), 0);
-    for (int b = 0; b < kNumBands; ++b) {
+    for (int b = 0; b < kMaxBands; ++b) {
         EXPECT_FALSE(eq.isBandEnabled(b)) << "band " << b;
         EXPECT_FALSE(eq.getBandSnapshots()[(size_t)b].enabled) << "band " << b;
     }
@@ -140,15 +148,15 @@ TEST(ParametricEQModuleTest, EnableRoundTripsAndCountsBands) {
 
     // Out-of-range indices are ignored rather than corrupting state.
     eq.setBandEnabled(-1, true);
-    eq.setBandEnabled(kNumBands, true);
+    eq.setBandEnabled(kMaxBands, true);
     EXPECT_EQ(eq.getEnabledBandCount(), 1);
     EXPECT_FALSE(eq.isBandEnabled(-1));
-    EXPECT_FALSE(eq.isBandEnabled(kNumBands));
+    EXPECT_FALSE(eq.isBandEnabled(kMaxBands));
 }
 
 TEST(ParametricEQModuleTest, DisabledBandWithGainStillContributesNothing) {
-    // Setting a big gain on a disabled band must not colour the response — otherwise turning a
-    // band off would not really bypass it.
+    // Setting a big gain on a disabled band must not colour the response —
+    // otherwise turning a band off would not really bypass it.
     ParametricEQModule eq;
     eq.setBandFreq(1, 1000.0f);
     eq.setBandGain(1, 24.0f);
@@ -193,7 +201,8 @@ TEST(ParametricEQPointPlacement, SkipsSlotsAlreadyInUse) {
     ParametricEQModule eq;
     ASSERT_EQ(eq.findBandForNewPoint(60.0f), 0);
     eq.setBandEnabled(0, true);
-    // The low shelf is taken, so a second low click falls to the next-nearest slot.
+    // The low shelf is taken, so a second low click falls to the next-nearest
+    // slot.
     EXPECT_EQ(eq.findBandForNewPoint(60.0f), 1);
 
     eq.setBandEnabled(1, true);
@@ -202,7 +211,7 @@ TEST(ParametricEQPointPlacement, SkipsSlotsAlreadyInUse) {
 
 TEST(ParametricEQPointPlacement, ReturnsMinusOneWhenAllSlotsAreUsed) {
     ParametricEQModule eq;
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b < kShownBands; ++b)
         eq.setBandEnabled(b, true);
     EXPECT_EQ(eq.findBandForNewPoint(1000.0f), -1);
 }
@@ -320,7 +329,8 @@ TEST(ParametricEQResponse, PeakCutIsSymmetricWithBoost) {
 TEST(ParametricEQResponse, HigherQNarrowsTheBell) {
     constexpr float centre = 1000.0f;
     constexpr float gain = 12.0f;
-    // One octave below the centre: a wide bell still lifts a lot, a narrow one barely does.
+    // One octave below the centre: a wide bell still lifts a lot, a narrow one
+    // barely does.
     const float wide = ParametricEQModule::bandMagnitudeDb(BandType::Peak, centre, gain, 0.5f, 500.0f);
     const float narrow = ParametricEQModule::bandMagnitudeDb(BandType::Peak, centre, gain, 8.0f, 500.0f);
     EXPECT_GT(wide, narrow);
@@ -339,7 +349,8 @@ TEST(ParametricEQResponse, LowShelfLiftsBelowAndLeavesTopAlone) {
     constexpr float centre = 150.0f;
     constexpr float gain = 9.0f;
     constexpr float q = ParametricEQModule::kDefaultQ;
-    // Deep below the corner the shelf has reached its full gain; far above it is out of the way.
+    // Deep below the corner the shelf has reached its full gain; far above it is
+    // out of the way.
     EXPECT_NEAR(ParametricEQModule::bandMagnitudeDb(BandType::LowShelf, centre, gain, q, 5.0f), gain, 0.3f);
     EXPECT_NEAR(ParametricEQModule::bandMagnitudeDb(BandType::LowShelf, centre, gain, q, 15000.0f), 0.0f, 0.3f);
     // At the corner a shelf sits at half its gain.
@@ -397,7 +408,8 @@ TEST(ParametricEQCoefficients, DigitalBiquadMatchesAnalyticPrototype) {
         float gain;
         float q;
     };
-    // Well below Nyquist, where the bilinear transform's frequency warping is negligible.
+    // Well below Nyquist, where the bilinear transform's frequency warping is
+    // negligible.
     const Case cases[] = {
         {BandType::Peak, 1000.0f, 12.0f, 1.0f},
         {BandType::Peak, 1000.0f, -12.0f, 3.0f},
@@ -422,7 +434,8 @@ TEST(ParametricEQCoefficients, ZeroGainProducesAPassThroughBiquad) {
     for (auto type : {BandType::LowShelf, BandType::Peak, BandType::HighShelf}) {
         float raw[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
         ParametricEQModule::writeBiquad(type, 1000.0f, 0.0f, 0.707f, kSampleRate, raw);
-        // b == a for a unity biquad, so the transfer function is 1 at every frequency.
+        // b == a for a unity biquad, so the transfer function is 1 at every
+        // frequency.
         EXPECT_NEAR(raw[0], 1.0f, 1.0e-5f);
         EXPECT_NEAR(raw[1], raw[3], 1.0e-5f);
         EXPECT_NEAR(raw[2], raw[4], 1.0e-5f);
@@ -431,11 +444,13 @@ TEST(ParametricEQCoefficients, ZeroGainProducesAPassThroughBiquad) {
 
 TEST(ParametricEQCoefficients, CentreAboveNyquistStaysFinite) {
     float raw[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    // 40 kHz at a 48 kHz sample rate is past Nyquist — must clamp, not produce NaN.
+    // 40 kHz at a 48 kHz sample rate is past Nyquist — must clamp, not produce
+    // NaN.
     ParametricEQModule::writeBiquad(BandType::HighShelf, 40000.0f, 12.0f, 0.707f, kSampleRate, raw);
     for (float v : raw)
         EXPECT_TRUE(std::isfinite(v));
-    // A zero/negative sample rate falls back to 44.1 kHz rather than dividing by zero.
+    // A zero/negative sample rate falls back to 44.1 kHz rather than dividing by
+    // zero.
     ParametricEQModule::writeBiquad(BandType::Peak, 1000.0f, 6.0f, 1.0f, 0.0, raw);
     for (float v : raw)
         EXPECT_TRUE(std::isfinite(v));
@@ -458,7 +473,8 @@ TEST(ParametricEQAudio, AllBandsOffIsAStraightWire) {
 }
 
 TEST(ParametricEQAudio, DisabledBandDoesNotTouchAudio) {
-    // The band is fully configured for a big boost but left off — audio must be untouched.
+    // The band is fully configured for a big boost but left off — audio must be
+    // untouched.
     ParametricEQModule eq;
     eq.setBandFreq(1, 1000.0f);
     eq.setBandGain(1, 24.0f);
@@ -528,7 +544,8 @@ TEST(ParametricEQAudio, HighShelfCutLowersTheTopEndOnly) {
 }
 
 TEST(ParametricEQAudio, MeasuredResponseTracksTheAnalyticCurve) {
-    // The curve the UI draws must be the curve the DSP realises, or the display lies.
+    // The curve the UI draws must be the curve the DSP realises, or the display
+    // lies.
     const auto configure = [](ParametricEQModule& eq) {
         enableBand(eq, 0, 150.0f, 6.0f);
         enableBand(eq, 1, 1000.0f, -9.0f, 1.5f);
@@ -631,7 +648,8 @@ TEST(ParametricEQEdgeCases, MonoBufferIsStillFiltered) {
     enableBand(eq, 1, 1000.0f, 12.0f, 1.0f);
     eq.prepareToPlay(kSampleRate, kBlockSize);
 
-    // A single-channel buffer must still get the boost rather than passing through untouched.
+    // A single-channel buffer must still get the boost rather than passing
+    // through untouched.
     EXPECT_NEAR(measureGainDb(eq, 1000.0f, /*numChannels*/ 1), 12.0f, 0.7f);
 }
 
@@ -716,7 +734,7 @@ TEST(ParametricEQEdgeCases, StateRoundTripPreservesBandsAndEnableFlags) {
 
 TEST(ParametricEQEdgeCases, EveryBandExposesTheFullParameterSet) {
     ParametricEQModule eq;
-    for (int b = 0; b < kNumBands; ++b) {
+    for (int b = 0; b < kMaxBands; ++b) {
         EXPECT_NE(boolParamById(eq, bandId(b, "On")), nullptr) << "band " << b << " on/off";
         EXPECT_NE(floatParamById(eq, bandId(b, "Freq")), nullptr) << "band " << b << " freq";
         EXPECT_NE(floatParamById(eq, bandId(b, "Gain")), nullptr) << "band " << b << " gain";

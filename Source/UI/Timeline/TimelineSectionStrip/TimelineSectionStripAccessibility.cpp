@@ -4,11 +4,13 @@
 // proxy child per block (the MixerInsertList::RowAccessibilityProxy pattern), the tooltips, and the test-mode probe a
 // ui-verify scenario reads.
 
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeStateSource.h"
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
+#include "UI/Timeline/ListSelectionModel.h"
 #include <algorithm>
 #include <map>
 
@@ -16,11 +18,28 @@ namespace synth::ui {
 
 namespace {
 constexpr int kMaxProxyCoordinate = 1'000'000;
+
+// A block is one selectable item of a multi-selectable list; the stock handler has no selected state to report.
+class BlockProxyHandler : public juce::AccessibilityHandler {
+public:
+    BlockProxyHandler(juce::Component& proxy, juce::AccessibilityActions actions, std::function<bool()> isSelected)
+        : juce::AccessibilityHandler(proxy, juce::AccessibilityRole::button, std::move(actions))
+        , isSelected_(std::move(isSelected)) {}
+
+    juce::AccessibleState getCurrentState() const override {
+        auto state = juce::AccessibilityHandler::getCurrentState().withSelectable().withMultiSelectable();
+        return isSelected_ && isSelected_() ? state.withSelected() : state;
+    }
+
+private:
+    std::function<bool()> isSelected_;
+};
 } // namespace
 
 // A child of the strip that only answers test-mode getState, so the strip's own header stays out of
 // TestModeStateSource.h. `sections` lists every placement as "name:startBeat:lengthBeats:ordinal/count" joined by ";"
-// in placement order; `selectedSection` is the selected placement's start beat, or empty; `variations` is the letter
+// in placement order; `selectedSection` is the selected placement's start beat, or empty; `selectedSections` is every
+// selected placement's start beat in placement order, joined by ";"; `variations` is the letter
 // each placement plays in the same order, with a "*" after it when its section has more than one variation
 // (`A*;B*;A*`); `sectionVariationCount` is how many variations the selected placement's section has (0 with nothing
 // selected).
@@ -47,7 +66,8 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::BlockProxy::cr
         if (showVariations)
             showVariations();
     });
-    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button, std::move(actions));
+    return std::make_unique<BlockProxyHandler>(*this, std::move(actions),
+                                               [this] { return isSelected && isSelected(); });
 }
 
 std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessibilityHandler() {
@@ -56,22 +76,27 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessib
 
 // The constructor and destructor live here: Probe is only complete in this file.
 TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
-    : viewState_(viewState) {
+    : viewState_(viewState)
+    , selection_(std::make_unique<ListSelectionModel<synth::PlacementId>>())
+    , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
     setTitle("Sections");
     setDescription("Sections, 0 sections");
     setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp
+    edgeScroll_.onTick = [this] { edgeScrollTick(); };
     addTestProbe();
 }
 
-TimelineSectionStrip::~TimelineSectionStrip() = default;
+TimelineSectionStrip::~TimelineSectionStrip() { stopEdgeScroll(); }
 
 void TimelineSectionStrip::addTestProbe() {
     probe_ = std::make_unique<Probe>([this](juce::DynamicObject& into) {
         juce::StringArray sections;
         juce::StringArray variations;
         juce::String selected;
+        juce::StringArray selectedAll;
         int selectedVariationCount = 0;
+        const auto anchor = getSelectedPlacement();
         if (doc_ != nullptr) {
             std::map<std::int64_t, int> total;
             for (const auto& placement : doc_->getPlacements())
@@ -87,7 +112,9 @@ void TimelineSectionStrip::addTestProbe() {
                              juce::String(total[placement.section.value]));
                 const bool several = section->variations.size() > 1;
                 variations.add(synth::variationLetter(placement.variation) + (several ? "*" : ""));
-                if (placement.id == selected_) {
+                if (isPlacementSelected(placement.id))
+                    selectedAll.add(juce::String(placement.startBeat, 3));
+                if (placement.id == anchor) {
                     selected = juce::String(placement.startBeat, 3);
                     selectedVariationCount = (int)section->variations.size();
                 }
@@ -95,6 +122,7 @@ void TimelineSectionStrip::addTestProbe() {
         }
         into.setProperty("sections", sections.joinIntoString(";"));
         into.setProperty("selectedSection", selected);
+        into.setProperty("selectedSections", selectedAll.joinIntoString(";"));
         into.setProperty("variations", variations.joinIntoString(";"));
         into.setProperty("sectionVariationCount", selectedVariationCount);
     });
@@ -111,17 +139,27 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
             const auto letter = synth::variationLetter(block.variation);
             if (sectionstrip::chipBounds(block.bounds).contains(pos))
                 return sectionstrip::chipTooltip(letter, block.name);
+            const int selected = isPlacementSelected(block.id) ? (int)getSelectedPlacements().size() : 0;
             return sectionstrip::blockTooltip(block.name, block.lengthBeats, beatsPerBar(), block.count,
                                               platformCommandKeyName(),
-                                              block.variationCount > 1 ? letter : juce::String());
+                                              block.variationCount > 1 ? letter : juce::String()) +
+                   sectionstrip::selectionTooltipSuffix(selected, platformCommandKeyName());
         }
     }
+    // The key is named only when it would make something now, and says from what.
+    const juce::String source = makeSectionKeySource ? makeSectionKeySource() : juce::String();
     const juce::KeyPress fallback('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
-    const auto hint = shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
-    return "Drag across bars to make a section" + (hint.isEmpty() ? juce::String() : " (" + hint + ")");
+    const auto hint = source.isEmpty() ? juce::String() : shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
+    return "Drag across bars to make a section" +
+           (hint.isEmpty() ? juce::String() : ", or press " + hint + " to make one from " + source);
 }
 
-juce::String TimelineSectionStrip::getTooltip() { return tooltipAt(getMouseXYRelative().toFloat()); }
+// No tooltip while a drag is held: it would cover the drop line and the blocks making room.
+juce::String TimelineSectionStrip::getTooltip() {
+    if (blockDragging_ || makeDragging_)
+        return {};
+    return tooltipAt(getMouseXYRelative().toFloat());
+}
 
 //==============================================================================
 // One proxy per placement (visible or not: a screen reader walks them all), rebuilt only when what they say changed.
@@ -158,10 +196,15 @@ void TimelineSectionStrip::rebuildProxies() {
     int index = 0;
     for (const auto& [title, description] : proxyText_) {
         auto proxy = std::make_unique<BlockProxy>();
-        proxy->showVariations = [safeThis, i = index++] {
+        proxy->showVariations = [safeThis, i = index] {
             auto* self = safeThis.getComponent();
             if (self != nullptr && self->doc_ != nullptr && i < (int)self->doc_->getPlacements().size())
                 self->openVariationMenu(self->doc_->getPlacements()[(std::size_t)i].id);
+        };
+        proxy->isSelected = [safeThis, i = index++] {
+            auto* self = safeThis.getComponent();
+            return self != nullptr && self->doc_ != nullptr && i < (int)self->doc_->getPlacements().size() &&
+                   self->isPlacementSelected(self->doc_->getPlacements()[(std::size_t)i].id);
         };
         // An overlay purely for accessibility: mouseDown() above still owns every real click.
         proxy->setInterceptsMouseClicks(false, false);
@@ -200,6 +243,13 @@ juce::String TimelineSectionStrip::getProxyTitleForTest(int index) const {
 
 juce::String TimelineSectionStrip::getProxyDescriptionForTest(int index) const {
     return index >= 0 && index < (int)proxies_.size() ? proxies_[(size_t)index]->getDescription() : juce::String();
+}
+
+bool TimelineSectionStrip::isProxySelectedForTest(int index) const {
+    if (index < 0 || index >= (int)proxies_.size())
+        return false;
+    const auto handler = proxies_[(size_t)index]->createAccessibilityHandler();
+    return handler != nullptr && handler->getCurrentState().isSelected();
 }
 
 } // namespace synth::ui

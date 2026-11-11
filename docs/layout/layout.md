@@ -116,13 +116,15 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
   pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
   `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection
-  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) each run that timer only
+  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) and the Sections
+  strip's block and make-section drags (`TimelineSectionStripEdgeScroll.cpp`) each run that timer only
   while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged thing
   stays under the still pointer. The view stops at beat 0 and never stops to the right.
-- **Timeline, keys.** `firstBeatShowing` (`Source/UI/Timeline/ScrollIntoView.h`) is where the view starts so a span is
-  in sight, placed `kScrollIntoViewMargin` (a tenth of the view) in from the edge it was leaving by. A clip picked with
-  the keys and a lane dot carried by a held Alt+arrow both use it; the view jumps once per step, ahead of the dot, so it
-  never fights the dot's own ease.
+- **Timeline, keys.** `kScrollIntoViewMargin` (`Source/UI/Timeline/ScrollIntoView.h`, a tenth of the view) is how far
+  in from the edge a thing leaving by it is kept. A clip picked with the keys jumps there once (`firstBeatShowing`). A
+  lane dot carried by a held Alt+arrow never makes the view jump: once the dot's DRAWN place passes that line the view
+  scrolls by the excess every frame (`followKeyDragDot`), eased together with the dot, so the drawn dot holds the line
+  and does not lurch; at beat 0 it stays clamped.
 - **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above.
 - **The view is shared.** A drag that scrolls the timeline view tells its owner (`onViewScrolledByDrag`), which repaints
   the ruler and the section strip and turns follow-playhead off, as a sideways wheel scroll does.

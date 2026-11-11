@@ -93,7 +93,7 @@ void KeyedTween<T>::requestRepaint(juce::Rectangle<int> area) {
 }
 
 template <typename T>
-void KeyedTween<T>::retarget(Key key, T from, T to, bool fadeWhenReduced) {
+void KeyedTween<T>::retarget(Key key, T from, T to, bool fadeWhenReduced, double durationMs) {
     if (fadeWhenReduced && from != to && fadesInstead()) {
         startFade(key, to);
         return;
@@ -108,7 +108,7 @@ void KeyedTween<T>::retarget(Key key, T from, T to, bool fadeWhenReduced) {
     before.push_back(from);
     before.push_back(to);
     repaintAround(before);
-    startRun();
+    startRun(durationMs);
 }
 
 template <typename T>
@@ -168,8 +168,8 @@ void KeyedTween<T>::startFade(Key key, T to) {
 }
 
 template <typename T>
-void KeyedTween<T>::startRun() {
-    driver_.start(vblank_, kMs, easeOutCubic, [this](float eased) { onFrame(eased); }, [this] { clear(); });
+void KeyedTween<T>::startRun(double durationMs) {
+    driver_.start(vblank_, durationMs, easeOutCubic, [this](float eased) { onFrame(eased); }, [this] { clear(); });
 }
 
 template <typename T>

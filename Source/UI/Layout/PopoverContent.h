@@ -21,6 +21,9 @@ class PopoverContent {
 public:
     virtual ~PopoverContent() = default;
     virtual void onPopoverCancel() {}
+    /** True when the popover grows out of the row or button that opened it and shrinks back into it, instead of
+     *  rising out of it. */
+    virtual bool growsFromOpener() const { return false; }
 };
 
 } // namespace synth::ui

@@ -14,7 +14,9 @@ Open it with `launchPopover(content, screenArea, anchor, options)` (`Source/UI/L
 `ClosedIt` (the popover was open, so the button closed it) or `Ignored` (it is already leaving). `options.trigger` is the
 button: a press on it or on the area closes the popover with a fade and is consumed, so it cannot reopen it; a press
 elsewhere closes it the JUCE way and commits. Esc runs the content's `PopoverContent::onPopoverCancel()` (the colour
-picker puts its preview back) and fades it out. A key listener on the box hands the keys `isWindowForwardableShortcut`
+picker puts its preview back) and fades it out. A popover rises 8 px out of what it points at, unless its content
+overrides `PopoverContent::growsFromOpener()` (the searchable pickers do): it then grows out of the area it points at
+and shrinks back into it, the box's own background scaling with the content ([animation](animation.md#popup-windows)). A key listener on the box hands the keys `isWindowForwardableShortcut`
 allows (undo, redo, play/stop) to the main window that holds `anchor`, the way the shape editor window does
 (`makeAppShortcutRelay`). A card's anchor reads the shortcut table from its canvas; a main-window panel's from the main
 window's canvas, so `anchor` is the button or panel the popover points at. A popover that needs its box back (MIDI

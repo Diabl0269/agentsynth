@@ -1,7 +1,8 @@
 // ShapeDrawGestureTests.cpp -- the shape window's Draw pen: a stroke replaces only the dragged stretch of the curve,
 // Free follows the mouse and is thinned, Line ramps, Escape cancels, a stroke is one undo step, the grid snaps its
-// ends (Shift frees them), what the drag previews is what the release commits, and with the pen off points edit as
-// before. Run for both the Filter's and the LFO's window.
+// ends (Shift frees them), a periodic pen spans the press's and the drag's levels like the lane's box, what the drag
+// previews is what the release commits, and with the pen off points edit as before. Run for both the Filter's and the
+// LFO's window.
 #include "../../../TestSettingsHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -47,6 +48,8 @@ struct Pen {
     CurveEditorComponent& curve() { return editor.getCurveEditor(); }
     LfoCustomWave stored() const { return adapter->getShapes()[0].curve; }
     juce::Point<float> at(double x, float level) { return curve().pixelForDrawPoint({x, (double)level}); }
+    /** Where a press at (x, level) lands once snapped to the grid. */
+    juce::Point<double> snapped(double x, float level) { return curve().drawPointAt(at(x, level), false); }
 
     void press(double x, float level, bool shift = false) {
         const auto p = at(x, level);
@@ -121,11 +124,12 @@ TEST(ShapeDrawGesture, EveryShapeReplacesOnlyTheDraggedStretch) {
     }
 }
 
-TEST(ShapeDrawGesture, ASineReadsTheCyclesInItsChipAndStaysInTheDefaultBand) {
+TEST(ShapeDrawGesture, ALevelDragKeepsTheDefaultHeightCentredOnThePress) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     Pen pen(editor, rig.undo, rig.adapter);
     const auto range = rig.adapter->getDrawRange();
+    const float half = (range.hi - range.lo) * 0.5f;
     editor.setPen(DrawShape::Sine);
 
     pen.press(0.25, 0.5f);
@@ -133,11 +137,85 @@ TEST(ShapeDrawGesture, ASineReadsTheCyclesInItsChipAndStaysInTheDefaultBand) {
     EXPECT_TRUE(pen.curve().getDrawGesture().chipText().contains("cycle")) << pen.curve().getDrawGesture().chipText();
     pen.release();
 
+    const float centre = (float)pen.snapped(0.25, 0.5f).y;
+    float lo = 2.0f, hi = -1.0f;
     for (const auto& p : pen.stored().points)
         if (p.x > 0.26f && p.x < 0.74f) {
-            EXPECT_GE(p.y, range.lo - 1e-3f);
-            EXPECT_LE(p.y, range.hi + 1e-3f);
+            lo = std::min(lo, p.y);
+            hi = std::max(hi, p.y);
         }
+    EXPECT_NEAR(lo, centre - half, 0.02f);
+    EXPECT_NEAR(hi, centre + half, 0.02f);
+}
+
+// Regression test for FRO1593: a periodic pen always swung over the fixed default band whatever the drag did.
+TEST(ShapeDrawGesture, APeriodicPenSpansThePressAndTheDragLevelsLikeTheLaneBox) {
+    for (const auto shape : {DrawShape::Sine, DrawShape::Triangle, DrawShape::Saw, DrawShape::Square}) {
+        for (const bool lfo : {false, true}) {
+            for (const float endLevel : {0.9f, 0.1f, 0.35f}) {
+                ShapeRig filterRig;
+                LfoRig lfoRig;
+                auto adapter = lfo ? std::shared_ptr<ShapeListAdapter>(lfoRig.adapter)
+                                   : std::shared_ptr<ShapeListAdapter>(filterRig.adapter);
+                ShapeListEditor editor(adapter, 0);
+                Pen pen(editor, lfo ? lfoRig.undo : filterRig.undo, adapter);
+                editor.setPen(shape);
+
+                pen.stroke(0.25, 0.75, 0.6f, endLevel);
+
+                const float a = (float)pen.snapped(0.25, 0.6f).y;
+                const float b = (float)pen.snapped(0.75, endLevel).y;
+                float lo = 2.0f, hi = -1.0f;
+                for (const auto& p : pen.stored().points)
+                    if (p.x > 0.25f - 1e-4f && p.x < 0.75f + 1e-4f) {
+                        lo = std::min(lo, p.y);
+                        hi = std::max(hi, p.y);
+                    }
+                const auto what = juce::String(drawShapeName(shape)) + (lfo ? " (LFO) to " : " (Filter) to ") +
+                                  juce::String(endLevel);
+                EXPECT_NEAR(lo, std::min(a, b), 0.02f) << what;
+                EXPECT_NEAR(hi, std::max(a, b), 0.02f) << what;
+                // A rising Saw or Triangle starts at the press, as the lane's does.
+                if (endLevel > 0.6f && (shape == DrawShape::Saw || shape == DrawShape::Triangle)) {
+                    float first = -1.0f;
+                    for (const auto& p : pen.stored().points)
+                        if (p.x >= 0.25f - 1e-4f) {
+                            first = p.y;
+                            break;
+                        }
+                    EXPECT_NEAR(first, a, 0.02f) << what;
+                }
+            }
+        }
+    }
+}
+
+TEST(ShapeDrawGesture, DraggingUpOrDownChangesTheWaveSizeWhileDragging) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    Pen pen(editor, rig.undo, rig.adapter);
+    editor.setPen(DrawShape::Sine);
+    const auto swing = [&pen] {
+        float lo = 2.0f, hi = -1.0f;
+        for (const auto& p : pen.curve().getDrawGesture().result().curve.points)
+            if (p.x > 0.2f && p.x < 0.8f) {
+                lo = std::min(lo, p.y);
+                hi = std::max(hi, p.y);
+            }
+        return hi - lo;
+    };
+
+    pen.press(0.2, 0.5f);
+    pen.drag(0.8, 0.7f);
+    const float small = swing();
+    pen.drag(0.8, 0.95f);
+    const float big = swing();
+    pen.drag(0.8, 0.6f);
+    const float smaller = swing();
+    pen.release();
+
+    EXPECT_GT(big, small + 0.1f);
+    EXPECT_LT(smaller, small);
 }
 
 TEST(ShapeDrawGesture, FreeFollowsTheMouseAndIsThinnedToAHandfulOfPoints) {
@@ -385,6 +463,64 @@ TEST(ShapeDrawGesture, TheDrawButtonPicksAPenShowsItAndLeavesDrawModeOnTheSecond
     EXPECT_FALSE(editor.getPen().has_value());
     EXPECT_FALSE(editor.getDrawButton().getToggleState());
     EXPECT_EQ(editor.getDrawButton().getTitle(), "Draw");
+}
+
+namespace {
+
+void expectDrawButtonCentredAndRowUnclipped(ShapeListEditor& editor) {
+    editor.setSize(ShapeListEditor::kWidth, ShapeListEditor::kHeight);
+    auto& draw = editor.getDrawPenButton();
+    const auto layout = draw.contentLayout();
+    const auto font = draw.getLookAndFeel().getTextButtonFont(draw, draw.getHeight());
+    const float wordWidth = juce::GlyphArrangement::getStringWidth(font, "Draw");
+    EXPECT_NEAR(layout.icon.getX(), (float)draw.getWidth() - layout.text.getRight(), 1.0f)
+        << "equal margins left and right of the icon-and-word group";
+    EXPECT_GE(layout.text.getWidth(), wordWidth) << "the word is not clipped";
+    EXPECT_GE(layout.text.getX(), layout.icon.getRight()) << "the icon and the word do not overlap";
+
+    juce::TextButton* row[] = {&editor.getAddButton(),
+                               &editor.getDuplicateButton(),
+                               &editor.getRenameButton(),
+                               &editor.getStartFromButton(),
+                               &draw,
+                               &editor.getSaveShapeButton(),
+                               &editor.getDeleteButton(),
+                               &editor.getRingButton()};
+    for (auto* button : row) {
+        if (!button->isVisible())
+            continue;
+        const auto labelFont = button->getLookAndFeel().getTextButtonFont(*button, button->getHeight());
+        const float need =
+            juce::GlyphArrangement::getStringWidth(labelFont, button->getButtonText()) + 6.0f +
+            (button == &draw ? (float)ShapeDrawPenButton::kIconSize + ShapeDrawPenButton::kIconGap : 0.0f);
+        EXPECT_GE((float)button->getWidth(), need) << button->getButtonText() << " is wider than its box";
+        EXPECT_FALSE(button->getBounds().intersects(editor.getDeleteButton().getBounds()) &&
+                     button != &editor.getDeleteButton())
+            << button->getButtonText() << " runs into Delete";
+    }
+}
+
+} // namespace
+
+TEST(ShapeDrawGesture, TheDrawButtonCentresItsIconAndWordAsOneGroup) {
+    {
+        LfoRig rig;
+        ShapeListEditor editor(rig.adapter, 0);
+        expectDrawButtonCentredAndRowUnclipped(editor);
+    }
+    ShapeRig rig; // the Filter has the pitch rows, so its row is the narrower Ring layout
+    ShapeListEditor editor(rig.adapter, 0);
+    ASSERT_NE(editor.getPitchRows(), nullptr);
+    expectDrawButtonCentredAndRowUnclipped(editor);
+
+    // At the tightest width the row can give it (wider fonts, as on Windows), the word still fits whole.
+    auto& draw = editor.getDrawPenButton();
+    const auto font = draw.getLookAndFeel().getTextButtonFont(draw, draw.getHeight());
+    const float word = juce::GlyphArrangement::getStringWidth(font, "Draw");
+    draw.setSize((int)std::ceil(word + (float)ShapeDrawPenButton::kIconSize + ShapeDrawPenButton::kIconGap +
+                                2.0f * ShapeDrawPenButton::kMinSidePad),
+                 draw.getHeight());
+    EXPECT_GE(draw.contentLayout().text.getWidth(), word) << "the word is not clipped at the tightest width";
 }
 
 TEST(ShapeDrawGesture, ThePenIsRememberedPerKindAcrossWindows) {

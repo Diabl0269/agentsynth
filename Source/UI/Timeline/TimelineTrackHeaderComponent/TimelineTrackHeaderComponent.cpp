@@ -6,6 +6,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
@@ -157,6 +158,9 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         if (auto* link = linkSurface())
             link->revealChannelForTrack(trackId_);
     };
+
+    // The name row reads swatch, fold arrow, name; the arrow is shorter than the label and would sort after it.
+    synth::ui::setReadingFocusOrder({&colourSwatch_, &foldArrow_, &nameLabel_});
 
     // The voice toggle: shown only for a track whose voice graph has something poly-capable (refreshFromDoc).
     addChildComponent(voiceToggle_);

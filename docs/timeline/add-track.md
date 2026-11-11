@@ -19,7 +19,7 @@ groups; More (Insert Track Preset from File..., Add Marker, Create Channels) is 
   (`ModuleLibraryComponent::activateAddListRow`): the canvas shows and the card goes after the one selected card, or at
   the view centre. A module already on the canvas that allows only one (Audio Input/Output) stays greyed with its reason.
 
-`AddList.h` (`Source/UI/AddList/`) orders and tags the rows: track rows keep their menu ids, library rows get
+`AddList.h` (`Source/UI/AddList/`) orders and tags the rows (the tag at the right edge is 11 px and coloured by kind, the table in [theming](../layout/theming.md#colour-code-kinds)): track rows keep their menu ids, library rows get
 `kAddListLibraryIdBase + index`. `MainComponent::openAddList(origin, anchor, fromKeyboard)` builds them (the library
 rows are read once when the list opens and found again by identity at pick time, like the plugin snapshot below),
 and the Timeline reaches it through `TrackHeaderHost::openAddList`; with no host (tests) its own track-only picker

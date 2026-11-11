@@ -152,4 +152,8 @@ SoundGuess guessFromName(const juce::String& folder, const juce::String& fileNam
     return guess;
 }
 
+bool loopLengthFits(double lengthSeconds, double tempo) {
+    return lengthSeconds >= kMinLoopSeconds && (tempo <= 0.0 || lengthSeconds * tempo / 60.0 >= kMinLoopBeats);
+}
+
 } // namespace synth::soundbrowser

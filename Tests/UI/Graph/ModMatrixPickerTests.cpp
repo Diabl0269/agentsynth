@@ -6,6 +6,7 @@
 
 #include "../../TestWait.h"
 #include "ModMatrixCanvasHelpers.h"
+#include "ModMatrixPickerFirstRow.h"
 
 #include "Modules/LFOModule.h"
 #include "Modules/MacroInletModule.h"
@@ -382,6 +383,14 @@ TEST(ModMatrixPicker, AFreshPickerOpensAtTheTopSoItsFirstHeaderAndRowAreInView) 
     ASSERT_NE(f.source, nullptr);
     EXPECT_EQ(f.source->getViewTopForTest(), 0);
     EXPECT_EQ(f.dest->getViewTopForTest(), 0);
+}
+
+TEST(ModMatrixPicker, TheModMatrixSourceAndDestinationOpenAtTheTop) {
+    PickerFixture f;
+    ASSERT_NE(f.source, nullptr);
+    ASSERT_NE(f.dest, nullptr);
+    first_row_test::expectOpensAtFirstRow(*f.source, "mod matrix source");
+    first_row_test::expectOpensAtFirstRow(*f.dest, "mod matrix destination");
 }
 
 namespace {

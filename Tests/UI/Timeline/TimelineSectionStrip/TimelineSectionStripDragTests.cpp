@@ -41,7 +41,7 @@ constexpr int kShift = juce::ModifierKeys::shiftModifier;
 
 TEST(TimelineSectionStripDragTest, ADragMovesTheBlockWithItsMusicAsOneUndoStep) {
     TwoSections f;
-    f.dragBlock(0.0, 16.0); // the drop line at the Verse's end: the Intro goes after the Verse
+    f.dragBlock(0.0, 8.0); // the left edge at the Verse's end once the Intro's gap closes: the Intro goes after it
     EXPECT_DOUBLE_EQ(f.startOf(f.intro), 8.0);
     EXPECT_DOUBLE_EQ(f.startOf(f.verse), 0.0) << "the gap it left closes";
     EXPECT_EQ(f.doc.getPlacements().size(), 2u) << "a move never adds a placement";
@@ -151,16 +151,17 @@ TEST(TimelineSectionStripDragTest, TheDropBeatSnapsToWholeBarsAndToANeighbourEdg
     TwoSections f;
     const juce::Point<float> from{f.x(2.0), 12.0f};
     f.strip.mouseDown(f.event(from, from, false));
+    // Cover (Shift held): the Verse stays where it is while the Intro is dragged.
     // Left edge at beat 21.3 (far from any block): the nearest bar is 20.
-    f.strip.mouseDrag(f.event({f.x(21.3 + 2.0), 12.0f}, from, true));
+    f.strip.mouseDrag(f.event({f.x(21.3 + 2.0), 12.0f}, from, true, kShift));
     EXPECT_DOUBLE_EQ(f.strip.getBlockDragTargetBeatForTest(), 20.0);
     // Left edge 6 px (0.15 beat) past the Verse's end at 16: snaps to 16.
-    f.strip.mouseDrag(f.event({f.x(16.15 + 2.0), 12.0f}, from, true));
+    f.strip.mouseDrag(f.event({f.x(16.15 + 2.0), 12.0f}, from, true, kShift));
     EXPECT_DOUBLE_EQ(f.strip.getBlockDragTargetBeatForTest(), 16.0);
     // Inside the Verse (8..16), nearer its end: goes to the end; nearer its start: the start.
-    f.strip.mouseDrag(f.event({f.x(13.0 + 2.0), 12.0f}, from, true));
+    f.strip.mouseDrag(f.event({f.x(13.0 + 2.0), 12.0f}, from, true, kShift));
     EXPECT_DOUBLE_EQ(f.strip.getBlockDragTargetBeatForTest(), 16.0);
-    f.strip.mouseDrag(f.event({f.x(9.0 + 2.0), 12.0f}, from, true));
+    f.strip.mouseDrag(f.event({f.x(9.0 + 2.0), 12.0f}, from, true, kShift));
     EXPECT_DOUBLE_EQ(f.strip.getBlockDragTargetBeatForTest(), 8.0);
     f.strip.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
 }
@@ -186,9 +187,7 @@ TEST(TimelineSectionStripDragTest, WhatTheDragPreviewsIsWhatTheDropCommits) {
         f.strip.mouseUp(f.event(to, from, true, flags));
         const auto* placed = copy ? &f.doc.getPlacements().back() : f.doc.getPlacement(f.intro);
         ASSERT_NE(placed, nullptr);
-        // A forward move's line is where the block goes in the timeline as it was; its own bars leave first.
-        const double expected = copy || previewed < 0.0 + 1e-9 ? previewed : std::max(0.0, previewed - 8.0);
-        EXPECT_DOUBLE_EQ(placed->startBeat, expected) << (copy ? "copy" : "move");
+        EXPECT_DOUBLE_EQ(placed->startBeat, previewed) << (copy ? "copy" : "move");
     }
     // The make drag shows the span it commits.
     TwoSections g;

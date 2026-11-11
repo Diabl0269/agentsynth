@@ -174,7 +174,7 @@ Its audio-side counterpart, the per-block render cost of the same project, is `T
   other control change.
 - **The timeline panel's transport poll adds no timer.** It rides `MainComponent`'s existing 10 Hz
   tick, only while the panel is visible, and repaints the ruler only when the ruler's own state —
-  time signature, loop trio — changed. The playhead's 30 Hz strip repaint is a permitted exception
+  time signature, loop trio — changed. The playhead's display-rate strip repaint is a permitted exception
   and runs only while the transport is playing; see
   [animation](animation.md#the-time-bounded-animation-rule).
 - **The track headers' channel-chip meters share ONE gated 15 Hz timer**, the same shape as

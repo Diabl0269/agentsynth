@@ -116,15 +116,17 @@ TEST(AutomationLanesCursorTest, TheLaneShowsTheClipLanesCursorForEveryToolThatAc
     EXPECT_TRUE(f.editor->getMouseCursor() == kArrow);
 }
 
-TEST_F(TimelinePanelIntegrationTest, TheAmountBandShowsTheSameToolCursorWithAndWithoutAnAmountLane) {
+TEST_F(TimelinePanelIntegrationTest, TheAmountBandShowsTheToolCursorOnlyWhereItsEditorTakesThePress) {
     amount_test::AmountScene s;
     ASSERT_NE(s.band(), nullptr);
     auto* band = s.band();
     ASSERT_EQ(s.amountLane(), nullptr) << "a new modulator has no amount lane: the band itself takes the press";
     for (auto tool : synth::ui::kAllEditTools) {
-        const auto expected = expectedLaneCursor(s.panel(), tool);
+        // With no lane only the Draw tool takes the press (it starts the curve); Range and Erase fall to the knob
+        // drag, so the band shows the arrow for them.
+        const auto expected = tool == EditTool::Draw ? expectedLaneCursor(s.panel(), tool) : kArrow;
+        s.panel().setActiveTool(tool);
         EXPECT_TRUE(band->getMouseCursor() == expected) << "no lane, tool " << (int)tool;
-        EXPECT_TRUE(band->getEditor()->getMouseCursor() == expected) << "editor, tool " << (int)tool;
     }
     s.panel().setActiveTool(EditTool::Draw);
     s.penStroke(8.0, -0.5, 24.0, 0.5);

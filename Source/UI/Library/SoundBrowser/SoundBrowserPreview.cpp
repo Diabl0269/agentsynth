@@ -2,6 +2,7 @@
 // the Play/Stop button and the footer's other controls, and keeping the footer's waveform on the selected sound.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -102,6 +103,10 @@ void SoundBrowserComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selectedName", sound ? rows_[(size_t)selected_].text : juce::String());
     into.setProperty("selectedDetail", sound ? rows_[(size_t)selected_].detail : juce::String());
     into.setProperty("getMoreOpen", isGetMoreShowing());
+    into.setProperty("firstRowText", rows_.empty() ? juce::String() : rows_.front().text);
+    const auto stop = std::find_if(rows_.begin(), rows_.end(), [](const Row& r) { return r.navigable(); });
+    into.setProperty("firstStopText", stop == rows_.end() ? juce::String() : stop->text);
+    into.setProperty("firstStopIsGetPack", stop != rows_.end() && stop->kind == RowKind::GetPack);
     into.setProperty("footerLine", sound ? soundFooterLine(*rows_[(size_t)selected_].entry) : juce::String());
 }
 

@@ -1,6 +1,8 @@
 # The timeline UI tests (Tests/UI/Timeline), kept in their own list so Tests/CMakeLists.txt stays
 # under the file-size cap.
 target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioClipSampleRateTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/ClipResampleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachinePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineGrooveTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineLanesTests.cpp
@@ -12,6 +14,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/ClipSwingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionGroupTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionFileTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionVariationsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocRowHeightTests.cpp
@@ -27,6 +30,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelRulerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelMarkerTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelineRulerMarkerDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
@@ -37,11 +41,13 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelAppWiringTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelResizeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelAuthoringGestureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelMakeSectionKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelFollowModeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/CursorGlide/TimelineCursorGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePlayheadTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePlayheadExtrapolatorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneInputTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineMidiDestinationMacroRoutingTests.cpp
@@ -72,6 +78,11 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionStripGeometryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragFollowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionDropPlanTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionGroupDropPlanTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMultiSelectTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/ListSelectionModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripVariationTests.cpp
@@ -101,6 +112,15 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditingModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedMouseTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorBehaviourMatrixTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorDiscoveryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixProbes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixCurveRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixShapeRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixLaneRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixEqRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixHoldHost.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/LanePointStretchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesStretchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesSnappedHoldTests.cpp
@@ -112,6 +132,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesColourCursorTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesRangeToolTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesRetargetTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesDuplicateTests.cpp
@@ -134,6 +155,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesRowIdentityTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesLaneHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesControlChipsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesReorderPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesCarryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesModulatorMainTests.cpp
@@ -158,4 +180,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesClipContents.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneRestoreGlideTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/PianoRoll/PianoRollDragPreviewCommitTests.cpp
 )

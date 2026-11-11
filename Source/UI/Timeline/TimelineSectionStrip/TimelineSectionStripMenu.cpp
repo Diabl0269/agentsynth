@@ -126,6 +126,13 @@ bool TimelineSectionStrip::isSectionMenuChoiceEnabled(synth::PlacementId id, Sec
 bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, SectionMenuChoice choice) {
     if (doc_ == nullptr || doc_->getPlacement(id) == nullptr)
         return false;
+    // On one of several selected blocks, the verbs that remove or place again reach every selected one.
+    if (actsOnSelection(id)) {
+        if (choice == SectionMenuChoice::PlaceAgainAfter)
+            return placeSelectedAgain();
+        if (choice == SectionMenuChoice::RemoveKeepMusic || choice == SectionMenuChoice::DeleteWithBars)
+            return deleteSelected(choice == SectionMenuChoice::RemoveKeepMusic);
+    }
     const double spb = secondsPerBeat();
     bool done = false;
     const auto leaving = ghostOf(id); // a removed block shrinks away from where it was

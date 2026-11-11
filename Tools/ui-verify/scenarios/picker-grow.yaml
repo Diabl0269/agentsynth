@@ -1,0 +1,44 @@
+# A picker grows out of the row that opened it and shrinks back into it on Esc, and Add modulator opens at its top.
+#
+# Bug: pickers rose 8 px and faded like any popover, unlike their sibling the mod dot panel, which grows out of its dot;
+# and a list whose first row sits under a heading could open scrolled past it (Add modulator without "New").
+#
+# What a user does:
+#   1. Opens a project with automation lanes and the timeline, unfolds the track's automation.
+#   2. Presses Cmd+Alt+R on the "LFO 1 mod lane on Cutoff" row: the source picker grows out of that row.
+#   3. Presses Esc: the picker shrinks back toward the row while it fades, and is gone.
+#   4. Right-clicks a lane header, picks Add modulator...: the list opens at the top, "New" heading then "New LFO".
+#      Down walks the rows from there; Esc closes it.
+record: true
+motion: true
+save_project: picker-grow
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - glide: {name: source-grow, frames: 6, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: cmd+alt+r, target: LFO 1 mod lane on Cutoff}}}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: source-picker-grown}
+  - glide: {name: source-shrink, frames: 6, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: escape}}}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: automationLaneHeader, button: right, instant: "the focus ring moves to the canvas panel"}
+  - wait: {}
+  - key: {keys: down}
+  - glide: {name: addmod-grow, frames: 10, crop: {x: 150, y: 0, w: 600, h: 400}, do: {key: {keys: return}}, instant: "the focus ring moves to the canvas panel"}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - mark: {check: 2, name: add-modulator-top}
+  # Down walks the list from its top row; Esc shrinks it back into the header.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}

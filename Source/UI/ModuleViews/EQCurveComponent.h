@@ -115,7 +115,7 @@ public:
     int hitTestBand(juce::Point<float> p) const {
         int best = -1;
         float bestDistanceSq = kHitRadius * kHitRadius;
-        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
             if (!lastBands[(size_t)b].enabled)
                 continue;
             const float distanceSq = bandPosition(lastBands[(size_t)b]).getDistanceSquaredFrom(p);
@@ -150,7 +150,7 @@ public:
 
     /** Removes a point — the band keeps its settings, it just stops contributing. */
     void removeBand(int band) {
-        if (band < 0 || band >= ParametricEQModule::kNumBands || !eqModule.isBandEnabled(band))
+        if (band < 0 || band >= ParametricEQModule::kShownBands || !eqModule.isBandEnabled(band))
             return;
         beginGesture();
         eqModule.setBandEnabled(band, false);
@@ -162,7 +162,7 @@ public:
 
     /** Moves a band's handle to `p` — x sets frequency, y sets gain. */
     void dragBandTo(int band, juce::Point<float> p) {
-        if (band < 0 || band >= ParametricEQModule::kNumBands)
+        if (band < 0 || band >= ParametricEQModule::kShownBands)
             return;
         eqModule.setBandFreq(band, freqAtX(p.x));
         eqModule.setBandGain(band, gainAtY(p.y));
@@ -171,7 +171,7 @@ public:
 
     /** Multiplicatively widens (negative) or narrows (positive) a band's Q. */
     void nudgeBandQ(int band, float amount) {
-        if (band < 0 || band >= ParametricEQModule::kNumBands)
+        if (band < 0 || band >= ParametricEQModule::kShownBands)
             return;
         const float current = lastBands[(size_t)band].q;
         const float updated = current * std::pow(2.0f, amount);
@@ -206,7 +206,7 @@ public:
 
     /** Selects band `band`, switching it on first if it is off. */
     void selectBand(int band) {
-        if (band < 0 || band >= ParametricEQModule::kNumBands)
+        if (band < 0 || band >= ParametricEQModule::kShownBands)
             return;
         if (!eqModule.isBandEnabled(band)) {
             beginGesture();
@@ -387,7 +387,7 @@ public:
         g.strokePath(curvePath, juce::PathStrokeType(2.0f));
 
         // ---- Band handles: one numbered dot per ENABLED band ----
-        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
             const auto& band = dotBands_[(size_t)b];
             if (!band.enabled)
                 continue;
@@ -439,8 +439,7 @@ public:
 
 private:
     /** The band-poll half of the timer: adopts changed settings, gliding them when `restored`. */
-    void syncBands(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& bands,
-                   float outputGainDb, bool restored);
+    void syncBands(const ParametricEQModule::BandSnapshots& bands, float outputGainDb, bool restored);
 
     void spectrumTick() {
         if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
@@ -469,7 +468,7 @@ private:
     bool ensureSelectedBand() {
         if (selectedBand >= 0)
             return eqModule.isBandEnabled(selectedBand);
-        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
             if (eqModule.isBandEnabled(b)) {
                 setSelectedBand(b);
                 return true;
@@ -505,11 +504,10 @@ private:
         repaint();
     }
 
-    static bool bandsDiffer(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& a,
-                            const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& b) {
+    static bool bandsDiffer(const ParametricEQModule::BandSnapshots& a, const ParametricEQModule::BandSnapshots& b) {
         for (size_t i = 0; i < a.size(); ++i)
             if (a[i].enabled != b[i].enabled || a[i].freqHz != b[i].freqHz || a[i].gainDb != b[i].gainDb ||
-                a[i].q != b[i].q)
+                a[i].q != b[i].q || a[i].type != b[i].type || a[i].slopeDbPerOct != b[i].slopeDbPerOct)
                 return true;
         return false;
     }
@@ -598,12 +596,12 @@ private:
     ParametricEQModule& eqModule;
 
     std::vector<float> magnitudes;
-    std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands{};
+    ParametricEQModule::BandSnapshots lastBands{};
     float lastOutputGainDb = 0.0f;
     struct GlideState; // EqBandGlide + RestoreWatch, defined in EQCurveGlide.cpp (their headers reach far)
     std::unique_ptr<GlideState> glide_;
-    std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> dotBands_{}; // as drawn now
-    std::array<float, ParametricEQModule::kNumBands> dotAlpha_{};
+    ParametricEQModule::BandSnapshots dotBands_{}; // as drawn now
+    std::array<float, ParametricEQModule::kMaxBands> dotAlpha_{};
     AppUndoManager* undoManager_ = nullptr;
 
     int selectedBand = -1;

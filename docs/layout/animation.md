@@ -435,6 +435,17 @@ eased progress). With a cubic on the opacity too, a leaving menu was still 87% o
 its last third, and an arriving one was 87% there halfway: both read as a pop (measured on the real app as
 the ghost window's opacity per frame).
 
+**Pickers grow out of their opener.** A popover whose content says `PopoverContent::growsFromOpener()` (every `ModMatrixPicker`: the
+source, parameter, modulator, track, Replace with, mixer insert and instrument pickers) does not rise: `PopoverBox` gives it
+`popup_motion::growStyle()` with the content as the `body` and the middle of the area the box points at as the pivot, so the
+list grows out of the row or button that opened it and shrinks back into it on Esc (the shared out leave: one fall in opacity
+and scale, then the box is gone). `PopupMotion` scales only the body, but a call-out paints its own background, arrow and
+shadow, so `PopoverBox::paint` applies the content's transform to the box's painting and repaints the whole box while the
+content is transformed; it also ignores the child-bounds change a transform raises, which would otherwise re-place the window
+around the scaled content on every frame. Reduce Motion is the 80 ms fade with no scale, Animations: Off is instant. A popover
+whose content does not grow keeps the 8 px rise. Tests: `PopupDismissPaths` (`APickerGrowsOutOfWhatOpenedItAndItsBoxBackgroundGrowsWithIt`,
+`APickerShrinksBackIntoItsOpenerOnEscapeAndLeavesOnce`).
+
 "Anchor" is the pointer: the window slides away from `Desktop::getMousePosition()` along the axis
 it sits furthest off it (`popup_motion::slideDirection`). A menu opened with its corner at the
 pointer, a dropdown under its combo box and a popover under its button slide down; a menu flipped
@@ -583,7 +594,8 @@ shortcut.
   grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
-- **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
+- **Popups.** A picker grows out of the row that opened it and shrinks back into it, like the mod dot panel
+  ([Popup windows](#popup-windows)). Any other menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
   the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close (Escape and click-away included)
   leaves this way (`PopupMotion::dismiss`, never a direct close), and lands at once when not on screen. One shared
   mechanism, never per call site: [Popup windows](#popup-windows).
@@ -759,8 +771,8 @@ a fade-in that ends early (`alphaInFraction`), and a **scale**: a native window 
 child `body` component that holds everything the window draws, and `PopupMotion` scales that child about `bodyPivot`
 (`inStartScale` to 1 on the way in, 1 to `outEndScale` on the way out) in the same tween that drives the window's
 opacity. It is buffered to an image while scaled (the panel's shadow is a blur). Reduce Motion never scales. The
-defaults scale nothing. Two windows use it: the mod dot's panel (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
-200 ms with the fade done at 120 ms, out to 0.04, so it ends on the dot, over 140 ms, no window slide) and the Filter shape editor window, which grows out of its card's centre (`openShapeEditorWindow`: 0.82 to 1 over 220 ms, back to 0.9 over 150 ms). Leaving never overshoots.
+defaults scale nothing. Three windows use it: the mod dot's panel (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
+200 ms with the fade done at 120 ms, out to 0.04, so it ends on the dot, over 140 ms, no window slide), every searchable picker (below) with the very same numbers (`popup_motion::growStyle()`, shared so the two never drift) and the Filter shape editor window, which grows out of its card's centre (`openShapeEditorWindow`: 0.82 to 1 over 220 ms, back to 0.9 over 150 ms). Leaving never overshoots.
 
 ## Popup reveal
 
@@ -810,7 +822,7 @@ clock or a stepped phase without asking the preference.
 | **Pick on canvas overlay** | Fades in 160 ms / out 110 ms as one component, takes no click once ended, outlines stay until it has faded out | `PickTargetOverlay` via `FadeVisibility` |
 | **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
 | **Drum Kit pads** | A pad that plays from the card flashes for 120 ms; the picked pad's accent ring slides to a new pick over 120 ms (`easeOutCubic`); the pad controls cross-fade on a pick (out 80 ms linear, the knobs re-bind while the panel is clear, in 160 ms `easeOutCubic`; a pick during the fade-out is the one that fades in). Under Reduce Motion the ring moves at once and the controls fade in over 80 ms; off screen or under Animations Off everything lands at once and there is no flash. The card height never changes on a pick; see [the card](../modules/drum-kit.md#the-card) | `DrumPadGrid`, `DrumPadControls` |
-| **Timeline playhead** | 30 Hz vertical position line, **playing only** (or while a drum machine Play clip loop runs), repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
+| **Timeline playhead** | Vertical position line at display rate (one `juce::VBlankAttachment` frame per refresh), from a position extrapolated between audio blocks (`PlayheadExtrapolator`); **playing only** (or while a drum machine Play clip loop runs, or for a locate glide of at most 160 ms), repainting only the old and new line strips | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent`; the morph map's arrow hold is the same pump and curve (`MorphMapGlide` via `MorphMap`) |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
 | **Macro fold** | Collapse: each module flies from its card into its preview box on the closed card (`easeInCubic`, 200 ms, 35 ms apart, all landed by 320 ms) while the dashed border shrinks around them. Expand: the reverse with the 8% bounce, the border growing ahead, each cable drawing out of its port (160 ms) once its module lands. Plain 80 ms fade under Reduce Motion; at once when Off or not on screen; undo and redo fold too; see [Macro fold](#macro-fold) | `MacroFoldAnimator` via `CardGlideAnimator` |
@@ -854,7 +866,7 @@ a duration:
 |---|---|---|---|
 | AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8x8 component | on completion or cancel |
 | A step icon (`StepIconView`, [song steps](#song-steps)) | its step is running or being fixed, the icon is on screen, and motion is allowed | its own icon-sized component, repainting only its bounds | when the step finishes, the build ends or is cancelled, or the icon leaves the screen |
-| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, or a drum machine Play clip loop runs | a strip a few px wide, spanning the panel's ruler and lanes | on stop or pause, with one final strip |
+| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING, a drum machine Play clip loop runs, or a locate glide (160 ms, `easeOutCubic`, `PlayheadLocateGlide`) plays | a strip a few px wide, spanning the panel's ruler and lanes; a big move repaints its two strips apart | on stop or pause, with one final strip; a glide on a stopped transport ends its frames when it lands |
 | Sound preview playhead (`SoundWaveformView`) | the sound the Sounds view footer shows is playing and the view is on screen | a strip a few px wide in the footer's waveform, a 30 Hz timer repainting only the old and new line strips | when the preview ends or is stopped, with one final strip |
 
 `zoomSettleAnim` is **not** an extra exception: it is a normal time-bounded `AnimationDriver` that
@@ -877,10 +889,11 @@ Never add:
 A further exception is not granted just because the earlier ones were. The playhead earned it by satisfying
 three clauses, all enforced in code and asserted in `Tests/UI/Timeline/TimelinePlayheadTests.cpp`:
 
-1. **Playing only.** The 30 Hz `juce::Timer` starts on play and stops on stop or pause, so an idle app
-   repaints nothing (`ZeroRepaintsOver100IdleFrames`). A Play clip loop counts as playing (`setClipPreviewActive`).
-2. **Strip only.** A frame repaints the *union of the old and new line strips* (`kStripHalfWidth` px
-   either side of the line), never the component; a frame whose rounded x did not move requests nothing
+1. **Playing only.** The display-rate `juce::VBlankAttachment` is created on play and dropped on stop or pause, so an idle app
+   repaints nothing (`ZeroRepaintsOver100IdleFrames`). A Play clip loop counts as playing (`setClipPreviewActive`), and a
+   locate glide on a stopped transport runs frames for its 160 ms and then stops them.
+2. **Strip only.** A frame repaints the old and new line strips (`kStripHalfWidth` px
+   either side of the line; their union, or the two apart when the line moved more than a few pixels), never the component; a frame whose rounded x did not move requests nothing
    (`PlayingRequestsConfinedStrips`).
 3. **Explicit stop.** Stopping emits exactly **one** final strip, so the line settles on the
    position playback ended at, and then goes silent (`StopEmitsOneFinalStripThenSilence`).

@@ -25,11 +25,11 @@ public:
     // The grow: the panel scales from 40% to 100% about the dot's centre with a 3% overshoot over 200 ms while it
     // fades in over the first 120 ms; it shrinks back into the dot (to 4%, about the dot's centre) while fading over
     // 140 ms, so it ends on the dot it grew out of. Reduce Motion is the shared plain 80 ms fade with no scale.
-    static constexpr float kInStartScale = 0.4f;
-    static constexpr float kOutEndScale = 0.04f;
-    static constexpr double kInMs = 200.0;
-    static constexpr double kOutMs = 140.0;
-    static constexpr float kFadeInFraction = 0.6f; // 120 ms of the 200
+    static constexpr float kInStartScale = popup_motion::kGrowInStartScale;
+    static constexpr float kOutEndScale = popup_motion::kGrowOutEndScale;
+    static constexpr double kInMs = popup_motion::kGrowInMs;
+    static constexpr double kOutMs = popup_motion::kGrowOutMs;
+    static constexpr float kFadeInFraction = popup_motion::kGrowFadeInFraction; // 120 ms of the 200
     static constexpr int kShadow = 10; // transparent margin around the panel: the arrow and the shadow live in it
 
     /** `content` is the panel; `anchor` the dot it points at, `dot` its bounds and `area` the room the panel may use

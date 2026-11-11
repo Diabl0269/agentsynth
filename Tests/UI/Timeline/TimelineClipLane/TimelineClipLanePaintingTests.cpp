@@ -241,6 +241,27 @@ TEST(TimelineClipLaneWaveformTest, SourceOffsetShiftsWaveform) {
     EXPECT_EQ(emptyRange.bucketCount, 0);
 }
 
+TEST(TimelineClipLaneWaveformTest, BucketRangeUsesTheFileRateNotTheTransportRate) {
+    using synth::ui::TimelineClipLaneArea;
+
+    // Regression test for FRO1520: a 44.1 kHz file under a 48 kHz transport had its waveform sliced
+    // at the transport rate, so it drifted 8% against the audio.
+    constexpr double kBpm = 120.0;
+    constexpr double kLengthBeats = 4.0; // 2 seconds
+
+    auto data = makeWaveformData(400, 1.0f);
+    data.sampleRate = 44100.0;
+    const auto atFileRate = TimelineClipLaneArea::bucketRangeForClip(data, kLengthBeats, 1.0, kBpm, 48000.0);
+
+    auto reference = makeWaveformData(400, 1.0f); // no rate of its own: the passed rate is the fallback
+    const auto expected = TimelineClipLaneArea::bucketRangeForClip(reference, kLengthBeats, 1.0, kBpm, 44100.0);
+    EXPECT_EQ(atFileRate.firstBucket, expected.firstBucket);
+    EXPECT_EQ(atFileRate.bucketCount, expected.bucketCount);
+
+    const auto atTransportRate = TimelineClipLaneArea::bucketRangeForClip(reference, kLengthBeats, 1.0, kBpm, 48000.0);
+    EXPECT_NE(atFileRate.firstBucket, atTransportRate.firstBucket) << "the two rates must give different ranges";
+}
+
 TEST(TimelineClipLaneWaveformTest, MissingAssetPaintsPlaceholder) {
     int missingResolverCalls = 0;
 

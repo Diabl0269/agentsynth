@@ -8,6 +8,7 @@
 #include "../TimelinePanel/TimelinePanelTestEvents.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesModulatorFixture.h"
+#include "Modules/AttenuverterModule.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
@@ -46,7 +47,7 @@ struct CustomLfoScene : Scene {
     AutomationLaneHeaderComponent& header() { return *panel().laneHeaderForTest(lane); }
 
     void selectRange(double start, double end) {
-        range().begin(lane, start);
+        range().begin(lane, start, panel().laneEditorForTest(lane));
         range().extendTo(end);
     }
     // Selects the lane's points at these beats with the Select tool, the way a click or a box does.
@@ -90,7 +91,7 @@ double frac(double x) { return x - std::floor(x); }
 
 TEST(AutomationLanesCustomLfoMenuTest, WithoutAHostThatCanModulateTheItemSaysNoCvInput) {
     lane_menu_test::MenuPanel p;
-    p.panel.getAutomationLanes().getLaneRange().begin(p.lane, 1.0);
+    p.panel.getAutomationLanes().getLaneRange().begin(p.lane, 1.0, p.panel.laneEditorForTest(p.lane));
     p.panel.getAutomationLanes().getLaneRange().extendTo(3.0);
     lane_menu_test::MenuCapture capture;
     p.header(p.lane)->showMenuAt(juce::PopupMenu::Options());

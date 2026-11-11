@@ -13,21 +13,21 @@ steps:
   - wait: {}
   - key: {keys: cmd+t}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
-  - key: {keys: escape}
+  - key: {keys: escape, instant: "the focus ring moves to or from the timeline panel"}
   - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
   - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
   - expect: {id: keyPicker, exists: false}
-  - click: {id: timelineTransportSongKey}
+  - click: {id: timelineTransportSongKey, instant: "the focus ring moves to or from the timeline panel"}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
   - screenshot: {id: keyPickerPanel, name: song-key-first-open}
-  - key: {keys: escape}
+  - key: {keys: escape, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: timelineTransportSongKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
   - screenshot: {id: keyPickerPanel, name: song-key-second-open}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
-  - click: {id: timelineTransportSongKey}
+  - click: {id: timelineTransportSongKey, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
@@ -35,13 +35,13 @@ steps:
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}
-  - key: {keys: cmd+f}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
   - wait: {}
-  - key: {keys: cmd+a}
+  - key: {keys: cmd+a, instant: "the caret moves in the library search field"}
   - type: {text: sequencer}
   - wait: {}
   - key: {keys: down}
-  - key: {keys: down}
+  - key: {keys: down, instant: "the selected row highlight moves in the library list"}
   - key: {keys: return}
   - wait: {}
   - expect: {id: sequencerKey, showing: true, within_ms: 2000}

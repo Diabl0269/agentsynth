@@ -15,6 +15,7 @@
 # (No `expect` on "Macro": its id finds the hidden card first, so only the stills and the project show its state.)
 # Each mark sits on the landed state (after the glide), never mid-glide; proof/<glide>-strip.png is the frames across it.
 motion: true
+pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the macro fold state its later steps expect
 record: true
 save_project: fro830-test-macros-close
 steps:

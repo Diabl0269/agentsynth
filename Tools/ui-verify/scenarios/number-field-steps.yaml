@@ -11,6 +11,7 @@
 #   7. Focuses the field and presses Up and Down.
 #   8. Presses Cmd+Z: the last change is undone, one gesture at a time.
 motion: true
+pop_check: {undo: false}   # undo off: the scenario counts its own undo steps
 record: true
 save_project: end
 steps:
@@ -48,7 +49,7 @@ steps:
   - wait: {}
   - expect: {id: "card:Sequencer > Steps state", value: 16}
   # Type a value: Return commits, Escape cancels.
-  - click: {id: "card:Sequencer > Steps", clicks: 2}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
   - wait: {}
   - expect: {id: "card:Sequencer > Steps state", editing: true, within_ms: 1000}
   - screenshot: {id: "card:Sequencer > Steps", name: 05-typing, scale: 4}
@@ -56,10 +57,10 @@ steps:
   - key: {keys: return}
   - wait: {}
   - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
-  - click: {id: "card:Sequencer > Steps", clicks: 2}
+  - click: {id: "card:Sequencer > Steps", clicks: 2, instant: "the number field turns into a text editor (a text change)"}
   - wait: {}
   - type: {text: "40"}
-  - key: {keys: escape}
+  - key: {keys: escape, instant: "the typed number replaces the field text (a text change)"}
   - wait: {}
   - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
   # Keys (a press on the number only focuses it).

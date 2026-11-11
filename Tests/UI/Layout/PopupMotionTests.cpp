@@ -72,7 +72,7 @@ TEST(PopupMotionFrame, StyleSetsTheSlideAndAnOvershootKeepsAlphaAtMostOne) {
 // A style that scales its body (the mod dot's panel)
 // ----------------------------------------------------------------------------------------------
 
-Style growStyle() {
+Style scaledTestStyle() {
     Style style;
     style.overshoot = true;
     style.inSlidePx = 0.0f;
@@ -96,7 +96,7 @@ TEST(PopupMotionScale, TheDefaultStyleNeverScalesAndKeepsTheSharedDurations) {
 }
 
 TEST(PopupMotionScale, GrowsFromFortyPercentWithTheOvershootAndSettlesAtOne) {
-    const auto style = growStyle();
+    const auto style = scaledTestStyle();
     const juce::Point<int> down(0, 1);
     EXPECT_FLOAT_EQ(frameAt(Phase::In, ease(Phase::In, 0.0f, style), down, false, style, 0.0f).scale, 0.4f);
     const float mid = frameAt(Phase::In, ease(Phase::In, 0.5f, style), down, false, style, 0.5f).scale;
@@ -113,7 +113,7 @@ TEST(PopupMotionScale, GrowsFromFortyPercentWithTheOvershootAndSettlesAtOne) {
 }
 
 TEST(PopupMotionScale, FadeInIsDoneAtSixtyPercentOfTheArrivalAndLinearBeforeIt) {
-    const auto style = growStyle();
+    const auto style = scaledTestStyle();
     const juce::Point<int> down(0, 1);
     const auto alphaAtTime = [&](float t) {
         return frameAt(Phase::In, ease(Phase::In, t, style), down, false, style, t).alpha;
@@ -125,7 +125,7 @@ TEST(PopupMotionScale, FadeInIsDoneAtSixtyPercentOfTheArrivalAndLinearBeforeIt) 
 }
 
 TEST(PopupMotionScale, LeavesDownToHalfSizeWhileFadingLinearlyInTime) {
-    const auto style = growStyle();
+    const auto style = scaledTestStyle();
     const juce::Point<int> down(0, 1);
     EXPECT_FLOAT_EQ(frameAt(Phase::Out, 0.0f, down, false, style).scale, 1.0f);
     EXPECT_FLOAT_EQ(frameAt(Phase::Out, 1.0f, down, false, style).scale, 0.5f);
@@ -136,7 +136,7 @@ TEST(PopupMotionScale, LeavesDownToHalfSizeWhileFadingLinearlyInTime) {
 }
 
 TEST(PopupMotionScale, ReduceMotionIsThePlainEightyMillisecondFadeWithNoScale) {
-    const auto style = growStyle();
+    const auto style = scaledTestStyle();
     const juce::Point<int> down(0, 1);
     EXPECT_DOUBLE_EQ(durationMs(Phase::In, true, style), 80.0);
     EXPECT_DOUBLE_EQ(durationMs(Phase::Out, true, style), 80.0);

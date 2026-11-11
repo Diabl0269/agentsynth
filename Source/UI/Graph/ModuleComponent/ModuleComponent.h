@@ -13,8 +13,6 @@
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/SplitButton.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
-#include "UI/ModuleViews/EQCurveComponent.h"
-#include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
@@ -29,6 +27,7 @@
 
 class AudioEngine;
 class GraphEditor;                // Forward declaration
+class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
 namespace synth::ui {

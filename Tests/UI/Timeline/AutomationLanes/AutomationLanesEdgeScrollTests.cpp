@@ -195,6 +195,52 @@ TEST(AutomationLanesEdgeScroll, AHeldAltRightNearTheRightEdgeKeepsTheMovingDotIn
     EXPECT_EQ(f.points()[0].beat, start) << "one undo puts it back";
 }
 
+// A held Alt+Right across the right edge with the dots' glide running: the view never jumps (each frame it moves by
+// no more than one grid step) and the DRAWN dot, not the preview, is what stays inside the margin band.
+TEST(AutomationLanesEdgeScroll, AHeldAltRightAcrossTheRightEdgeScrollsTheViewSmoothlyAndKeepsTheDrawnDotInTheMargin) {
+    EdgeLane f;
+    const double start = std::floor(f.visibleBeats()) - 2.0;
+    f.doc.addBreakpoint(f.lane, start, 50.0);
+    f.editor->getPointSelection().setSelection({start});
+    f.editor->forceGlideAnimateForTest(true);
+    auto& tween = f.editor->getPointTweenForTest();
+    const double stepBeats = 1.0;
+    const double width = (double)f.editor->getWidth();
+
+    f.keys.down = {juce::KeyPress::rightKey};
+    f.keys.alt = true;
+    ASSERT_TRUE(f.editor->keyPressed(
+        juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0)));
+    double easeMs = 0.0;
+    double lastBeat = f.editor->getPreviewBeatForTest();
+    double lastFirst = f.first();
+    double lastDrawnX = -1.0;
+    for (double ms = 0.0; ms <= 5000.0; ms += 16.0) {
+        f.keys.now = 1000.0 + synth::ui::lane_key::kTapMs + ms;
+        f.editor->getKeyHoldForTest().tick();
+        if (f.editor->getPreviewBeatForTest() != lastBeat) {
+            lastBeat = f.editor->getPreviewBeatForTest();
+            easeMs = 0.0;
+        }
+        easeMs += 16.0;
+        tween.stepForTest(easeMs);
+        EXPECT_LE(std::abs(f.first() - lastFirst), stepBeats) << "the view did not jump at " << ms << " ms";
+        lastFirst = f.first();
+        const double drawnX =
+            f.view().beatToX(lastBeat) + (double)tween.offsetFor(synth::ui::lane_key::tweenKey(start)).x;
+        EXPECT_LE(drawnX, 0.9 * width + 0.5) << "the drawn dot is not past the margin line at " << ms << " ms";
+        EXPECT_GE(drawnX, 0.0) << "or off the left at " << ms << " ms";
+        if (lastDrawnX >= 0.0)
+            EXPECT_LE(std::abs(drawnX - lastDrawnX), stepBeats * f.view().pixelsPerBeat)
+                << "the dot never lurches on screen at " << ms << " ms";
+        lastDrawnX = drawnX;
+    }
+    EXPECT_GT(f.first(), 0.0) << "the view scrolled along";
+    f.keys.down.clear();
+    f.editor->getKeyHoldForTest().checkKeyUp();
+    f.editor->forceGlideAnimateForTest(false);
+}
+
 TEST(AutomationLanesEdgeScroll, ADragThatScrollsTheViewTurnsFollowPlayheadOff) {
     EdgeLane f;
     f.panel.setFollowPlayheadEnabled(true);

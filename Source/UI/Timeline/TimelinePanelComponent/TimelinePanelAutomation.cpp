@@ -10,6 +10,7 @@
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 
 namespace synth::ui {
 
@@ -72,7 +73,7 @@ void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
 // every selected track closes, else every one opens), applied as one layout change so the lanes animate together.
 void TimelinePanelComponent::toggleAutomationForSelection(synth::TrackId trackId) {
     std::vector<synth::TrackId> targets;
-    if (trackSelection_.contains(trackId) && trackSelection_.size() > 1)
+    if (trackSelection_->contains(trackId) && trackSelection_->size() > 1)
         targets = selectedTracks();
     else
         targets = {trackId};

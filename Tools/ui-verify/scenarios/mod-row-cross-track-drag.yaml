@@ -11,6 +11,7 @@
 #   3. Cmd+Z puts it back on Ratio in one step; Cmd+Shift+Z moves it again.
 #   4. Saves, reopens the saved project: still one LFO row on Audio 3's Threshold, still named LFO 2.
 motion: true
+pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the lanes its later steps expect
 stale_pixel_check: true
 record: true
 save_project: end

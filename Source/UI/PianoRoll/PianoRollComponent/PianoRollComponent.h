@@ -382,9 +382,10 @@ public:
     double getMaxTopRowPositionForTest() const noexcept;
     bool isMarqueeActiveForTest() const noexcept;
     NoteSelectionModel& getSelectionForTest() noexcept;
-
     void tickAutoScrollForTest();
     bool isCopyDragForTest() const noexcept;
+    std::vector<pianoroll::NoteGeometry> getCopyGhostsForTest() const;
+    pianoroll::NoteGeometry getShownGeometryForTest(synth::NoteId id) const;
     bool isAutoScrollTimerRunningForTest() const noexcept;
 
     const std::vector<int>& getVisiblePitchesForTest() const noexcept;
