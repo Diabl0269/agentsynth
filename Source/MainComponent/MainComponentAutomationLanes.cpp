@@ -42,7 +42,8 @@ void appendModuleParameters(const juce::AudioProcessorGraph::Node& node, ModuleB
         auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
         const bool automatable = dynamic_cast<juce::AudioParameterFloat*>(param) != nullptr ||
                                  dynamic_cast<juce::AudioParameterInt*>(param) != nullptr;
-        if (ranged == nullptr || !automatable || (isStrip && isSendSlotParameter(ranged->paramID)))
+        if (ranged == nullptr || !automatable || (isStrip && isSendSlotParameter(ranged->paramID)) ||
+            !module.isParameterExposed(ranged->paramID))
             continue;
         if (uuid.isNotEmpty() && doc.getLaneForParam(uuid, ranged->paramID) != nullptr)
             continue; // already automated

@@ -111,6 +111,63 @@ private:
     ShapeListEditor editor_;
 };
 
+/** A stretch of the shape window's curve drawn with the Square pen: the undo and redo change the number of points, so
+ *  the line morphs (the morph tween) instead of its nodes gliding. drawn() is the line's height at a probe x inside the
+ *  stretch, where the square's top stands well above the curve it replaced. */
+class CurveDrawnStretchSurface : public Surface {
+public:
+    CurveDrawnStretchSurface()
+        : editor_(rig_.adapter, 0) {
+        auto& curve = editor_.getCurveEditor();
+        curve.getMorphTweenForTest().forceAnimateForTest(true);
+        const double cell = curve.drawCellWidth() > 0.0 ? curve.drawCellWidth() : 1.0 / 3.0;
+        probeX_ = curve.pixelForDrawPoint({kStart + cell * 0.25, 0.0}).x;
+    }
+
+    void move() override {
+        auto& curve = editor_.getCurveEditor();
+        editor_.setPen(synth::ui::DrawShape::Square);
+        const auto from = curve.pixelForDrawPoint({kStart, 0.5});
+        const auto to = curve.pixelForDrawPoint({kEnd, 0.95});
+        curve.mouseDown(synth::ui::test::curveLeftClick(curve, from));
+        curve.mouseDrag(synth::ui::test::curveLeftDrag(curve, (from + to) * 0.5f, from));
+        curve.mouseDrag(synth::ui::test::curveLeftDrag(curve, to, from));
+        curve.mouseUp(synth::ui::test::curveLeftDrag(curve, to, from));
+        editor_.setPen(std::nullopt);
+    }
+    bool undo() override { return restore(false); }
+    bool redo() override { return restore(true); }
+    double drawn() const override {
+        const auto points = const_cast<ShapeListEditor&>(editor_).getCurveEditor().getDrawnCurvePointsForTest();
+        for (size_t i = 1; i < points.size(); ++i)
+            if (points[i].x >= probeX_ && points[i].x > points[i - 1].x)
+                return points[i - 1].y +
+                       (points[i].y - points[i - 1].y) * (probeX_ - points[i - 1].x) / (points[i].x - points[i - 1].x);
+        return points.empty() ? 0.0 : points.back().y;
+    }
+    bool gliding() const override {
+        return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getMorphTweenForTest().isAnimating();
+    }
+    void stepTo(double elapsedMs) override { editor_.getCurveEditor().getMorphTweenForTest().stepForTest(elapsedMs); }
+    float alpha() const override {
+        return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getMorphTweenForTest().alphaFor(0);
+    }
+    juce::Component* paintedComponent() override { return &editor_.getCurveEditor(); }
+
+private:
+    static constexpr double kStart = 0.25;
+    static constexpr double kEnd = 0.75;
+    bool restore(bool forward) {
+        const bool did = forward ? rig_.undo.redo() : rig_.undo.undo();
+        editor_.refresh();
+        return did;
+    }
+
+    synth::ui::test::ShapeRig rig_;
+    ShapeListEditor editor_;
+    float probeX_ = 0.0f;
+};
+
 /** An automation point dragged to a new value; the lane editor follows the doc notification the undo sends. */
 class LanePointSurface : public Surface {
 public:
@@ -205,6 +262,7 @@ const std::vector<Entry>& surfaces() {
         {"Morph map dot", true, [] { return std::make_unique<MorphMapSurface>(false); }},
         {"Morph map cursor", true, [] { return std::make_unique<MorphMapSurface>(true); }},
         {"Curve editor point", true, [] { return std::make_unique<CurveSurface>(); }},
+        {"Curve editor drawn stretch", true, [] { return std::make_unique<CurveDrawnStretchSurface>(); }},
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Timeline clip edge", true, [] { return std::make_unique<ClipTrimSurface>(); }},
         {"LFO card curve point", true, [] { return makeLfoCardPoint(); }},

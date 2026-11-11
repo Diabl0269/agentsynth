@@ -407,9 +407,6 @@ add_executable(Tests
     FX/FXModule/FXModuleReverbTests.cpp
     FX/GateModuleTests.cpp
     FX/PitchShifterModuleTests.cpp
-    FX/ParametricEQ/ParametricEQModuleTests.cpp
-    FX/ParametricEQ/ParametricEQCVTests.cpp
-    FX/ParametricEQ/ParametricEQAudibleTests.cpp
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
@@ -983,6 +980,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/MacroCardCableDropTests.cmake) # a cable dra
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
 include(${CMAKE_CURRENT_SOURCE_DIR}/SharedOutputCvTests.cmake) # cables on Level, Pan and the shared Mix
 include(${CMAKE_CURRENT_SOURCE_DIR}/MixerRowTests.cmake) # mixer insert/send rows and focusable controls
+include(${CMAKE_CURRENT_SOURCE_DIR}/ParametricEQTests.cmake) # the Parametric EQ engine, saved model and hidden bands
 include(${CMAKE_CURRENT_SOURCE_DIR}/MotionPolishTests.cmake) # the last instant changes that now animate
 include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi-select, per-note Pitch cable
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption

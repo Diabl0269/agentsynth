@@ -7,6 +7,8 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQWindow.h"
 
 namespace eqCard {
 constexpr int kMargin = 12;
@@ -111,15 +113,15 @@ void ModuleComponent::layoutParametricEQ() {
 
     // One column per band. The on/off toggle's text is the band's type ("1 Low Shelf"), so the
     // column header and its enable control are the same widget.
-    const int colW = contentW / ParametricEQModule::kNumBands;
-    for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+    const int colW = contentW / ParametricEQModule::kShownBands;
+    for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
         if (auto* toggle = findToggleByName(ParametricEQModule::rowLabelFor(b)))
             toggle->setBounds(kMargin + b * colW, y, colW - 4, kToggleRow);
     }
     y += kToggleRow + 2;
 
     for (int row = 0; row < kNumKnobRows; ++row) {
-        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
             const juce::String name = "B" + juce::String(b + 1) + " " + kKnobSuffix[row];
             layoutNamedKnob(name, kMargin + b * colW, y + row * kKnobRow, colW - 4, kKnobRow);
         }

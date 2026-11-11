@@ -61,9 +61,7 @@ void EQCurveComponent::setUndoManager(AppUndoManager* manager) {
     glide_->restoreWatch = synth::ui::RestoreWatch(manager != nullptr ? manager->getRestoreSerial() : 0);
 }
 
-void EQCurveComponent::syncBands(
-    const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& bands, float outputGainDb,
-    bool restored) {
+void EQCurveComponent::syncBands(const ParametricEQModule::BandSnapshots& bands, float outputGainDb, bool restored) {
     glide_->glide.sync(lastBands, lastOutputGainDb, bands, outputGainDb, restored);
     lastBands = bands;
     lastOutputGainDb = outputGainDb;

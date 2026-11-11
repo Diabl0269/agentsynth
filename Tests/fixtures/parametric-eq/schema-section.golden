@@ -1,0 +1,26 @@
+#### Parametric EQ
+| Parameter ID | Name | Range / Options | Default |
+| :--- | :--- | :--- | :--- |
+| `bypassed` | Bypassed | Boolean (0 or 1) | 0 |
+| `dualIO` | Dual I/O | Boolean (0 or 1) | 0 |
+| `band1On` | 1 Low Shelf | Boolean (0 or 1) | 0 |
+| `band1Freq` | B1 Freq | 20 to 20000 | 0.23299 |
+| `band1Gain` | B1 Gain | -24 to 24 | 0.5 |
+| `band1Q` | B1 Q | 0.1 to 10 | 0.446217 |
+| `band2On` | 2 Peak | Boolean (0 or 1) | 0 |
+| `band2Freq` | B2 Freq | 20 to 20000 | 0.46598 |
+| `band2Gain` | B2 Gain | -24 to 24 | 0.5 |
+| `band2Q` | B2 Q | 0.1 to 10 | 0.446217 |
+| `band3On` | 3 Peak | Boolean (0 or 1) | 0 |
+| `band3Freq` | B3 Freq | 20 to 20000 | 0.725364 |
+| `band3Gain` | B3 Gain | -24 to 24 | 0.5 |
+| `band3Q` | B3 Q | 0.1 to 10 | 0.446217 |
+| `band4On` | 4 High Shelf | Boolean (0 or 1) | 0 |
+| `band4Freq` | B4 Freq | 20 to 20000 | 0.867353 |
+| `band4Gain` | B4 Gain | -24 to 24 | 0.5 |
+| `band4Q` | B4 Q | 0.1 to 10 | 0.446217 |
+| `outputGain` | Output | -24 to 24 | 0.5 |
+| `muted` | Muted | Boolean (0 or 1) | 0 |
+| `mix` | Mix | 0 to 1 | 1 |
+| `pan` | Pan | -1 to 1 | 0.5 |
+

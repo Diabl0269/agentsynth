@@ -12,10 +12,18 @@ constexpr float kSemitoneOctaves = 1.0f / 12.0f;
 constexpr float kFineFactor = 0.25f;
 constexpr float kGainStepDb = 1.0f;
 constexpr float kQStepOctaves = 0.25f;
+
+// The summary counts the points the curve shows, not a hidden slot that is on.
+int shownEnabledBandCount(const ParametricEQModule& eq) {
+    int count = 0;
+    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+        count += eq.isBandEnabled(b) ? 1 : 0;
+    return count;
+}
 } // namespace
 
 void EQCurveComponent::selectBandRelative(int delta) {
-    const int last = ParametricEQModule::kNumBands - 1;
+    const int last = ParametricEQModule::kShownBands - 1;
     setSelectedBand(selectedBand < 0 ? 0 : juce::jlimit(0, last, selectedBand + delta));
     repaint();
 }
@@ -38,7 +46,7 @@ bool EQCurveComponent::toggleSelectedBand() {
 
 juce::String EQCurveComponent::getAccessibilityValueText() const {
     if (selectedBand < 0)
-        return synth::ui::describeEqCurveSummary(eqModule.getEnabledBandCount(), ParametricEQModule::kNumBands);
+        return synth::ui::describeEqCurveSummary(shownEnabledBandCount(eqModule), ParametricEQModule::kShownBands);
     const auto& band = lastBands[(size_t)selectedBand];
     return synth::ui::describeEqBand(selectedBand, band.enabled, band.freqHz, band.gainDb, band.q);
 }
@@ -70,7 +78,7 @@ bool EQCurveComponent::keyPressed(const juce::KeyPress& key) {
     const float fine = mods.isShiftDown() ? kFineFactor : 1.0f;
     const int code = key.getKeyCode();
 
-    if (code >= '1' && code < '1' + ParametricEQModule::kNumBands) {
+    if (code >= '1' && code < '1' + ParametricEQModule::kShownBands) {
         selectBand(code - '1');
         return true;
     }

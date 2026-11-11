@@ -438,6 +438,9 @@ public:
     // unchanged assetRef can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
 
+    // Asset ref -> the file's header sample rate (0 = unknown); see TimelineClipLaneArea.cpp.
+    void setAssetSampleRateResolver(std::function<double(const juce::String& assetRef)> resolver);
+
     // ---- Missing-asset placeholder ----
 
     // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves). Installing
@@ -548,7 +551,7 @@ public:
 
     // Which buckets of `peaks` cover this clip's visible span, given where inside the asset it
     // starts reading (`sourceStartSeconds`, seconds) and the beats<->seconds conversion (`bpm`).
-    // `sampleRate` is the ASSUMED source sample rate (see TimelineClipLaneArea.cpp). Clamped to
+    // `sampleRate` is the fallback source rate, used when `peaks.sampleRate` is 0. Clamped to
     // `[0, totalBuckets]` — a clip past the end of the peaks data (or no buckets at all) returns a
     // zero-length range rather than an out-of-bounds one.
     static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
@@ -953,6 +956,7 @@ private:
     // ---- Waveform peaks cache ----
     std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
+    std::function<double(const juce::String& assetRef)> assetSampleRateResolver_;
 
     // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;

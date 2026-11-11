@@ -29,6 +29,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"

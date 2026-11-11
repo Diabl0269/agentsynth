@@ -52,7 +52,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
 - **Morph map.** `ShapeMapController::refresh()` and `syncCursor()` hand the restore flag to `MorphMap::setDots`/`setCursor`;
   a dot (keyed by index, same count) and the cursor glide in map units.
 - **Curve editor.** `CurveEditorComponent::setModel(model, glideMoved)`: the same node count and mode glides each node dot;
-  another shape lands at once. The shape window passes the flag when it reloads the selected curve after a restore.
+  a different count or mode (a drawn stretch undone or redone) morphs the whole line instead: the line as drawn before
+  the restore and the new one are sampled at every x either has, and the drawn level eases from the old to the new over
+  one `KeyedPointTween` key (`morphTween_`, so the glide time, Reduce Motion's land-and-fade-in and Animations Off are
+  the shared ones); the fill follows the line and the dots and bend handles fade in as it lands. A restore during a
+  morph starts from the line as drawn. The shape window and the card's curve view pass the flag when they reload the
+  selected curve after a restore. Guard: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces`.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the

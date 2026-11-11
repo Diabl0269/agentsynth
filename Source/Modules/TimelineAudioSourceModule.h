@@ -29,10 +29,9 @@
  * which is wrong for an arrangement. Nothing here calls a file API. A clip with no stream yet
  * (just added/seeked, or past `kMaxStreams`) renders SILENCE, never stale audio or a stall.
  *
- * SAMPLE RATE (v1 policy): source positions are computed in file frames using the ENGINE's sample
- * rate — no resampling. A file whose header rate differs from the session's plays transposed.
- * Record-taps are written at session rate so they're always correct; imported files may not be.
- * `AudioClipStreamer::getStreamFileSampleRate()` is what a UI warning would read.
+ * SAMPLE RATE: source positions are playback frames at the ENGINE's sample rate; the streamer
+ * resamples a file whose header rate differs (see its class comment), so an imported file plays at
+ * its true pitch and length at any device rate.
  *
  * Loop wrap: a block crossing the loop end is TWO beat ranges (same decomposition as Track In,
  * same multi-wrap bound); each range renders independently and the results SUM.
@@ -229,7 +228,7 @@ private:
         if (frames <= 0)
             return;
 
-        // Beat -> FILE FRAME, through the shared mapping the streamer's offline priming also uses:
+        // Beat -> PLAYBACK FRAME (engine rate), through the shared mapping the streamer's offline priming also uses:
         // the two must agree on which frame a beat reads, or a primed ring is primed at the wrong
         // place. See synth::sourceFrameForClipBeat.
         const std::int64_t sourceFrame = synth::sourceFrameForClipBeat(clip.startBeat, clip.sourceStartSeconds,

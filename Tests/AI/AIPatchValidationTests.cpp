@@ -434,8 +434,12 @@ TEST(AIPatchValidationTest, SchemaChoiceParamIdsAreUnambiguous) {
         auto processor = AIStateMapper::createModule(value.toString());
         if (!processor)
             continue;
+        auto* module = dynamic_cast<ModuleBase*>(processor.get());
         for (auto* param : processor->getParameters()) {
             if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                // A parameter no surface offers yet is kept out of the schema on purpose.
+                if (module != nullptr && !module->isParameterExposed(choice->paramID))
+                    continue;
                 auto existing = seen.find(choice->paramID);
                 if (existing == seen.end())
                     seen[choice->paramID] = choice->choices;
