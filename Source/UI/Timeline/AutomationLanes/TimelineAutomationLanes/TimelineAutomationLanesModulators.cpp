@@ -336,14 +336,16 @@ void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::
         const float open =
             landing_.active && entry.infos[i].key() == droppedRoutingKey_ ? 1.0f - landing_.closure : 1.0f;
         leaving->presence = shrink ? FoldTween{open, 0.0f, open} : FoldTween{0.0f, 0.0f, 0.0f};
+        leaving->shrinks = shrink;
         started = started || shrink;
+        // Pictures of the row and band as they stand now; the live ones go with entry.rows below.
         entry.rows[i]->setLift(0.0f);
-        leaving->row = std::move(entry.rows[i]);
-        leaving->band = std::move(entry.bands[i]);
+        leaving->row = pictureOf(headerParent_, entry.rows[i]->getBounds().withHeight(leaving->height));
+        leaving->band = pictureOf(*bodies_, entry.bands[i]->getBounds().withHeight(leaving->height));
         leaving->fade = std::make_unique<FadeVisibility>(
             std::initializer_list<juce::Component*>{leaving->row.get(), leaving->band.get()});
-        // The fade's end hides the row and band (their parents repaint where they last stood); the sweep then
-        // deletes them unless the gap is still closing.
+        // The fade's end hides the pictures (their parents repaint where they last stood); the sweep then deletes
+        // them unless the gap is still closing.
         leaving->fade->onHidden = [this] { leavingSweep_.triggerAsyncUpdate(); };
         leaving->fade->setShown(false);
         // A row dropped on another lane is already drawn there (it grows in at its new slot): here only its gap closes.
@@ -364,6 +366,10 @@ void TimelineAutomationLanes::sweepLeavingModulators() {
                                       return !l->fade->isFading() && !l->fade->isShown() && l->presence.now <= 0.0f;
                                   }),
                    leaving_.end());
+}
+
+const juce::Component* TimelineAutomationLanes::leavingModulatorForTest(int index) const {
+    return index >= 0 && index < (int)leaving_.size() ? leaving_[(size_t)index]->row.get() : nullptr;
 }
 
 // The graph changed under the timeline (an LFO added or removed, a cable patched, an undo): re-derive
