@@ -90,7 +90,7 @@ void expectPicked(PadDotScene& scene, int shown) {
     auto* dot = scene.card().getModDotButton(scene.channel[shown]);
     ASSERT_NE(dot, nullptr);
     EXPECT_TRUE(dot->isVisible());
-    EXPECT_TRUE(dot->getTitle().isNotEmpty());
+    EXPECT_TRUE(dot->getTitle().startsWith(scene.levelKnob().getTitle() + " modulation")) << "named for the pad";
     EXPECT_TRUE(dot->getTooltip().isNotEmpty());
 
     EXPECT_FALSE(scene.card().getModTargetKnobAnchor(scene.channel[other]).has_value());
