@@ -190,6 +190,12 @@ letting the *install* decide the exit status, since the image ships usable index
 is unchanged: a working Azure mirror is genuinely faster, being in the same datacenter, so this
 switches on failure rather than hard-coding the fallback.
 
+A third tier covers both Canonical mirrors being down (2026-11-11, for hours): when `update` also
+fails against `archive.ubuntu.com` (or a later `install` does), the script rewrites the list to
+`FALLBACK_MIRROR` (default `https://mirrors.edge.kernel.org`) and updates again. Switching at the
+update keeps the dead 300 s install attempts out of the step's 15 min ceiling. Install still decides
+the exit status. apt still verifies signatures, so the mirror is not trusted.
+
 Those caps come from measurement. Healthy: `update` 5-15 s, `install` around 40 s. During a live
 outage the first `update` burned its whole cap, the rewrite took milliseconds, and the retry fetched
 10.7 MB in 2 s with `install` fetching 31.4 MB in 2 s — so on a sick mirror the cap *is* the cost,
