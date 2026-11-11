@@ -29,7 +29,8 @@ public:
     /** Shows `row`'s state; the buttons and the bar fade where they stand. */
     void update(const synth::soundpacks::SoundPackInstaller::Row& row);
 
-    /** The row's height at `width`: kHeight closed, taller by the details when open. */
+    /** The row's height at `width`: kHeight closed, taller by the details when open, and in between while they fade
+     *  in or out (the height glides with the credit's fade). */
     int heightForWidth(int width) const;
     bool isExpanded() const noexcept { return disclosure_.isOpen(); }
     /** Opens or closes the details: they fade and the chevron turns, or both land at once when `animate` is false.
@@ -37,6 +38,8 @@ public:
     void setExpanded(bool expanded, bool animate = true);
     /** Called after the open state changed; the owner lays the list out again and remembers the state. */
     std::function<void()> onExpandedChanged;
+    /** Called on each frame of the glide, when heightForWidth() has moved; the owner lays the list out again. */
+    std::function<void()> onHeightChanged;
 
     const juce::String& getPackId() const noexcept { return packId_; }
     void resized() override;
