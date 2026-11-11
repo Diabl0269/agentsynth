@@ -507,7 +507,7 @@ Modelled on a traditional DAW channel EQ (Cubase's, specifically): fixed band sl
 
 Slots 5-24 and every slot's Type and Slope exist in the engine and the saved model, but no surface offers them yet. One predicate decides it, `ModuleBase::isParameterExposed(paramId)` (the EQ's `ParametricEQModule::isHiddenParamId`), and every surface that lists parameters asks it:
 
-- the card builds no widget for them (`CardBodyPlan`), so they are not MIDI-learnable and add no accessibility elements; the curve, its keys 1-4 and its spoken "N of 4" summary stay on slots 1-4 (an enabled hidden slot still shapes the drawn curve, since it shapes the sound);
+- the card builds no widget for them (`CardBodyPlan`), so they are not MIDI-learnable and add no accessibility elements; the EQ curve and the pop-out window's band strip are the exception: they read every slot and its type through `getBandSnapshots()` (keys 1-4 still select slots 1-4, Left/Right walk all 24, the spoken summary counts "N of 24");
 - the timeline's automation picker and the modulation targets leave them out;
 - the AI never sees them: not in the module schema or catalog, the choice enum, its automation targets or the patch context. A model-written patch that names one is ignored for it;
 - a node's JSON leaves one out while it is at its default, so an EQ that does not use them saves byte-identical JSON; a trusted apply (undo, project load) resets one the JSON does not name, so undoing an added band turns it off again;
