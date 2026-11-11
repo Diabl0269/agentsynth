@@ -803,6 +803,7 @@ bool ModuleComponent::computeReparentArmed(const juce::ModifierKeys& mods) const
 }
 
 void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
+    owner.getEdgeScroll().notePointer(e); // before the card moves under the event
     // A cable first: the press point is re-read against the card's current spot, so one a row pushed misses its jack.
     if (owner.isCableDragFrom(*this) || getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
@@ -811,8 +812,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
             return; // modifier-click toggled selection; the dragger was never armed
 
         dragger.dragComponent(this, e, nullptr);
-        // Held at the canvas origin: the drop slides the rest of the patch instead
-        // (GraphEditor::slidePatchForEdgeDrop).
+        // Held at the canvas origin: the drop slides the patch instead (GraphEditor::slidePatchForEdgeDrop).
         setTopLeftPosition(dragStartPosition + owner.clampDragDeltaToCanvas(getPosition() - dragStartPosition));
         // An output-dock card only moves vertically (its x is derived); the rest of the dock follows its y.
         if (owner.isOutputDockNode(nodeId)) {

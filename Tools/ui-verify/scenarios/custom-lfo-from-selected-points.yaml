@@ -36,7 +36,7 @@ steps:
   - click: {id: timelineToolSelect}
   - expect: {id: automationLaneState, cursor: arrow}
   - expect: {id: modulatorBandState, cursor: arrow}
-  # One selected point: no stretch, so the menu stays the plain lane menu (Hold, Linear).
+  # One selected point: no stretch, so the menu is the segment's own (Curve of this segment: Hold, Linear).
   - click: {id: automationLaneState, x: 48, y: 27}
   - expect: {id: automationLaneState, selectedPoints: 1}
   - click: {id: automationLaneState, x: 120, y: 29, button: right}
@@ -49,7 +49,8 @@ steps:
   - click: {id: automationLaneState, x: 120, y: 29, button: right}
   - wait: {settleMs: 500} # the menu fades in before it takes keys
   - screenshot: {id: menu, name: menu-two-points}
-  # Arrow keys reach the popup (its items carry no ids): Hold, Linear, then Create custom LFO.
+  # Arrow keys reach the popup (its items carry no ids; the curve header takes no stop): Hold, Linear, then Create
+  # custom LFO.
   - key: {keys: down}
   - key: {keys: down}
   - key: {keys: down}
@@ -60,10 +61,10 @@ steps:
   - screenshot: {name: after-create}
   - glide: {name: undo-leaving-row, frames: 8, crop: {x: 0, y: 380, w: 400, h: 500}, do: {key: {keys: cmd+z}}}
   - wait: {}
+  - mark: {check: 2, name: undo-row-gone}  # right after the row left, so the clip holds the undo itself
   - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
   - checkStalePixels: {settleMs: 0}  # the settled frame after the row has gone, not only the frames mid-motion
   - screenshot: {name: after-undo}
-  - mark: {check: 2, name: undo-row-gone}
   - key: {keys: cmd+shift+z}
   - wait: {}
   - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}

@@ -12,7 +12,8 @@
 // cross-fades between the old and the new shape. Any other change (a move, a stroke) lands at once, unless the owner
 // armed a melt (meltNext): then the next change of points animates whatever it did, as the old curve melting into the
 // new one inside a beat range over motionMs(200, 80) (a short fade under Reduce Motion, at once under Animations Off),
-// repainting only that range.
+// repainting only that range. Changes fed before the melt's first frame (an edit that sets several points one by one)
+// join it.
 //
 // The owner must outlive it, feeds it every change of the lane's points and paints from it; it repaints the owner
 // itself. A hidden owner or Reduce Motion lands at once. Message thread only.

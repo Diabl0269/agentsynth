@@ -8,8 +8,11 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
+
+class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's timer)
 
 // ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
 // panel's centre region -- the selected controller's controls drawn on a 56 px grid
@@ -93,6 +96,10 @@ public:
     void stepMotionForTest(float t);
     /** Test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
+    /** Test seams for the edge scroll (ControllerSurfaceEdgeScroll.cpp): one tick of its timer, as if the button were
+     *  still held, and whether a drag has it armed. */
+    void tickEdgeScrollForTest();
+    bool isEdgeScrollActiveForTest() const noexcept;
 
     /** Fired on every selection change (click, shift/cmd-click, marquee, Esc, a click on
      *  empty grid space) with the new full id set -- the panel's one hook for keeping its own
@@ -135,6 +142,8 @@ public:
      *  useful for a fixed 56 px grid). */
     static constexpr float kMinZoom = 0.4f;
     static constexpr float kMaxZoom = 2.0f;
+    /** The content's fixed size (content-local px): panning never runs out of room on any controller. */
+    static constexpr int kContentExtent = 6000;
 
 private:
     // ---- Selection (ControllerSurfaceSelection.cpp) -----------
@@ -156,6 +165,17 @@ private:
 
     // ---- Marquee / pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
+
+    // ---- Edge scroll (ControllerSurfaceEdgeScroll.cpp) -----------
+    // A marquee or a cell drag held at the edge of the surface pans it, and the box or the cell keeps
+    // tracking the still pointer (docs/layout/layout.md, "Every drag follows the view").
+    void noteEdgePointer(const juce::MouseEvent& event);
+    void beginMarqueeEdgeScroll();
+    void beginCellEdgeScroll(ControllerSurfaceCell& cell);
+    void endEdgeScroll();
+    bool stopEdgeScrollForEscape();
+    CanvasEdgeScroller& edgeScroller();
+    bool panByForEdgeScroll(juce::Point<float> delta);
 
     // ---- Group drag (ControllerSurfaceGroupDrag.cpp) -----------
     void handleCellDragged(const juce::String& controlId, int deltaCol, int deltaRow);
@@ -225,6 +245,14 @@ private:
                                     // gesture must never be replayed for a new one
     int liveDragDeltaCol_ = 0;
     int liveDragDeltaRow_ = 0;
+
+    // Edge scroll (ControllerSurfaceEdgeScroll.cpp): the pointer is the last one a drag reported, in this component's
+    // own space (it never moves, so it stays true however far the content pans), not the OS cursor, which test-mode
+    // input never moves.
+    std::unique_ptr<CanvasEdgeScroller> edgeScroll_;
+    bool edgeScrollStoppedByEscape_ = false; // Esc stopped this gesture's pan: it stays stopped until the release
+    juce::Point<float> edgePointer_;
+    bool edgeTickForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceComponent)
 };

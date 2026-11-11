@@ -1,0 +1,32 @@
+# The focus ring around a mod dot sits dead centre on the dot at every zoom: it follows the dot's real (fractional)
+# position instead of the whole pixel the button is placed on.
+#
+# What a user does:
+#   1. Opens a project with an LFO modulating the Filter's Cutoff and zooms the canvas in one step.
+#   2. Gives the Cutoff mod dot the keyboard and presses Return: the panel opens and the ring stays around the dot.
+#   3. Closes the panel, zooms in once more and opens it again: the ring is evenly round the dot at both levels.
+record: true
+save_project: filter-cutoff-lfo-mod-dot-ring
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+=}
+  - wait: {settleMs: 500}
+  - click: {id: "Cutoff modulation, 1 source"}               # a click on the dot gives it the keyboard
+  - wait: {settleMs: 500}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - expect: {id: "Cutoff modulation, 1 source", hasFocus: true, within_ms: 2000}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - hover: {id: "card:Audio Output", x: 140, y: 90}           # the pointer off the dot, so the ring is bare
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: ring-centred-zoom-a}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - key: {keys: cmd+=}
+  - wait: {settleMs: 500}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: ring-centred-zoom-b}

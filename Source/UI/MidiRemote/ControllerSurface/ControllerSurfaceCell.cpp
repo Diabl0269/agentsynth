@@ -281,6 +281,8 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 // stayed under the rounding threshold and looked fine, which is why this went unnoticed until a
 // group drag crossing several other controls' cells made an 8+ cell drag common enough to hit it.
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
+    if (onPointer)
+        onPointer(event, false);
     const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
     const int dCols = (int)std::floor((float)offset.x / (float)kCellPitch + 0.5f);
     const int dRows = (int)std::floor((float)offset.y / (float)kCellPitch + 0.5f);
@@ -306,7 +308,9 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
         onDraggedByCells(dCols, dRows);
 }
 
-void ControllerSurfaceCell::mouseUp(const juce::MouseEvent&) {
+void ControllerSurfaceCell::mouseUp(const juce::MouseEvent& event) {
+    if (onPointer)
+        onPointer(event, true);
     const bool didDrag = isDragging_;
     isDragging_ = false;
     if (didDrag) {

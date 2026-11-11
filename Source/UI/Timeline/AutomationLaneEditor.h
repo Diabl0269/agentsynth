@@ -62,10 +62,11 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // ones scale its values; Alt+Shift+Left/Right/Up/Down do the same from the keyboard. The drag previews and commits once
 // on mouse-up, Escape cancels. Double-clicking a point (or Return with the keyboard cursor on one) opens a
 // PointValueField beside it: type a value, Return sets that one point's value (clamped to the lane's range, one undo
-// step), Escape cancels. Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
-// don't run in tests); right-click a handle shows Delete point; right-click anywhere else (and Shift+F10) asks for the
-// lane's own menu through onLaneMenuRequested. A right-click inside the lane's selected range also offers Create custom
-// LFO (addRangeMenuItems): on empty space it is the whole menu, on a handle or segment it follows that menu's items.
+// step), Escape cancels. Right-click a segment shows its curve (Hold/Linear; inside a selected stretch, every segment
+// of it) via the headless applySegmentCurveChoice() hook (menus don't run in tests); right-click a handle shows Delete
+// point; right-click anywhere else (and Shift+F10) asks for the lane's own menu through onLaneMenuRequested. A
+// right-click inside the lane's selected range also offers Create custom LFO (addRangeMenuItems): on empty space it is
+// the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
 struct PointKeyAction;
@@ -114,6 +115,8 @@ public:
      *  the range no menu of its own. */
     std::function<void(juce::PopupMenu&)> addRangeMenuItems;
 
+    /** With points or a range selected, opens the selection's menu (its curve, then the range's items); else the
+     * lane's. */
     bool showContextMenuForKeyboardFocus() override;
 
     /** Move Lane Up/Down for the whole lane: offered a key first, or after the points when any is selected (both
@@ -222,10 +225,12 @@ public:
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
-    // Toggles the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value).
-    // One recordTimelineChange mutation preserving the point's beat/value/tension. A no-op if
-    // `leftBeat` doesn't resolve to a real point in the active lane.
+    // Sets the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value), one undo step. A no-op
+    // if `leftBeat` doesn't resolve to a real point in the active lane or already has that curve.
     void applySegmentCurveChoice(double leftBeat, int curve);
+    // The segment menu's header: what its Hold and Linear items act on.
+    static constexpr const char* kSegmentCurveHeader = "Curve of this segment";
+    static constexpr const char* kSelectionCurveHeader = "Curve of the selection";
 
     // ---- Test hooks ----
 
@@ -349,6 +354,11 @@ private:
     double keyDragSpeedFactor(KeyAxis axis) const;
     bool restoreSinceLastSync();
     void glideRestoredPoints(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
+    // Undo and redo keep the selection and its view (AutomationLaneEditorRestoreGlide.cpp).
+    void carrySelectionThroughRestore(const std::vector<LaneBreakpoint>& before,
+                                      const std::vector<LaneBreakpoint>& now);
+    void meltRestoredCurves(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
+    void followRestoredSelection(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
     void easeMovedPoints(const std::vector<LaneBreakpoint>& from, const std::vector<LaneBreakpoint>& to,
                          const std::vector<double>& keysFrom, const std::vector<double>& keysTo,
                          double durationMs = KeyedPointTween::kMs);
@@ -404,6 +414,10 @@ private:
     bool isInSelectedRange(juce::Point<int> pos) const; // the Range selection, else the selected points' span
     void showHandleContextMenu(double beat, juce::Point<int> pos);
     void showSegmentContextMenu(int leftIndex, juce::Point<int> pos);
+    // Segment shapes (AutomationLaneEditorCurvePath.cpp).
+    std::optional<std::pair<double, double>> selectedStretch() const;
+    std::vector<double> segmentLeftBeatsIn(double startBeat, double endBeat) const;
+    void applySegmentCurves(const std::vector<double>& leftBeats, int curve);
 
     TimelineViewState& viewState_;
     synth::TimelineDoc* doc_ = nullptr;
@@ -468,6 +482,8 @@ private:
     };
     EdgeScrollTimer edgeScroll_;
     juce::Point<int> lastDragPointer_;
+    // The beat a selection box was pressed at, which its corner follows when the view scrolls.
+    double boxAnchorBeat_ = 0.0;
     LanePointStretch stretch_{*this};
     StretchHandle hoverHandle_ = StretchHandle::None;
     double stretchGrabBeat_ = 0.0;

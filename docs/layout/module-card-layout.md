@@ -526,7 +526,12 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
     the pointer again; in-card positions keep the group clamp. Esc cancels as always
-    (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`). The motion
+    (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`). A control, group or Add control row held at the edge of
+    the canvas view scrolls the canvas, so a card cut by the view edge, and the hide area under it, still take the
+    drop; the scroll stops once the card's far side (with the hide area) meets the view's edge, so the pointer held
+    there rests on the hide area (`CardLayoutOnCardEditorFollow.cpp`; [Every drag follows the
+    view](layout.md#every-drag-follows-the-view)).
+    The motion
     (`CardLayoutOnCardEditorHideDrag.cpp`, on screen only; under Reduce Motion, Animations Off or off-screen the
     control stays in the card and the usual hide fade plays where it was):
     the card clips its own children, so a picture of the control (the hide proxy, a `ShrinkGhost`) glides from

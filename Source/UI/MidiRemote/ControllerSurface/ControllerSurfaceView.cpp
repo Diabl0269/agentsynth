@@ -18,13 +18,6 @@
 namespace synth::ui {
 
 namespace {
-// content_'s fixed size (content-local units, i.e. before the view transform) -- generous enough
-// that panning never runs out of room for any controller template shipped or user-authored. A fixed
-// "just make it big" extent rather than sizing to the current profile's actual bounding box (the
-// patch canvas grows instead, docs/layout/layout.md#canvas-frame, but a controller surface is small), which would have
-// to be recomputed on every setControls() and every group move.
-constexpr int kContentExtent = 6000;
-
 // Wheel-to-pixels and wheel-to-zoom tuning, the same shape (a plain multiplier on the raw wheel
 // delta, no exponential curve) TimelinePanelComponent::mouseWheelMove uses for its own two
 // branches -- there is no existing shared helper for this (that file's constants are private to
@@ -80,6 +73,9 @@ void ControllerSurfaceComponent::Content::paintOverChildren(juce::Graphics& g) {
 
 // The one place content_'s transform is written -- called after every panOffset_/zoomLevel_ change
 // (a drag-to-pan step, a wheel/pinch zoom, a profile-switch view restore/reset).
+// kContentExtent is a fixed "just make it big" size rather than the profile's bounding box (the patch canvas grows
+// instead, docs/layout/layout.md#canvas-frame, but a controller surface is small), so it is never recomputed on a
+// setControls() or a group move.
 void ControllerSurfaceComponent::updateTransform() {
     content_.setBounds(0, 0, kContentExtent, kContentExtent);
     content_.setTransform(juce::AffineTransform::scale(zoomLevel_).translated(panOffset_));

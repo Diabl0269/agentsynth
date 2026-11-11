@@ -1,0 +1,36 @@
+# A cell dragged to the edge of the controller surface stopped there; now the surface pans along and the cell keeps
+# moving under the pointer, so it can reach a column that was out of view.
+#
+# What a user does: has a controller whose layout runs past the right edge of the surface (fixture profile
+# MidiRemote/Controllers/wide-test-controller.json: eight knobs in a row plus a "Far Knob" at column 24), opens the
+# Controllers tab, picks the controller, drags Knob 1 by its name to the right edge and keeps the pointer there: the
+# surface pans, Far Knob comes into view and Knob 1 stays under the pointer. Esc stops the pan; the release drops the
+# cell where it is.
+record: true
+motion: true
+save_project: controller-surface-follows-view
+steps:
+  - copyFixture: {name: MidiRemote}
+  - restart: {}
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: window, x: 1308, y: 671}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 64, y: 694}
+  - wait: {settleMs: 600}
+  - screenshot: {name: before}
+  - mouseDown: {id: window, x: 234, y: 749}
+  - mouseMoveHeld: {id: window, x: 600, y: 760}
+  - mouseMoveHeld: {id: window, x: 1100, y: 770}
+  - glide: {name: cell-held-at-edge, frames: 16, crop: {x: 200, y: 700, w: 1160, h: 180}, do: {mouseMoveHeld: {id: window, x: 1350, y: 770}}}
+  - mark: {check: 1, name: cell-drag-scrolls-the-surface}
+  - key: {keys: escape}
+  - wait: {settleMs: 600}
+  - screenshot: {name: escape-stops-the-pan}
+  - wait: {settleMs: 800}
+  - screenshot: {name: still-stopped-after-escape}
+  - mouseUp: {id: window, x: 1350, y: 770}
+  - wait: {}
+  - screenshot: {name: dropped}

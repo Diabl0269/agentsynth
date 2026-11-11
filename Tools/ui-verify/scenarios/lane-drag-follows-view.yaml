@@ -16,12 +16,13 @@ steps:
   - mouseDown: {id: automationLaneState, x: 1248, y: 65}
   - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 65}
   - glide: {name: mouse-edge-follows, frames: 16, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1396, y: 65}}}
+  - mark: {check: 1, name: dot-under-pointer-after-edge-drag}  # still held at the edge: the clip holds the scroll
   - mouseUp: {id: automationLaneState, x: 1396, y: 65}
   - wait: {}
   - expect: {id: automationLaneState, points: 1, dragging: false}
   - screenshot: {name: after-drag}
-  - mark: {check: 1, name: dot-under-pointer-after-edge-drag}
   - key: {keys: cmd+z}
   - wait: {}
-  - screenshot: {name: drag-undone}
   - mark: {check: 2, name: one-undo-after-edge-drag}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1}
+  - screenshot: {name: drag-undone}

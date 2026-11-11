@@ -187,6 +187,11 @@ private:
     void syncToCard();
     void syncAfterOutsideChange();
     void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
+    // ---- The canvas follows a drag held at its edge (CardLayoutOnCardEditorFollow.cpp) ------
+    void followDragAt(juce::Point<int> screenPos, std::function<bool(juce::Point<int>)> reaim);
+    void followControlDrag(const juce::MouseEvent& e);
+    void followGroupDrag(const juce::MouseEvent& e);
+    void endDragFollow();
     void releaseCardGlide();
     void animateRestore(const std::vector<OnCardCell>& before,
                         const std::map<juce::String, juce::Rectangle<int>>& shapesBefore,
@@ -362,7 +367,8 @@ private:
     juce::Component::SafePointer<ModuleComponent> card_;
     const juce::Component* cardIdentity_ = nullptr; ///< Which card the listener is on; never dereferenced.
     bool closing_ = false;                          ///< close() is running: no write may glide.
-    bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
+    bool closed_ = false;        ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
+    bool edgeFollowing_ = false; ///< A drag of this editor has the canvas edge scroll armed.
     bool writing_ = false;
     bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
     /// Keeps the re-sync after an undo or redo inside the restore itself (see open()); the manager holds it weakly.
@@ -388,7 +394,12 @@ private:
     NonModalLabel renameLabel_;                            ///< The inline title editor, over the group's title.
     juce::String renamingId_;                              ///< The group whose title is being edited; empty when none.
     GroupDrag groupDrag_;
-    ReorderDragSession groupSession_{*this, [this] { placeGroups(); }};
+    ReorderDragSession groupSession_{
+        *this, [this] {
+            placeGroups();
+            if (!groupSession_.animator().isDragging())
+                endDragFollow(); // Esc aborted the group drag: its edge scroll stops with it
+        }};
     std::vector<OnCardCell> cells_;
     /** Where each group's title and views are drawn, by glide key: read at every sync and moved with every glide,
      *  so an undo that rebuilds the card still knows where they stood. */

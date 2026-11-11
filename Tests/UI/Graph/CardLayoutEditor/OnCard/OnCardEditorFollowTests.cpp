@@ -1,10 +1,15 @@
 // OnCardEditorFollowTests.cpp -- Edit Layout when something other than the editor moves the card being edited:
 // the session goes on and the canvas pans, eased, only as far as needed to keep the card on screen; and
 // starting an edit on a second module ends the first one's, its changes kept. Real undo path, real menu click.
-// Bug kinds: undo-gap, motion-over-time.
+// And a control, a group or a row of the Add control panel dragged to the edge of the canvas view scrolls the canvas,
+// so the part of a cut card (and the "Drop to hide" area under it) that was out of sight comes under the still pointer;
+// Esc and the release stop it, and the drop is still one undo step. The 30 Hz edge-scroll timer is ticked by hand.
+// Bug kinds: undo-gap, motion-over-time, drag-leaves-view.
 
+#include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 #include "Project/ViewDoc.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.h"
 
 using namespace oncard_test;
@@ -183,4 +188,163 @@ TEST(OnCardEditorFollow, StartingAnEditOnASecondModuleEndsTheFirstAndKeepsItsCha
     ASSERT_TRUE(rig.canvas.undo.undo());
     EXPECT_FALSE(rig.storedLayout(first).has_value()) << "one Cmd+Z takes the first module's move back";
     synth::ui::closeOnCardLayoutEditor(rig.canvas.editor); // ends the session while the canvas is alive
+}
+
+namespace {
+
+// ---- The editor's own drags held at the canvas view's edge ----
+
+constexpr int kLeft = juce::ModifierKeys::leftButtonModifier;
+
+// A card being edited, with the view's bottom edge cut through the middle of it: its lower half, the Add strip and
+// the hide area are out of sight, and the pointer the edge scroll reads sits on that edge.
+struct CutByTheView {
+    OnCardRig rig;
+    NodeID id;
+    CardLayoutOnCardEditor* editor = nullptr;
+    juce::Point<int> edge; // GraphEditor-local
+
+    explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module) {
+        id = rig.add(std::move(module), 200, 200);
+        editor = rig.openOnCard(id);
+        auto& graph = rig.canvas.editor;
+        const auto area = graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds());
+        graph.setSize(graph.getWidth(), area.getCentreY() + 2);
+        edge = {graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds()).getCentreX(), graph.getHeight() - 2};
+        graph.getEdgeScroll().setPointerForTest([this] { return edge.toFloat(); });
+    }
+    GraphEditor& graph() { return rig.canvas.editor; }
+    float panY() { return graph().getViewDoc().panY; }
+    void tick(int times) {
+        for (int i = 0; i < times; ++i)
+            graph().getEdgeScroll().tickForTest();
+    }
+    bool scrolling() { return graph().getEdgeScroll().isActive(); }
+    // A real mouse event on `comp` at the edge point.
+    juce::MouseEvent atEdge(juce::Component& comp, int mods) {
+        return cardbody_test::mouseAt(comp, comp.getLocalPoint(&graph(), edge).toFloat(), juce::ModifierKeys(mods));
+    }
+};
+
+} // namespace
+
+TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheHideAreaAndTheDropIsOneUndo) {
+    CutByTheView cut(std::make_unique<FilterModule>());
+    ASSERT_NE(cut.editor, nullptr);
+    auto* outline = cut.editor->getOutlineForTest("cutoff");
+    ASSERT_NE(outline, nullptr);
+    const auto press = outline->getLocalBounds().getCentre().toFloat();
+    outline->mouseDown(cardbody_test::mouseAt(*outline, press, juce::ModifierKeys(kLeft)));
+    outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
+    ASSERT_TRUE(cut.editor->isDraggingForTest());
+    ASSERT_FALSE(cut.editor->isHidingDragForTest()) << "sanity: the pointer starts on the card";
+    ASSERT_TRUE(cut.scrolling()) << "the control drag armed the canvas edge scroll";
+
+    const float before = cut.panY();
+    cut.tick(40);
+    EXPECT_LT(cut.panY(), before - 100.0f) << "the canvas scrolled down";
+    EXPECT_TRUE(cut.editor->isHidingDragForTest()) << "the hide area that was out of sight came under the pointer";
+    EXPECT_FALSE(cut.rig.storedLayout(cut.id).has_value()) << "nothing is written until the release";
+
+    cut.editor->getOutlineForTest("cutoff")->mouseUp(cut.atEdge(*outline, 0));
+    EXPECT_FALSE(cut.scrolling()) << "the release stops it";
+    ASSERT_TRUE(cut.rig.storedLayout(cut.id).has_value());
+    EXPECT_TRUE(cut.rig.storedLayout(cut.id)->hidden.contains("cutoff"));
+    ASSERT_TRUE(cut.rig.canvas.undo.undo());
+    cut.editor->runQueuedSyncForTest();
+    EXPECT_FALSE(cut.rig.storedLayout(cut.id).has_value()) << "one Cmd+Z undoes the whole drag";
+}
+
+// Regression test for FRO1688: held at the edge, the canvas scrolled on past the card and its hide strip until the
+// content ran out, leaving the control's ghost far from the pointer.
+TEST(OnCardEditorEdgeScroll, TheScrollStopsOnceTheCardAndItsHideStripAreInView) {
+    CutByTheView cut(std::make_unique<FilterModule>());
+    ASSERT_NE(cut.editor, nullptr);
+    auto* outline = cut.editor->getOutlineForTest("cutoff");
+    ASSERT_NE(outline, nullptr);
+    outline->mouseDown(
+        cardbody_test::mouseAt(*outline, outline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));
+    outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
+    ASSERT_TRUE(cut.scrolling());
+    cut.tick(200);
+    const float settled = cut.panY();
+    cut.tick(40);
+    EXPECT_FLOAT_EQ(cut.panY(), settled) << "the scroll stopped";
+    const auto overlay = cut.graph().getLocalArea(cut.editor, cut.editor->getLocalBounds());
+    EXPECT_NEAR(overlay.getBottom(), cut.graph().getHeight(), 1)
+        << "it stopped where the card's hide strip meets the view's bottom, not further";
+    EXPECT_TRUE(cut.editor->isHidingDragForTest()) << "the pointer held at the edge rests on the hide strip";
+    cut.editor->getOutlineForTest("cutoff")->mouseUp(cut.atEdge(*outline, 0));
+}
+
+TEST(OnCardEditorEdgeScroll, EscapeMidDragStopsTheScrollWithTheDrag) {
+    CutByTheView cut(std::make_unique<FilterModule>());
+    ASSERT_NE(cut.editor, nullptr);
+    auto* outline = cut.editor->getOutlineForTest("cutoff");
+    const auto press = outline->getLocalBounds().getCentre().toFloat();
+    outline->mouseDown(cardbody_test::mouseAt(*outline, press, juce::ModifierKeys(kLeft)));
+    outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
+    cut.tick(2);
+    ASSERT_TRUE(cut.scrolling());
+    EXPECT_TRUE(cut.editor->sendEscapeToDragForTest());
+    EXPECT_FALSE(cut.scrolling());
+    const float stopped = cut.panY();
+    cut.tick(5);
+    EXPECT_FLOAT_EQ(cut.panY(), stopped);
+}
+
+TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeStopsIt) {
+    CutByTheView cut(std::make_unique<OscillatorModule>());
+    ASSERT_NE(cut.editor, nullptr);
+    auto* handle = cut.editor->getGroupHandleForTest("unison");
+    ASSERT_NE(handle, nullptr);
+    const auto press = handle->getTitleRowArea().getCentre().toFloat();
+    handle->mouseDown(cardbody_test::mouseAt(*handle, press, juce::ModifierKeys(kLeft)));
+    handle->mouseDrag(
+        cardbody_test::mouseAt(*handle, press + juce::Point<float>(0.0f, 12.0f), juce::ModifierKeys(kLeft)));
+    handle->mouseDrag(cut.atEdge(*handle, kLeft));
+    ASSERT_TRUE(cut.editor->isDraggingGroupForTest());
+    ASSERT_TRUE(cut.scrolling()) << "the group drag armed the canvas edge scroll";
+
+    const float before = cut.panY();
+    cut.tick(10);
+    EXPECT_LT(cut.panY(), before - 50.0f) << "the canvas scrolled down";
+    EXPECT_TRUE(cut.editor->isDraggingGroupForTest()) << "the group is still lifted under the pointer";
+
+    EXPECT_TRUE(cut.editor->sendEscapeToGroupDragForTest());
+    EXPECT_FALSE(cut.scrolling()) << "Esc stops the scroll with the drag";
+    const float stopped = cut.panY();
+    cut.tick(5);
+    EXPECT_FLOAT_EQ(cut.panY(), stopped);
+    handle->mouseUp(cut.atEdge(*handle, 0));
+}
+
+TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGhostFollowsDownTheCard) {
+    CutByTheView cut(std::make_unique<FilterModule>());
+    ASSERT_NE(cut.editor, nullptr);
+    hideThroughPanel(cut.rig, *cut.editor, "drive");
+    auto* panel = openAddPanel(cut.rig, *cut.editor);
+    ASSERT_NE(panel, nullptr);
+    auto* row = panel->getRowForTest("drive");
+    ASSERT_NE(row, nullptr);
+
+    const auto from = row->localPointToGlobal(row->getLocalBounds().getCentre());
+    const auto target = cut.graph().localPointToGlobal(cut.edge);
+    row->mouseDown(eventAtScreen(*row, from, kLeft));
+    row->mouseDrag(eventAtScreen(*row, (from + target) / 2, kLeft));
+    row->mouseDrag(eventAtScreen(*row, target, kLeft));
+    const auto ghostBefore = cut.editor->getAddGhostForTest();
+    ASSERT_FALSE(ghostBefore.isEmpty()) << "sanity: the pointer is over the card";
+    ASSERT_TRUE(cut.scrolling()) << "the row drag armed the canvas edge scroll";
+
+    const float before = cut.panY();
+    cut.tick(3);
+    EXPECT_LT(cut.panY(), before - 20.0f) << "the canvas scrolled down";
+    EXPECT_GT(cut.editor->getAddGhostForTest().getY(), ghostBefore.getY())
+        << "the ghost stayed under the still pointer, lower on the card";
+
+    row->mouseUp(eventAtScreen(*row, target, 0));
+    EXPECT_FALSE(cut.scrolling()) << "the release stops it";
+    ASSERT_TRUE(cut.rig.storedLayout(cut.id).has_value());
+    EXPECT_FALSE(cut.rig.storedLayout(cut.id)->hidden.contains("drive")) << "the drop added the control";
 }

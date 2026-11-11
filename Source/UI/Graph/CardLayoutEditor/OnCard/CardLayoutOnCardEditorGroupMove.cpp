@@ -196,6 +196,7 @@ void CardLayoutOnCardEditor::dragGroup(const juce::MouseEvent& e) {
         return;
     if (!groupSession_.dragTo(e.getEventRelativeTo(this).position.y))
         return;
+    followGroupDrag(e); // held at the edge of the canvas view, the canvas scrolls and the group stays under it
     if (auto* handle = getGroupHandleForTest(groupDrag_.run[(size_t)groupDrag_.dragged].id))
         handle->setLifted(true);
     placeGroups();
@@ -223,6 +224,7 @@ void CardLayoutOnCardEditor::placeGroups() {
 }
 
 void CardLayoutOnCardEditor::releaseGroup(const juce::MouseEvent&) {
+    endDragFollow();
     if (!groupDrag_.pressed)
         return;
     const auto drag = std::move(groupDrag_);
