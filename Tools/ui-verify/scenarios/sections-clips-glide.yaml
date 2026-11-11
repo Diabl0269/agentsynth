@@ -1,0 +1,49 @@
+# Sections motion: when a section block moves, the clips in its bars glide with it, and undo glides them back.
+#
+# What a user does: adds an Oscillator track and a one-bar clip, makes a section over bar 1 and a second over bar 2,
+# drags the first section after the second (make room): its clip glides to bar 2 while the second section and its bar
+# glide to bar 1. Cmd+Z: both glide back.
+record: true
+motion: true
+save_project: "fro1619 test"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - key: {keys: escape}
+  - wait: {}
+  # Two sections: bar 1 (x 0..96) and bar 2 (96..192); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  # Check 1: drag Section 1 (grabbed 40 px in) past Section 2 and let go: its clip glides to bar 2 with the block.
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 160, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 178, y: 12}
+  - wait: {}
+  - glide: {name: move-clips, do: {mouseUp: {id: timelineSectionStrip, x: 178, y: 12}}, frames: 8}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 1:4.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 1, name: move-clips}
+  # Check 2: Cmd+Z glides both blocks and the clip back.
+  - glide: {name: undo-move, do: {key: {keys: cmd+z}}, frames: 8}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 2, name: undo-move}

@@ -159,3 +159,21 @@ TEST(TimelineSectionStripExitTest, AMakeRoomDropGlidesTheClipsBelowWithTheBlocks
     lane.getClipGlideForTest().stepForTest(600.0);
     EXPECT_EQ(lane.getDrawnClipRectForTest(f.verseClip), lane.getClipRect(f.verseClip));
 }
+
+// Regression test for FRO1619: the dropped block faded out while it settled and the block popped in after it.
+TEST(TimelineSectionStripExitTest, ADroppedBlockFirmsUpAsItSettlesAndNeverGoesBlank) {
+    FullMotion motion;
+    ThreeBlocks f;
+    f.dragBlock(8.0, 0.0);
+    auto& lift = f.strip.getMotionForTest();
+    lift.stepForTest(0.0);
+    float last = f.strip.getDragGhostAlphaForTest();
+    EXPECT_GE(last, 0.85f) << "the settle starts as solid as the dragged ghost";
+    for (double ms = 20.0; ms <= 200.0; ms += 20.0) {
+        lift.stepForTest(ms);
+        const float now = f.strip.getDragGhostAlphaForTest();
+        EXPECT_GE(now, last) << "at " << ms << " ms the ghost only gets more solid";
+        last = now;
+    }
+    EXPECT_FLOAT_EQ(last, 1.0f) << "it lands as solid as the block that takes over";
+}

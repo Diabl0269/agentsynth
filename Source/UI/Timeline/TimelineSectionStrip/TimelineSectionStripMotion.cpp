@@ -102,6 +102,12 @@ void TimelineSectionStrip::trackChangesForMotion() {
 // The lifted block (a ghost that follows the pointer at the grab offset while dragging, and glides to where it lands
 // or back to where it was when it settles) and the accent line at the start a release would give it. The line, the
 // gap the other blocks open and the settle's end are all the plan's landing.
+// A dragged ghost is see-through; a settling one firms up as it lands, so the block it hands over to is the same
+// picture (fading it out instead left the dropped block blank for the settle, then popped it in).
+float TimelineSectionStrip::dragGhostAlpha() const {
+    return blockDragging_ ? kGhostAlpha : 1.0f - (1.0f - kGhostAlpha) * motion_.lift();
+}
+
 void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
     const float lift = motion_.lift();
     if (!blockDragging_ && lift <= 0.0f)
@@ -116,7 +122,7 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
 
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(11.0f);
     const juce::Font countFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::plain));
-    const float alpha = blockDragging_ ? kGhostAlpha : kGhostAlpha * lift;
+    const float alpha = dragGhostAlpha();
     const auto paintGhost = [&](const Block& block, juce::Rectangle<float> at) {
         const auto rect = at.translated(0.0f, -kLiftRaisePx * lift);
         juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2})

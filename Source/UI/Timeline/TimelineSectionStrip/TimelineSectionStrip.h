@@ -213,6 +213,7 @@ public:
     // Where a block is drawn now, in beats: its start, eased toward where the drag in flight moves it.
     double getDrawnStartBeatForTest(synth::PlacementId id) const;
     juce::Rectangle<float> getDragGhostBoundsForTest() const;
+    float getDragGhostAlphaForTest() const { return dragGhostAlpha(); }
     // The placements a drag in flight carries, in time order (one unless a multi-selection is dragged).
     std::vector<synth::PlacementId> getDragMembersForTest() const;
     // Where the ghost of drag member `index` is drawn now (the grabbed one is getDragGhostBoundsForTest()).
@@ -264,6 +265,7 @@ private:
     void commitBlockDrop(synth::SectionDropMode mode);
     std::optional<Block> blockOf(synth::PlacementId id) const;
     juce::Rectangle<float> memberGhostRect(std::size_t index) const;
+    float dragGhostAlpha() const;
     void clearDropPlan();
     std::vector<sectionstrip::PlacedSpan> placedSpans() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
