@@ -5,7 +5,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kNodeRadius = 5.0f;
+constexpr float kNodeRadius = CurveEditorGeometry::kNodeRadiusPx;
 constexpr float kBendHandleRadius = 4.0f;
 constexpr int kCurveStepsPerSegment = 24;
 constexpr float kLandmarkThickness = 1.5f;
@@ -223,12 +223,12 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
 // How far the point at `progress` along a segment is drawn from its model place: the x offset blends linearly between
 // the two nodes' offsets and the y offset by how far along the level change the point is, so the line meets both
 // gliding nodes.
-juce::Point<float> CurveEditorComponent::segmentTweenOffset(int seg, float progress) const {
+juce::Point<float> CurveEditorComponent::segmentTweenOffset(int seg, float progress, const CurveModel& shown) const {
     const auto start = pointTween_.offsetFor(seg);
     const auto end = pointTween_.offsetFor(seg + 1);
     const float from = model_.getNode(seg).y;
     const float to = model_.getNode(seg + 1).y;
-    const float shape = to == from ? progress : (model_.valueAt(seg, progress) - from) / (to - from);
+    const float shape = to == from ? progress : (shown.valueAt(seg, progress) - from) / (to - from);
     return {start.x * (1.0f - progress) + end.x * progress, start.y * (1.0f - shape) + end.y * shape};
 }
 
@@ -256,6 +256,7 @@ void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeomet
 std::vector<juce::Point<float>> CurveEditorComponent::modelCurvePoints(const CurveEditorGeometry& geometry) const {
     std::vector<juce::Point<float>> points;
     const int numSegments = model_.getNumSegments();
+    const CurveModel shown = drawnModel();
     for (int seg = 0; seg < numSegments; ++seg) {
         const juce::Point<float> segStart = geometry.nodePosition(seg);
         const juce::Point<float> segEnd = geometry.nodePosition(seg + 1);
@@ -263,9 +264,9 @@ std::vector<juce::Point<float>> CurveEditorComponent::modelCurvePoints(const Cur
             if (step == 0 && seg > 0)
                 continue; // shared with the previous segment's last point
             const float progress = (float)step / (float)kCurveStepsPerSegment;
-            const auto drift = segmentTweenOffset(seg, progress);
+            const auto drift = segmentTweenOffset(seg, progress, shown);
             points.push_back({segStart.x + (segEnd.x - segStart.x) * progress + drift.x,
-                              geometry.yForLevel(model_.valueAt(seg, progress)) + drift.y});
+                              geometry.yForLevel(shown.valueAt(seg, progress)) + drift.y});
         }
     }
     return points;
@@ -291,15 +292,17 @@ void CurveEditorComponent::buildCurvePaths(const CurveEditorGeometry& geometry, 
 
 void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                         const ThemeColours& colours) const {
+    const CurveModel shown = drawnModel();
     for (int seg = 0; seg < model_.getNumSegments(); ++seg) {
         auto handle = geometry.bendHandlePosition(seg);
         if (!handle.has_value())
             continue;
-        *handle += segmentTweenOffset(seg, 0.5f);
+        handle->y = geometry.yForLevel(shown.valueAt(seg, 0.5f));
+        *handle += segmentTweenOffset(seg, 0.5f, shown);
         const bool active = hoveredKind_ == CurveHitKind::BendHandle && hoveredIndex_ == seg;
         const float radius = active ? kBendHandleRadius + 1.5f : kBendHandleRadius;
-        g.setColour(
-            colours.accent.withAlpha((active ? 0.9f : 0.55f) * (1.0f - morphWeight()) * morphTween_.alphaFor(0)));
+        g.setColour(colours.accent.withAlpha((active ? 0.9f : 0.55f) * (1.0f - morphWeight()) *
+                                             morphTween_.alphaFor(0) * bendTween_.alphaFor(seg)));
         g.drawEllipse(handle->x - radius, handle->y - radius, radius * 2.0f, radius * 2.0f, 1.5f);
     }
 

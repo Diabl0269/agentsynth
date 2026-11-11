@@ -5,13 +5,16 @@
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 
 namespace synth::ui {
 
 namespace {
 constexpr int kWindowPad = 12;
 constexpr int kWindowRowH = 26;
-constexpr int kHintH = 18;
+constexpr int kHintH = 32;
+constexpr int kSnapW = 70;
+constexpr int kGridW = 100;
 constexpr float kInStartScale = 0.82f;
 constexpr float kOutEndScale = 0.9f;
 constexpr double kInMs = 220.0;
@@ -45,7 +48,13 @@ popup_motion::Style motionStyle(juce::Component::SafePointer<juce::Component> an
 } // namespace
 
 juce::String ModCurveWindowContent::hintText() {
-    return "Click the line to add a point. Drag to move. Right-click to remove.";
+    return "Click the line to add a point. Drag a point to move it. Right-click a point to remove it. Drag the ring on "
+           "a "
+           "sloping segment to bend it. Snap rounds points to the grid; hold Shift to place them freely.";
+}
+
+int ModCurveWindowContent::gridDivisions(const juce::String& itemText) {
+    return itemText.fromLastOccurrenceOf("/", false, false).getIntValue();
 }
 
 ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget> target)
@@ -55,6 +64,7 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     setTitle(target_->title());
     setComponentID("modCurveWindow");
     addAndMakeVisible(view_);
+    view_.editor().setComponentID("modCurveWindowEditor");
     for (const auto& entry : builtIns_) {
         auto chip = std::make_unique<ModCurvePresetButton>(entry.name);
         chip->setTitle(entry.name + " curve");
@@ -69,13 +79,33 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     doneButton_.setTitle("Done");
     doneButton_.setTooltip("Close the curve editor");
     doneButton_.onClick = [this] { close(); };
+    snapButton_.setTitle("Snap to grid");
+    snapButton_.setTooltip("Snap to grid: points land on the grid lines (hold Shift to place a point freely)");
+    snapButton_.onClick = [this] { applyGrid(); };
+    gridBox_.setTitle("Curve grid");
+    gridBox_.setTooltip("Grid: how many cells the input and output range are cut into, for the grid lines and Snap");
+    gridBox_.setTextWhenNothingSelected("Grid");
+    int id = 1;
+    for (const char* name : {"1/2", "1/4", "1/8", "1/16", "1/32"})
+        gridBox_.addItem(juce::String("Grid ") + name, id++);
+    gridBox_.setSelectedId(3, juce::dontSendNotification); // Grid 1/8
+    gridBox_.onChange = [this] { applyGrid(); };
     addAndMakeVisible(resetButton_);
     addAndMakeVisible(doneButton_);
+    addAndMakeVisible(snapButton_);
+    addAndMakeVisible(gridBox_);
+    applyGrid();
     view_.onTargetGone = [this] { close(); };
     changeHandle_ = target_->watchChanges([this] { syncChips(); });
     restoreHandle_ = target_->watchRestore([this] { syncChips(); });
     syncChips();
     setSize(520, 440);
+}
+
+void ModCurveWindowContent::applyGrid() {
+    auto& editor = view_.editor();
+    editor.setGrid(curvegrid::gridForDivisions(gridDivisions(gridBox_.getText())));
+    editor.setSnapToGrid(snapButton_.getToggleState());
 }
 
 void ModCurveWindowContent::syncChips() {
@@ -100,8 +130,8 @@ void ModCurveWindowContent::paint(juce::Graphics& g) {
     g.fillAll(p.panel);
     g.setColour(p.muted);
     g.setFont(p.mono(12.0f));
-    g.drawText(hintText(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH, getWidth() - 2 * kWindowPad,
-               kHintH, juce::Justification::centredLeft, true);
+    g.drawFittedText(hintText(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH,
+                     getWidth() - 2 * kWindowPad, kHintH, juce::Justification::centredLeft, 2);
 }
 
 void ModCurveWindowContent::resized() {
@@ -117,6 +147,9 @@ void ModCurveWindowContent::resized() {
     doneButton_.setBounds(bottom.removeFromRight(90));
     bottom.removeFromRight(8);
     resetButton_.setBounds(bottom.removeFromRight(90));
+    snapButton_.setBounds(bottom.removeFromLeft(kSnapW));
+    bottom.removeFromLeft(8);
+    gridBox_.setBounds(bottom.removeFromLeft(kGridW));
 }
 
 bool ModCurveWindowContent::keyPressed(const juce::KeyPress& key) {

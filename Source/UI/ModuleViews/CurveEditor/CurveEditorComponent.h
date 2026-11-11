@@ -312,9 +312,16 @@ public:
     KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
     /** Tests: the morph of a restore that changed the number of points (key 0; offset y is the old line's weight). */
     KeyedPointTween& getMorphTweenForTest() noexcept { return morphTween_; }
+    /** Tests: the glide of each segment's bend after a restore (key = segment; offset x is the old bend less the new).
+     */
+    KeyedPointTween& getBendTweenForTest() noexcept { return bendTween_; }
+    /** Tests: segment `seg`'s bend as drawn now (the model's, plus the glide's offset). */
+    float getDrawnBendForTest(int seg) const { return drawnBend(seg); }
     /** Tests: the curve's line as drawn now, left to right, in pixels. */
     std::vector<juce::Point<float>> getDrawnCurvePointsForTest() const { return drawnCurvePoints(currentGeometry()); }
     juce::Path getDrawnCurvePathForTest() const;
+    /** Tests: the pixel mapping the editor itself uses for hits and painting right now. */
+    CurveEditorGeometry getGeometryForTest() const { return currentGeometry(); }
 
 private:
     CurveEditorGeometry currentGeometry() const;
@@ -358,7 +365,12 @@ private:
     bool beginKeyDrag(int keyCode, double dx, double dy, bool fine);
     double coveredAlong(KeyAxis axis, double unit) const;
     std::vector<juce::Point<float>> selectionPositions() const;
-    juce::Point<float> segmentTweenOffset(int seg, float progress) const;
+    juce::Point<float> segmentTweenOffset(int seg, float progress, const CurveModel& shown) const;
+    /** The model with every bend as drawn now: itself unless a restore's bend glide is running. */
+    CurveModel drawnModel() const;
+    float drawnBend(int seg) const;
+    std::vector<float> drawnBends() const;
+    void glideBendsFrom(const std::vector<float>& before);
     void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
     std::vector<juce::Point<float>> nodePositions() const;
     void glideNodesFrom(const std::vector<juce::Point<float>>& before);
@@ -481,6 +493,7 @@ private:
     std::optional<juce::String> tooltipBeforePen_;
     KeyedPointTween pointTween_{*this};
     KeyedPointTween morphTween_{*this};
+    KeyedPointTween bendTween_{*this}; ///< Per segment (key = index): x holds the drawn bend's lag behind the model's.
     std::vector<juce::Point<float>> morphFrom_; ///< The line as drawn when the morph began, left to right.
     KeyHold keyHold_{*this};
     struct KeyDrag {

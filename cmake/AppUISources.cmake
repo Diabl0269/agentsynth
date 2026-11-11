@@ -192,6 +192,10 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneKitRows.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneWaveform.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformDraw.h
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.h
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp

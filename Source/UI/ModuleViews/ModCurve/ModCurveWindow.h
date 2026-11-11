@@ -1,7 +1,7 @@
 #pragma once
 
 // The enlarged curve editor: a resizable window titled "Curve: <source> to <destination>" with the big editor, the
-// preset chips, a hint, Reset and Done. It edits the same curve as the small box.
+// preset chips, a hint, a Snap switch and Grid box, Reset and Done. It edits the same curve as the small box.
 
 #include "ModCurveEditorView.h"
 #include "ModCurvePresetStore.h"
@@ -18,6 +18,10 @@ public:
     juce::TextButton& presetChip(int index) { return *chips_.at((size_t)index); }
     juce::TextButton& resetButton() noexcept { return resetButton_; }
     juce::TextButton& doneButton() noexcept { return doneButton_; }
+    juce::ToggleButton& snapButton() noexcept { return snapButton_; }
+    juce::ComboBox& gridBox() noexcept { return gridBox_; }
+    /** The cells across the input and output range a Grid box item stands for ("1/8" is 8). */
+    static int gridDivisions(const juce::String& itemText);
     juce::String windowTitle() const { return target_->title(); }
     static juce::String hintText();
     void focusFirstControl();
@@ -34,12 +38,15 @@ public:
 private:
     void close();
     void syncChips();
+    void applyGrid();
     std::shared_ptr<ModCurveEditTarget> target_;
     ModCurveEditorView view_;
     std::vector<ModCurvePresetStore::Entry> builtIns_;
     std::vector<std::unique_ptr<juce::TextButton>> chips_;
     juce::TextButton resetButton_{"Reset"};
     juce::TextButton doneButton_{"Done"};
+    juce::ToggleButton snapButton_{"Snap"};
+    juce::ComboBox gridBox_;
     std::shared_ptr<void> changeHandle_;
     std::shared_ptr<void> restoreHandle_;
 };

@@ -77,6 +77,9 @@ class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
 struct ClipLaneChange;
+struct WaveformInk;
+class WaveformSampleCache;
+enum class WaveformSource : int;
 
 //==============================================================================
 // ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
@@ -446,6 +449,9 @@ public:
     // Asset ref -> the file's header sample rate (0 = unknown); see TimelineClipLaneArea.cpp.
     void setAssetSampleRateResolver(std::function<double(const juce::String& assetRef)> resolver);
 
+    void setAssetSamplesResolver(
+        std::function<bool(const juce::String&, std::int64_t, int, juce::AudioBuffer<float>&)> resolver);
+    WaveformSource getLastWaveformSourceForTest() const noexcept { return lastWaveformSource_; }
     // ---- Missing-asset placeholder ----
 
     // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves). Installing
@@ -793,15 +799,13 @@ private:
     // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
     // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
     void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
-    // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
-    // With `rms` (one value per bucket slot) it draws the peak outline in `ink.outline` and the darker RMS body inside
-    // it in `ink.body`; with no rms (a version 1 peaks file) it draws the plain outline in `ink.flat`.
-    struct WaveformInk {
-        juce::Colour outline, body, flat;
-    };
+    // Shared by paintWaveform() and the live strip: filled outline and RMS body paths (one outline without `rms`).
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                      const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,
                                      int numChannels, int firstBucket, int bucketCount, const WaveformInk& ink);
+    bool paintWaveformFromSamples(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect,
+                                  const synth::PeaksFile::Data& data, double bpm, double transportRate,
+                                  const WaveformInk& ink);
     // What paintWaveform draws for a clip `width` px wide (see waveformShapeFor / getWaveformShapeForTest).
     enum class WaveformShape { None, Summary, Columns };
     WaveformShape waveformShapeFor(const synth::Clip& clip, int width);
@@ -969,6 +973,8 @@ private:
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
     std::function<double(const juce::String& assetRef)> assetSampleRateResolver_;
 
+    std::unique_ptr<WaveformSampleCache> sampleCache_; // cleared with the peaks cache
+    WaveformSource lastWaveformSource_{};
     // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;
     std::map<juce::String, bool> assetExistsCache_;

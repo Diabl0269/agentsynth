@@ -22,6 +22,7 @@
 #include "UserSettings.h"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 using namespace detail;
@@ -395,6 +396,37 @@ void settleCableOpenedRows(const std::vector<CableOpenedRow>& rows, const Module
         if (auto* card = row.card.getComponent(); card != nullptr && card->getCardBody() != nullptr)
             card->getCardBody()->cableDragEnded(row.dropOnRevealedControl && card == landedOn);
 }
+
+// The row a drop kept open is part of the drop's undo step: Cmd+Z folds it, Cmd+Shift+Z opens it again (the cards the
+// step moved are restored by the graph's own snapshot).
+class MoreRowKeptOpenAction : public juce::UndoableAction {
+public:
+    MoreRowKeptOpenAction(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId)
+        : editor_(&editor)
+        , nodeId_(nodeId) {}
+
+    bool perform() override {
+        if (std::exchange(firstPerform_, false))
+            return true; // the row is already open: the drop did it
+        return setRow(true);
+    }
+    bool undo() override { return setRow(false); }
+    int getSizeInUnits() override { return (int)sizeof(*this); }
+
+private:
+    bool setRow(bool unfolded) {
+        if (editor_ == nullptr)
+            return true;
+        for (auto* card : editor_->getModuleComponents())
+            if (card != nullptr && card->getNodeId() == nodeId_ && card->getCardBody() != nullptr)
+                card->getCardBody()->setMoreUnfoldedByHistory(unfolded);
+        return true;
+    }
+
+    juce::Component::SafePointer<GraphEditor> editor_;
+    juce::AudioProcessorGraph::NodeID nodeId_;
+    bool firstPerform_ = true;
+};
 } // namespace
 
 // Drops the pending drop-target highlight on every card: a knob's ring and a folded macro's drop hint (which fades).
@@ -464,9 +496,15 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         return;
     edgeScroll_->end();
 
+    // The connection, a macro port it mints and the room a kept-open row makes are ONE undo step.
+    std::optional<AppUndoManager::ScopedUndoGroup> undoGroup;
+    if (undoManager)
+        undoGroup.emplace(*undoManager);
+
     const auto openedRows = cableOpenedRows(content.getModules(), screenPos);
-    const ModuleComponent* landedOn = nullptr; // the card whose jack or knob took the cable
-    bool connectedToAModule = false;           // gates the macro-card fallback below — unchanged loop otherwise
+    const ModuleComponent* landedOn = nullptr;  // the card whose jack or knob took the cable
+    juce::AudioProcessorGraph::NodeID landedId; // the same card's node: its component may be rebuilt
+    bool connectedToAModule = false;            // gates the macro-card fallback below — unchanged loop otherwise
     juce::String refusal; // why a jack under the cursor was passed over, said when nothing connects
 
     // A connection can rebuild the cards (a macro port minted by the drop, a Dual I/O change, a Track In's auto
@@ -546,6 +584,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                                                        content.getLocalPoint(nullptr, screenPos).toFloat());
                 connectedToAModule = true;
                 landedOn = comp;
+                landedId = comp->getNodeId();
                 break;
             }
         }
@@ -614,7 +653,18 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!connectedToAModule && refusal.isNotEmpty())
         onDropRefused(refusal);
 
-    settleCableOpenedRows(openedRows, landedOn);
+    // A row kept open makes room for the cards it grew over (handleModuleResized): recorded inside the cable's step so
+    // Cmd+Z folds the row and glides those cards back, and Cmd+Shift+Z replays both.
+    const auto settle = [&] { settleCableOpenedRows(openedRows, landedOn); };
+    if (undoManager && landedOn != nullptr)
+        undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, settle);
+    else
+        settle();
+    if (undoManager && landedOn != nullptr)
+        for (const auto& row : openedRows)
+            if (row.dropOnRevealedControl && row.card.getComponent() == landedOn)
+                if (auto* body = landedOn->getCardBody(); body != nullptr && body->isMoreUnfolded())
+                    undoManager->recordUiAction(std::make_unique<MoreRowKeptOpenAction>(*this, landedId));
     restoreFocusAfterCableDrag(*this);
     isDraggingConnection = false;
     dragSourceModule = nullptr;

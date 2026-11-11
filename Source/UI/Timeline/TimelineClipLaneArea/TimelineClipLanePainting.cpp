@@ -1,7 +1,7 @@
 // TimelineClipLanePainting.cpp
 //
-// Tool affordances (copy-drag ghosts, Draw ghost, Split preview line) and waveform
-// painting for committed clips, plus the live-recording strip. TimelineClipLaneArea is
+// Tool affordances (copy-drag ghosts, Draw ghost, Split preview line), the waveform peaks cache and the
+// live-recording strip. The waveform drawing itself is in TimelineClipLaneWaveform.cpp. TimelineClipLaneArea is
 // declared in TimelineClipLaneArea.h; sibling TimelineClipLane*.cpp files in this
 // directory hold the rest of the class.
 
@@ -12,20 +12,13 @@
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
+#include "WaveformDraw.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
 
 namespace {
-constexpr int kMinWidthForWaveform = 24;
-
-// bpm/sampleRate fallbacks when there is no live transport (a headless test, or a
-// TimelineClipLaneArea built with setTransport() never called) — the same "no transport, assume
-// 120 bpm" convention currentBeatsPerBar() uses for beatsPerBar, and the same 44.1 kHz fallback
-// MainComponent's own audio-take code uses when a snapshot's sampleRate is not yet known.
-constexpr double kFallbackSampleRate = 44100.0;
-
 // A copy-drag ghost: a translucent wash of the SOURCE track's colour, well under the 0.65/0.85 a
 // real clip body paints at, plus a soft one-pixel outline. Translucency alone carries "not real
 // yet" on purpose — a true blur would mean rendering the region to an image and filtering it once
@@ -177,66 +170,6 @@ const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::St
     return &it->second;
 }
 
-// "Nothing resolves" covers no resolver set, an unresolvable ref, or an unreadable/absent peaks
-// file.
-void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
-    const auto* data = findPeaksData(clip.assetRef);
-    if (data == nullptr)
-        return;
-
-    double bpm = kFallbackBpm;
-    double sampleRate = kFallbackSampleRate;
-    if (transport_ != nullptr) {
-        const auto snap = transport_->getPositionSnapshot();
-        if (snap.bpm > 0.0)
-            bpm = snap.bpm;
-        if (snap.sampleRate > 0.0)
-            sampleRate = snap.sampleRate;
-    }
-
-    const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
-    // Black at low alpha, not a theme token — a shadow-style darkening of whatever `fill` already
-    // is (the module cards' drop shadows are composed the same way), not a colour of its own. The peak outline is
-    // the lighter wash and the RMS body the darker one; a file without RMS keeps the single 0.4 wash.
-    const WaveformInk ink{juce::Colours::black.withAlpha(0.22f), juce::Colours::black.withAlpha(0.55f),
-                          juce::Colours::black.withAlpha(0.4f)};
-    g.setColour(ink.flat);
-    if (rect.getWidth() <= kMinWidthForWaveform)
-        paintWaveformSummary(g, rect, *data, range.firstBucket, range.bucketCount);
-    else
-        paintWaveformColumns(g, rect, data->buckets, data->rms, data->numChannels, range.firstBucket, range.bucketCount,
-                             ink);
-}
-
-// What paintWaveform draws for `clip` in a rect `width` wide: nothing without peaks, a one-bar summary below
-// kMinWidthForWaveform, else the per-column waveform. Read by the test-mode state and the tests.
-TimelineClipLaneArea::WaveformShape TimelineClipLaneArea::waveformShapeFor(const synth::Clip& clip, int width) {
-    if (findPeaksData(clip.assetRef) == nullptr)
-        return WaveformShape::None;
-    return width <= kMinWidthForWaveform ? WaveformShape::Summary : WaveformShape::Columns;
-}
-
-// A clip too narrow for columns still shows its audio has a waveform: one centred bar across the clip, as tall as the
-// loudest peak under it (at least two pixels, so a quiet clip is not lost).
-void TimelineClipLaneArea::paintWaveformSummary(juce::Graphics& g, juce::Rectangle<int> rect,
-                                                const synth::PeaksFile::Data& data, int firstBucket, int bucketCount) {
-    if (bucketCount <= 0)
-        return;
-    float peak = 0.0f;
-    const std::size_t first = (std::size_t)firstBucket * (std::size_t)data.numChannels;
-    const std::size_t last =
-        std::min(data.buckets.size(), first + (std::size_t)bucketCount * (std::size_t)data.numChannels);
-    for (std::size_t i = first; i < last; ++i)
-        peak = std::max({peak, std::abs(data.buckets[i].first), std::abs(data.buckets[i].second)});
-
-    const auto bounds = rect.reduced(0, 1);
-    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
-        return;
-    const int height = juce::jlimit(2, bounds.getHeight(),
-                                    juce::roundToInt(juce::jlimit(0.0f, 1.0f, peak) * (float)bounds.getHeight()));
-    g.fillRect(bounds.getX(), bounds.getCentreY() - height / 2, bounds.getWidth(), height);
-}
-
 // Mirrors findPeaksData's cache shape exactly: a miss is cached too, so a still-missing clip never
 // re-triggers the resolver on the next paint.
 bool TimelineClipLaneArea::assetExists(const juce::String& assetRef) {
@@ -287,45 +220,6 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
         g.setColour(juce::Colours::white.withAlpha(0.9f));
         g.setFont(juce::Font(10.0f));
         g.drawText("missing: " + fileName, rect.reduced(4, 2), juce::Justification::bottomLeft, true);
-    }
-}
-
-// Shared by paintWaveform() (a committed clip's peaks) and paintLiveRecordingStrip() (the live
-// accumulator's peaks): per x column, the min of mins / max of maxes of EVERY bucket that column covers
-// (PeaksFile::aggregateToColumns), so zooming out never skips a loud bucket. With RMS, the lighter outline spans
-// min..max and the darker body spans +-rms (clamped inside the outline), like Reaper/Logic; without it, one line.
-void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                                const std::vector<std::pair<float, float>>& buckets,
-                                                const std::vector<float>& rms, int numChannels, int firstBucket,
-                                                int bucketCount, const WaveformInk& ink) {
-    const auto bounds = rect.reduced(1);
-    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
-        return;
-
-    const auto columns =
-        synth::PeaksFile::aggregateToColumns(buckets, numChannels, firstBucket, bucketCount, bounds.getWidth());
-    const auto bodies =
-        rms.size() == buckets.size()
-            ? synth::PeaksFile::aggregateRmsToColumns(rms, numChannels, firstBucket, bucketCount, bounds.getWidth())
-            : std::vector<float>{};
-    const float midY = (float)bounds.getCentreY();
-    const float halfHeight = (float)bounds.getHeight() * 0.5f;
-
-    for (std::size_t i = 0; i < columns.size(); ++i) {
-        const float x = (float)(bounds.getX() + (int)i);
-        const float lo = juce::jlimit(-1.0f, 1.0f, columns[i].first);
-        const float hi = juce::jlimit(-1.0f, 1.0f, columns[i].second);
-        const float y0 = midY - hi * halfHeight;
-        const float y1 = juce::jmax(midY - lo * halfHeight, y0 + 1.0f);
-        g.setColour(i < bodies.size() ? ink.outline : ink.flat);
-        g.drawLine(x, y0, x, y1, 1.0f);
-        if (i < bodies.size()) {
-            const float r = juce::jlimit(0.0f, 1.0f, bodies[i]);
-            const float b0 = midY - std::min(hi, r) * halfHeight;
-            const float b1 = midY - std::max(lo, -r) * halfHeight;
-            g.setColour(ink.body);
-            g.drawLine(x, b0, x, juce::jmax(b1, b0 + 1.0f), 1.0f);
-        }
     }
 }
 

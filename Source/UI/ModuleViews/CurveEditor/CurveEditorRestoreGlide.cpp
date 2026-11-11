@@ -5,6 +5,7 @@
 
 #include "CurveEditorComponent.h"
 #include <algorithm>
+#include <cmath>
 
 namespace synth::ui {
 
@@ -24,6 +25,38 @@ void CurveEditorComponent::glideNodesFrom(const std::vector<juce::Point<float>>&
     for (size_t i = 0; i < after.size(); ++i)
         pointTween_.retarget((KeyedPointTween::Key)i, pointTween_.drawnAt((KeyedPointTween::Key)i, before[i]), after[i],
                              true);
+}
+
+float CurveEditorComponent::drawnBend(int seg) const { return model_.getBend(seg) + bendTween_.offsetFor(seg).x; }
+
+std::vector<float> CurveEditorComponent::drawnBends() const {
+    std::vector<float> bends;
+    for (int seg = 0; seg < model_.getNumSegments(); ++seg)
+        bends.push_back(drawnBend(seg));
+    return bends;
+}
+
+CurveModel CurveEditorComponent::drawnModel() const {
+    CurveModel shown = model_;
+    if (bendTween_.isAnimating())
+        for (int seg = 0; seg < shown.getNumSegments(); ++seg)
+            shown.setBend(seg, juce::jlimit(-1.0f, 1.0f, drawnBend(seg)));
+    return shown;
+}
+
+// A segment's bend glides like the nodes beside it: from the bend drawn now (a bend still gliding from an earlier step
+// continues from where it is) to the restored one, so the line between two gliding dots bows into place with them.
+void CurveEditorComponent::glideBendsFrom(const std::vector<float>& before) {
+    if ((int)before.size() != model_.getNumSegments())
+        return;
+    for (int seg = 0; seg < model_.getNumSegments(); ++seg) {
+        const float now = model_.getBend(seg);
+        if (std::abs(before[(size_t)seg] - now) < 1e-6f) {
+            bendTween_.erase(seg);
+            continue;
+        }
+        bendTween_.retarget(seg, {before[(size_t)seg], 0.0f}, {now, 0.0f}, true);
+    }
 }
 
 namespace {

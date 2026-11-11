@@ -1,0 +1,83 @@
+# Bug: undoing a cable drop on a revealed "More controls" knob removed only the cable; the row it had opened stayed
+# open and the card it had pushed down stayed pushed, so it took more presses to get back to where the user started.
+#
+# What a user does:
+#   1. Starts a new project with a Delay and two LFOs, and puts LFO 2 directly under the Delay.
+#   2. Drags a cable from LFO 1's CV output across the Delay's folded "More controls" button and drops it on the
+#      Pan knob that the row revealed: the row stays open and LFO 2 is pushed down.
+#   3. Presses Cmd+Z once: the cable goes, the row folds and LFO 2 glides back.
+#   4. Presses Cmd+Shift+Z: the cable, the open row and the pushed LFO 2 come back.
+# Check 1 (undo-folds-row-and-returns-card) and check 2 (redo-opens-row-again) are marked after each has settled.
+motion: true
+record: true
+save_project: cable-drop-more-row-undo
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: delay}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "the caret moves in the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "the caret moves in the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the highlighted library row moves"}
+  - key: {keys: down, instant: "the highlighted library row moves"}
+  - key: {keys: return, instant: "setup: the added card appears and the canvas re-centres on it"}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 60, fromY: 14, to: "card:Delay", toX: 60, toY: 261, steps: 20}   # LFO 2 under the Delay
+  - wait: {}
+  - expect: {id: "card:Delay", bounds: {x: 902, y: 414, w: 180, h: 237}}
+  - expect: {id: "card:LFO 2", bounds: {x: 902, y: 659, w: 180, h: 252}}
+  - screenshot: {name: before-cable}
+  - mouseDown: {id: "card:LFO 1 > CV output"}
+  - mouseMoveHeld: {id: window, x: 1230, y: 480}
+  - mouseMoveHeld: {id: window, x: 1160, y: 520}
+  - mouseMoveHeld: {id: window, x: 1090, y: 570}
+  - mouseMoveHeld: {id: window, x: 1040, y: 610}
+  - glide: {name: cable-over-more, frames: 12, do: {mouseMoveHeld: {id: "card:Delay > cardMoreRow"}}}   # the row opens under the cable
+  - expect: {id: "card:Delay", bounds: {x: 902, y: 414, w: 180, h: 285}, within_ms: 2000}
+  - glide: {name: cable-onto-pan, frames: 10, do: {mouseMoveHeld: {id: "card:Delay > Pan"}}}
+  - glide: {name: cable-release, frames: 12, do: {mouseUp: {id: "card:Delay > Pan"}}}
+  - wait: {}
+  - screenshot: {name: after-drop}
+  - expect: {id: "card:Delay", contains: {cabledTargets: Pan}, within_ms: 3000}
+  - expect: {id: "card:Delay", bounds: {x: 902, y: 414, w: 180, h: 285}}
+  - expect: {id: "card:LFO 2", bounds: {x: 902, y: 711, w: 180, h: 251}, within_ms: 2000}   # pushed down by the open row
+  - glide: {name: undo, frames: 16, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {id: "card:Delay", bounds: {x: 902, y: 414, w: 180, h: 237}, within_ms: 2000}
+  - expect: {id: "card:Delay", cabledTargets: ""}
+  - expect: {id: "card:LFO 2", bounds: {x: 902, y: 659, w: 180, h: 252}, within_ms: 2000}
+  - wait: {timeoutMs: 1000, settleMs: 1000}
+  - mark: {check: 1, name: undo-folds-row-and-returns-card}
+  - glide: {name: redo, frames: 16, do: {key: {keys: cmd+shift+z}}}
+  - wait: {}
+  - expect: {id: "card:Delay", bounds: {x: 902, y: 414, w: 180, h: 285}, within_ms: 2000}
+  - expect: {id: "card:Delay", contains: {cabledTargets: Pan}}
+  - expect: {id: "card:LFO 2", bounds: {x: 902, y: 711, w: 180, h: 251}, within_ms: 2000}
+  - wait: {timeoutMs: 1000, settleMs: 1000}
+  - mark: {check: 2, name: redo-opens-row-again}

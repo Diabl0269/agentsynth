@@ -5,10 +5,10 @@
 # Never add a NEW header here -- relocate its comments beside their out-of-line definitions
 # instead. Adding a member with its own short one-line caller-facing contract in the header
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
+2 Source/AI/AccountService.h
 19 Source/AI/AIIntegrationService/AIIntegrationService.h
 15 Source/AI/AIProvider.h
 86 Source/AI/AIStateMapper/AIStateMapper.h
-2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 11 Source/AI/RemoteProvider.h
 87 Source/AppUndoManager.h
@@ -30,7 +30,7 @@
 11 Source/Timeline/AutomationRecorder.h
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
-29 Source/Timeline/PeaksFile.h
+23 Source/Timeline/PeaksFile.h
 12 Source/Timeline/TimelineOps.h
 47 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
