@@ -65,7 +65,7 @@ public:
     std::optional<HoldHooks> hold() override {
         auto* m = &map();
         HoldHooks h;
-        h.install = [m, keys = h.keys] { m->setGlideHostForTest(hostOf(keys)); };
+        h.install = [m, keys = h.keys] { installHold(*m, keys); };
         h.tick = [m] { m->glideTickForTest(); };
         h.active = [m] { return m->isGliding(); };
         h.keyUp = [m] { m->keyStateChanged(false); };

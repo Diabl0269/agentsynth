@@ -62,7 +62,7 @@ public:
     std::optional<HoldHooks> hold() override {
         auto& c = curve();
         HoldHooks h;
-        h.install = [&c, keys = h.keys] { c.getKeyHoldForTest().host = hostOf(keys); };
+        h.install = [&c, keys = h.keys] { installHold(c, keys); };
         h.tick = [&c] { c.getKeyHoldForTest().tick(); };
         h.active = [&c] { return c.getKeyHoldForTest().active(); };
         h.keyUp = [&c] { c.keyStateChanged(false); };

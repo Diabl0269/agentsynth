@@ -59,7 +59,7 @@ public:
     std::optional<HoldHooks> hold() override {
         HoldHooks h;
         auto* e = editor_;
-        h.install = [e, keys = h.keys] { e->getKeyHoldForTest().host = hostOf(keys); };
+        h.install = [e, keys = h.keys] { installHold(*e, keys); };
         h.tick = [e] { e->getKeyHoldForTest().tick(); };
         h.active = [e] { return e->getKeyHoldForTest().active(); };
         h.keyUp = [e] { e->keyStateChanged(false); };
