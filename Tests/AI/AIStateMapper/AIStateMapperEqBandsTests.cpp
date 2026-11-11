@@ -167,3 +167,22 @@ TEST(AIEqBands, ThePromptTellsTheModelBandsAreAddedAndNamesEveryTypeAndSlope) {
     EXPECT_TRUE(schema.contains("6 dB/oct, 12 dB/oct, 18 dB/oct, 24 dB/oct, 30 dB/oct, 36 dB/oct, 48 dB/oct, "
                                 "72 dB/oct, 96 dB/oct"));
 }
+
+TEST(AIEqBands, ThePromptListsTheBandParametersOnceNotOncePerBand) {
+    const auto schema = AIStateMapper::getModuleSchema();
+    for (const char* field : {"On", "Freq", "Gain", "Q", "Type", "Slope"})
+        EXPECT_TRUE(schema.contains("| `bandN" + juce::String(field) + "` |")) << field;
+    EXPECT_FALSE(schema.contains("| `band2Freq` |")) << "no per-band rows";
+    EXPECT_FALSE(schema.contains("| `band24Gain` |"));
+    EXPECT_FALSE(schema.contains("| `band1On` |"));
+    EXPECT_TRUE(schema.contains("`band24On`"));
+}
+
+TEST(AIEqBands, TheCatalogAndValidationStillCarryEveryBandId) {
+    const auto catalog = AIStateMapper::getModuleCatalogJson();
+    for (const char* id : {"band1On", "band24Slope", "band13Q", "band24Type"})
+        EXPECT_TRUE(catalog.contains(id)) << id;
+    juce::AudioProcessorGraph graph;
+    EXPECT_TRUE(
+        AIStateMapper::validatePatch(patchWithEqParams(R"({"band24Gain":3,"band13Q":2})"), graph, true, false).ok);
+}

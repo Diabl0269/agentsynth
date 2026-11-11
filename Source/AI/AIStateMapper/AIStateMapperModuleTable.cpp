@@ -35,7 +35,8 @@ juce::String parametricEqNote(juce::AudioProcessor& processor) {
             else if (choice->paramID == "band1Slope")
                 slopes = choice->choices;
         }
-    return "Bands are ADDED, not slots to fill: the EQ has up to 24 bands (`band1On` ... `band24On`, each with "
+    return "Bands are ADDED, not slots to fill: the EQ has up to 24 bands, N = 1 to 24; the `bandN...` rows above give "
+           "every band's parameters once (`band1On` ... `band24On`, each with "
            "`bandNFreq`, `bandNGain`, `bandNQ`, `bandNType`, `bandNSlope`). Turn on as many as the sound needs, "
            "starting from the first free (off) slot, and set each one's `bandNType` and, for a Low Cut or High Cut, "
            "its `bandNSlope`. A band you leave out stays off. `bandNType` is one of: " +
@@ -44,6 +45,23 @@ juce::String parametricEqNote(juce::AudioProcessor& processor) {
            "steep low cut and a notch: `{\"band1On\": true, \"band1Type\": \"Low Cut\", \"band1Freq\": 80, "
            "\"band1Slope\": \"48 dB/oct\", \"band2On\": true, \"band2Type\": \"Notch\", \"band2Freq\": 2500, "
            "\"band2Q\": 8}`.\n\n";
+}
+
+// The Parametric EQ's 24 bands share one parameter set, so the table lists it once: band 1's rows stand for
+// `bandN...` and bands 2-24 add no rows (the catalog and validation still carry every id).
+struct EqBandId {
+    bool isBand = false;
+    int band = 0;
+};
+
+EqBandId parseEqBandId(const juce::String& paramId) {
+    if (!paramId.startsWith("band"))
+        return {};
+    const auto rest = paramId.substring(4);
+    const int digits = rest.indexOfAnyOf("OFGQTS");
+    if (digits < 1 || !rest.substring(0, digits).containsOnly("0123456789"))
+        return {};
+    return {true, rest.substring(0, digits).getIntValue()};
 }
 
 } // namespace
@@ -66,6 +84,17 @@ juce::String AIStateMapper::getModuleSchema() {
 
         for (auto* param : processor->getParameters()) {
             if (auto* p = detail::modelVisibleParam(*processor, param)) {
+                juce::String idStr = p->paramID;
+                juce::String defaultStr = juce::String(p->getDefaultValue());
+                if (entry.first == "Parametric EQ") {
+                    const auto eqBand = parseEqBandId(p->paramID);
+                    if (eqBand.isBand && eqBand.band != 1)
+                        continue;
+                    if (eqBand.isBand) {
+                        idStr = "band" + juce::String("N") + p->paramID.substring(5);
+                        defaultStr = "per band";
+                    }
+                }
                 juce::String rangeStr;
                 if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
                     rangeStr = "Choice: [" + choice->choices.joinIntoString(", ") + "]";
@@ -76,8 +105,7 @@ juce::String AIStateMapper::getModuleSchema() {
                     rangeStr = juce::String(range.start) + " to " + juce::String(range.end);
                 }
 
-                schema += "| `" + p->paramID + "` | " + p->name + " | " + rangeStr + " | " +
-                          juce::String(p->getDefaultValue()) + " |\n";
+                schema += "| `" + idStr + "` | " + p->name + " | " + rangeStr + " | " + defaultStr + " |\n";
             }
         }
         schema += "\n";
