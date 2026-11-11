@@ -8,6 +8,7 @@
 // listener then does the menu's job (JUCE's peer would swallow them while the dialog is modal), once, from every
 // focused child. Dialogs come from the theme sweep's registry, so a new dialog has to pick a side. Windows that open on
 // a real display are skipped on a headless runner.
+#include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "NativeWindowTestGuard.h"
 #include "UI/Layout/DialogMenuKeys.h"
@@ -78,10 +79,10 @@ bool isTextEditorPart(juce::Component& c) {
            c.findParentComponentOfClass<juce::TextEditor>() != nullptr;
 }
 
-void pumpMessages() {
-    for (int i = 0; i < 3; ++i)
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
-}
+// The relay hands a key to the app with a callAsync (an undo can delete the window whose handler is still running), so
+// the count is read only after every message posted by the key has run. A fixed 3 x 10 ms pump overran on a loaded
+// machine and read the count before the app had received the key.
+void pumpMessages() { EXPECT_TRUE(synth::test::flushMessageQueue()) << "the message queue did not drain"; }
 
 class ShortcutRelay : public ::testing::Test {
 protected:
