@@ -40,6 +40,16 @@ public:
     }
     bool isMenuOpen() const noexcept { return menuOpen_; }
 
+    /** Where the dot truly sits, relative to the button's centre: the card places the button on whole pixels, the dot
+     *  is painted at a float point, so the ring follows the remainder. */
+    void setDotOffset(juce::Point<float> offset) {
+        if (dotOffset_ != offset) {
+            dotOffset_ = offset;
+            repaint();
+        }
+    }
+    juce::Point<float> getDotOffset() const noexcept { return dotOffset_; }
+
     int getDestChannel() const noexcept { return destChannel_; }
     /** The knob, fader or morph map slider this dot belongs to; Tab visits the dot right after it. */
     juce::Component* getKnob() const noexcept { return knob_.getComponent(); }
@@ -71,8 +81,9 @@ public:
     }
 
     void paintButton(juce::Graphics& g, bool, bool) override {
-        // Around the 7 px dot, which sits at the centre.
-        const auto ring = getLocalBounds().toFloat().withSizeKeepingCentre(11.0f, 11.0f);
+        // Around the 7 px dot, which sits at the centre plus the sub-pixel remainder.
+        const auto ring =
+            getLocalBounds().toFloat().withSizeKeepingCentre(11.0f, 11.0f).translated(dotOffset_.x, dotOffset_.y);
         if (menuOpen_)
             paintFocusRingAlways(g, ring, *this, 5.5f);
         else
@@ -82,6 +93,7 @@ public:
 private:
     int destChannel_;
     bool menuOpen_ = false;
+    juce::Point<float> dotOffset_;
     juce::Component::SafePointer<juce::Component> knob_;
 };
 

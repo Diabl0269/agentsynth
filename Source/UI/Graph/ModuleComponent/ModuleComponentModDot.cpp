@@ -95,8 +95,10 @@ void ModuleComponent::syncModDotButtons() {
             tip += ". Double-click to remove";
         if (button->getTooltip() != tip)
             button->setTooltip(tip);
-        button->setBounds(juce::Rectangle<int>(synth::ui::ModDotButton::kSize, synth::ui::ModDotButton::kSize)
-                              .withCentre(anchor->roundToInt()));
+        const auto centre = anchor->roundToInt();
+        button->setBounds(
+            juce::Rectangle<int>(synth::ui::ModDotButton::kSize, synth::ui::ModDotButton::kSize).withCentre(centre));
+        button->setDotOffset(*anchor - centre.toFloat());
         button->setVisible(true);
     }
     for (auto* button : modDotButtons_)
