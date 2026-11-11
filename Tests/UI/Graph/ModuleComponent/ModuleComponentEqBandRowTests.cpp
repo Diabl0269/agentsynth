@@ -2,6 +2,8 @@
 // a toggle that follow the one selection the curve, the strip and the knobs share; the card holds the same few widgets
 // at 4 and at 24 bands, and its height is what the layout computes from the strip's wrapped rows.
 
+#include "../../Accessibility/AccessibilityAudit.h"
+#include "../../Accessibility/TabOrderHelpers.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
@@ -98,6 +100,61 @@ TEST_F(ModuleComponentTest, ClickingAStripChipRebindsTheKnobsToThatBand) {
     const auto toggles = bandToggles(card);
     ASSERT_EQ(toggles.size(), 1u);
     EXPECT_EQ(card.findMidiLearnableParamForTest(toggles[0])->paramID, "band9On");
+}
+
+// Regression test for FRO1694: pressing a chip wrote the new band's frequency, gain and Q into the band the knobs had
+// just left (the old attachment was still alive when the slider took the new value).
+TEST_F(ModuleComponentTest, SelectingAnotherBandLeavesTheBandTheKnobsLeftUntouched) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 10);
+    eq.setBandGain(0, 9.0f);
+    eq.setBandGain(8, -9.0f);
+    eq.setBandQ(8, 3.0f);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    auto* strip = stripOf(card);
+    curve->timerCallback();
+    curve->setSelectedBand(0);
+    const auto before = eq.getBandSnapshots()[0];
+
+    strip->getChip(8)->onClick();
+    card.driveEqKnobGlideForTest(true, 1000.0);
+    const auto after = eq.getBandSnapshots()[0];
+    EXPECT_FLOAT_EQ(after.freqHz, before.freqHz);
+    EXPECT_FLOAT_EQ(after.gainDb, before.gainDb);
+    EXPECT_FLOAT_EQ(after.q, before.q);
+    EXPECT_FLOAT_EQ(eq.getBandSnapshots()[8].gainDb, -9.0f);
+}
+
+// The card's strip chips, the selected band's knobs, toggle and pill are named, have tooltips and are Tab stops.
+TEST_F(ModuleComponentTest, TheEqCardsBandControlsAreNamedHaveTooltipsAndAreTabStops) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ParametricEQModule eq;
+    turnBandsOn(eq, 9);
+    ModuleComponent card(&eq, juce::AudioProcessorGraph::NodeID(1), editor);
+    card.setSize(card.getWidth(), card.getHeight());
+    auto* curve = firstOfType<EQCurveComponent>(card);
+    curve->timerCallback();
+    curve->setSelectedBand(8);
+
+    int gaps = 0;
+    juce::String listing;
+    for (const auto& gap : synth::test::auditAccessibility(card))
+        if (gap.path.contains("EQBandStrip") || gap.path.contains("EQBandTypePill") || gap.path.contains("B9") ||
+            gap.path.contains("Band 9")) {
+            ++gaps;
+            listing << gap.path << "\n";
+        }
+    EXPECT_EQ(gaps, 0) << listing;
+
+    const auto names = synth::test::walkTabOrder(card).names();
+    EXPECT_TRUE(names.contains("Band 9, Bell, 213 Hz") || names.joinIntoString("|").contains("Band 9, Bell"))
+        << names.joinIntoString(" | ");
+    EXPECT_TRUE(names.joinIntoString("|").contains("Band 9 type, Bell")) << names.joinIntoString(" | ");
+    EXPECT_TRUE(names.contains("B9 Freq")) << names.joinIntoString(" | ");
 }
 
 TEST_F(ModuleComponentTest, TheDrawnJacksDoNotChangeWithTheSelectedBand) {

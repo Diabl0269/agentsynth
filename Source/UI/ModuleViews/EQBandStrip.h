@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EQCurveComponent.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -20,6 +21,7 @@ class KeyedTween;
  *  for display only. Units: EQBandStrip.cpp. */
 class EQBandStrip
     : public juce::Component
+    , public synth::testmode::StateSource
     , private EQCurveComponent::Listener {
 public:
     explicit EQBandStrip(EQCurveComponent& curve);
@@ -39,6 +41,9 @@ public:
     juce::Button* getAddChip() const;
     KeyedTween<juce::Rectangle<float>>& getGlideForTest() noexcept;
 
+    /** Test mode: `chips` (each chip's label, left to right, "7 Bell"), `selectedBand` (1-based, 0 for none). */
+    void addTestModeState(juce::DynamicObject& into) const override;
+
 private:
     class Chip;
     struct Place {
@@ -46,6 +51,7 @@ private:
         juce::Rectangle<int> bounds;
     };
     static constexpr int kAddKey = ParametricEQModule::kMaxBands;
+    static constexpr int kLeavingKeyBase = 1000;
 
     void eqCurveChanged() override;
     std::vector<int> shownBandsInOrder() const;
@@ -53,11 +59,15 @@ private:
     Chip* chipForKey(int key) const;
     void refresh();
     void placeChips(bool animate);
+    void retireChip(int band, std::unique_ptr<Chip> chip);
+    void pruneLeaving();
     void applyDrawnBounds();
 
     EQCurveComponent& curve_;
     std::map<int, std::unique_ptr<Chip>> chips_;
     std::unique_ptr<Chip> addChip_;
+    std::map<int, std::unique_ptr<Chip>> leaving_;
+    std::map<int, juce::Rectangle<float>> leavingRest_;
     std::map<int, juce::Rectangle<int>> resting_;
     struct Glide;
     std::unique_ptr<Glide> glide_;

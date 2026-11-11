@@ -23,7 +23,7 @@ juce::String eqBandTypeName(synth::eq::BandType type);
 /** A cut's slope as shown: "24 dB/oct". */
 juce::String eqSlopeText(int slopeDbPerOct);
 
-/** Text on a kind colour: dark ink, since every kind colour is a light hue. */
+/** Text on a kind colour: the darker of the theme's icon ink and text colour (every kind colour is a light hue). */
 juce::Colour eqBandKindInk(const synth::theme::Colors& colors) noexcept;
 
 } // namespace synth::ui

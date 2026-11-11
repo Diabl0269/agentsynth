@@ -1,0 +1,89 @@
+# FRO1694: the Parametric EQ grows past four bands. Double-clicking the curve adds bands up to 24, each band has a type
+# chosen from the right-click type menu, and the strip under the curve shows one kind-coloured chip per band.
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve eight times, gives four of the
+# new bands a type (High Cut at 48 dB/oct, Notch, Tilt, Band Pass), then adds a ninth band (it grows from the click),
+# turns it into a Notch (the dot and curve morph), removes it (it shrinks into the curve) and undoes each in turn: every
+# step plays backwards. Each `glide` films the motion; each mark sits on the landed state, with the strip chips, the card
+# and the Mixer thumbnail's badge on screen beside the window.
+# EqBandGlide, EqUndoGlideTests and the EQ strip tests cover the same motion headlessly.
+motion: true
+record: true
+save_project: eq-bands-strip
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}                                        # the bottom panel, on the Mixer tab: the strip's EQ thumbnail
+  - wait: {settleMs: 800}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 230, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 100, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 240, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 700, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "High Cut"}
+  - wait: {settleMs: 500}
+  - click: {id: "48 dB/oct"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 520, y: 100, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Notch"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 610, y: 240, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Tilt"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 700, y: 150, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Band Pass"}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqChip8", exists: true}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 8 bands."}}
+  - glide: {name: add-ninth, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {click: {id: eqWindowCurve, x: 770, y: 280, clicks: 2}}}
+  - wait: {settleMs: 700}
+  - expect: {id: "eqWindowStrip > eqChip9", exists: true, within_ms: 2000}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 9 bands."}}
+  - mark: {check: 1, name: add-ninth-landed}
+  - click: {id: eqWindowCurve, x: 770, y: 280, button: right}
+  - wait: {settleMs: 500}
+  - glide: {name: type-to-notch, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {click: {id: "Notch"}}}
+  - wait: {settleMs: 700}
+  - mark: {check: 2, name: type-notch-landed}
+  - glide: {name: remove-ninth, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {click: {id: eqWindowCurve, x: 770, y: 280, clicks: 2}}}
+  - wait: {settleMs: 700}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 8 bands."}, within_ms: 2000}
+  - mark: {check: 3, name: remove-landed}
+  - glide: {name: undo-remove, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {key: {keys: cmd+z, target: eqWindowCurve}}}
+  - wait: {settleMs: 700}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 9 bands."}, within_ms: 2000}
+  - mark: {check: 4, name: undo-remove-landed}
+  - glide: {name: undo-type, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {key: {keys: cmd+z, target: eqWindowCurve}}}
+  - wait: {settleMs: 700}
+  - mark: {check: 5, name: undo-type-landed}
+  - glide: {name: undo-add, frames: 14, crop: {x: 389, y: 201, w: 822, h: 498}, do: {key: {keys: cmd+z, target: eqWindowCurve}}}
+  - wait: {settleMs: 700}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 8 bands."}, within_ms: 2000}
+  - mark: {check: 6, name: undo-add-landed}
+  - key: {keys: "cmd+shift+z", target: eqWindowCurve}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+shift+z", target: eqWindowCurve}
+  - wait: {settleMs: 1000}
+  - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 9 bands."}, within_ms: 2000}

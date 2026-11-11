@@ -1,5 +1,6 @@
 // EQCurveBandsTests.cpp -- the Parametric EQ curve and its band strip with all 24 bands: real mouse gestures past the
 // fourth slot, the type menu and its single undo step, kind colours, spoken names and the strip's chips.
+#include "../Theme/ThemeSweep/ThemeSweepSupport.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
@@ -11,6 +12,7 @@
 #include "UI/ModuleViews/EQBandTypePill.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -275,6 +277,31 @@ TEST(EQBandStrip, AChipThatPassesAnotherGlidesToItsNewPlace) {
     EXPECT_LT(rig.strip->getChip(6)->getX(), before.getX());
 }
 
+// Regression test for FRO1694: a new band's chip first showed at the band's old frequency (the band was selected while
+// its cached settings were still the off ones) and slid across its neighbours to the click.
+TEST(EQBandStrip, ANewBandsChipGrowsInPlaceInsteadOfSlidingInFromAStaleFrequency) {
+    StripRig rig;
+    rig.strip->getGlideForTest().forceAnimateForTest(true);
+    const int band = rig.curve->addPointAt(at(9000.0f, 2.0f));
+    ASSERT_GE(band, 0);
+    auto* chip = rig.strip->getChip(band);
+    ASSERT_NE(chip, nullptr);
+    EXPECT_LT(chip->getWidth(), 4) << "it starts as a sliver, not as a full chip somewhere else";
+    rig.strip->getGlideForTest().stepForTest(1000.0);
+    EXPECT_GT(chip->getWidth(), 20);
+}
+
+// Regression test for FRO1694: a removed band's chip vanished in one frame while its dot shrank.
+TEST(EQBandStrip, ARemovedBandsChipShrinksIntoItsMiddleBeforeItGoes) {
+    StripRig rig;
+    rig.strip->getGlideForTest().forceAnimateForTest(true);
+    const int childrenBefore = rig.strip->getNumChildComponents();
+    rig.curve->removeBand(10);
+    EXPECT_EQ(rig.strip->getNumChildComponents(), childrenBefore) << "the chip stays while it shrinks";
+    rig.strip->getGlideForTest().stepForTest(1000.0);
+    EXPECT_EQ(rig.strip->getNumChildComponents(), childrenBefore - 1) << "and goes once it has landed";
+}
+
 TEST(EQBandStrip, PressingAChipSelectsItsBandAndTheCurveSelectionMovesTheChip) {
     StripRig rig;
     rig.strip->getChip(10)->onClick();
@@ -337,4 +364,33 @@ TEST(EQBandStrip, TheWindowHostsTheStripAndKeepsARoomForCompareAndSuggest) {
     EXPECT_GE(window.getReservedToolbarSlot().getX(), window.getSpectrumToggle().getRight());
     EXPECT_LE(window.getStrip().getBottom(), window.getHeight());
     EXPECT_GE(window.getStrip().getY(), window.getCurve().getBottom());
+}
+
+// The EQ band strip's chips and type pill in every built-in theme: the label of a resting or hovered chip reaches 4.5:1
+// against its kind tint over the surface it sits on, and the label of a selected chip or the pill against the solid
+// kind colour. The text sweep cannot read these (they are painted, not Labels), so the maths here follows
+// EQBandStrip::Chip::paintButton and EQBandTypePill::paintButton.
+TEST(EQBandStrip, TheChipAndPillLabelsReadInEveryThemeForEveryKind) {
+    constexpr EqBandKind kinds[] = {EqBandKind::Bell,  EqBandKind::Shelf, EqBandKind::Cut,
+                                    EqBandKind::Notch, EqBandKind::Tilt,  EqBandKind::BandPass};
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto& colors = theme.colors;
+        for (const auto kind : kinds) {
+            const auto tint = synth::ui::eqBandKindColour(colors, kind);
+            const auto ink = synth::ui::eqBandKindInk(colors);
+            for (const auto& ground : {colors.surface, colors.bg0}) {
+                for (const float alpha : {0.22f, 0.34f}) {
+                    const auto fill = ground.withAlpha(1.0f).overlaidWith(tint.withAlpha(alpha));
+                    EXPECT_GE(synth::test::theme_sweep::contrastRatio(colors.textPrimary, fill),
+                              synth::test::theme_sweep::kMinTextContrast)
+                        << theme.id << ": chip label on a kind tint at " << alpha << " (kind " << (int)kind << ")";
+                }
+            }
+            EXPECT_GE(synth::test::theme_sweep::contrastRatio(ink, tint), synth::test::theme_sweep::kMinTextContrast)
+                << theme.id << ": selected chip (kind " << (int)kind << ")";
+            EXPECT_GE(synth::test::theme_sweep::contrastRatio(ink, tint.brighter(0.15f)),
+                      synth::test::theme_sweep::kMinTextContrast)
+                << theme.id << ": hovered pill (kind " << (int)kind << ")";
+        }
+    }
 }

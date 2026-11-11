@@ -85,6 +85,9 @@ trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the 
 both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
 when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
 `ArrowKeyNavigation`, Return presses. The chip order is display only: a chip is always its band index.
+A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
+(`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
+`eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).
 `EQBandTypePill` shows the selected band's type and opens the same menu.
 
 **Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and

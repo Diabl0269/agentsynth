@@ -46,8 +46,9 @@ int EQCurveComponent::addBandAt(float freqHz, float gainDb) {
     eqModule.setBandEnabled(band, true);
     endGesture();
 
-    setSelectedBand(band);
+    // Refresh first: selecting an off band whose cached settings are stale would draw its chip at the old frequency.
     refreshFromModule();
+    setSelectedBand(band);
     return band;
 }
 

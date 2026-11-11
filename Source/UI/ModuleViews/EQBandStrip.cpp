@@ -37,6 +37,7 @@ public:
     }
 
     int band() const noexcept { return band_; }
+    const juce::String& label() const noexcept { return label_; }
 
     void setContent(const juce::String& label, synth::eq::BandType type, bool on, bool selected) {
         label_ = label;
@@ -96,6 +97,7 @@ EQBandStrip::EQBandStrip(EQCurveComponent& curve)
     setTitle("EQ bands");
     addChip_ = std::make_unique<Chip>(-1);
     addChip_->setContent("+", synth::eq::BandType::Peak, true, false);
+    addChip_->setComponentID("eqAddBand");
     addChip_->setTitle("Add band");
     addChip_->setTooltip("Add a band in the widest gap between the others");
     addChip_->onClick = [this] { curve_.addBandInLargestGap(); };
@@ -111,6 +113,15 @@ EQBandStrip::~EQBandStrip() { curve_.removeListener(this); }
 KeyedRectTween& EQBandStrip::getGlideForTest() noexcept { return glide_->tween; }
 
 void EQBandStrip::eqCurveChanged() { refresh(); }
+
+void EQBandStrip::addTestModeState(juce::DynamicObject& into) const {
+    juce::Array<juce::var> labels;
+    for (const int band : shownBandsInOrder())
+        if (const auto* chip = chipForKey(band))
+            labels.add(chip->label());
+    into.setProperty("chips", labels);
+    into.setProperty("selectedBand", curve_.getSelectedBand() + 1);
+}
 
 // The bands that are on, plus the selected band while it is off, in frequency order; equal frequencies keep slot order.
 std::vector<int> EQBandStrip::shownBandsInOrder() const {
@@ -171,6 +182,7 @@ void EQBandStrip::refresh() {
 
     for (auto it = chips_.begin(); it != chips_.end();) {
         if (std::find(shown.begin(), shown.end(), it->first) == shown.end()) {
+            retireChip(it->first, std::move(it->second));
             glide_->tween.erase(it->first);
             resting_.erase(it->first);
             it = chips_.erase(it);
@@ -182,6 +194,7 @@ void EQBandStrip::refresh() {
         auto& chip = chips_[b];
         if (chip == nullptr) {
             chip = std::make_unique<Chip>(b);
+            chip->setComponentID("eqChip" + juce::String(b + 1));
             chip->onClick = [this, b] { curve_.setSelectedBand(b); };
             addAndMakeVisible(*chip);
         }
@@ -193,6 +206,31 @@ void EQBandStrip::refresh() {
                          ". Press to select it on the curve");
     }
     placeChips(true);
+}
+
+// A chip whose band left shrinks into its own middle instead of vanishing; once it has landed it is deleted.
+void EQBandStrip::retireChip(int band, std::unique_ptr<Chip> chip) {
+    const auto drawn = chip->getBounds().toFloat();
+    const auto centre = drawn.getCentre();
+    const int key = kLeavingKeyBase + band;
+    chip->setInterceptsMouseClicks(false, false);
+    chip->setWantsKeyboardFocus(false);
+    chip->setTitle({});
+    glide_->tween.retarget(key, drawn, juce::Rectangle<float>(centre.x, drawn.getY(), 0.0f, drawn.getHeight()));
+    leaving_[band] = std::move(chip);
+    leavingRest_[key] = juce::Rectangle<float>(centre.x, drawn.getY(), 0.0f, drawn.getHeight());
+}
+
+void EQBandStrip::pruneLeaving() {
+    for (auto it = leaving_.begin(); it != leaving_.end();) {
+        const int key = kLeavingKeyBase + it->first;
+        if (glide_->tween.offsetFor(key) == juce::Rectangle<float>()) {
+            leavingRest_.erase(key);
+            it = leaving_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 // Gives every chip its resting place for the current width. A chip that has moved glides from where it is drawn; a new
@@ -229,6 +267,10 @@ void EQBandStrip::placeChips(bool animate) {
 }
 
 void EQBandStrip::applyDrawnBounds() {
+    for (const auto& [band, chip] : leaving_)
+        chip->setBounds(
+            glide_->tween.drawnAt(kLeavingKeyBase + band, leavingRest_[kLeavingKeyBase + band]).toNearestInt());
+    pruneLeaving();
     for (const auto& [key, rest] : resting_) {
         auto* chip = chipForKey(key);
         if (chip == nullptr)

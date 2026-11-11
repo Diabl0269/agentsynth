@@ -29,6 +29,7 @@
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/Settings/SettingsWindow.h"
 #include <algorithm>
+#include <cmath>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -191,8 +192,19 @@ juce::DialogWindow* openSamplerMap(SweepEnvironment& env) {
     return openSamplerMapWindow(std::move(view), nullptr);
 }
 
+// Every band type on, one after another across the spectrum, so each kind colour's chip and dot is judged.
+void populateEqBands(ParametricEQModule& eq) {
+    for (int b = 0; b < 9; ++b) {
+        eq.setBandType(b, static_cast<synth::eq::BandType>(b % synth::eq::kNumBandTypes));
+        eq.setBandFreq(b, 60.0f * std::pow(1.6f, (float)b));
+        eq.setBandGain(b, b % 2 == 0 ? 4.0f : -4.0f);
+        eq.setBandEnabled(b, true);
+    }
+}
+
 juce::DialogWindow* openEq(SweepEnvironment& env) {
     auto eq = std::make_shared<ParametricEQModule>();
+    populateEqBands(*eq);
     env.keepAlive(eq);
     auto* content = new EQWindow(*eq);
     content->onAppShortcut = synth::ui::makeAppShortcutRelay(&env.appAnchor());
@@ -315,7 +327,10 @@ std::unique_ptr<CardRig> buildCard(const std::string& type, std::string& whyNot)
         whyNot = "not in the module factory";
         return nullptr;
     }
-    return std::make_unique<CardRigImpl>(it->second());
+    auto module = it->second();
+    if (auto* eq = dynamic_cast<ParametricEQModule*>(module.get()))
+        populateEqBands(*eq);
+    return std::make_unique<CardRigImpl>(std::move(module));
 }
 
 } // namespace synth::test::theme_sweep
