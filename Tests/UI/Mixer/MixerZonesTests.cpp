@@ -3,9 +3,12 @@
 // that column drag-to-reorder still works inside the scrolling group. Drives a real off-screen
 // MainComponent with hand-built mouse events.
 #include "../Layout/ReorderDragPreviewCommit.h"
+#include "../Layout/ViewportDragFollowEvents.h"
 #include "MixerZonesTestRig.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <gtest/gtest.h>
+#include <memory>
 
 namespace {
 
@@ -434,4 +437,64 @@ TEST(MixerZonesDragPreviewCommit, ACrossGroupDropCommitsTheZoneAndSlotTheLastDra
     const auto id = rig.stripId(0);
     dragRowTo(rig, id, (float)rig.row(id)->getY() + 400.0f, true); // the Right group
     dragRowTo(rig, id, -200.0f, true);                             // and back above the first heading: the Left group
+}
+
+// The zones list and the strip columns follow their view while a reorder is held at its edge; the row reorders in a
+// section frame are in MixerListDragFollowTests.cpp, the checklist in ../Layout/ViewportDragFollow.h.
+TEST(MixerListDragFollow, AZonesRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer) {
+    viewport_drag_follow::expectFollows([] {
+        auto rig = std::make_shared<MixerZonesRig>(24);
+        auto& pane = rig->panel->getZonesPaneForTest();
+        auto& content = pane.getListContentForTest();
+        auto* viewport = content.findParentComponentOfClass<juce::Viewport>();
+        EXPECT_NE(viewport, nullptr);
+        // The first track row whose middle sits clear of both edge zones.
+        juce::String id;
+        for (int i = 0; i < 24 && id.isEmpty(); ++i) {
+            auto* row = rig->row(rig->stripId(i));
+            const int middle = viewport->getLocalPoint(row, juce::Point<int>(0, row->getHeight() / 2)).y;
+            if (middle >= 50 && middle <= viewport->getMaximumVisibleHeight() - 80)
+                id = rig->stripId(i);
+        }
+        EXPECT_TRUE(id.isNotEmpty());
+        auto* row = rig->row(id);
+        viewport_drag_follow::DragTarget t;
+        t.keepAlive = rig;
+        t.viewport = viewport;
+        t.target = [r = rig.get(), id] { return static_cast<juce::Component*>(r->row(id)); };
+        t.cross = (float)viewport->getLocalPoint(row, juce::Point<int>(20, 0)).x;
+        t.pressAt = (float)viewport->getLocalPoint(row, juce::Point<int>(0, row->getHeight() / 2)).y;
+        t.draggedPosition = [r = rig.get(), id, viewport] {
+            return (float)viewport->getLocalPoint(r->row(id), juce::Point<int>()).y;
+        };
+        t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
+        t.escape = [r = rig.get()] { return r->panel->getZonesPaneForTest().sendEscapeToDragForTest(); };
+        return viewport_drag_follow::surfaceOn(t);
+    });
+}
+
+TEST(MixerListDragFollow, AColumnHeldAtThePanelEdgeScrollsTheMixerAndStaysUnderThePointer) {
+    viewport_drag_follow::expectFollows([] {
+        auto rig = std::make_shared<MixerZonesRig>(16);
+        auto& viewport = rig->panel->getViewportForTest();
+        constexpr int kPressed = 2;
+        auto* column = rig->panel->getStripColumnForTest(kPressed);
+        auto& header = column->getHeaderForTest();
+        const auto press = viewport.getLocalPoint(&header, juce::Point<int>(3, 12));
+        viewport_drag_follow::DragTarget t;
+        t.keepAlive = rig;
+        t.viewport = &viewport;
+        t.horizontal = true;
+        t.target = [r = rig.get()] {
+            return static_cast<juce::Component*>(&r->panel->getStripColumnForTest(kPressed)->getHeaderForTest());
+        };
+        t.cross = (float)press.y;
+        t.pressAt = (float)press.x;
+        t.draggedPosition = [r = rig.get(), &viewport] {
+            return (float)viewport.getLocalPoint(r->panel->getStripColumnForTest(kPressed), juce::Point<int>()).x;
+        };
+        t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
+        t.escape = [r = rig.get()] { return r->panel->sendEscapeToColumnDragForTest(); };
+        return viewport_drag_follow::surfaceOn(t);
+    });
 }

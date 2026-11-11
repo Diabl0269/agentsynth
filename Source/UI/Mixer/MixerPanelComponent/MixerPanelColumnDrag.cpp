@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "MixerPanelComponent.h"
 #include "MixerPanelInternal.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -14,8 +15,7 @@ namespace synth::ui {
 
 namespace {
 constexpr int kColumnPitch = kMixerColumnWidth + kMixerColumnGap;
-constexpr float kAutoscrollZone = 48.0f;
-constexpr float kAutoscrollMaxStep = 18.0f;
+constexpr int kAutoscrollZone = 48; // wider than a list's: a column is a broad target
 constexpr int kDragRepeatMs = 40;
 constexpr int kShadowLayers = 6;
 constexpr float kColumnRadius = 3.0f;
@@ -89,29 +89,20 @@ bool MixerPanelComponent::inActiveReorderGroup(const ColumnEntry& entry) const {
 
 // Scrolls the viewport while the pointer is within the edge zone; the drag auto-repeat keeps the
 // events coming when the pointer rests there. Faster the deeper into the zone.
-void MixerPanelComponent::autoscrollForPointer(const juce::MouseEvent& e) {
-    const float x = e.getEventRelativeTo(&viewport_).position.x;
-    const float visible = static_cast<float>(viewport_.getMaximumVisibleWidth());
-    float depth = 0.0f;
-    if (x < kAutoscrollZone)
-        depth = -(kAutoscrollZone - std::max(x, 0.0f)) / kAutoscrollZone;
-    else if (x > visible - kAutoscrollZone)
-        depth = (std::min(x, visible) - (visible - kAutoscrollZone)) / kAutoscrollZone;
-    if (depth == 0.0f)
-        return;
-    int step = static_cast<int>(std::lround(depth * kAutoscrollMaxStep));
-    if (step == 0)
-        step = depth < 0.0f ? -1 : 1;
-    const int maxX = std::max(0, content_.getWidth() - viewport_.getMaximumVisibleWidth());
-    viewport_.setViewPosition(std::clamp(viewport_.getViewPositionX() + step, 0, maxX), viewport_.getViewPositionY());
+// The shared step (UI/Layout/ReorderDrag/ViewportDragScroll.h) on the panel's own viewport.
+void MixerPanelComponent::autoscrollForPointer(juce::Point<int> pointer) {
+    viewport_drag_scroll::follow(viewport_, pointer, viewport_drag_scroll::Axis::Horizontal, kAutoscrollZone);
 }
 
+// The pointer is read in desktop coordinates before anything moves: the event comes from the dragged column's own
+// header, which the scroll and the column's placement both move, so its event-relative position would go stale.
 void MixerPanelComponent::dragColumn(const juce::MouseEvent& e) {
     if (!columnReorder_.isPressed() && !columnReorder_.isDragging())
         return;
+    const auto pointer = viewport_drag_scroll::pointerOf(e);
     if (columnReorder_.isDragging())
-        autoscrollForPointer(e);
-    if (!columnReorder_.dragTo(pointerXInContent(e)))
+        autoscrollForPointer(pointer);
+    if (!columnReorder_.dragTo(viewport_drag_scroll::along(content_, pointer, viewport_drag_scroll::Axis::Horizontal)))
         return;
     if (!columnCancelKey_.isArmed()) {
         columnCancelKey_.arm(*this, [this] { cancelColumnDrag(); });

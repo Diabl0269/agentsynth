@@ -21,4 +21,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/LaneChips/LaneChipRowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/NoteRangePicker/NoteRangePickerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/NoteRangePicker/NoteRangeDragPreviewCommitTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/NoteRangePicker/NoteRangePickerDragFollowTests.cpp
 )

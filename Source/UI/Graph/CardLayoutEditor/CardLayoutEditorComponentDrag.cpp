@@ -4,6 +4,7 @@
 // that group. Esc cancels with nothing committed. docs/layout/animation.md#reorder-drag.
 #include "CardLayoutEditorComponent.h"
 #include "CardLayoutEditorRow.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include <algorithm>
 #include <cmath>
 
@@ -45,8 +46,11 @@ void CardLayoutEditorComponent::beginRowDrag(const juce::String& key, const juce
     rowDrag_.begin(slots, pressedKey, pointer - slots[static_cast<size_t>(pressedKey)].start, pointer);
 }
 
+// The row list follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
 void CardLayoutEditorComponent::updateRowDrag(const juce::MouseEvent& e) {
-    if (rowDrag_.dragTo(e.getEventRelativeTo(&rowsContent_).position.y))
+    using namespace viewport_drag_scroll;
+    const auto pointer = pointerOf(e);
+    if (rowDrag_.dragTo(followAndLocate(rowsContent_, pointer, Axis::Vertical, rowDrag_.animator().isDragging())))
         placeDragRows();
 }
 

@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "MixerInsertList.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 
 namespace synth::ui {
 namespace {
@@ -71,7 +72,10 @@ void MixerInsertList::beginRowDrag(int rowIndex, const juce::MouseEvent& event) 
 void MixerInsertList::mouseDrag(const juce::MouseEvent& event) {
     if (pressedRow_ < 0)
         return;
-    if (rowDrag_.dragTo(event.getEventRelativeTo(this).position.y)) {
+    // The section frame follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
+    using namespace viewport_drag_scroll;
+    const auto pointer = pointerOf(event);
+    if (rowDrag_.dragTo(followAndLocate(*this, pointer, Axis::Vertical, rowDrag_.animator().isDragging()))) {
         updateHoverCursor(event.getPosition());
         placeRows();
     }

@@ -32,6 +32,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelMarkerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelineRulerMarkerDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelineListDragFollowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelClipSizingTests.cpp

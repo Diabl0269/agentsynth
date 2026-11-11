@@ -1,0 +1,84 @@
+# Feature: a track row dragged to the bottom of the timeline's track list and held there scrolls the list, faster nearer
+# the edge, with the row staying under the pointer; the drop is one undo step.
+#
+# What a user does:
+#   1. Starts a new project with a taller bottom panel, opens it and adds ten MIDI tracks: the list is taller than its view.
+#   2. Presses the first track's colour strip and drags it down to the bottom edge of the list, then holds it there
+#      (in the app the drag auto-repeat sends an event every 40 ms while the pointer rests; here each mouseMoveHeld is
+#      one of those events, a pixel apart because the app drops a move to the spot the pointer already is): the list
+#      scrolls under the held row (proof 1).
+#   3. Releases: Track In 1 lands down the list; one Cmd+Z puts it back first.
+settings:
+  timelinePanelHeight: 420                                   # a taller bottom panel: more of the list shows
+record: true
+save_project: track-list-follows-reorder
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 3000}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - screenshot: {name: 1-list-at-top}
+  - mouseDown: {id: timelineTrackHeaderViewport, x: 4, y: 12}   # Track In 1's colour strip
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 100}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 200}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 270}
+  - screenshot: {name: 2-held-above-the-edge}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 300}   # one auto-repeat tick at the bottom edge
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 4, y: 301}   # one auto-repeat tick at the bottom edge
+  - mark: {check: 1, name: held-row-scrolls-the-list}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 4, y: 300}
+  - wait: {}
+  - screenshot: {name: 3-dropped-down-the-list}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: 4-undone}
