@@ -175,7 +175,8 @@ TEST(TagHue, OnlyTagHueDrawsATagOutlineAndNoRowPaintsATagInMuted) {
     EXPECT_EQ(picker.find("kTagFontSize"), std::string::npos) << "the tag's size lives in TagHue.h";
     const auto from = picker.find("void paintTag(");
     ASSERT_NE(from, std::string::npos);
-    const auto body = picker.substr(from, picker.find("\n    }\n", from) - from);
+    const auto body = picker.substr(from, picker.find("\n    }", from) -
+                                              from); // no trailing newline in the needle: Windows checkouts have CRLF
     EXPECT_EQ(body.find("palette_.muted"), std::string::npos) << "paintTag colours by kind, not by muted";
     EXPECT_EQ(body.find("drawRoundedRectangle"), std::string::npos) << "paintTag draws through drawTag";
     EXPECT_NE(body.find("drawTag("), std::string::npos);
