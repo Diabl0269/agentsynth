@@ -9,6 +9,8 @@
 #include "UI/Settings/AccountButtonStyle.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
+#include <cmath>
+#include <vector>
 
 namespace synth::ui {
 
@@ -19,6 +21,8 @@ constexpr int kMapSize = 340;
 constexpr int kButtonHeight = 28;
 constexpr int kToolbarHeight = 26;
 constexpr int kBottomBarHeight = 36;
+constexpr float kMinButtonPad = 4.0f; // each side of a bottom-row button's word
+constexpr float kMaxButtonPad = 14.0f;
 constexpr int kPollHz = 10;
 constexpr int kStatusHeight = 36;
 constexpr juce::uint32 kStatusShowMs = 4000;
@@ -344,19 +348,35 @@ void ShapeListEditor::resized() {
     area.removeFromBottom(kGap);
     curve_.setBounds(area);
 
-    // Delete is the destructive action: alone at the right end of the row, apart from the others. With Ring helpers
-    // the row holds one more button, so every button and gap is a little narrower.
+    // Delete is the destructive action: alone at the right end of the row, apart from the others. The other buttons are
+    // as wide as their words (and the Draw button's icon) plus an equal padding, the most padding that lets the row
+    // fit; with Ring helpers the row holds one more button, so the padding and the gaps are smaller.
     const bool ring = pitchRows_ != nullptr;
     deleteButton_.setBounds(buttons.removeFromRight(ring ? 56 : 64));
     juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &startFromButton_,
                                  &drawButton_, &ringButton_,      &saveShapeButton_};
-    const int widths[] = {80, 88, 64, 88, 76, 0, 92};
-    const int ringWidths[] = {72, 72, 58, 76, 64, 88, 80};
-    for (int i = 0; i < 7; ++i) {
-        if (!ring && order[i] == &ringButton_)
+    const int gap = ring ? kGap / 2 : kGap;
+    std::vector<juce::TextButton*> shown;
+    std::vector<float> content;
+    for (auto* button : order) {
+        if (!ring && button == &ringButton_)
             continue;
-        order[i]->setBounds(buttons.removeFromLeft(ring ? ringWidths[i] : widths[i]));
-        buttons.removeFromLeft(ring ? kGap / 2 : kGap);
+        const auto font = button->getLookAndFeel().getTextButtonFont(*button, kButtonHeight);
+        float width = juce::GlyphArrangement::getStringWidth(font, button->getButtonText());
+        if (button == &drawButton_)
+            width += (float)ShapeDrawPenButton::kIconSize + ShapeDrawPenButton::kIconGap;
+        shown.push_back(button);
+        content.push_back(width);
+    }
+    float contentTotal = 0.0f;
+    for (const float w : content)
+        contentTotal += w;
+    // One pixel per button is kept back for rounding each width up, so no word is clipped by a fraction of a pixel.
+    const float room = (float)buttons.getWidth() - (float)((gap + 1) * (int)shown.size());
+    const float pad = juce::jlimit(kMinButtonPad, kMaxButtonPad, (room - contentTotal) / (2.0f * (float)shown.size()));
+    for (size_t i = 0; i < shown.size(); ++i) {
+        shown[i]->setBounds(buttons.removeFromLeft((int)std::ceil(content[i] + 2.0f * pad)));
+        buttons.removeFromLeft(gap);
     }
 }
 
