@@ -1,0 +1,21 @@
+# FRO1608 check 1 (FRO1548): paint a run of Kick hits by dragging and let go; they stay full size, no flicker.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: drum-paint-drop
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - mouseDown: {id: timelineDrumMachine, x: 251, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 409, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 567, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 726, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 884, y: 62}
+  - glide: {name: drop-frames, frames: 14, do: {mouseUp: {id: timelineDrumMachine, x: 884, y: 62}}}
+  - expect: {id: drumMachineState, stroke: false, hitCount: 9, hits: "36:1,2,3,4,5,6,7,8,9", within_ms: 1500}
+  - mark: {check: 1, name: drop-keeps-hits}

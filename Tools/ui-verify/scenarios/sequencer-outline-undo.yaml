@@ -33,12 +33,12 @@ steps:
   - expect: {id: stepGrid, playedNotes: "D#2,F3,F2,C3,F2,G#2,F2,C3", outlinedSteps: "1,3,4,6,7", within_ms: 1500}
   - wait: {settleMs: 800}
   - screenshot: {name: 1-natural-minor}
-  - glide: {name: undo-frames, frames: 14, do: {key: {keys: cmd+z}}}
-  - mark: {check: 6, name: undo-outline-fades}
+  - key: {keys: cmd+z}
+  - mark: {check: 1, name: undo-outline-fades}
   - wait: {settleMs: 600}
   - screenshot: {name: 2-after-undo}
-  - glide: {name: redo-frames, frames: 14, do: {key: {keys: cmd+shift+z}}}
-  - mark: {check: 6, name: redo-outline-returns}
+  - key: {keys: cmd+shift+z}
+  - mark: {check: 1, name: redo-outline-returns}
   - wait: {settleMs: 600}
   - expect: {id: stepGrid, outlinedSteps: "1,3,4,6,7", within_ms: 1500}
   - screenshot: {name: 3-after-redo}
