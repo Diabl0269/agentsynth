@@ -21,9 +21,6 @@ mod-row-cross-track-drag 37 FRO1708 [timeline] the timeline toggle icon swaps in
 key-menus-reopen 14 FRO1704 [layout] a small control under the canvas changes in one frame
 key-menus-reopen 23 FRO1704 [layout] the editor area changes in one frame
 lane-change-parameter-rows-still 35 FRO1708 [timeline] the lane rows change in one frame
-mod-matrix-create-source 1u FRO1709 [mod] undoing the project load clears the window in one frame
-mod-matrix-create-source 7u FRO1709 [mod] undoing a source panel edit changes it in one frame
-mod-matrix-create-source 7r FRO1709 [mod] redoing a source panel edit changes it in one frame
 mod-row-drag-follows-pointer 8 FRO1708 [timeline] an automation lane appears in one frame
 mod-row-drag-follows-pointer 9 FRO1708 [timeline] an automation lane appears in one frame
 sequencer-outline-undo 1u FRO1707 [sequencer] undoing the project load changes the window edge in one frame
@@ -33,6 +30,3 @@ sequencer-outline-undo 31r FRO1707 [sequencer] redo rewrites the pattern notes i
 toast-severity-icons 19 FRO1706 [toast] the toast appears in one frame
 toast-severity-icons 20 FRO1706 [toast] the toast appears in one frame
 key-menus-reopen 21 FRO1704 [layout] a small control under the canvas changes in one frame
-mod-matrix-create-source 7 FRO1709 [mod] the sources panel edit changes the window area in one frame
-mod-matrix-create-source 25u FRO1709 [mod] undoing the glide edit changes the sources panel in one frame
-mod-matrix-create-source 25r FRO1709 [mod] redoing the glide edit changes the sources panel in one frame
