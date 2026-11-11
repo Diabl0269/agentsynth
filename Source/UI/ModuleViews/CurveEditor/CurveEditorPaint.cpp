@@ -244,21 +244,18 @@ void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeomet
     buildCurvePaths(geometry, curvePath, fillPath);
     if (curvePath.isEmpty())
         return;
-    g.setColour(colours.accent.withAlpha(0.20f));
+    const float fade = morphTween_.alphaFor(0); // Reduce Motion: a restored line lands and fades in
+    g.setColour(colours.accent.withAlpha(0.20f * fade));
     g.fillPath(fillPath);
-    g.setColour(colours.accent);
+    g.setColour(colours.accent.withMultipliedAlpha(fade));
     g.strokePath(curvePath, juce::PathStrokeType(2.0f));
 }
 
-void CurveEditorComponent::buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath,
-                                           juce::Path& fillPath) const {
+// The model's line in pixels, sampled kCurveStepsPerSegment times per segment, with each point drawn where the node
+// glide has it now.
+std::vector<juce::Point<float>> CurveEditorComponent::modelCurvePoints(const CurveEditorGeometry& geometry) const {
+    std::vector<juce::Point<float>> points;
     const int numSegments = model_.getNumSegments();
-    if (numSegments <= 0)
-        return;
-
-    const float baselineY = geometry.yForLevel(fillBaselineLevel_);
-    bool first = true;
-
     for (int seg = 0; seg < numSegments; ++seg) {
         const juce::Point<float> segStart = geometry.nodePosition(seg);
         const juce::Point<float> segEnd = geometry.nodePosition(seg + 1);
@@ -267,20 +264,28 @@ void CurveEditorComponent::buildCurvePaths(const CurveEditorGeometry& geometry, 
                 continue; // shared with the previous segment's last point
             const float progress = (float)step / (float)kCurveStepsPerSegment;
             const auto drift = segmentTweenOffset(seg, progress);
-            const float x = segStart.x + (segEnd.x - segStart.x) * progress + drift.x;
-            const float y = geometry.yForLevel(model_.valueAt(seg, progress)) + drift.y;
-            if (first) {
-                curvePath.startNewSubPath(x, y);
-                fillPath.startNewSubPath(x, baselineY);
-                fillPath.lineTo(x, y);
-                first = false;
-            } else {
-                curvePath.lineTo(x, y);
-                fillPath.lineTo(x, y);
-            }
+            points.push_back({segStart.x + (segEnd.x - segStart.x) * progress + drift.x,
+                              geometry.yForLevel(model_.valueAt(seg, progress)) + drift.y});
         }
     }
-    fillPath.lineTo(geometry.nodePosition(numSegments).x + pointTween_.offsetFor(numSegments).x, baselineY);
+    return points;
+}
+
+// The fill follows the drawn line, so a morphing line takes its fill with it.
+void CurveEditorComponent::buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath,
+                                           juce::Path& fillPath) const {
+    const auto points = drawnCurvePoints(geometry);
+    if (points.empty())
+        return;
+    const float baselineY = geometry.yForLevel(fillBaselineLevel_);
+    curvePath.startNewSubPath(points.front());
+    fillPath.startNewSubPath(points.front().x, baselineY);
+    fillPath.lineTo(points.front());
+    for (size_t i = 1; i < points.size(); ++i) {
+        curvePath.lineTo(points[i]);
+        fillPath.lineTo(points[i]);
+    }
+    fillPath.lineTo(points.back().x, baselineY);
     fillPath.closeSubPath();
 }
 
@@ -293,7 +298,8 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
         *handle += segmentTweenOffset(seg, 0.5f);
         const bool active = hoveredKind_ == CurveHitKind::BendHandle && hoveredIndex_ == seg;
         const float radius = active ? kBendHandleRadius + 1.5f : kBendHandleRadius;
-        g.setColour(colours.accent.withAlpha(active ? 0.9f : 0.55f));
+        g.setColour(
+            colours.accent.withAlpha((active ? 0.9f : 0.55f) * (1.0f - morphWeight()) * morphTween_.alphaFor(0)));
         g.drawEllipse(handle->x - radius, handle->y - radius, radius * 2.0f, radius * 2.0f, 1.5f);
     }
 
@@ -307,7 +313,7 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
             g.setColour(colours.accent.withAlpha(0.25f));
             g.fillEllipse(pos.x - radius - 4.0f, pos.y - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
         }
-        const float fade = pointTween_.alphaFor(i); // Reduce Motion: a restored node fades in
+        const float fade = pointTween_.alphaFor(i) * (1.0f - morphWeight()) * morphTween_.alphaFor(0);
         g.setColour(colours.background.withMultipliedAlpha(fade));
         g.fillEllipse(pos.x - radius, pos.y - radius, radius * 2.0f, radius * 2.0f);
         g.setColour((node.xMovable || node.yMovable ? colours.accent : colours.mutedText).withMultipliedAlpha(fade));

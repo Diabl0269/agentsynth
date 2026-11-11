@@ -29,6 +29,7 @@ CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
 void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
     draw_.cancel(); // a stroke in flight was drawn on the old curve
     const auto placesBefore = glideMoved ? nodePositions() : std::vector<juce::Point<float>>();
+    auto lineBefore = glideMoved ? drawnCurvePoints(currentGeometry()) : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
     model_ = std::move(model);
@@ -54,10 +55,17 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
         pendingToggleIndex_ = -1;
         pendingCollapseIndex_ = -1;
     }
-    if (topologyChanged)
+    if (topologyChanged) {
         pointTween_.clear();
-    else if (glideMoved)
+        if (glideMoved)
+            morphFrom(std::move(lineBefore));
+        else {
+            morphTween_.clear();
+            morphFrom_.clear();
+        }
+    } else if (glideMoved) {
         glideNodesFrom(placesBefore);
+    }
     repaint();
     refreshAccessibilityValue();
 }
