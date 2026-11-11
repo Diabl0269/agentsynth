@@ -88,7 +88,7 @@ double CurveEditorComponent::coveredAlong(KeyAxis axis, double unit) const {
 
 // Moves the group to where the keys have carried the cursor point: relative to the point's place now, so the same
 // move path as a press does the clamping, snapping and neighbour limits. A tap and a snapped step ease the drawn
-// points, unless snapped steps come faster than the ease runs: then the drawn points move with the nodes.
+// points, over the gap to the step before when steps come faster than the ease runs (snappedStepEaseMs).
 void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
         return;
@@ -97,12 +97,11 @@ void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     const double dy = keyDrag_.start.y + coveredAlong(KeyAxis::value, keyDrag_.unit.y) - node.y;
     const bool fine = keyHold_.host.isShiftDown && keyHold_.host.isShiftDown();
     const double now = holdClockMs(keyHold_.host);
-    const bool eases = tapStep || (keyDrag_.snapped && lane_key::snappedStepEases(now - keyDrag_.lastStepMs));
-    if (!moveSelectionBy(dx, (float)dy, fine, true, eases) || !keyDrag_.snapped)
+    const double easeMs = tapStep            ? KeyedPointTween::kMs
+                          : keyDrag_.snapped ? lane_key::snappedStepEaseMs(now - keyDrag_.lastStepMs)
+                                             : 0.0;
+    if (!moveSelectionBy(dx, (float)dy, fine, true, easeMs) || !keyDrag_.snapped)
         return;
-    if (!eases)
-        for (const int i : selection_.selected())
-            pointTween_.erase(i);
     keyDrag_.lastStepMs = now;
 }
 

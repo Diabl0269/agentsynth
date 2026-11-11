@@ -38,10 +38,12 @@ inline HoldPace snappedHoldPace(double step, double freeStart) {
     return {std::min(max, std::max(freeStart, step / kSnappedStepSeconds)), max};
 }
 
-/** Whether a snapped step `msSinceLastStep` after the one before eases its drawn point. Steps that come faster than
- *  the ease runs would restart it before it lands, so the drawn point would trail further behind on every step; those
- *  move the drawn point with the hold instead. */
-inline bool snappedStepEases(double msSinceLastStep) { return msSinceLastStep >= KeyedPointTween::kMs; }
+/** How long a snapped step `msSinceLastStep` after the one before eases its drawn point: the usual ease, or the gap
+ *  when steps come faster than that, so each ease lands as the next starts and the drawn point glides on from where it
+ *  is (it never restarts from far behind, and never hops from grid line to grid line). */
+inline double snappedStepEaseMs(double msSinceLastStep) {
+    return std::clamp(msSinceLastStep, 1.0, KeyedPointTween::kMs);
+}
 
 /** The key a point's eased drawn offset is filed under: its beat to a millionth of a beat. */
 inline KeyedPointTween::Key tweenKey(double beat) { return (KeyedPointTween::Key)std::llround(beat * 1e6); }

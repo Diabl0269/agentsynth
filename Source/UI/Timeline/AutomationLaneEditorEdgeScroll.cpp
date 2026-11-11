@@ -1,20 +1,15 @@
 // AutomationLaneEditor -- a drag follows the view. A dot or the stretch box held in the edge zone scrolls the shared
 // timeline view at the clip lanes' pace and keeps the dragged thing under the still pointer; a key hold brings the
-// moving dot back into view when a step would carry it out. The class is declared in AutomationLaneEditor.h.
+// moving dot along, eased with the dot, once it passes the margin. The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/ScrollIntoView.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
-
-namespace {
-// How much of the view either side of a dot's centre must be on screen for the dot to count as in view: its drawn
-// radius and a little air.
-constexpr double kDotInViewPadPx = 8.0;
-} // namespace
 
 bool AutomationLaneEditor::dragFollowsView() const noexcept {
     return (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch) && !keyHold_.active();
@@ -86,19 +81,41 @@ void AutomationLaneEditor::edgeScrollTick() {
 
 void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_.stopTimer(); }
 
-// After a key step: when the moving dot would be out of view, the view jumps so it lands a margin in from the edge it
-// was leaving by (firstBeatShowing), in one move per step, so the scroll never fights the dot's own ease.
-void AutomationLaneEditor::keepKeyDragInView() {
-    if (dragMode_ != DragMode::MoveHandle || getWidth() <= 0 || viewState_.pixelsPerBeat <= 0.0)
+// The view follows the grabbed dot of a key move by where it is DRAWN (its rest place plus its eased offset), not by
+// where it will rest: once that passes the margin line (kScrollIntoViewMargin in from the edge it is leaving by) the
+// view scrolls by exactly the excess, so the drawn dot holds that line while it and the view glide together and
+// nothing jumps. The dot's pixel offset is relative to the view, so a scroll of the view carries it along unchanged.
+// Only the way the dot is carried counts, so a dot that starts near an edge is not pulled away from it, and the view
+// stops at beat 0. A key hold feeds it every frame; after the key goes up the dot's ease does, until it lands.
+void AutomationLaneEditor::followKeyDragDot() {
+    if (dragMode_ == DragMode::MoveHandle && keyHold_.active()) {
+        const double moved = previewBeat_ - dragOriginalBeat_;
+        keyFollow_ = {true, previewBeat_, lane_key::tweenKey(dragOriginalBeat_),
+                      moved < 0.0   ? -1
+                      : moved > 0.0 ? 1
+                                    : 0};
+    } else if (!keyFollow_.active || dragMode_ != DragMode::None) {
+        keyFollow_.active = false;
         return;
-    const double visibleBeats = (double)getWidth() / viewState_.pixelsPerBeat;
-    const double pad = kDotInViewPadPx / viewState_.pixelsPerBeat;
-    const double first = viewState_.firstVisibleBeat;
-    const double newFirst = firstBeatShowing(first, visibleBeats, previewBeat_ - pad, previewBeat_ + pad);
-    if (std::abs(newFirst - first) < 1e-9)
+    } else if (!pointTween_.isAnimating()) {
+        keyFollow_.active = false; // landed: the last frame still pins the dot at the line below
+    }
+    if (getWidth() <= 0 || viewState_.pixelsPerBeat <= 0.0)
         return;
-    viewState_.firstVisibleBeat = newFirst;
-    viewScrolledByDrag();
+    const double drawnX = viewState_.beatToX(keyFollow_.restBeat) + (double)pointTween_.offsetFor(keyFollow_.key).x;
+    const double rightLine = (1.0 - kScrollIntoViewMargin) * (double)getWidth();
+    const double leftLine = kScrollIntoViewMargin * (double)getWidth();
+    double scrollPx = 0.0;
+    if (keyFollow_.direction > 0 && drawnX > rightLine)
+        scrollPx = drawnX - rightLine;
+    else if (keyFollow_.direction < 0 && drawnX < leftLine)
+        scrollPx = drawnX - leftLine;
+    if (scrollPx == 0.0)
+        return;
+    const double before = viewState_.firstVisibleBeat;
+    viewState_.scrollBeats(scrollPx / viewState_.pixelsPerBeat);
+    if (viewState_.firstVisibleBeat != before)
+        viewScrolledByDrag();
 }
 
 // The view is shared: the owner repaints the ruler and the other lanes and turns follow-playhead off, as a manual

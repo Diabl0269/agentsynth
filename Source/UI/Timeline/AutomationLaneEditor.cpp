@@ -37,6 +37,10 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     keyHold_.speedFactor = [this](KeyAxis axis) { return keyDragSpeedFactor(axis); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
+    pointTween_.onDirty = [this](juce::Rectangle<int>) {
+        followKeyDragDot();
+        repaint();
+    };
     edgeScroll_.onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's

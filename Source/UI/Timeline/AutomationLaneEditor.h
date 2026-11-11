@@ -350,7 +350,8 @@ private:
     bool restoreSinceLastSync();
     void glideRestoredPoints(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
     void easeMovedPoints(const std::vector<LaneBreakpoint>& from, const std::vector<LaneBreakpoint>& to,
-                         const std::vector<double>& keysFrom, const std::vector<double>& keysTo);
+                         const std::vector<double>& keysFrom, const std::vector<double>& keysTo,
+                         double durationMs = KeyedPointTween::kMs);
     juce::Point<float> pointPosition(const LaneBreakpoint& point) const;
     bool insertAfterCursor();
     bool stepCursor(int direction);
@@ -455,7 +456,7 @@ private:
     void updateEdgeScrollArming();
     void edgeScrollTick();
     void stopEdgeScroll();
-    void keepKeyDragInView();
+    void followKeyDragDot();
     void viewScrolledByDrag();
     // The kEdgeScrollHz timer of a drag's edge scroll: runs onTick while started.
     struct EdgeScrollTimer : juce::Timer {
@@ -480,6 +481,14 @@ private:
         bool cancelled = false;
         double lastStepMs = 0.0; // the hold clock at the last snapped step (or the press)
     } keyDrag_;
+    // The grabbed dot of a key move, whose DRAWN place the view follows: through the hold, and after the key goes up
+    // until its ease has landed.
+    struct KeyFollow {
+        bool active = false;
+        double restBeat = 0.0; // where the dot rests
+        KeyedPointTween::Key key = 0;
+        int direction = 0; // the way it is carried: -1 left, +1 right, 0 none
+    } keyFollow_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;
     RestoreWatch restoreWatch_;
