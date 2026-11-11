@@ -65,8 +65,21 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
 - **Undo and redo animate too.** `AppUndoManager::applyHistoryStep` takes `snapshotFoldState()` before the restore and
   calls `foldChangedMacros()` after it, which folds every macro whose collapsed state flipped, all in one animation.
   Those modules keep out of the delete and undo ghosts (`CardGlideAnimator::dropGhostsFor`).
-- **Interruption:** any pass that re-syncs the cards (`syncMacroCards`: a second toggle, a rename) lands the running
-  fold at once first.
+- **Interruption:** a second change while a fold runs (a second Cmd+Z or Cmd+Shift+Z, a second toggle, a rename)
+  never lands it. The re-sync (`syncMacroCards`) lands only a fold the model has left behind (its macro gone, or
+  toggled back) and holds the cards of every other running fold back again (`MacroFoldAnimator::reassertHolds`);
+  `snapshotFoldState()` captures each module where it is DRAWN (a running fold's ghost, a glide's picture), so the new
+  fold starts there, and its plans join the running ones on the same clock with no delay of their own
+  (`MacroFoldAnimator::arm`). A card the new fold takes over stops gliding (`CardGlideAnimator::dropGhostsFor`), so
+  it is drawn once; so does the closed card of a macro that opens, whose border the fold grows. Reversing the same macro mid-fold drops its running plan and the reverse starts from its drawn
+  modules. When the second change moves where a running fold ends (closing Macro moves Macro2's card up, opening
+  Macro pushes Macro2's members down), that fold bends towards the new place over the time it has left
+  (`MacroFoldAnimator::retargetRunning`, eased in and out from where each module is drawn). An unfold whose closed card
+  is still gliding starts from the card's drawn place and eases onto its real one (`Plan::startShift`). Guard:
+  `MacroFoldSecondStepMidMotion.*` (`MacroFoldOpenNeighbourTests.cpp`): Macro and Macro2 open, Cmd+Z twice 40 ms
+  apart (and Cmd+Shift+Z twice), every 20 ms frame under Full, Reduce Motion and Off; no card drawn twice or missing,
+  nothing moves, fades or vanishes at the second press, no card jumps when its drawer changes, and no frame moves a
+  card more than a quarter further than the largest frame step of the same two presses with a wait between them.
 - **Nested macros** fold as one box of their parent (the parent's card previews a nested macro as one box, see
   [the collapsed card](macro-cards.md#the-collapsed-card)), and each keeps its own collapsed flag, so it comes back
   as it was left. Each level is its own plan with its own clock (`Plan::delayMs`), built parent-first by

@@ -81,10 +81,29 @@ Fold::Module macroUnit(const Preview& p) {
     return m;
 }
 
-// The half taken before the change. An open macro keeps its modules' rects and pictures (the cards' own rasters, never
-// a fresh render) and its border, and each nested macro's card; a closed one keeps its card and the box each unit has
-// on it.
-Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros, const juce::String& macroId) {
+// A module card as it is drawn right now, which is where a fold of it starts: a fold still flying it (a second Cmd+Z
+// mid-fold) or a glide still moving it draws it away from its place. Its picture is the card's own raster, or the one
+// the running fold flies.
+Fold::Module drawnCard(const CardGlideAnimator& glide, juce::Component& comp, uint32_t nodeUid) {
+    if (auto flying = glide.fold().drawnModule(nodeUid)) {
+        if (flying->picture.isNull())
+            flying->picture = Fold::cachedPicture(comp);
+        flying->comp = nullptr;
+        return *flying;
+    }
+    Fold::Module m;
+    m.nodeUid = nodeUid;
+    const auto gliding = glide.currentRectFor(&comp);
+    m.rect = gliding.isEmpty() ? comp.getBounds() : gliding;
+    m.picture = Fold::cachedPicture(comp);
+    return m;
+}
+
+// The half taken before the change, as the canvas draws it (drawnCard). An open macro keeps its modules' rects and
+// pictures (the cards' own rasters, never a fresh render) and its border, and each nested macro's card; a closed one
+// keeps its card and the box each unit has on it, or where a fold still flying the unit draws it.
+Fold::Before captureBefore(Controller& controller, const CardGlideAnimator& glide, const synth::MacroSet& macros,
+                           const juce::String& macroId) {
     Fold::Before before;
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
@@ -97,6 +116,9 @@ Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros
         if (card == nullptr)
             return before;
         before.card = card->getBounds();
+        // A card the glide still moves is drawn on its way: an unfold starts there (Plan::startShift).
+        if (const auto gliding = glide.currentRectFor(card); !gliding.isEmpty())
+            before.cardOffset = gliding.getPosition() - card->getPosition();
         const auto boxes = boxesOnCard(*card, card->getPosition(), previews);
         for (size_t i = 0; i < previews.size() && i < boxes.size(); ++i) {
             Fold::Module m = previews[i].isMacro() ? macroUnit(previews[i]) : Fold::Module{};
@@ -104,12 +126,18 @@ Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros
             m.category = previews[i].category;
             m.rect = previews[i].bounds;
             m.box = boxes[i];
+            if (const auto flying =
+                    m.nodeUid != 0 ? glide.fold().moduleRectFor(m.nodeUid) : glide.fold().nestedRectFor(m.macroId);
+                !flying.isEmpty())
+                m.box = flying - before.cardOffset.toFloat(); // the start shift puts it back where it is drawn
             before.modules.push_back(std::move(m));
         }
         return before;
     }
 
     before.hull = controller.macroHullBounds(macroId);
+    if (const auto growing = glide.fold().expandOutlineFor(macroId); growing.has_value() && !growing->isEmpty())
+        before.hull = *growing;
     for (const auto& p : previews) {
         if (p.isMacro()) {
             const auto* child = macros.find(p.macroId);
@@ -121,13 +149,10 @@ Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros
             before.modules.push_back(std::move(m));
             continue;
         }
-        if (p.comp == nullptr || !p.comp->isVisible())
+        if (p.comp == nullptr || (!p.comp->isVisible() && glide.fold().moduleRectFor(p.nodeUid).isEmpty()))
             continue;
-        Fold::Module m;
-        m.nodeUid = p.nodeUid;
+        auto m = drawnCard(glide, *p.comp, p.nodeUid);
         m.category = p.category;
-        m.rect = p.bounds;
-        m.picture = Fold::cachedPicture(*p.comp);
         before.modules.push_back(std::move(m));
     }
     return before;
@@ -168,6 +193,9 @@ public:
                                    const std::vector<Fold::VisibleCable>& cables) {
         timeScale_ = 1.0 / openLevels(macroId);
         expandPlan(macroId, before.card, &before.modules, 0.0, 0);
+        for (auto& plan : plans_)
+            if (plan.macroId == macroId)
+                plan.startShift = before.cardOffset.toFloat();
         assignCables(cables, /*bothEnds=*/false);
         addSlides(snapshot_.cables, cables);
         return std::move(plans_);
@@ -394,10 +422,15 @@ void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans, const s
         uids.push_back(CardGlideAnimator::macroKey(id));
         uids.push_back(CardGlideAnimator::borderKey(CardGlideAnimator::macroKey(id)));
     }
-    for (const auto& plan : plans)
+    for (const auto& plan : plans) {
+        // An opening macro's closed card is gone from the canvas: the fold grows its border out of where it was drawn,
+        // so a glide still moving the card's picture would draw it twice.
+        if (!plan.collapsing)
+            uids.push_back(CardGlideAnimator::macroKey(plan.macroId));
         for (const auto& m : plan.modules)
             if (m.nodeUid != 0)
                 uids.push_back(m.nodeUid);
+    }
     if (glide.fold().arm(std::move(plans)))
         glide.dropGhostsFor(uids);
 }
@@ -405,22 +438,22 @@ void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans, const s
 } // namespace
 
 std::shared_ptr<const MacroGroupController::FoldSnapshot> MacroGroupController::snapshotFoldState() {
-    auto& fold = host_.cardGlide().fold();
+    auto& glide = host_.cardGlide();
+    auto& fold = glide.fold();
     if (!fold.wouldAnimate())
         return nullptr;
     auto out = std::make_shared<FoldSnapshot>();
     out->cables = fold.currentCables();
     for (const auto& macro : host_.getMacros().getAll())
         if (host_.getMacros().isVisible(macro.id))
-            out->byMacro[macro.id] = captureBefore(*this, host_.getMacros(), macro.id);
+            out->byMacro[macro.id] = captureBefore(*this, glide, host_.getMacros(), macro.id);
     for (auto* comp : host_.modules()) {
-        if (comp == nullptr || !comp->isVisible())
+        if (comp == nullptr)
             continue;
-        Fold::Module m;
-        m.nodeUid = comp->getNodeId().uid;
-        m.rect = comp->getBounds();
-        m.picture = Fold::cachedPicture(*comp);
-        out->nodes[m.nodeUid] = std::move(m);
+        const auto uid = comp->getNodeId().uid;
+        if (!comp->isVisible() && fold.moduleRectFor(uid).isEmpty())
+            continue;
+        out->nodes[uid] = drawnCard(glide, *comp, uid);
     }
     return out;
 }
@@ -515,12 +548,16 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         if (!haveCablesAfter)
             cablesAfter = host_.cardGlide().fold().currentCables();
         haveCablesAfter = true;
-        if (macros.find(id)->collapsed)
+        const bool collapsed = macros.find(id)->collapsed;
+        if (collapsed)
             tree = builder.collapse(id, snapshot, cablesAfter);
         else
             tree = builder.expand(id, snapshot, cablesAfter);
-        for (auto& plan : tree)
+        for (auto& plan : tree) {
+            plan.rootId = id;
+            plan.rootCollapsed = collapsed;
             plans.push_back(std::move(plan));
+        }
     }
     for (const auto& [id, snapshot] : created) {
         if (snapshot.modules.empty())
@@ -533,8 +570,10 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         if (!haveCablesAfter)
             cablesAfter = host_.cardGlide().fold().currentCables();
         haveCablesAfter = true;
-        for (auto& plan : builder.collapse(id, snapshot, cablesAfter))
+        for (auto& plan : builder.collapse(id, snapshot, cablesAfter)) {
+            plan.rootId = id;
             plans.push_back(std::move(plan));
+        }
     }
     // A collapsed macro the change removed (undo of a grouping, or Ungroup) whose modules stand on the canvas again:
     // they unfold out of the box they had on the card it leaves.
@@ -542,6 +581,8 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         if (macros.find(id) != nullptr || !snapshot.wasCollapsed || snapshot.modules.empty())
             continue;
         if (auto plan = unfoldRemovedMacro(host_, id, snapshot); !plan.modules.empty()) {
+            plan.rootId = id;
+            plan.rootRemoved = true;
             plans.push_back(std::move(plan));
             goneMacros.push_back(id);
         }

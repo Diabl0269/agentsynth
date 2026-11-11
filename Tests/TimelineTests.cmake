@@ -175,6 +175,7 @@ target_sources(Tests PRIVATE
     # Every marker around a point (ring, halo, focus stop, selection box) follows its drawn dot.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointMarkers/PointMarkerProbe.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointMarkers/PointMarkersFollowTheDotTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesSecondStepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfaces.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesRows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesLfo.cpp
