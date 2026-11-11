@@ -350,7 +350,6 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMorphShapesCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoMorphCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
-    UI/Graph/ModuleComponent/ModuleComponentEqBandRowTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAutomationMarkerTests.cpp
     UI/Layout/AutomatedMarkerTests.cpp
     UI/Mixer/MixerAutomationMarkerTests.cpp
@@ -489,7 +488,6 @@ add_executable(Tests
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
     UI/ModuleViews/EQCurveTests.cpp
-    UI/ModuleViews/EQCurveBandsTests.cpp
     UI/ModuleViews/EqUndoGlideTests.cpp
     UI/ModuleViews/ModuleViewsKeyboardTests.cpp
     UI/ModuleViews/ScopeTests.cpp

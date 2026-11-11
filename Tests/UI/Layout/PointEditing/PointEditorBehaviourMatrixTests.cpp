@@ -48,7 +48,7 @@ const std::vector<Cell> kNotApplicable = {
     {"Morph map", "shift-extend", "a 2D map has no order to extend along"},
     {"Morph map", "edge-scroll", "the map is drawn whole and a dot clamps inside it"},
     {"EQ curve", "edge-scroll", "the frequency window is fixed"},
-    {"EQ curve", "duplicate", "four fixed band slots: a band has no copy"},
+    {"EQ curve", "duplicate", "a band is a slot with its own index: there is no copy of one"},
 };
 
 // Behaviours an editor has not got yet. May only shrink.
@@ -64,7 +64,6 @@ const std::vector<MissingCell> kMissingBehaviours = {
     {"EQ curve", "two-arrows-diagonal", "no key hold, so two arrows cannot move a band diagonally", "FRO1717"},
     {"EQ curve", "delete-next",
      "Delete switches the band off and the selection stays on it, so Return can bring it back", "FRO1717"},
-    {"EQ curve", "right-click-menu", "a right-click on a band opens no menu", "FRO1717"},
 };
 
 const Cell* findNotApplicable(const std::string& editor, const std::string& behaviour) {

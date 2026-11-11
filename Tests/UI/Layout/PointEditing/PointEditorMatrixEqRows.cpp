@@ -1,8 +1,9 @@
-// PointEditorMatrixEqRows.cpp -- the matrix row for the Parametric EQ's curve: four band slots, three of them on, in a
+// PointEditorMatrixEqRows.cpp -- the matrix row for the Parametric EQ's curve: 24 band slots, three of them on, in a
 // real graph. A point is an enabled band; its position is the octave of its frequency, its value its gain.
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "PointEditorMatrixDriver.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include <cmath>
 
@@ -44,10 +45,18 @@ public:
     bool key(int code, int mods) override { return curve_->keyPressed(keyOf(code, mods)); }
     // An empty place high up between the first two bands.
     juce::Point<float> emptySpot() override { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
-    // The curve has no menu: a right-click is a plain press on the dot.
+    // A right-click on a band opens its type menu at the dot; the popover is captured, never shown, so no window is
+    // left open for the next test.
     std::optional<juce::Rectangle<int>> rightClick(int point) override {
+        std::optional<juce::Rectangle<int>> area;
+        auto& launcher = synth::ui::test_hooks::popoverLauncherForTest();
+        launcher = [&area](std::unique_ptr<juce::Component>, juce::Rectangle<int> at) -> juce::CallOutBox* {
+            area = at;
+            return nullptr;
+        };
         rightPress(dot(point));
-        return std::nullopt;
+        launcher = nullptr;
+        return area;
     }
 
 private:
