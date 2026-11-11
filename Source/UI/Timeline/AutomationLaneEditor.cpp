@@ -565,6 +565,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
             previewTension_ = tensionOriginal_;
         } else {
             selection_.pressEmpty(pos, e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown());
+            boxAnchorBeat_ = viewState_.xToBeat((double)pos.x);
         }
         break;
     }
@@ -626,8 +627,10 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
             erasedBeats_.insert(hit->beat);
         break;
     case DragMode::None:
-        if (const auto* points = lanePoints())
-            selection_.dragTo(pos, *points, pointMapper());
+        // A selection box follows the view past either edge too, its pressed corner staying on its beat.
+        previewDragAt(pos);
+        lastDragPointer_ = pos;
+        updateEdgeScrollArming();
         return;
     }
 

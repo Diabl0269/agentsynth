@@ -1,6 +1,7 @@
-// AutomationLaneEditor -- a drag follows the view. A dot or the stretch box held in the edge zone scrolls the shared
-// timeline view at the clip lanes' pace and keeps the dragged thing under the still pointer; a key hold brings the
-// moving dot along, eased with the dot, once it passes the margin. The class is declared in AutomationLaneEditor.h.
+// AutomationLaneEditor -- a drag follows the view. A dot, the stretch box or a selection box held in the edge zone
+// scrolls the shared timeline view at the clip lanes' pace and keeps the dragged thing under the still pointer (a
+// selection box keeps its pressed corner on its beat); a key hold brings the moving dot along, eased with the dot,
+// once it passes the margin. The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
@@ -12,11 +13,12 @@
 namespace synth::ui {
 
 bool AutomationLaneEditor::dragFollowsView() const noexcept {
-    return (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch) && !keyHold_.active();
+    const bool box = dragMode_ == DragMode::None && selection_.isBoxActive();
+    return (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch || box) && !keyHold_.active();
 }
 
-// The preview of a dot move or a stretch at a pointer position. A mouse move and an edge-scroll tick both land here,
-// so a tick re-derives the preview from the same pointer against the scrolled view.
+// The preview of a dot move, a stretch or a selection box at a pointer position. A mouse move and an edge-scroll tick
+// both land here, so a tick re-derives the preview from the same pointer against the scrolled view.
 void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
     switch (dragMode_) {
     case DragMode::MoveHandle: {
@@ -35,6 +37,14 @@ void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
         refreshStretchBox();
         break;
     case DragMode::None:
+        // The box's pressed corner is pinned to its beat, so a scrolled view carries it along with the content.
+        if (const auto* points = lanePoints()) {
+            if (selection_.isBoxActive())
+                selection_.setBoxAnchor(
+                    {(int)std::lround(viewState_.beatToX(boxAnchorBeat_)), selection_.boxAnchor().y});
+            selection_.dragTo(pos, *points, pointMapper());
+        }
+        break;
     case DragMode::TensionScrub:
     case DragMode::Pencil:
     case DragMode::Line:
@@ -44,8 +54,8 @@ void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
     }
 }
 
-// The timer runs only while a dot or the stretch box is being dragged with the pointer inside an edge zone; it stops
-// the moment either stops holding (release, Escape, a tool change, the pointer back in the middle).
+// The timer runs only while a dot, the stretch box or a selection box is being dragged with the pointer inside an edge
+// zone; it stops the moment either stops holding (release, Escape, a tool change, the pointer back in the middle).
 void AutomationLaneEditor::updateEdgeScrollArming() {
     const bool inZone =
         dragFollowsView() && edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, 1.0) != 0.0;

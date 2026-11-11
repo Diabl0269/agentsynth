@@ -1,0 +1,21 @@
+# A cable dragged to the edge of the canvas view stopped there; now the canvas scrolls along and the cable's loose
+# end stays under the pointer, so a jack that was out of sight can be reached in one drag.
+#
+# What a user does: opens the macros project (at its own zoom the patch runs past the view on the left), presses on
+# Oscillator 2's Audio output, drags the cable to the left edge of the canvas and holds the pointer there: the canvas
+# scrolls right and the cable end stays under the pointer. Lets go over empty canvas: no cable is made and the scroll
+# stops.
+record: true
+save_project: canvas-cable-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: before}
+  - mouseDown: {id: window, x: 1030, y: 420}
+  - mouseMoveHeld: {id: window, x: 800, y: 500}
+  - mouseMoveHeld: {id: window, x: 400, y: 560}
+  - glide: {name: cable-held-at-edge, frames: 16, do: {mouseMoveHeld: {id: window, x: 203, y: 560}}}
+  - mark: {check: 2, name: cable-scrolls-the-canvas}
+  - mouseUp: {id: window, x: 203, y: 560}
+  - wait: {}
+  - screenshot: {name: released}

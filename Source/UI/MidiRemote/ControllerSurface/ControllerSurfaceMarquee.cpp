@@ -48,6 +48,8 @@ void ControllerSurfaceComponent::mouseDown(const juce::MouseEvent& event) {
 
 void ControllerSurfaceComponent::mouseDrag(const juce::MouseEvent& event) {
     if (marqueeArmed_) {
+        noteEdgePointer(event);
+        beginMarqueeEdgeScroll(); // held at the edge, the surface pans and the box grows over what scrolls in
         const auto previousRect = marqueeRect_;
         marqueeRect_ = juce::Rectangle<int>(marqueeAnchor_, content_.getLocalPoint(this, event.position).roundToInt());
         marqueeActive_ = true;
@@ -71,6 +73,8 @@ void ControllerSurfaceComponent::mouseDrag(const juce::MouseEvent& event) {
 }
 
 void ControllerSurfaceComponent::mouseUp(const juce::MouseEvent&) {
+    endEdgeScroll();
+    edgeScrollStoppedByEscape_ = false;
     if (marqueeArmed_) {
         marqueeArmed_ = false;
         if (!marqueeActive_)

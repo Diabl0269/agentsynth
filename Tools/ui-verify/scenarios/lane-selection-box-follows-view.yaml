@@ -1,0 +1,26 @@
+# A selection box dragged to the edge of a lane stopped there; now the view scrolls along, the box keeps its pressed
+# corner on its beat and grows over the points that scroll in.
+#
+# What a user does: opens a project whose Cutoff lane has a row of points running past the right edge of the view
+# (fixture lane-box-edge.agsproj), Shift-drags a box from the empty space below the line left of the beat-44 point to
+# the right edge and keeps the pointer there: the view scrolls, the box's left side stays left of beat 44, and the
+# points that come in are selected.
+record: true
+motion: true
+save_project: lane-selection-box-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/lane-box-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 11}
+  - screenshot: {name: before}
+  - expect: {id: automationLaneState, selectedPoints: 0}
+  - mouseDown: {id: automationLaneState, x: 1010, y: 76, mods: shift}
+  - mouseMoveHeld: {id: automationLaneState, x: 1200, y: 20, mods: shift}
+  - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 20, mods: shift}
+  - glide: {name: box-held-at-edge, frames: 16, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1396, y: 20, mods: shift}}}
+  - mark: {check: 1, name: lane-box-scrolls-the-view}
+  - mouseUp: {id: automationLaneState, x: 1396, y: 20, mods: shift, instant: "the selection box marquee ends on release, as every box select does"}
+  - wait: {}
+  - screenshot: {name: selected-after-scroll}

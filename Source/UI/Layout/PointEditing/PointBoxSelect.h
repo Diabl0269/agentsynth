@@ -27,6 +27,10 @@ public:
     void cancel();
     bool isActive() const noexcept { return active_; }
     juce::Rectangle<float> box() const { return box_.toFloat(); }
+    // Where the box was pressed. A view that scrolls under a held box moves its anchor with the content, so the box
+    // keeps its pressed corner on what was pressed; the next advance() redraws it.
+    juce::Point<int> anchor() const noexcept { return anchor_; }
+    void setAnchor(juce::Point<int> pos) noexcept { anchor_ = pos; }
     void paintMarquee(juce::Graphics& g) const;
 
 protected:

@@ -1,0 +1,21 @@
+# A selection box dragged to the edge of the canvas view stopped there; now the canvas scrolls along, the box keeps
+# its corner on the patch and grows over the cards that scroll in, and the release selects them.
+#
+# What a user does: opens the macros project (at its own zoom the patch runs past the view on the left), Shift-drags a
+# box from the empty space left of Oscillator 2 to the left edge of the canvas and holds the pointer there: the canvas
+# scrolls right, faster nearer the edge, and the box grows over what comes in. Lets go: the cards under it are
+# selected.
+record: true
+save_project: canvas-selection-box-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: before}
+  - mouseDown: {id: window, x: 650, y: 470, mods: shift}
+  - mouseMoveHeld: {id: window, x: 500, y: 520, mods: shift}
+  - mouseMoveHeld: {id: window, x: 300, y: 560, mods: shift}
+  - glide: {name: box-held-at-edge, frames: 16, do: {mouseMoveHeld: {id: window, x: 203, y: 560, mods: shift}}}
+  - mark: {check: 1, name: selection-box-scrolls-the-canvas}
+  - mouseUp: {id: window, x: 203, y: 560, mods: shift}
+  - wait: {}
+  - screenshot: {name: selected-after-scroll}
