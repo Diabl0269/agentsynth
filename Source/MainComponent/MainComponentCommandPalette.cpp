@@ -413,7 +413,10 @@ void MainComponentCommandPalette::addTrackAndMarkerEntries() {
         entry.keywords = "jump playhead locate go to";
         entries_.push_back(entry);
         const double beat = marker.beat;
-        runners_.push_back([this, beat] { mc_.audioEngine.getTransport().locateBeat(beat); });
+        runners_.push_back([this, beat] {
+            mc_.timelinePanel.getPlayhead().armLocateGlide();
+            mc_.audioEngine.getTransport().locateBeat(beat);
+        });
     }
 }
 

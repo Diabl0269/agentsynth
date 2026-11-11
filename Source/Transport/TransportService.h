@@ -218,6 +218,9 @@ public:
         // Counts the locates the audio thread has applied; a change between two snapshots is a jump, not playback.
         std::uint32_t locateCount = 0;
         double lastLocateBeat = 0.0; // where the latest of them put the transport
+        // juce::Time::getMillisecondCounterHiRes() when the audio thread published this snapshot (0 = never stamped,
+        // as in a hand-built snapshot). The UI uses it to extrapolate the position between blocks.
+        double publishedAtMs = 0.0;
     };
 
     // Consistent snapshot of the position at the start of the current block.
@@ -314,6 +317,7 @@ private:
         std::atomic<double> loopEndPpq{4.0};
         std::atomic<std::uint32_t> locateCount{0};
         std::atomic<double> lastLocateBeat{0.0};
+        std::atomic<double> publishedAtMs{0.0};
     };
     SharedPosition shared;
     std::atomic<std::uint32_t> sharedVersion{0}; // odd while a write is in flight

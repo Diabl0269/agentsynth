@@ -10,7 +10,7 @@
 // virtual — `requestRepaintStrip(Rectangle<int>)`. A test subclasses the component and overrides
 // that seam to count the calls and record the rects, which turns "how many repaints does an idle
 // app cost?" into an ordinary headless assertion: no peer, no message loop, no screenshot diffing.
-// The subclass also exposes the (protected) timer callback so frames can be driven deterministically
+// The subclass also exposes the (protected) frame so frames can be driven deterministically
 // instead of waiting on wall-clock time.
 //
 // Groups:
@@ -20,13 +20,18 @@
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "TestMode/TestModeStateSource.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelIsOpen
 #include "Transport/TransportService.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Timeline/PlayheadLocateGlide.h"
 #include "UI/Timeline/PlayheadWrapCompensation.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include "UserSettings.h"
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -49,7 +54,7 @@ int maxStripWidthFor(int movementPx) {
 
 // ---------------------------------------------------------------------------
 // The paint-count harness. Counts (and records) every repaint the overlay asks for, and exposes
-// the timer tick so frames are driven by the test rather than by wall-clock time.
+// the display frame so frames are driven by the test rather than by wall-clock time.
 // ---------------------------------------------------------------------------
 struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
     using TimelinePlayheadOverlay::TimelinePlayheadOverlay;
@@ -65,8 +70,11 @@ struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
         TimelinePlayheadOverlay::requestRepaintStrip(r);
     }
 
-    // The protected juce::Timer callback, driven by hand.
-    void tick() { timerCallback(); }
+    // The protected display frame, driven by hand, on a clock the test sets: 0 places every frame before the position
+    // was published, which switches the extrapolation off (a frame then sees the raw position).
+    double fakeNowMs = 0.0;
+    double nowMs() const override { return fakeNowMs; }
+    void tick() { onFrame(); }
 
     void resetCounts() {
         requests = 0;
@@ -135,10 +143,10 @@ TEST(TimelinePlayheadTest, ZeroRepaintsOver100IdleFrames) {
     for (int i = 0; i < 100; ++i)
         f.playhead.updateFromTransport(stopped, 0.0);
 
-    EXPECT_FALSE(f.playhead.isPlayheadTimerRunning()) << "the 30 Hz timer must never run while stopped";
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning()) << "the display frames must never run while stopped";
     EXPECT_EQ(f.playhead.requests, 0) << "100 idle polls must not ask for a single repaint";
 
-    // Belt and braces: even if something drove the timer anyway, an unmoved playhead repaints
+    // Belt and braces: even if something drove a frame anyway, an unmoved playhead repaints
     // nothing.
     for (int i = 0; i < 100; ++i)
         f.playhead.tick();
@@ -157,16 +165,19 @@ TEST(TimelinePlayheadTest, PlayingRequestsConfinedStrips) {
     ASSERT_TRUE(transport.play());
     transport.tick(kTenthBeatSamples);
     f.playhead.updateFromTransport(transport.getPositionSnapshot(), 0.0);
-    ASSERT_TRUE(f.playhead.isPlayheadTimerRunning());
+    ASSERT_TRUE(f.playhead.isPlayheadFrameRunning());
     ASSERT_EQ(f.playhead.getLineX(), 0);
+    // The first half block still shows where the whole one ended (10 px away); the frames after it move 5 px each.
+    transport.tick(kTenthBeatSamples / 2);
+    f.playhead.tick();
     f.playhead.resetCounts();
 
-    // Each audio block advances exactly 0.1 beat == 10 px at this zoom, and each frame must repaint
+    // Each half block advances exactly 0.05 beat == 5 px at this zoom, and each frame must repaint
     // only the strip between the old and the new line.
     constexpr int kFrames = 5;
-    constexpr int kMovementPx = 10;
+    constexpr int kMovementPx = 5;
     for (int i = 0; i < kFrames; ++i) {
-        transport.tick(kTenthBeatSamples);
+        transport.tick(kTenthBeatSamples / 2);
         f.playhead.tick();
     }
 
@@ -184,7 +195,7 @@ TEST(TimelinePlayheadTest, PlayingRequestsConfinedStrips) {
         previousX = strip.getX();
     }
 
-    EXPECT_EQ(f.playhead.getLineX(), kFrames * kMovementPx);
+    EXPECT_EQ(f.playhead.getLineX(), 10 + kFrames * kMovementPx);
 
     transport.stop();
     transport.tick(kTenthBeatSamples);
@@ -195,16 +206,16 @@ TEST(TimelinePlayheadTest, StopEmitsOneFinalStripThenSilence) {
     Fixture f;
 
     f.playhead.updateFromTransport(snapshotAt(0.0, /*playing=*/true), 0.0);
-    ASSERT_TRUE(f.playhead.isPlayheadTimerRunning());
+    ASSERT_TRUE(f.playhead.isPlayheadFrameRunning());
     f.playhead.resetCounts();
 
     // Stop at a position the last frame had not drawn yet.
-    f.playhead.updateFromTransport(snapshotAt(1.0, /*playing=*/false), 0.0);
-    EXPECT_FALSE(f.playhead.isPlayheadTimerRunning()) << "the stop transition must stop the timer";
+    f.playhead.updateFromTransport(snapshotAt(0.05, /*playing=*/false), 0.0);
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning()) << "the stop transition must stop the frames";
     EXPECT_EQ(f.playhead.requests, 1) << "stopping settles the line with exactly one strip";
-    EXPECT_EQ(f.playhead.getLineX(), 100);
+    EXPECT_EQ(f.playhead.getLineX(), 5);
 
-    const auto stopped = snapshotAt(1.0, /*playing=*/false);
+    const auto stopped = snapshotAt(0.05, /*playing=*/false);
     for (int i = 0; i < 100; ++i) {
         f.playhead.updateFromTransport(stopped, 0.0);
         f.playhead.tick();
@@ -385,28 +396,29 @@ TEST(TimelinePlayheadTest, ZoomWhilePlayingRepaintsStalePixels) {
     f.playhead.updateFromTransport(snapshotAt(2.2, /*playing=*/true), 0.0);
     f.playhead.tick();
 
-    ASSERT_EQ(f.playhead.requests, 1);
-    const auto strip = f.playhead.lastStrip;
-    EXPECT_LE(strip.getX(), 55 - synth::ui::TimelinePlayheadOverlay::kStripHalfWidth)
-        << "the strip must reach the new line position (beat 2.2 * 25 px)";
-    EXPECT_GE(strip.getRight(), 200)
-        << "the strip must still cover the STALE pixels the line was drawn on before the zoom";
+    // 150 px apart: the old and the new strip are requested apart.
+    ASSERT_EQ(f.playhead.requests, 2);
+    const auto stale = f.playhead.strips[0];
+    const auto fresh = f.playhead.strips[1];
+    EXPECT_TRUE(stale.contains(200, 10))
+        << "the strip must cover the STALE pixels the line was drawn on before the zoom";
+    EXPECT_TRUE(fresh.contains(55, 10)) << "and the new line position (beat 2.2 * 25 px)";
 }
 
-TEST(TimelinePlayheadTest, TimerLifecycle) {
+TEST(TimelinePlayheadTest, FrameLifecycle) {
     Fixture f;
 
-    EXPECT_FALSE(f.playhead.isPlayheadTimerRunning());
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning());
 
     f.playhead.updateFromTransport(snapshotAt(0.0, /*playing=*/true), 0.0);
-    EXPECT_TRUE(f.playhead.isPlayheadTimerRunning()) << "the play transition starts the 30 Hz timer";
+    EXPECT_TRUE(f.playhead.isPlayheadFrameRunning()) << "the play transition starts the display frames";
 
     // Staying in play must not restart or double-start anything.
     f.playhead.updateFromTransport(snapshotAt(0.5, /*playing=*/true), 0.0);
-    EXPECT_TRUE(f.playhead.isPlayheadTimerRunning());
+    EXPECT_TRUE(f.playhead.isPlayheadFrameRunning());
 
     f.playhead.updateFromTransport(snapshotAt(1.0, /*playing=*/false), 0.0);
-    EXPECT_FALSE(f.playhead.isPlayheadTimerRunning()) << "the stop transition stops it";
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning()) << "the stop transition stops it";
 }
 
 // While stopped the overlay asks for nothing — but it still DRAWS whenever something else paints
@@ -423,6 +435,174 @@ TEST(TimelinePlayheadTest, SnapshotSmoke) {
 
     EXPECT_GT(img.getPixelAt(200, kOverlayHeight / 2).getAlpha(), 0) << "the line is drawn at beat 2";
     EXPECT_EQ(img.getPixelAt(400, kOverlayHeight / 2).getAlpha(), 0) << "and nowhere else — the overlay is transparent";
+}
+
+// A big move asks for the strip it left and the strip it arrived at, not the whole span between them.
+TEST(TimelinePlayheadTest, ABigMoveRequestsTheTwoStripsApartAndASmallOneTheirUnion) {
+    Fixture f;
+    f.playhead.updateFromTransport(snapshotAt(1.0, /*playing=*/true), 0.0);
+    f.playhead.resetCounts();
+
+    f.playhead.updateFromTransport(snapshotAt(2.0, /*playing=*/true), 0.0); // 100 px
+    ASSERT_EQ(f.playhead.requests, 2);
+    for (const auto& strip : f.playhead.strips)
+        EXPECT_EQ(strip.getWidth(), 2 * synth::ui::TimelinePlayheadOverlay::kStripHalfWidth + 1);
+    EXPECT_EQ(f.playhead.strips[0].getCentreX(), 100);
+    EXPECT_EQ(f.playhead.strips[1].getCentreX(), 200);
+
+    f.playhead.resetCounts();
+    f.playhead.updateFromTransport(snapshotAt(2.05, /*playing=*/true), 0.0); // 5 px
+    EXPECT_EQ(f.playhead.requests, 1);
+}
+
+// ---- Frame stats (read by test mode) ----
+
+TEST(TimelinePlayheadTest, FrameStatsCountFramesAndTakeTheMedianGapOfTheLast64) {
+    Fixture f;
+    EXPECT_EQ(f.playhead.getFrameCount(), 0);
+    EXPECT_DOUBLE_EQ(f.playhead.getMedianFrameIntervalMs(), 0.0);
+
+    for (int i = 0; i < 100; ++i) {
+        f.playhead.fakeNowMs = 1000.0 + i * (1000.0 / 60.0) + (i == 70 ? 40.0 : 0.0); // one late frame
+        f.playhead.tick();
+    }
+    EXPECT_EQ(f.playhead.getFrameCount(), 100);
+    EXPECT_NEAR(f.playhead.getMedianFrameIntervalMs(), 1000.0 / 60.0, 1e-6) << "one late frame does not move a median";
+
+    juce::DynamicObject state;
+    for (auto* child : f.playhead.getChildren())
+        if (child->getComponentID() == "timelinePlayhead")
+            if (auto* source = dynamic_cast<synth::testmode::StateSource*>(child))
+                source->addTestModeState(state);
+    EXPECT_EQ((int)state.getProperty("frameCount"), 100) << "test mode reads the stats from the child timelinePlayhead";
+}
+
+// ---- Locate glide ----
+
+namespace {
+struct GlideFixture : Fixture {
+    synth::TransportService transport;
+    double latency = 0.0;
+
+    GlideFixture() {
+        synth::ui::TimelinePlayheadOverlay::setGlideOffScreenForTest(true);
+        synth::ui::setReducedMotionForTest(false);
+        transport.prepare(kSampleRate, 512);
+        playhead.setTransport(&transport);
+    }
+    ~GlideFixture() {
+        synth::ui::TimelinePlayheadOverlay::setGlideOffScreenForTest(false);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+
+    void block() { transport.tick(512); }
+    void frameAt(double ms) {
+        playhead.fakeNowMs = ms;
+        playhead.tick();
+    }
+    // A stopped transport sitting on `beat`, seen once so the overlay has a baseline.
+    void settleOn(double beat) {
+        transport.locateBeat(beat);
+        block();
+        playhead.fakeNowMs = 0.0;
+        playhead.updateFromTransport(transport.getPositionSnapshot(), latency);
+    }
+};
+} // namespace
+
+TEST(TimelinePlayheadGlideTest, AnArmedLocateDrawsTheOldPlaceThenGlidesAndLandsOnTheTargetAt160Ms) {
+    GlideFixture f;
+    f.settleOn(2.0);
+    ASSERT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 2.0);
+
+    f.playhead.fakeNowMs = 1000.0;
+    f.playhead.armLocateGlide();
+    f.transport.locateBeat(10.0);
+    f.block();
+
+    f.frameAt(1000.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 2.0) << "the first frame still draws the old place";
+    EXPECT_TRUE(f.playhead.isPlayheadFrameRunning()) << "a stopped glide runs frames for its duration";
+
+    f.frameAt(1080.0);
+    EXPECT_GT(f.playhead.getDrawnBeat(), 2.0);
+    EXPECT_LT(f.playhead.getDrawnBeat(), 10.0) << "mid-glide lies strictly between";
+
+    double previous = f.playhead.getDrawnBeat();
+    for (const double ms : {1100.0, 1130.0, 1150.0}) {
+        f.frameAt(ms);
+        EXPECT_GE(f.playhead.getDrawnBeat(), previous) << "the glide only goes forward";
+        previous = f.playhead.getDrawnBeat();
+    }
+
+    f.frameAt(1160.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 10.0) << "lands exactly on the target";
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning()) << "and the stopped frames stop with it";
+}
+
+TEST(TimelinePlayheadGlideTest, ALocateNobodyArmedJumpsAtOnce) {
+    GlideFixture f;
+    f.settleOn(2.0);
+
+    f.transport.locateBeat(10.0); // a scrub, or a held cursor move
+    f.block();
+    f.frameAt(1000.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 10.0);
+    EXPECT_FALSE(f.playhead.isPlayheadFrameRunning());
+}
+
+TEST(TimelinePlayheadGlideTest, AnArmThatNoLocateFollowedLapsesAndCannotTurnALaterScrubIntoAGlide) {
+    GlideFixture f;
+    f.settleOn(2.0);
+
+    f.playhead.fakeNowMs = 1000.0;
+    f.playhead.armLocateGlide();
+    f.transport.locateBeat(10.0);
+    f.block();
+    f.frameAt(1000.0 + synth::ui::PlayheadLocateGlide::kArmWindowMs + 1.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 10.0);
+}
+
+TEST(TimelinePlayheadGlideTest, ReduceMotionAndAHiddenPanelLandAtOnce) {
+    GlideFixture f;
+    f.settleOn(2.0);
+    synth::ui::setReducedMotionForTest(true);
+    f.playhead.armLocateGlide();
+    f.transport.locateBeat(10.0);
+    f.block();
+    f.frameAt(0.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 10.0) << "Reduce Motion";
+
+    synth::ui::setReducedMotionForTest(false);
+    synth::ui::TimelinePlayheadOverlay::setGlideOffScreenForTest(false); // not showing: a headless component
+    f.playhead.armLocateGlide();
+    f.transport.locateBeat(3.0);
+    f.block();
+    f.frameAt(10.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 3.0) << "not on screen";
+}
+
+// The line holds on a locate's target until the sound reaches it; the glide ends on that held place.
+TEST(TimelinePlayheadGlideTest, WhilePlayingTheGlideLandsOnTheHeldTarget) {
+    GlideFixture f;
+    f.latency = 0.05; // 0.1 beat at 120 BPM
+    f.transport.play();
+    for (int i = 0; i < 20; ++i) {
+        f.block();
+        f.playhead.updateFromTransport(f.transport.getPositionSnapshot(), f.latency);
+    }
+    const double before = f.playhead.getDrawnBeat();
+    ASSERT_GT(before, 0.2);
+
+    f.playhead.fakeNowMs = 1000.0;
+    f.playhead.armLocateGlide();
+    f.transport.locateBeat(8.0);
+    f.block();
+    f.frameAt(1000.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), before) << "first frame: the old place";
+    f.frameAt(1160.0);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 8.0) << "the held target, as without a glide";
+    EXPECT_TRUE(f.playhead.isPlayheadFrameRunning()) << "playing keeps its frames";
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +681,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     for (int i = 0; i < 10; ++i)
         mc.timerCallback();
     EXPECT_EQ(panel.getTransportUpdateCountForTest(), 0) << "a hidden timeline costs exactly what it did before";
-    EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
+    EXPECT_FALSE(panel.getPlayhead().isPlayheadFrameRunning());
 
     mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(timelinePanelIsOpen(mc));
@@ -509,8 +689,55 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     mc.timerCallback();
     EXPECT_EQ(panel.getTransportUpdateCountForTest(), 1) << "a visible panel is polled once per 10 Hz tick";
 
-    // A stopped transport (nothing opens an audio device in a test) still starts no 30 Hz timer.
-    EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
+    // A stopped transport (nothing opens an audio device in a test) still starts no display frames.
+    EXPECT_FALSE(panel.getPlayhead().isPlayheadFrameRunning());
 
     mc.simulateToggleBottomPanelClick();
+}
+
+// A measurement, not a gate: what one Smooth follow frame costs to paint when the whole panel is repainted. Run with
+// --gtest_also_run_disabled_tests --gtest_filter=TimelinePanelPaintCost.* and read the printed median and p95.
+TEST(TimelinePanelPaintCost, DISABLED_ZoomedInFollowFrame) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1600, 900);
+    panel.setTimelineDoc(&doc);
+
+    for (int t = 0; t < 8; ++t) {
+        const bool audio = t % 2 == 1;
+        const auto track = doc.addTrack(audio ? synth::TrackKind::Audio : synth::TrackKind::Midi,
+                                        (audio ? "Audio " : "Midi ") + juce::String(t));
+        for (int c = 0; c < 24; ++c) {
+            const auto clip = doc.addClip(track, c * 4.0, 3.5, "Clip " + juce::String(c));
+            if (audio) {
+                doc.setClipAsset(clip, "Audio/take-" + juce::String(c) + ".wav", 0.0);
+                continue;
+            }
+            for (int n = 0; n < 24; ++n) {
+                synth::MidiNote note;
+                note.startBeat = n * 0.125 * 4.0 / 3.0;
+                note.lengthBeats = 0.25;
+                note.pitch = 48 + (n * 7) % 24;
+                doc.addNote(clip, note);
+            }
+        }
+    }
+    panel.getViewState().pixelsPerBeat = 120.0; // zoomed in: a couple of clips fill the width
+    panel.getViewState().firstVisibleBeat = 40.0;
+    panel.getPlayhead().setVisible(false);
+
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    std::vector<double> millis;
+    for (int i = 0; i < 200; ++i) {
+        const double start = juce::Time::getMillisecondCounterHiRes();
+        juce::Graphics g(image);
+        panel.paintEntireComponent(g, true);
+        millis.push_back(juce::Time::getMillisecondCounterHiRes() - start);
+    }
+    std::sort(millis.begin(), millis.end());
+    const double median = millis[millis.size() / 2];
+    const double p95 = millis[(size_t)((double)millis.size() * 0.95)];
+    std::printf("PaintCost ZoomedInFollowFrame (1600x900, 8 tracks, 200 paints): median %.3f ms, p95 %.3f ms\n", median,
+                p95);
+    EXPECT_GT(median, 0.0);
 }

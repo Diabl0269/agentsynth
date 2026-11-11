@@ -243,6 +243,8 @@ void TransportService::publishSnapshot() noexcept {
     shared.loopEndPpq.store(loopEndPpq);
     shared.locateCount.store(locateCount);
     shared.lastLocateBeat.store(lastLocateBeat);
+    // A monotonic clock read (mach_absolute_time on macOS): no lock, no allocation, fine on the audio thread.
+    shared.publishedAtMs.store(juce::Time::getMillisecondCounterHiRes());
     sharedVersion.fetch_add(1); // even: write complete
 }
 
@@ -264,6 +266,7 @@ TransportService::PositionSnapshot TransportService::getPositionSnapshot() const
         out.loopEndPpq = shared.loopEndPpq.load();
         out.locateCount = shared.locateCount.load();
         out.lastLocateBeat = shared.lastLocateBeat.load();
+        out.publishedAtMs = shared.publishedAtMs.load();
         if (sharedVersion.load() == before)
             return out;
     }

@@ -199,6 +199,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
             const auto snap = transport_->getPositionSnapshot();
             if (!(snap.loopEndPpq > snap.loopStartPpq))
                 return false;
+            playhead_.armLocateGlide();
             transport_->locateBeat(toStart ? snap.loopStartPpq : snap.loopEndPpq);
             // The playhead overlay picks the new position up on the panel's next 10 Hz poll; the
             // ruler needs no repaint (the locators themselves did not move).

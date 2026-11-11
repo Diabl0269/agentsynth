@@ -17,6 +17,14 @@ std::vector<double> markerBeats(const synth::TimelineDoc& doc) {
     return beats;
 }
 
+// An explicit jump (Return to Start, a loop locator, a marker) glides the drawn cursor to its target; the audio jumps
+// at once. Armed only when the jump was made, so a no-op leaves nothing armed for a later scrub.
+bool glidedJump(MainComponent& m, bool jumped) {
+    if (jumped)
+        m.getTimelinePanel().getPlayhead().armLocateGlide();
+    return jumped;
+}
+
 } // namespace
 
 // ---- Transport: promoted to command-dispatched actions (docs/control/midi-remote.md#action-targets's
@@ -112,7 +120,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportReturnToStart",
          {},
          [](MainComponent& m) {
-             return synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0);
+             return glidedJump(m, synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0));
          }},
         // Cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
         // several firing inside one audio block (a jog wheel) don't lose steps; see TransportNudge.h.
@@ -159,7 +167,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportJumpToLoopStart",
          {},
          [](MainComponent& m) {
-             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, false);
+             return glidedJump(m, synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, false));
          }},
         {AppCommands::transportJumpToLoopEnd,
          "Jump to Loop End",
@@ -168,7 +176,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportJumpToLoopEnd",
          {},
          [](MainComponent& m) {
-             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
+             return glidedJump(m, synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true));
          }},
         // Jump to the next/previous timeline marker relative to the current position, using
         // the same transportNudge_ accumulate state as the cursor moves above (see MarkerJump.h) so
@@ -180,8 +188,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportJumpToNextMarker",
          {},
          [](MainComponent& m) {
-             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
-                                                markerBeats(m.getTimelineDoc()), true);
+             return glidedJump(m, synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
+                                                              markerBeats(m.getTimelineDoc()), true));
          }},
         {AppCommands::transportJumpToPreviousMarker,
          "Jump to Previous Marker",
@@ -190,8 +198,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportJumpToPreviousMarker",
          {},
          [](MainComponent& m) {
-             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
-                                                markerBeats(m.getTimelineDoc()), false);
+             return glidedJump(m, synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
+                                                              markerBeats(m.getTimelineDoc()), false));
          }},
     };
 }

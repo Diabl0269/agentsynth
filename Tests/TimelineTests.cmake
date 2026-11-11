@@ -43,6 +43,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelFollowModeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/CursorGlide/TimelineCursorGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePlayheadTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePlayheadExtrapolatorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneInputTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineMidiDestinationMacroRoutingTests.cpp

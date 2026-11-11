@@ -35,7 +35,7 @@ private:
 
 inline void PlayheadWrapCompensation::observe(const TransportService::PositionSnapshot& snapshot,
                                               double latencyBeats) noexcept {
-    // Snapshots arrive from a 10 Hz poll and a 30 Hz frame timer, so a wrap can be seen up to one poll late.
+    // Snapshots arrive from a 10 Hz poll and the display-rate frames, so a wrap can be seen up to one poll late.
     const double slackBeats = std::max(0.0, snapshot.bpm) / 60.0 * 0.15;
     const double window = std::max(0.0, latencyBeats) + slackBeats;
 

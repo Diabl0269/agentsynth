@@ -81,7 +81,7 @@ void DrumMachineComponent::followPreviewBeat(double& beat) {
         stopClipPreview();
 }
 
-// Flashes the hits of `step`, and of the steps a 30 Hz frame stepped over (a 64-step bar at speed moves faster than
+// Flashes the hits of `step`, and of the steps a display frame stepped over (a 64-step bar at speed moves faster than
 // frames arrive); a loop that wrapped also covers the steps up to the clip end.
 void DrumMachineComponent::flashSkippedSteps(int previous, int step) {
     const int count = getStepCount();
