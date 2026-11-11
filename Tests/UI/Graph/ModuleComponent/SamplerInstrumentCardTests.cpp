@@ -6,6 +6,7 @@
 
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
 #include "../CardBody/CardBodyTestHelpers.h"
+#include "../ModMatrixPickerFirstRow.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModMatrixPicker.h"
@@ -175,6 +176,14 @@ TEST(SamplerInstrumentCard, ThePickerListsPackInstrumentsAndTheFileLoaders) {
               (std::vector<juce::String>{"Built in", "Grand Piano", "Upright Piano", "Your files",
                                          "Load an instrument file (.sfz)...", "Load recordings..."}));
     EXPECT_EQ(list->getVisibleItemDetailsForTest()[0], "Keys") << "the pack name sits dim under the instrument";
+}
+
+TEST(SamplerInstrumentCard, TheInstrumentListOpensAtItsFirstHeading) {
+    PackRoot packs;
+    Scene scene;
+    auto list = openPickerByKey(scene);
+    ASSERT_NE(list, nullptr);
+    first_row_test::expectOpensAtFirstRow(*list, "instrument picker");
 }
 
 TEST(SamplerInstrumentCard, ThePickerSaysSoWhenNoInstrumentIsInstalled) {

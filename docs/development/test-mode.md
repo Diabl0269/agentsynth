@@ -93,7 +93,7 @@ show nothing. The pointer is drawn at the last synthetic mouse position (`click`
 image of the cursor the component under it shows when that is a custom image cursor (the tool cursors built by
 `makeToolCursor`, which keeps the picture in a small registry because a `juce::MouseCursor` cannot be read back), else a
 white arrow with a dark outline. The reply is `{path, width, height, windows: [{id,x,y,width,height}], pointer: {x,y,kind}}`
-with positions in the frame's own coordinates and `kind` `arrow` or the cursor's name (`tool:range`). Code:
+with positions in the frame's own coordinates and `kind` `arrow` or the cursor's name (`tool:range`). A window is drawn at its own opacity, so a popup mid-fade (or a leaving picture) shows as faint in a recorded strip. Code:
 `Source/TestMode/TestModeScreenFrame.*`. `Tools/ui-verify` films this frame by default and `mark` saves it as proof, see
 [Video and saved project](#video-and-saved-project).
 

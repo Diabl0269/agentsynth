@@ -435,6 +435,17 @@ eased progress). With a cubic on the opacity too, a leaving menu was still 87% o
 its last third, and an arriving one was 87% there halfway: both read as a pop (measured on the real app as
 the ghost window's opacity per frame).
 
+**Pickers grow out of their opener.** A popover whose content says `PopoverContent::growsFromOpener()` (every `ModMatrixPicker`: the
+source, parameter, modulator, track, Replace with, mixer insert and instrument pickers) does not rise: `PopoverBox` gives it
+`popup_motion::growStyle()` with the content as the `body` and the middle of the area the box points at as the pivot, so the
+list grows out of the row or button that opened it and shrinks back into it on Esc (the shared out leave: one fall in opacity
+and scale, then the box is gone). `PopupMotion` scales only the body, but a call-out paints its own background, arrow and
+shadow, so `PopoverBox::paint` applies the content's transform to the box's painting and repaints the whole box while the
+content is transformed; it also ignores the child-bounds change a transform raises, which would otherwise re-place the window
+around the scaled content on every frame. Reduce Motion is the 80 ms fade with no scale, Animations: Off is instant. A popover
+whose content does not grow keeps the 8 px rise. Tests: `PopupDismissPaths` (`APickerGrowsOutOfWhatOpenedItAndItsBoxBackgroundGrowsWithIt`,
+`APickerShrinksBackIntoItsOpenerOnEscapeAndLeavesOnce`).
+
 "Anchor" is the pointer: the window slides away from `Desktop::getMousePosition()` along the axis
 it sits furthest off it (`popup_motion::slideDirection`). A menu opened with its corner at the
 pointer, a dropdown under its combo box and a popover under its button slide down; a menu flipped
@@ -583,7 +594,8 @@ shortcut.
   grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
-- **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
+- **Popups.** A picker grows out of the row that opened it and shrinks back into it, like the mod dot panel
+  ([Popup windows](#popup-windows)). Any other menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
   the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close (Escape and click-away included)
   leaves this way (`PopupMotion::dismiss`, never a direct close), and lands at once when not on screen. One shared
   mechanism, never per call site: [Popup windows](#popup-windows).
@@ -759,8 +771,8 @@ a fade-in that ends early (`alphaInFraction`), and a **scale**: a native window 
 child `body` component that holds everything the window draws, and `PopupMotion` scales that child about `bodyPivot`
 (`inStartScale` to 1 on the way in, 1 to `outEndScale` on the way out) in the same tween that drives the window's
 opacity. It is buffered to an image while scaled (the panel's shadow is a blur). Reduce Motion never scales. The
-defaults scale nothing. Two windows use it: the mod dot's panel (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
-200 ms with the fade done at 120 ms, out to 0.04, so it ends on the dot, over 140 ms, no window slide) and the Filter shape editor window, which grows out of its card's centre (`openShapeEditorWindow`: 0.82 to 1 over 220 ms, back to 0.9 over 150 ms). Leaving never overshoots.
+defaults scale nothing. Three windows use it: the mod dot's panel (`ModDotPanelFrame::motionStyle`: scale 0.4 to 1 over
+200 ms with the fade done at 120 ms, out to 0.04, so it ends on the dot, over 140 ms, no window slide), every searchable picker (below) with the very same numbers (`popup_motion::growStyle()`, shared so the two never drift) and the Filter shape editor window, which grows out of its card's centre (`openShapeEditorWindow`: 0.82 to 1 over 220 ms, back to 0.9 over 150 ms). Leaving never overshoots.
 
 ## Popup reveal
 

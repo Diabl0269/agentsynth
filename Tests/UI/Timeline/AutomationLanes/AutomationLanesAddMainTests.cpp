@@ -3,6 +3,7 @@
 // helper nodes or what already has a lane), what the Unassigned section lists, and that a pick lands the lane
 // on the track the picker was opened for. The panel's own row and menu are in AutomationLanesAddRowTests.cpp.
 
+#include "../../Graph/ModMatrixPickerFirstRow.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -218,6 +219,21 @@ TEST_F(AddFromTimelineMainTest, PickingLandsTheLaneOnTheTrackTheMenuWasOpenedFor
 
     ASSERT_TRUE(mc.getUndoManager().undo());
     EXPECT_EQ(doc.getTrack(chain.track)->lanes.size(), lanesBefore) << "ONE undo step";
+    panel.setAddAutomationPickerHookForTest(nullptr);
+}
+
+TEST_F(AddFromTimelineMainTest, TheAddAutomationPickerOpensAtItsFirstModuleHeading) {
+    MainComponent mc(std::make_unique<QuietProvider>());
+    buildChain(mc);
+    auto& panel = mc.getTimelinePanel();
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    panel.setAddAutomationPickerHookForTest(
+        [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p) { picker = std::move(p); });
+    auto* header = panel.getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+    header->applyContextMenuChoice(synth::ui::TimelineTrackHeaderComponent::kAddAutomationMenuId);
+    ASSERT_NE(picker, nullptr);
+    first_row_test::expectOpensAtFirstRow(*picker, "timeline add automation");
     panel.setAddAutomationPickerHookForTest(nullptr);
 }
 

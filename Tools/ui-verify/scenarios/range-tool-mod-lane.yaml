@@ -35,12 +35,11 @@ steps:
   - click: {id: timelineToolRange}
   - expect: {id: modulatorBandState, cursor: tool}
   - expect: {id: modulatorBandState, laneRange: false}
-  - drag: {from: modulatorBandState, to: modulatorBandState, fromX: 120, fromY: 20, toX: 300, toY: 20, steps: 20}
-  - wait: {}
+  - drag: {from: modulatorBandState, to: modulatorBandState, fromX: 60, fromY: 20, toX: 640, toY: 20, steps: 30}
+  - mark: {check: 1, name: range-on-mod-row}  # right after the drag, so the clip holds the drag itself
   - expect: {id: modulatorBandState, laneRange: true}
   - expect: {id: automationLaneState, laneRange: false}
   - screenshot: {name: range-on-mod-row}
-  - mark: {check: 1, name: range-on-mod-row}  # the stretch is still selected on the mod row
   # Delete removes the points in the stretch; one Cmd+Z puts them back.
   - key: {keys: delete}
   - wait: {}

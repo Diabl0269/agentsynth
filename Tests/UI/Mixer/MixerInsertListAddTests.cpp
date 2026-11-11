@@ -1,6 +1,7 @@
 // MixerInsertListAddTests.cpp (docs/mixer/mixer.md#adding-an-insert): adding an effect from the mixer -- the
 // "+ Insert" row, the "+" on the line between two rows, "Add after" and a split's "Add to path", the effect picker with
 // recent picks first, and the module landing cabled in, on the canvas, as one undo step.
+#include "../Graph/ModMatrixPickerFirstRow.h"
 #include "MixerInsertListSplitFixture.h"
 
 #include "UI/Graph/ModMatrixPicker.h"
@@ -87,6 +88,18 @@ TEST(MixerInsertListAddTests, PlusInsertOpensTheEffectPickerAndThePickLandsBefor
     ASSERT_NE(capture.picker, nullptr);
     EXPECT_EQ(capture.picker->getVisibleRowNamesForTest().front(), "Recent");
     EXPECT_EQ(capture.picker->getVisibleItemTextsForTest().front(), "Reverb");
+}
+
+TEST(MixerInsertListAddTests, TheEffectPickerOpensAtItsFirstHeading) {
+    SplitListRig r;
+    const auto eq = r.add("Parametric EQ", 300, 400);
+    r.wire(r.source, eq);
+    r.wire(eq, r.strip);
+    r.refresh();
+    PickerCapture capture;
+    r.list.activateAddRow();
+    ASSERT_NE(capture.picker, nullptr);
+    first_row_test::expectOpensAtFirstRow(*capture.picker, "mixer insert");
 }
 
 TEST(MixerInsertListAddTests, ThePlusOnTheLineBetweenTwoRowsAddsRightThere) {
