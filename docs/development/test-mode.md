@@ -65,6 +65,7 @@ thread is never blocked and timers and animations run in between.
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
+| `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) | `{running, blocks}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -207,6 +208,17 @@ test, see the ui-verify README.
 
 Edge scroll (a drag held at the edge of the canvas) runs on its own 30 Hz timer, so it needs no `--automation-motion`;
 `Tools/ui-verify/examples/edge_scroll_drags.py` holds each canvas drag at the edge and checks the scroll.
+
+## Audio pump
+
+A test-mode launch opens no audio device, so nothing renders the graph: a display fed by the audio thread (the
+Wavetable frame under an LFO on Position, a filter curve under a cable) never moves. `audioPump {run: true}` renders the
+open project on the message thread at the wall clock's pace, 512-sample blocks at 44.1 kHz, the way a bounce renders a
+live app (`prepareForHost` once, then `processHostBlock` per block; at most 16 blocks per tick, so a stalled thread
+skips ahead), until `audioPump {run: false}`. Nothing is heard. `audioPump {note: 60, down: true}` queues a note-on
+into the next block's MIDI (`down: false` a note-off); it reaches the modules the graph's MIDI input feeds. The pump is
+refused while a real device is running and stops on its own once the main window is gone
+(`Source/TestMode/TestModeAudioPump.cpp`).
 
 ## Scenarios
 

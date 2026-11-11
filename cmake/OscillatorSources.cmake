@@ -1,5 +1,5 @@
 # The Oscillator's voice rendering, note tracking and the unison and restart pieces it shares with the Wavetable
-# (plus the Wavetable's own note and voicing units). Part of Core;
+# (plus the Wavetable's own note, voicing and live-display units). Part of Core;
 # its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/Oscillator/BandLimitedWaves.cpp
@@ -18,5 +18,6 @@ target_sources(Core PRIVATE
     Source/Modules/RestartGhosts.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleNotes.cpp
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleUnison.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleLiveDisplay.cpp
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleVoicing.cpp
 )

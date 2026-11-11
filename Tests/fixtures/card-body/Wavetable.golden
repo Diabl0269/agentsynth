@@ -5,7 +5,7 @@ type Wavetable size 560x578
   child 3 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
-  child 6 component id="" at 200,60 260x72 visible=1 title="Wavetable display" tip="Wavetable display: the frame under the scan position" focusOrder=0 wantsFocus=0
+  child 6 component id="wavetableDisplay" at 200,60 260x72 visible=1 title="Wavetable display" tip="Wavetable display: the frame the oscillator plays now, following any cable on Position or Warp" focusOrder=0 wantsFocus=0
   child 7 textButton id="" at 200,188 94x24 visible=1 title="Load Wavetable..." tip="Load an audio file as a wavetable, or drop one straight onto this card. The Import combo below decides how it is cut into frames." focusOrder=0 wantsFocus=1
   child 8 textButton id="" at 298,188 98x24 visible=1 title="Folder..." tip="Pick a wavetable folder, then step through it with < and >" focusOrder=0 wantsFocus=1
   child 9 textButton id="" at 400,188 28x24 visible=1 title="<" tip="Previous wavetable in the folder" focusOrder=0 wantsFocus=1

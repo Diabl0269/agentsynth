@@ -1,0 +1,57 @@
+# The Wavetable display shows the frame the oscillator plays now: with an LFO cabled to Position the drawn frame and
+# its caption sweep with the sound, and once the cable is gone the display settles on the Position knob's value.
+#
+# What a user does: adds a Wavetable and an LFO from the library (Cmd+F), drags the LFO output onto Position and
+# watches the display while it sounds, then undoes the cable. A test-mode launch has no audio device, so `audioPump`
+# renders the patch in real time (nothing is heard). The values themselves are covered by WavetableLiveDisplay tests
+# (offline render); offKnob is the display's live position differing from the knob's.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+motion: true
+save_project: fro1728 wavetable live position
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "wavetable"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - mouseDown: {id: "card:LFO", x: 268, y: 56}
+  - mouseMoveHeld: {id: "card:Wavetable > Position"}
+  - mouseMoveHeld: {id: "card:Wavetable > Position"}
+  - mouseUp: {id: "card:Wavetable > Position"}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Wavetable", contains: {cabledTargets: Position}, within_ms: 3000}
+  - audioPump: {run: true}
+  - expect: {id: wavetableDisplay, offKnob: true, within_ms: 4000}
+  - expect: {id: wavetableDisplay, timerHz: 30, within_ms: 4000}
+  - getState: {id: wavetableDisplay}
+  - glide: {name: frame-follows-lfo, frames: 24, do: {getState: {id: wavetableDisplay}}}
+  - getState: {id: wavetableDisplay}
+  - mark: {check: 1, name: frame-follows-lfo}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - expect: {id: wavetableDisplay, offKnob: false, within_ms: 3000}
+  - expect: {id: wavetableDisplay, shownFrame: 1, within_ms: 3000}
+  - expect: {id: wavetableDisplay, timerHz: 15, within_ms: 3000}
+  - getState: {id: wavetableDisplay}
+  - mark: {check: 2, name: settles-on-knob}
+  - audioPump: {run: false}

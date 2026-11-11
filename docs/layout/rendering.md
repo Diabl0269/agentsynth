@@ -158,6 +158,11 @@ Its audio-side counterpart, the per-block render cost of the same project, is `T
   a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
   cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
   `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
+- **A display that follows a modulated value ticks faster only while it moves.** The Wavetable
+  display reads the live position at 15 Hz and switches to 30 Hz only while the drawn or the live
+  position moves (an LFO on Position), back to 15 Hz once both rest; the repaint stays gated on its
+  change signature, so a held value repaints nothing and only the display's own bounds are
+  invalidated in the card cache ([visualizers](visualizers.md#wavetabledisplaycomponent)).
 - **A theme switch is exactly one re-skin pass**: `AppLookAndFeel::applyTheme()` into
   `sendLookAndFeelChangeMessage()` into one `repaint()`. No timer is started and no continuous
   repaint is added during or after a theme switch.

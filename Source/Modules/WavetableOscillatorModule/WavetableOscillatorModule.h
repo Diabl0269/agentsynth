@@ -9,6 +9,7 @@
 #include "WavetableTableBuilder.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
@@ -287,16 +288,29 @@ public:
     /** True when a file-backed table is available for the "Loaded File" choice. */
     bool hasLoadedWavetable() const { return messageLoadedTable != nullptr; }
 
-    /** Current scan position (the Position parameter), 0..1. */
+    /** The Position knob's own value, 0..1. A display shows getModulatedScanPosition() instead. */
     float getScanPosition() const { return positionParam->get(); }
+
+    /** The Position the oscillator plays now, 0..1: the knob plus the Position cable at the end of the last block
+        while a note sounds, the knob alone at rest. Any thread. */
+    float getModulatedScanPosition() const;
+
+    /** The Warp amount the oscillator plays now, 0..1, the same way as getModulatedScanPosition(). Any thread. */
+    float getModulatedWarpAmount() const;
 
     /** Fills `out` with numPoints samples of the frame at scan position `position`, for UI
         display. Message thread only. */
     void getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position) const;
 
+    /** As above, warped by `warpAmount` (0..1) instead of the knob. Message thread only. */
+    void getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position, float warpAmount) const;
+
     /** Changes to this value mean the drawn waveform changed shape. The display's repaint
         gate folds it in so a Warp tweak redraws without an unconditional per-tick repaint. */
     int getWarpSignature() const;
+
+    /** getWarpSignature() for a drawn Warp amount of `warpAmount`. */
+    int getWarpSignature(float warpAmount) const;
 
     /** Fills `out` with the frame currently under the scan position. Message thread only. */
     void getDisplayWaveform(std::vector<float>& out, int numPoints) const {
@@ -871,6 +885,12 @@ private:
 
     void pushToVisualBuffer(const juce::AudioBuffer<float>& buffer, int numSamples);
 
+    /** Publishes the block's last Position and Warp for the display (WavetableOscillatorModuleLiveDisplay.cpp);
+        `cacheLen` 0 publishes "at rest". Audio thread. */
+    void publishLiveDisplayValues(int cacheLen);
+    bool displayFollowsSound() const;
+    void countHeldMidiNotes(const juce::MidiMessage& msg);
+
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
@@ -913,6 +933,9 @@ private:
 
     float blockPeakWarpAmount = 0.0f;
     float lastSyncSample = 0.0f;
+    std::atomic<float> liveScanPosition{-1.0f}; ///< audio -> UI; below 0 means at rest (show the knob)
+    std::atomic<float> liveWarpAmount{-1.0f};   ///< audio -> UI, as liveScanPosition
+    int heldMidiNotes_ = 0;                     ///< audio thread: MIDI notes down now
     synth::UnisonMix unisonMix;
     juce::Random phaseRandom{0x5EED1234};
 
