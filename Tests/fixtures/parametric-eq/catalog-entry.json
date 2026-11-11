@@ -1,0 +1,162 @@
+{
+  "category": "Filter",
+  "audioIn": true,
+  "audioOut": true,
+  "params": [
+    {
+      "id": "bypassed",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "dualIO",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "band1On",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "band1Freq",
+      "kind": "float",
+      "min": 20.0,
+      "max": 20000.0,
+      "default": 100.0,
+      "modulatable": true
+    },
+    {
+      "id": "band1Gain",
+      "kind": "float",
+      "min": -24.0,
+      "max": 24.0,
+      "default": 0.0,
+      "modulatable": true
+    },
+    {
+      "id": "band1Q",
+      "kind": "float",
+      "min": 0.1,
+      "max": 10.0,
+      "default": 0.707107,
+      "modulatable": true
+    },
+    {
+      "id": "band2On",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "band2Freq",
+      "kind": "float",
+      "min": 20.0,
+      "max": 20000.0,
+      "default": 499.999969000000021,
+      "modulatable": true
+    },
+    {
+      "id": "band2Gain",
+      "kind": "float",
+      "min": -24.0,
+      "max": 24.0,
+      "default": 0.0,
+      "modulatable": true
+    },
+    {
+      "id": "band2Q",
+      "kind": "float",
+      "min": 0.1,
+      "max": 10.0,
+      "default": 0.707107,
+      "modulatable": true
+    },
+    {
+      "id": "band3On",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "band3Freq",
+      "kind": "float",
+      "min": 20.0,
+      "max": 20000.0,
+      "default": 2999.999756000000161,
+      "modulatable": true
+    },
+    {
+      "id": "band3Gain",
+      "kind": "float",
+      "min": -24.0,
+      "max": 24.0,
+      "default": 0.0,
+      "modulatable": true
+    },
+    {
+      "id": "band3Q",
+      "kind": "float",
+      "min": 0.1,
+      "max": 10.0,
+      "default": 0.707107,
+      "modulatable": true
+    },
+    {
+      "id": "band4On",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "band4Freq",
+      "kind": "float",
+      "min": 20.0,
+      "max": 20000.0,
+      "default": 7999.999512000000323,
+      "modulatable": true
+    },
+    {
+      "id": "band4Gain",
+      "kind": "float",
+      "min": -24.0,
+      "max": 24.0,
+      "default": 0.0,
+      "modulatable": true
+    },
+    {
+      "id": "band4Q",
+      "kind": "float",
+      "min": 0.1,
+      "max": 10.0,
+      "default": 0.707107,
+      "modulatable": true
+    },
+    {
+      "id": "outputGain",
+      "kind": "float",
+      "min": -24.0,
+      "max": 24.0,
+      "default": 0.0,
+      "modulatable": true
+    },
+    {
+      "id": "muted",
+      "kind": "bool",
+      "default": false
+    },
+    {
+      "id": "mix",
+      "kind": "float",
+      "min": 0.0,
+      "max": 1.0,
+      "default": 1.0,
+      "modulatable": true
+    },
+    {
+      "id": "pan",
+      "kind": "float",
+      "min": -1.0,
+      "max": 1.0,
+      "default": 0.0,
+      "modulatable": true
+    }
+  ]
+}

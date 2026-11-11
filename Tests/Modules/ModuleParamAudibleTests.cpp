@@ -135,13 +135,21 @@ std::vector<Variant> effectVariants(const std::string& type) {
                             true,
                             true,
                             {57}});
-    } else if (type == "Parametric EQ")
+    } else if (type == "Parametric EQ") {
         v.push_back(plain("bands on, +12 dB", [](juce::AudioProcessor& m) {
             for (int b = 1; b <= 4; ++b) {
                 set(m, ("band" + juce::String(b) + "On").toRawUTF8(), 1);
                 set(m, ("band" + juce::String(b) + "Gain").toRawUTF8(), 12);
             }
         }));
+        // Slots 5-24 are off by default like every slot; on, their knobs are heard (no surface shows them yet).
+        v.push_back(plain("slots 5-24 on, +12 dB", [](juce::AudioProcessor& m) {
+            for (int b = 5; b <= 24; ++b) {
+                set(m, ("band" + juce::String(b) + "On").toRawUTF8(), 1);
+                set(m, ("band" + juce::String(b) + "Gain").toRawUTF8(), 12);
+            }
+        }));
+    }
     return v;
 }
 

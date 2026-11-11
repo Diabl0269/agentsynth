@@ -51,7 +51,8 @@ juce::var choiceParamProperties() {
             continue;
 
         for (auto* param : processor->getParameters()) {
-            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param);
+                choice != nullptr && !detail::isUnexposedParam(*processor, choice->paramID)) {
                 auto existing = byParamId.find(choice->paramID);
                 if (existing == byParamId.end())
                     byParamId[choice->paramID] = choice->choices;

@@ -221,6 +221,14 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
 
 inline bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
 
+// A parameter the module keeps but no surface offers yet (ModuleBase::isParameterExposed; the Parametric EQ's bands
+// 5-24 and every band's Type and Slope). The model never sees or sets one; a node's JSON leaves it out while it is at
+// its default, so the saved JSON of a module that gained it is unchanged, and a trusted apply resets an absent one.
+inline bool isUnexposedParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    const auto* module = dynamic_cast<const ModuleBase*>(&processor);
+    return module != nullptr && !module->isParameterExposed(paramId);
+}
+
 // The parameter as the model may see it, or null for one it never sees: the Drum Kit's per-pad parameters, which
 // its group ids (kickLevel, closedDecay ...) write.
 inline juce::RangedAudioParameter* modelVisibleParam(juce::AudioProcessor& processor,
@@ -228,6 +236,8 @@ inline juce::RangedAudioParameter* modelVisibleParam(juce::AudioProcessor& proce
     auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
     if (ranged != nullptr && dynamic_cast<DrumKitModule*>(&processor) != nullptr &&
         DrumKitModule::isPadParamId(ranged->paramID))
+        return nullptr;
+    if (ranged != nullptr && isUnexposedParam(processor, ranged->paramID))
         return nullptr;
     return ranged;
 }
