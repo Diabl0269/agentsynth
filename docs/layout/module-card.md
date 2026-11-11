@@ -568,7 +568,8 @@ mixer uses the same ones ([`mixer/panel.md#automation-markers`](../mixer/panel.m
 ## Modulation dot
 
 A knob or fader a modulation cable lands on also carries a transparent `synth::ui::ModDotButton`
-(`UI/Graph/ModDot/ModDotButton.h`), centred on the landing dot (about 16 px square). It is the dot's
+(`UI/Graph/ModDot/ModDotButton.h`), centred on the landing dot (about 16 px square; the button sits on whole pixels,
+so it also carries the dot's sub-pixel remainder and the ring is drawn round the dot's real centre, at any zoom). It is the dot's
 keyboard and screen-reader face: its own Tab stop right after its knob (`getKeyboardControls` sorts it
 with the knob it belongs to), named "<Param> modulation, N sources" with the tooltip "Modulation
 sources for <Param>", the solid accent focus ring around the dot, Up/Down for the last-chosen
