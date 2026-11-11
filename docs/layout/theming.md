@@ -338,6 +338,12 @@ implemented in `AppLookAndFeel`:
   (headless tests, pixel goldens) land on the final state at once, so a draw with no VBlank reads the final
   look. Frames run only while a tween runs and repaint only that button. A `DrawableButton`'s icon image is a
   child the owner tints itself (`setImages`), so it still swaps instantly with the state.
+- **On/off switch** — `synth::ui::SwitchGlide` (`Source/UI/Layout/SwitchGlide.h`) is the one hand-painted switch (a
+  pill with a round knob; the Cmd+K rows use it). The owner holds one, calls `retarget(on, animate)` when its state
+  changes and `paint(g, pill, colours)` from its own paint, with the colours passed in. The knob slides and the fill
+  fades with the same timing as button states (110 ms in, 90 ms out, 80 ms under Reduce Motion, none under
+  Animations: Off); `animate` false (a first bind, another entry on a recycled row) or an owner off screen lands at
+  once. No second switch is painted by hand (`ModMatrixPickerSwitchGlideTests` scans Source for one).
 - **Toolbar button** — `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`) is the top
   bar's button: a group-coloured chip, a multi-role glyph and a caption, painted by
   `AppLookAndFeel::drawToolbarButton` (free function `paintToolbarButton` outside any
