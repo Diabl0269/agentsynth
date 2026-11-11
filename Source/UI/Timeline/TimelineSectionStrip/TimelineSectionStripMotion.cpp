@@ -103,6 +103,63 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
             paintGhost(dragMembers_[i].block, memberGhostRect(i));
     const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
     paintGhost(dragBlock_, dragBlock_.bounds.withX(x));
+    if (dragging && !dragOutside_)
+        paintDropHint(g, lift);
+}
+
+// What a release now would do, in words, on the side of the drop line away from the ghost. Its opacity follows the lift
+// so it fades in and out with the drag; when Shift flips the mode the old words fade into the new.
+void TimelineSectionStrip::updateDropHint() {
+    const juce::String words = dragMakeRoom_ ? "Release to push the music later" : "Release to cover it";
+    if (words == dropHint_)
+        return;
+    const bool swap = dropHint_.isNotEmpty() && blockDragging_;
+    dropHintFrom_ = dropHint_;
+    dropHint_ = words;
+    if (swap)
+        motion_.startHintSwap();
+}
+
+void TimelineSectionStrip::paintDropHint(juce::Graphics& g, float lift) const {
+    if (dropHint_.isEmpty() || lift <= 0.0f)
+        return;
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const juce::Font font(juce::FontOptions(10.5f));
+    const float swap = motion_.hintSwap();
+    const bool swapping = swap < 1.0f && dropHintFrom_.isNotEmpty();
+    const auto widthOf = [&](const juce::String& s) {
+        return (float)juce::GlyphArrangement::getStringWidthInt(font, s);
+    };
+    constexpr float kPadX = 7.0f;
+    constexpr float kGap = 6.0f;
+    constexpr float kPillH = 16.0f;
+    const float textW = std::max(widthOf(dropHint_), swapping ? widthOf(dropHintFrom_) : 0.0f);
+    const float pillW = textW + 2.0f * kPadX;
+    const float lineX = (float)xAtBeat(dragPlan_.landing);
+    const float ghostMid = dragGhostX_ + dragBlock_.bounds.getWidth() * 0.5f;
+    // The side the ghost is not on; the other side when this one has no room.
+    bool right = ghostMid >= lineX ? false : true;
+    const auto fits = [&](bool onRight) {
+        const float left = onRight ? lineX + kGap : lineX - kGap - pillW;
+        return left >= 0.0f && left + pillW <= (float)getWidth();
+    };
+    if (!fits(right) && fits(!right))
+        right = !right;
+    const float left =
+        std::clamp(right ? lineX + kGap : lineX - kGap - pillW, 0.0f, std::max(0.0f, (float)getWidth() - pillW));
+    const juce::Rectangle<float> pill(left, ((float)getHeight() - kPillH) * 0.5f, pillW, kPillH);
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(getLocalBounds());
+    g.setColour(colors.surface.withAlpha(0.92f * lift));
+    g.fillRoundedRectangle(pill, kPillH * 0.5f);
+    g.setFont(font);
+    const auto text = pill.reduced(kPadX, 0.0f).toNearestInt();
+    if (swapping) {
+        g.setColour(colors.textMuted.withAlpha(lift * (1.0f - swap)));
+        g.drawText(dropHintFrom_, text, juce::Justification::centred, false);
+    }
+    g.setColour(colors.textMuted.withAlpha(lift * (swapping ? swap : 1.0f)));
+    g.drawText(dropHint_, text, juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

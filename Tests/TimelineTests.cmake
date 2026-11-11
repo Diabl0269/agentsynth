@@ -79,6 +79,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragFollowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDropHintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionDropPlanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionGroupDropPlanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMultiSelectTests.cpp

@@ -200,6 +200,10 @@ public:
     sectionstrip::Span getMakeDragSpanForTest() const noexcept { return makeDragSpan_; }
     bool isBlockDraggingForTest() const noexcept { return blockDragging_; }
     bool isBlockDragCopyForTest() const noexcept { return dragCopy_; }
+    // The words of the hint the drop line carries now ("Release to ..."); empty unless a drag in flight shows it.
+    juce::String getDropHintTextForTest() const { return dropHintShown() ? dropHint_ : juce::String(); }
+    // What the block menu's "Place again after this" says with the current setting.
+    juce::String getPlaceAgainAfterMenuTextForTest() const { return placeAgainAfterMenuText(); }
     // The beat a block drag in flight would drop its start on (what the accent drop line shows).
     double getBlockDragTargetBeatForTest() const noexcept { return dragPlan_.landing; }
     // The whole plan of the drag in flight: every other block's start after the drop and what a cover drop removes.
@@ -262,6 +266,10 @@ private:
     std::vector<sectionstrip::PlacedSpan> placedSpans() const;
     double drawnStartOf(synth::PlacementId id, double docStart) const;
     void paintBlockDrag(juce::Graphics& g) const;
+    void paintDropHint(juce::Graphics& g, float lift) const;
+    bool dropHintShown() const noexcept { return blockDragging_ && !dragCancelled_ && !dragOutside_; }
+    void updateDropHint();
+    juce::String placeAgainAfterMenuText() const;
     // Abandons any gesture in flight (Esc): the make-drag outline and a block drag. True when one was.
     bool cancelGesture();
 
@@ -363,6 +371,8 @@ private:
     sectionstrip::DropPlan dragPlan_; // what a release now would do; landing is where the drop line is drawn
     bool dragMakeRoom_ = true;        // the mode the plan was made in (the setting, flipped while Shift is held)
     bool hasDragPlan_ = false;
+    juce::String dropHint_; // the words beside the drop line, and the ones it fades from when Shift flips the mode
+    juce::String dropHintFrom_;
     std::vector<synth::PlacementId> settlingIds_; // the blocks just dropped: their settling ghosts stand in for them
     std::unique_ptr<KeyedPointTween>
         dropGlide_; // blocks easing to a new start: a drag's plan, an undo, a key move (x = beats)

@@ -82,7 +82,8 @@ open in the piano roll, and by the Settings toggle below.
   flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
-  and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
+  and bars. "Place again after this" names what it will do with the setting: "(push the music later)" or "(cover
+  what is there)"; "Place again at the end" has nothing to cover. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
   `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
 - **Variation chip:** every block shows a rounded chip at its right end with the letter it plays (A, B...),
@@ -119,11 +120,16 @@ open in the piano roll, and by the Settings toggle below.
   placement that shares it.
 - **Edge lines:** each block's start and end draw as a faint line down the lanes.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
-  "placing a section covers the music where it lands" (`timelineSectionsCoverOnDrop`, default off; Shift flips
-  it for one drop).
+  "dropping a section on other music" (`timelineSectionsCoverOnDrop`; a Label + ComboBox, "Pushes the music
+  later" by default, or "Covers it"; a hint under it says Shift does the other one, that time only).
+- **Drop hint:** while a block is dragged, a small pill beside the drop line (on the side away from the ghost, clipped
+  to the strip) says what a release does, from the same mode the release commits (the setting, flipped while Shift is
+  held): "Release to push the music later" or "Release to cover it", for a copy drag too. Hidden when the pointer is
+  above the strip or after Esc. Its opacity follows the lift; when Shift flips the mode the old words fade into the new
+  over 120 ms (`SectionStripMotion::startHintSwap`). Test seam `getDropHintTextForTest`.
 - **Motion** (`SectionStripMotion`, one `AnimationDriver` per effect, nothing running at rest): a new block grows
   in over 160 ms; a deleted block's picture shrinks toward its centre over 180 ms; a dragged block lifts over 100 ms
-  and settles over 140 ms; when `getSectionStampRevision()` changes, every placement in
+  and settles over 140 ms; the drop hint's words cross-fade over 120 ms; when `getSectionStampRevision()` changes, every placement in
   `getLastStampedPlacements()` shows a 1 px accent outline that fades over 400 ms. Undo of a delete grows the block
   back; a project load grows nothing. Reduce Motion turns the grow and shrink into an 80 ms fade and the outline
   into an 80 ms fade, and the lift lands at once (a move has no fade form); Animations: Off, or a strip that is not

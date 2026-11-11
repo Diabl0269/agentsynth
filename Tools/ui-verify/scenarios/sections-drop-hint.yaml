@@ -1,0 +1,46 @@
+# Dragging a Sections-strip block says what a release does: a small pill beside the drop line reads "Release to push
+# the music later" (the default) and, with Shift held, "Release to cover it"; the words fade in with the lift and
+# cross-fade when Shift flips the mode.
+#
+# What a user does: makes two sections (bar 1, bar 2), presses the second and drags it over the first: the pill shows
+# beside the drop line. Holds Shift: the words change to "Release to cover it" and the block it would replace dims.
+# Releases with Shift held: the second section replaces the first. Undo puts it back.
+record: true
+motion: true
+save_project: "fro1539 test"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Two sections: bar 1 (x 0..96) and bar 2 (96..192); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  # Check 1: press Section 2 (grabbed 40 px in) and drag it over Section 1: the pill says it would push the music later.
+  - mouseDown: {id: timelineSectionStrip, x: 136, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 60, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 44, y: 12}
+  - mark: {check: 1, name: drop-hint}
+  # Check 2: Shift pressed mid-drag: the words change to "Release to cover it".
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 46, y: 12, mods: shift}
+  - mark: {check: 2, name: drop-hint-cover}
+  - mouseUp: {id: timelineSectionStrip, x: 46, y: 12, mods: shift}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}

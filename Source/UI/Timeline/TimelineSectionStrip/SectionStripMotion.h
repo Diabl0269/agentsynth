@@ -19,6 +19,7 @@ public:
     static constexpr double kSettleMs = 140.0;
     static constexpr double kOutlineMs = 400.0;
     static constexpr double kReducedMs = 80.0;
+    static constexpr double kHintSwapMs = 120.0;
 
     /** `host` is the strip: it must outlive this and supplies the VBlank clock. */
     SectionStripMotion(juce::Component& host, std::function<void()> onFrame);
@@ -54,6 +55,11 @@ public:
     bool isOutlined(synth::PlacementId id) const;
     float outlineAlpha() const noexcept { return outlineAlpha_; }
 
+    /** The drop hint changed its words (Shift flipped the drop mode): the old text fades out as the new one fades in.
+     *  hintSwap() runs 0 to 1; it is 1 at rest and lands at once when animation is off. */
+    void startHintSwap();
+    float hintSwap() const noexcept { return hintSwap_; }
+
     bool isAnimating() const noexcept;
     /** Lands everything at once (a new doc, a destroyed strip). */
     void stopAll();
@@ -64,6 +70,7 @@ public:
     bool isGrowingForTest() const noexcept { return grow_.isRunning(); }
     bool isLiftingForTest() const noexcept { return liftDriver_.isRunning(); }
     bool isOutliningForTest() const noexcept { return outline_.isRunning(); }
+    bool isHintSwappingForTest() const noexcept { return hintSwapDriver_.isRunning(); }
     bool isExitingForTest() const noexcept { return exitDriver_.isRunning(); }
     void stepForTest(double ms);
 
@@ -93,6 +100,9 @@ private:
 
     AnimationDriver liftDriver_;
     float lift_ = 0.0f;
+
+    AnimationDriver hintSwapDriver_;
+    float hintSwap_ = 1.0f;
 
     AnimationDriver outline_;
     std::vector<synth::PlacementId> outlined_;
