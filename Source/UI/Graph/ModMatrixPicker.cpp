@@ -5,6 +5,7 @@
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Layout/SwitchGlide.h"
+#include "UI/Layout/TagHue.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -23,8 +24,7 @@ constexpr int kDetailRowHeight = 40; // a row with a second line
 constexpr float kDetailFontSize = 11.0f;
 constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
-constexpr int kGlyphGutter = 16; // before the text of every row when any row has a tick or a plus
-constexpr float kTagFontSize = 9.0f;
+constexpr int kGlyphGutter = 16;          // before the text of every row when any row has a tick or a plus
 constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
 constexpr int kActionSize = 20;           // a row's action button, square
 constexpr float kHintFontSize = 11.0f;
@@ -37,6 +37,7 @@ struct Palette {
     juce::Colour muted = juce::Colours::grey;
     juce::Colour accent = juce::Colours::lightblue;
     juce::Colour success = juce::Colours::limegreen;
+    synth::theme::Colors colors; // for the tag hues
     float radius = 6.0f;
 };
 
@@ -53,6 +54,7 @@ Palette paletteFor(juce::Component& comp) {
         p.muted = c.textMuted;
         p.accent = c.accent;
         p.success = c.success;
+        p.colors = c;
         p.radius = lf->getTheme().metrics.cornerRadius;
     }
     return p;
@@ -289,16 +291,9 @@ public:
 
     // A tag ("New", or the row's kind word) at the row's right edge, which takes that width off `content`.
     void paintTag(juce::Graphics& g, juce::Rectangle<int>& content, const juce::String& label) const {
-        const juce::Font font(juce::FontOptions(kTagFontSize, juce::Font::bold));
-        juce::GlyphArrangement glyphs;
-        glyphs.addLineOfText(font, label, 0.0f, 0.0f);
-        const int width = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 10;
-        const auto tag = content.removeFromRight(width).withSizeKeepingCentre(width, 14).toFloat();
+        const auto box = content.removeFromRight(tagWidth(label)).withSizeKeepingCentre(tagWidth(label), kTagHeight);
         content.removeFromRight(6);
-        g.setColour(palette_.muted);
-        g.drawRoundedRectangle(tag.reduced(0.5f), 4.0f, 1.0f);
-        g.setFont(font);
-        g.drawText(label, tag, juce::Justification::centred, false);
+        drawTag(g, box.toFloat(), label, palette_.colors);
     }
 
     // A muted note (an action's key) right-aligned before the tag; it never squeezes the row's own text below half.
