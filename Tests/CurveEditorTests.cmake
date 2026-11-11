@@ -19,6 +19,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeColourSlotTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ModalCloseKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyboardReachTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/TabOrderReadingSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/EditorHeaderTabReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MenuFieldSpaceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/SelectFocusRingTests.cpp
