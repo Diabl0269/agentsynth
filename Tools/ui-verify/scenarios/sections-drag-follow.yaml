@@ -38,26 +38,19 @@ steps:
   - screenshot: {name: 1-three-sections}
   # Check 1: drag Section 1 (grabbed 40 px in) until its left edge is at x 290, just past Section 3's end once
   # Section 1's own bar closes up: Sections 2 and 3 glide left and the drop line sits at x 288 (beat 12).
-  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 150, y: 12}
-  - glide: {name: neighbours-make-room, do: {mouseMoveHeld: {id: timelineSectionStrip, x: 330, y: 12}}, frames: 12}
-  - mark: {check: 1, name: drop-line-and-gap}
-  - glide: {name: block-settles-on-line, do: {mouseUp: {id: timelineSectionStrip, x: 330, y: 12}}, frames: 10}
-  - wait: {}
-  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
+  - drag: {from: timelineSectionStrip, to: timelineSectionStrip, fromX: 40, fromY: 12, toX: 330, toY: 12, steps: 20}
   - mark: {check: 1, name: landed-where-the-line-was}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
   # Undo glides them back.
   - glide: {name: undo-glides-back, do: {key: {keys: cmd+z}}, frames: 10}
   - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:8.000:1/1", within_ms: 2000}
   - key: {keys: cmd+shift+z}
   - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
-  # Check 2: Shift held over Section 2 shows a cover drop (Section 2 dims, nothing moves); released above the strip
-  # it cancels.
-  - mouseDown: {id: timelineSectionStrip, x: 330, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 200, y: 12}
-  - mouseMoveHeld: {id: timelineSectionStrip, x: 44, y: 12, mods: shift}
+  # Check 2: drag Section 1 back over Section 2 with Shift held: while dragging Section 2 dims and nothing moves (a
+  # cover drop); on release Section 1 replaces it. Undo puts it back.
+  - drag: {from: timelineSectionStrip, to: timelineSectionStrip, fromX: 330, fromY: 12, toX: 44, toY: 12, steps: 18, mods: shift}
   - mark: {check: 2, name: shift-shows-cover}
-  - mouseUp: {id: timelineSectionStrip, x: 44, y: -10, mods: shift}
+  - key: {keys: cmd+z}
   - wait: {}
   - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 3:4.000:8.000:1/1;Section 1:12.000:4.000:1/1", within_ms: 2000}
   # Check 4: Shift+Cmd+J with the strip focused. With no range and no loop, a toast says what to do; with the Range
@@ -67,17 +60,16 @@ steps:
   - expect: {id: toastState, contains: {message: "Range tool"}, within_ms: 2000}
   - mark: {check: 4, name: make-section-key-says-what-to-do}
   - click: {id: timelineToolRange}
-  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 484, fromY: 28, toX: 670, toY: 28, steps: 12}
-  - wait: {}
   - hover: {id: timelineSectionStrip, x: 1000, y: 12}
+  - wait: {settleMs: 1500}
+  # The Range drag is filmed step by step so the clip shows the bars being picked, then the key making the section.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 484, fromY: 28, toX: 670, toY: 28, steps: 14}
+  - glide: {name: strip-focused, do: {click: {id: timelineSectionStrip, x: 1000, y: 12}}, frames: 4}
   - expect: {id: timelineSectionStrip, contains: {tooltip: "to make one from the selected bars"}, within_ms: 3000}
-  - mark: {check: 4, name: tooltip-names-the-key}
-  - click: {id: timelineSectionStrip, x: 1000, y: 12}
-  - key: {keys: cmd+shift+j}
-  - wait: {}
-  - expect: {id: timelineSections, contains: {sections: "Section 4:"}, within_ms: 2000}
-  - key: {keys: return}
+  - glide: {name: key-makes-section, do: {key: {keys: cmd+shift+j}}, frames: 6}
   - mark: {check: 4, name: made-from-the-range}
+  - key: {keys: return}
+  - expect: {id: timelineSections, contains: {sections: "Section 4:"}, within_ms: 2000}
   - click: {id: timelineToolSelect}
   # Check 3: Section 2 held at the strip's right edge scrolls the timeline; on release it lands after the others.
   - mouseDown: {id: timelineSectionStrip, x: 40, y: 12}
