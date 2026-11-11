@@ -97,6 +97,11 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
 `forceAnimateForTest`). The LFO card's Custom-wave editor takes the same path: its poll passes the restore flag to
 `setModel`. Track header rows and automation lane rows land at once under Reduce Motion, with no fade.
+- **Drum Kit pad knobs.** `DrumPadControls` draws each of the four pad knobs at its parameter's value plus what is left of a
+  `KeyedPointTween` glide (one key per knob, the value as a proportion of its range). A change the parameter makes while
+  `AppUndoManager::isRestoring()` is true (an undo or redo of a knob change) and a pad pick both glide the drawn value from
+  the one shown; a drag, a key press or automation takes the knob where it is, frame for frame. Guard: the `Drum Kit pad
+  knob` entry in `UndoGlideSurfaces`; the pick itself is `DrumKitPadGlideTests`.
 
 ## The checklist
 

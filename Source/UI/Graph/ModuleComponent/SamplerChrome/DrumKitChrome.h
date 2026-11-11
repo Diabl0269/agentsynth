@@ -27,6 +27,12 @@ public:
     void poll() override;
     void refreshLoaded() override { row_.refresh(); }
     void releaseBindings() override { pads_.controls().releaseBindings(); }
+    float padRingAlpha() const override { return pads_.controls().arrivingRingAlpha(); }
+    std::optional<LeavingRing> leavingPadRing(const juce::String& paramId) const override {
+        if (const auto ring = pads_.controls().leavingRing(paramId))
+            return LeavingRing{ring->knob, ring->alpha};
+        return std::nullopt;
+    }
 
     InstrumentPickerRow& getRow() noexcept { return row_; }
     juce::Button& getDrumMachineButton() noexcept { return drumMachineButton_; }

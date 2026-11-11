@@ -513,6 +513,8 @@ void DrumPadGrid::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("pickedSound", pad.sound);
     into.setProperty("soundOutline", isShowingSoundOutline());
     into.setProperty("dropTargetPad", dropTarget_ + 1);
+    if (addAreaTestState)
+        addAreaTestState(into);
 }
 
 } // namespace synth::ui

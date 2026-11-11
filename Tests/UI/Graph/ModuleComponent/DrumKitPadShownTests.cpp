@@ -345,14 +345,14 @@ TEST(DrumKitPadShown, WithAnimationsOffThePadsMoveAtOnce) {
     EXPECT_EQ(scene.grid().padCell(7).getBounds(), scene.grid().padBounds(7));
 }
 
-// Regression test for FRO1304: the Shown switch took the pad the panel was still fading from, so a click within the
-// 80 ms cross-fade after a pick hid the previous pad.
-TEST(DrumKitPadShown, TheSwitchActsOnTheNewPickBeforeThePanelFinishesFading) {
+// Regression test for FRO1304: the Shown switch took the pad the panel was still moving from, so a click right after a
+// pick hid the previous pad.
+TEST(DrumKitPadShown, TheSwitchActsOnTheNewPickWhileTheKnobsAreStillGliding) {
     Scene scene;
     scene.pickQuietly(0);
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
-    scene.pickQuietly(3); // the panel starts fading from pad 1 to pad 4
-    ASSERT_NE(scene.pads().controls().boundPad(), 3) << "the fade has not re-bound the knobs yet";
+    scene.pickQuietly(3); // the knobs start gliding from pad 1 to pad 4
+    ASSERT_EQ(scene.pads().controls().boundPad(), 3);
     EXPECT_EQ(scene.pads().controls().shownSwitch().getTitle(), "Shown: Closed hat")
         << "the switch already speaks for it";
     scene.flipSwitch();

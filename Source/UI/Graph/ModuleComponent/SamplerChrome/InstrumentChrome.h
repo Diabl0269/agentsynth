@@ -6,6 +6,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 class AppUndoManager;
 
@@ -46,6 +47,14 @@ public:
     virtual void poll() = 0;
     /** Re-reads the module (after a project's deferred loads landed). */
     virtual void refreshLoaded() = 0;
+    /** Drum Kit: how opaque the picked pad's mod ring is now (it fades in over a pick); 1 for every other chrome. */
+    virtual float padRingAlpha() const { return 1.0f; }
+    /** Drum Kit: the ring of the pad parameter `paramId` that is fading out of its knob after a pick. */
+    struct LeavingRing {
+        juce::Slider* knob = nullptr;
+        float alpha = 0.0f;
+    };
+    virtual std::optional<LeavingRing> leavingPadRing(const juce::String& /*paramId*/) const { return std::nullopt; }
     /** The module is already freed: give up any parameter attachment without touching its parameters (leaks it). */
     virtual void releaseBindings() {}
 

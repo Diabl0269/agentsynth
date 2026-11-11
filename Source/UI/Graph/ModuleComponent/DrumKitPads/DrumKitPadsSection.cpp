@@ -15,7 +15,10 @@ using synth::drums::PadKind;
 namespace {
 
 constexpr int kStepperWidth = 104;
-constexpr int kChipGap = 4; // the caption's count and the Show all chip
+constexpr int kChipGap = 8; // the Pads title and the Show all chip
+// The "Pads" title gets at least this width, so the chip lands at the same x on every platform
+// (the title measures 41-43 px across macOS, Linux and Windows fonts; the card goldens are shared).
+constexpr int kPadsTitleMinWidth = 48;
 
 // A pad holds a setting of its own when it differs from what a fresh kit holds there: its note, name, file or
 // instrument, a sound other than its default (or the one the count gives a free pad), or a knob moved off its
@@ -52,8 +55,9 @@ std::uint32_t linkedInstrumentPads(const DrumKitModule& kit) {
 } // namespace
 
 int DrumKitPadsSection::height(const DrumKitModule& kit) {
-    return synth::cardbody::kRowHeight + kGridGap + DrumPadGrid::heightFor((int)kit.shownPads().size()) + kCaptionGap +
-           kCaptionHeight + kControlsGap + DrumPadControls::height() + kSectionGap;
+    return synth::cardbody::kBlockGap + synth::cardbody::kRowHeight + kGridGap +
+           DrumPadGrid::heightFor((int)kit.shownPads().size()) + kCaptionGap + kCaptionHeight + kControlsGap +
+           DrumPadControls::height() + kSectionGap;
 }
 
 int DrumKitPadsSection::hiddenPadsWithSettings(const DrumKitModule& kit) {
@@ -80,6 +84,14 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     , controls_(kit) {
     stepperLabel_.setJustificationType(juce::Justification::centredLeft);
     host_.card->addAndMakeVisible(stepperLabel_);
+    showAll_.setComponentID("drumPadsShowAll");
+    showAll_.setTitle("Show all hidden pads");
+    showAll_.setWantsKeyboardFocus(true);
+    showAll_.setClickingTogglesState(false); // lit follows the kit, so an undo relights it
+    setTogglePillStyle(showAll_, true);
+    showAll_.setVisible(false);
+    showAll_.onClick = [this] { toggleShowAll(); };
+    host_.card->addChildComponent(showAll_);
     stepper_.setComponentID("drumPadCount");
     stepper_.setTooltip("How many pads the card shows. Hidden pads keep their sounds.");
     stepper_.setTypable(true);
@@ -99,15 +111,18 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     caption_.setMinimumHorizontalScale(1.0f);
     host_.card->addAndMakeVisible(caption_);
 
-    showAll_.setComponentID("drumPadsShowAll");
-    showAll_.setTitle("Show all hidden pads");
-    showAll_.setWantsKeyboardFocus(true);
-    showAll_.setClickingTogglesState(false); // lit follows the kit, so an undo relights it
-    setTogglePillStyle(showAll_, true);
-    showAll_.setVisible(false);
-    showAll_.onClick = [this] { toggleShowAll(); };
-    host_.card->addChildComponent(showAll_);
-
+    grid_.addAreaTestState = [this](juce::DynamicObject& into) {
+        into.setProperty("chipX", showAll_.getX());
+        into.setProperty("chipVisible", showAll_.isVisible());
+        into.setProperty("chipLit", showAll_.getToggleState());
+        into.setProperty("titleRight", stepperLabel_.getRight());
+        into.setProperty("stepperX", stepper_.getX());
+        int levelBottom = 0;
+        for (auto* child : host_.card->getChildren())
+            if (child->getComponentID() == "Level")
+                levelBottom = child->getBottom();
+        into.setProperty("levelToStepperGap", stepper_.getY() - levelBottom);
+    };
     grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padShown(index)); };
     controls_.onShownChanged = [this](int index, bool shown) { setPadShown(index, shown); };
     controls_.onEscape = [this] { grid_.grabKeyboardFocus(); };
@@ -115,6 +130,7 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
         if (host_.rebindLearnable)
             host_.rebindLearnable(knob, param);
     };
+    controls_.isRestoring = [this] { return host_.undo != nullptr && host_.undo->isRestoring(); };
     controls_.onBeforeRebind = [this] {
         if (host_.cableEndsMove)
             host_.cableEndsMove();
@@ -133,10 +149,10 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
 DrumKitPadsSection::~DrumKitPadsSection() { *alive_ = false; }
 
 int DrumKitPadsSection::layout(int y, int x, int w, bool apply) {
+    y += synth::cardbody::kBlockGap; // clear of the Level box above
     if (apply) {
-        auto row = juce::Rectangle<int>(x, y, w, synth::cardbody::kRowHeight);
-        stepper_.setBounds(row.removeFromRight(kStepperWidth));
-        stepperLabel_.setBounds(row);
+        padsRow_ = {x, y, w, synth::cardbody::kRowHeight};
+        placePadsRow();
     }
     y += synth::cardbody::kRowHeight + kGridGap;
     const int gridH = DrumPadGrid::heightFor((int)kit_.shownPads().size());
@@ -248,20 +264,27 @@ void DrumKitPadsSection::refreshCaption() {
     placeCaption();
 }
 
-// "2 hidden [Show all]": the chip sits right after the count, a gap away (and is away while a pick hint has the
-// line). Lit, it reads "2 shown again [Show all]" and a press hides those two again.
+// The caption under the grid says "2 hidden" (or "2 shown again"); the Show all chip sits on the Pads row, so a pick
+// hint or a drop hint taking the caption never moves or hides it.
 void DrumKitPadsSection::placeCaption() {
     const auto text = synth::ui::showAllText(kit_.hiddenPadCount(), kit_.revealedPadCount());
-    const bool chip = hint_.isEmpty() && dropHint().isEmpty() && text.enabled;
     synth::ui::applyShowAllChip(showAll_, text);
-    const float textWidth = juce::GlyphArrangement::getStringWidth(caption_.getFont(), caption_.getText());
+    caption_.setBounds(captionRow_);
+    placePadsRow();
+    showAllFade_.setShown(text.enabled); // fades in and out with the count under the grid, never pops
+}
+
+// label | chip | stepper: the chip's left edge is a fixed gap after the "Pads" title, whatever the chip's state.
+void DrumKitPadsSection::placePadsRow() {
+    auto row = padsRow_;
+    stepper_.setBounds(row.removeFromRight(kStepperWidth));
+    const int labelW = juce::jmax(kPadsTitleMinWidth, (int)std::ceil(juce::GlyphArrangement::getStringWidth(
+                                                          stepperLabel_.getFont(), stepperLabel_.getText())) +
+                                                          stepperLabel_.getBorderSize().getLeftAndRight() + 2);
+    stepperLabel_.setBounds(row.removeFromLeft(labelW));
     const int chipWidth = synth::theme::AppLookAndFeel::togglePillWidth(showAll_.getButtonText());
-    const int textW = chip ? juce::jmin(captionRow_.getWidth() - chipWidth - kChipGap,
-                                        (int)std::ceil(textWidth) + caption_.getBorderSize().getLeftAndRight() + 2)
-                           : captionRow_.getWidth();
-    caption_.setBounds(captionRow_.withWidth(textW));
-    showAll_.setBounds(captionRow_.withTrimmedLeft(textW + kChipGap).withWidth(chipWidth));
-    showAllFade_.setShown(chip); // fades in and out with the count beside it, never pops
+    // On the stepper's own top edge: Tab orders siblings by y, so the chip then comes before the stepper.
+    showAll_.setBounds(row.getX() + kChipGap, row.getY(), chipWidth, kCaptionHeight);
 }
 
 // ---- Following the kit ----

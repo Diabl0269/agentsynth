@@ -53,6 +53,8 @@ std::unique_ptr<Surface> makeLfoCardPoint();
 std::unique_ptr<Surface> makeEqCardCurve();
 std::unique_ptr<Surface> makeEqWindowCurve();
 std::unique_ptr<Surface> makeEqMixerThumbnail();
+/** The Drum Kit pad panel's Level knob (a pad pick glides the same knobs; see DrumKitPadGlideTests). */
+std::unique_ptr<Surface> makeDrumPadKnob();
 /** A section moved by covering another: its clips in the clip lane, and its block on the Sections strip. */
 std::unique_ptr<Surface> makeSectionMoveClips();
 std::unique_ptr<Surface> makeSectionStripBlock();
