@@ -64,5 +64,6 @@ steps:
   - drag: {from: "card:Filter > Cutoff", to: "card:Filter > Cutoff", fromX: 42, fromY: 40, toX: 42, toY: 20}
   - wait: {settleMs: 400}
   - getState: {id: "card:Filter > Cutoff"}
+  - mark: {check: 1, name: cutoff-readout-fits}   # the note and its whole Hz after a turn, no "..."
   - screenshot: {id: "card:Filter > Cutoff", name: after-drag, scale: 3}
   - screenshot: {id: "card:Filter", name: card-after}
