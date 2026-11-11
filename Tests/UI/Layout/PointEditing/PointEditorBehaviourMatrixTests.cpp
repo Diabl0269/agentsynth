@@ -54,16 +54,17 @@ const std::vector<Cell> kNotApplicable = {
 // Behaviours an editor has not got yet. May only shrink.
 const std::vector<MissingCell> kMissingBehaviours = {
     {"Mod curve editor", "double-click-add",
-     "a double-click on empty space does not leave a new point in the module's curve", "TICKET"},
-    {"Mod curve editor", "right-click-menu", "a right-click on a point removes it at once; there is no menu", "TICKET"},
+     "a double-click on empty space does not leave a new point in the module's curve", "FRO1716"},
+    {"Mod curve editor", "right-click-menu", "a right-click on a point removes it at once; there is no menu",
+     "FRO1716"},
     {"EQ curve", "box-select", "a drag on empty space does not select bands in a box; the selection is one band",
-     "TICKET"},
-    {"EQ curve", "shift-extend", "Shift+Left/Right moves the one selected band instead of extending", "TICKET"},
-    {"EQ curve", "held-glide", "an arrow steps once per press; holding it does not glide", "TICKET"},
-    {"EQ curve", "two-arrows-diagonal", "no key hold, so two arrows cannot move a band diagonally", "TICKET"},
+     "FRO1717"},
+    {"EQ curve", "shift-extend", "Shift+Left/Right moves the one selected band instead of extending", "FRO1717"},
+    {"EQ curve", "held-glide", "an arrow steps once per press; holding it does not glide", "FRO1717"},
+    {"EQ curve", "two-arrows-diagonal", "no key hold, so two arrows cannot move a band diagonally", "FRO1717"},
     {"EQ curve", "delete-next",
-     "Delete switches the band off and the selection stays on it, so Return can bring it back", "TICKET"},
-    {"EQ curve", "right-click-menu", "a right-click on a band opens no menu", "TICKET"},
+     "Delete switches the band off and the selection stays on it, so Return can bring it back", "FRO1717"},
+    {"EQ curve", "right-click-menu", "a right-click on a band opens no menu", "FRO1717"},
 };
 
 const Cell* findNotApplicable(const std::string& editor, const std::string& behaviour) {
