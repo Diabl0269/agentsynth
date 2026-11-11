@@ -163,14 +163,34 @@ struct MotionFrame {
     juce::Component anchor;
     std::unique_ptr<ModDotPanelFrame> frame;
     int closed = 0;
+    float alphaAtClose = -1.0f; // the window's alpha at the moment onClosed ran
     MotionFrame() {
         auto content = std::make_unique<juce::Component>();
         content->setSize(280, 100);
         frame = std::make_unique<ModDotPanelFrame>(std::move(content), anchor, juce::Rectangle<int>(100, 200, 12, 12),
                                                    kScreen);
-        frame->onClosed = [this] { ++closed; };
+        frame->onClosed = [this] {
+            alphaAtClose = frame->getAlpha();
+            ++closed;
+        };
         synth::ui::PopupMotion::attach(*frame, frame->motionStyle());
         frame->setVisible(true);
+    }
+};
+
+// Reads the fade's alpha between pumps and checks it only goes down. It stops reading once onClosed has run: a turn
+// later the frame puts its alpha back to 1.0 (a window that lives on after a vetoed close is whole), and a loaded
+// runner delivers that turn inside the same pump slice as the close, so a read after it sees 1.0, which is the
+// restore and not a re-show. alphaAtClose is the fade's own last value.
+struct FadeReads {
+    float last = 1.0f;
+    bool monotonic = true;
+    void sample(const MotionFrame& m) {
+        if (m.closed != 0)
+            return;
+        const float alpha = m.frame->getAlpha();
+        monotonic = monotonic && alpha <= last;
+        last = alpha;
     }
 };
 
@@ -273,9 +293,6 @@ TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow)
     } watch;
     watch.count = &shown;
     m.frame->addComponentListener(&watch);
-    // Let the intro fade finish first: a slow runner can still be mid fade-in at the press.
-    ASSERT_TRUE(pumpUntil([&] { return m.frame->getAlpha() >= 0.999f; }));
-
     const juce::MouseEvent press(juce::Desktop::getInstance().getMainMouseSource(), {50, 50}, kPlainMouse, 0.0f, 0.0f,
                                  0.0f, 0.0f, 0.0f, &canvas, &canvas, juce::Time::getCurrentTime(), {50, 50},
                                  juce::Time::getCurrentTime(), 1, false);
@@ -284,21 +301,42 @@ TEST(ModDotPanelFrameTest, ClickingEmptyCanvasFadesOutExactlyOnceWithoutAReshow)
 
     EXPECT_TRUE(m.frame->isClosing());
     EXPECT_TRUE(synth::ui::PopupMotion::isDismissing(*m.frame));
-    float lastAlpha = 1.0f;
-    bool monotonic = true;
+    FadeReads reads;
     ASSERT_TRUE(pumpUntil([&] {
-        // The wait above stops at alpha 0.999, so on a slow runner the intro can still be running at the press
-        // and the dismiss settles it to 1.0 first: allow that last step, not a real re-show.
-        monotonic = monotonic && m.frame->getAlpha() <= lastAlpha + 2e-3f;
-        lastAlpha = m.frame->getAlpha();
+        reads.sample(m);
         return m.closed >= 1;
     }));
-    EXPECT_TRUE(monotonic) << "the alpha only goes down";
+    EXPECT_LE(m.alphaAtClose, reads.last) << "the fade ends no higher than it was";
+    EXPECT_TRUE(reads.monotonic) << "the alpha only goes down";
     EXPECT_EQ(shown, 0) << "nothing re-shows the window";
     EXPECT_EQ(synth::ui::PopupMotion::getNumLeavingGhosts(), 0) << "no second, leaving picture on top of the fade";
     pumpUntil([] { return false; });
     EXPECT_EQ(m.closed, 1);
     m.frame->removeComponentListener(&watch);
+}
+
+// The frame puts its alpha back to 1.0 a turn after onClosed (a close can be vetoed). On a loaded runner the
+// fade's end, the close and that restore all land inside one pump slice, so a read after the slice sees 1.0. The old
+// read (every poll, to within 2e-3) took that for a re-show and flaked; FadeReads stops at the close. Here the loaded
+// ordering is made certain: the test clock ends the fade and one pump delivers every queued turn before any read.
+TEST(ModDotPanelFrameTest, ARestoreToWholeAfterTheCloseIsNotAReShowInTheFadeReads) {
+    AnimateOffScreenGuard seam;
+    MotionFrame m;
+    m.frame->close();
+    ASSERT_TRUE(synth::ui::PopupMotion::isDismissing(*m.frame));
+    synth::ui::PopupMotion::stepMotionForTest(*m.frame, 0.0);
+    synth::ui::PopupMotion::stepMotionForTest(*m.frame, m.frame->motionStyle().outMs * 2.0);
+    EXPECT_FLOAT_EQ(m.frame->getAlpha(), 0.0f) << "the fade ended";
+    ASSERT_TRUE(pumpUntil([&] { return m.closed == 1 && m.frame->getAlpha() >= 1.0f; }));
+    EXPECT_FLOAT_EQ(m.alphaAtClose, 0.0f) << "onClosed ran with the fade finished";
+
+    // What a poll landing after the slice reads: the restore, 1.0 after 0.0.
+    const float lastRead = 0.0f;
+    EXPECT_GT(m.frame->getAlpha(), lastRead + 2e-3f) << "the old read called this a re-show";
+    FadeReads reads;
+    reads.last = lastRead;
+    reads.sample(m);
+    EXPECT_TRUE(reads.monotonic) << "reads stop once the close has run";
 }
 
 // Regression test for FRO793: the panel grew out of its dot but on close it left at almost full size, fading, and
