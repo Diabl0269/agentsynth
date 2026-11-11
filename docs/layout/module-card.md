@@ -69,6 +69,17 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 | `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
 
+**Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
+checks to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
+dialog of the theme sweep registry, discovered rather than listed. It runs at the default size in every built-in theme and
+at the smallest size (the main window's 480 x 400 minimum, a dialog's constrainer minimum) in the first theme. It fails
+on: sibling leaves that touch or overlap (a mouse-transparent overlay and buttons joined by connected edges are exempt);
+a caption that is not `theme.metrics.spacingUnit` (6 px, the `space-unit` token) from its control (the attached component
+of a `juce::Label`, else the nearest control directly below or to the right within 24 px); a Label, TextButton or combo box
+whose text is wider than its text area and has no tooltip; a TextButton whose text ink is off centre by more than 1 px
+(measured by painting it with and without its text). A finding is `<surface> / <component>: <what>`; known ones live in
+the test's `kKnownGaps`, which may only shrink.
+
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
 out at full `contentX` / `contentW`, flush-left with the knob grid, rather than the centred
 `narrowX` / `narrowW` band — a toggle's label reads better flush-left than centred in a narrow
