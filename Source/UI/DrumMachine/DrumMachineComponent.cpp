@@ -8,6 +8,7 @@
 
 #include "DrumMachineComponent.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/EditorTabWalk.h"
 
 #include "Transport/TransportService.h"
@@ -38,7 +39,8 @@ int rankOfPitch(int pitch) {
 } // namespace
 
 DrumMachineComponent::DrumMachineComponent()
-    : viewSwitch_("View", juce::StringArray{"Drum machine", "Piano roll"}) {
+    : viewSwitch_("View", juce::StringArray{"Drum machine", "Piano roll"})
+    , humaniseKnob_(std::make_unique<CardKnobSlider>()) {
     tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: setupTabWalk and focusLost use it
     setComponentID("drumMachineComponent");
     setTitle("Drum machine grid");

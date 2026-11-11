@@ -9,7 +9,6 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
-#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/ScrollTween.h"
@@ -21,6 +20,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -43,6 +43,7 @@ class TransportService;
 // the clip lanes (the same rect the piano roll uses) when such a clip is double-clicked. It reads and writes the same
 // notes the piano roll shows; docs/timeline/drum-machine.md has the cell mapping and the gesture table.
 namespace synth::ui {
+class CardKnobSlider;
 class EditorTabWalk;
 
 class DrumMachineComponent
@@ -199,7 +200,7 @@ public:
     double getHumanise() const noexcept { return humanise_; }
     void setHumanise(double amount);
     CardStepper& getSwingField() noexcept { return swingField_; }
-    CardKnobSlider& getHumaniseKnob() noexcept { return humaniseKnob_; }
+    CardKnobSlider& getHumaniseKnob() noexcept { return *humaniseKnob_; }
     /** The knob positions (percent) of a clip's swing and back: 0.5 is 0%, 0.75 is 100%. */
     static double swingToPercent(double swing) noexcept { return (swing - synth::Clip::kStraightSwing) * 400.0; }
     static double percentToSwing(double percent) noexcept { return synth::Clip::kStraightSwing + percent / 400.0; }
@@ -600,7 +601,7 @@ private:
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
     CardStepper swingField_{"Swing"};
-    CardKnobSlider humaniseKnob_;
+    std::unique_ptr<CardKnobSlider> humaniseKnob_; // held by pointer so this header does not pull in the card knob
     LaneChipRow chips_;
     std::unique_ptr<EditorTabWalk> tabWalk_; // UI/Layout/EditorTabWalk.h
     std::array<LaneBand, kDrumLaneKindCount> bands_;

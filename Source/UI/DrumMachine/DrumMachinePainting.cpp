@@ -4,6 +4,7 @@
 
 #include "DrumMachineComponent.h"
 
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -66,7 +67,7 @@ void DrumMachineComponent::layoutToolbar() {
         header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
     header.removeFromLeft(kToolbarPad);
     humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
-    humaniseKnob_.setBounds(
+    humaniseKnob_->setBounds(
         header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
     header.removeFromLeft(kToolbarPad);
     humaniseValueBounds_ = header.removeFromLeft(kSwingValueWidth);
@@ -97,7 +98,7 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
     g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
     g.drawText("Humanise", humaniseCaptionBounds_, juce::Justification::centredRight, true);
     g.setColour(theme.colors.textPrimary);
-    g.drawText(juce::String(juce::roundToInt(humaniseKnob_.getValue())) + "%", humaniseValueBounds_,
+    g.drawText(juce::String(juce::roundToInt(humaniseKnob_->getValue())) + "%", humaniseValueBounds_,
                juce::Justification::centredLeft, true);
 }
 
