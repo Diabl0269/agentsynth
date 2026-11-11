@@ -91,7 +91,7 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 // pattern, which the model can read and write. Shared by the patch
 // path's "Current patch state" section and project.generate's "currentPatch".
 juce::var AIIntegrationService::buildStrippedPatchJson() const {
-    juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
+    juce::var graphJson = AIStateMapper::graphToJSON(audioGraph, /*forModel=*/true);
     if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray()) {
         for (auto& nodeVar : *nodeArr) {
             if (auto* nodeObj = nodeVar.getDynamicObject()) {

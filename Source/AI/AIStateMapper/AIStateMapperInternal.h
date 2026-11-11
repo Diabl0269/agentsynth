@@ -228,6 +228,31 @@ inline bool isUnexposedParam(juce::AudioProcessor& processor, const juce::String
     return module != nullptr && !module->isParameterExposed(paramId);
 }
 
+// One of a Parametric EQ band's six parameters (bandNOn/Freq/Gain/Q/Type/Slope) while that band is off and every one
+// of the six is at its default: nothing the band says is worth showing the model, and a patch that leaves it out
+// leaves it exactly so. The model's compact view of a node (nodeToJSON's forModel) skips these.
+inline bool isDisabledDefaultEqBandParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    if (dynamic_cast<ParametricEQModule*>(&processor) == nullptr || !paramId.startsWith("band"))
+        return false;
+    const int band = paramId.substring(4).getIntValue();
+    if (band < 1 || band > ParametricEQModule::kMaxBands)
+        return false;
+    const juce::String prefix = "band" + juce::String(band);
+    if (!paramId.startsWith(prefix) || paramId.substring(prefix.length()).containsAnyOf("0123456789"))
+        return false;
+    int found = 0;
+    for (auto* param : processor.getParameters())
+        if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(param); r != nullptr && r->paramID.startsWith(prefix)) {
+            const auto rest = r->paramID.substring(prefix.length());
+            if (rest != "On" && rest != "Freq" && rest != "Gain" && rest != "Q" && rest != "Type" && rest != "Slope")
+                continue;
+            ++found;
+            if (r->getValue() != r->getDefaultValue())
+                return false;
+        }
+    return found == 6;
+}
+
 // The parameter as the model may see it, or null for one it never sees: the Drum Kit's per-pad parameters, which
 // its group ids (kickLevel, closedDecay ...) write.
 inline juce::RangedAudioParameter* modelVisibleParam(juce::AudioProcessor& processor,
