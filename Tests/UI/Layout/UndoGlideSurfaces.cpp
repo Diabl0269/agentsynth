@@ -266,6 +266,8 @@ const std::vector<Entry>& surfaces() {
         {"Curve editor drawn stretch", true, [] { return std::make_unique<CurveDrawnStretchSurface>(); }},
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Timeline clip edge", true, [] { return std::make_unique<ClipTrimSurface>(); }},
+        {"Section move: clips", true, [] { return makeSectionMoveClips(); }},
+        {"Section strip block", false, [] { return makeSectionStripBlock(); }},
         {"LFO card curve point", true, [] { return makeLfoCardPoint(); }},
         {"EQ card curve band", true, [] { return makeEqCardCurve(); }},
         {"EQ window curve band", true, [] { return makeEqWindowCurve(); }},

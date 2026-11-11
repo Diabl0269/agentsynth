@@ -4,6 +4,7 @@
 // dragged one lifts and settles, and the placements an edit rewrote flash an outline. The effects themselves
 // (durations, Reduce Motion, nothing running at rest) are SectionStripMotion's.
 
+#include "AppUndoManager.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -22,18 +23,32 @@ constexpr float kHintPillH = 16.0f;
 juce::Font hintFont() { return juce::Font(juce::FontOptions(10.5f)); }
 } // namespace
 
-// Called by refresh() after every doc notification. A placement that was not there before grows in (unless the doc
-// was replaced wholesale, as a load or an undo does: those land at once); a new stamp revision outlines the
+// Called by refresh() after every doc notification. A placement that was not there before grows in, and one that is
+// gone shrinks away from where it was drawn at the last change (unless the doc was replaced wholesale with nothing
+// surviving, as a load does, or more than a handful at once: those land at once); a new stamp revision outlines the
 // placements it rewrote. A placement whose start changed (an undo or redo of a move, a key move, a menu's make-room)
 // glides from where it was drawn to its new start; a drop being committed skips that, since its plan's glides already
-// head for the same starts.
+// head for the same starts. This is the one place a block leaves: every delete, cover drop, undo and redo goes
+// through it, so each removed block exits exactly once. A notification between the steps of one section edit is not
+// a change of its own: the edit's last step is diffed against the state before its first.
 void TimelineSectionStrip::trackChangesForMotion() {
     if (doc_ == nullptr) {
         knownPlacements_.clear();
+        lastGhosts_.clear();
         motionPrimed_ = false;
         return;
     }
+    const auto editRevision = doc_->getSectionEditRevision();
+    if (motionPrimed_ && doc_->isSectionEditUnfinished() && editRevision == lastSectionEditRevision_)
+        return;
     const auto replaceCount = doc_->getReplaceCount();
+    bool restored = false;
+    if (undoManager_ != watchedUndo_) {
+        watchedUndo_ = undoManager_;
+        restoreWatch_ = RestoreWatch(undoManager_ != nullptr ? undoManager_->getRestoreSerial() : 0);
+    } else if (undoManager_ != nullptr) {
+        restored = restoreWatch_.take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
+    }
     const auto stampRevision = doc_->getSectionStampRevision();
     std::map<std::int64_t, double> now;
     std::vector<synth::PlacementId> added;
@@ -51,28 +66,37 @@ void TimelineSectionStrip::trackChangesForMotion() {
                                  dropGlide_->drawnAt(placement.id.value, {(float)known->second, 0.0f}),
                                  {(float)placement.startBeat, 0.0f});
     }
-    // A load replaces the doc: nearly every id is new and nothing grows. An undo or redo replaces it too, but most of
-    // the placements it leaves are the ones already shown, and the one it brings back grows like a new one.
+    std::vector<std::int64_t> removed;
+    for (const auto& [id, start] : knownPlacements_)
+        if (now.find(id) == now.end())
+            removed.push_back(id);
+    // A load replaces the doc and nothing in it moves, even when its ids happen to match the old song's. An undo or
+    // redo replaces it too, but most of the placements it leaves are the ones already shown, and the ones it brings
+    // back or takes away move like edits.
     const bool replaced = replaceCount != lastReplaceCount_;
-    const bool grows = motionPrimed_ && (!replaced || (survivors > 0 && (int)added.size() <= kMaxGrowingBlocks));
-    if (grows) {
+    const bool loaded = replaced && !restored;
+    const bool grows =
+        motionPrimed_ && !loaded && (!replaced || (survivors > 0 && (int)added.size() <= kMaxGrowingBlocks));
+    if (grows)
         for (const auto id : added)
             motion_.startGrow(id, growFromRight_);
-        growFromRight_ = false;
-    }
+    growFromRight_ = false;
+    const bool exits =
+        motionPrimed_ && !loaded && (!replaced || survivors > 0) && (int)removed.size() <= kMaxGrowingBlocks;
+    if (exits)
+        for (const auto id : removed)
+            if (const auto ghost = lastGhosts_.find(id); ghost != lastGhosts_.end())
+                motion_.startExit(synth::PlacementId{id}, ghost->second);
     if (motionPrimed_ && stampRevision != lastStampRevision_)
         motion_.startOutline(doc_->getLastStampedPlacements());
     knownPlacements_ = std::move(now);
+    lastGhosts_.clear();
+    for (const auto& block : buildBlocks())
+        lastGhosts_[block.id.value] = {block.bounds, block.colour, block.name};
     lastReplaceCount_ = replaceCount;
     lastStampRevision_ = stampRevision;
+    lastSectionEditRevision_ = editRevision;
     motionPrimed_ = true;
-}
-
-std::optional<SectionStripMotion::Ghost> TimelineSectionStrip::ghostOf(synth::PlacementId id) const {
-    for (const auto& block : buildBlocks())
-        if (block.id == id)
-            return SectionStripMotion::Ghost{block.bounds, block.colour, block.name};
-    return std::nullopt;
 }
 
 // The lifted block (a ghost that follows the pointer at the grab offset while dragging, and glides to where it lands

@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
@@ -315,7 +316,6 @@ private:
 
     // Motion (TimelineSectionStripMotion.cpp)
     void trackChangesForMotion();
-    std::optional<SectionStripMotion::Ghost> ghostOf(synth::PlacementId id) const;
     void paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
                     const juce::Font& nameFont, const juce::Font& countFont, bool chipHot = false) const;
 
@@ -386,6 +386,11 @@ private:
     std::map<std::int64_t, double> knownPlacements_;
     std::int64_t lastReplaceCount_ = 0;
     std::int64_t lastStampRevision_ = 0;
+    std::int64_t lastSectionEditRevision_ = 0;
+    RestoreWatch restoreWatch_; // whether a replaced doc is an undo or redo (moves like an edit) or a load
+    AppUndoManager* watchedUndo_ = nullptr;
+    // Each block's picture at the last change: what a block that is gone at the next one shrinks away from.
+    std::map<std::int64_t, SectionStripMotion::Ghost> lastGhosts_;
     bool motionPrimed_ = false;
     bool growFromRight_ = false; // set by a make-drag that started on the span's right half
     SectionStripMotion motion_{*this, [this] { repaint(); }};

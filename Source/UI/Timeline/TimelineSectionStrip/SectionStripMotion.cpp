@@ -22,87 +22,132 @@ SectionStripMotion::~SectionStripMotion() { stopAll(); }
 bool SectionStripMotion::canAnimate() const { return FadeVisibility::canAnimateIn(&host_); }
 
 void SectionStripMotion::stopAll() {
-    grow_.stop();
-    exitDriver_.stop();
+    for (auto& [id, grow] : grows_)
+        grow.driver.stop();
+    grows_.clear();
+    for (auto& [id, exit] : exits_)
+        exit.driver.stop();
+    exits_.clear();
     liftDriver_.stop();
     outline_.stop();
     hintSwapDriver_.stop();
     hintSwap_ = 1.0f;
-    growT_ = 1.0f;
-    exitActive_ = false;
     lift_ = 0.0f;
     outlined_.clear();
     outlineAlpha_ = 0.0f;
 }
 
+bool SectionStripMotion::isGrowingForTest() const noexcept {
+    return std::any_of(grows_.begin(), grows_.end(), [](const auto& kv) { return kv.second.driver.isRunning(); });
+}
+
+bool SectionStripMotion::isExitingForTest() const noexcept {
+    return std::any_of(exits_.begin(), exits_.end(), [](const auto& kv) { return kv.second.driver.isRunning(); });
+}
+
 bool SectionStripMotion::isAnimating() const noexcept {
-    return grow_.isRunning() || exitDriver_.isRunning() || liftDriver_.isRunning() || outline_.isRunning() ||
+    return isGrowingForTest() || isExitingForTest() || liftDriver_.isRunning() || outline_.isRunning() ||
            hintSwapDriver_.isRunning();
 }
 
 void SectionStripMotion::stepForTest(double ms) {
-    grow_.stepForTest(ms);
-    exitDriver_.stepForTest(ms);
+    for (auto& [id, grow] : grows_)
+        grow.driver.stepForTest(ms);
+    for (auto& [id, exit] : exits_)
+        exit.driver.stepForTest(ms);
     liftDriver_.stepForTest(ms);
     outline_.stepForTest(ms);
     hintSwapDriver_.stepForTest(ms);
 }
 
+// Drops the grows and exits that have landed. Only called when a new one starts (a doc change), never from a frame or
+// completion callback: a driver is never destroyed while its updater may be running it.
+void SectionStripMotion::pruneLanded() {
+    std::erase_if(grows_, [](const auto& kv) { return !kv.second.driver.isRunning() && kv.second.t >= 1.0f; });
+    std::erase_if(exits_, [](const auto& kv) { return !kv.second.active; });
+}
+
 //==============================================================================
 void SectionStripMotion::startGrow(synth::PlacementId id, bool fromRight) {
-    growId_ = id;
-    growFromRight_ = fromRight;
-    growFade_ = prefersReducedMotion();
+    pruneLanded();
     growMs_ = 0.0;
     if (!canAnimate()) {
-        growT_ = 1.0f;
+        grows_.erase(id.value);
         return;
     }
+    auto& grow = grows_[id.value];
+    grow.fromRight = fromRight;
+    grow.fade = prefersReducedMotion();
     growMs_ = motionMs(kGrowMs, kReducedMs);
-    growT_ = 0.0f;
-    grow_.start(
+    grow.t = 0.0f;
+    auto* item = &grow; // std::map nodes never move
+    grow.driver.start(
         updater_, growMs_, easeOutCubic,
-        [this](float t) {
-            growT_ = t;
+        [this, item](float t) {
+            item->t = t;
             frame();
         },
-        [this] {
-            growT_ = 1.0f;
+        [this, item] {
+            item->t = 1.0f;
             frame();
         });
 }
 
 float SectionStripMotion::growScale(synth::PlacementId id) const {
-    return id == growId_ && !growFade_ ? std::max(0.02f, growT_) : 1.0f;
+    const auto it = grows_.find(id.value);
+    return it != grows_.end() && !it->second.fade ? std::max(0.02f, it->second.t) : 1.0f;
 }
 
-float SectionStripMotion::growAlpha(synth::PlacementId id) const { return id == growId_ && growFade_ ? growT_ : 1.0f; }
+float SectionStripMotion::growAlpha(synth::PlacementId id) const {
+    const auto it = grows_.find(id.value);
+    return it != grows_.end() && it->second.fade ? it->second.t : 1.0f;
+}
+
+bool SectionStripMotion::growsFromRight(synth::PlacementId id) const {
+    const auto it = grows_.find(id.value);
+    return it != grows_.end() && it->second.fromRight;
+}
 
 //==============================================================================
-void SectionStripMotion::startExit(const Ghost& ghost) {
-    exitDriver_.stop();
-    exitActive_ = false;
+void SectionStripMotion::startExit(synth::PlacementId id, const Ghost& ghost) {
+    pruneLanded();
+    if (const auto it = exits_.find(id.value); it != exits_.end()) {
+        it->second.driver.stop();
+        it->second.active = false;
+    }
     if (!canAnimate())
         return; // nothing to show: the block is simply gone
-    exit_ = ghost;
-    exitFade_ = prefersReducedMotion();
-    exitT_ = 0.0f;
-    exitActive_ = true;
-    exitDriver_.start(
+    auto& exit = exits_[id.value];
+    exit.ghost = ghost;
+    exit.fade = prefersReducedMotion();
+    exit.t = 0.0f;
+    exit.active = true;
+    ++exitsStarted_;
+    auto* item = &exit;
+    exit.driver.start(
         updater_, motionMs(kExitMs, kReducedMs), easeInCubic,
-        [this](float t) {
-            exitT_ = t;
+        [this, item](float t) {
+            item->t = t;
             frame();
         },
-        [this] {
-            exitActive_ = false;
+        [this, item] {
+            item->active = false;
             frame();
         });
 }
 
-float SectionStripMotion::exitScale() const noexcept { return exitFade_ ? 1.0f : std::max(0.0f, 1.0f - exitT_); }
+std::vector<SectionStripMotion::ExitFrame> SectionStripMotion::exitFrames() const {
+    std::vector<ExitFrame> frames;
+    for (const auto& [id, exit] : exits_)
+        if (exit.active)
+            frames.push_back(
+                {exit.ghost, exit.fade ? 1.0f : std::max(0.0f, 1.0f - exit.t), exit.fade ? 1.0f - exit.t : 1.0f});
+    return frames;
+}
 
-float SectionStripMotion::exitAlpha() const noexcept { return exitFade_ ? 1.0f - exitT_ : 1.0f; }
+bool SectionStripMotion::hasExitGhost() const noexcept {
+    return std::any_of(exits_.begin(), exits_.end(), [](const auto& kv) { return kv.second.active; });
+}
 
 //==============================================================================
 void SectionStripMotion::liftTo(bool lifted) {
