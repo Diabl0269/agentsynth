@@ -76,9 +76,10 @@ cap). The curve editor does the same with its grid cell, with the same numbers. 
 **Easing.** A discrete jump of the drawn points (the tap, a snapped step, a one-step key press) is final in the doc
 or the preview at once; the drawn dots trail it by an offset that eases to zero over 160 ms `easeOutCubic`
 (`KeyedPointTween`, keyed by the point's beat, an `AnimationDriver` that stops when settled). A new jump retargets
-from where the dot is drawn, and the offsets carry across the commit at release. Snapped steps that come less than
-160 ms after the one before (`lane_key::snappedStepEases`) do not ease: the drawn dots move with the preview, so the
-dots never fall behind the hold and slide a backlog after it. The value bubble is placed on the grabbed point's drawn
+from where the dot is drawn, and the offsets carry across the commit at release. A snapped step that comes less than
+160 ms after the one before eases over that gap instead (`lane_key::snappedStepEaseMs`, so at the 12 steps a second cap
+each ease lands as the next starts): the drawn dots glide on from where they are drawn, never restart from far behind
+and never hop from grid line to grid line. The committed value stays exactly on the grid. The value bubble is placed on the grabbed point's drawn
 dot at every paint (`AutomationLaneEditor::grabbedPointDrawnAt`), so it and the dot move together. Under Reduce Motion or Animations
 Off, or off screen, nothing eases (a hold still moves). The stretch box and the keyboard focus ring follow the drawn dots (during a drag, a hold and any glide, `AutomationLaneEditorDrawnPoints.cpp`), and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s.
 
@@ -100,8 +101,11 @@ existing rebindable commands. Return stays free.
 A dot, a selection or the stretch box dragged into the 24 px zone at either end of the lane scrolls the shared timeline
 view, faster nearer the edge, and stays under the still pointer (each 30 Hz tick re-derives the preview from the last
 pointer: `AutomationLaneEditorEdgeScroll.cpp`). Moving back in, releasing, Escape or a tool change stops it; the view
-stops at beat 0. A held Alt+Left/Right brings the moving dot back into view whenever a step would carry it out
-(`firstBeatShowing`, landing a tenth of the view in from the edge). Either way the scroll turns follow-playhead off,
+stops at beat 0. A held Alt+Left/Right scrolls the view continuously
+once the moving dot's DRAWN place (rest place plus its eased offset) passes the margin line, a tenth of the view in
+from the edge it is leaving by (`kScrollIntoViewMargin`): the view moves by exactly the excess every frame, so the
+drawn dot holds that line and the dot and the view glide together, never jumping (`AutomationLaneEditor::followKeyDragDot`).
+It keeps following while the dot's ease runs on after the key goes up. Either way the scroll turns follow-playhead off,
 and the move is still one undo step. The rule for every drag: [layout](../layout/layout.md#every-drag-follows-the-view).
 
 ## Duplicating

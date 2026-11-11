@@ -349,7 +349,7 @@ private:
     void dragSelectionTo(int index, juce::Point<float> point, bool bypassSnap);
     /** The move behind nudgeSelectedNode without its gesture bracket: `holdGesture` opens the hold's bracket at the
      *  first real move instead. */
-    bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease);
+    bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, double easeMs);
     /** Ctrl+Alt+arrows: the selection scaled about its middle in time or level (CurveEditorScale.cpp), one gesture. */
     bool scaleSelection(bool time, int side, bool fine);
 

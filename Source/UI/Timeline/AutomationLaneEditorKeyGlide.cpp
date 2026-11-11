@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <optional>
 
 namespace synth::ui {
 
@@ -30,14 +31,14 @@ juce::Point<float> AutomationLaneEditor::pointPosition(const LaneBreakpoint& poi
 // now, so a second step in quick succession does not restart from the old spot.
 void AutomationLaneEditor::easeMovedPoints(const std::vector<LaneBreakpoint>& from,
                                            const std::vector<LaneBreakpoint>& to, const std::vector<double>& keysFrom,
-                                           const std::vector<double>& keysTo) {
+                                           const std::vector<double>& keysTo, double durationMs) {
     for (std::size_t i = 0; i < from.size() && i < to.size(); ++i) {
         const auto oldKey = lane_key::tweenKey(keysFrom[i]);
         const auto newKey = lane_key::tweenKey(keysTo[i]);
         const auto drawnFrom = pointTween_.drawnAt(oldKey, pointPosition(from[i]));
         if (oldKey != newKey)
             pointTween_.erase(oldKey);
-        pointTween_.retarget(newKey, drawnFrom, pointPosition(to[i]));
+        pointTween_.retarget(newKey, drawnFrom, pointPosition(to[i]), false, durationMs);
     }
 }
 
@@ -87,9 +88,9 @@ bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreak
 }
 
 // Sets the preview from how far the keys have moved things along each axis. With snap on a time move is whole steps,
-// so it jumps from grid line to grid line and each jump eases, unless the steps come faster than the ease runs: then
-// the drawn points move with the preview (snappedStepEases). A free move and any value move follow the glide
-// continuously.
+// so it jumps from grid line to grid line and each jump eases over the gap to the step before when steps come faster
+// than the ease runs (snappedStepEaseMs), so the drawn points glide on instead of hopping. A free move and any value
+// move follow the glide continuously.
 void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     const auto* lane = dragMode_ == DragMode::MoveHandle && doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
     if (lane == nullptr)
@@ -106,15 +107,12 @@ void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     const bool snappedStep = keyDrag_.snapped && previewBeat_ != beatBefore;
     const double now = holdClockMs(keyHold_.host);
     const auto keys = beatsOf(dragPoints_);
-    if (tapStep || (snappedStep && lane_key::snappedStepEases(now - keyDrag_.lastStepMs))) {
-        easeMovedPoints(before, dragMovedPoints(), keys, keys);
-    } else if (snappedStep) {
-        for (const double beat : keys)
-            pointTween_.erase(lane_key::tweenKey(beat));
-    }
+    if (tapStep || snappedStep)
+        easeMovedPoints(before, dragMovedPoints(), keys, keys,
+                        tapStep ? KeyedPointTween::kMs : lane_key::snappedStepEaseMs(now - keyDrag_.lastStepMs));
     if (snappedStep)
         keyDrag_.lastStepMs = now;
-    keepKeyDragInView();
+    followKeyDragDot();
     refreshStretchBox();
     repaint();
 }
@@ -131,6 +129,12 @@ void AutomationLaneEditor::endKeyDrag() {
     for (const double beat : keys)
         offsets.push_back(pointTween_.offsetFor(lane_key::tweenKey(beat)));
     const auto landed = dragMovedPoints();
+    std::optional<std::size_t> grabbed;
+    for (std::size_t i = 0; i < keys.size(); ++i)
+        if (keys[i] == dragOriginalBeat_)
+            grabbed = i;
+    const int direction = keyFollow_.direction;
+    keyFollow_.active = false;
 
     if (!cancelled)
         commitPointMove();
@@ -147,6 +151,9 @@ void AutomationLaneEditor::endKeyDrag() {
             if (offsets[i] != juce::Point<float>())
                 pointTween_.retarget(lane_key::tweenKey(landed[i].beat), pointPosition(landed[i]) + offsets[i],
                                      pointPosition(landed[i]));
+    // The dot still easing in goes on pulling the view along until it lands.
+    if (!cancelled && grabbed && pointTween_.isAnimating())
+        keyFollow_ = {true, landed[*grabbed].beat, lane_key::tweenKey(landed[*grabbed].beat), direction};
     repaint();
 }
 
@@ -155,6 +162,7 @@ void AutomationLaneEditor::cancelKeyDrag() {
         return;
     keyDrag_.cancelled = true;
     keyHold_.end();
+    keyFollow_.active = false;
     pointTween_.clear();
 }
 
