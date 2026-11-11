@@ -896,7 +896,7 @@ void AutomationLaneEditor::showContextMenu(juce::PopupMenu menu, juce::Point<int
             menu.addSeparator();
         addRangeMenuItems(menu);
     }
-    const auto options = synth::ui::contextMenuOptionsAtPointer();
+    const auto options = synth::ui::contextMenuOptionsAtPoint(localPointToGlobal(at));
     if (auto& hook = synth::ui::test_hooks::laneMenuHookForTest()) {
         hook(menu, options);
         return;

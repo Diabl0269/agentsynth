@@ -409,9 +409,19 @@ bool AutomationLaneEditor::selectAllPoints() {
 bool AutomationLaneEditor::deleteSelectedPoints() {
     if (selection_.isEmpty())
         return false;
-    commitPointEdit(editTarget(), selection_.getSelected(), {});
+    const auto removed = selection_.getSelected();
+    commitPointEdit(editTarget(), removed, {});
     selection_.clear();
     selection_.setCursor(std::nullopt);
+    // The point after the removed ones (the last one left when none follows) takes over the selection and the cursor.
+    const auto* left = lanePoints();
+    if (left == nullptr || left->empty())
+        return true;
+    const double last = *std::max_element(removed.begin(), removed.end());
+    const auto next = std::find_if(left->begin(), left->end(), [last](const auto& p) { return p.beat > last; });
+    const double beat = (next != left->end() ? *next : left->back()).beat;
+    selection_.setSelection({beat});
+    selection_.setCursor(beat);
     return true;
 }
 
