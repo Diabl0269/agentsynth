@@ -4,6 +4,7 @@
 // naming the live key.
 #include "../../FX/ParametricEQ/ParametricEQTestHelpers.h"
 #include "../../TestWait.h"
+#include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
 #include "../Layout/NativeWindowTestGuard.h"
 #include "../Layout/RealKeyDelivery.h"
 #include "AI/AIStateMapper/AIStateMapper.h"

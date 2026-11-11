@@ -4,10 +4,12 @@
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
 #include "AudioEngine/AudioEngine.h"
-#include "GraphEditorTestHelpers.h"
+#include "GraphEditorWiredFixtures.h"
 
 #include "AppUndoManager.h"
 #include "Modules/FX/ChorusModule.h"
+#include "Modules/FX/DelayModule.h"
+#include "Modules/FX/ReverbModule.h"
 #include "UI/Layout/ReducedMotion.h"
 
 namespace {
