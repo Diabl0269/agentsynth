@@ -28,13 +28,19 @@ inline juce::String describeGainDb(float db) {
     return (rounded < 0.0f ? "-" : "+") + juce::String(std::abs(rounded), 1) + " dB";
 }
 
-/** One EQ band: "Band 2, 1.2 kHz, +3.0 dB, Q 0.7", or "Band 2, off" while the band is switched off.
+/** One EQ band: "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7", or "Band 7, Bell, off" while the band is switched off.
  *  `bandIndex` is 0-based; the text is 1-based like the handle numbers on the curve. */
-inline juce::String describeEqBand(int bandIndex, bool enabled, float freqHz, float gainDb, float q) {
-    const auto name = "Band " + juce::String(bandIndex + 1);
+inline juce::String describeEqBand(int bandIndex, const juce::String& typeName, bool enabled, float freqHz,
+                                   float gainDb, float q) {
+    const auto name = "Band " + juce::String(bandIndex + 1) + ", " + typeName;
     if (!enabled)
         return name + ", off";
     return name + ", " + describeFrequency(freqHz) + ", " + describeGainDb(gainDb) + ", Q " + juce::String(q, 1);
+}
+
+/** A chip of the band strip: "Band 7, Bell, 2.4 kHz" (the strip does not carry the gain). */
+inline juce::String describeEqBandChip(int bandIndex, const juce::String& typeName, float freqHz) {
+    return "Band " + juce::String(bandIndex + 1) + ", " + typeName + ", " + describeFrequency(freqHz);
 }
 
 /** The curve as a whole while no band is selected: "No band selected, 2 of 4 bands on". */

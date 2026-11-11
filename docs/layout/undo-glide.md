@@ -71,7 +71,9 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   eases what is DRAWN. A band is two keys: place (log2 frequency, gain) and shape (Q, presence 0 to 1), plus one for the
   output trim, so frequency, gain, Q and on/off move in one 160 ms glide and the curve is re-summed from the drawn bands
   on every frame. An undo that switches a band off fades it out where it stood, and a redo that brings it back fades it
-  in where it lands (it never flies to or from its hidden settings). `EQCurveComponent` (the card's curve and the pop-out
+  in where it lands (it never flies to or from its hidden settings). A plain add or remove (a double-click, the + chip, a key) uses the
+  same presence fade, so an added dot grows where it was parked and a removed one shrinks away where it stood; a changed type or
+  slope runs a separate 220 ms morph (`Drawn::typeMorph`) that cross-fades the curve and the dot's kind colour. `EQCurveComponent` (the card's curve and the pop-out
   EQ window's, each with its own watch; `setUndoManager`) asks a `RestoreWatch` on EVERY 30 Hz tick, changed or not, so a
   restore that left this EQ alone cannot make a later drag glide; a drag, a key step or a CV change lands at once and
   ends any running glide. `MixerEqThumbnail` marks a restore when a parameter write arrives while

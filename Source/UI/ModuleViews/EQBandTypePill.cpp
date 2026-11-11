@@ -1,0 +1,56 @@
+// EQBandTypePill.cpp -- see EQBandTypePill.h.
+
+#include "EQBandTypePill.h"
+
+#include "EQBandKinds.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/Theme.h"
+
+namespace synth::ui {
+
+EQBandTypePill::EQBandTypePill(EQCurveComponent& curve)
+    : juce::Button("Band type")
+    , curve_(curve) {
+    setWantsKeyboardFocus(true);
+    setTooltip("Band type: press to change it (right-click a point does the same)");
+    onClick = [this] {
+        if (curve_.getSelectedBand() >= 0)
+            curve_.showTypeMenu(getScreenBounds());
+    };
+    curve_.addListener(this);
+    eqCurveChanged();
+}
+
+EQBandTypePill::~EQBandTypePill() { curve_.removeListener(this); }
+
+void EQBandTypePill::eqCurveChanged() {
+    const int band = curve_.getSelectedBand();
+    text_ = band < 0 ? juce::String() : eqBandTypeName(curve_.getBands()[(size_t)band].type);
+    setTitle(band < 0 ? "Band type" : "Band " + juce::String(band + 1) + " type, " + text_);
+    setEnabled(band >= 0);
+    repaint();
+}
+
+void EQBandTypePill::paintButton(juce::Graphics& g, bool over, bool) {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const int band = curve_.getSelectedBand();
+    if (band < 0)
+        return;
+    const auto kind = eqBandKindOf(curve_.getBands()[(size_t)band].type);
+    const auto area = getLocalBounds().toFloat().reduced(1.0f);
+    g.setColour(eqBandKindColour(colors, kind).brighter(over ? 0.15f : 0.0f));
+    g.fillRoundedRectangle(area, area.getHeight() * 0.5f);
+    g.setColour(eqBandKindInk(colors));
+    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    g.drawText(text_ + "  v", getLocalBounds(), juce::Justification::centred, false);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, area.getHeight() * 0.5f);
+}
+
+std::unique_ptr<juce::AccessibilityHandler> EQBandTypePill::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::button,
+        juce::AccessibilityActions().addAction(juce::AccessibilityActionType::press, [this] { onClick(); }));
+}
+
+} // namespace synth::ui

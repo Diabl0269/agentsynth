@@ -689,6 +689,17 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/FrequencyGrid.h
     Source/UI/ModuleViews/EQCurveComponent.h
     Source/UI/ModuleViews/EQCurveKeyboard.cpp
+    Source/UI/ModuleViews/EQCurveInteraction.cpp
+    Source/UI/ModuleViews/EQCurvePaint.cpp
+    Source/UI/ModuleViews/EQCurveTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandKinds.h
+    Source/UI/ModuleViews/EQBandKinds.cpp
+    Source/UI/ModuleViews/EQBandStrip.h
+    Source/UI/ModuleViews/EQBandStrip.cpp
+    Source/UI/ModuleViews/EQBandTypeMenu.h
+    Source/UI/ModuleViews/EQBandTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandTypePill.h
+    Source/UI/ModuleViews/EQBandTypePill.cpp
     Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h

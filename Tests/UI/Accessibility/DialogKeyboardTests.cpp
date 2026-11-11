@@ -256,7 +256,7 @@ TEST(DialogKeyboard, MacroAutoPortPromptTabOrderAndEscape) {
 TEST(DialogKeyboard, EQWindowTabOrderAndEscape) {
     ParametricEQModule eq;
     EQWindow window(eq);
-    expectTabOrder(window, names({"EQ curve", "Show Spectrum"}));
+    expectTabOrder(window, names({"EQ curve", "Add band", "Show Spectrum"}));
 
     bool closed = false;
     window.onRequestClose = [&] { closed = true; };

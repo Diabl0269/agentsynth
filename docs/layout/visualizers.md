@@ -64,16 +64,28 @@ On the card the curve is 150 px tall and laid out *beside* the port labels (`x` 
 down each edge, so on a six-input module this reclaims about 125 px of otherwise dead space at the
 top of the card.
 
-**Gestures.** All four bands start disabled, so the curve starts empty with a "Double-click to add
-an EQ point" hint.
+**Gestures.** Every band starts disabled, so the curve starts empty with a "Double-click to add
+an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
+parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
+theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo and a floating readout
+above it (type pill, frequency, gain, Q).
 
 | Gesture | Effect |
 |---|---|
-| Double-click empty space | Adds a point, enabling the slot that best fits that frequency (`findBandForNewPoint`) |
+| Double-click empty space | Adds a point: slots 1-4 by home frequency (`findBandForNewPoint`), then the lowest free slot as a Bell parked at the click (`findFreeBand`), up to 24 |
 | Double-click a point | Removes it (disables that band; its settings are kept) |
 | Drag a point | Sets frequency (x) and gain (y) |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
-| Hover | Halos the handle and shows a freq / gain / Q readout bottom-right |
+| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
+| Hover | Halos the handle and shows its floating readout |
+
+**Band strip and type pill.** `EQBandStrip` sits under the curve in the pop-out window: one chip per band that is on
+(plus the selected band while it is off, at 35%) in frequency order, labelled like "7 Bell", tinted by kind, and a
+trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
+both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
+when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
+`ArrowKeyNavigation`, Return presses. The chip order is display only: a chip is always its band index.
+`EQBandTypePill` shows the selected band's type and opens the same menu.
 
 **Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
 on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags
@@ -85,7 +97,7 @@ native control's own keys, these act only inside the focused curve and are not r
 
 | Key | Effect |
 |---|---|
-| Left / Right | Select the previous / next band (all four, on or off; stops at the ends). Tabbing in selects band 1 |
+| Left / Right | Select the previous / next band (all 24, on or off; stops at the ends). Tabbing in selects band 1 |
 | 1-4 | Select that band and switch it on |
 | Up / Down | Gain +1 / -1 dB on the selected band (Shift: 0.25 dB) |
 | Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that) |
@@ -149,10 +161,11 @@ never shown on hover; the title and description still reach a screen reader.
 `Source/UI/ModuleViews/EQWindow.h`. The pop-out editor for a Parametric EQ, opened from the card's
 "Open EQ Window" button. It is a content-only `juce::Component`, the same pattern as
 `SettingsWindow`; the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`.
-It hosts a second `EQCurveComponent` over the same module at 720x420 (resizable), plus a spectrum
-toggle and a gesture hint. Escape closes it. The curve in this window edits with the same keys as the
-card's curve (see the EQ curve's Keyboard table above); Tab visits the curve and then the spectrum
-toggle.
+It hosts a second `EQCurveComponent` over the same module at 820x470 (resizable), the band strip under it, and a
+toolbar of the spectrum toggle, an empty reserved slot (`kReservedToolbarSlotWidth`, for the Compare and Suggest
+buttons), the type pill and a gesture hint. Escape closes it. The curve in this window edits with the same keys as the
+card's curve (see the EQ curve's Keyboard table above); Tab visits the curve, the band chips, the spectrum
+toggle and the type pill.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in
 `detachFromProcessor()`** — the window references the module, so leaving it open across a graph

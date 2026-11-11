@@ -10,19 +10,31 @@ namespace synth::ui {
 
 namespace {
 constexpr float kVisible = 0.001f; // below this presence a band is not drawn
+constexpr std::int64_t kMorphKey = 0;
+
+bool shapeDiffers(const EqBandGlide::Bands& a, const EqBandGlide::Bands& b) {
+    for (size_t i = 0; i < a.size(); ++i)
+        if (a[i].type != b[i].type || a[i].slopeDbPerOct != b[i].slopeDbPerOct)
+            return true;
+    return false;
 }
+} // namespace
 
 EqBandGlide::~EqBandGlide() = default;
 
-bool EqBandGlide::isAnimating() const noexcept { return tween_->isAnimating(); }
+bool EqBandGlide::isAnimating() const noexcept { return tween_->isAnimating() || morph_->isAnimating(); }
 
 EqBandGlide::EqBandGlide(juce::Component& owner)
-    : tween_(std::make_unique<KeyedPointTween>(owner)) {
+    : tween_(std::make_unique<KeyedPointTween>(owner))
+    , morph_(std::make_unique<KeyedPointTween>(owner)) {
     // The curve is summed from the drawn bands, so every frame recomputes it; the owner repaints itself.
-    tween_->onDirty = [this](juce::Rectangle<int>) {
+    const auto dirty = [this](juce::Rectangle<int>) {
         if (onChange)
             onChange();
     };
+    tween_->onDirty = dirty;
+    morph_->onDirty = dirty;
+    morph_->setDurationMs(kTypeMorphMs);
 }
 
 EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) const {
@@ -30,6 +42,7 @@ EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) co
     out.dots = resting;
     out.curve = resting;
     out.outputGainDb = outputGain + tween_->offsetFor(kOutputKey).x;
+    out.typeMorph = juce::jlimit(0.0f, 1.0f, morph_->offsetFor(kMorphKey).x);
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto i = (size_t)b;
         auto& dot = out.dots[i];
@@ -54,12 +67,14 @@ EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) co
     return out;
 }
 
+// A band coming or going fades where it stands instead of travelling to or from its hidden settings; a band that stays
+// on glides from where it is drawn to where it now rests, but only for an undo or redo.
 void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter,
                        bool restored) {
-    if (!restored) {
-        tween_->clear();
-        return;
-    }
+    if (shapeDiffers(before, after))
+        morph_->retarget(kMorphKey, {1.0f, 0.0f}, {0.0f, 0.0f});
+    if (!tween_->isAnimating())
+        presenceGlide_.fill(false);
     const auto now = drawn(before, outputGainBefore);
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b) {
         const auto i = (size_t)b;
@@ -68,10 +83,16 @@ void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands&
         const float fromPresence = now.presence[i];
         const bool appears = fromPresence <= kVisible && to.enabled;
         const bool vanishes = !to.enabled && fromPresence > kVisible;
+        const bool toggled = before[i].enabled != to.enabled;
 
+        if (!restored && !toggled && !appears && !vanishes) {
+            tween_->erase(placeKey(b)); // a drag or a plain edit lands at once
+            if (!presenceGlide_[i])
+                tween_->erase(shapeKey(b));
+            continue;
+        }
         ghost_[i].active = false;
         if (appears || !to.enabled) {
-            // A band coming or going fades where it stands instead of travelling to or from its hidden settings.
             tween_->erase(placeKey(b));
             if (vanishes)
                 ghost_[i] = {true, from.freqHz, from.gainDb, from.q};
@@ -81,10 +102,14 @@ void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands&
         }
         const float fromQ = appears ? to.q : from.q;
         tween_->retarget(shapeKey(b), {fromQ, fromPresence}, {to.q, to.enabled ? 1.0f : 0.0f}, true);
+        presenceGlide_[i] = !restored;
         if (vanishes && tween_->offsetFor(shapeKey(b)).y == 0.0f)
             ghost_[i].active = false; // nothing animates (Reduce Motion, Off): it is simply gone
     }
-    tween_->retarget(kOutputKey, {now.outputGainDb, 0.0f}, {outputGainAfter, 0.0f}, true);
+    if (restored)
+        tween_->retarget(kOutputKey, {now.outputGainDb, 0.0f}, {outputGainAfter, 0.0f}, true);
+    else
+        tween_->erase(kOutputKey);
 }
 
 } // namespace synth::ui

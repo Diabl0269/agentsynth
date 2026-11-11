@@ -8,6 +8,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/EqBandGlide.h"
+#include "UI/Theme/Theme.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -115,16 +116,17 @@ TEST_F(EqUndoGlide, FrequencyGainAndQMoveTogetherInOneGlide) {
 }
 
 TEST_F(EqUndoGlide, ADragLandsAtOnceEvenRightAfterARestore) {
-    const int band = curve().addPointAt({300.0f, 120.0f});
+    const int kept = curve().addPointAt({300.0f, 120.0f});
     step(1000.0);
-    restore(false);
+    const int undone = curve().addPointAt({420.0f, 80.0f});
+    step(1000.0);
+    restore(false); // band `undone` fades out
     step(40.0);
     ASSERT_TRUE(curve().getBandGlideForTest().isAnimating());
-    const int again = curve().addPointAt({420.0f, 80.0f}); // a new edit mid-glide
-    ASSERT_GE(again, 0);
-    EXPECT_FALSE(curve().getBandGlideForTest().isAnimating()) << "the glide ends and the edit lands at once";
-    EXPECT_EQ(curve().getDrawnBandPosition(again), curve().bandPosition(module_->getBandSnapshots()[(size_t)again]));
-    juce::ignoreUnused(band);
+    curve().dragBandTo(kept, {310.0f, 100.0f}); // a new edit mid-glide
+    // The removed band's fade may still run; the dragged band itself must land at once.
+    EXPECT_EQ(curve().getDrawnBandPosition(kept), curve().bandPosition(module_->getBandSnapshots()[(size_t)kept]));
+    juce::ignoreUnused(undone);
 }
 
 TEST_F(EqUndoGlide, AnEditAfterARestoreOfSomethingElseDoesNotGlide) {
@@ -160,4 +162,106 @@ TEST_F(EqUndoGlide, CmdZAndCmdShiftZReachTheAppFromTheCurveAndTheWindow) {
     ASSERT_EQ(relayed.size(), 2u);
     EXPECT_EQ(relayed[0], undoKey);
     EXPECT_EQ(relayed[1], redoKey);
+}
+
+// ---------------------------------------------------------------------------
+// Bands past four, plain adds and removes, and type changes
+// ---------------------------------------------------------------------------
+
+namespace {
+// Switches slots 1..count on through the module, so a later add lands in slot count + 1.
+void switchOnBands(ParametricEQModule& eq, int count) {
+    for (int b = 0; b < count; ++b) {
+        eq.setBandFreq(b, 60.0f * std::pow(1.25f, (float)b));
+        eq.setBandEnabled(b, true);
+    }
+}
+} // namespace
+
+TEST_F(EqUndoGlide, UndoingAnAddOfBandNineFadesItOutWhereItStoodAndRedoBringsItBack) {
+    switchOnBands(*module_, 8);
+    curve().timerCallback();
+    const int band = curve().addPointAt({300.0f, 120.0f});
+    ASSERT_EQ(band, 8) << "band 9";
+    step(1000.0);
+    const auto stood = curve().getDrawnBandPosition(band);
+
+    restore(false);
+    EXPECT_FALSE(module_->isBandEnabled(band));
+    EXPECT_GT(curve().getDrawnBandAlpha(band), 0.95f);
+    step(40.0);
+    EXPECT_LT(curve().getDrawnBandAlpha(band), 0.98f);
+    EXPECT_EQ(curve().getDrawnBandPosition(band), stood);
+    step(1000.0);
+    EXPECT_FLOAT_EQ(curve().getDrawnBandAlpha(band), 0.0f);
+
+    restore(true);
+    EXPECT_LT(curve().getDrawnBandAlpha(band), 0.05f);
+    step(1000.0);
+    EXPECT_FLOAT_EQ(curve().getDrawnBandAlpha(band), 1.0f);
+}
+
+TEST_F(EqUndoGlide, AnAddedBandGrowsInWhereItWasParkedAndARemovedOneShrinksAway) {
+    const int band = curve().addPointAt({300.0f, 120.0f});
+    const auto parked = curve().getDrawnBandPosition(band);
+    EXPECT_LT(curve().getDrawnBandAlpha(band), 0.05f) << "it starts as nothing";
+    step(40.0);
+    EXPECT_GT(curve().getDrawnBandAlpha(band), 0.02f);
+    EXPECT_LT(curve().getDrawnBandAlpha(band), 0.98f) << "growing";
+    EXPECT_EQ(curve().getDrawnBandPosition(band), parked);
+    step(1000.0);
+    EXPECT_FLOAT_EQ(curve().getDrawnBandAlpha(band), 1.0f);
+
+    curve().removeBand(band);
+    EXPECT_GT(curve().getDrawnBandAlpha(band), 0.95f) << "a removed dot is still drawn on the first frame";
+    step(40.0);
+    EXPECT_LT(curve().getDrawnBandAlpha(band), 0.98f) << "shrinking away";
+    EXPECT_EQ(curve().getDrawnBandPosition(band), parked) << "where it stood";
+    step(1000.0);
+    EXPECT_FLOAT_EQ(curve().getDrawnBandAlpha(band), 0.0f);
+}
+
+TEST_F(EqUndoGlide, ATypeChangeMorphsTheCurveAndTheDotColourAndIsOneUndoStep) {
+    const int band = curve().addPointAt({300.0f, 120.0f});
+    step(1000.0);
+    curve().getTypeMorphForTest().forceAnimateForTest(true);
+    const synth::theme::Colors colors;
+    ASSERT_EQ(curve().getDotColourForTest(band), colors.eqKindBell);
+
+    curve().setBandTypeAndSlope(band, synth::eq::BandType::Notch);
+    EXPECT_TRUE(curve().getTypeMorphForTest().isAnimating());
+    EXPECT_EQ(curve().getDotColourForTest(band), colors.eqKindBell) << "starts as the old kind";
+    curve().getTypeMorphForTest().stepForTest(60.0);
+    EXPECT_NE(curve().getDotColourForTest(band), colors.eqKindBell);
+    EXPECT_NE(curve().getDotColourForTest(band), colors.eqKindNotch) << "between the two";
+    curve().getTypeMorphForTest().stepForTest(1000.0);
+    EXPECT_EQ(curve().getDotColourForTest(band), colors.eqKindNotch);
+
+    restore(false); // one undo takes the type back
+    EXPECT_EQ(module_->getBandType(band), synth::eq::BandType::Peak);
+    EXPECT_TRUE(module_->isBandEnabled(band)) << "and leaves the band itself";
+}
+
+TEST_F(EqUndoGlide, AWindowWithAll24BandsOnGlidesTheLastBandBackOnUndo) {
+    switchOnBands(*module_, 24);
+    curve().timerCallback();
+    step(1000.0);
+    const int last = ParametricEQModule::kMaxBands - 1;
+    const auto before = curve().getDrawnBandPosition(last);
+    undo_.captureBeforeState(engine_.getGraph());
+    module_->setBandFreq(last, 900.0f);
+    module_->setBandGain(last, 7.0f);
+    undo_.pushSnapshotFromCapture(engine_.getGraph());
+    curve().timerCallback();
+    step(1000.0);
+    const auto moved = curve().getDrawnBandPosition(last);
+    ASSERT_NE(moved, before);
+
+    restore(false);
+    step(40.0);
+    const auto mid = curve().getDrawnBandPosition(last);
+    EXPECT_NE(mid, moved);
+    EXPECT_NE(mid, before) << "band 24 is between its two places";
+    step(1000.0);
+    EXPECT_NEAR(curve().getDrawnBandPosition(last).x, before.x, 0.01f);
 }

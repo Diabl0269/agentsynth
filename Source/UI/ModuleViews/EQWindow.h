@@ -1,5 +1,7 @@
 #pragma once
 
+#include "EQBandStrip.h"
+#include "EQBandTypePill.h"
 #include "EQCurveComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include <functional>
@@ -15,8 +17,11 @@
  *  Follows the SettingsWindow pattern: this is just the content Component; the caller wraps it in
  *  a juce::DialogWindow via PopupMotion::launchDialog().
  *
- *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent) and the
- *  spectrum toggle; Escape closes the window.
+ *  Layout: the curve, the band strip under it (EQBandStrip), then the toolbar: the spectrum toggle, a reserved
+ *  empty slot for the Compare and Suggest buttons, the selected band's type pill and the hint.
+ *
+ *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent), the band chips, the
+ *  spectrum toggle and the type pill; Escape closes the window.
  */
 class EQWindow : public juce::Component {
 public:
@@ -25,19 +30,27 @@ public:
         curve->setComponentID("eqWindowCurve");
         addAndMakeVisible(*curve);
 
+        strip = std::make_unique<synth::ui::EQBandStrip>(*curve);
+        strip->setComponentID("eqWindowStrip");
+        strip->onPreferredHeightChanged = [this] { resized(); };
+        addAndMakeVisible(*strip);
+
+        typePill = std::make_unique<synth::ui::EQBandTypePill>(*curve);
+        addAndMakeVisible(*typePill);
+
         spectrumToggle.setButtonText("Show Spectrum");
         spectrumToggle.setTooltip("Draw the live spectrum of the signal behind the curve");
         spectrumToggle.setToggleState(curve->getShowSpectrum(), juce::dontSendNotification);
         spectrumToggle.onClick = [this] { curve->setShowSpectrum(spectrumToggle.getToggleState()); };
         addAndMakeVisible(spectrumToggle);
 
-        hint.setText("Double-click to add or remove a point  -  drag to move  -  scroll over a point for Q",
+        hint.setText("Double-click to add or remove  -  drag to move  -  scroll for Q  -  right-click for type",
                      juce::dontSendNotification);
         hint.setJustificationType(juce::Justification::centredLeft);
         hint.setInterceptsMouseClicks(false, false);
         addAndMakeVisible(hint);
 
-        setSize(720, 420);
+        setSize(820, 470);
     }
 
     ~EQWindow() override = default;
@@ -46,7 +59,13 @@ public:
         auto area = getLocalBounds().reduced(10);
         auto footer = area.removeFromBottom(26);
         spectrumToggle.setBounds(footer.removeFromLeft(130));
+        reservedToolbarSlot = footer.removeFromLeft(kReservedToolbarSlotWidth);
+        typePill->setBounds(footer.removeFromLeft(kTypePillWidth).withSizeKeepingCentre(kTypePillWidth, 22));
         hint.setBounds(footer);
+        area.removeFromBottom(6);
+        const int stripHeight = std::min(strip->heightForWidth(area.getWidth()), area.getHeight() / 3);
+        strip->setBounds(area.removeFromBottom(stripHeight));
+        area.removeFromBottom(6);
         curve->setBounds(area);
     }
 
@@ -76,12 +95,22 @@ public:
         curve->onGestureEnd = std::move(onEnd);
     }
 
+    /** Width of the empty toolbar area right of the spectrum toggle, kept for the Compare and Suggest buttons. */
+    static constexpr int kReservedToolbarSlotWidth = 220;
+    static constexpr int kTypePillWidth = 110;
+    juce::Rectangle<int> getReservedToolbarSlot() const { return reservedToolbarSlot; }
+
     // Testing hooks
     EQCurveComponent& getCurve() { return *curve; }
+    synth::ui::EQBandStrip& getStrip() { return *strip; }
+    synth::ui::EQBandTypePill& getTypePill() { return *typePill; }
     juce::ToggleButton& getSpectrumToggle() { return spectrumToggle; }
 
 private:
     std::unique_ptr<EQCurveComponent> curve;
+    std::unique_ptr<synth::ui::EQBandStrip> strip;
+    std::unique_ptr<synth::ui::EQBandTypePill> typePill;
+    juce::Rectangle<int> reservedToolbarSlot;
     juce::ToggleButton spectrumToggle;
     juce::Label hint;
 

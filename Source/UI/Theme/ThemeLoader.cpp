@@ -189,6 +189,12 @@ static constexpr OptionalColourKey kOptionalColourKeys[] = {
     {"trackMuteOn", &Colors::trackMuteOn},
     {"trackSoloOn", &Colors::trackSoloOn},
     {"trackArmOn", &Colors::trackArmOn},
+    {"eqKindBell", &Colors::eqKindBell},
+    {"eqKindShelf", &Colors::eqKindShelf},
+    {"eqKindCut", &Colors::eqKindCut},
+    {"eqKindNotch", &Colors::eqKindNotch},
+    {"eqKindTilt", &Colors::eqKindTilt},
+    {"eqKindBandPass", &Colors::eqKindBandPass},
 };
 
 static bool parseOptionalPaletteColours(const juce::var& colorsVar, const Colors& defaults, Colors& colors) {
@@ -551,6 +557,12 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("trackMuteOn", colourToHex(c.trackMuteOn));
         colors->setProperty("trackSoloOn", colourToHex(c.trackSoloOn));
         colors->setProperty("trackArmOn", colourToHex(c.trackArmOn));
+        colors->setProperty("eqKindBell", colourToHex(c.eqKindBell));
+        colors->setProperty("eqKindShelf", colourToHex(c.eqKindShelf));
+        colors->setProperty("eqKindCut", colourToHex(c.eqKindCut));
+        colors->setProperty("eqKindNotch", colourToHex(c.eqKindNotch));
+        colors->setProperty("eqKindTilt", colourToHex(c.eqKindTilt));
+        colors->setProperty("eqKindBandPass", colourToHex(c.eqKindBandPass));
 
         // Cable category palette, emitted as a nested object so the round-trip matches the
         // parse shape above.

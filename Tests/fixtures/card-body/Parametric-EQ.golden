@@ -1,5 +1,5 @@
 type Parametric EQ size 560x592
-  child 0 component id="" at 88,60 384x150 visible=1 title="EQ curve" tip="EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, scroll for Q" focusOrder=0 wantsFocus=1
+  child 0 component id="" at 88,60 384x150 visible=1 title="EQ curve" tip="EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, scroll for Q, right-click a point for its type" focusOrder=0 wantsFocus=1
   child 1 toggle id="" at 12,244 140x28 visible=1 title="Show Spectrum" tip="Show Spectrum" focusOrder=0 wantsFocus=1
   child 2 textButton id="eqPopOut" at 162,244 150x28 visible=1 title="Open EQ Window" tip="Edit this EQ in a larger resizable window" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1

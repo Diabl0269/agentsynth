@@ -20,6 +20,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
+#include "UI/ModuleViews/EQBandTypeMenu.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeStackPanel.h"
 #include "UI/ModuleViews/StepGrid/StepGridChordPicker.h"
 #include "UI/ModuleViews/StepGrid/StepGridRandomizePanel.h"
@@ -79,6 +80,8 @@ std::vector<ContentEntry> contentEntries() {
         {"ColourPickerPopup", colourPicker, nullptr},
         {"ModMatrixPicker", matrixPicker, nullptr},
         {"KeyPicker", keyPicker, nullptr},
+        {"EQBandTypeMenu", [] { return std::make_unique<synth::ui::EQBandTypeMenu>(synth::eq::BandType::LowCut, 24); },
+         nullptr},
         {"DrumIdeasPanel", [] { return std::make_unique<DrumIdeasPanel>([] { return DrumIdeasContext{}; }); }, nullptr},
         {"DrawShapeFlyout",
          [] { return std::make_unique<DrawShapeFlyout>(DrawShape::Free, DrawShapeFlyout::HintFn{}, [](DrawShape) {}); },
