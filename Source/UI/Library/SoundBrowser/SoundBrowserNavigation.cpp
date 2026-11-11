@@ -157,10 +157,16 @@ void SoundBrowserComponent::rebuildRows() {
     const auto filter = currentFilter();
     rows_.clear();
     if (showsFlatResults()) {
-        appendSoundRows(index_.search(query_, filter));
-        if (isSearchActive() && !filter.isActive())
+        // A search lists the packs it finds first, under a "Get more" hint, then the sounds; filters narrow the
+        // sounds only, so the packs stay while a chip is on.
+        if (isSearchActive()) {
             appendOfferedPackRows(*snap, false);
-        if (rows_.empty())
+            if (!rows_.empty())
+                rows_.insert(rows_.begin(), Row{RowKind::Hint, "Get more", {}, {}, {}, 0, std::nullopt});
+        }
+        const auto packRows = rows_.size();
+        appendSoundRows(index_.search(query_, filter));
+        if (rows_.size() == packRows)
             rows_.push_back({RowKind::Hint, "No matching sounds", {}, {}, {}, 0, std::nullopt});
     } else if (placeId_.isEmpty()) {
         rebuildPlaceRows(*snap);
