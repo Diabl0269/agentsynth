@@ -65,9 +65,6 @@ struct KnownGap {
 };
 
 const std::vector<KnownGap> kKnownGaps = {
-    // EQ window
-    {"EQ window / EQCurveComponent 'EQ curve': touches ToggleButton 'Show Spectrum'", "FRO1713"},
-    {"EQ window [min] / EQCurveComponent 'EQ curve': touches ToggleButton 'Show Spectrum'", "FRO1713"},
     // Export audio
     {"Export audio / Label '<folder path>': its text does not fit and it has no tooltip", "FRO1712"},
     {"Export audio / Label 'Bit depth': is not 6 px from its control ComboBox 'Bit depth'", "FRO1712"},

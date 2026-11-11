@@ -16,6 +16,7 @@ constexpr int kTextBoxWidth = 50;
 constexpr int kTextBoxHeight = 20;
 constexpr int kRowGap = 6;
 constexpr int kControlHeight = 26;
+constexpr double kKnobGlideMs = 120.0;
 constexpr int kPillWidth = 110;
 constexpr const char* kFieldSuffix[3] = {"Freq", "Gain", "Q"};
 
@@ -87,7 +88,6 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
 
     glide_ = std::make_unique<synth::ui::KeyedPointTween>(*knobs_[0]);
     glide_->onDirty = [this](juce::Rectangle<int>) { applyGlideFrame(); };
-    glide_->setDurationMs(120.0);
 
     bind(boundBand_);
     curve_.addListener(this);
@@ -152,7 +152,7 @@ void ModuleComponent::EqBandRow::bind(int band) {
         if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(slider))
             card_.wireCardControlGestures(*slider, *gestures, param);
         if (previous != band) {
-            glide_->retarget(f, {shown, 0.0f}, {param->getValue(), 0.0f});
+            glide_->retarget(f, {shown, 0.0f}, {param->getValue(), 0.0f}, false, kKnobGlideMs);
             applyGlideFrame();
         }
     }

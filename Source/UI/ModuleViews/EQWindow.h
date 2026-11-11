@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 
 #include "EQBandStrip.h"
 #include "EQBandTypePill.h"
@@ -44,9 +45,10 @@ public:
         spectrumToggle.onClick = [this] { curve->setShowSpectrum(spectrumToggle.getToggleState()); };
         addAndMakeVisible(spectrumToggle);
 
-        hint.setText("Double-click adds or removes  -  right-click sets the type", juce::dontSendNotification);
+        hint.setText("Double-click adds or removes", juce::dontSendNotification);
+        hint.setTooltip("Double-click the curve to add or remove a band; right-click a band to set its type");
         hint.setJustificationType(juce::Justification::centredLeft);
-        hint.setInterceptsMouseClicks(false, false);
+        hint.setInterceptsMouseClicks(false, true);
         addAndMakeVisible(hint);
 
         setSize(820, 470);
@@ -54,12 +56,25 @@ public:
 
     ~EQWindow() override = default;
 
+    /** Keeps the hosting window no smaller than the footer needs: the toggle, type pill and hint side by side. */
+    void parentHierarchyChanged() override {
+        if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
+            window->setResizeLimits(kMinWidth, kMinHeight, 4000, 4000);
+    }
+
     void resized() override {
         auto area = getLocalBounds().reduced(10);
         auto footer = area.removeFromBottom(26);
         spectrumToggle.setBounds(footer.removeFromLeft(130));
-        reservedToolbarSlot = footer.removeFromLeft(kReservedToolbarSlotWidth);
+        footer.removeFromLeft(kFooterGap);
+        // The reserved slot gives way first when the window is narrow, so the pill and hint never overlap the toggle.
+        const int slotWidth = std::clamp(footer.getWidth() - kTypePillWidth - kHintMinWidth - 2 * kFooterGap, 0,
+                                         kReservedToolbarSlotWidth);
+        reservedToolbarSlot = footer.removeFromLeft(slotWidth);
+        if (slotWidth > 0)
+            footer.removeFromLeft(kFooterGap);
         typePill->setBounds(footer.removeFromLeft(kTypePillWidth).withSizeKeepingCentre(kTypePillWidth, 22));
+        footer.removeFromLeft(kFooterGap);
         hint.setBounds(footer);
         area.removeFromBottom(6);
         const int stripHeight = std::min(strip->heightForWidth(area.getWidth()), area.getHeight() / 3);
@@ -97,6 +112,10 @@ public:
     /** Width of the empty toolbar area right of the spectrum toggle, kept for the Compare and Suggest buttons. */
     static constexpr int kReservedToolbarSlotWidth = 220;
     static constexpr int kTypePillWidth = 110;
+    static constexpr int kFooterGap = 6;
+    static constexpr int kMinWidth = 480;
+    static constexpr int kMinHeight = 320;
+    static constexpr int kHintMinWidth = 170;
     juce::Rectangle<int> getReservedToolbarSlot() const { return reservedToolbarSlot; }
 
     // Testing hooks
