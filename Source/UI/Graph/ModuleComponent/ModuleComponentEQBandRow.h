@@ -39,6 +39,10 @@ public:
     void layoutSelected(int x, int y, int width);
     static constexpr int kRowHeight = 80;
 
+    /** Wires a band knob's gestures (a CardKnobSlider's) when it is one. Defined in ModuleComponent.cpp, which already
+     * has CardControlGestures.h. */
+    static void wireKnobGestures(ModuleComponent& card, juce::Slider& knob, juce::RangedAudioParameter* param);
+
     /** Where a cable to band-parameter channel `channel` lands while its knob is not shown: the band's chip (the
      * strip's start when the band has none), in card coordinates. Null for a channel that is no band's. */
     std::optional<juce::Point<float>> anchorFor(int channel) const;

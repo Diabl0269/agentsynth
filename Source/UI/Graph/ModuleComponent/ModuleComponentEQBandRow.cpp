@@ -148,8 +148,7 @@ void ModuleComponent::EqBandRow::bind(int band) {
         slider->setTitle(param->getName(100));
         slider->setTooltip(param->getName(100));
         card_.rebindMidiLearnable(*slider, param);
-        if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(slider))
-            card_.wireCardControlGestures(*slider, *gestures, param);
+        wireKnobGestures(card_, *slider, param);
         if (previous != band) {
             glide_->retarget(f, {shown, 0.0f}, {param->getValue(), 0.0f}, false, kKnobGlideMs);
             applyGlideFrame();

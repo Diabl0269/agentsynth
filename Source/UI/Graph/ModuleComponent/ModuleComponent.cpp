@@ -973,3 +973,9 @@ void ModuleComponent::setRasterFrozen(bool frozen) {
 bool ModuleComponent::isRasterFrozen() const noexcept { return rasterCache != nullptr && rasterCache->isFrozen(); }
 
 juce::Slider* detail::newCardKnobSlider() { return new synth::ui::CardKnobSlider(); }
+
+void ModuleComponent::EqBandRow::wireKnobGestures(ModuleComponent& card, juce::Slider& knob,
+                                                  juce::RangedAudioParameter* param) {
+    if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(&knob))
+        card.wireCardControlGestures(knob, *gestures, param);
+}
