@@ -47,6 +47,12 @@ synth::PlacementId TimelineSectionStrip::makeSectionFromRange(double startBeat, 
     return id;
 }
 
+// Says what the choice does with the current setting: placeAgain() places after this one in dropMode().
+juce::String TimelineSectionStrip::placeAgainAfterMenuText() const {
+    return dropMode() == synth::SectionDropMode::Cover ? "Place again after this (cover what is there)"
+                                                       : "Place again after this (push the music later)";
+}
+
 bool TimelineSectionStrip::placeAgain(synth::PlacementId id, bool atEnd) {
     const auto* placement = doc_ != nullptr ? doc_->getPlacement(id) : nullptr;
     const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
@@ -250,7 +256,7 @@ void TimelineSectionStrip::buildAndShowBlockMenu(synth::PlacementId id) {
     add("Rename...", SectionMenuChoice::Rename, &kRenameKey);
     add("Change colour...", SectionMenuChoice::ChangeColour);
     menu.addSeparator();
-    add("Place again after this", SectionMenuChoice::PlaceAgainAfter, &kPlaceAgainKey);
+    add(placeAgainAfterMenuText(), SectionMenuChoice::PlaceAgainAfter, &kPlaceAgainKey);
     add("Place again at the end", SectionMenuChoice::PlaceAgainAtEnd);
     menu.addSeparator();
     add("Make unique", SectionMenuChoice::MakeUnique);

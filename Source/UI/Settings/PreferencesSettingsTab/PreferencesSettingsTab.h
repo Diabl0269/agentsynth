@@ -620,8 +620,10 @@ private:
     // above rather than getting a divider of its own: one is "make the locators from a selection",
     // this one is "make a clip from the locators".
     juce::ToggleButton showSectionsStripToggle{"Timeline: show the Sections strip"};
-    juce::ToggleButton sectionsCoverOnDropToggle{
-        "Timeline: placing a section covers the music where it lands (hold Shift to make room)"};
+    // "Timeline: dropping a section on other music": Pushes the music later (id 1, default) | Covers it (id 2).
+    juce::Label sectionsDropLabel;
+    juce::ComboBox sectionsDropCombo;
+    juce::Label sectionsDropHint;
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
     juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track or its macro"};

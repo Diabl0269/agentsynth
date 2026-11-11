@@ -26,6 +26,8 @@ void SectionStripMotion::stopAll() {
     exitDriver_.stop();
     liftDriver_.stop();
     outline_.stop();
+    hintSwapDriver_.stop();
+    hintSwap_ = 1.0f;
     growT_ = 1.0f;
     exitActive_ = false;
     lift_ = 0.0f;
@@ -34,7 +36,8 @@ void SectionStripMotion::stopAll() {
 }
 
 bool SectionStripMotion::isAnimating() const noexcept {
-    return grow_.isRunning() || exitDriver_.isRunning() || liftDriver_.isRunning() || outline_.isRunning();
+    return grow_.isRunning() || exitDriver_.isRunning() || liftDriver_.isRunning() || outline_.isRunning() ||
+           hintSwapDriver_.isRunning();
 }
 
 void SectionStripMotion::stepForTest(double ms) {
@@ -42,6 +45,7 @@ void SectionStripMotion::stepForTest(double ms) {
     exitDriver_.stepForTest(ms);
     liftDriver_.stepForTest(ms);
     outline_.stepForTest(ms);
+    hintSwapDriver_.stepForTest(ms);
 }
 
 //==============================================================================
@@ -118,6 +122,27 @@ void SectionStripMotion::liftTo(bool lifted) {
         },
         [this, to] {
             lift_ = to;
+            frame();
+        });
+}
+
+//==============================================================================
+void SectionStripMotion::startHintSwap() {
+    hintSwapDriver_.stop();
+    if (!canAnimate()) {
+        hintSwap_ = 1.0f;
+        frame();
+        return;
+    }
+    hintSwap_ = 0.0f;
+    hintSwapDriver_.start(
+        updater_, motionMs(kHintSwapMs, kReducedMs), [](float t) { return t; },
+        [this](float t) {
+            hintSwap_ = t;
+            frame();
+        },
+        [this] {
+            hintSwap_ = 1.0f;
             frame();
         });
 }

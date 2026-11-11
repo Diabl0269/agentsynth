@@ -195,6 +195,8 @@ void TimelineSectionStrip::beginBlockDrag(const juce::MouseEvent& e) {
         dragBlock_ = block;
         dragCopy_ = e.mods.isAltDown();
         settlingIds_.clear();
+        dropHint_.clear(); // a new drag's first words appear with the lift, not as a swap from the last drag's
+        dropHintFrom_.clear();
         dragGrabOffsetPx_ = pressPos_.x - block.bounds.getX();
         dragMembers_.clear();
         const auto ids =
@@ -256,6 +258,7 @@ void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift)
     dragGhostX_ = pos.x - dragGrabOffsetPx_;
     dragOutside_ = pos.y < 0.0f;
     dragMakeRoom_ = dropMode(shift) == synth::SectionDropMode::MakeRoom;
+    updateDropHint();
     std::vector<std::int64_t> members;
     for (const auto& member : dragMembers_)
         members.push_back(member.block.id.value);
