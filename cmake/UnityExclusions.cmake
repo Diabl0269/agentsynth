@@ -126,6 +126,7 @@ set(SYNTH_UNITY_SKIP
     Tests/Project/ProjectBundleViewTests.cpp
     Tests/Timeline/ArrangementContextTests.cpp
     Tests/Timeline/AudioClipPlaybackTests.cpp
+    Tests/Timeline/AudioClipSampleRateTests.cpp
     Tests/Timeline/AutomationApplierTests.cpp
     Tests/Timeline/AutomationRecordTests.cpp
     Tests/Timeline/AutomationSlicingTests.cpp

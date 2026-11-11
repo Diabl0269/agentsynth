@@ -216,10 +216,11 @@ struct TimelineSnapshot {
     static std::atomic<int>& liveInstanceCount() noexcept;
 };
 
-// Timeline beat -> FILE FRAME for one audio clip. The ONE mapping playback and offline stream
-// priming share: frames are file frames advanced at the ENGINE's rate (this build does not
-// resample), and the clip's trim is in seconds because it indexes a recording, which does not move
-// when the tempo map does. Never negative — a beat before the clip starts reads its first frame.
+// Timeline beat -> PLAYBACK FRAME for one audio clip: a frame at the ENGINE's rate (the streamer
+// converts to file frames when the file's rate differs). The ONE mapping playback and offline
+// stream priming share. The clip's trim is in seconds because it indexes a recording, which does
+// not move when the tempo map does. Never negative — a beat before the clip starts reads its first
+// frame.
 inline std::int64_t sourceFrameForClipBeat(double clipStartBeat, double sourceStartSeconds, double beat, double bpm,
                                            double sampleRate) noexcept {
     const double secondsPerBeat = (bpm > 0.0) ? (60.0 / bpm) : 0.5;

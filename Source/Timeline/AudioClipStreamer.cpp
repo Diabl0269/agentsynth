@@ -1,5 +1,6 @@
 #include "AudioClipStreamer.h"
 
+#include "Timeline/ClipResample.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,10 @@ namespace {
 // magnitude above that and exists only so a bug cannot hang a test forever.
 constexpr int kMaxPumpSlices = 100000;
 
+// Extra file frames a resampling read needs beyond k * ratio: one before and two after the span
+// the 4-point interpolator touches, plus one for the span's own rounding.
+constexpr int kInterpolationPadding = 8;
+
 } // namespace
 
 //==============================================================================
@@ -22,7 +27,9 @@ AudioClipStreamer::AudioClipStreamer() {
     formatManager_.registerBasicFormats();
     // Sized once, here: the fill path must not allocate, and every stream shares this scratch
     // because only one stream is ever being filled at a time (the prefetch thread is single).
-    fillScratch_.setSize(kNumChannels, kFillChunkFrames);
+    // Wide enough for the largest resampling read: a chunk of playback frames at kMaxRatio file
+    // frames each, plus the interpolator's 4-point support.
+    fillScratch_.setSize(kNumChannels, kFillChunkFrames * kMaxRatio + kInterpolationPadding);
 }
 
 AudioClipStreamer::~AudioClipStreamer() { releaseAll(); }
@@ -187,6 +194,23 @@ void AudioClipStreamer::invalidateAllStreams() {
         prefetchThread_.moveToFrontOfQueue(&prefetchClient_);
 }
 
+// Called from AudioEngine::handleStreamFormatChange in place of a bare invalidateAllStreams(): the
+// rings are in engine-rate frames, so a rate change remaps every window and every file's ratio.
+void AudioClipStreamer::setEngineSampleRate(double rate) {
+    // Stored BEFORE the invalidate flag is raised (release), so the prefetch slice that consumes the
+    // flag is guaranteed to see the new rate when it recomputes each stream's ratio.
+    engineSampleRate_.store(rate > 0.0 ? rate : 0.0, std::memory_order_release);
+    invalidateAllStreams();
+}
+
+double AudioClipStreamer::readFileSampleRate(const juce::File& file) {
+    // A throwaway manager: formatManager_ belongs to the prefetch thread's reader creation.
+    juce::AudioFormatManager manager;
+    manager.registerBasicFormats();
+    const std::unique_ptr<juce::AudioFormatReader> reader(manager.createReaderFor(file));
+    return reader != nullptr ? reader->sampleRate : 0.0;
+}
+
 void AudioClipStreamer::startPrefetchThreadIfNeeded() {
     if (prefetchPaused_.load(std::memory_order_relaxed))
         return;
@@ -267,7 +291,7 @@ bool AudioClipStreamer::isPrimed(const PrimeTargets& targets, int framesAhead) c
         if (!handle.ready.load(std::memory_order_acquire))
             continue; // assigned but unplayable: silence by design, never something to wait for
 
-        const std::int64_t fileLength = handle.fileLengthFrames.load(std::memory_order_acquire);
+        const std::int64_t fileLength = handle.playbackLengthFrames.load(std::memory_order_acquire);
         if (fileLength <= 0 || target.frame >= fileLength)
             continue; // past the end of the take — silence is the correct content
 
@@ -479,8 +503,12 @@ bool AudioClipStreamer::runOneSlice() {
     // serviced yet this pass could still be read against its stale, pre-invalidate window.
     if (forceInvalidate_.load(std::memory_order_acquire)) {
         for (auto& stream : streams_)
-            if (stream.reader != nullptr)
+            if (stream.reader != nullptr) {
+                // The engine rate may have changed: remap the stream's ratio and length FIRST, so the
+                // refill that follows the collapse is already at the new mapping.
+                applyRateMapping(stream);
                 collapseWindow(stream, stream.handle.wantedFrame.load(std::memory_order_acquire));
+            }
         forceInvalidate_.store(false, std::memory_order_release);
     }
 
@@ -526,7 +554,7 @@ void AudioClipStreamer::retireStream(ClipStream& stream) {
     stream.handle.clipId.store(kNoClip, std::memory_order_release);
     stream.handle.ready.store(false, std::memory_order_release);
     stream.handle.fileSampleRate.store(0.0, std::memory_order_release);
-    stream.handle.fileLengthFrames.store(0, std::memory_order_release);
+    stream.handle.playbackLengthFrames.store(0, std::memory_order_release);
     collapseWindow(stream, 0);
 
     // The reader is prefetch-thread-owned, so destroying it here needs no hand-off. (releaseAll()
@@ -535,6 +563,7 @@ void AudioClipStreamer::retireStream(ClipStream& stream) {
     stream.assignedClipId = kNoClip;
     stream.assignedFile = juce::File();
     stream.fileLengthFrames = 0;
+    stream.playbackLengthFrames = 0;
     // ringStorage_ is deliberately NOT freed: a slot keeps its ring for the process' lifetime, so
     // handle.ringData is stable the moment it is first published and the audio thread never sees it
     // change under a live clip id.
@@ -558,7 +587,7 @@ void AudioClipStreamer::openStream(ClipStream& stream, const Assignment& assignm
     }
 
     stream.fileLengthFrames = stream.reader->lengthInSamples;
-    stream.handle.fileLengthFrames.store(stream.fileLengthFrames, std::memory_order_release);
+    applyRateMapping(stream);
 
     // Allocate this slot's ring on FIRST use only, and never free or move it afterwards — that is
     // what makes the pointer safe to publish once and read forever. An engine whose session has no
@@ -571,9 +600,12 @@ void AudioClipStreamer::openStream(ClipStream& stream, const Assignment& assignm
 
     // Start empty at the clip's own trim point, so the very first fill covers what playback will
     // actually ask for rather than the head of the file (see Assignment::sourceStartSeconds).
-    const double rate = stream.reader->sampleRate > 0.0 ? stream.reader->sampleRate : 0.0;
+    // The seed is a PLAYBACK frame: the trim in seconds at the engine rate, or at the file's own rate
+    // while the engine rate is unknown (the ratio is then 1, so the two agree).
+    const double engineRate = engineSampleRate_.load(std::memory_order_acquire);
+    const double rate = engineRate > 0.0 ? engineRate : juce::jmax(0.0, stream.reader->sampleRate);
     const std::int64_t seed = (std::int64_t)std::llround(
-        juce::jlimit(0.0, (double)stream.fileLengthFrames, assignment.sourceStartSeconds * rate));
+        juce::jlimit(0.0, (double)stream.playbackLengthFrames, assignment.sourceStartSeconds * rate));
     collapseWindow(stream, seed);
     stream.handle.wantedFrame.store(seed, std::memory_order_release);
     stream.handle.fileSampleRate.store(stream.reader->sampleRate, std::memory_order_release);
@@ -582,6 +614,23 @@ void AudioClipStreamer::openStream(ClipStream& stream, const Assignment& assignm
     // Published LAST: this release store is what makes everything above visible to the audio
     // thread's acquire-load in acquire().
     stream.handle.clipId.store(clipId, std::memory_order_release);
+}
+
+void AudioClipStreamer::applyRateMapping(ClipStream& stream) {
+    const double engineRate = engineSampleRate_.load(std::memory_order_acquire);
+    const double fileRate = stream.reader != nullptr ? stream.reader->sampleRate : 0.0;
+
+    double ratio = 1.0;
+    if (engineRate > 0.0 && fileRate > 0.0) {
+        ratio = juce::jlimit(1.0 / kMaxRatio, (double)kMaxRatio, fileRate / engineRate);
+        if (std::abs(ratio - 1.0) < 1.0e-9)
+            ratio = 1.0; // exactly equal rates keep the bit-exact copy path
+    }
+
+    stream.ratio = ratio;
+    stream.playbackLengthFrames =
+        ratio == 1.0 ? stream.fileLengthFrames : (std::int64_t)std::ceil((double)stream.fileLengthFrames / ratio);
+    stream.handle.playbackLengthFrames.store(stream.playbackLengthFrames, std::memory_order_release);
 }
 
 void AudioClipStreamer::collapseWindow(ClipStream& stream, std::int64_t frame) {
@@ -608,7 +657,7 @@ bool AudioClipStreamer::serviceStream(ClipStream& stream) {
     if (wanted < stream.windowStart || wanted > stream.windowEnd)
         collapseWindow(stream, wanted);
 
-    if (stream.windowEnd >= stream.fileLengthFrames)
+    if (stream.windowEnd >= stream.playbackLengthFrames)
         return false; // the whole rest of this file is silence; nothing left to fetch
 
     const std::int64_t target = wanted + (std::int64_t)kPrefetchAheadFrames;
@@ -616,7 +665,7 @@ bool AudioClipStreamer::serviceStream(ClipStream& stream) {
         return false; // already a comfortable distance ahead of the playhead
 
     const std::int64_t roomToTarget = target - stream.windowEnd;
-    const std::int64_t roomInFile = stream.fileLengthFrames - stream.windowEnd;
+    const std::int64_t roomInFile = stream.playbackLengthFrames - stream.windowEnd;
     const int frames = (int)std::min<std::int64_t>(std::min(roomToTarget, roomInFile), kFillChunkFrames);
     if (frames <= 0)
         return false;
@@ -636,9 +685,21 @@ bool AudioClipStreamer::serviceStream(ClipStream& stream) {
         stream.handle.ringStartSourceFrame.store(newStart, std::memory_order_release);
     }
 
-    // STEP 2 — read into the de-interleaving scratch. Both channel flags true means: a MONO file is
-    // duplicated into both channels, a file with more than two channels contributes its first two,
-    // and an integer format is converted to float — all of it inside juce::AudioFormatReader.
+    // STEP 2 — read into the de-interleaving scratch and write the ring slots. At equal rates a
+    // plain copy; otherwise resampled (which may shrink the chunk to fit the scratch).
+    const int written = stream.ratio == 1.0 ? fillDirect(stream, ring, frames) : fillResampled(stream, ring, frames);
+
+    // STEP 3 — mark the new frames valid LAST. Release-paired with the audio thread's acquire load,
+    // so seeing the new end guarantees seeing the samples behind it.
+    stream.windowEnd += written;
+    stream.handle.ringEndSourceFrame.store(stream.windowEnd, std::memory_order_release);
+    return true;
+}
+
+int AudioClipStreamer::fillDirect(ClipStream& stream, float* ring, int frames) {
+    // Both channel flags true means: a MONO file is duplicated into both channels, a file with more
+    // than two channels contributes its first two, and an integer format is converted to float — all
+    // of it inside juce::AudioFormatReader.
     stream.reader->read(&fillScratch_, 0, frames, stream.windowEnd, true, true);
 
     const float* sourceLeft = fillScratch_.getReadPointer(0);
@@ -649,12 +710,45 @@ bool AudioClipStreamer::serviceStream(ClipStream& stream) {
         ring[slot] = sourceLeft[i];
         ring[slot + 1] = sourceRight[i];
     }
+    return frames;
+}
 
-    // STEP 3 — mark the new frames valid LAST. Release-paired with the audio thread's acquire load,
-    // so seeing the new end guarantees seeing the samples behind it.
-    stream.windowEnd += frames;
-    stream.handle.ringEndSourceFrame.store(stream.windowEnd, std::memory_order_release);
-    return true;
+// Resampling: an imported 44.1 kHz file plays at its true pitch and length on a 48 kHz device. The
+// ratio fileRate / engineRate is clamped to [1/kMaxRatio, kMaxRatio] (the fill scratch is sized for
+// it); outside that the file still plays, at the wrong speed. Equal rates never come here.
+int AudioClipStreamer::fillResampled(ClipStream& stream, float* ring, int frames) {
+    // Playback frame n sits at file position p = n * ratio; its Hermite support is the file frames
+    // floor(p) - 1 .. floor(p) + 2. For the playback frames [e, e + k) that is one contiguous file
+    // span, read with ONE call (JUCE zero-fills positions before 0 and past the end, which is
+    // exactly the silence the interpolator should see there).
+    const double ratio = stream.ratio;
+    const std::int64_t e = stream.windowEnd;
+    const int scratchFrames = fillScratch_.getNumSamples();
+
+    const auto spanFor = [&](int k) {
+        return (std::int64_t)std::floor((double)(e + k - 1) * ratio) - (std::int64_t)std::floor((double)e * ratio) + 4;
+    };
+    int k = frames;
+    while (k > 1 && spanFor(k) > scratchFrames)
+        --k; // never binds for ratio <= kMaxRatio; a guard, not a path
+
+    const std::int64_t start = (std::int64_t)std::floor((double)e * ratio) - 1;
+    const int span = (int)spanFor(k);
+    stream.reader->read(&fillScratch_, 0, span, start, true, true);
+
+    const float* sourceLeft = fillScratch_.getReadPointer(0);
+    const float* sourceRight = fillScratch_.getReadPointer(1);
+    for (int i = 0; i < k; ++i) {
+        const double position = (double)(e + i) * ratio;
+        const double base = std::floor(position);
+        const float frac = (float)(position - base);
+        const int j = (int)((std::int64_t)base - start) - 1; // index of the frame before `base`
+
+        const std::size_t slot = (std::size_t)((e + i) & (std::int64_t)(kRingFrames - 1)) * (std::size_t)kNumChannels;
+        ring[slot] = hermite4(sourceLeft[j], sourceLeft[j + 1], sourceLeft[j + 2], sourceLeft[j + 3], frac);
+        ring[slot + 1] = hermite4(sourceRight[j], sourceRight[j + 1], sourceRight[j + 2], sourceRight[j + 3], frac);
+    }
+    return k;
 }
 
 } // namespace synth
