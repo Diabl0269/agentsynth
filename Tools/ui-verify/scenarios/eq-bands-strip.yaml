@@ -2,7 +2,7 @@
 # chosen from the right-click type menu, and the strip under the curve shows one kind-coloured chip per band.
 #
 # What a user does: opens the Parametric EQ window from its card, double-clicks the curve eight times, gives four of the
-# new bands a type (High Cut at 48 dB/oct, Notch, Tilt, Band Pass), then adds a ninth band (it grows from the click),
+# new bands a type (High Cut at 48 dB/oct, Notch, Tilt, Low Shelf), then adds a ninth band (it grows from the click),
 # turns it into a Notch (the dot and curve morph), removes it (it shrinks into the curve) and undoes each in turn: every
 # step plays backwards. Each `glide` films the motion; each mark sits on the landed state, with the strip chips, the card
 # and the Mixer thumbnail's badge on screen beside the window.
@@ -53,7 +53,7 @@ steps:
   - wait: {settleMs: 500}
   - click: {id: eqWindowCurve, x: 700, y: 150, button: right}
   - wait: {settleMs: 500}
-  - click: {id: "Band Pass"}
+  - click: {id: "Low Shelf"}
   - wait: {settleMs: 500}
   - expect: {id: "eqWindowStrip > eqChip8", exists: true}
   - expect: {id: "Oscillator 2 EQ curve", contains: {tooltip: "EQ: 8 bands."}}
