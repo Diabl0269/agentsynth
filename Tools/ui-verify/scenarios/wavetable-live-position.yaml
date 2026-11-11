@@ -4,10 +4,9 @@
 # What a user does: adds a Wavetable and an LFO from the library (Cmd+F), drags the LFO output onto Position and
 # watches the display while it sounds, then undoes the cable. A test-mode launch has no audio device, so `audioPump`
 # renders the patch in real time (nothing is heard). The values themselves are covered by WavetableLiveDisplay tests
-# (offline render); offKnob is the display's live position differing from the knob's.
+# (offline render); offKnob is the live position differing from the knob's, drawnOffKnob the drawn one.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 record: true
-motion: true
 save_project: fro1728 wavetable live position
 steps:
   - click: {id: New empty project}
@@ -45,11 +44,13 @@ steps:
   - expect: {id: wavetableDisplay, timerHz: 30, within_ms: 4000}
   - getState: {id: wavetableDisplay}
   - glide: {name: frame-follows-lfo, frames: 24, do: {getState: {id: wavetableDisplay}}}
+  - expect: {id: wavetableDisplay, drawnOffKnob: true, within_ms: 4000}   # the still shows a frame off the knob's
   - getState: {id: wavetableDisplay}
   - mark: {check: 1, name: frame-follows-lfo}
   - key: {keys: cmd+z}
   - wait: {settleMs: 600}
   - expect: {id: wavetableDisplay, offKnob: false, within_ms: 3000}
+  - expect: {id: wavetableDisplay, drawnOffKnob: false, within_ms: 3000}
   - expect: {id: wavetableDisplay, shownFrame: 1, within_ms: 3000}
   - expect: {id: wavetableDisplay, timerHz: 15, within_ms: 3000}
   - getState: {id: wavetableDisplay}

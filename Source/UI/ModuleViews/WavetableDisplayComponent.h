@@ -118,6 +118,7 @@ public:
         into.setProperty("livePosition", module.getModulatedScanPosition());
         into.setProperty("knobPosition", module.getScanPosition());
         into.setProperty("offKnob", module.getModulatedScanPosition() != module.getScanPosition());
+        into.setProperty("drawnOffKnob", quantisePosition(shownPosition) != quantisePosition(module.getScanPosition()));
         into.setProperty("shownFrame", getShownFrame());
         into.setProperty("caption", getCaption());
         into.setProperty("timerHz", getTimerInterval() > 0 ? 1000 / getTimerInterval() : 0);
