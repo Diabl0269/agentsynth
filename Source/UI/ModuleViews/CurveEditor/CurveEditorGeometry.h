@@ -39,8 +39,8 @@ struct CurveGeometryConfig {
  *
  *  x mapping is piecewise per segment: a zero-duration segment always occupies exactly
  *  `kZeroSegmentPx` on screen (the model value stays 0 — this is a display convention only);
- *  the remaining width is shared among the real-duration segments in proportion to
- *  `duration / visibleRange`, where `visibleRange >= totalDuration` leaves headroom on the
+ *  the remaining width (the bounds less `kNodeInsetPx` on each side) is shared among the real-duration
+ *  segments in proportion to `duration / visibleRange`, where `visibleRange >= totalDuration` leaves headroom on the
  *  right of the last node to drag it further out.
  */
 class CurveEditorGeometry {
@@ -49,6 +49,12 @@ public:
     static constexpr float kHitRadiusPx = 10.0f;
     /** Vertical inset so a node at level 0 or 1 isn't clipped against the component edge. */
     static constexpr float kLevelInsetPx = 10.0f;
+    /** A node dot's drawn radius, and the widest it grows (selected or hovered, plus its 2 px outline). */
+    static constexpr float kNodeRadiusPx = 5.0f;
+    static constexpr float kNodeMaxExtentPx = kNodeRadiusPx + 1.5f + 1.0f;
+    /** Horizontal inset so the first and last node (at the component's left and right ends) draw whole. */
+    static constexpr float kNodeInsetPx = 8.0f;
+    static_assert(kNodeInsetPx >= kNodeMaxExtentPx, "the inset must hold a whole dot");
 
     CurveEditorGeometry(const CurveModel& model, juce::Rectangle<float> bounds, CurveGeometryConfig config = {});
 
