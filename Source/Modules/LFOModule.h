@@ -112,11 +112,15 @@ public:
         // returning early — but it stays its own branch so the two cases can never be conflated.
         if (isBypassed()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 

@@ -428,7 +428,9 @@ slider drag is one undo step (the settings are part of the module's extra state)
   moves like a meter, timed in seconds rather than frames: it rises in about 10 ms and falls about 30 dB in the half
   second after a note stops (`kAttackSeconds`, `kReleaseSeconds`, both in the analyser). A 30 Hz tick runs only while
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
-  curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, its Snap, Level,
+  curve paints exactly as before (the LFO's window has no such toggle). The spectrum is the filter's output before any
+  volume stage, so a source still running into the filter keeps it moving after the notes stop; muting or bypassing the
+  filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, its Snap, Level,
   its Snap, the second row (Steps, Key or Root), Guides, Show spectrum, the curve, the buttons (Ring helpers after Draw).
 - **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response

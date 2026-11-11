@@ -209,6 +209,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
+        spectrumToggle->setTooltip(
+            "Show spectrum: draw the filter's output behind the response, before any volume stage, "
+            "so a sound still running into the filter keeps it moving after the notes stop");
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
         attachBlockFade(responseFade_, {freqResponseComponent.get(), spectrumToggle.get()});
@@ -223,6 +226,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         // actual signal, so an idle patch still costs no repaints).
         spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
+        spectrumToggle->setTooltip("Show spectrum: draw the EQ's output behind the curve");
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
 

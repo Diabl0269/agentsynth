@@ -116,8 +116,8 @@ void ShapeListEditor::buildToolbar(int& order) {
         spectrumToggle_ = std::make_unique<juce::ToggleButton>("Show spectrum");
         spectrumToggle_->setTitle("Show spectrum");
         spectrumToggle_->setTooltip(
-            "Show spectrum: draw the filter's live spectrum faintly behind the curve, the same reading as the "
-            "card's response view");
+            "Show spectrum: draw the filter's output faintly behind the curve, before any volume stage, so a sound "
+            "still running into the filter keeps it moving after the notes stop");
         spectrumToggle_->setWantsKeyboardFocus(true);
         spectrumToggle_->setExplicitFocusOrder(order++);
         setTogglePillStyle(*spectrumToggle_, true);

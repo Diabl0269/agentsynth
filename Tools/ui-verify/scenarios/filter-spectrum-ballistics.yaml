@@ -44,6 +44,7 @@ steps:
   - click: {id: Show Spectrum}
   - wait: {settleMs: 600}
   - expect: {id: Show Spectrum, toggleState: true, within_ms: 3000}
+  - expect: {id: Show Spectrum, contains: {tooltip: "before any volume stage"}}
   - screenshot: {id: "card:Filter", name: card-spectrum-on}
   - click: {id: Edit shapes}
   - wait: {}
@@ -51,6 +52,7 @@ steps:
   - click: {id: Show spectrum}
   - wait: {settleMs: 600}
   - expect: {id: Show spectrum, toggleState: true, within_ms: 3000}
+  - expect: {id: Show spectrum, contains: {tooltip: "before any volume stage"}}
   - expect: {id: Show Spectrum, toggleState: true}             # the card's toggle stays on: one analyser each, same buffer
   - screenshot: {id: "Filter shapes: Filter", name: window-spectrum-on}
   - screenshot: {name: canvas-spectrum-on}

@@ -364,6 +364,8 @@ void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buf
     // (same exception as OscillatorModule / PolyMidiModule — see docs/architecture/module-base.md#bypassmute-contract).
     if (isBypassed() || isMuted()) {
         buffer.clear();
+        if (auto* vb = getVisualBuffer())
+            vb->pushConstant(0.0f, buffer.getNumSamples());
         return;
     }
 
