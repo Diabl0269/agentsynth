@@ -7,6 +7,7 @@
 #include "Modules/FilterModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 
 using namespace detail;

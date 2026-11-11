@@ -404,7 +404,8 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
             // describeKnownIds() above: a retry that can't see the valid options re-rolls blind.
             juce::StringArray ids;
             for (const auto& id : knownParamIds)
-                ids.add(id);
+                if (!detail::isUnexposedParam(*processor, id)) // known, so it loads, but never named to the model
+                    ids.add(id);
             return {false, PatchValidationError::UnknownParameterKey,
                     "Unknown parameter \"" + key +
                         "\" - it doesn't match any real parameter on this module and would be silently ignored, "
