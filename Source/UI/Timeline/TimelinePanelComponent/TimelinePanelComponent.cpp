@@ -17,6 +17,7 @@
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
 #include <cmath>
@@ -67,6 +68,19 @@ TimelinePanelComponent::TimelinePanelComponent()
         clipLaneArea_.clearRange();
         clipSelection_.setSelection(ids);
         clipLaneArea_.repaint();
+    };
+    // A section drag held at the strip's edge scrolled the shared view by hand, as a sideways wheel does:
+    // follow-playhead stops, and the ruler and the lanes learn their beats moved.
+    sectionStrip_->onViewScrolledByDrag = [this] {
+        if (follow_.enabled)
+            setFollowPlayheadEnabled(false);
+        ruler_.repaint();
+        repaint();
+    };
+    // The empty strip's tooltip names Shift+Cmd+J only when the key would make something (keyPressed acts on the same).
+    sectionStrip_->makeSectionKeySource = [this] {
+        const auto span = makeSectionKeySpan(clipLaneArea_, transport_, doc_);
+        return span && !span->blocked ? span->source() : juce::String();
     };
     // "New variation of this part": the placement flashes its outline and the toast names the new letter.
     clipLaneArea_.onVariationAdded = [this](synth::PlacementId placement, const juce::String& message) {

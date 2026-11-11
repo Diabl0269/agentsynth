@@ -191,6 +191,17 @@ TEST(TimelineSectionStripTest, TooltipNamesTheBlockAndTheEmptyStripNamesTheGestu
     EXPECT_TRUE(onBlock.contains("plays 2 times")) << onBlock;
     const auto empty = f.strip.tooltipAt({f.x(10.0), 12.0f});
     EXPECT_TRUE(empty.contains("Drag across bars to make a section")) << empty;
+    EXPECT_FALSE(empty.contains("press")) << "no key is promised when it would make nothing";
+}
+
+TEST(TimelineSectionStripTest, TheEmptyStripNamesTheMakeSectionKeyAndItsSourceWhenItWouldWork) {
+    StripFixture f;
+    f.makeRepeatedSection();
+    f.strip.makeSectionKeySource = [] { return juce::String("the loop"); };
+    const auto empty = f.strip.tooltipAt({f.x(10.0), 12.0f});
+    EXPECT_TRUE(empty.startsWith("Drag across bars to make a section")) << empty;
+    EXPECT_TRUE(empty.contains("to make one from the loop")) << empty;
+    EXPECT_TRUE(empty.contains("J")) << "names the key: " << empty;
 }
 
 TEST(TimelineSectionStripTest, ProbePublishesTheSectionsAndTheSelection) {
