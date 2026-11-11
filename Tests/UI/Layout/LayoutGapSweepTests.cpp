@@ -702,6 +702,9 @@ protected:
 } // namespace
 
 TEST_F(LayoutGapShell, NoRegionHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCentreButtons) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
+#endif
     Findings findings;
     const auto themes = synth::theme::builtInThemes();
     for (const auto& theme : themes) {
@@ -718,6 +721,9 @@ TEST_F(LayoutGapShell, NoRegionHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCe
 class LayoutGapDialogs : public KeyboardReachDialogFixture {};
 
 TEST_F(LayoutGapDialogs, NoDialogHasTouchingPartsWrongCaptionGapsCutOffTextOrOffCentreButtons) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
+#endif
     Findings findings;
     const auto themes = synth::theme::builtInThemes();
     for (const auto& surface : dialogSurfaces()) {

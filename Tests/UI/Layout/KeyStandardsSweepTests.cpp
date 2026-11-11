@@ -495,12 +495,18 @@ class KeyStandardsDialogs : public KeyboardReachDialogFixture {};
 } // namespace
 
 TEST_F(KeyStandardsShell, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryRegion) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
+#endif
     Findings findings;
     checkScenes(findings);
     findings.expectOnlyKnownGaps();
 }
 
 TEST_F(KeyStandardsDialogs, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryDialog) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
+#endif
     Findings findings;
     const auto theme = synth::theme::builtInThemes().front();
     for (const auto& surface : dialogSurfaces()) {
