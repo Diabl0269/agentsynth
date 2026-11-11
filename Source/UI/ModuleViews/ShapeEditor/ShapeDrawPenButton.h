@@ -29,20 +29,21 @@ public:
     static constexpr int kIconSize = 14;
     /** The space between the icon and the word. */
     static constexpr float kIconGap = 6.0f;
+    /** The least room each side of a bottom-row button's content; the row never sizes a button tighter. */
+    static constexpr float kMinSidePad = 3.0f;
 
     /** Where the icon and the word sit: one group, centred in the button; the word shrinks if it must. */
     struct ContentLayout {
         juce::Rectangle<float> icon, text;
     };
     ContentLayout contentLayout() {
-        constexpr float kPad = 4.0f;
         const float height = (float)getHeight();
         const auto font = getLookAndFeel().getTextButtonFont(*this, getHeight());
         const float wanted = juce::GlyphArrangement::getStringWidth(font, getButtonText());
-        const float room = juce::jmax(0.0f, (float)getWidth() - 2.0f * kPad - kIconSize - kIconGap);
+        const float room = juce::jmax(0.0f, (float)getWidth() - 2.0f * kMinSidePad - kIconSize - kIconGap);
         const float textWidth = juce::jmin(wanted, room);
         const float group = (float)kIconSize + kIconGap + textWidth;
-        const float left = juce::jmax(kPad, ((float)getWidth() - group) * 0.5f);
+        const float left = juce::jmax(kMinSidePad, ((float)getWidth() - group) * 0.5f);
         return {juce::Rectangle<float>(left, (height - kIconSize) * 0.5f, (float)kIconSize, (float)kIconSize),
                 juce::Rectangle<float>(left + kIconSize + kIconGap, 0.0f, textWidth, height)};
     }

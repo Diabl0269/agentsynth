@@ -512,6 +512,15 @@ TEST(ShapeDrawGesture, TheDrawButtonCentresItsIconAndWordAsOneGroup) {
     ShapeListEditor editor(rig.adapter, 0);
     ASSERT_NE(editor.getPitchRows(), nullptr);
     expectDrawButtonCentredAndRowUnclipped(editor);
+
+    // At the tightest width the row can give it (wider fonts, as on Windows), the word still fits whole.
+    auto& draw = editor.getDrawPenButton();
+    const auto font = draw.getLookAndFeel().getTextButtonFont(draw, draw.getHeight());
+    const float word = juce::GlyphArrangement::getStringWidth(font, "Draw");
+    draw.setSize((int)std::ceil(word + (float)ShapeDrawPenButton::kIconSize + ShapeDrawPenButton::kIconGap +
+                                2.0f * ShapeDrawPenButton::kMinSidePad),
+                 draw.getHeight());
+    EXPECT_GE(draw.contentLayout().text.getWidth(), word) << "the word is not clipped at the tightest width";
 }
 
 TEST(ShapeDrawGesture, ThePenIsRememberedPerKindAcrossWindows) {
