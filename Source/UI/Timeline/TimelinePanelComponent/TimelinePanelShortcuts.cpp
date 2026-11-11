@@ -11,6 +11,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
@@ -205,6 +206,28 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
             // ruler needs no repaint (the locators themselves did not move).
             return true;
         }
+    }
+
+    // Shift+Cmd+J = make a section, whichever timeline surface has focus (the clip lane takes it first when it holds a
+    // range; the strip and the panel root bubble here, and MainComponent forwards it from outside the timeline): from
+    // the Range tool's span, else the loop locators. The new block opens its name for typing. With nothing to make it
+    // from, a toast says what to do, so the key never does nothing silently.
+    if (matchesAction(
+            key, "timelineMakeSection",
+            juce::KeyPress('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0))) {
+        if (clipEditorOpen())
+            return false;
+        const auto span = makeSectionKeySpan(clipLaneArea_, transport_, doc_);
+        if (span && span->blocked) {
+            if (onShowMessage)
+                onShowMessage("Those bars already hold a section: pick bars outside it to make a new one");
+        } else if (span && span->fromRange)
+            clipLaneArea_.applyRangeChoice(TimelineClipLaneArea::RangeChoice::MakeSection);
+        else if (span)
+            sectionStrip_->makeSectionFromRange(span->startBeat, span->endBeat);
+        else if (onShowMessage)
+            onShowMessage("Select bars with the Range tool or set the loop, then press it again to make a section");
+        return true;
     }
 
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the

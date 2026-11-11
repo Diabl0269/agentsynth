@@ -3,11 +3,13 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripMotion.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -35,6 +37,10 @@ class ShortcutManager;
 // ...Motion.cpp (what animates), ...Variations.cpp (the letter chip's menu and its edits).
 namespace synth::ui {
 
+template <typename T>
+class KeyedTween;
+using KeyedPointTween = KeyedTween<juce::Point<float>>;
+
 class TimelineSectionStrip
     : public juce::Component
     , public juce::TooltipClient
@@ -54,6 +60,11 @@ public:
     // "Select its clips" hands the ids of every clip that starts inside the placement here; the panel puts them in the
     // clip lanes' selection (and clears a live range, which never coexists with one).
     std::function<void(const std::vector<synth::ClipId>&)> onSelectClips;
+    // A drag held at the strip's left or right edge scrolled the shared view; the panel repaints what reads it.
+    std::function<void()> onViewScrolledByDrag;
+    // What the Make Section key would make a section from right now ("the selected bars", "the loop"), or empty when
+    // it can do nothing; the empty-strip tooltip names the key only when this is not empty.
+    std::function<juce::String()> makeSectionKeySource;
 
     // Re-reads the doc: drops a selection whose placement is gone, rebuilds the accessibility proxies when the blocks
     // changed, repaints. Called by the panel on every doc notification.
@@ -152,6 +163,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(FocusChangeType) override { repaint(); }
     void focusLost(FocusChangeType) override { repaint(); }
@@ -174,7 +186,16 @@ public:
     bool isBlockDraggingForTest() const noexcept { return blockDragging_; }
     bool isBlockDragCopyForTest() const noexcept { return dragCopy_; }
     // The beat a block drag in flight would drop its start on (what the accent drop line shows).
-    double getBlockDragTargetBeatForTest() const noexcept { return dragTargetBeat_; }
+    double getBlockDragTargetBeatForTest() const noexcept { return dragPlan_.landing; }
+    // The whole plan of the drag in flight: every other block's start after the drop and what a cover drop removes.
+    const sectionstrip::DropPlan& getBlockDragPlanForTest() const noexcept { return dragPlan_; }
+    // Where a block is drawn now, in beats: its start, eased toward where the drag in flight moves it.
+    double getDrawnStartBeatForTest(synth::PlacementId id) const;
+    juce::Rectangle<float> getDragGhostBoundsForTest() const;
+    // One edge-scroll tick, as the timer would run it.
+    void tickEdgeScrollForTest() { edgeScrollTick(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    KeyedPointTween& getDropGlideForTest() noexcept { return *dropGlide_; }
     SectionStripMotion& getMotionForTest() noexcept { return motion_; }
 
 protected:
@@ -208,6 +229,11 @@ private:
     void cancelBlockDrag(); // Esc mid-drag: no doc change
     void beginBlockDrag(const juce::MouseEvent& e);
     void updateBlockDrag(const juce::MouseEvent& e);
+    void updateBlockDragAt(juce::Point<float> pos, bool shift);
+    void setDropPlan(sectionstrip::DropPlan plan);
+    void clearDropPlan();
+    std::vector<sectionstrip::PlacedSpan> placedSpans() const;
+    double drawnStartOf(synth::PlacementId id, double docStart) const;
     void paintBlockDrag(juce::Graphics& g) const;
     // Abandons any gesture in flight (Esc): the make-drag outline and a block drag. True when one was.
     bool cancelGesture();
@@ -222,7 +248,23 @@ private:
     // Pointer gestures (TimelineSectionStripMouse.cpp)
     void beginMakeDrag(const juce::MouseEvent& e);
     void updateMakeDrag(const juce::MouseEvent& e);
+    void updateMakeDragAt(juce::Point<float> pos);
     void endMakeDrag(bool commit);
+
+    // Edge scroll (TimelineSectionStripEdgeScroll.cpp)
+    void updateEdgeScrollArming();
+    void edgeScrollTick();
+    void stopEdgeScroll();
+    struct EdgeScrollTimer : juce::Timer {
+        std::function<void()> onTick;
+        void timerCallback() override {
+            if (onTick)
+                onTick();
+        }
+    };
+    EdgeScrollTimer edgeScroll_;
+    juce::Point<float> lastDragPointer_;
+    bool lastDragShift_ = false;
     std::vector<sectionstrip::Span> blockSpans() const;
     void setHoveredBlock(synth::PlacementId id, bool overChip = false);
 
@@ -275,14 +317,19 @@ private:
     Block dragBlock_;
     bool dragCopy_ = false;
     bool dragCancelled_ = false;
-    bool dragOutside_ = false; // the pointer is above the strip: a release there cancels
-    double dragTargetBeat_ = 0.0;
+    bool dragOutside_ = false;        // the pointer is above the strip: a release there cancels
+    sectionstrip::DropPlan dragPlan_; // what a release now would do; landing is where the drop line is drawn
+    bool dragMakeRoom_ = true;        // the mode the plan was made in (the setting, flipped while Shift is held)
+    bool hasDragPlan_ = false;
+    synth::PlacementId settlingId_; // the block just dropped: the settling ghost stands in for it until it lands
+    std::unique_ptr<KeyedPointTween>
+        dropGlide_; // blocks easing to a new start: a drag's plan, an undo, a key move (x = beats)
     float dragGrabOffsetPx_ = 0.0f;
     float dragGhostX_ = 0.0f;  // where the ghost's left edge was at the last drag event
     float dragSettleX_ = 0.0f; // where the ghost settles to once released
 
-    // What trackChangesForMotion compared last: the placements seen, the doc's replace count and stamp revision.
-    std::set<std::int64_t> knownPlacements_;
+    // What trackChangesForMotion compared last: the placements seen (id to start), the replace count, stamp revision.
+    std::map<std::int64_t, double> knownPlacements_;
     std::int64_t lastReplaceCount_ = 0;
     std::int64_t lastStampRevision_ = 0;
     bool motionPrimed_ = false;

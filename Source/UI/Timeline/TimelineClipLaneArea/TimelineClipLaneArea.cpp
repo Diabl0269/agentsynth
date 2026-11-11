@@ -10,6 +10,7 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
@@ -43,9 +44,12 @@ constexpr float kMutedClipLabelAlpha = 0.35f;
 using namespace detail;
 
 //==============================================================================
+TimelineClipLaneArea::~TimelineClipLaneArea() = default;
+
 TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection)
     : viewState_(viewState)
-    , selection_(selection) {
+    , selection_(selection)
+    , clipGlide_(std::make_unique<KeyedRectTween>(*this)) {
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);
@@ -424,7 +428,7 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
         for (const auto& clip : track.clips) {
-            const float fade = clipGlide_.alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
+            const float fade = clipGlide_->alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
             if (fade < 1.0f)
                 g.beginTransparencyLayer(fade);
             paintClip(g, clip, track, trackIndex, layout);

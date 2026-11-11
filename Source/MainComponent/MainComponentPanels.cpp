@@ -396,12 +396,14 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // TimelinePanelComponent::keyPressed never saw the locator-jump keystroke at all: it died here,
     // silently, because a surface action has no command to dispatch.
     //
-    // Deliberately a WHITELIST of two ids rather than a blanket forward. Forwarding everything the
+    // Deliberately a WHITELIST of ids rather than a blanket forward. Forwarding everything the
     // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while
     // the graph canvas has focus, which is a different feature with its own design question. These
-    // two act on the transport, are chorded, and mean nothing on any other surface.
+    // act on the transport or the timeline's own sections (Make Section from the loop), are chorded,
+    // and mean nothing on any other surface.
     if (isTimelineReachable()) {
-        static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2"};
+        static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2",
+                                                               "timelineMakeSection"};
         for (const auto& action : shortcutManager.getActionsForKeyPress(key))
             if (forwardsToTimelinePanel.contains(action))
                 return timelinePanel.keyPressed(key);

@@ -3,6 +3,7 @@
 #include "../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "../Timeline/AutomationLanes/AutomationLanesTestFixture.h"
 #include "../Timeline/TimelineClipLane/TimelineClipLaneTestFixture.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"

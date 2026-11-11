@@ -5,6 +5,7 @@
 // TimelineSectionStrip is declared in TimelineSectionStrip.h.
 
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
@@ -37,6 +38,11 @@ void TimelineSectionStrip::setTimelineDoc(synth::TimelineDoc* doc) {
     endMakeDrag(false);
     pressedBlock_ = {};
     blockDragging_ = false;
+    stopEdgeScroll();
+    hasDragPlan_ = false;
+    dragPlan_ = {};
+    settlingId_ = {};
+    dropGlide_->clear();
     motion_.stopAll();
     motionPrimed_ = false;
     selected_ = {};
@@ -212,16 +218,26 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(kBlockFontHeight);
     const juce::Font countFont(
         juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kCountFontHeight, juce::Font::plain));
+    const bool movingOriginal = blockDragging_ && !dragCopy_ && !dragCancelled_;
     for (const auto& block : blocks) {
-        auto rect = block.bounds;
+        // The block just dropped is drawn by its settling ghost until that lands; a make-room move's original has left
+        // (its gap is closed in the preview), a cover move's stays as a faint mark of where it was.
+        if (block.id == settlingId_ && !blockDragging_ && motion_.lift() > 0.0f)
+            continue;
+        if (movingOriginal && block.id == pressedBlock_ && dragMakeRoom_ && hasDragPlan_)
+            continue;
+        const double drawnStart = drawnStartOf(block.id, block.startBeat);
+        auto rect = sectionstrip::blockRect((float)xAtBeat(drawnStart), (float)xAtBeat(drawnStart + block.lengthBeats),
+                                            getHeight());
         float alpha = motion_.growAlpha(block.id);
         const float scale = motion_.growScale(block.id);
         if (scale < 1.0f) {
             const float width = rect.getWidth() * scale;
             rect = motion_.growsFromRight() ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
         }
-        if (blockDragging_ && !dragCopy_ && block.id == pressedBlock_)
-            alpha *= kMovedOriginalAlpha; // the block being moved stays as a faint mark of where it was
+        if ((movingOriginal && block.id == pressedBlock_) ||
+            (blockDragging_ && hasDragPlan_ && dragPlan_.isCovered(block.id.value)))
+            alpha *= kMovedOriginalAlpha; // a cover move's original, and what a cover drop would remove
         paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);
         if (block.id == selected_) {
             g.setColour(colors.accent);

@@ -4,13 +4,14 @@
 
 #include "AppUndoManager.h"
 #include "TimelineClipLaneArea.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 
 namespace synth::ui {
 
 juce::Rectangle<int> TimelineClipLaneArea::drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const {
-    if (!clipGlide_.isAnimating())
+    if (!clipGlide_->isAnimating())
         return resting;
-    const auto drawn = clipGlide_.drawnAt(id.value, resting.toFloat()).toNearestInt();
+    const auto drawn = clipGlide_->drawnAt(id.value, resting.toFloat()).toNearestInt();
     return drawn.withWidth(std::max(drawn.getWidth(), 1));
 }
 
@@ -22,13 +23,13 @@ juce::Rectangle<int> TimelineClipLaneArea::getDrawnClipRectForTest(synth::ClipId
 }
 
 double TimelineClipLaneArea::glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const {
-    if (!clipGlide_.isAnimating())
+    if (!clipGlide_->isAnimating())
         return restingX;
     const auto mode = noteGlide_.find(id.value);
     if (mode == noteGlide_.end())
         return restingX;
     const auto rest = restingRect.toFloat();
-    const auto drawn = clipGlide_.drawnAt(id.value, rest);
+    const auto drawn = clipGlide_->drawnAt(id.value, rest);
     return synth::glidedNoteX(mode->second, restingX, rest.getX(), rest.getWidth(), drawn.getX(), drawn.getWidth());
 }
 
@@ -66,7 +67,7 @@ void TimelineClipLaneArea::glideRestoredClips() {
     }
     for (const auto& [id, place] : clipPlaces_)
         if (now.find(id) == now.end())
-            clipGlide_.erase(id);
+            clipGlide_->erase(id);
 
     if (restored) {
         const auto layout = getRowLayout();
@@ -79,7 +80,7 @@ void TimelineClipLaneArea::glideRestoredClips() {
                 continue;
             noteGlide_[id] =
                 synth::classifyClipNoteGlide(was->second.length, place.length, clipNoteStarts_[id], noteStartsNow[id]);
-            clipGlide_.retarget(id, clipGlide_.drawnAt(id, rectOf(was->second)), rectOf(place), true);
+            clipGlide_->retarget(id, clipGlide_->drawnAt(id, rectOf(was->second)), rectOf(place), true);
         }
     }
     std::erase_if(noteGlide_, [&](const auto& kv) { return now.find(kv.first) == now.end(); });

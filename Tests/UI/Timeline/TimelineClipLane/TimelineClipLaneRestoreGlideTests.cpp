@@ -2,6 +2,7 @@
 // instead of snapping it (docs/layout/animation.md "Undo and redo glide"). The real mouse path makes the trim and
 // the real AppUndoManager restores it; the glide is stepped by hand.
 #include "TimelineClipLaneTestFixture.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 
 namespace {

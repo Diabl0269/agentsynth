@@ -161,8 +161,8 @@ TEST_F(TimelineDocTest, ScopeRunsNoSyncAndNoRevisionWhenNothingChanged) {
 TEST_F(TimelineDocTest, MovePlacementMakeRoomKeepsTheIdAndTheMusic) {
     auto t = buildThreeVerses(doc);
     const auto& song = t.song;
-    ASSERT_TRUE(doc.movePlacement(t.p1, 24.0, SectionDropMode::MakeRoom, kSpb));
-    // p1 left [0,8) and the gap closed; 24 named the end of the third placement, which is 16 once the gap is closed.
+    ASSERT_TRUE(doc.movePlacement(t.p1, 16.0, SectionDropMode::MakeRoom, kSpb));
+    // p1 left [0,8) and the gap closed; 16 is the start it gets, the end of the third placement once the gap closed.
     ASSERT_EQ(doc.getPlacements().size(), 3u);
     EXPECT_EQ(doc.getPlacements()[2].id, t.p1);
     EXPECT_DOUBLE_EQ(doc.getPlacements()[2].startBeat, 16.0);
