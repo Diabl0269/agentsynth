@@ -258,7 +258,8 @@ A section edit moves the music with the blocks instead of popping it, in the cli
   every clip that changed; a repeat stamp glides only the clips in the placements it rewrote (never the one being
   edited); any other edit lands at once. A clip that arrives grows from its left edge, and one that leaves shrinks
   toward its centre where it was (180 ms `easeInCubic`, drawn by the real `paintClip`). A clip on a new or deleted track
-  goes with its row, a doc replaced with no clip surviving (a load) moves nothing, more than 64 arriving or leaving
+  goes with its row, a doc replaced with no clip surviving (a load) moves nothing (an undo or redo is never a load, so
+  redoing the delete of the only clip's section still shrinks it away), more than 64 arriving or leaving
   clips land at once, and a clip that arrives exactly where one left draws as the same clip. Reduce Motion: moves land
   and fade in, leaving clips fade over 80 ms; Animations Off or off screen: nothing.
 - **Strip.** `trackChangesForMotion` is the one place a block leaves: every menu delete, Delete key, cover drop, undo
