@@ -12,6 +12,7 @@ struct OpenBox {
     juce::Component::SafePointer<ModDotPanelFrame> frame;
     juce::Component::SafePointer<ModCurveBox> box;
     juce::uint32 attenuverter = 0;
+    bool launchedByTest = false; ///< a test launcher owns the box; there is no frame
 };
 
 OpenBox& openBox() {
@@ -21,7 +22,7 @@ OpenBox& openBox() {
 
 void forgetIfGone() {
     auto& open = openBox();
-    if (open.frame == nullptr || open.box == nullptr)
+    if (open.box == nullptr || (open.frame == nullptr && !open.launchedByTest))
         open = {};
 }
 } // namespace
@@ -35,7 +36,10 @@ std::function<void(std::unique_ptr<ModCurveBox>, juce::Component&)>& modCurvePop
 
 bool isModCurvePopoverOpen() {
     forgetIfGone();
-    return openBox().frame != nullptr && !openBox().frame->isClosing();
+    const auto& open = openBox();
+    if (open.launchedByTest)
+        return open.box != nullptr;
+    return open.frame != nullptr && !open.frame->isClosing();
 }
 
 juce::AudioProcessorGraph::NodeID openModCurvePopoverFor() {
@@ -46,7 +50,9 @@ ModCurveBox* openModCurveBox() { return isModCurvePopoverOpen() ? openBox().box.
 
 void closeModCurvePopover() {
     forgetIfGone();
-    if (auto* frame = openBox().frame.getComponent())
+    if (openBox().launchedByTest)
+        openBox() = {};
+    else if (auto* frame = openBox().frame.getComponent())
         frame->close();
 }
 
@@ -86,7 +92,9 @@ ModDotPanelFrame* openModCurvePopover(GraphEditor& editor, juce::AudioProcessorG
     box->onClose = [] { closeModCurvePopover(); };
 
     if (auto& launcher = test_hooks::modCurvePopoverLauncherForTest()) {
+        const juce::Component::SafePointer<ModCurveBox> launched(box.get());
         launcher(std::move(box), anchor);
+        openBox() = {nullptr, launched, attenuverter.uid, true};
         return nullptr;
     }
 
@@ -117,16 +125,23 @@ ModDotPanelFrame* openModCurvePopover(GraphEditor& editor, juce::AudioProcessorG
     return frame;
 }
 
+bool toggleModCurvePopover(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& anchor,
+                           juce::Rectangle<int> anchorScreenBounds, bool anchorIsRegion) {
+    // The frame leaves a press on its own anchor alone, so the owner's click lands here with the box still open.
+    if (isModCurvePopoverOpen() && openModCurvePopoverFor() == attenuverter) {
+        closeModCurvePopover();
+        return false;
+    }
+    openModCurvePopover(editor, attenuverter, anchor, anchorScreenBounds, anchorIsRegion);
+    return true;
+}
+
 void wireModCurveChip(ModCurveChip& chip, GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverter,
                       const juce::String& sourceName) {
     auto target = std::make_shared<ModCurveEditTarget>(editor, attenuverter);
     chip.setTarget(target, sourceName);
     chip.onClick = [&chip, &editor, attenuverter] {
-        if (isModCurvePopoverOpen() && openModCurvePopoverFor() == attenuverter) {
-            closeModCurvePopover();
-            return;
-        }
-        openModCurvePopover(editor, attenuverter, chip, chip.getScreenBounds(), false);
+        toggleModCurvePopover(editor, attenuverter, chip, chip.getScreenBounds(), false);
     };
 }
 

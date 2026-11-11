@@ -60,7 +60,9 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   one `KeyedPointTween` key (`morphTween_`, so the glide time, Reduce Motion's land-and-fade-in and Animations Off are
   the shared ones); the fill follows the line and the dots and bend handles fade in as it lands. A restore during a
   morph starts from the line as drawn. The shape window and the card's curve view pass the flag when they reload the
-  selected curve after a restore. Guard: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces`.
+  selected curve after a restore. A segment's bend glides too: `glideBendsFrom` keys each changed bend in `bendTween_` (a
+  `KeyedPointTween`, the bend in x) and the line, fill and rings are drawn from `drawnModel()`, the model with the drawn
+  bends. Guards: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces` and `EveryUndoableCurvePropertyGlidesOnUndoAndRedo`.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the

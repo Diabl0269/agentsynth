@@ -8,6 +8,8 @@ ModCurveEditorView::ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> targe
     : target_(std::move(target)) {
     editor_.setTitle("Curve editor");
     editor_.setLineClickEditing(true);
+    // The wave spans the whole width, with no headroom to the right of its last point.
+    editor_.setVisibleRangeOverride(1.0);
     // The x axis is the source's level, not time.
     editor_.setTimeLabelFormatter([](double) { return juce::String(); });
     addAndMakeVisible(editor_);

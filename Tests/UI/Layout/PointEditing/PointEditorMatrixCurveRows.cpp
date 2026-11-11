@@ -58,6 +58,11 @@ public:
     ~ModCurveEditor() override { view_.onTargetGone = nullptr; }
     synth::ui::CurveEditorComponent& curve() override { return view_.editor(); }
     int editSteps() const override { return fixture_.undo.getEditSerial(); }
+    synth::ui::CurveGeometryConfig geometryConfig() const override {
+        synth::ui::CurveGeometryConfig config;
+        config.explicitVisibleRange = 1.0;
+        return config;
+    }
 
 private:
     Fixture fixture_;

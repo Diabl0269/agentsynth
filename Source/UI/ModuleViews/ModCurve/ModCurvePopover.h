@@ -19,6 +19,11 @@ ModDotPanelFrame* openModCurvePopover(GraphEditor& editor, juce::AudioProcessorG
                                       juce::Component& anchor, juce::Rectangle<int> anchorScreenBounds,
                                       bool anchorIsRegion);
 
+/** What an anchor's click runs: closes the box when it is open for `attenuverter` (returns false), else opens it
+ *  (returns true). A press on the anchor never dismisses the box itself, so every anchor goes through here. */
+bool toggleModCurvePopover(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& anchor,
+                           juce::Rectangle<int> anchorScreenBounds, bool anchorIsRegion);
+
 bool isModCurvePopoverOpen();
 /** The attenuverter of the open box (uid 0 when none). */
 juce::AudioProcessorGraph::NodeID openModCurvePopoverFor();
