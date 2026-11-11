@@ -13,6 +13,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -21,6 +22,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -167,6 +169,30 @@ void checkBlockGaps(const std::vector<juce::Component*>& visible, const std::set
             << context << "\n  between " << rows[i - 1].toString() << " and " << rows[i].toString();
 }
 
+// The first row of the Drum Kit's pads area (its title, Show all chip and count stepper) is a row of its own, but it
+// still keeps the block gap from the controls above it: a near-touch (a gap under kBlockGap, down to zero) between
+// sibling controls fails here, not only an overlap.
+bool isPadsRow(const juce::Component& c) {
+    return c.getComponentID() == "drumPadCount" || c.getComponentID() == "drumPadsShowAll" ||
+           c.getName() == "Pads label";
+}
+
+void checkNearTouch(const std::vector<juce::Component*>& visible, const std::set<const juce::Component*>& parts,
+                    const juce::String& context) {
+    for (auto* row : visible) {
+        if (!isPadsRow(*row))
+            continue;
+        for (auto* other : visible) {
+            const bool above = other != row && !isPadsRow(*other) && isBodyControl(*other, parts) &&
+                               other->getBottom() <= row->getY() && other->getRight() > row->getX() &&
+                               other->getX() < row->getRight();
+            if (above)
+                EXPECT_GE(row->getY() - other->getBottom(), synth::cardbody::kBlockGap)
+                    << context << "\n  " << name(*row) << "\n  nearly touches " << name(*other);
+        }
+    }
+}
+
 void checkCard(ModuleComponent& card, const juce::String& context, bool custom = false) {
     std::vector<juce::Component*> visible;
     for (auto* child : card.getChildren())
@@ -180,6 +206,7 @@ void checkCard(ModuleComponent& card, const juce::String& context, bool custom =
                 << context << "\n  " << name(*visible[i]) << "\n  overlaps " << name(*visible[j]);
 
     const auto parts = bodyParts(card);
+    checkNearTouch(visible, parts, context);
     if (custom)
         checkBlockGaps(visible, parts, context);
     for (auto* block : visible) {
@@ -243,6 +270,35 @@ TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
                         toggle->setToggleState(state.envelopeGraph, juce::sendNotificationSync);
                 checkCard(card, type + ": " + state.describe() + (free ? " free" : ""), state.custom);
             }
+        }
+    }
+}
+
+// The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
+// Show all pressed (the chip showing in both of its states): no part overlaps another and the Pads row keeps the gap
+// from the Level box above it. Regression test for FRO1678: the Pads row touched the Level value box.
+TEST(CardBodyOverlap, TheDrumKitPadsAreaIsClearAtEveryPadCountAndPadState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    for (const int count : {4, 32}) {
+        for (const int state : {0, 1, 2}) { // nothing hidden, two hidden, Show all pressed
+            auto processor = synth::AIStateMapper::createModule("Drum Kit");
+            auto* kit = dynamic_cast<DrumKitModule*>(processor.get());
+            ASSERT_NE(kit, nullptr);
+            kit->setPadCount(count);
+            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+            auto* chrome = dynamic_cast<synth::ui::DrumKitChrome*>(card.getInstrumentChrome());
+            ASSERT_NE(chrome, nullptr);
+            auto& pads = chrome->getPads();
+            if (state >= 1) {
+                pads.setPadShown(1, false);
+                pads.setPadShown(2, false);
+            }
+            if (state == 2)
+                pads.toggleShowAll();
+            const juce::String context = "Drum Kit: " + juce::String(count) + " pads, state " + juce::String(state);
+            EXPECT_EQ(pads.showAllChip().isVisible(), state >= 1) << context;
+            checkCard(card, context);
         }
     }
 }
