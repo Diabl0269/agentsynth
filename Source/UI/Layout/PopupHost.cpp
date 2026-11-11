@@ -70,6 +70,7 @@ public:
     PopoverBox(juce::Component& content, juce::Rectangle<int> area, PopoverOptions options)
         : juce::CallOutBox(content, area, nullptr)
         , content_(content)
+        , lastContentBounds_(content.getBounds())
         , area_(area)
         , options_(std::move(options))
         , triggerToFocus_(options_.trigger) {
@@ -112,7 +113,8 @@ public:
     }
 
     // The motion's scale reaches the box as a child change. JUCE would re-place the window around the scaled content
-    // on every frame; only a real change of the content's size or place does that. The scaled bubble also covers more
+    // on every frame (and keep the size of the first, 40% frame); only a real change of the content's size or place
+    // does that, measured from where the call-out first put it. The scaled bubble also covers more
     // than the content, so the whole box repaints.
     void childBoundsChanged(juce::Component* child) override {
         if (child == &content_ && content_.getBounds() == lastContentBounds_) {

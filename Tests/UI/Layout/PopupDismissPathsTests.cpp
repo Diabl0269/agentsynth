@@ -498,6 +498,8 @@ TEST_F(PopupDismissPaths, APickerGrowsOutOfWhatOpenedItAndItsBoxBackgroundGrowsW
     }
     ASSERT_TRUE(pumpUntil([&] { return rig.box->getAlpha() >= 0.999f && !rig.picker->isTransformed(); }));
     EXPECT_EQ(rig.contentScale(), 1.0f);
+    EXPECT_TRUE(rig.box->getLocalBounds().contains(rig.picker->getBounds()))
+        << "the settled box holds the whole list, not the 40% it started at";
     const int wholePainted = rig.boxPaintedPixels();
     ASSERT_GT(wholePainted, 0) << "the box paints a background of its own";
     EXPECT_LT(smallPainted, wholePainted / 2)
