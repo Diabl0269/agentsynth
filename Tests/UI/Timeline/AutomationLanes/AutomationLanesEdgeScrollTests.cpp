@@ -107,6 +107,43 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
     EXPECT_EQ(f.points()[0].beat, 2.0) << "one undo puts it back";
 }
 
+// Regression test for FRO1739: after a long edge drag of a lane dot the release looked like a jump of the view and
+// the dot. A release changes nothing on screen: the view stays where the last tick left it, the drop is the beat the
+// drag showed and the drawn dot holds its place through every frame after it, also when the up event lands a few
+// pixels from the last drag event.
+TEST(AutomationLanesEdgeScroll, ReleasingAfterALongEdgeHoldLeavesTheViewAndTheDrawnDotWhereTheLastFrameShowedThem) {
+    for (const float upOffset : {0.0f, -3.0f}) {
+        EdgeLane f;
+        f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+        f.undo.beginNewTransaction();
+        f.editor->forceGlideAnimateForTest(true);
+        const auto from = f.at(2.0, 50.0);
+        f.press(from);
+        f.dragTo(f.rightEdge(50.0), from);
+        f.ticks(45);
+        ASSERT_GT(f.first(), 10.0) << "a long hold scrolled well past the first view";
+        const double firstBefore = f.first();
+        const double landed = f.editor->getPreviewBeatForTest();
+        const auto drawn = f.editor->getGrabbedPointDrawnAtForTest();
+        ASSERT_TRUE(drawn.has_value());
+
+        auto up = f.rightEdge(50.0);
+        up.x += upOffset;
+        f.release(up, from);
+        EXPECT_DOUBLE_EQ(f.first(), firstBefore) << "the release does not move the view";
+        ASSERT_EQ(f.points().size(), 1u);
+        EXPECT_EQ(f.points()[0].beat, landed) << "the drop is the beat the last frame showed";
+        auto& tween = f.editor->getPointTweenForTest();
+        for (double ms = 0.0; ms <= 400.0; ms += 16.0) {
+            tween.stepForTest(ms);
+            const auto shown = f.editor->getDrawnSelectionBoundsForTest().getCentre();
+            EXPECT_NEAR(shown.x, drawn->x, 0.5) << "the dot holds its place " << ms << " ms after the release";
+            EXPECT_NEAR(shown.y, drawn->y, 0.5) << ms << " ms after the release";
+        }
+        f.editor->forceGlideAnimateForTest(false);
+    }
+}
+
 TEST(AutomationLanesEdgeScroll, TheLeftEdgeScrollsBackAndStopsAtBeatZero) {
     EdgeLane f;
     f.view().firstVisibleBeat = 8.0;

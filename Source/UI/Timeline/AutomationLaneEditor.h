@@ -178,6 +178,7 @@ public:
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
     std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
+    juce::Rectangle<float> getDrawnSelectionBoundsForTest() const { return drawnSelectionBounds(); }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
