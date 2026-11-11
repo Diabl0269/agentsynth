@@ -48,6 +48,7 @@ private:
 
     void hostedInstanceGone() override;
     void hostedInstanceLive() override;
+    void hostedLoadFailed() override;
     void layoutChangedForPlugin(const synth::PluginIdentity& identity) override;
 
     ModuleComponent& card_;

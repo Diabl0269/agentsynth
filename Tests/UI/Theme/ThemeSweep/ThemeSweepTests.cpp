@@ -8,6 +8,7 @@
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Theme/AppLookAndFeel/AlertIconBounds.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
@@ -289,6 +290,32 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
         message.ratio = contrastRatio(message.text, message.background);
         checkSurface(findings, log, "Alert box", theme, *alert, cornerProbes(alert->getWidth(), alert->getHeight(), 12),
                      {message});
+        // Every icon kind paints a 22 px glyph in the accent colour, wholly inside the box; no icon paints none.
+        for (const auto type : {juce::MessageBoxIconType::WarningIcon, juce::MessageBoxIconType::QuestionIcon,
+                                juce::MessageBoxIconType::InfoIcon, juce::MessageBoxIconType::NoIcon}) {
+            std::unique_ptr<juce::AlertWindow> iconAlert(
+                env.lookAndFeel().createAlertWindow("Title", "A message.", "OK", {}, {}, type, 1, nullptr));
+            ASSERT_NE(iconAlert, nullptr);
+            const auto iconImage = renderToImage(*iconAlert);
+            const auto icon = env.lookAndFeel().getLastAlertIconBounds();
+            if (type == juce::MessageBoxIconType::NoIcon) {
+                EXPECT_TRUE(icon.isEmpty()) << theme.name;
+                continue;
+            }
+            EXPECT_EQ(icon.getWidth(), synth::ui::kAlertIconSize) << theme.name;
+            EXPECT_EQ(icon.getHeight(), synth::ui::kAlertIconSize) << theme.name;
+            EXPECT_TRUE(iconAlert->getLocalBounds().contains(icon)) << theme.name << ": the icon sticks out of the box";
+            int accentPixels = 0;
+            for (int y = icon.getY(); y < icon.getBottom(); ++y)
+                for (int x = icon.getX(); x < icon.getRight(); ++x) {
+                    const auto pixel = iconImage.getPixelAt(x, y);
+                    if (std::abs(pixel.getRed() - theme.colors.accent.getRed()) < 8 &&
+                        std::abs(pixel.getGreen() - theme.colors.accent.getGreen()) < 8 &&
+                        std::abs(pixel.getBlue() - theme.colors.accent.getBlue()) < 8)
+                        ++accentPixels;
+                }
+            EXPECT_GT(accentPixels, 60) << theme.name << ": the glyph is not painted in the accent colour";
+        }
     }
     log.expectThemed(findings);
     findings.expectOnlyKnownGaps({"Alert box"});

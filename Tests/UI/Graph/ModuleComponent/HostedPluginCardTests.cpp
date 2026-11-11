@@ -769,6 +769,69 @@ TEST(HostedPluginCardTest, ClearingTheGraphAfterDetachAllIsSafeWithLiveCards) {
     pump();
 }
 
+// ============================================================================
+// 5b. A plugin that failed to load says why on the card
+// ============================================================================
+
+namespace {
+juce::Label* statusLabelOf(ModuleComponent& card) { return childWithId<juce::Label>(card, "hostedLoadStatus"); }
+const juce::String kOpenEditorTip = "Open this plugin's editor window";
+} // namespace
+
+TEST(HostedPluginCardTest, AFailedLoadSaysWhyOnTheCardAndAsTheOpenEditorTooltip) {
+    Rig rig;
+    rig.backend.failWith = "Card Plugin could not be opened.";
+    rig.addPlugin({knobSpec("a", "Alpha")}, /*waitForInstance*/ false);
+    auto card = rig.makeCard();
+    ASSERT_NE(statusLabelOf(*card), nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return !rig.module->isLoading() && statusLabelOf(*card)->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    auto* openEditor = childWithId<juce::TextButton>(*card, "openPluginEditor");
+    ASSERT_NE(label, nullptr);
+    ASSERT_NE(openEditor, nullptr);
+    EXPECT_TRUE(label->isVisible());
+    EXPECT_EQ(label->getText(), "Card Plugin could not be opened.");
+    EXPECT_EQ(openEditor->getTooltip(), "Card Plugin could not be opened.");
+    EXPECT_FALSE(openEditor->isEnabled());
+    EXPECT_FALSE(label->getWantsKeyboardFocus()) << "static text is not a tab stop";
+    EXPECT_TRUE(label->getTitle().isNotEmpty());
+    EXPECT_GE(label->getY(), openEditor->getBottom()) << "the reason sits under the Open Editor row";
+    EXPECT_GE(card->getHeight(), label->getBottom()) << "the card was re-measured to hold it";
+
+    // A later successful load clears the label and restores the tooltip.
+    rig.backend.failWith = {};
+    rig.module->loadPlugin(stubDescription(), rig.backend);
+    ASSERT_TRUE(pumpUntil([&] { return rig.module->hasInstance() && !statusLabelOf(*card)->isVisible(); }));
+    EXPECT_FALSE(statusLabelOf(*card)->isVisible());
+    EXPECT_EQ(openEditor->getTooltip(), kOpenEditorTip);
+}
+
+TEST(HostedPluginCardTest, ASwitchedOffPluginsCardSaysItIsSwitchedOffForThisOpen) {
+    Rig rig;
+    rig.backend.skipPluginForNextLoad("Card Plugin", "/Library/Audio/Plug-Ins/VST3/Card Plugin.vst3");
+    auto* hosted = new HostedPluginModule();
+    auto node = rig.engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(hosted));
+    rig.module = hosted;
+    rig.nodeId = node->nodeID;
+    hosted->prepareToPlay(kSampleRate, kBlockSize);
+    auto card = rig.makeCard();
+
+    synth::PluginIdentity identity;
+    identity.name = "Card Plugin";
+    identity.format = "VST3";
+    identity.uid = 0xC0DE01;
+    hosted->loadPlugin(identity, rig.backend);
+    ASSERT_NE(statusLabelOf(*card), nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return !hosted->isLoading() && statusLabelOf(*card)->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    ASSERT_NE(label, nullptr);
+    EXPECT_TRUE(label->isVisible());
+    EXPECT_TRUE(label->getText().contains("switched off for this open"));
+    EXPECT_EQ(rig.backend.createCount, 0) << "the plugin's code is never loaded";
+}
+
 TEST(HostedPluginCardTest, DetachingACardWhoseNodeWasAlreadyFreedTouchesNothing) {
     Rig rig;
     rig.addPlugin({knobSpec("a", "Alpha"), choiceSpec("c", "Choice", {"A", "B"})});

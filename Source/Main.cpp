@@ -3,6 +3,8 @@
 #include "MainComponent/MainComponent.h"
 #include "MainComponent/QuitRequest.h"
 #include "MainComponent/WindowKeyForward.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
+#include "Plugin/Hosting/PluginCrashRecovery.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
@@ -105,7 +107,9 @@ public:
         // A path the OS hands over before this point waits in pendingProject_.
         if (const auto bundle = synth::projectBundleFromCommandLine(getCommandLineParameterArray()))
             pendingProject_ = *bundle;
-        if (pendingProject_ != juce::File())
+        // A project named on the command line waits for the answer when the last run died inside a plugin.
+        checkPreviousRun();
+        if (!awaitingCrashChoice_ && pendingProject_ != juce::File())
             openProject(std::exchange(pendingProject_, juce::File()));
 
         startTestModeIfRequested();
@@ -119,7 +123,9 @@ public:
     void shutdown() override {
         // Dialogs launched async (Settings) are otherwise deleted by JUCE after this object is gone.
         synth::ui::deleteOpenModalDialogs();
-        testModeServer_ = nullptr; // stop answering before the window it drives goes away
+        if (runSentinel_ != nullptr)
+            runSentinel_->markCleanExit(); // reached on every normal quit; a crash never gets here
+        testModeServer_ = nullptr;         // stop answering before the window it drives goes away
         mainWindow = nullptr;
         juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
     }
@@ -163,7 +169,7 @@ private:
     // Routes a bundle to the open window (guarded like any Open, so unsaved changes are asked about first), or
     // holds it until the window exists.
     void openProject(const juce::File& bundle) {
-        if (mainWindow == nullptr) {
+        if (mainWindow == nullptr || awaitingCrashChoice_) {
             pendingProject_ = bundle;
             return;
         }
@@ -171,6 +177,54 @@ private:
             mainWindow->toFront(!juce::ComponentPeer::hideWindowsForAutomation); // a hidden run never takes focus
             mc->openProjectFromCommandLine(bundle);
         }
+    }
+
+    // Looks at how the previous run ended (docs/architecture/plugin-layer.md, "When a plugin takes the app down"),
+    // asks about it when there is something to say, and starts this run's sentinel. An automation launch keeps out
+    // of it: its runs are killed on purpose and live in their own settings directory.
+    void checkPreviousRun() {
+        if (synth::isAutomationLaunch(getCommandLineParameterArray()))
+            return;
+        const auto stateDir = synth::userSettingsRootDirectory().getChildFile("run-state");
+        const auto outcome = synth::inspectPreviousRun(stateDir, synth::defaultCrashReportsDirectory(),
+                                                       synth::RunSentinel::processIsAlive);
+        runSentinel_ = std::make_unique<synth::RunSentinel>(stateDir, synth::RunSentinel::currentProcessId());
+
+        if (outcome.kind == synth::PreviousRunKind::CleanOrUnknown)
+            return;
+
+        // Async like every other question here (never a modal loop). The first button is the default (Return);
+        // Escape and closing the window answer 0, the choice that changes nothing.
+        auto options = juce::MessageBoxOptions().withIconType(juce::MessageBoxIconType::WarningIcon);
+        if (outcome.kind == synth::PreviousRunKind::Unexpected) {
+            juce::AlertWindow::showAsync(options.withTitle("Agent Synth Quit Unexpectedly")
+                                             .withMessage("Agent Synth quit unexpectedly last time.")
+                                             .withButton("OK"),
+                                         [](int) {});
+            return;
+        }
+
+        juce::String message = "Agent Synth quit last time inside " + outcome.plugin.name +
+                               ". Open your project without it? Its card then stays empty and says it is switched off, "
+                               "and nothing is lost.";
+        if (outcome.strikes > 1)
+            message += " It has now been blamed " + juce::String(outcome.strikes) + " times.";
+        awaitingCrashChoice_ = true;
+        const auto plugin = outcome.plugin;
+        juce::AlertWindow::showAsync(options.withTitle("Plugin Crash")
+                                         .withMessage(message)
+                                         .withButton("Open without it")
+                                         .withButton("Open normally"),
+                                     [this, plugin](int result) {
+                                         // Two-button convention: the first button returns 1, the second and a
+                                         // closed window 0.
+                                         if (result == 1)
+                                             synth::HostedPluginBackend::getDefault().skipPluginForNextLoad(
+                                                 plugin.name, plugin.bundlePath);
+                                         awaitingCrashChoice_ = false;
+                                         if (pendingProject_ != juce::File())
+                                             openProject(std::exchange(pendingProject_, juce::File()));
+                                     });
     }
 
     // Must run before anything creates a juce::ApplicationProperties for kSettingsFolderName
@@ -333,7 +387,9 @@ private:
     std::unique_ptr<synth::MacPeerDroppedKeyRelay> droppedKeyRelay_;
 #endif
     std::unique_ptr<synth::testmode::TestModeServer> testModeServer_;
-    juce::File pendingProject_; // a project the OS handed over before the window existed
+    std::unique_ptr<synth::RunSentinel> runSentinel_; // present from launch until a clean quit
+    bool awaitingCrashChoice_ = false;                // the "quit inside a plugin" question is open
+    juce::File pendingProject_;                       // a project the OS handed over before the window existed
 };
 
 //==============================================================================

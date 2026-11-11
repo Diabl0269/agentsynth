@@ -516,6 +516,7 @@ add_executable(Tests
     UI/Theme/FaderRenderTests.cpp
     UI/Theme/UiTextWidthTests.cpp
     UI/Theme/MenuCornerTests.cpp
+    UI/Theme/AlertIconBoundsTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
