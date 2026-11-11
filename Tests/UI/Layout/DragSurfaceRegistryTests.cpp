@@ -239,8 +239,7 @@ const std::vector<Follows> kFollow = {
 
 // A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: each
 // one is built as a follow (a registered test) or moved to kFollow with an exemption.
-const std::vector<KnownGap> kFollowGaps = {
-};
+const std::vector<KnownGap> kFollowGaps = {};
 // What kFollowGaps holds today; it may only go down. Every drag now follows or is exempt, so it stays empty.
 constexpr std::size_t kFollowGapCeiling = 0;
 
