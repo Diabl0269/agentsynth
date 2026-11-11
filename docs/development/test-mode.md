@@ -52,7 +52,7 @@ thread is never blocked and timers and animations run in between.
 | `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (one of `cmd`,`shift`,`alt`,`ctrl` as a string, or a list of them; an unknown name is an error naming it) | `{id, point}` |
 | `wheel` | `id`, `x?`, `y?` (local, default centre), `dx?`, `dy?` (JUCE wheel units; 0.25 is about one notch), `mods` | `{id, point}` |
 | `hover` | `id`, `x?`, `y?` (local, default centre) | `{id, point}`; moves the pointer there with no button down |
-| `mouseDown`, `mouseMoveHeld`, `mouseUp` | `id`, `x?`, `y?` (local, default centre), `mods` | `{id, point}`; one step of a drag each, so other commands can read the app while the button is held. A scenario that presses also releases: nothing lets go for it |
+| `mouseDown`, `mouseMoveHeld`, `mouseUp` | `id`, `x?`, `y?` (local, default centre), `mods`, `captured?` | `{id, point}`; one step of a drag each, so other commands can read the app while the button is held. A scenario that presses also releases: nothing lets go for it |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
 | `keyDown`, `keyUp` | `keys` (an arrow with its modifiers, `alt+right`), `target?`; `keyUp` without `keys` lets go of all | `{handled}`, `{held}`; presses the arrow and keeps it held: every key hold (`KeyGlideHost`) reads it, with the chord's Shift and Alt, as physically down until `keyUp`, so a scenario can film a held Alt+arrow with `glide`. The hold moves on animation frames, so it needs `motion: true`; `keyUp` also sends a key-up, which ends a hold at once. A scenario that holds also lets go |
@@ -63,6 +63,8 @@ thread is never blocked and timers and animations run in between.
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
+| `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
+| `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
@@ -78,7 +80,7 @@ do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
 (`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip stack under a hovered knob (or a dragged mod dot) is drawn, `modHoverChipRows`: its row texts, `macro`: the name of the macro the module sits in, empty when none, `macroPath`: every macro around it, outermost first, as `Outer macro > Nested macro`, `cabledTargets`: the modulation targets with a cable on them, `audioFrom`: the titles of the cards feeding its audio inputs, sorted and comma-separated, `cabledInputs`: every input jack with a cable, by its label, `landingOutline`: the drag outline shown now as `x y w h`, empty when none, `canvasBounds`: its bounds in canvas coordinates) and
-`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `sizingReadout`, the percentage pill an edge drag shows, empty when none) do. `getState` also reports a component's `tooltip`
+`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `sizingReadout`, the percentage pill an edge drag shows, empty when none) and a 1x1 child of the timeline's playhead overlay (id `timelinePlayhead`: `frameCount` and `medianFrameIntervalMs`, the frames of the current or last frame run and the median gap of the last 64, and `frameRunning`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 The minimap has the id `minimap` (a scenario clicks it by that id).
 The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` tell the window where the synthetic pointer is (`AppTooltipWindow::setSyntheticPointer`) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
@@ -93,7 +95,7 @@ show nothing. The pointer is drawn at the last synthetic mouse position (`click`
 image of the cursor the component under it shows when that is a custom image cursor (the tool cursors built by
 `makeToolCursor`, which keeps the picture in a small registry because a `juce::MouseCursor` cannot be read back), else a
 white arrow with a dark outline. The reply is `{path, width, height, windows: [{id,x,y,width,height}], pointer: {x,y,kind}}`
-with positions in the frame's own coordinates and `kind` `arrow` or the cursor's name (`tool:range`). Code:
+with positions in the frame's own coordinates and `kind` `arrow` or the cursor's name (`tool:range`). A window is drawn at its own opacity, so a popup mid-fade (or a leaving picture) shows as faint in a recorded strip. Code:
 `Source/TestMode/TestModeScreenFrame.*`. `Tools/ui-verify` films this frame by default and `mark` saves it as proof, see
 [Video and saved project](#video-and-saved-project).
 
@@ -165,6 +167,35 @@ check itself are not counted.
 It sees what JUCE repaints, not what macOS does with it (a backing store that drops a region JUCE asked for is
 invisible to it). A scenario turns it on with `stale_pixel_check`, see [Scenarios](#scenarios).
 
+## No-pop check
+
+Anything added, removed or swapped on screen must animate; it never lands in one frame. `popWatchStart` keeps a full
+paint of the window and, from the same presented frame the [stale-pixel check](#stale-pixels) keeps, a copy of every
+frame the window presents afterwards. `popWatchCheck` waits until `ms` have passed and animations have stopped, paints the
+window afresh, and takes the pixels that differ from the "before" picture (outside `ignore`) as the change. A change
+**pops** when the first presented frame that shows any of it already equals the final picture there (all but 4 pixels or
+1%), or when no presented frame shows it at all. A fade or slide has frames in between (`intermediateFrames`). The check
+answers either way; the runner decides.
+
+A scenario with `motion: true` runs it around every action that can change the window: `click`, `drag` (the whole drag),
+`key`, `wheel`, `mouseUp`, `keyUp` and a `glide`'s `do`. Not checked: runner steps (`type` makes text appear per key
+by design), `hover`, `mouseDown`, `mouseMoveHeld`, `keyDown`, `openProject`, `saveProject`, `restart`, `quit`, `wait`
+and every query. Frames of a `record` video and of a `glide` are still taken before the check.
+
+- `pop_check: {off: "<reason>"}` turns it off for the scenario; a bare `false` is refused. A mapping may also give
+  `ignore: [ids]` (components that change on their own; the toolbar's Undo and Redo buttons are always ignored), `ms` and `undo: false`.
+- `instant: "<reason>"` in a step's arguments (in a `glide`, beside `do`) lets that step pop: a deliberately instant
+  change of text, a value, a selection or a caret. The reason is required and is not sent to the app.
+- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
+  `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
+  `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
+  answers they are skipped and one line says so.
+- `Tools/ui-verify/known-pops.txt` lists pops that exist today, one per line: `<scenario> <step>[u|r] <ticket> <reason>`
+  (`#` starts a comment; start the reason with an area tag such as `[timeline]`). A pop on a listed step passes with a
+  `known pop` line; a listed step that runs and does not pop prints a `note:` to remove its line (a busy run can miss a pop, so it does not fail), and a listed
+  scenario or step that does not exist fails too, so the file only shrinks. A pop on any other step fails the scenario,
+  naming the region and the PNG folder `<out>/pop-step-NN/`.
+
 ## Limits
 
 No image comparison against a reference (take a PNG and look at it; [Stale pixels](#stale-pixels) compares the window
@@ -192,7 +223,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 
 | Step | Meaning |
 | --- | --- |
-| `type: {text}` | one `key` per character |
+| `type: {text, target?}` | one `key` per character, each sent to `target` when given (a text field of another window, e.g. `name` in the Save Snippet dialog) |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
 | `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |

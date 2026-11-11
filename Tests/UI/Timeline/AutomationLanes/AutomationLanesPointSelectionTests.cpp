@@ -215,7 +215,7 @@ TEST(AutomationLanesPointSelectionTest, DeleteAndBackspaceRemoveTheSelectionAsOn
         EXPECT_TRUE(f.key(juce::KeyPress(keyCode)));
         EXPECT_EQ(f.doc.getRevision(), rev + 1);
         EXPECT_EQ(f.beats(), Beats({2.0}));
-        EXPECT_TRUE(f.selected().empty());
+        EXPECT_EQ(f.selected(), Beats({2.0})) << "the point left takes the selection";
 
         f.undo.undo();
         EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0})) << "one undo brings both back";

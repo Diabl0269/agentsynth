@@ -3,13 +3,11 @@
 // a drum machine open on a clip), the dialogs from the theme sweep registry, so a new region or dialog is walked
 // without being listed here. A region that reaches some controls with keys of its own is described by an adapter below.
 // A gap that is known and ticketed lives in kKnownGaps; the list may only shrink (docs/development/accessibility.md).
-#include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
 #include "../Mixer/MixerKeyWalk.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
-#include "BottomDockActiveTabResetGuard.h"
-#include "NativeWindowTestGuard.h"
+#include "KeyboardReachFixture.h"
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -320,40 +318,8 @@ private:
     std::set<std::string> found_;
 };
 
-class KeyboardReachShell : public MainComponentTest {
+class KeyboardReachShell : public KeyboardReachFixture {
 protected:
-    void SetUp() override {
-        MainComponentTest::SetUp();
-        resetGuard_.emplace();
-        mc_ = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
-        mc_->setSize(1400, 900);
-        mc_->newPatchForTest();
-        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false); // a hidden pane is hidden at once
-        mc_->simulateAddAudioTrackClick();
-        mc_->getTimelineDoc().addTrack(synth::TrackKind::Midi, "Track 1");
-        mc_->getBottomDock().getMixerPanel().rebuild();
-        mc_->resized();
-    }
-    void TearDown() override {
-        mc_.reset();
-        resetGuard_.reset();
-        MainComponentTest::TearDown();
-    }
-
-    // Every region of the registry as it stands, opened first when it is closed and can be opened.
-    std::vector<synth::ui::FocusRegion> openRegions() {
-        std::vector<synth::ui::FocusRegion> regions;
-        for (const auto& region : mc_->getFocusRegionsForTest().getRegions()) {
-            if (!region.isCurrentlyOpen() && region.open)
-                region.open();
-            mc_->resized();
-        }
-        for (const auto& region : mc_->getFocusRegionsForTest().getRegions())
-            if (region.isCurrentlyOpen() && region.root != nullptr)
-                regions.push_back(region);
-        return regions;
-    }
-
     // A control belongs to the deepest region that contains it.
     void walkRegions(Findings& findings, std::set<std::string>& seen, const std::string& suffix) {
         const auto& registry = mc_->getFocusRegionsForTest();
@@ -398,30 +364,13 @@ protected:
         timeline.getTopBarKeysForTest().leave();
         return missing;
     }
-
-    std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
-    std::unique_ptr<MainComponent> mc_;
 };
 
-class KeyboardReachDialogs : public ::testing::Test {
-protected:
-    void SetUp() override {
-        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
-            GTEST_SKIP() << "needs a display";
-        if (nativeWindowsAbortHere())
-            GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
-        juce::MessageManager::getInstance();
-        wasEnabled_ = synth::ui::PopupMotion::isEnabled();
-        synth::ui::PopupMotion::setEnabled(false);
-    }
-    void TearDown() override {
-        synth::ui::deleteOpenModalDialogs();
-        synth::ui::PopupMotion::setEnabled(wasEnabled_);
-    }
-    bool wasEnabled_ = true;
-};
+class KeyboardReachDialogs : public KeyboardReachDialogFixture {};
 
 } // namespace
+
+void KeyboardReachFixture::rebuildMixer() { mc_->getBottomDock().getMixerPanel().rebuild(); }
 
 TEST_F(KeyboardReachShell, EveryControlInEveryMainViewRegionIsAKeyboardStop) {
     Findings findings;

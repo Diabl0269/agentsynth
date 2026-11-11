@@ -49,6 +49,9 @@ ModulatorBand::ModulatorBand(TimelineViewState& viewState)
     testModeProbe_ = makeLaneStateProbe("modulatorBandState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("hasAmountLane", amountLane() != nullptr);
+        const auto* gesture = editor_ != nullptr ? &editor_->getShapeGesture() : nullptr;
+        into.setProperty("laneRange",
+                         gesture != nullptr && gesture->rangeIsOnThisLane() && gesture->getLaneRange()->hasWidth());
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -66,13 +69,18 @@ void ModulatorBand::setTransport(synth::TransportService* transport) {
         editor_->setTransport(transport);
 }
 
-// The grabbing hand while the knob drag runs; otherwise the tool's cursor, the same one the lanes show. The band takes
-// the press itself only when there is no amount lane, but the cursor must read the same either way.
+// The grabbing hand while the knob drag runs; otherwise the tool's cursor, the same one the lanes show, but only
+// where the curve editor takes the press. With no amount lane only Draw does (it starts one); Range and Erase
+// have nothing to act on there and the press is the knob drag, so the cursor is the arrow the press behaves like.
 juce::MouseCursor ModulatorBand::getMouseCursor() {
     if (knobDragging_)
         return dragGrabCursor();
-    return isEditable() ? toolCursors_->get(*this, tool_) : juce::Component::getMouseCursor();
+    if (!isEditable())
+        return juce::Component::getMouseCursor();
+    return editorTakesPress() ? toolCursors_->get(*this, tool_) : juce::MouseCursor(juce::MouseCursor::NormalCursor);
 }
+
+bool ModulatorBand::editorTakesPress() const { return amountLane() != nullptr || tool_ == EditTool::Draw; }
 
 void ModulatorBand::lookAndFeelChanged() {
     toolCursors_->invalidate();
@@ -93,6 +101,12 @@ void ModulatorBand::setDrawShape(DrawShape shape) {
         editor_->setDrawShape(shape);
 }
 
+void ModulatorBand::setLaneRange(LaneRangeSelection* range) {
+    laneRange_ = range;
+    if (editor_ != nullptr)
+        editor_->setLaneRange(range);
+}
+
 // A routing with an Attenuverter gets the curve editor over its proxy lane and becomes a Tab stop; a direct
 // cable has no amount to edit, so its band is decoration the row in the header column already names, and
 // takes no clicks so the clip lanes underneath still decide.
@@ -107,6 +121,7 @@ void ModulatorBand::setModulator(const ModulatorInfo& info, synth::LaneId ownerL
         editor_->setTransport(transport_);
         editor_->setEditTool(tool_);
         editor_->setDrawShape(drawShape_);
+        editor_->setLaneRange(laneRange_);
         // The band is the one Tab stop and the one accessible node: the editor's press hands focus up to it.
         editor_->setWantsKeyboardFocus(false);
         editor_->onLaneMenuRequested = [this](const juce::PopupMenu::Options& options) {
@@ -178,7 +193,8 @@ synth::TrackId ModulatorBand::ownerTrack() const {
 void ModulatorBand::updateClickRouting() {
     setInterceptsMouseClicks(isEditable(), isEditable());
     if (editor_ != nullptr)
-        editor_->setInterceptsMouseClicks(amountLane() != nullptr || tool_ == EditTool::Draw, false);
+        editor_->setInterceptsMouseClicks(editorTakesPress(), false);
+    updateMouseCursor();
 }
 
 // "<Parameter> <modulator> amount", e.g. "Cutoff LFO 1 amount", valued "+50%".

@@ -3,6 +3,7 @@
 // mode or edge is covered the day it exists. Where the sizing rule leaves the notes on their beat (Trim, and Carry on
 // the right edge) the notes must instead stay put under the sliding edge; that is the second test.
 #include "../Timeline/TimelineClipLane/TimelineClipLaneTestFixture.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UndoGlideSurfaces.h"
 #include <array>

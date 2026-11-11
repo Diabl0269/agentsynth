@@ -3,6 +3,7 @@
 list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h
+    Source/UI/Timeline/TimelinePanelComponent/MakeSectionKey.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelKeyAudition.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
@@ -26,6 +27,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/AddList/AddList.h
     Source/UI/AddList/AddList.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h
+    Source/UI/Timeline/TimelineSectionStrip/SectionDropPlan.h
     Source/UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h
     Source/UI/Timeline/TimelineSectionStrip/SectionStripSettings.h
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.cpp
@@ -34,9 +36,13 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripVariations.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripAccessibility.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripEdgeScroll.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeys.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripSelection.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotion.cpp
     Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.cpp
     Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.h
     Source/UI/Timeline/SectionColours.h
+    Source/UI/Timeline/ListSelectionModel.h
+    Source/UI/Timeline/TrackSelectionModel.h
 )

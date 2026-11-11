@@ -14,6 +14,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
 using synth::ui::HostedParameterAttachment;
@@ -39,6 +40,10 @@ synth::CardSlotKind resolvedKind(const synth::ResolvedCardSlot& resolved) {
         return synth::CardSlotKind::Knob;
     return kind == synth::CardSlotKind::Auto ? synth::CardSlotKind::Knob : kind;
 }
+
+constexpr float kHostedStatusFontSize = 12.0f;
+constexpr int kHostedStatusLineHeight = 15; // fits one line of the font above; the label wraps and ellipsises at 2
+constexpr int kHostedStatusLines = 2;
 
 } // namespace
 
@@ -120,8 +125,11 @@ void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
     if (card_.dualIOButton != nullptr)
         card_.dualIOButton->setVisible(module_.get() != nullptr && module_->hasStereoPairInstance());
     card_.rebuildHostedPluginCard();
+    card_.refreshHostedLoadStatus(); // a success clears the reason; it re-measures only when it changed
     card_.relayoutHostedPluginCard();
 }
+
+void ModuleComponent::HostedCardBinding::hostedLoadFailed() { card_.refreshHostedLoadStatus(); }
 
 void ModuleComponent::HostedCardBinding::layoutChangedForPlugin(const synth::PluginIdentity& identity) {
     auto* module = module_.get();
@@ -248,6 +256,18 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     };
     addAndMakeVisible(openPluginEditorButton.get());
 
+    hostedStatusLabel = std::make_unique<juce::Label>("hostedLoadStatus");
+    hostedStatusLabel->setComponentID("hostedLoadStatus");
+    hostedStatusLabel->setTitle("Plugin load status");
+    hostedStatusLabel->setFont(juce::FontOptions(kHostedStatusFontSize));
+    hostedStatusLabel->setJustificationType(juce::Justification::topLeft);
+    hostedStatusLabel->setMinimumHorizontalScale(1.0f);
+    hostedStatusLabel->setInterceptsMouseClicks(false, false);
+    hostedStatusLabel->setWantsKeyboardFocus(false);
+    hostedStatusLabel->setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    hostedStatusLabel->setVisible(false);
+    addChildComponent(hostedStatusLabel.get());
+
     // One split button for adding controls: the list picker on the left, "add by moving a control in the
     // plugin" on the right (the same split button as the mod dot panel's "Add source").
     addControlsSplit = std::make_unique<synth::ui::SplitButton>(
@@ -272,6 +292,32 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
     if (hosted.hasInstance())
         rebuildHostedPluginCard();
+    else
+        refreshHostedLoadStatus(/*relayoutOnChange*/ false); // createControls() ends with the measure
+}
+
+// The reason applies while there is no instance, no load is in flight and the module holds a message. It is
+// the label under the Open Editor row and that button's tooltip; when the instance publishes both go back.
+// Re-measures only when the label appears or disappears, so the card's 15 Hz poll can call it freely.
+void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || hostedStatusLabel == nullptr || openPluginEditorButton == nullptr)
+        return;
+
+    const bool show = !hosted->hasInstance() && !hosted->isLoading() && hosted->getStatusMessage().isNotEmpty();
+    const juce::String message = show ? hosted->getStatusMessage() : juce::String();
+    const bool visibilityChanged = show != hostedStatusLabel->isVisible();
+
+    if (hostedStatusLabel->getText() != message)
+        hostedStatusLabel->setText(message, juce::dontSendNotification);
+    const juce::String tooltip = show ? message : juce::String("Open this plugin's editor window");
+    if (openPluginEditorButton->getTooltip() != tooltip)
+        openPluginEditorButton->setTooltip(tooltip);
+    if (visibilityChanged) {
+        hostedStatusLabel->setVisible(show);
+        if (relayoutOnChange)
+            relayoutHostedPluginCard();
+    }
 }
 
 // Opens the parameter list picker as a juce::CallOutBox anchored to the split button's list half. Reached from
@@ -444,7 +490,13 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
         if (addControlsSplit != nullptr)
             addControlsSplit->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
     }
-    return y + kRowHeight + 6;
+    y += kRowHeight + 6;
+    if (hostedStatusLabel != nullptr && hostedStatusLabel->isVisible()) {
+        if (apply)
+            hostedStatusLabel->setBounds(narrowX, y, narrowW, kHostedStatusLines * kHostedStatusLineHeight);
+        y += kHostedStatusLines * kHostedStatusLineHeight + 6;
+    }
+    return y;
 }
 
 void ModuleComponent::reflectHostedRestingValues() {

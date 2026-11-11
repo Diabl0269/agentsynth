@@ -64,7 +64,7 @@ the project changes. A change to the clip's start or length restarts the loop on
 request through atomics (a version counter, odd while being written) and the audio thread reads it at the top of a
 block. It reuses the module's note-hygiene (every note-on gets its note-off, also at the wrap, a stop, a mute and a
 lost track). The loop only runs while the transport is stopped, and the module ends it the moment the transport
-plays. The panel reads the loop's beat back through `TrackHeaderHost::clipPreviewBeat` at the playhead's 30 Hz frames,
+plays. The panel reads the loop's beat back through `TrackHeaderHost::clipPreviewBeat` at the playhead's display-rate frames,
 which keep running while a loop plays (a NaN beat means the module ended it).
 ## Cell mapping
 

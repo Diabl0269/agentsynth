@@ -52,7 +52,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
 - **Morph map.** `ShapeMapController::refresh()` and `syncCursor()` hand the restore flag to `MorphMap::setDots`/`setCursor`;
   a dot (keyed by index, same count) and the cursor glide in map units.
 - **Curve editor.** `CurveEditorComponent::setModel(model, glideMoved)`: the same node count and mode glides each node dot;
-  another shape lands at once. The shape window passes the flag when it reloads the selected curve after a restore.
+  a different count or mode (a drawn stretch undone or redone) morphs the whole line instead: the line as drawn before
+  the restore and the new one are sampled at every x either has, and the drawn level eases from the old to the new over
+  one `KeyedPointTween` key (`morphTween_`, so the glide time, Reduce Motion's land-and-fade-in and Animations Off are
+  the shared ones); the fill follows the line and the dots and bend handles fade in as it lands. A restore during a
+  morph starts from the line as drawn. The shape window and the card's curve view pass the flag when they reload the
+  selected curve after a restore. Guard: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces`.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the
@@ -62,6 +67,11 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
+  A finished section edit and a repeat stamp glide clips too (a stamp only those in the placements it rewrote), and a
+  clip that arrives on a known track grows from its left edge while one that leaves shrinks toward its centre where it
+  was: `ClipLaneEnterExit` keeps a copy of every clip at each sync and draws the leaving ones with the real `paintClip`
+  under a scale (180 ms; Reduce Motion an 80 ms fade; Off nothing), repainting through `repaintMotionArea` so the
+  frame guard below sees those repaints too. Mechanism: [sections](../timeline/sections.md#motion).
 - **Parametric EQ curves.** `EqBandGlide` (`UI/ModuleViews/EqBandGlide.h`) keeps the EQ's REAL band settings final at once and
   eases what is DRAWN. A band is two keys: place (log2 frequency, gain) and shape (Q, presence 0 to 1), plus one for the
   output trim, so frequency, gain, Q and on/off move in one 160 ms glide and the curve is re-summed from the drawn bands
@@ -95,6 +105,8 @@ frames and settles at the restored one. **A new move surface adds an entry there
 tween repaints (`paintedComponent()`; a surface drawn through a `KeyedTween` must return one), and after every 16 ms
 glide frame of an undo and a redo (also under Reduce Motion) the test re-renders only the areas the tween asked to repaint
 (`setKeyedTweenDirtyProbeForTest`) and compares with a full render.
+Two entries cover sections: `Section move: clips` (a cover move whose covered clip comes back on undo and shrinks
+away again on redo) and `Section strip block` (a block dragged past another; it lands at once under Reduce Motion).
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).
 
 ## Registration

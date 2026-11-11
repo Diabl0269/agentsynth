@@ -47,6 +47,12 @@ synth::PlacementId TimelineSectionStrip::makeSectionFromRange(double startBeat, 
     return id;
 }
 
+// Says what the choice does with the current setting: placeAgain() places after this one in dropMode().
+juce::String TimelineSectionStrip::placeAgainAfterMenuText() const {
+    return dropMode() == synth::SectionDropMode::Cover ? "Place again after this (cover what is there)"
+                                                       : "Place again after this (push the music later)";
+}
+
 bool TimelineSectionStrip::placeAgain(synth::PlacementId id, bool atEnd) {
     const auto* placement = doc_ != nullptr ? doc_->getPlacement(id) : nullptr;
     const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
@@ -126,9 +132,15 @@ bool TimelineSectionStrip::isSectionMenuChoiceEnabled(synth::PlacementId id, Sec
 bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, SectionMenuChoice choice) {
     if (doc_ == nullptr || doc_->getPlacement(id) == nullptr)
         return false;
+    // On one of several selected blocks, the verbs that remove or place again reach every selected one.
+    if (actsOnSelection(id)) {
+        if (choice == SectionMenuChoice::PlaceAgainAfter)
+            return placeSelectedAgain();
+        if (choice == SectionMenuChoice::RemoveKeepMusic || choice == SectionMenuChoice::DeleteWithBars)
+            return deleteSelected(choice == SectionMenuChoice::RemoveKeepMusic);
+    }
     const double spb = secondsPerBeat();
     bool done = false;
-    const auto leaving = ghostOf(id); // a removed block shrinks away from where it was
     switch (choice) {
     case SectionMenuChoice::Rename:
         beginRenameSection(id);
@@ -159,9 +171,7 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
         performEdit([this, id, spb, &done] { done = doc_->deletePlacementAndBars(id, spb); });
         break;
     }
-    refresh();
-    if (done && leaving.has_value())
-        motion_.startExit(*leaving);
+    refresh(); // a removed block shrinks away from where it was (trackChangesForMotion)
     return done;
 }
 
@@ -243,7 +253,7 @@ void TimelineSectionStrip::buildAndShowBlockMenu(synth::PlacementId id) {
     add("Rename...", SectionMenuChoice::Rename, &kRenameKey);
     add("Change colour...", SectionMenuChoice::ChangeColour);
     menu.addSeparator();
-    add("Place again after this", SectionMenuChoice::PlaceAgainAfter, &kPlaceAgainKey);
+    add(placeAgainAfterMenuText(), SectionMenuChoice::PlaceAgainAfter, &kPlaceAgainKey);
     add("Place again at the end", SectionMenuChoice::PlaceAgainAtEnd);
     menu.addSeparator();
     add("Make unique", SectionMenuChoice::MakeUnique);

@@ -2,9 +2,13 @@
 // menu and by dragging a row in the side pane -- where pinned columns sit, the half-width cap, undo, and
 // that column drag-to-reorder still works inside the scrolling group. Drives a real off-screen
 // MainComponent with hand-built mouse events.
+#include "../Layout/ReorderDragPreviewCommit.h"
+#include "../Layout/ViewportDragFollowEvents.h"
 #include "MixerZonesTestRig.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <gtest/gtest.h>
+#include <memory>
 
 namespace {
 
@@ -335,4 +339,162 @@ TEST(MixerZonesTests, AColumnPinnedInAZoneHasNoReorderHooks) {
         const bool pinned = isUnder(column, *r.panel->getLeftZoneViewportForTest().getViewedComponent());
         EXPECT_EQ(static_cast<bool>(column->getHeaderForTest().reorderHooks.onGrab), !pinned);
     }
+}
+
+// ---- A row drag's preview is what the release commits ----
+
+namespace {
+
+using namespace reorder_preview_commit;
+using Pt = juce::Point<float>;
+using synth::MixerZone;
+
+const char* zoneName(MixerZone zone) { return zone == MixerZone::Left ? "L" : zone == MixerZone::Right ? "R" : "S"; }
+
+/** Every listed channel as "<zone>:<id>", in the order drawn (top to bottom) after the last drag event. A row's zone is
+ *  the nearest group heading above it. */
+std::vector<std::string> shownSlots(MixerZonesRig& rig) {
+    auto& pane = rig.panel->getZonesPaneForTest();
+    std::vector<std::pair<std::string, int>> items;
+    for (int i = 0; i < pane.getRowCountForTest(); ++i) {
+        auto* row = pane.getRowForTest(i);
+        int headerY = -1;
+        std::string zone = "L";
+        for (const auto z : {MixerZone::Left, MixerZone::Scrolling, MixerZone::Right}) {
+            const int y = pane.getGroupHeaderForTest(z).getY();
+            if (y < row->getY() && y > headerY) {
+                headerY = y;
+                zone = zoneName(z);
+            }
+        }
+        items.emplace_back(zone + ":" + row->getChannel().id.toStdString(), row->getY());
+    }
+    return orderedByPosition(items);
+}
+
+/** The same slots as the pane lists them after the release rebuilt them from the committed zone and order. */
+std::vector<std::string> committedSlots(MixerZonesRig& rig) {
+    auto& pane = rig.panel->getZonesPaneForTest();
+    std::vector<std::string> slots;
+    for (const auto z : {MixerZone::Left, MixerZone::Scrolling, MixerZone::Right})
+        for (int i = 0; i < pane.getRowCountForTest(); ++i) {
+            const auto& channel = pane.getRowForTest(i)->getChannel();
+            if (channel.zone == z)
+                slots.push_back(std::string(zoneName(z)) + ":" + channel.id.toStdString());
+        }
+    return slots;
+}
+
+/** A pin to another group keeps only the group the row lands in: the pinned group lists its channels in mixer order, so
+ *  the slot inside it is not something a drop can commit. The rest of the list is compared slot by slot. */
+std::vector<std::string> keepOnlyTheZoneOf(std::vector<std::string> slots, const juce::String& id) {
+    const auto suffix = ":" + id.toStdString();
+    std::string zoneOfId;
+    for (auto it = slots.begin(); it != slots.end(); ++it)
+        if (it->size() > suffix.size() && it->compare(it->size() - suffix.size(), suffix.size(), suffix) == 0) {
+            zoneOfId = it->substr(0, 1);
+            slots.erase(it);
+            break;
+        }
+    slots.push_back(zoneOfId + "@" + id.toStdString());
+    return slots;
+}
+
+/** Drags the row of `id` to list y `dropY` and checks the drop commits the slots the last drag event drew. */
+void dragRowTo(MixerZonesRig& rig, const juce::String& id, float dropY, bool zoneOnly = false) {
+    auto* row = rig.row(id);
+    auto& list = rig.panel->getZonesPaneForTest().getListContentForTest();
+    const Pt press(20.0f, (float)(row->getY() + row->getHeight() / 2));
+    const auto before = zoneOnly ? keepOnlyTheZoneOf(shownSlots(rig), id) : shownSlots(rig);
+    const auto local = [&](Pt p) { return row->getLocalPoint(&list, p); };
+    Probe<std::string> probe;
+    probe.send = [&](Phase phase, Pt p) {
+        if (phase == Phase::Down)
+            row->mouseDown(makeClickEvent(*row, local(p)));
+        else if (phase == Phase::Drag)
+            row->mouseDrag(makeDragEvent(*row, local(p), local(press)));
+        else
+            row->mouseUp(makeClickEvent(*row, local(p)));
+    };
+    probe.shown = [&] { return zoneOnly ? keepOnlyTheZoneOf(shownSlots(rig), id) : shownSlots(rig); };
+    probe.committed = [&] { return zoneOnly ? keepOnlyTheZoneOf(committedSlots(rig), id) : committedSlots(rig); };
+    const auto outcome = dragAndRelease(probe, press, straightPath(press, Pt(20.0f, dropY)));
+    expectCommitsWhatItPreviewed(outcome, before);
+}
+
+} // namespace
+
+TEST(MixerZonesDragPreviewCommit, AWithinGroupDropCommitsTheOrderTheLastDragEventShowed) {
+    MixerZonesRig rig(3);
+    const auto last = rig.stripId(2);
+    dragRowTo(rig, last, (float)rig.row(rig.stripId(0))->getY() + 6.0f);
+    const auto first = rig.stripId(0);
+    dragRowTo(rig, first, (float)rig.row(rig.stripId(2))->getBottom() + 4.0f);
+}
+
+TEST(MixerZonesDragPreviewCommit, ACrossGroupDropCommitsTheZoneAndSlotTheLastDragEventShowed) {
+    MixerZonesRig rig(2);
+    const auto id = rig.stripId(0);
+    dragRowTo(rig, id, (float)rig.row(id)->getY() + 400.0f, true); // the Right group
+    dragRowTo(rig, id, -200.0f, true);                             // and back above the first heading: the Left group
+}
+
+// The zones list and the strip columns follow their view while a reorder is held at its edge; the row reorders in a
+// section frame are in MixerListDragFollowTests.cpp, the checklist in ../Layout/ViewportDragFollow.h.
+TEST(MixerListDragFollow, AZonesRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer) {
+    viewport_drag_follow::expectFollows([] {
+        auto rig = std::make_shared<MixerZonesRig>(24);
+        auto& pane = rig->panel->getZonesPaneForTest();
+        auto& content = pane.getListContentForTest();
+        auto* viewport = content.findParentComponentOfClass<juce::Viewport>();
+        EXPECT_NE(viewport, nullptr);
+        // The first track row whose middle sits clear of both edge zones.
+        juce::String id;
+        for (int i = 0; i < 24 && id.isEmpty(); ++i) {
+            auto* row = rig->row(rig->stripId(i));
+            const int middle = viewport->getLocalPoint(row, juce::Point<int>(0, row->getHeight() / 2)).y;
+            if (middle >= 50 && middle <= viewport->getMaximumVisibleHeight() - 80)
+                id = rig->stripId(i);
+        }
+        EXPECT_TRUE(id.isNotEmpty());
+        auto* row = rig->row(id);
+        viewport_drag_follow::DragTarget t;
+        t.keepAlive = rig;
+        t.viewport = viewport;
+        t.target = [r = rig.get(), id] { return static_cast<juce::Component*>(r->row(id)); };
+        t.cross = (float)viewport->getLocalPoint(row, juce::Point<int>(20, 0)).x;
+        t.pressAt = (float)viewport->getLocalPoint(row, juce::Point<int>(0, row->getHeight() / 2)).y;
+        t.draggedPosition = [r = rig.get(), id, viewport] {
+            return (float)viewport->getLocalPoint(r->row(id), juce::Point<int>()).y;
+        };
+        t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
+        t.escape = [r = rig.get()] { return r->panel->getZonesPaneForTest().sendEscapeToDragForTest(); };
+        return viewport_drag_follow::surfaceOn(t);
+    });
+}
+
+TEST(MixerListDragFollow, AColumnHeldAtThePanelEdgeScrollsTheMixerAndStaysUnderThePointer) {
+    viewport_drag_follow::expectFollows([] {
+        auto rig = std::make_shared<MixerZonesRig>(16);
+        auto& viewport = rig->panel->getViewportForTest();
+        constexpr int kPressed = 2;
+        auto* column = rig->panel->getStripColumnForTest(kPressed);
+        auto& header = column->getHeaderForTest();
+        const auto press = viewport.getLocalPoint(&header, juce::Point<int>(3, 12));
+        viewport_drag_follow::DragTarget t;
+        t.keepAlive = rig;
+        t.viewport = &viewport;
+        t.horizontal = true;
+        t.target = [r = rig.get()] {
+            return static_cast<juce::Component*>(&r->panel->getStripColumnForTest(kPressed)->getHeaderForTest());
+        };
+        t.cross = (float)press.y;
+        t.pressAt = (float)press.x;
+        t.draggedPosition = [r = rig.get(), &viewport] {
+            return (float)viewport.getLocalPoint(r->panel->getStripColumnForTest(kPressed), juce::Point<int>()).x;
+        };
+        t.commits = [r = rig.get()] { return r->mc.getUndoManager().getEditSerial(); };
+        t.escape = [r = rig.get()] { return r->panel->sendEscapeToColumnDragForTest(); };
+        return viewport_drag_follow::surfaceOn(t);
+    });
 }

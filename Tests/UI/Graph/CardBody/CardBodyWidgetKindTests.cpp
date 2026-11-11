@@ -8,6 +8,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyTestHelpers.h"
+#include "Modules/FX/ParametricEQModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -150,4 +151,19 @@ TEST(CardBodyWidgetKind, TheAutomaticLayoutWrittenOutBuildsTheSameCard) {
             EXPECT_EQ(rebuilt->getChildComponent(i)->isVisible(), card->getChildComponent(i)->isVisible()) << i;
         }
     }
+}
+
+// Slots 5-24 and every band's Type and Slope are hidden from the card, so they are no card widget and no
+// MIDI learn target; the four shown bands and the output keep their widgets.
+TEST(CardBodyWidgetKind, TheEqCardBuildsOnlyTheFourShownBands) {
+    ParametricEQModule eq;
+    const auto plan = synth::CardBodyPlan::forModule(eq, std::nullopt);
+    for (auto* p : eq.getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
+            if (ParametricEQModule::isHiddenParamId(withId->paramID))
+                EXPECT_EQ(plan.findParam(withId->paramID), -1) << withId->paramID << " must not be a card widget";
+    for (int b = 1; b <= ParametricEQModule::kShownBands; ++b)
+        for (const char* suffix : {"On", "Freq", "Gain", "Q"})
+            EXPECT_GE(plan.findParam("band" + juce::String(b) + suffix), 0) << b << suffix;
+    EXPECT_GE(plan.findParam("outputGain"), 0);
 }

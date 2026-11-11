@@ -105,15 +105,7 @@ void ModDotPanelFrame::showOnDesktop() {
 // Grows out of the dot: the body scales from 40% about the dot's centre with a 3% overshoot while it fades in, and
 // shrinks back toward it on the way out. The window itself does not slide: the scale already moves the panel.
 popup_motion::Style ModDotPanelFrame::motionStyle() const {
-    popup_motion::Style style;
-    style.inSlidePx = 0.0f;
-    style.outSlidePx = 0.0f;
-    style.overshoot = true;
-    style.inMs = kInMs;
-    style.outMs = kOutMs;
-    style.alphaInFraction = kFadeInFraction;
-    style.inStartScale = kInStartScale;
-    style.outEndScale = kOutEndScale;
+    auto style = popup_motion::growStyle();
     style.anchor = [dot = dot_] { return dot.getCentre(); };
     style.body = [this]() -> juce::Component* { return body_.get(); };
     // The dot's centre in the body's parent space (the frame's own): the dot is in the space the frame's bounds are in.

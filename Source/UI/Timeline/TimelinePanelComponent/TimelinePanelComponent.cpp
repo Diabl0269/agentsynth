@@ -15,8 +15,11 @@
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 #include <algorithm>
 #include <cmath>
 
@@ -48,7 +51,8 @@ void TimelinePanelComponent::wirePianoRollLoopRequest() {
 }
 
 TimelinePanelComponent::TimelinePanelComponent()
-    : clipSizingButton_(std::make_unique<ClipSizingButton>())
+    : trackSelection_(std::make_unique<TrackSelectionModel>())
+    , clipSizingButton_(std::make_unique<ClipSizingButton>())
     , topBarKeys_(std::make_unique<KeyRing>(*this, [this] { return topBarStops(); })) {
     // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
@@ -66,6 +70,19 @@ TimelinePanelComponent::TimelinePanelComponent()
         clipLaneArea_.clearRange();
         clipSelection_.setSelection(ids);
         clipLaneArea_.repaint();
+    };
+    // A section drag held at the strip's edge scrolled the shared view by hand, as a sideways wheel does:
+    // follow-playhead stops, and the ruler and the lanes learn their beats moved.
+    sectionStrip_->onViewScrolledByDrag = [this] {
+        if (follow_.enabled)
+            setFollowPlayheadEnabled(false);
+        ruler_.repaint();
+        repaint();
+    };
+    // The empty strip's tooltip names Shift+Cmd+J only when the key would make something (keyPressed acts on the same).
+    sectionStrip_->makeSectionKeySource = [this] {
+        const auto span = makeSectionKeySpan(clipLaneArea_, transport_, doc_);
+        return span && !span->blocked ? span->source() : juce::String();
     };
     // "New variation of this part": the placement flashes its outline and the toast names the new letter.
     clipLaneArea_.onVariationAdded = [this](synth::PlacementId placement, const juce::String& message) {
@@ -260,7 +277,7 @@ TimelinePanelComponent::TimelinePanelComponent()
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
-    playhead_.setComponentID("timelinePlayhead");
+    playhead_.setComponentID("timelinePlayheadOverlay");
     // The piano roll maps beats to x through its OWN zoom/scroll, so while it is open the overlay
     // hands it the drawn beat and leaves its rows alone entirely — one timer, two mappings. The
     // region itself is set in resized(), which is the only place the offset is known.
@@ -272,6 +289,14 @@ TimelinePanelComponent::TimelinePanelComponent()
     // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
     // a real manager is wired, and again on every bindings-changed notification.
     refreshShortcutTooltips();
+
+    // Tab reads the panel top to bottom, left to right. JUCE sorts siblings by top edge, and the Add Track button is
+    // inset from its strip, so with an editor open it would be visited after the editor beside it; every focusable
+    // sibling is named here (one that is missing sorts after all of these).
+    synth::ui::setReadingFocusOrder({&sidePaneButton_, &transportBar_, clipSizingButton_.get(), &followPlayheadButton_,
+                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(),
+                                     &trackHeaderWidthHandle_, &addTrackButton_, &trackHeaderViewport_, &clipLaneArea_,
+                                     &pianoRoll_, &drum_->grid});
 }
 
 // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component --
@@ -454,11 +479,11 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
 // TimelineTransportBar::setMetronome.
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
 
-// Two jobs: hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer
-// from the play/stop transitions it sees here (see TimelinePlayheadOverlay.h); and diff the small
-// slice of transport state the RULER paints (time signature + loop trio), repainting it only on a
-// change. The position is deliberately NOT part of that diff: the playhead is the only thing that
-// moves with it, and it repaints its own strip. Same gated idiom as the status bar's 5 Hz poll.
+// Two jobs: hand the snapshot to the playhead overlay, which owns its display-rate frames
+// (playing, a clip preview or a locate glide only) from the play/stop transitions it sees here (see
+// TimelinePlayheadOverlay.h); and diff the small slice of transport state the RULER paints (time signature + loop
+// trio), repainting it only on a change. The position is deliberately NOT part of that diff: the playhead is the only
+// thing that moves with it, and it repaints its own strip. Same gated idiom as the status bar's 5 Hz poll.
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
@@ -476,11 +501,11 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     // Follow playhead: keep the (latency-compensated) playhead on screen, per mode. Gated on
     // playing/enabled/roll-closed/ no-drag-in-flight, so a stopped transport, the feature off, the piano roll open (it
     // follows on its own) or a clip drag in progress cost nothing here. No new timer: Page rides this 10 Hz poll,
-    // Smooth the playhead's 30 Hz frames.
+    // Smooth the playhead's display-rate frames.
     drum_->grid.setTransportPlaying(snapshot.playing);
     if (follow_.enabled && snapshot.playing && !clipEditorOpen() && !clipLaneArea_.isDragInProgress() &&
         viewState_.pixelsPerBeat > 0.0) {
-        followViewToBeat(playhead_.getDrawnBeat());
+        followViewToBeat(follow_.mode == FollowMode::Page ? playhead_.getTargetBeat() : playhead_.getDrawnBeat());
     }
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from

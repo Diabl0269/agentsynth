@@ -2,6 +2,7 @@
 // ReorderDragAnimator: the row stays under the pointer, its neighbours (group headings included)
 // make room, and the drop only assigns the channel to the group it lands in.
 #include "MixerZonesPane.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 
 #include <algorithm>
 
@@ -51,7 +52,10 @@ void MixerZonesPane::beginRowDrag(const juce::String& id, const juce::MouseEvent
 void MixerZonesPane::dragRow(const juce::MouseEvent& e) {
     if (!reorder_.isPressed() && !reorder_.isDragging())
         return;
-    if (!reorder_.dragTo(juce::jmax(minPointer_, pointerYInList(e))))
+    // The list follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
+    using namespace viewport_drag_scroll;
+    const float pointer = followAndLocate(listContent_, pointerOf(e), Axis::Vertical, reorder_.isDragging());
+    if (!reorder_.dragTo(juce::jmax(minPointer_, pointer)))
         return;
     if (!cancelKey_.isArmed()) {
         cancelKey_.arm(*this, [this] { cancelRowDrag(); });

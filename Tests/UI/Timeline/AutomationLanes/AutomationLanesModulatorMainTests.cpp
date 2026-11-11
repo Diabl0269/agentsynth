@@ -4,6 +4,7 @@
 // showing up as a row, and "Remove modulator". The row's controls are in AutomationLanesModulatorEditTests.cpp.
 
 #include "AutomationLanesModulatorFixture.h"
+#include "Modules/AttenuverterModule.h"
 
 using namespace modulator_test;
 using namespace automation_lanes_test;

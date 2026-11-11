@@ -44,6 +44,9 @@ bool isTicked(const synth::AudioInputChoice& choice, const synth::AudioInputStat
     return resolved.connected && resolved.firstChannel == first && resolved.numChannels == count;
 }
 
+// What a greyed input row says, so a grey row is never a mystery.
+juce::String offWords() { return " (off)"; }
+
 bool pairActive(const synth::AudioInputStatus& status, int first) {
     return status.isChannelActive(first) && status.isChannelActive(first + 1);
 }
@@ -62,20 +65,27 @@ void addDeviceInputs(juce::PopupMenu& menu, const synth::AudioInputChoice& choic
         return;
     }
     menu.addSectionHeader("Mono" + dot() + deviceLabel(status));
+    // The way out of the greyed rows sits right under the header, where they are, not after the Stereo section.
     bool anyOff = false;
-    for (int channel = 0; channel < inputs; ++channel) {
+    for (int channel = 0; channel < inputs; ++channel)
         anyOff = anyOff || !status.isChannelActive(channel);
-        menu.addItem(Ids::kFirstMono + channel, namedInputLabel(status.nameOfInput(channel, 1), channel, 1),
-                     status.isChannelActive(channel), isTicked(choice, status, channel, 1));
+    if (anyOff && !status.hosted)
+        menu.addItem(Ids::kTurnOnInputs, "Turn on all its inputs");
+    for (int channel = 0; channel < inputs; ++channel) {
+        const bool on = status.isChannelActive(channel);
+        menu.addItem(Ids::kFirstMono + channel,
+                     namedInputLabel(status.nameOfInput(channel, 1), channel, 1) + (on ? "" : offWords()), on,
+                     isTicked(choice, status, channel, 1));
     }
     if (inputs >= 2) {
         menu.addSectionHeader("Stereo" + dot() + deviceLabel(status));
-        for (int first = 0; first + 1 < inputs; first += 2)
-            menu.addItem(Ids::kFirstStereo + first, namedInputLabel(status.nameOfInput(first, 2), first, 2),
-                         pairActive(status, first), isTicked(choice, status, first, 2));
+        for (int first = 0; first + 1 < inputs; first += 2) {
+            const bool on = pairActive(status, first);
+            menu.addItem(Ids::kFirstStereo + first,
+                         namedInputLabel(status.nameOfInput(first, 2), first, 2) + (on ? "" : offWords()), on,
+                         isTicked(choice, status, first, 2));
+        }
     }
-    if (anyOff && !status.hosted)
-        menu.addItem(Ids::kTurnOnInputs, "Turn on all its inputs");
 }
 
 const AudioInputTrackSource* findSource(const std::vector<AudioInputTrackSource>& sources, synth::TrackId id) {
@@ -110,7 +120,8 @@ void addTrackSources(juce::PopupMenu& menu, const synth::AudioInputChoice& choic
         sub.addItem(Ids::kFirstTrack + (int)i, source.hasChannel ? source.name : source.name + " (no mixer channel)",
                     source.hasChannel, choice.kind == Kind::Track && choice.sourceTrack == source.id);
     }
-    menu.addSubMenu("Another track", sub, !sources.empty(), nullptr, choice.kind == Kind::Track);
+    menu.addSubMenu(sources.empty() ? "Another track (no other tracks)" : "Another track", sub, !sources.empty(),
+                    nullptr, choice.kind == Kind::Track);
 }
 } // namespace
 

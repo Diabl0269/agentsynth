@@ -439,11 +439,9 @@ add_library(Core STATIC
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
     Source/Modules/FX/RingModulatorModule.h
-    Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
-    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the
-    # AgentSynthPlugin target: this is the app HOSTING plugins, which the headless Tests target
-    # exercises against a stub backend (Tests/StubPluginInstance.h).
+    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the AgentSynthPlugin
+    # target: this is the app HOSTING plugins, which the headless Tests target exercises against a stub backend.
     Source/Plugin/Hosting/HostedPluginBackend.cpp
     Source/Plugin/Hosting/HostedPluginBackend.h
     Source/Plugin/Hosting/HostedPluginModule.cpp
@@ -564,6 +562,7 @@ include(cmake/AiSources.cmake)
 include(cmake/GraphQuerySources.cmake)
 include(cmake/ModCurveSources.cmake)
 include(cmake/ProjectLoadSources.cmake)
+include(cmake/PluginCrashRecoverySources.cmake)
 include(cmake/TimelineOpsSources.cmake)
 include(cmake/MidiRecordingSources.cmake)
 include(cmake/DrumKitSources.cmake)
@@ -573,6 +572,7 @@ include(cmake/SamplerInstrumentSources.cmake)
 include(cmake/SoundPackSources.cmake)
 include(cmake/SoundBrowserSources.cmake)
 include(cmake/FilterSources.cmake)
+include(cmake/ParametricEQSources.cmake)
 include(cmake/SequencerSources.cmake)
 include(cmake/UndoSources.cmake)
 # Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new

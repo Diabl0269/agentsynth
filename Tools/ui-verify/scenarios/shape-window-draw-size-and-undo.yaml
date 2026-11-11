@@ -1,0 +1,53 @@
+# Feature: in the Filter's shape window, the Draw button shows its pen icon and word centred together; a Sine pen
+# stroke starts at the press and its height follows the drag up or down (like the timeline lane's Draw box); and undo
+# and redo of the stroke morph the curve between the two states instead of snapping.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, clicks Draw and picks Sine, presses high on the curve
+# and drags right and down (the dashed box and the wave grow to that height), releases, then presses Cmd+Z and
+# Cmd+Shift+Z.
+record: true
+motion: true
+save_project: shape-window-draw-size-and-undo
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411, instant: "the focus ring moves to the canvas panel"}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: draw-button-centred}
+  - mouseDown: {id: Shape curve, x: 150, y: 60}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 80}
+  - mouseMoveHeld: {id: Shape curve, x: 250, y: 110}
+  - mouseMoveHeld: {id: Shape curve, x: 300, y: 140}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 170}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: sine-box-follows-drag}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 110}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: drag-back-up-smaller}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 200}
+  - wait: {settleMs: 300}
+  - mouseUp: {id: Shape curve, x: 330, y: 200}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "Filter shapes: Filter", name: drawn}
+  - glide: {name: undo-morph, frames: 12, do: {key: {keys: cmd+z, target: Shape curve}}}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: undo-morph-landed}
+  - glide: {name: redo-morph, frames: 12, do: {key: {keys: cmd+shift+z, target: Shape curve}}}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "Filter shapes: Filter", name: redo-landed}

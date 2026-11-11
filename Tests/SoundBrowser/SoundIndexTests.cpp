@@ -127,6 +127,81 @@ TEST(SoundIndexTest, AnAcidChunkGivesTempoRootNoteAndTheOneShotFlag) {
     EXPECT_EQ(shot->tempo, 0.0);
 }
 
+// Guard for the name-trusts-over-audio bug kind.
+TEST(SoundIndexScan, AShortHitUnderALoopLikeNameIsAOneShot) {
+    TempTree tree;
+    writePack(tree.packs, "p", "Pack");
+    writeWav(tree.packs.getChildFile("p/Loops/Synth/Galbanum07 [128] 19.wav"), 0.3);
+    writeWav(tree.packs.getChildFile("p/Loops/Synth/Galbanum07 [128] 20.wav"), 7.5);
+    writeWav(tree.packs.getChildFile("p/Loops/pad.wav"), 3.0);
+    writeWav(tree.packs.getChildFile("p/Loops/hit.wav"), 1.0);
+    auto index = makeIndex(tree);
+    scanAndWait(*index);
+    const auto snap = index->snapshot();
+
+    const auto* slice = findByName(*snap, "Galbanum07 [128] 19");
+    ASSERT_NE(slice, nullptr);
+    EXPECT_EQ(slice->kind, SoundKind::OneShot);
+    EXPECT_EQ(slice->tempo, 0.0);
+    const auto* loop = findByName(*snap, "Galbanum07 [128] 20");
+    ASSERT_NE(loop, nullptr);
+    EXPECT_EQ(loop->kind, SoundKind::Loop);
+    EXPECT_EQ(loop->tempo, 128.0);
+    const auto* pad = findByName(*snap, "pad");
+    ASSERT_NE(pad, nullptr);
+    EXPECT_EQ(pad->kind, SoundKind::Loop);
+    const auto* hit = findByName(*snap, "hit");
+    ASSERT_NE(hit, nullptr);
+    EXPECT_EQ(hit->kind, SoundKind::OneShot);
+}
+
+TEST(SoundIndexScan, AShortFileWhoseAcidChunkSaysLoopStaysALoop) {
+    TempTree tree;
+    writePack(tree.packs, "p", "Pack");
+    juce::StringPairArray meta;
+    meta.set(juce::WavAudioFormat::acidOneShot, "0");
+    meta.set(juce::WavAudioFormat::acidRootSet, "1");
+    meta.set(juce::WavAudioFormat::acidRootNote, "57");
+    meta.set(juce::WavAudioFormat::acidTempo, "120.0");
+    writeWav(tree.packs.getChildFile("p/Loops/blip.wav"), 0.4, meta);
+    auto index = makeIndex(tree);
+    scanAndWait(*index);
+    const auto* blip = findByName(*index->snapshot(), "blip");
+    ASSERT_NE(blip, nullptr);
+    EXPECT_EQ(blip->kind, SoundKind::Loop) << "the file's own metadata beats the length rule";
+    EXPECT_NEAR(blip->tempo, 120.0, 0.01);
+}
+
+TEST(SoundIndexScan, AnIndexSavedByAnOlderClassifierIsIgnoredSoEveryFileIsAnalysedAgain) {
+    TempTree tree;
+    writePack(tree.packs, "p", "Pack");
+    writeWav(tree.packs.getChildFile("p/Loops/Synth/Galbanum07 [128] 19.wav"), 0.3);
+    {
+        auto first = makeIndex(tree, true);
+        scanAndWait(*first);
+    }
+    // Rewrite the saved index the way the old version left it: version 1, the short slice labelled a loop.
+    auto root = juce::JSON::parse(tree.cache());
+    auto* obj = root.getDynamicObject();
+    ASSERT_NE(obj, nullptr);
+    obj->setProperty("version", 1);
+    auto* list = root.getProperty("entries", {}).getArray();
+    ASSERT_NE(list, nullptr);
+    ASSERT_EQ(list->size(), 1);
+    auto* entry = (*list)[0].getDynamicObject();
+    entry->setProperty("k", (int)SoundKind::Loop);
+    entry->setProperty("b", 128.0);
+    ASSERT_TRUE(tree.cache().replaceWithText(juce::JSON::toString(root)));
+
+    auto second = makeIndex(tree, true);
+    scanAndWait(*second);
+    EXPECT_EQ(second->headersReadForTests(), 1) << "the old cache is not trusted";
+    const auto* slice = findByName(*second->snapshot(), "Galbanum07 [128] 19");
+    ASSERT_NE(slice, nullptr);
+    EXPECT_EQ(slice->kind, SoundKind::OneShot);
+    EXPECT_EQ(slice->tempo, 0.0);
+}
+
 TEST(SoundIndexTest, TheCacheRestoresTheListAndARescanOpensOnlyChangedFiles) {
     TempTree tree;
     tree.fill();

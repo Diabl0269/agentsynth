@@ -435,3 +435,93 @@ TEST_F(PreferencesSettingsTabTest, PlayScaleWhenBrowsingKeysFollowsTheKeyMenuTog
     synth::test::waitUntil([&] { return tab.isPlayScaleOnBrowseEnabled(); }, 2000);
     EXPECT_TRUE(tab.isPlayScaleOnBrowseEnabled());
 }
+
+namespace {
+// The Label + ComboBox + hint of the section-drop setting, found by their words.
+struct SectionsDropRow {
+    juce::Label* label = nullptr;
+    juce::ComboBox* combo = nullptr;
+    juce::Label* hint = nullptr;
+};
+
+SectionsDropRow findSectionsDropRow(juce::Component& tab) {
+    SectionsDropRow row;
+    for (auto* child : descendantsOf(tab)) {
+        if (auto* l = dynamic_cast<juce::Label*>(child)) {
+            if (l->getText() == "Timeline: dropping a section on other music")
+                row.label = l;
+            if (l->getText() == "Hold Shift while you drop to do the other one, that time only.")
+                row.hint = l;
+        }
+        if (auto* c = dynamic_cast<juce::ComboBox*>(child))
+            if (c->getTitle() == "Timeline: dropping a section on other music")
+                row.combo = c;
+    }
+    return row;
+}
+} // namespace
+
+// The section-drop setting is a Label + ComboBox with a hint under it: it pushes the music later by default, choosing
+// "Covers it" writes the key and back, and the words and tooltip say what each choice does.
+TEST_F(PreferencesSettingsTabTest, SectionsDropComboDefaultsToPushingAndPersistsEachChoice) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(560, 900);
+    tab.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
+    const auto row = findSectionsDropRow(tab);
+    ASSERT_NE(row.label, nullptr);
+    ASSERT_NE(row.combo, nullptr);
+    ASSERT_NE(row.hint, nullptr);
+    EXPECT_EQ(row.combo->getText(), "Pushes the music later");
+    EXPECT_EQ(row.combo->getNumItems(), 2);
+    EXPECT_EQ(row.combo->getItemText(1), "Covers it");
+    EXPECT_TRUE(row.combo->getTooltip().contains("Hold Shift while you drop to do the other one."));
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineSectionsCoverOnDrop"));
+
+    row.combo->setSelectedId(2, juce::sendNotificationSync);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineSectionsCoverOnDrop"), "1");
+    EXPECT_TRUE(tab.isSectionsCoverOnDropEnabled());
+    row.combo->setSelectedId(1, juce::sendNotificationSync);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineSectionsCoverOnDrop"), "0");
+    EXPECT_FALSE(tab.isSectionsCoverOnDropEnabled());
+
+    tab.setSectionsCoverOnDropEnabled(true);
+    EXPECT_EQ(row.combo->getText(), "Covers it");
+    PreferencesSettingsTab again(appProperties);
+    again.setSize(560, 900);
+    again.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
+    EXPECT_EQ(findSectionsDropRow(again).combo->getText(), "Covers it");
+}
+
+// The rows show with the Timeline group, hide when a search misses them, show again for words in the label, and never
+// overlap the rows above and below.
+TEST_F(PreferencesSettingsTabTest, SectionsDropRowsFollowSearchAndDoNotOverlapNeighbours) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(560, 900);
+    tab.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
+    auto row = findSectionsDropRow(tab);
+    ASSERT_NE(row.combo, nullptr);
+    ASSERT_NE(row.hint, nullptr);
+    EXPECT_TRUE(row.label->isVisible() && row.combo->isVisible() && row.hint->isVisible());
+
+    auto* above = findToggleByText(tab, "Timeline: show the Sections strip");
+    auto* below = findToggleByText(tab, "Ask before removing an LFO's last destination");
+    ASSERT_NE(above, nullptr);
+    ASSERT_NE(below, nullptr);
+    const auto top = [&](juce::Component* c) { return c->getBounds().getY(); };
+    EXPECT_GE(row.label->getY(), above->getBottom());
+    EXPECT_GE(row.combo->getY(), above->getBottom());
+    EXPECT_EQ(row.label->getY(), row.combo->getY());
+    EXPECT_GE(row.hint->getY(), row.combo->getBottom());
+    EXPECT_LE(row.hint->getBottom(), below->getY());
+    EXPECT_LE(row.label->getRight(), row.combo->getX()) << "label and combo sit side by side without overlapping";
+    EXPECT_GT(top(row.hint), top(row.combo));
+
+    tab.setSearchFilterForTest("dropping a section");
+    EXPECT_TRUE(row.label->isVisible() && row.combo->isVisible() && row.hint->isVisible());
+    tab.setSearchFilterForTest("zzz-no-such-preference");
+    EXPECT_FALSE(row.label->isVisible());
+    EXPECT_FALSE(row.combo->isVisible());
+    EXPECT_FALSE(row.hint->isVisible());
+    tab.setSearchFilterForTest("");
+    EXPECT_TRUE(row.combo->isVisible());
+}

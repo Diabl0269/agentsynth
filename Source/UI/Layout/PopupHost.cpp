@@ -70,11 +70,17 @@ public:
     PopoverBox(juce::Component& content, juce::Rectangle<int> area, PopoverOptions options)
         : juce::CallOutBox(content, area, nullptr)
         , content_(content)
+        , lastContentBounds_(content.getBounds())
         , area_(area)
         , options_(std::move(options))
         , triggerToFocus_(options_.trigger) {
         // The look and feel has already attached the call-out with the shared style from its constructor.
         auto style = options_.style;
+        if (growsFromOpener()) {
+            style = popup_motion::growStyle();
+            style.body = [this]() -> juce::Component* { return &content_; };
+            style.bodyPivot = [this] { return growPivot(); };
+        }
         if (!style.anchor)
             style.anchor = [area] { return area.getCentre(); };
         PopupMotion::setStyle(*this, std::move(style));
@@ -100,6 +106,25 @@ public:
         return juce::CallOutBox::keyPressed(key);
     }
 
+    // The background, arrow and shadow are painted here, not by the content the motion scales: they follow its scale.
+    void paint(juce::Graphics& g) override {
+        g.addTransform(content_.getTransform());
+        juce::CallOutBox::paint(g);
+    }
+
+    // The motion's scale reaches the box as a child change. JUCE would re-place the window around the scaled content
+    // on every frame (and keep the size of the first, 40% frame); only a real change of the content's size or place
+    // does that, measured from where the call-out first put it. The scaled bubble also covers more
+    // than the content, so the whole box repaints.
+    void childBoundsChanged(juce::Component* child) override {
+        if (child == &content_ && content_.getBounds() == lastContentBounds_) {
+            repaint();
+            return;
+        }
+        lastContentBounds_ = content_.getBounds();
+        juce::CallOutBox::childBoundsChanged(child);
+    }
+
     void inputAttemptWhenModal() override {
         if (options_.holdGestureDown && options_.holdGestureDown())
             return;
@@ -116,6 +141,17 @@ public:
     }
 
 private:
+    bool growsFromOpener() const {
+        const auto* content = dynamic_cast<const PopoverContent*>(&content_);
+        return content != nullptr && content->growsFromOpener();
+    }
+
+    // The middle of what the box points at, in the box's own space (the space the content's transform is in).
+    juce::Point<float> growPivot() const {
+        const auto local = getLocalPoint(nullptr, area_.getCentre());
+        return getLocalBounds().getConstrainedPoint(local).toFloat();
+    }
+
     void escape() {
         if (PopupMotion::isDismissing(*this))
             return;
@@ -165,6 +201,7 @@ private:
     };
 
     juce::Component& content_;
+    juce::Rectangle<int> lastContentBounds_;
     juce::Rectangle<int> area_;
     PopoverOptions options_;
     LabelEscape labelEscape_{*this};

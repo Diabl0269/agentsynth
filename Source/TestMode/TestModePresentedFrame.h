@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <utility>
 
@@ -7,6 +8,11 @@
 // a pixel a missing repaint left behind (docs/development/test-mode.md#stale-pixels) is found by comparing it with a
 // full repaint. A component snapshot always paints everything fresh and can never show such a pixel.
 namespace synth::testmode {
+
+/** The largest per-channel difference that still counts as the same pixel. A partial repaint and a full one can leave
+ *  an anti-aliased pixel a few levels apart (up to 4 seen); a left-behind dot, cable or text pixel differs by 9 and
+ * more. */
+constexpr int kStaleTolerance = 6;
 
 class PresentedFrame {
 public:
@@ -29,6 +35,12 @@ public:
     };
     PaintCounts takePaintCounts() { return std::exchange(counts_, {}); }
 
+    /** Called with the frame after every peer paint it took in. One observer; an empty function removes it. */
+    void setPaintObserver(std::function<void(const juce::Image&)> observer) { observer_ = std::move(observer); }
+
+    /** The whole window painted fresh, at scale 1: what the screen should show. */
+    static juce::Image paintFullRepaint(juce::Component& window);
+
     /** What the window has on screen, at scale 1. Invalid while not following. */
     const juce::Image& image() const { return image_; }
 
@@ -50,6 +62,7 @@ private:
     juce::Component::SafePointer<juce::Component> window_;
     juce::Image image_;
     PaintCounts counts_;
+    std::function<void(const juce::Image&)> observer_;
 };
 
 /** While one lives, window paints are not peer paints (a screenshot, the frame's own repaint, a full repaint to

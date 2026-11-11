@@ -116,14 +116,25 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
   pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
   `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection
-  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) each run that timer only
+  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) and the Sections
+  strip's block and make-section drags (`TimelineSectionStripEdgeScroll.cpp`) each run that timer only
   while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged thing
   stays under the still pointer. The view stops at beat 0 and never stops to the right.
-- **Timeline, keys.** `firstBeatShowing` (`Source/UI/Timeline/ScrollIntoView.h`) is where the view starts so a span is
-  in sight, placed `kScrollIntoViewMargin` (a tenth of the view) in from the edge it was leaving by. A clip picked with
-  the keys and a lane dot carried by a held Alt+arrow both use it; the view jumps once per step, ahead of the dot, so it
-  never fights the dot's own ease.
+- **Timeline, keys.** `kScrollIntoViewMargin` (`Source/UI/Timeline/ScrollIntoView.h`, a tenth of the view) is how far
+  in from the edge a thing leaving by it is kept. A clip picked with the keys jumps there once (`firstBeatShowing`). A
+  lane dot carried by a held Alt+arrow never makes the view jump: once the dot's DRAWN place passes that line the view
+  scrolls by the excess every frame (`followKeyDragDot`), eased together with the dot, so the drawn dot holds the line
+  and does not lurch; at beat 0 it stays clamped.
 - **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above.
+- **Reorders in a list.** `viewport_drag_scroll` (`Source/UI/Layout/ReorderDrag/ViewportDragScroll.h`) gives the step
+  for a pointer in a 32 px zone (never more than a third of the view) at either end of a `juce::Viewport`, up to 18 px
+  per drag event on the same curve; the drag auto-repeat (`ReorderDragSession`) keeps the events coming while the
+  pointer rests. The owner reads the pointer in desktop coordinates first, lets the view follow, then hands the
+  pointer in list coordinates to the drag, so the row stays under it. It runs only while the drag is past its threshold
+  and not cancelled, so Escape stops it. The track list (track rows, lane headers, modulator rows, all through
+  `scrollTrackRows` so the clip lanes keep step), the mixer's insert and send sections, the zones pane, the column
+  strip (sideways, a 48 px zone), the macro port dialog and the card layout editor use it. The note range picker
+  scrolls its key strip its own way (`autoScrollSpeed`) and Escape puts the range back.
 - **The view is shared.** A drag that scrolls the timeline view tells its owner (`onViewScrolledByDrag`), which repaints
   the ruler and the section strip and turns follow-playhead off, as a sideways wheel scroll does.
 
@@ -134,9 +145,9 @@ scroll stops on release, Escape, a tool change and the pointer moving back in; t
 The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
 every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
 a resizer, a forwarder, a drag-and-drop starter, a card with no scroll of its own, a fixed page or tab strip). The
-surfaces still missing it are listed in `kFollowGaps`, which may only shrink; they fall in three families: horizontal
-beat-axis drags (timeline strips, velocity and drum lanes), vertical reorders inside a viewport (lanes, modulator rows,
-mixer lists, dialog lists) and free canvas or controller-surface pans (selection box, cable, cell move).
+surfaces still missing it are listed in `kFollowGaps`, which may only shrink; they fall in two families: horizontal
+beat-axis drags (timeline strips, velocity and drum lanes) and free canvas or controller-surface pans (selection box,
+cable, cell move).
 
 ## Anti-overlap search
 

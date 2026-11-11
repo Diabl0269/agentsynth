@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -119,6 +120,7 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     }
 
     ProgrammaticApplyScope guard(*this);
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // see loadBundleFromFile
     graphEditor.loadPreset(file, append);
     countUsage(synth::telemetry::Feature::PresetLoaded); // a user opened a plain patch file
     reconcileTimelineAfterGraphChange();
@@ -147,6 +149,7 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
 // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
 bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // "Open without it" covers this load only
     // On screen the open comes to life as it loads: the audio gate closes, samples and wavetables decode off the
     // message thread, and the canvas reveal starts once it is built (ProjectLoadPipeline.h). Off screen: null.
     auto* deferredAssets = projectLoad_->beginLoad();
@@ -241,7 +244,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
 // programmatic way ProjectBundle::load always has.
 bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
-    auto* deferredAssets = projectLoad_->beginLoad(); // see loadBundleFromFile
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // see loadBundleFromFile
+    auto* deferredAssets = projectLoad_->beginLoad();            // see loadBundleFromFile
     graphEditor.detachAllModuleComponents();
 
     const juce::File previousBundleDir = currentBundleDir_;

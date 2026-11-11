@@ -367,12 +367,12 @@ TEST(DrumMachinePanelPlayClipTest, TheLoopKeepsThePlayheadFramesRunningWithTheTr
     f.clip = f.doc.addClip(f.drums, 0.0, 4.0, "Beat 1");
     f.panel.openDrumMachine(f.clip);
     auto& playhead = f.panel.getPlayhead();
-    EXPECT_FALSE(playhead.isPlayheadTimerRunning());
+    EXPECT_FALSE(playhead.isPlayheadFrameRunning());
     f.host.beat = 0.0;
     f.clickPlayClip();
-    EXPECT_TRUE(playhead.isPlayheadTimerRunning()) << "the same 30 Hz frames the song uses, for the loop's beat";
+    EXPECT_TRUE(playhead.isPlayheadFrameRunning()) << "the same display frames the song uses, for the loop's beat";
     f.panel.getDrumMachine().stopClipPreview();
-    EXPECT_FALSE(playhead.isPlayheadTimerRunning()) << "and they stop with it";
+    EXPECT_FALSE(playhead.isPlayheadFrameRunning()) << "and they stop with it";
 }
 
 //==============================================================================

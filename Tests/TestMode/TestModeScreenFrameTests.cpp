@@ -62,6 +62,25 @@ TEST(TestModeScreenFrame, ItIsTheUnionOfTheMainWindowAndAnotherTopLevelWindowAtI
     EXPECT_EQ(shot.image.getPixelAt(450 + 10, 99), juce::Colours::black) << "above the second window is not drawn";
 }
 
+// A popup fading in or out is a window with an opacity below 1: a recorded strip must show it that faint.
+TEST(TestModeScreenFrame, AWindowMidFadeIsDrawnAtItsOpacity) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    RedWindow other;
+    const auto mainBounds = rig.getScreenBounds();
+    if (!other.show({mainBounds.getRight() + 50, mainBounds.getY() + 100, 120, 260}))
+        GTEST_SKIP() << "no native window in this environment";
+    other.setAlpha(0.5f);
+
+    const auto shot = takeScreenShot();
+    ASSERT_EQ(shot.result.state, StepResult::State::done) << shot.result.error;
+    ASSERT_TRUE(shot.image.isValid());
+    const auto pixel = shot.image.getPixelAt(450 + 10, 100 + 10); // over the frame's black ground
+    EXPECT_NEAR((int)pixel.getRed(), 128, 4) << "half of the window's red over black";
+    EXPECT_EQ((int)pixel.getGreen(), 0);
+}
+
 TEST(TestModeScreenFrame, ThePointerIsDrawnAtTheLastSyntheticPoint) {
     Rig rig;
     if (!rig.show())

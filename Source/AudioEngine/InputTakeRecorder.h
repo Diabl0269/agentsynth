@@ -50,8 +50,8 @@ public:
     bool isAnyCapturing() const noexcept { return capturingCount_.load(std::memory_order_relaxed) > 0; }
     int getSlotChannelCount(int slot) const noexcept;
     bool getSlotCaptureStart(int slot, juce::int64& timelineSample) const noexcept;
-    /** MESSAGE THREAD. `out` is cleared for an unknown slot. */
-    void copyLivePeaks(int slot, std::vector<std::pair<float, float>>& out) const;
+    /** MESSAGE THREAD. `out` (and `rmsOut`, when given) is cleared for an unknown slot. */
+    void copyLivePeaks(int slot, std::vector<std::pair<float, float>>& out, std::vector<float>* rmsOut = nullptr) const;
 
     /** Prepare path: halts every capturing slot whose take rate differs from `sampleRate`. */
     void latchHaltIfRateDiffers(double sampleRate) noexcept;

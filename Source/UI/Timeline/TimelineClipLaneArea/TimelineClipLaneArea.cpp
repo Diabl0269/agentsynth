@@ -10,7 +10,9 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
@@ -43,9 +45,13 @@ constexpr float kMutedClipLabelAlpha = 0.35f;
 using namespace detail;
 
 //==============================================================================
+TimelineClipLaneArea::~TimelineClipLaneArea() = default;
+
 TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection)
     : viewState_(viewState)
-    , selection_(selection) {
+    , selection_(selection)
+    , clipGlide_(std::make_unique<KeyedRectTween>(*this))
+    , enterExit_(std::make_unique<ClipLaneEnterExit>(*this)) {
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);
@@ -72,6 +78,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
 //==============================================================================
 void TimelineClipLaneArea::setTimelineDoc(synth::TimelineDoc* doc) {
     doc_ = doc;
+    enterExit_->clear(); // a new document: its clips are simply there
     refreshFromDoc();
 }
 
@@ -114,6 +121,13 @@ void TimelineClipLaneArea::refreshFromDoc() {
 void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce::String&)> resolver) {
     peaksResolver_ = std::move(resolver);
     invalidatePeaksCache(); // a different resolver may resolve an already-cached ref differently
+}
+
+// MainComponent wires this to the audio file's header rate. Peaks buckets count FILE samples, so the
+// rate that turns seconds into buckets is the file's, not the engine's.
+void TimelineClipLaneArea::setAssetSampleRateResolver(std::function<double(const juce::String&)> resolver) {
+    assetSampleRateResolver_ = std::move(resolver);
+    invalidatePeaksCache(); // a different resolver may answer an already-cached ref differently
 }
 
 void TimelineClipLaneArea::invalidatePeaksCache() {
@@ -276,16 +290,16 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
     return computeClipRect(viewState, TimelineRowLayout(trackIndex + 1, rowHeight), trackIndex, startBeat, lengthBeats);
 }
 
-// `sampleRate` is the ASSUMED source sample rate — the peaks file itself does not carry one (see
-// PeaksFile.h), so this is the same "engine rate, no resampling" honesty AudioClipStreamer already
-// states for playback; a caller with a live transport passes its current sampleRate/bpm, exactly
-// like currentBeatsPerBar() does for the snap grid.
+// Buckets count FILE samples, so the rate is the audio file's own: `peaks.sampleRate` when the
+// caller filled it (findPeaksData does), else `sampleRate`, the transport rate a caller passes as the
+// fallback (exactly like currentBeatsPerBar() does for the snap grid).
 TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const synth::PeaksFile::Data& peaks,
                                                                            double lengthBeats,
                                                                            double sourceStartSeconds, double bpm,
                                                                            double sampleRate) {
     BucketRange range;
-    if (peaks.numChannels <= 0 || peaks.bucketSize <= 0 || sampleRate <= 0.0)
+    const double fileRate = peaks.sampleRate > 0.0 ? peaks.sampleRate : sampleRate;
+    if (peaks.numChannels <= 0 || peaks.bucketSize <= 0 || fileRate <= 0.0)
         return range;
 
     const int totalBuckets = (int)(peaks.buckets.size() / (std::size_t)peaks.numChannels);
@@ -296,8 +310,8 @@ TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const
     const double startSeconds = std::max(0.0, sourceStartSeconds);
     const double endSeconds = startSeconds + std::max(0.0, lengthBeats) * secondsPerBeat;
 
-    const double startSample = startSeconds * sampleRate;
-    const double endSample = endSeconds * sampleRate;
+    const double startSample = startSeconds * fileRate;
+    const double endSample = endSeconds * fileRate;
 
     int firstBucket = (int)std::floor(startSample / (double)peaks.bucketSize);
     int lastBucketExclusive = (int)std::ceil(endSample / (double)peaks.bucketSize);
@@ -417,7 +431,7 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
         for (const auto& clip : track.clips) {
-            const float fade = clipGlide_.alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
+            const float fade = clipGlide_->alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
             if (fade < 1.0f)
                 g.beginTransparencyLayer(fade);
             paintClip(g, clip, track, trackIndex, layout);
@@ -425,6 +439,8 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
                 g.endTransparencyLayer();
         }
     }
+
+    paintClipGhosts(g, layout);
 
     if (belowTracksHint_ || isShowingSoundOutline())
         paintBelowTracksStrip(g);

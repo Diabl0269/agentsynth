@@ -89,13 +89,21 @@ juce::KeyPress keyPressFromText(const juce::String& text, juce::String& error) {
 
 juce::Point<int> centreOf(const juce::Component& c) { return c.getLocalBounds().getCentre(); }
 
+namespace {
+// The window a held button went down in: the OS keeps sending the drag and the release there (implicit capture).
+juce::Component::SafePointer<juce::Component>& pressWindow() {
+    static juce::Component::SafePointer<juce::Component> window;
+    return window;
+}
+} // namespace
+
 bool sendMouse(const MouseStep& step, juce::String& error) {
     if (step.target == nullptr) {
         error = "no target component";
         return false;
     }
-    auto* peer = step.target->getPeer();
-    if (peer == nullptr) {
+    auto* targetPeer = step.target->getPeer();
+    if (targetPeer == nullptr) {
         error = "the component is not on a native window";
         return false;
     }
@@ -103,18 +111,23 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
     if (step.buttonDown)
         flags |= step.button == Button::left ? juce::ModifierKeys::leftButtonModifier
                                              : juce::ModifierKeys::rightButtonModifier;
-    const auto inPeer = peer->getComponent().getLocalPoint(step.target, step.local).toFloat();
+    const auto targetInPeer = targetPeer->getComponent().getLocalPoint(step.target, step.local);
     // Which window is in front is not asked here: the automation launch tells JUCE to ignore the window order.
-    if (!peer->getComponent().getLocalBounds().contains(peer->getComponent().getLocalPoint(step.target, step.local))) {
+    const bool capturedByPress = step.captured && pressWindow() != nullptr && pressWindow()->getPeer() != nullptr;
+    auto* peer = capturedByPress ? pressWindow()->getPeer() : targetPeer;
+    if (!capturedByPress && !peer->getComponent().getLocalBounds().contains(targetInPeer)) {
         error = "the point is outside the window";
         return false;
     }
     // JUCE places a tooltip at the OS cursor, which this input never moves: tell the tooltip where the pointer is.
-    const auto screenPoint = peer->getComponent().localPointToGlobal(inPeer.roundToInt());
+    const auto screenPoint = targetPeer->getComponent().localPointToGlobal(targetInPeer);
+    const auto inPeer = peer->getComponent().getLocalPoint(nullptr, screenPoint).toFloat();
     synth::ui::AppTooltipWindow::setSyntheticPointer(screenPoint);
     // A popover reads the pointer to tell a press on its own button (a toggle) from a click away.
     synth::ui::test_hooks::popoverMouseForTest() = screenPoint;
     lastPointer() = screenPoint;
+    if (step.buttonDown && pressWindow() == nullptr)
+        pressWindow() = &peer->getComponent();
     // JUCE reads the keyboard modifiers of a mouse event from this global, not from the event's own flags.
     const auto previous = juce::ModifierKeys::currentModifiers;
     juce::ModifierKeys::currentModifiers = step.keys.withoutMouseButtons();
@@ -122,6 +135,8 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
                            juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
                            juce::Time::currentTimeMillis());
     juce::ModifierKeys::currentModifiers = previous;
+    if (!step.buttonDown)
+        pressWindow() = nullptr;
     return true;
 }
 

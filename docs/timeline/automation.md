@@ -685,7 +685,7 @@ The Draw tool puts down one of six shapes (`synth::ui::DrawShape`, `AutomationLa
 periodic shapes, **Sine**, **Triangle**, **Saw** and **Square**. The panel owns the shape next to the edit
 tool and pushes it to every lane editor the same way (`TimelinePanelComponent::setDrawShape`), the
 [amount lanes](#amount-lane)' editors included (`ModulatorBand::setDrawShape`), so a box stamp works on an LFO's
-amount too and creates its lane like a first pen stroke. The lane range is for ordinary lanes only.
+amount too and creates its lane like a first pen stroke. The Range tool works there as well (see the lane range below).
 
 **The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
 always shows what the tool will draw, and a small chevron (the app's combo chevron, in the glyph's ink) in its bottom-right corner says it opens more. When the
@@ -740,6 +740,16 @@ value at the start to its value at the end; Free does nothing. Delete or Backspa
 it. Each is one undo step, and the range stays for the next verb. Stamped points are ordinary breakpoints:
 Select moves them, the eraser removes them.
 
+**On a mod row.** The Range tool also selects a stretch of a modulator row's amount curve, and the shape and Delete verbs
+act on that curve, each as one undo step (the band commits every edit of its private editor as one step on the real
+doc). The band is handed the same `LaneRangeSelection` as the lane editors (`ModulatorBand::setLaneRange`), but its
+editor works on a private doc whose lane ids repeat the real ones', so a lane id cannot say where the range is: the
+range records the editor that began it (`LaneRangeSelection::getOwner`), and every question about it (is it on this
+editor, which editor do the verbs go to, does this lane header have a range) goes through that owner. With no amount
+lane yet a band has nothing to select: only the Draw tool takes the press there (it starts the curve), the other tools
+fall to the knob drag, and the band shows the plain arrow for them. A range on a mod row never offers
+[Create custom LFO](#create-custom-lfo-from-a-range): that is for a lane's own curve only.
+
 `AutomationLaneShapeGesture` holds all of this for one editor. The editor forwards its mouse, key and paint
 calls to it first, so the editor's own tools are unchanged.
 
@@ -781,7 +791,7 @@ state).
   is flat)" (the curve moves less than 1/10000 of the parameter's range), "(lane has too many points)".
 - **Motion.** The old curve melts into the flat line: the editor keeps the old shape and cross-fades it out over the
   range (200 ms, 80 ms under Reduce Motion, at once under Animations Off or off screen) while the old points shrink away,
-  repainting only the range's rectangle. The new modulator row and band fade and grow in like any new routing, and a row whose routing goes (Undo) fades out in a closing gap where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off, and deleted as soon as its fade and gap end, see [lane-motion.md](lane-motion.md)).
+  repainting only the range's rectangle. The new modulator row and band fade and grow in like any new routing, and a row whose routing goes (Undo) is replaced by a picture of itself that fades out in a closing gap where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off, and deleted as soon as its fade and gap end, see [lane-motion.md](lane-motion.md)).
 
 The math is `CustomLfoFromRange` (`LaneShapes/`, pure, one plan shared by the menu's enabled state and the command);
 the command is `TrackHeaderHost::createCustomLfoFromRange`, implemented by `MainComponent` as one

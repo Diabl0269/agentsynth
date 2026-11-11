@@ -97,13 +97,16 @@ bool InputTakeRecorder::getSlotCaptureStart(int slot, juce::int64& timelineSampl
     return found != nullptr && found->writer->getCaptureStartTimelineSample(timelineSample);
 }
 
-void InputTakeRecorder::copyLivePeaks(int slot, std::vector<std::pair<float, float>>& out) const {
+void InputTakeRecorder::copyLivePeaks(int slot, std::vector<std::pair<float, float>>& out,
+                                      std::vector<float>* rmsOut) const {
     const auto* found = slotAt(slot);
     if (found == nullptr) {
         out.clear();
+        if (rmsOut != nullptr)
+            rmsOut->clear();
         return;
     }
-    found->writer->copyLivePeaks(out);
+    found->writer->copyLivePeaks(out, rmsOut);
 }
 
 void InputTakeRecorder::latchHaltIfRateDiffers(double sampleRate) noexcept {

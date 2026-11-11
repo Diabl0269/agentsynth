@@ -41,6 +41,8 @@ public:
     bool isActive() const noexcept { return mode_ != Mode::None; }
 
     // ---- Lane-range verbs (no-ops unless the range sits on this editor's lane) ----
+    /** True while the shared range is active and was begun on this editor. */
+    bool rangeIsOnThisLane() const;
     /** Stamps `shape` over the range at the lane's full height; Line ramps between the curve's values at the edges. */
     bool stampOverRange(DrawShape shape);
     /** Removes every point inside the range. */
@@ -62,7 +64,6 @@ private:
     bool commitReplace(double startBeat, double endBeat, std::vector<synth::AutomationLane::Breakpoint> points);
     bool commitStamp(DrawShape shape, double startBeat, double endBeat, double lo, double hi);
     bool refuse(const juce::String& message);
-    bool rangeIsOnThisLane() const;
     juce::Rectangle<float> boxRect() const;
     void paintBoxPreview(juce::Graphics& g, juce::Colour accent);
     void paintChip(juce::Graphics& g, const juce::String& text, juce::Rectangle<float> anchor, juce::Colour colour);

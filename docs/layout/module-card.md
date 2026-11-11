@@ -69,6 +69,17 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 | `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
 
+**Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
+checks (on macOS only, where its known-gap list is measured; Windows fonts and audio devices differ) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
+dialog of the theme sweep registry, discovered rather than listed. It runs at the default size in every built-in theme and
+at the smallest size (the main window's 480 x 400 minimum, a dialog's constrainer minimum) in the first theme. It fails
+on: sibling leaves that touch or overlap (a mouse-transparent overlay and buttons joined by connected edges are exempt);
+a caption that is not `theme.metrics.spacingUnit` (6 px, the `space-unit` token) from its control (the attached component
+of a `juce::Label`, else the nearest control directly below or to the right within 24 px); a Label, TextButton or combo box
+whose text is wider than its text area and has no tooltip; a TextButton whose text ink is off centre by more than 1 px
+(measured by painting it with and without its text). A finding is `<surface> / <component>: <what>`; known ones live in
+the test's `kKnownGaps`, which may only shrink.
+
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
 out at full `contentX` / `contentW`, flush-left with the knob grid, rather than the centred
 `narrowX` / `narrowW` band — a toggle's label reads better flush-left than centred in a narrow
@@ -335,9 +346,9 @@ rebuilds and makes room inside one undo record, and undo and redo rebuild the sa
 ## Modules that resize at runtime
 
 Widths are static; a few modules' **heights** are not (the More row above also folds a card's height). The LFO (FRO114) stays `Single` width even with
-its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 2` px (the Grid/Shapes/Tools toolbar
-row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
-of 190 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
+its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 6` px (the Grid/Shapes/Tools toolbar
+row and `cardbody::kBlockGap`, the one gap under a button row and between neighbouring blocks) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 6` px (`kBlockGap` again, bottom breathing room), a total
+of 192 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
 369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.

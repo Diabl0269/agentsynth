@@ -4,7 +4,6 @@
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/DrumMachine/DrumLanes.h"
-#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
@@ -72,6 +71,12 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // OUTWARDS through onAudioFileDropped. This class never imports anything itself — it owns no
 // AssetManager and no bundle knowledge, exactly like onRelinkAudioRequested.
 namespace synth::ui {
+
+template <typename T>
+class KeyedTween;
+using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
+class ClipLaneEnterExit;
+struct ClipLaneChange;
 
 //==============================================================================
 // ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
@@ -153,7 +158,7 @@ class TimelineClipLaneArea
     , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
-    ~TimelineClipLaneArea() override = default;
+    ~TimelineClipLaneArea() override;
 
     void paint(juce::Graphics& g) override;
 
@@ -438,6 +443,9 @@ public:
     // unchanged assetRef can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
 
+    // Asset ref -> the file's header sample rate (0 = unknown); see TimelineClipLaneArea.cpp.
+    void setAssetSampleRateResolver(std::function<double(const juce::String& assetRef)> resolver);
+
     // ---- Missing-asset placeholder ----
 
     // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves). Installing
@@ -455,7 +463,7 @@ public:
         double punchBeat = 0.0;   // the strip's fixed left edge
         double currentBeat = 0.0; // the strip's growing right edge — the transport's current position
         const RecordTapModule* tap = nullptr;
-        std::function<void(std::vector<std::pair<float, float>>&)> copyPeaks;
+        std::function<void(std::vector<std::pair<float, float>>&, std::vector<float>&)> copyPeaks; // peaks, then rms
         int numChannels = 2; // channels per peak bucket in the source
     };
 
@@ -548,7 +556,7 @@ public:
 
     // Which buckets of `peaks` cover this clip's visible span, given where inside the asset it
     // starts reading (`sourceStartSeconds`, seconds) and the beats<->seconds conversion (`bpm`).
-    // `sampleRate` is the ASSUMED source sample rate (see TimelineClipLaneArea.cpp). Clamped to
+    // `sampleRate` is the fallback source rate, used when `peaks.sampleRate` is 0. Clamped to
     // `[0, totalBuckets]` — a clip past the end of the peaks data (or no buckets at all) returns a
     // zero-length range rather than an out-of-bounds one.
     static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
@@ -603,7 +611,8 @@ public:
     juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
     /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
     double getDrawnNoteXForTest(synth::ClipId id, int index) const;
-    KeyedRectTween& getClipGlideForTest() noexcept { return clipGlide_; }
+    KeyedRectTween& getClipGlideForTest() noexcept { return *clipGlide_; }
+    ClipLaneEnterExit& getEnterExitForTest() noexcept { return *enterExit_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -673,6 +682,7 @@ private:
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
     void glideRestoredClips();
+    void paintClipGhosts(juce::Graphics& g, const TimelineRowLayout& layout);
     juce::Rectangle<int> drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const;
     // The x a note's resting `restingX` is drawn at while the clip glides from its old place (RestoreGlide.cpp).
     double glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const;
@@ -784,10 +794,14 @@ private:
     // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
     void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
-    // Assumes the caller already set the colour.
+    // With `rms` (one value per bucket slot) it draws the peak outline in `ink.outline` and the darker RMS body inside
+    // it in `ink.body`; with no rms (a version 1 peaks file) it draws the plain outline in `ink.flat`.
+    struct WaveformInk {
+        juce::Colour outline, body, flat;
+    };
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                     const std::vector<std::pair<float, float>>& buckets, int numChannels,
-                                     int firstBucket, int bucketCount);
+                                     const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,
+                                     int numChannels, int firstBucket, int bucketCount, const WaveformInk& ink);
     // What paintWaveform draws for a clip `width` px wide (see waveformShapeFor / getWaveformShapeForTest).
     enum class WaveformShape { None, Summary, Columns };
     WaveformShape waveformShapeFor(const synth::Clip& clip, int width);
@@ -806,6 +820,7 @@ private:
     struct LiveStrip {
         LiveRecordingInfo info;
         std::vector<std::pair<float, float>> peaks;
+        std::vector<float> rms;
         juce::Rectangle<int> rect;
     };
     void paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip);
@@ -837,10 +852,14 @@ private:
         bool operator==(const ClipPlace&) const = default;
     };
     std::map<std::int64_t, ClipPlace> clipPlaces_;
+    using NoteStartsById = std::map<std::int64_t, std::vector<synth::ClipNoteStart>>;
+    void glideChangedClips(const ClipLaneChange& change, const std::map<std::int64_t, ClipPlace>& now,
+                           const NoteStartsById& noteStartsNow);
     // The notes' relative starts at the same sync, and how a restore's glide moves each clip's notes (ClipNoteGlide).
     std::map<std::int64_t, std::vector<synth::ClipNoteStart>> clipNoteStarts_;
     std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
-    KeyedRectTween clipGlide_{*this};
+    std::unique_ptr<KeyedRectTween> clipGlide_;
+    std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
     RestoreWatch restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
@@ -948,6 +967,7 @@ private:
     // ---- Waveform peaks cache ----
     std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
+    std::function<double(const juce::String& assetRef)> assetSampleRateResolver_;
 
     // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;

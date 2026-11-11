@@ -98,10 +98,17 @@ bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPe
 }
 
 bool TimelineDoc::deleteTime(double startBeat, double endBeat, double secondsPerBeat) {
+    return deleteTimeSteps(startBeat, endBeat, secondsPerBeat, false);
+}
+
+// `finishesSectionEdit`: deleting a placement's bars is a section edit of its own, finished by the last step here.
+bool TimelineDoc::deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit) {
     if (!isValidSpan(startBeat, endBeat) || !isFinitePositive(secondsPerBeat))
         return false;
 
     SectionEditScope scope(*this);
+    if (finishesSectionEdit)
+        beginSectionEdit();
     const double gap = endBeat - startBeat;
     applyMutation([&] { removePlacementsOverlapping(startBeat, endBeat, {}); });
     deleteRange(trackIds(true), startBeat, endBeat, true, secondsPerBeat);
@@ -128,8 +135,19 @@ bool TimelineDoc::deleteTime(double startBeat, double endBeat, double secondsPer
         for (auto& placement : placements)
             if (placement.startBeat >= endBeat)
                 placement.startBeat -= gap;
+        if (finishesSectionEdit)
+            finishSectionEdit();
     });
     return true;
+}
+
+// Ends the section edit with the notification of the step running now: the strip and the clip lane diff against the
+// state before the op's first step, never against the states between its steps.
+void TimelineDoc::finishSectionEdit() noexcept {
+    if (!sectionEditOpen)
+        return;
+    sectionEditOpen = false;
+    ++sectionEditCount;
 }
 
 // ------------------------------------------------------------------ sections --
@@ -169,6 +187,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
     const auto content = variationContent(*getSection(id), letter);
 
     SectionEditScope scope(*this);
+    beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
         insertTime(atBeat, length, secondsPerBeat);
     } else {
@@ -180,6 +199,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
         const PlacementId placementId{nextSectionId++};
         insertPlacementSorted({placementId, id, atBeat, letter});
         stampContent(content, atBeat, length);
+        finishSectionEdit();
         return placementId;
     });
 }
@@ -196,12 +216,14 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
     const double oldEnd = old.startBeat + length;
     const auto content = contentOf(old.startBeat, length);
 
+    // `newStartBeat` is the start the block has AFTER the move, in the layout the user sees while dragging (the strip's
+    // sectionstrip::planSectionDrop): with make-room its old bars close up first, so a later target is already counted
+    // without them.
     SectionEditScope scope(*this);
-    double target = newStartBeat;
+    beginSectionEdit();
+    const double target = newStartBeat;
     if (mode == SectionDropMode::MakeRoom) {
         deleteTime(old.startBeat, oldEnd, secondsPerBeat); // takes the placement with it; the section stays alive
-        if (newStartBeat > old.startBeat)
-            target = std::max(old.startBeat, newStartBeat - length);
         insertTime(target, length, secondsPerBeat);
     } else {
         deleteRange(trackIds(true), old.startBeat, oldEnd, false, secondsPerBeat);
@@ -217,9 +239,130 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
     }
     applyMutation([&] {
         insertPlacementSorted({id, old.section, target, old.variation});
-        stampContent(content, target, length);
+        stampContent(content, target, length, true); // a moved clip keeps its id
+        finishSectionEdit();
     });
     return true;
+}
+
+namespace {
+
+// The placements `ids` name, in time order, without repeats; empty when any id is unknown.
+std::vector<SectionPlacement> placementsInTimeOrder(const TimelineDoc& doc, const std::vector<PlacementId>& ids) {
+    std::vector<SectionPlacement> out;
+    for (const auto id : ids) {
+        const auto* placement = doc.getPlacement(id);
+        if (placement == nullptr)
+            return {};
+        if (std::none_of(out.begin(), out.end(), [id](const SectionPlacement& p) { return p.id == id; }))
+            out.push_back(*placement);
+    }
+    std::stable_sort(out.begin(), out.end(),
+                     [](const SectionPlacement& a, const SectionPlacement& b) { return a.startBeat < b.startBeat; });
+    return out;
+}
+
+} // namespace
+
+// The group form of movePlacement, and with one id exactly it. `landingBeat` is the group's start after the move in
+// the layout the strip shows while dragging (sectionstrip::planGroupDrop): with make-room every member's old bars
+// close up first (latest first, so an earlier member's start still names its bars), then the group's summed length
+// opens at the landing and each member is stamped back with the music it had. Cover clears every member's old bars,
+// then whatever the group's span covers, and stamps the members over it.
+bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
+                                         double secondsPerBeat) {
+    const auto members = placementsInTimeOrder(*this, ids);
+    if (members.empty() || !isFiniteAtOrAfterZero(landingBeat) || !isFinitePositive(secondsPerBeat))
+        return false;
+    if (members.size() == 1)
+        return movePlacement(members.front().id, landingBeat, mode, secondsPerBeat);
+
+    std::vector<PlacementContent> contents;
+    double total = 0.0;
+    for (const auto& member : members) {
+        const double length = sectionLength(member.section);
+        contents.push_back(contentOf(member.startBeat, length));
+        total += length;
+    }
+
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    if (mode == SectionDropMode::MakeRoom) {
+        for (auto it = members.rbegin(); it != members.rend(); ++it)
+            deleteTime(it->startBeat, it->startBeat + sectionLength(it->section), secondsPerBeat);
+        insertTime(landingBeat, total, secondsPerBeat);
+    } else {
+        for (const auto& member : members) {
+            const double end = member.startBeat + sectionLength(member.section);
+            deleteRange(trackIds(true), member.startBeat, end, false, secondsPerBeat);
+            applyMutation([&] {
+                eraseLanePoints(member.startBeat, end);
+                placements.erase(std::remove_if(placements.begin(), placements.end(),
+                                                [&](const SectionPlacement& p) { return p.id == member.id; }),
+                                 placements.end());
+            });
+        }
+        applyMutation([&] { removePlacementsOverlapping(landingBeat, landingBeat + total, {}); });
+        deleteRange(trackIds(true), landingBeat, landingBeat + total, false, secondsPerBeat);
+        applyMutation([&] { eraseLanePoints(landingBeat, landingBeat + total); });
+    }
+    applyMutation([&] {
+        double at = landingBeat;
+        for (std::size_t i = 0; i < members.size(); ++i) {
+            const double length = sectionLength(members[i].section);
+            insertPlacementSorted({members[i].id, members[i].section, at, members[i].variation});
+            stampContent(contents[i], at, length, true);
+            at += length;
+        }
+        finishSectionEdit();
+    });
+    return true;
+}
+
+// The group form of placeSection, and with one id exactly it. Each section's music is read before anything changes and
+// the group's span is opened (or cleared) once, so a copy that covers another member's original still places the music
+// that original had.
+std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<PlacementId>& ids, double atBeat,
+                                                            SectionDropMode mode, double secondsPerBeat) {
+    const auto members = placementsInTimeOrder(*this, ids);
+    if (members.empty() || !isFiniteAtOrAfterZero(atBeat) || !isFinitePositive(secondsPerBeat) ||
+        static_cast<int>(placements.size() + members.size()) > kMaxPlacements)
+        return {};
+    if (members.size() == 1) {
+        const auto placed = placeSection(members.front().section, atBeat, mode, secondsPerBeat);
+        return placed.isValid() ? std::vector<PlacementId>{placed} : std::vector<PlacementId>{};
+    }
+
+    std::vector<PlacementContent> contents;
+    double total = 0.0;
+    for (const auto& member : members) {
+        contents.push_back(variationContent(*getSection(member.section), 0));
+        total += sectionLength(member.section);
+    }
+
+    SectionEditScope scope(*this);
+    beginSectionEdit();
+    if (mode == SectionDropMode::MakeRoom) {
+        insertTime(atBeat, total, secondsPerBeat);
+    } else {
+        applyMutation([&] { removePlacementsOverlapping(atBeat, atBeat + total, {}); });
+        deleteRange(trackIds(true), atBeat, atBeat + total, false, secondsPerBeat);
+        applyMutation([&] { eraseLanePoints(atBeat, atBeat + total); });
+    }
+    return applyMutation([&] {
+        std::vector<PlacementId> placed;
+        double at = atBeat;
+        for (std::size_t i = 0; i < members.size(); ++i) {
+            const double length = sectionLength(members[i].section);
+            const PlacementId placementId{nextSectionId++};
+            insertPlacementSorted({placementId, members[i].section, at, 0});
+            stampContent(contents[i], at, length);
+            placed.push_back(placementId);
+            at += length;
+        }
+        finishSectionEdit();
+        return placed;
+    });
 }
 
 bool TimelineDoc::removePlacementKeepMusic(PlacementId id) {
@@ -238,7 +381,7 @@ bool TimelineDoc::deletePlacementAndBars(PlacementId id, double secondsPerBeat) 
     if (placement == nullptr || !isFinitePositive(secondsPerBeat))
         return false;
     const double start = placement->startBeat;
-    return deleteTime(start, start + sectionLength(placement->section), secondsPerBeat);
+    return deleteTimeSteps(start, start + sectionLength(placement->section), secondsPerBeat, true);
 }
 
 SectionId TimelineDoc::makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb) {

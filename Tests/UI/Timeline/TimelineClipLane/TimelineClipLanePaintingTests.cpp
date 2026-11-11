@@ -241,6 +241,27 @@ TEST(TimelineClipLaneWaveformTest, SourceOffsetShiftsWaveform) {
     EXPECT_EQ(emptyRange.bucketCount, 0);
 }
 
+TEST(TimelineClipLaneWaveformTest, BucketRangeUsesTheFileRateNotTheTransportRate) {
+    using synth::ui::TimelineClipLaneArea;
+
+    // Regression test for FRO1520: a 44.1 kHz file under a 48 kHz transport had its waveform sliced
+    // at the transport rate, so it drifted 8% against the audio.
+    constexpr double kBpm = 120.0;
+    constexpr double kLengthBeats = 4.0; // 2 seconds
+
+    auto data = makeWaveformData(400, 1.0f);
+    data.sampleRate = 44100.0;
+    const auto atFileRate = TimelineClipLaneArea::bucketRangeForClip(data, kLengthBeats, 1.0, kBpm, 48000.0);
+
+    auto reference = makeWaveformData(400, 1.0f); // no rate of its own: the passed rate is the fallback
+    const auto expected = TimelineClipLaneArea::bucketRangeForClip(reference, kLengthBeats, 1.0, kBpm, 44100.0);
+    EXPECT_EQ(atFileRate.firstBucket, expected.firstBucket);
+    EXPECT_EQ(atFileRate.bucketCount, expected.bucketCount);
+
+    const auto atTransportRate = TimelineClipLaneArea::bucketRangeForClip(reference, kLengthBeats, 1.0, kBpm, 48000.0);
+    EXPECT_NE(atFileRate.firstBucket, atTransportRate.firstBucket) << "the two rates must give different ranges";
+}
+
 TEST(TimelineClipLaneWaveformTest, MissingAssetPaintsPlaceholder) {
     int missingResolverCalls = 0;
 
@@ -376,4 +397,112 @@ TEST(TimelineClipLaneWaveformTest, SingleLoudBucketIsDrawnAtEveryClipWidth) {
         EXPECT_TRUE(differsInRows(quietImage, spikeImage, rect.getY(), rect.getY() + rect.getHeight() / 4))
             << "the loud bucket vanished at clip width " << width;
     }
+}
+
+namespace {
+
+// Peaks of `numBuckets` buckets: the first half at (peakQuiet, rmsQuiet), the second at (peakLoud, rmsLoud).
+synth::PeaksFile::Data makeWaveformDataWithRms(int numBuckets, float peakQuiet, float rmsQuiet, float peakLoud,
+                                               float rmsLoud) {
+    synth::PeaksFile::Data data;
+    data.bucketSize = 256;
+    data.numChannels = 1;
+    for (int i = 0; i < numBuckets; ++i) {
+        const bool loud = i >= numBuckets / 2;
+        const float peak = loud ? peakLoud : peakQuiet;
+        data.buckets.emplace_back(-peak, peak);
+        data.rms.push_back(loud ? rmsLoud : rmsQuiet);
+    }
+    return data;
+}
+
+struct ColumnInk {
+    int inkRows = 0;  // rows painted darker than the clip fill (outline plus body)
+    int bodyRows = 0; // rows painted at the darkest level (the RMS body)
+};
+
+// Scans one pixel column of the clip body; the brightest row is the clip fill (every test leaves some rows unpainted).
+ColumnInk scanColumn(const juce::Image& image, juce::Rectangle<int> rect, int x) {
+    std::vector<float> rows;
+    for (int y = rect.getY() + 3; y < rect.getBottom() - 3; ++y)
+        rows.push_back(image.getPixelAt(x, y).getBrightness());
+    const float brightest = *std::max_element(rows.begin(), rows.end());
+    const float darkest = *std::min_element(rows.begin(), rows.end());
+    const float fill = brightest;
+    ColumnInk ink;
+    for (const float b : rows) {
+        ink.inkRows += b < fill - 0.01f ? 1 : 0;
+        ink.bodyRows += b <= darkest + 0.01f && darkest < fill - 0.05f ? 1 : 0;
+    }
+    return ink;
+}
+
+} // namespace
+
+// A clip with RMS draws a lighter peak outline with a darker, narrower body inside it (like Reaper/Logic): a quiet
+// then loud clip has a narrow body in the quiet half and a wide one in the loud half, always inside the outline.
+TEST(TimelineClipLaneWaveformTest, RmsBodyIsDrawnDarkerAndNarrowerThanThePeakOutline) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_rms_body.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformDataWithRms(400, 0.3f, 0.05f, 0.9f, 0.5f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto quiet = scanColumn(image, rect, rect.getX() + rect.getWidth() * 3 / 10);
+    const auto loud = scanColumn(image, rect, rect.getX() + rect.getWidth() * 8 / 10);
+
+    EXPECT_GT(quiet.bodyRows, 0) << "the quiet half still has a body";
+    EXPECT_GT(quiet.inkRows, quiet.bodyRows * 3) << "outline (peak 0.3) is much taller than the body (rms 0.05)";
+    EXPECT_GT(loud.inkRows, loud.bodyRows + 10) << "outline rows remain around the body";
+    EXPECT_GT(loud.bodyRows, quiet.bodyRows * 3) << "a louder part has a taller body";
+    EXPECT_GT(loud.inkRows, quiet.inkRows) << "and a taller outline";
+}
+
+// A loud constant tone (a high peak with a sine's RMS) shows an outline AND a body: not one solid block.
+TEST(TimelineClipLaneWaveformTest, LoudConstantToneShowsAnOutlineAroundABody) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_rms_tone.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformDataWithRms(400, 0.8f, 0.57f, 0.8f, 0.57f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    EXPECT_GT(col.bodyRows, 0);
+    EXPECT_GT(col.inkRows, col.bodyRows + 10) << "a lighter outline band shows above and below the body";
+    EXPECT_LT(col.bodyRows, col.inkRows * 3 / 4) << "the body is not the whole column";
+}
+
+// A version 1 file (no RMS) still draws exactly as before: one flat wash, no darker body level.
+TEST(TimelineClipLaneWaveformTest, PeaksWithoutRmsDrawAsAPlainOutline) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_no_rms.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformData(400, 0.6f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    EXPECT_GT(col.inkRows, 0);
+    EXPECT_GE(col.bodyRows, col.inkRows - 4)
+        << "every inked row is the same single wash (bar two antialiased edge rows)";
 }

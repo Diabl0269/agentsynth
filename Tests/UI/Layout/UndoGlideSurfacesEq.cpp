@@ -5,6 +5,7 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/EqBandGlide.h"

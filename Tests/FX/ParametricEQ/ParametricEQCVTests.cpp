@@ -1,6 +1,7 @@
 // ParametricEQCVTests.cpp
-// CV modulation of the Parametric EQ: the original bell jacks (ch2-5, bespoke exponential/linear
-// curves) and the normalised-CV jacks for every remaining parameter (ch6-14).
+// CV modulation of the Parametric EQ: the original bell jacks (ch2-5, bespoke
+// exponential/linear curves) and the normalised-CV jacks for every remaining
+// parameter (ch6-14).
 
 #include "ParametricEQTestHelpers.h"
 #include <gtest/gtest.h>
@@ -17,7 +18,8 @@ TEST(ParametricEQCV, FreqCVSweepsTheFullRangeExponentially) {
     EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 0.0f), 500.0f, 0.01f);
     EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 1.0f), hi, 1.0f);
     EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, -1.0f), lo, 0.1f);
-    // Half-way up is the geometric mean of the base and the top — an exponential sweep.
+    // Half-way up is the geometric mean of the base and the top — an exponential
+    // sweep.
     EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 0.5f), std::sqrt(500.0f * hi), 1.0f);
     // Out-of-range CV is clamped, not extrapolated.
     EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 4.0f), hi, 1.0f);
@@ -57,11 +59,12 @@ TEST(ParametricEQCV, SilentCVJackLeavesTheBandAtItsKnobValue) {
 }
 
 TEST(ParametricEQCV, NearSilentCVIsGatedToZero) {
-    // An unconnected jack can still carry a tiny amount of numerical dirt; it must not nudge the
-    // band at all. The gate threshold is a mean-square of 1e-6, i.e. ~1e-3 amplitude.
-    // Compared against the no-CV case rather than literal 0.0, because a JUCE parameter
-    // round-tripped through NormalisableRange::convertTo0to1 lands a few ULPs off its nominal
-    // value — that offset is the baseline here, not part of what is being tested.
+    // An unconnected jack can still carry a tiny amount of numerical dirt; it
+    // must not nudge the band at all. The gate threshold is a mean-square of
+    // 1e-6, i.e. ~1e-3 amplitude. Compared against the no-CV case rather than
+    // literal 0.0, because a JUCE parameter round-tripped through
+    // NormalisableRange::convertTo0to1 lands a few ULPs off its nominal value —
+    // that offset is the baseline here, not part of what is being tested.
     ParametricEQModule baseline;
     enableBand(baseline, 1, 1000.0f, 0.0f);
     baseline.prepareToPlay(kSampleRate, kBlockSize);
@@ -80,8 +83,8 @@ TEST(ParametricEQCV, NearSilentCVIsGatedToZero) {
 }
 
 TEST(ParametricEQCV, CVAboveTheGateThresholdIsApplied) {
-    // The complement of the test above: CV loud enough to clear the gate must get through, so
-    // the gate can't be silently swallowing real modulation.
+    // The complement of the test above: CV loud enough to clear the gate must get
+    // through, so the gate can't be silently swallowing real modulation.
     ParametricEQModule eq;
     enableBand(eq, 1, 1000.0f, 0.0f);
     eq.prepareToPlay(kSampleRate, kBlockSize);
@@ -122,7 +125,8 @@ TEST(ParametricEQCV, NegativeFreqCVOnChannel4MovesTheSecondBellDown) {
 }
 
 TEST(ParametricEQCV, ShelvesAreNotCVModulated) {
-    // Only the two bells take CV; stamping every CV channel must leave the shelves put.
+    // Only the two bells take CV; stamping every CV channel must leave the
+    // shelves put.
     ParametricEQModule eq;
     enableBand(eq, 0, 150.0f, 6.0f);
     enableBand(eq, 3, 9000.0f, -6.0f);
@@ -142,8 +146,9 @@ TEST(ParametricEQCV, ShelvesAreNotCVModulated) {
 }
 
 // ============================================================================
-// CV modulation of the remaining parameters (ch6-14: B1/B4 Freq+Gain, every band's Q, Output) —
-// normalised convention, docs/modules/modulation.md#cv-in-normalised-units
+// CV modulation of the remaining parameters (ch6-14: B1/B4 Freq+Gain, every
+// band's Q, Output) — normalised convention,
+// docs/modules/modulation.md#cv-in-normalised-units
 // ============================================================================
 
 TEST(ParametricEQCV, FreqCVOnChannel6MovesTheLowShelf) {
@@ -173,8 +178,8 @@ TEST(ParametricEQCV, GainCVOnChannel9MovesTheHighShelf) {
 }
 
 TEST(ParametricEQCV, QCVChangesTheBandsResponse) {
-    // Widening Q on a boosted bell moves energy at a frequency one octave below centre, even
-    // though the centre gain itself is untouched by Q.
+    // Widening Q on a boosted bell moves energy at a frequency one octave below
+    // centre, even though the centre gain itself is untouched by Q.
     ParametricEQModule eq;
     enableBand(eq, 1, 1000.0f, 18.0f, ParametricEQModule::kMaxQ);
     eq.prepareToPlay(kSampleRate, kBlockSize);
@@ -185,8 +190,9 @@ TEST(ParametricEQCV, QCVChangesTheBandsResponse) {
     enableBand(widened, 1, 1000.0f, 18.0f, ParametricEQModule::kMaxQ);
     widened.prepareToPlay(kSampleRate, kBlockSize);
     const float widenedGainDb = measureGainDb(widened, 500.0f, 15, [](juce::AudioBuffer<float>& buffer) {
-        // B2 Q is channel 11 (B1 Q is 10 — see getModulationTargets/getInputPortLabel); negative
-        // CV widens Q toward kMinQ, positive CV narrows it further toward kMaxQ.
+        // B2 Q is channel 11 (B1 Q is 10 — see
+        // getModulationTargets/getInputPortLabel); negative CV widens Q toward
+        // kMinQ, positive CV narrows it further toward kMaxQ.
         for (int i = 0; i < buffer.getNumSamples(); ++i)
             buffer.setSample(11, i, -1.0f);
     });
@@ -198,18 +204,20 @@ TEST(ParametricEQCV, OutputCVChangesTheGain) {
     ParametricEQModule eq;
     eq.prepareToPlay(kSampleRate, kBlockSize);
 
-    // Output CV is channel 14; +1.0 should sweep the trim from 0 dB toward its +24 dB ceiling.
+    // Output CV is channel 14; +1.0 should sweep the trim from 0 dB toward its
+    // +24 dB ceiling.
     const float gainDb = measureGainDb(eq, 1000.0f, 15, [](juce::AudioBuffer<float>& buffer) {
         for (int i = 0; i < buffer.getNumSamples(); ++i)
             buffer.setSample(14, i, 1.0f);
     });
 
-    EXPECT_GT(gainDb, 6.0f) << "full-scale positive CV on Output should raise the level well above unity";
+    EXPECT_GT(gainDb, 6.0f) << "full-scale positive CV on Output should raise "
+                               "the level well above unity";
 }
 
 TEST(ParametricEQCV, ZeroCVOnTheNewChannelsMatchesNoCVAtAll) {
-    // A 6-channel buffer (today's shape) and a 15-channel buffer with the new CV channels present
-    // but silent must produce the identical resolved band state.
+    // A 6-channel buffer (today's shape) and a 15-channel buffer with the new CV
+    // channels present but silent must produce the identical resolved band state.
     ParametricEQModule legacy;
     enableBand(legacy, 0, 300.0f, 4.0f, 2.0f);
     enableBand(legacy, 3, 6000.0f, -4.0f, 2.0f);
@@ -220,11 +228,12 @@ TEST(ParametricEQCV, ZeroCVOnTheNewChannelsMatchesNoCVAtAll) {
     enableBand(wide, 0, 300.0f, 4.0f, 2.0f);
     enableBand(wide, 3, 6000.0f, -4.0f, 2.0f);
     wide.prepareToPlay(kSampleRate, kBlockSize);
-    measureRMS(wide, 1000.0f, 15); // extra channels present but silent (unpatched)
+    measureRMS(wide, 1000.0f,
+               15); // extra channels present but silent (unpatched)
 
     const auto legacyBands = legacy.getBandSnapshots();
     const auto wideBands = wide.getBandSnapshots();
-    for (int b = 0; b < kNumBands; ++b) {
+    for (int b = 0; b < kMaxBands; ++b) {
         EXPECT_NEAR(wideBands[(size_t)b].freqHz, legacyBands[(size_t)b].freqHz, 1.0f) << "band " << b;
         EXPECT_NEAR(wideBands[(size_t)b].gainDb, legacyBands[(size_t)b].gainDb, 0.05f) << "band " << b;
         EXPECT_NEAR(wideBands[(size_t)b].q, legacyBands[(size_t)b].q, 0.05f) << "band " << b;

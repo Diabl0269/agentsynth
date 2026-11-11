@@ -21,12 +21,13 @@ steps:
   - expect: {id: soundBrowser, showing: true, within_ms: 3000}
   - expect: {id: soundBrowser, getMoreOpen: true}
   - screenshot: {id: soundBrowser, name: 1-open}
-  - click: {id: soundBrowser, x: 60, y: 193}
-  - mark: {check: 1, name: get-more-mid-slide}
+  - glide: {name: fold-frames, frames: 14, crop: {x: 0, y: 150, w: 400, h: 300}, do: {click: {id: soundBrowser, x: 60, y: 193}}}
   - wait: {}
+  - mark: {check: 7, name: get-more-folded}
   - expect: {id: soundBrowser, getMoreOpen: false}
   - screenshot: {id: soundBrowser, name: 2-folded}
-  - click: {id: soundBrowser, x: 60, y: 193}
+  - glide: {name: unfold-frames, frames: 14, crop: {x: 0, y: 150, w: 400, h: 300}, do: {click: {id: soundBrowser, x: 60, y: 193}}}
   - wait: {}
+  - mark: {check: 7, name: get-more-opened}
   - expect: {id: soundBrowser, getMoreOpen: true}
   - screenshot: {id: soundBrowser, name: 3-open-again}

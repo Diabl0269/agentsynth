@@ -4,6 +4,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/EqBandGlide.h"

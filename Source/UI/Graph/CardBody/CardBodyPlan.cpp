@@ -48,6 +48,8 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
     }
     if (typeOf(module) == ModuleType::DrumKit && id != "level")
         return true;
+    if (const auto* base = dynamic_cast<const ModuleBase*>(&module); base != nullptr && !base->isParameterExposed(id))
+        return true; // kept and saved, but offered on no surface yet
     if (typeOf(module) == ModuleType::Wavetable && id == "table")
         return true;
     if (isSequencer(module) && (id == sequencer_ids::kScale || id == sequencer_ids::kFollowSongKey))

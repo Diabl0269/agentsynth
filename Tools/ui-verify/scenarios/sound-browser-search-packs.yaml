@@ -1,0 +1,23 @@
+# Search lists the packs it finds above the sounds. Before, a search ended with its packs (and none showed while a
+# filter chip was on), so a pack was below the fold of a long result list.
+#
+# What a user does: opens the Sounds view, types "crow" in the search: the Animals pack (it has a crow call) is the first
+# row to step to, under a "Get more" hint, above any sound. The pack list comes from the hosted index, fetched when the
+# view shows, the same as in sound-browser-get-more-fold.yaml.
+record: true
+save_project: fro1543 search packs
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - expect: {id: soundBrowser, getMoreOpen: true, within_ms: 8000}
+  - click: {id: "Search sounds"}
+  - type: {text: crow}
+  - wait: {settleMs: 600}
+  - getState: {id: soundBrowser}
+  - expect: {id: soundBrowser, contains: {firstRowText: "Get more", firstStopText: animals}}
+  - expect: {id: soundBrowser, firstStopIsGetPack: true}
+  - mark: {check: 1, name: crow-pack-on-top}

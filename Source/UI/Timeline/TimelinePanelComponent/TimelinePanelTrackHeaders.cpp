@@ -14,6 +14,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -476,7 +477,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         trackHeaderList_.addAndMakeVisible(header);
     }
     previous.clear(); // the rows of tracks that are gone
-    trackSelection_.retainOnly(trackOrder());
+    trackSelection_->retainOnly(trackOrder());
     applyTrackSelectionToHeaders();
     layoutTrackHeaders();
     glideTrackRowsFrom(reorderedRows);
@@ -550,7 +551,7 @@ void TimelinePanelComponent::layoutTrackHeaders() {
 // Focusing a track on its own (a plain click, an add, a duplicate) selects just that track.
 void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     focusTrackKeepingSelection(id);
-    trackSelection_.selectOnly(focusedTrackIndex_ >= 0 ? id : synth::TrackId());
+    trackSelection_->selectOnly(focusedTrackIndex_ >= 0 ? id : synth::TrackId());
     applyTrackSelectionToHeaders();
 }
 
@@ -576,18 +577,20 @@ std::vector<synth::TrackId> TimelinePanelComponent::trackOrder() const {
     return order;
 }
 
+bool TimelinePanelComponent::isTrackSelected(synth::TrackId id) const { return trackSelection_->contains(id); }
+
 std::vector<synth::TrackId> TimelinePanelComponent::selectedTracks() const {
-    return trackSelection_.ordered(trackOrder());
+    return trackSelection_->ordered(trackOrder());
 }
 
 void TimelinePanelComponent::applyTrackSelectionToHeaders() {
     for (auto* header : trackHeaderList_.headers)
-        header->setSelected(trackSelection_.contains(header->getTrackId()));
+        header->setSelected(trackSelection_->contains(header->getTrackId()));
 }
 
 void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary) {
     focusTrackKeepingSelection(primary);
-    trackSelection_.selectAll(ids);
+    trackSelection_->selectAll(ids);
     applyTrackSelectionToHeaders();
     if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
         trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
@@ -607,10 +610,10 @@ void TimelinePanelComponent::selectAllTracks() {
 void TimelinePanelComponent::selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods) {
     pendingClickCollapse_ = {};
     if (mods.isShiftDown()) {
-        trackSelection_.extendTo(id, trackOrder());
+        trackSelection_->extendTo(id, trackOrder());
     } else if (mods.isCommandDown()) {
-        trackSelection_.toggle(id);
-    } else if (trackSelection_.contains(id) && trackSelection_.size() > 1) {
+        trackSelection_->toggle(id);
+    } else if (trackSelection_->contains(id) && trackSelection_->size() > 1) {
         pendingClickCollapse_ = id; // see the member: the release (or a drag) decides
     } else {
         setFocusedTrack(id);
@@ -629,18 +632,18 @@ void TimelinePanelComponent::extendTrackSelection(int direction) {
         return;
     }
     const auto current = trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId();
-    if (!trackSelection_.anchor().isValid())
-        trackSelection_.selectOnly(current);
+    if (!trackSelection_->anchor().isValid())
+        trackSelection_->selectOnly(current);
     const int target = juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
     focusTrackRowAt(target);
-    trackSelection_.extendTo(trackHeaderList_.headers.getUnchecked(target)->getTrackId(), trackOrder());
+    trackSelection_->extendTo(trackHeaderList_.headers.getUnchecked(target)->getTrackId(), trackOrder());
     applyTrackSelectionToHeaders();
 }
 
 void TimelinePanelComponent::toggleFocusedTrackSelection() {
     if (!juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size()))
         return;
-    trackSelection_.toggle(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    trackSelection_->toggle(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
     applyTrackSelectionToHeaders();
 }
 
@@ -661,7 +664,7 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     if (count == 0)
         return;
     focusTrackRowAt(focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction));
-    trackSelection_.selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    trackSelection_->selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
     applyTrackSelectionToHeaders();
 }
 
@@ -754,7 +757,7 @@ bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) 
     }
     focusedTrackIndex_ = count - 1;
     addTrackFocusRecorded_ = false;
-    trackSelection_.selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    trackSelection_->selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
     applyTrackSelectionToHeaders();
     const auto stops = keyboardStops();
     if (!stops.empty() && dynamic_cast<TimelineTrackHeaderComponent*>(stops.back()) == nullptr) {

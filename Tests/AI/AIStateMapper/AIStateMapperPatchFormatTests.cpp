@@ -196,9 +196,24 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
          "blend, bypassed, coarse, detune, dualIO, fine, fixedRate, glide, glideCurve, glideMode, legato, "
          "level, muted, octave, pan, "
          "phase, poly, pulseWidth, randomPhase, rateMode, unison, waveform, width"},
-        {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, "
-                          "band3Freq, band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, "
-                          "dualIO, mix, muted, outputGain, pan"},
+        {"Parametric EQ",
+         "band10Freq, band10Gain, band10On, band10Q, band10Slope, band10Type, band11Freq, band11Gain, "
+         "band11On, band11Q, band11Slope, band11Type, band12Freq, band12Gain, band12On, band12Q, band12Slope, "
+         "band12Type, band13Freq, band13Gain, band13On, band13Q, band13Slope, band13Type, band14Freq, "
+         "band14Gain, band14On, band14Q, band14Slope, band14Type, band15Freq, band15Gain, band15On, band15Q, "
+         "band15Slope, band15Type, band16Freq, band16Gain, band16On, band16Q, band16Slope, band16Type, "
+         "band17Freq, band17Gain, band17On, band17Q, band17Slope, band17Type, band18Freq, band18Gain, "
+         "band18On, band18Q, band18Slope, band18Type, band19Freq, band19Gain, band19On, band19Q, band19Slope, "
+         "band19Type, band1Freq, band1Gain, band1On, band1Q, band1Slope, band1Type, band20Freq, band20Gain, "
+         "band20On, band20Q, band20Slope, band20Type, band21Freq, band21Gain, band21On, band21Q, band21Slope, "
+         "band21Type, band22Freq, band22Gain, band22On, band22Q, band22Slope, band22Type, band23Freq, "
+         "band23Gain, band23On, band23Q, band23Slope, band23Type, band24Freq, band24Gain, band24On, band24Q, "
+         "band24Slope, band24Type, band2Freq, band2Gain, band2On, band2Q, band2Slope, band2Type, band3Freq, "
+         "band3Gain, band3On, band3Q, band3Slope, band3Type, band4Freq, band4Gain, band4On, band4Q, "
+         "band4Slope, band4Type, band5Freq, band5Gain, band5On, band5Q, band5Slope, band5Type, band6Freq, "
+         "band6Gain, band6On, band6Q, band6Slope, band6Type, band7Freq, band7Gain, band7On, band7Q, "
+         "band7Slope, band7Type, band8Freq, band8Gain, band8On, band8Q, band8Slope, band8Type, band9Freq, "
+         "band9Gain, band9On, band9Q, band9Slope, band9Type, bypassed, dualIO, mix, muted, outputGain, pan"},
         {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
         {"Pitch Shifter", "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pan, pitch, shiftHz, "
                           "shiftMode, window"},

@@ -36,7 +36,7 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
             onKeyboardStopFocused(header);
     };
     header.laneRangeProvider = [this, id]() -> std::optional<std::pair<double, double>> {
-        if (hasLaneRange() && laneRange_.getLane() == id)
+        if (hasLaneRange() && laneRangeIsOnLane(id))
             return std::make_pair(laneRange_.getStartBeat(), laneRange_.getEndBeat());
         // No Range selection here: the stretch of the points selected with the Select tool.
         if (const auto* editor = editorFor(id))
@@ -106,8 +106,13 @@ void TimelineAutomationLanes::beginLaneDrag(synth::LaneId lane, int screenY) {
     laneDrag_.begin(slots, key, pointer - slots[static_cast<size_t>(key)].start, pointer);
 }
 
+// The list follows first (only while really dragging, so Esc stops it), then the pointer is read in the scrolled list.
 void TimelineAutomationLanes::dragLane(int screenY) {
-    if (dragLaneIds_.empty() || !laneDrag_.dragTo(laneDragPointerY(screenY)))
+    if (dragLaneIds_.empty())
+        return;
+    if (laneDrag_.animator().isDragging() && followReorderDrag)
+        followReorderDrag(screenY);
+    if (!laneDrag_.dragTo(laneDragPointerY(screenY)))
         return;
     liftedLane_ = dragLaneIds_[static_cast<size_t>(laneDrag_.animator().getDraggedKey())];
     onLaneDragFrame();

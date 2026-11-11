@@ -58,7 +58,8 @@ public:
     ~CurveEditorComponent() override = default;
 
     /** With `glideMoved` (an undo or redo), nodes of a same-shaped curve (same count and mode) are drawn gliding from
-     *  where they were; a different shape lands at once. */
+     *  where they were, and a curve with a different number of points or mode is drawn morphing from the old line into
+     *  the new one; without it the curve lands at once. */
     void setModel(CurveModel model, bool glideMoved = false);
     CurveModel& getModel() noexcept { return model_; }
     const CurveModel& getModel() const noexcept { return model_; }
@@ -309,6 +310,10 @@ public:
      *  drawn points. */
     KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
     KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
+    /** Tests: the morph of a restore that changed the number of points (key 0; offset y is the old line's weight). */
+    KeyedPointTween& getMorphTweenForTest() noexcept { return morphTween_; }
+    /** Tests: the curve's line as drawn now, left to right, in pixels. */
+    std::vector<juce::Point<float>> getDrawnCurvePointsForTest() const { return drawnCurvePoints(currentGeometry()); }
     juce::Path getDrawnCurvePathForTest() const;
 
 private:
@@ -344,7 +349,7 @@ private:
     void dragSelectionTo(int index, juce::Point<float> point, bool bypassSnap);
     /** The move behind nudgeSelectedNode without its gesture bracket: `holdGesture` opens the hold's bracket at the
      *  first real move instead. */
-    bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease);
+    bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, double easeMs);
     /** Ctrl+Alt+arrows: the selection scaled about its middle in time or level (CurveEditorScale.cpp), one gesture. */
     bool scaleSelection(bool time, int side, bool fine);
 
@@ -357,6 +362,11 @@ private:
     void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
     std::vector<juce::Point<float>> nodePositions() const;
     void glideNodesFrom(const std::vector<juce::Point<float>>& before);
+    // ---- Restore morph (CurveEditorRestoreGlide.cpp) ----
+    std::vector<juce::Point<float>> modelCurvePoints(const CurveEditorGeometry& geometry) const;
+    std::vector<juce::Point<float>> drawnCurvePoints(const CurveEditorGeometry& geometry) const;
+    void morphFrom(std::vector<juce::Point<float>> before);
+    float morphWeight() const;
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();
     double keyDragSpeedFactor() const;
@@ -470,6 +480,8 @@ private:
     CurveDrawGesture draw_{*this};
     std::optional<juce::String> tooltipBeforePen_;
     KeyedPointTween pointTween_{*this};
+    KeyedPointTween morphTween_{*this};
+    std::vector<juce::Point<float>> morphFrom_; ///< The line as drawn when the morph began, left to right.
     KeyHold keyHold_{*this};
     struct KeyDrag {
         juce::Point<double> start; // the cursor point when the hold began

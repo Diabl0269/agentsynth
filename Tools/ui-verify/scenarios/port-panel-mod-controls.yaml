@@ -21,7 +21,7 @@ steps:
   - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 144, fromY: 71, toX: 154, toY: 71}
   - wait: {}
   - mark: {check: 2, name: amount-dragged}
-  - click: {id: "card:VCA", x: 150, y: 12}   # click away: the panel closes
+  - click: {id: "card:VCA", x: 150, y: 12, instant: "the focus ring moves to the canvas panel"}   # click away: the panel closes
   - wait: {}
   - key: {keys: cmd+z}
   - wait: {}

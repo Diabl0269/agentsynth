@@ -331,8 +331,8 @@ void MainComponent::updateLiveRecordingStrips(double currentBeat) {
         info.numChannels = take.numChannels;
         if (take.source != AudioTake::Source::WholeMix) {
             const int slot = take.inputSlot;
-            info.copyPeaks = [&recorder, slot](std::vector<std::pair<float, float>>& out) {
-                recorder.copyLivePeaks(slot, out);
+            info.copyPeaks = [&recorder, slot](std::vector<std::pair<float, float>>& out, std::vector<float>& rms) {
+                recorder.copyLivePeaks(slot, out, &rms);
             };
         } else {
             info.tap = findMasterRecordTap(take.tapNode);

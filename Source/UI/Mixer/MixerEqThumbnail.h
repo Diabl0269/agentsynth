@@ -114,7 +114,7 @@ private:
     AppUndoManager* undo_ = nullptr;
     std::atomic<bool> restorePending_{false};
     std::unique_ptr<EqBandGlide> glide_;
-    std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands_{};
+    ParametricEQModule::BandSnapshots lastBands_{};
     float lastOutputGainDb_ = 0.0f;
 
     std::vector<float> cachedMagnitudesDb_;

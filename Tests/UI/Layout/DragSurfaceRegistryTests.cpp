@@ -45,7 +45,7 @@ const char* const kOnCardRows = "test:OnCardEditorRows.TheCommittedLayoutEqualsT
 const std::vector<Registered> kRegistered = {
     // Preview and commit checked by a shared guard.
     {"TimelineClipLaneArea", {"clip-edge"}},
-    {"TimelineSectionStrip", {"test:TimelineSectionStripDragTest.WhatTheDragPreviewsIsWhatTheDropCommits"}},
+    {"TimelineSectionStrip", {"test:TimelineSectionStripDragFollowTest.ThePreviewIsTheCommitForEveryModeAndPosition"}},
     {"CurveEditorComponent",
      {"undo-glide:Curve editor point", "point-markers:Curve editor point",
       "test:ShapeDrawGesture.PreviewAtTheLastDragEqualsTheCommit"}},
@@ -54,6 +54,23 @@ const std::vector<Registered> kRegistered = {
      {"undo-glide:Automation lane point", "point-markers:Automation lane point",
       "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits"}},
     // Preview and commit checked by a test of their own.
+    {"PianoRollComponent",
+     {"test:PianoRollDragPreviewCommitTest.ANoteMoveCommitsTheStartsAndPitchesItLastShowed",
+      "test:PianoRollDragPreviewCommitTest.ARightEdgeResizeCommitsTheLengthsItLastShowed",
+      "test:PianoRollDragPreviewCommitTest.AnOptionDragCopyCommitsTheNotesItsGhostsLastShowed",
+      "test:PianoRollNewNoteCellTest.DrawToolStartsInTheClickedCellAndItsPreviewIsWhatIsCommitted"}},
+    {"PianoRollVelocityLane",
+     {"test:PianoRollVelocityDragPreviewCommitTest.AStickDragCommitsTheVelocitiesItLastShowed",
+      "test:PianoRollVelocityDragPreviewCommitTest.AShiftRampCommitsTheVelocitiesItLastShowed"}},
+    {"NoteRangePicker",
+     {"test:NoteRangeDragPreviewCommit.AnEdgeDragCommitsTheRangeTheLastDragEventDrew",
+      "test:NoteRangeDragPreviewCommit.AnEdgeDragWithAScaleCommitsTheScaleNotesTheLastDragEventDrew",
+      "test:NoteRangeDragPreviewCommit.ABandDragCommitsTheRangeTheLastDragEventDrew"}},
+    {"MixerZonesRow",
+     {"test:MixerZonesDragPreviewCommit.AWithinGroupDropCommitsTheOrderTheLastDragEventShowed",
+      "test:MixerZonesDragPreviewCommit.ACrossGroupDropCommitsTheZoneAndSlotTheLastDragEventShowed"}},
+    {"TimelineRulerComponent",
+     {"test:TimelineRulerMarkerDragPreviewCommit.ASnappedMarkerDropWritesTheBeatTheLastDragEventDrew"}},
     {"CardLayoutOutline", {kOnCardRows}},
     {"CardLayoutAddRow", {kOnCardRows}},
     {"CardLayoutGroupHandle", {"test:OnCardGroupMoveEditor.WhatTheDragShowsIsWhatTheDropWrites"}},
@@ -62,6 +79,18 @@ const std::vector<Registered> kRegistered = {
     {"DrumHitLane", {"test:DrumMachineLanesTest.ADragAcrossAnyLaneSetsARampAsOneUndoStepAndCommitsWhatItPreviewed"}},
     {"MixerInsertList",
      {"test:MixerInsertListReorderTests.ARealDragReordersAsOneUndoStepAndThePreviewIsWhatTheDropCommits"}},
+    {"CardLayoutEditorGrip", {"test:CardLayoutEditorGripPreviewCommit.ADropCommitsTheRowOrderTheLastDragEventShowed"}},
+    {"DockTabButton", {"test:ReorderDragPreviewCommit.ADockTabDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"MixerColumnHeader", {"test:ReorderDragPreviewCommit.AMixerColumnDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"MixerSendList", {"test:ReorderDragPreviewCommit.ASendRowDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"TimelineTrackHeaderComponent",
+     {"test:ReorderDragPreviewCommit.ATrackRowDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"AutomationLaneHeaderComponent",
+     {"test:AutomationLanesReorderPreviewCommit.ALaneHeaderDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"LaneControlChip",
+     {"test:AutomationLanesReorderPreviewCommit.AControlChipDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"ModulatorRow",
+     {"test:AutomationLanesReorderPreviewCommit.AModulatorRowDropCommitsTheOrderTheLastDragEventShowed"}},
     {"DragHandle", {"test:MacroPortConfigDialogTest.DraggingAcrossTwoRowsCommitsOnceOnReleaseWithTheFinalIndex"}},
     {"ControllerSurfaceCell", {"test:ControllerSurfaceComponentTest.MultiStepDragLandsExactlyOnOriginPlusDelta"}},
     // No preview/commit split.
@@ -88,35 +117,21 @@ const std::vector<Registered> kRegistered = {
     {"ControllerSurfaceComponent", {"exempt: a selection marquee, nothing to commit"}},
     {"TopBar", {"exempt: moves the help window, nothing to commit"}},
     {"CommandPaletteComponent", {"exempt: moves the search bar, the release only stores the position shown"}},
+    {"GraphEditor",
+     {"test:CardMoveDragPreviewCommit.AModuleCardLandsWhereTheDragShowedIt",
+      "test:CardMoveDragPreviewCommit.AMacroCardLandsWhereTheDragShowedIt"}},
+    {"ModuleComponent", {"test:CardMoveDragPreviewCommit.AModuleCardLandsWhereTheDragShowedIt"}},
+    {"MacroCardComponent", {"test:CardMoveDragPreviewCommit.AMacroCardLandsWhereTheDragShowedIt"}},
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"SoundBrowserComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"DrawPenButton", {"exempt: a drag only cancels the press-and-hold timer"}},
-    {"MixerColourDot", {"exempt: forwards the drag to MixerColumnHeader (its gap is listed there)"}},
-    {"SwatchButton", {"exempt: forwards the drag to TimelineTrackHeaderComponent (its gap is listed there)"}},
-    {"ContextMenuForwardingLabel",
-     {"exempt: forwards the drag to TimelineTrackHeaderComponent (its gap is listed there)"}},
+    {"MixerColourDot", {"exempt: forwards the drag to MixerColumnHeader (guarded there)"}},
+    {"SwatchButton", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
+    {"ContextMenuForwardingLabel", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
 };
 
 // A real preview/commit split with no guard that compares the two. Each needs one; the list may only shrink.
-const std::vector<KnownGap> kKnownGaps = {
-    {"GraphEditor", "FRO1319", "canvas card move: shown card bounds vs the node position after release"},
-    {"ModuleComponent", "FRO1319", "module card move: shown card bounds vs the node position after release"},
-    {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
-    {"CardLayoutEditorGrip", "FRO1316", "list editor row reorder: preview rows vs the committed order"},
-    {"DockTabButton", "FRO1316", "bottom dock tab reorder: lifted tab order vs the saved order"},
-    {"NoteRangePicker", "FRO1318", "range edge/band drag: shown range vs the range committed on release"},
-    {"MixerColumnHeader", "FRO1316", "mixer column reorder: preview slot vs the committed order"},
-    {"MixerSendList", "FRO1316", "send row reorder: preview slot vs the committed order"},
-    {"MixerZonesRow", "FRO1318", "zone row drag: preview slot vs the committed zone and order"},
-    {"PianoRollComponent", "FRO1317",
-     "note move/resize/copy: ghost notes vs the notes committed (only the draw tool is checked)"},
-    {"PianoRollVelocityLane", "FRO1317", "velocity stick/ramp gesture: shown velocities vs the committed ones"},
-    {"AutomationLaneHeaderComponent", "FRO1316", "lane header reorder: preview slot vs the committed order"},
-    {"LaneControlChip", "FRO1316", "lane chip reorder: preview order vs the committed order"},
-    {"ModulatorRow", "FRO1316", "modulator row reorder: preview slot vs the committed order"},
-    {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
-    {"TimelineTrackHeaderComponent", "FRO1316", "track row reorder: lifted row slot vs the committed order"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 // Every drag follows the view. A class is one of:
 //   "follow:<Suite.Name>"      a registered test that parks the pointer at the edge and sees the view and the thing
@@ -139,6 +154,8 @@ const std::vector<Follows> kFollow = {
      "follow:PianoRollAutoScrollTest.EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer"},
     {"AutomationLaneEditor",
      "follow:AutomationLanesEdgeScroll.ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer"},
+    {"TimelineSectionStrip",
+     "follow:TimelineSectionStripDragFollowTest.HoldingABlockAtTheRightEdgeScrollsTheViewAndTheDropFollows"},
     {"ModuleComponent", kCanvasCards},
     {"MacroCardComponent", kCanvasCards},
     {"MorphMap", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
@@ -173,36 +190,46 @@ const std::vector<Follows> kFollow = {
     {"MixerColourDot", kForwarder},
     {"SwatchButton", kForwarder},
     {"ContextMenuForwardingLabel", kForwarder},
+    // Reorders in a scrolling list: the list follows a row held at its edge
+    // (UI/Layout/ReorderDrag/ViewportDragScroll.h).
+    {"TimelineTrackHeaderComponent",
+     "follow:TimelineListDragFollow.ATrackRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"AutomationLaneHeaderComponent",
+     "follow:TimelineListDragFollow.ALaneHeaderHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"ModulatorRow",
+     "follow:TimelineListDragFollow.AModulatorRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"MixerInsertList",
+     "follow:MixerListDragFollow.AnInsertRowHeldAtTheSectionEdgeScrollsTheSectionAndStaysUnderThePointer"},
+    {"MixerSendList",
+     "follow:MixerListDragFollow.ASendRowHeldAtTheSectionEdgeScrollsTheSectionAndStaysUnderThePointer"},
+    {"MixerZonesRow", "follow:MixerListDragFollow.AZonesRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"MixerColumnHeader", "follow:MixerListDragFollow.AColumnHeldAtThePanelEdgeScrollsTheMixerAndStaysUnderThePointer"},
+    {"DragHandle", "follow:DialogListDragFollow.APortRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"CardLayoutEditorGrip",
+     "follow:DialogListDragFollow.ACardLayoutRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"NoteRangePicker",
+     "follow:NoteRangePickerDragFollow.AnEdgeHeldAtTheStripsEndScrollsTheStripAndStaysOnTheKeyUnderThePointer"},
+    {"LaneControlChip",
+     "follow-exempt: a chip lands only on its own lane header or its tray, anywhere else it goes "
+     "back (AutomationLanesControlChipsTest.AChipDroppedOnAnotherLaneOrDownTheListGoesBackAndChangesNothing)"},
 };
 
 // A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
 // each is built as a follow (a registered test) or moved to kFollow with an exemption.
 const std::vector<KnownGap> kFollowGaps = {
     {"GraphEditor", "FRO1688", "selection box, cable and drops from the library: the canvas does not pan"},
-    {"TimelineSectionStrip", "FRO1686", "section drag stops at the view edge"},
     {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
-    {"TimelineTrackHeaderComponent", "FRO1687", "track reorder does not scroll the track list"},
-    {"AutomationLaneHeaderComponent", "FRO1687", "lane reorder does not scroll the track list"},
-    {"LaneControlChip", "FRO1687", "chip reorder does not scroll"},
-    {"ModulatorRow", "FRO1687", "modulator row reorder does not scroll the track list"},
     {"PianoRollVelocityLane", "FRO1686", "a velocity ramp stops at the roll's edge"},
     {"DrumMachineComponent", "FRO1686", "edge drags stop at the view edge"},
     {"DrumHitLane", "FRO1686", "a ramp across a lane stops at the view edge"},
-    {"MixerInsertList", "FRO1687", "insert reorder does not scroll the list"},
-    {"MixerSendList", "FRO1687", "send reorder does not scroll the list"},
-    {"MixerColumnHeader", "FRO1687", "column reorder does not scroll the mixer"},
-    {"MixerZonesRow", "FRO1687", "zone drag does not scroll the mixer"},
     {"ControllerSurfaceComponent", "FRO1688", "selection box: triage whether the surface scrolls"},
     {"ControllerSurfaceCell", "FRO1688", "cell move: triage whether the surface scrolls"},
-    {"DragHandle", "FRO1687", "macro port row reorder: triage whether the list scrolls"},
-    {"CardLayoutEditorGrip", "FRO1687", "list editor row reorder: triage whether the list scrolls"},
     {"CardLayoutOutline", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
     {"CardLayoutAddRow", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
     {"CardLayoutGroupHandle", "FRO1688", "on-card group move: triage whether it can leave the card's view"},
-    {"NoteRangePicker", "FRO1687", "range edge drag: triage whether the keyboard strip scrolls"},
 };
 // What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 22;
+constexpr std::size_t kFollowGapCeiling = 10;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning

@@ -5,6 +5,7 @@
 #include "ProjectBundle.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeInput.h"
+#include "TestMode/TestModePopWatch.h"
 #include "TestMode/TestModePresentedFrame.h"
 #include "TestMode/TestModeScreenFrame.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
@@ -20,10 +21,6 @@ namespace synth::testmode {
 namespace {
 
 constexpr int kDefaultDragSteps = 12;
-// A partial repaint and a full one can leave an anti-aliased pixel a few levels apart: a zoomed canvas half-covers the
-// pixel column at its edge and blends it over what was there, not over the background (up to 4 levels seen). A
-// left-behind dot, cable or text pixel differs by 9 levels and far more.
-constexpr int kStaleTolerance = 6;
 
 int processId() {
 #if JUCE_WINDOWS
@@ -170,9 +167,11 @@ StepResult sendHeldMouse(const juce::var& args, bool buttonDown, bool arriveFirs
     if (error.isNotEmpty())
         return StepResult::failed(error);
     const auto point = localPointArg(args, *found.component, "x", "y");
-    if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left}, error))
+    // `captured: true`: the held-button steps go to the window the press happened in, as the OS sends them.
+    const bool captured = static_cast<bool>(args.getProperty("captured", false));
+    if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left, captured}, error))
         return StepResult::failed(error);
-    if (!sendMouse({found.component, point, keys, buttonDown, Button::left}, error))
+    if (!sendMouse({found.component, point, keys, buttonDown, Button::left, captured}, error))
         return StepResult::failed(error);
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
@@ -528,6 +527,7 @@ CommandTable CommandTable::standard() {
     table.add("waitForIdle", {cmdWaitForIdle});
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});
+    registerPopWatchCommands(table);
     table.add("quit", {cmdQuit});
     table.add("requestQuit", {cmdRequestQuit});
     return table;

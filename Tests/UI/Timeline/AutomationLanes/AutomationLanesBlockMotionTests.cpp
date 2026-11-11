@@ -5,9 +5,12 @@
 // tweens are stepped by hand, never by frames.
 
 #include "../../../TestWait.h"
+
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesModulatorHost.h"
+#include <algorithm>
+#include <vector>
 
 using namespace lane_menu_test;
 using namespace modulator_rows_test;
@@ -290,6 +293,52 @@ TEST(AutomationLanesBlockMotionTest, UnderReduceMotionAModulatorRowArrivesAndLea
     EXPECT_EQ(s.extra(), before);
 }
 
+// Regression test for FRO1579: a removed row used to stay a live ModulatorRow, shrunk with its gap, and every frame
+// laid its controls out again (the combos squashed to nothing, the Sync toggle pushed below the row); on screen those
+// frames were left behind under the lane. Now the live row goes at once and a still picture of it closes with the gap:
+// cropped by it, never squashed, with nothing inside it laid out again.
+TEST(AutomationLanesBlockMotionTest, ARemovedModulatorRowLeavesAsAStillPictureCroppedByItsGap) {
+    RowScene s;
+    FadeAnimateGuard animate;
+    s.h.host.modulators.push_back(lfoInfo("2"));
+    s.f().panel.refreshModulators();
+    s.lanes().stepBlockMotionForTest(1.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    auto* liveRow = s.lanes().modulatorRowFor(s.cutoff, 1);
+    ASSERT_NE(liveRow, nullptr);
+    auto* column = liveRow->getParentComponent();
+    ASSERT_NE(column, nullptr);
+    const auto stood = liveRow->getBounds();
+    const juce::Component::SafePointer<juce::Component> row(liveRow);
+    std::vector<juce::Component*> others; // what the column held besides the row
+    for (auto* child : column->getChildren())
+        if (child != liveRow)
+            others.push_back(child);
+
+    s.h.host.modulators.pop_back(); // LFO 2, the bottom row, goes
+    s.f().panel.refreshModulators();
+    ASSERT_EQ(s.lanes().leavingModulatorCountForTest(), 1);
+    EXPECT_EQ(row.getComponent(), nullptr) << "the live row and its controls go at once";
+    const juce::Component::SafePointer<juce::Component> pictureRef(
+        const_cast<juce::Component*>(s.lanes().leavingModulatorForTest(0)));
+    const auto* picture = pictureRef.getComponent();
+    ASSERT_NE(picture, nullptr);
+    EXPECT_EQ(picture->getParentComponent(), column);
+    EXPECT_EQ(picture->getBounds(), stood) << "the picture stands where the row stood";
+    EXPECT_EQ(picture->getNumChildComponents(), 0) << "a still picture: nothing in it is laid out again";
+
+    s.lanes().stepBlockMotionForTest(0.5f);
+    EXPECT_EQ(picture->getY(), stood.getY()) << "the gap closes from the bottom";
+    expectBetween(picture->getHeight(), 0, stood.getHeight(), "the picture is cropped by the closing gap");
+
+    s.lanes().stepBlockMotionForTest(1.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_TRUE(synth::test::flushMessageQueue());
+    EXPECT_EQ(s.lanes().leavingModulatorCountForTest(), 0);
+    EXPECT_EQ(pictureRef.getComponent(), nullptr) << "nothing of the row is left";
+    EXPECT_LE(column->getNumChildComponents(), (int)others.size()) << "nothing is added to the column";
+}
+
 // Regression test for FRO1472: under Reduce Motion a removed row only fades, in place. Once the fade ends the row is
 // hidden and deleted on the next message-loop turn; it used to stay a hidden child of the header column until the
 // next routing change.
@@ -302,18 +351,22 @@ TEST(AutomationLanesBlockMotionTest, UnderReduceMotionARemovedRowIsDeletedOnceIt
     ASSERT_NE(leavingRow, nullptr);
     auto* column = leavingRow->getParentComponent();
     ASSERT_NE(column, nullptr);
-    const juce::Component::SafePointer<juce::Component> row(leavingRow);
+    const auto stood = leavingRow->getBounds();
 
     s.h.host.modulators.pop_back();
     s.f().panel.refreshModulators();
     ASSERT_EQ(s.lanes().leavingModulatorCountForTest(), 1);
-    EXPECT_TRUE(row->isVisible()) << "the row fades where it stood";
+    const juce::Component::SafePointer<juce::Component> picture(
+        const_cast<juce::Component*>(s.lanes().leavingModulatorForTest(0)));
+    ASSERT_NE(picture.getComponent(), nullptr);
+    EXPECT_EQ(picture->getParentComponent(), column);
+    EXPECT_TRUE(picture->isVisible()) << "the row's picture fades where it stood";
+    EXPECT_EQ(picture->getBounds(), stood);
 
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
-    ASSERT_NE(row.getComponent(), nullptr) << "never deleted inside the fade's own callback";
-    EXPECT_FALSE(row->isVisible());
+    ASSERT_NE(picture.getComponent(), nullptr) << "never deleted inside the fade's own callback";
+    EXPECT_FALSE(picture->isVisible());
     ASSERT_TRUE(synth::test::flushMessageQueue());
     EXPECT_EQ(s.lanes().leavingModulatorCountForTest(), 0);
-    EXPECT_EQ(row.getComponent(), nullptr);
-    EXPECT_EQ(column->getIndexOfChildComponent(leavingRow), -1);
+    EXPECT_EQ(picture.getComponent(), nullptr);
 }

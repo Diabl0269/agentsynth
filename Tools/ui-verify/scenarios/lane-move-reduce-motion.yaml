@@ -9,6 +9,7 @@
 #      Alt+Up: back on top, again at once.
 #   3. Focuses the LFO 2 row and presses Alt+Down: it is on Attack at once.
 motion: true
+pop_check: {off: "reduced motion is on in this scenario, so changes land at once by design"}
 record: true
 save_project: end
 settings:

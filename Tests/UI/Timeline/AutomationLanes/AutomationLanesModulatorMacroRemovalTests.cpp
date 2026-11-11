@@ -6,6 +6,7 @@
 
 #include "AutomationLanesModulatorFixture.h"
 
+#include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"

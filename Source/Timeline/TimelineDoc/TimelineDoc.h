@@ -693,8 +693,17 @@ public:
                           double secondsPerBeat);
     // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none).
     PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat, int letter = 0);
-    // Moves a placement, music and all; the placement keeps its id.
+    // Moves a placement, music and all; the placement keeps its id. `newStartBeat` is its start after the move (with
+    // MakeRoom, counted with its old bars already closed up).
     bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
+    // Moves the placements as one group, back to back in time order from `landingBeat` (its start after the move, as
+    // for movePlacement). False, with nothing changed, when an id is unknown.
+    bool movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
+                                double secondsPerBeat);
+    // placeSection (variation A) for each placement's section, back to back in time order from atBeat; returns the new
+    // placements in that order, or none when an id is unknown or the placement cap would be passed.
+    std::vector<PlacementId> placeSectionsTogether(const std::vector<PlacementId>& ids, double atBeat,
+                                                   SectionDropMode mode, double secondsPerBeat);
     // Removes the placement only; the section goes with its last placement.
     bool removePlacementKeepMusic(PlacementId id);
     // Removes the placement and its bars, closing the gap on every track.
@@ -739,6 +748,10 @@ public:
     // Runtime only: counts syncs that rewrote a placement, and names the placements the last mutation rewrote.
     std::int64_t getSectionStampRevision() const noexcept { return sectionStampCount; }
     const std::vector<PlacementId>& getLastStampedPlacements() const noexcept { return lastStampedPlacements; }
+    // Runtime only: bumped once by the last step of a section move, place or delete-with-bars that changed the doc.
+    std::int64_t getSectionEditRevision() const noexcept { return sectionEditCount; }
+    // True between the steps of such an op: a notification then shows a state halfway through it.
+    bool isSectionEditUnfinished() const noexcept { return sectionEditOpen; }
 
     // While one is alive, edits do not copy between placements; the last one to end runs a single sync, and only
     // when it would change something.
@@ -828,8 +841,16 @@ private:
     bool sectionsNeedSync() const;
     PlacementContent contentOf(double startBeat, double lengthBeats) const;
     double sectionLength(SectionId id) const;
-    void stampContent(const PlacementContent& source, double targetStart, double length);
-    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length);
+    // Clip and note ids in the doc; a stamp given one keeps a source clip's ids that are free and claims them.
+    struct UsedIds {
+        std::set<std::int64_t> clips, notes;
+    };
+    void stampContent(const PlacementContent& source, double targetStart, double length, bool keepFreeIds = false);
+    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length,
+                    UsedIds* keepFree = nullptr);
+    bool deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit);
+    void beginSectionEdit() noexcept { sectionEditOpen = true; }
+    void finishSectionEdit() noexcept;
     // Section variations (TimelineDocSectionVariations.cpp).
     void refreshStoredVariations(Section& section);
     PlacementContent variationContent(const Section& section, int letter) const;
@@ -858,6 +879,8 @@ private:
     int sectionSyncSuspended = 0;
     std::int64_t sectionStampCount = 0;
     std::vector<PlacementId> lastStampedPlacements;
+    std::int64_t sectionEditCount = 0;
+    bool sectionEditOpen = false;
     std::set<std::int64_t> storedStale; // runtime only: sections whose variations' stored music needs a refresh
 
     std::int64_t nextTrackId = 1;

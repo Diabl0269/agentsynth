@@ -10,6 +10,7 @@
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 
 namespace synth::ui {
 
@@ -29,6 +30,8 @@ void TimelinePanelComponent::initAutomationLanes() {
     };
     // A lane drag that scrolled the shared view took it by hand, as a sideways wheel does: follow-playhead stops,
     // and the ruler and the section strip learn their beats moved.
+    // A lane header or modulator row held at the top or bottom of the track list scrolls it, as a track row does.
+    automationLanes_.followReorderDrag = [this](int screenY) { autoscrollForTrackPointer(screenY); };
     automationLanes_.onViewScrolledByDrag = [this] {
         if (follow_.enabled)
             setFollowPlayheadEnabled(false);
@@ -72,7 +75,7 @@ void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
 // every selected track closes, else every one opens), applied as one layout change so the lanes animate together.
 void TimelinePanelComponent::toggleAutomationForSelection(synth::TrackId trackId) {
     std::vector<synth::TrackId> targets;
-    if (trackSelection_.contains(trackId) && trackSelection_.size() > 1)
+    if (trackSelection_->contains(trackId) && trackSelection_->size() > 1)
         targets = selectedTracks();
     else
         targets = {trackId};

@@ -103,7 +103,8 @@ private:
         float startX = 0.0f;
         int startLow = 0; ///< The range when the gesture began (to tell whether it changed anything).
         int startHigh = 0;
-        int anchorLow = 0; ///< The range the band is moved from.
+        float startScroll = 0.0f; ///< Where the strip was, for Esc.
+        int anchorLow = 0;        ///< The range the band is moved from.
         int anchorHigh = 0;
         int grabPitch = 0; ///< The note under the pointer when a band drag began.
         bool moved = false;
@@ -140,6 +141,7 @@ private:
     // Gestures.
     void beginDrag(const juce::MouseEvent& e);
     void advanceDrag(float x, juce::ModifierKeys mods, double dt);
+    void cancelDrag();
     void dragEdge(Part part, float x);
     void dragBand(float x, juce::ModifierKeys mods);
     bool keyPressedOn(Part part, const juce::KeyPress& key);

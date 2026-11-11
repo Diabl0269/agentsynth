@@ -29,6 +29,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
@@ -376,6 +377,7 @@ void ModuleComponent::detachFromProcessor() {
     spectrumToggle.reset();
     eqPopOutButton.reset();
     openPluginEditorButton.reset();
+    hostedStatusLabel.reset();
     keyboardComponent.reset();
     // Same reasoning: the threshold control times itself and holds a reference to the module.
     thresholdControl = nullptr;
@@ -527,6 +529,8 @@ void ModuleComponent::lookAndFeelChanged() {
     applyHeaderButtonIcons();
     refreshWaveformComboIcons();
     applyKeyboardThemeColours();
+    if (hostedStatusLabel != nullptr)
+        hostedStatusLabel->setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
 }
 
 void ModuleComponent::timerCallback() {
@@ -538,6 +542,7 @@ void ModuleComponent::timerCallback() {
     if (openPluginEditorButton != nullptr) {
         if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module))
             openPluginEditorButton->setEnabled(hostedPlugin->hasInstance());
+        refreshHostedLoadStatus();
     }
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {

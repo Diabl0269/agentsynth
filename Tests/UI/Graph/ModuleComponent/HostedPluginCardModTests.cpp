@@ -6,6 +6,7 @@
 
 #include "../../../StubPluginInstance.h"
 #include "../CardBody/CardBodyTestHelpers.h"
+#include "../ModMatrixPickerFirstRow.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
@@ -165,6 +166,18 @@ TEST(HostedPluginCardModTest, ACableDroppedOnTheCardBodyOffersEveryParameterAndT
     EXPECT_TRUE(canvas.routedTo(channel));
     canvas.editor.updateComponents();
     canvas.knobPoint("p9"); // the parameter is on the card now
+}
+
+TEST(HostedPluginCardModTest, TheParameterSearchOpensAtItsFirstRow) {
+    PluginCanvas canvas;
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+    auto* plugin = canvas.card(canvas.pluginId);
+    canvas.dropCableAt(plugin->getPosition() +
+                       juce::Point<int>(plugin->getWidth() / 2, ModuleComponent::kHeaderHeight / 2));
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = nullptr;
+    ASSERT_NE(picker, nullptr);
+    first_row_test::expectOpensAtFirstRow(*picker, "hosted mod target");
 }
 
 // Regression test for FRO1157: the knob was its own undo step, so one Cmd+Z took the cable and left the knob.

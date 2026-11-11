@@ -43,26 +43,26 @@ juce::Point<double> CurveEditorComponent::keyboardStep() const {
 }
 
 bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSnap) {
-    return moveSelectionBy(dx, dy, bypassSnap, false, true);
+    return moveSelectionBy(dx, dy, bypassSnap, false, KeyedPointTween::kMs);
 }
 
 // The group's move, shared by a press and a hold's frames. A press brackets it as one gesture; a hold opens the
 // bracket at its first real move and closes it when the key goes up, so a hold against a limit never reaches the undo
 // stack.
-bool CurveEditorComponent::moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease) {
+bool CurveEditorComponent::moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, double easeMs) {
     if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
         return false;
     const auto selectedBefore = selection_.selected();
     const auto positionsBefore = selectionPositions();
     const auto easeToResult = [&] {
         const auto positionsAfter = selectionPositions();
-        if (!ease || positionsAfter.size() != positionsBefore.size())
+        if (easeMs <= 0.0 || positionsAfter.size() != positionsBefore.size())
             return;
         for (std::size_t k = 0; k < positionsAfter.size(); ++k) {
             const auto from = pointTween_.drawnAt(selectedBefore[k], positionsBefore[k]);
             if (selectedBefore[k] != selection_.selected()[k])
                 pointTween_.erase(selectedBefore[k]);
-            pointTween_.retarget(selection_.selected()[k], from, positionsAfter[k]);
+            pointTween_.retarget(selection_.selected()[k], from, positionsAfter[k], false, easeMs);
         }
     };
     const auto openGesture = [&] {

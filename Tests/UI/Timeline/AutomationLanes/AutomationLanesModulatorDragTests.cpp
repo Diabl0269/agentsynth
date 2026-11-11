@@ -6,6 +6,7 @@
 
 #include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
+#include "../TallTimelinePanel.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesModulatorHost.h"
 
@@ -229,7 +230,9 @@ TEST(AutomationLanesModulatorDragTest, ALaneThatCannotTakeTheRowIsNotHereNoLineT
 // Resonance lane, then a lane on a parameter that has no CV jack.
 
 namespace {
-struct MoveScene : amount_test::AmountScene {
+struct MoveScene
+    : TallTimelinePanel
+    , amount_test::AmountScene {
     synth::LaneId resLane;
     std::vector<synth::AutomationLane::Breakpoint> points{{0.0, 0.25, 0.0f, amount_test::kHold},
                                                           {4.0, -0.5, 0.0f, amount_test::kHold}};

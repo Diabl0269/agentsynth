@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 using synth::soundbrowser::guessFromName;
+using synth::soundbrowser::loopLengthFits;
 
 namespace {
 
@@ -60,4 +61,13 @@ TEST(SoundNameGuessTest, NoteNamesIgnoreTheOctave) {
     EXPECT_EQ(synth::soundbrowser::noteNameOf(60), "C");
     EXPECT_EQ(synth::soundbrowser::noteNameOf(57), "A");
     EXPECT_EQ(synth::soundbrowser::noteNameOf(61), "C#");
+}
+
+TEST(SoundNameGuessTest, ALoopMustBeLongEnoughAndSpanEnoughBeatsAtItsTempo) {
+    EXPECT_FALSE(loopLengthFits(0.2, 128.0));
+    EXPECT_FALSE(loopLengthFits(1.4, 0.0)) << "under the minimum length, no tempo";
+    EXPECT_TRUE(loopLengthFits(3.0, 0.0));
+    EXPECT_TRUE(loopLengthFits(7.5, 128.0));
+    EXPECT_FALSE(loopLengthFits(1.6, 60.0)) << "1.6 beats is not a loop";
+    EXPECT_TRUE(loopLengthFits(2.0, 60.0)) << "exactly two beats fits";
 }

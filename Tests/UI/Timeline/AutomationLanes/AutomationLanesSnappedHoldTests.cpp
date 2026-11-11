@@ -136,6 +136,7 @@ struct HoldFrame {
     double previewBeat = 0.0;
     float restingX = 0.0f;
     float dotX = 0.0f;
+    double drawnBeat = 0.0; // where the drawn dot is, in the timeline's own beats (the view may have scrolled)
     std::optional<float> bubbleX;
 };
 
@@ -162,7 +163,8 @@ std::vector<HoldFrame> holdFiveSeconds(TimelineViewState::Snap snap) {
         const float restingX = (float)f.panel.getViewState().beatToX(beat);
         const float dotX = restingX + tween.offsetFor(synth::ui::lane_key::tweenKey(2.0)).x;
         const auto anchor = f.editor->getPointBubbleForTest().getAnchor();
-        frames.push_back({(double)ms, beat, restingX, dotX, anchor ? std::optional<float>(anchor->x) : std::nullopt});
+        frames.push_back({(double)ms, beat, restingX, dotX, f.panel.getViewState().xToBeat((double)dotX),
+                          anchor ? std::optional<float>(anchor->x) : std::nullopt});
     }
     f.release();
     f.editor->forceGlideAnimateForTest(false);
@@ -219,6 +221,34 @@ TEST(AutomationLanesSnappedHold, AQuarterHoldStepsAtAnEvenCappedPaceWithTheBubbl
 
 TEST(AutomationLanesSnappedHold, ASixteenthHoldStepsAtAnEvenCappedPaceWithTheBubbleOnTheDot) {
     expectSteadyHold(TimelineViewState::Snap::Sixteenth, 0.25, "1/16");
+}
+
+// Steps arrive every ~83 ms at the cap, faster than the ease: each step eases over the gap instead, so the drawn dot
+// glides on between steps (it never sits still and then hops a grid step). A step that is a frame late leaves the dot
+// landed for that one frame, so the count allows a few of those; before, every frame between steps stood still.
+TEST(AutomationLanesSnappedHold, ATopSpeedSnappedHoldGlidesTheDrawnDotOnEveryFrame) {
+    for (const auto snap : {TimelineViewState::Snap::Quarter, TimelineViewState::Snap::Sixteenth}) {
+        const auto frames = holdFiveSeconds(snap);
+        int checked = 0;
+        int moved = 0;
+        for (std::size_t i = 1; i < frames.size(); ++i) {
+            if (frames[i].ms < 3000.0)
+                continue;
+            ++checked;
+            EXPECT_GE(frames[i].drawnBeat, frames[i - 1].drawnBeat)
+                << "the drawn dot never steps back at " << frames[i].ms;
+            moved += frames[i].drawnBeat > frames[i - 1].drawnBeat ? 1 : 0;
+        }
+        EXPECT_GT(checked, 100);
+        EXPECT_GE(moved, checked * 9 / 10) << "the drawn dot moves on nearly every frame";
+    }
+}
+
+TEST(AutomationLanesSnappedHold, ASnappedStepEasesOverTheGapWhenStepsComeFasterThanTheEase) {
+    namespace k = synth::ui::lane_key;
+    EXPECT_DOUBLE_EQ(k::snappedStepEaseMs(83.0), 83.0);
+    EXPECT_DOUBLE_EQ(k::snappedStepEaseMs(500.0), synth::ui::KeyedPointTween::kMs);
+    EXPECT_GT(k::snappedStepEaseMs(0.0), 0.0);
 }
 
 TEST(AutomationLanesSnappedHold, TheSnappedPaceIsCountedInGridStepsWhateverTheirSize) {

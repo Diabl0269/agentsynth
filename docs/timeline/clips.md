@@ -20,7 +20,7 @@ two or more units in `TimelineClipLaneInternal.h`:
 | Unit | Concern |
 |------|---------|
 | `TimelineClipLaneArea.cpp` | Ctor, `TimelineDoc` wiring, row/rect geometry, hit-testing, core `paint()` |
-| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting (each column folds every peak bucket under it), live-recording strip |
+| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting (each column folds every peak bucket under it; a lighter peak outline with a darker RMS body), live-recording strip |
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
 | `TimelineClipLaneKeyboard.cpp` | Clip keyboard mode: stepping/opening/moving the keyboard clip, its accent ring, its screen-reader description |
@@ -369,8 +369,8 @@ and then fired through the SAME `onClipDoubleClicked` hook a clip double-click u
 lands straight in the piano roll ready to draw notes.
 
 **Two Sections preferences** sit beside it (Preferences > Timeline), both read at use time: `timelineShowSectionsStrip`
-(default on) shows the [Sections strip](sections.md), and `timelineSectionsCoverOnDrop` (default off) makes placing a
-section cover the music where it lands instead of making room.
+(default on) shows the [Sections strip](sections.md), and `timelineSectionsCoverOnDrop` (default off) makes dropping a
+section cover the music where it lands instead of pushing it later.
 
 **Except when it spans the loop locators.** `locatorSpanForDoubleClick(clickedBeat)` is the pure
 rule: when the `timelineDoubleClickSpansLocators` preference is on (**default ON**), a transport is

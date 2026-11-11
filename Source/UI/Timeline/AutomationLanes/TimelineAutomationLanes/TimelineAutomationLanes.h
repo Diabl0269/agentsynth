@@ -151,6 +151,8 @@ public:
     int modulatorCount(synth::LaneId lane) const;
     /** Rows still fading out after their routing went. */
     int leavingModulatorCountForTest() const { return (int)leaving_.size(); }
+    /** What the `index`th leaving row draws in the header column while its gap closes, or nullptr. */
+    const juce::Component* leavingModulatorForTest(int index) const;
     /** The lane's `index`th modulator row / band, or nullptr. */
     ModulatorRow* modulatorRowFor(synth::LaneId lane, int index) const;
     ModulatorBand* modulatorBandFor(synth::LaneId lane, int index) const;
@@ -258,8 +260,10 @@ public:
     void setDrawShape(DrawShape shape);
     /** The one lane range across every lane. */
     LaneRangeSelection& getLaneRange() noexcept { return laneRange_; }
-    /** True while a lane range with width sits on a lane that is on screen. */
+    /** True while a lane range with width sits on a lane or a modulator band that is on screen. */
     bool hasLaneRange() const;
+    /** True while the lane range sits on lane `lane`'s own editor (never on a modulator band's amount curve). */
+    bool laneRangeIsOnLane(synth::LaneId lane) const;
     /** Stamps `shape` over the lane range (one undo step); false when nothing changed. */
     bool stampShapeOnLaneRange(DrawShape shape);
     /** Removes the points inside the lane range (one undo step); false when nothing changed. */
@@ -285,7 +289,13 @@ public:
     /** Fired when a drag or a key hold in any lane editor (modulator bands included) scrolled the shared view. */
     std::function<void()> onViewScrolledByDrag;
 
+    /** Called on every drag event of a lane or modulator-row reorder past its threshold, with the pointer's screen Y,
+     *  before the drag reads it: the owner scrolls the list the rows sit in when the pointer is at its edge. */
+    std::function<void(int screenY)> followReorderDrag;
+
 private:
+    /** The editor the lane range was begun on while it is still one of ours (lane or modulator band), else null. */
+    AutomationLaneEditor* laneRangeEditor() const;
     struct Bodies : juce::Component {
         Bodies();
     };
@@ -306,16 +316,30 @@ private:
         float to = 1.0f;
         float now = 1.0f;
     };
-    // A row and band whose routing is gone, fading out in a gap that shrinks from its height to nothing in its old
-    // place (before the lane's `slot`th remaining row). It lands as soon as both have finished: the gap's end
-    // (landBlockMotion) or the fade's end (leavingSweep_) deletes it, so no hidden row waits for the next sync.
+    // A picture of a lane block that left, drawn in its shrinking gap: it never reads the doc its lane is gone from.
+    class BlockPicture : public juce::Component {
+    public:
+        BlockPicture(juce::Image image, float scale);
+        void paint(juce::Graphics& g) override;
+
+    private:
+        juce::Image image_;
+        float scale_ = 1.0f;
+    };
+    // `area` of `parent` as it is drawn now, as a picture added to `parent` over it.
+    static std::unique_ptr<BlockPicture> pictureOf(juce::Component& parent, juce::Rectangle<int> area);
+    // A row and band whose routing is gone: the live row and band go at once, and pictures of them fade out in a gap
+    // that shrinks from its height to nothing in its old place (before the lane's `slot`th remaining row), cropped by
+    // it. A live row shrunk with the gap laid its controls out again every frame. It lands as soon as both
+    // have finished: the gap's end (landBlockMotion) or the fade's end (leavingSweep_) deletes it.
     struct LeavingModulator {
         synth::LaneId lane;
         int slot = 0;
         int height = 0;
+        bool shrinks = false; // false under Reduce Motion: the pictures only fade, where the row stood
         FoldTween presence{1.0f, 0.0f, 1.0f};
-        std::unique_ptr<ModulatorRow> row;
-        std::unique_ptr<ModulatorBand> band;
+        std::unique_ptr<BlockPicture> row;               // in the header column
+        std::unique_ptr<BlockPicture> band;              // in the lanes region
         std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
     };
     std::vector<std::unique_ptr<LeavingModulator>> leaving_;
@@ -331,16 +355,6 @@ private:
     };
     LeavingSweep leavingSweep_;
 
-    // A picture of a lane block that left, drawn in its shrinking gap: it never reads the doc its lane is gone from.
-    class BlockPicture : public juce::Component {
-    public:
-        BlockPicture(juce::Image image, float scale);
-        void paint(juce::Graphics& g) override;
-
-    private:
-        juce::Image image_;
-        float scale_ = 1.0f;
-    };
     // A lane block that left an open track (deleted, moved to another track, undone), shrinking away after `after` (the
     // lane above it that stayed; invalid for the top).
     struct LeavingLane {
@@ -485,7 +499,7 @@ private:
                          const juce::String& parameterName);
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
                            const juce::String& parameterName, bool growNewRows);
-    void wireBand(ModulatorBand& band) const;
+    void wireBand(ModulatorBand& band);
     void refreshModulatorAmounts(int visibleTop, int visibleBottom);
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();

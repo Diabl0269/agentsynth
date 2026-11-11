@@ -117,7 +117,7 @@
 552 Source/Modules/UnisonVoicing.h
 550 Source/UI/Layout/ContextMenuPlacement.h
 536 Source/UI/Layout/FocusRegion.h
-532 Source/UI/Layout/KeyGlide/KeyedTween.h
+562 Source/UI/Layout/KeyGlide/KeyedTween.h
 520 Source/Modules/Sampler/SamplerSampleData.h
 519 Source/Modules/Sampler/SamplerInstrument.h
 515 Source/UI/Layout/AutomatedMarker.h
@@ -128,8 +128,8 @@
 506 Source/Modules/Sampler/SamplerInstrumentSlot.h
 505 Source/Modules/Sampler/SamplerInstrumentHost.h
 501 Source/UI/Layout/ChevronTurn.h
-499 Source/UI/Layout/KeyGlide/KeyGlide.h
-498 Source/UI/Layout/KeyGlide/KeyGlideHost.h
+502 Source/UI/Layout/KeyGlide/KeyGlide.h
+502 Source/UI/Layout/KeyGlide/KeyGlideHost.h
 498 Source/UI/Layout/PointEditing/PointSelectionModel.h
 497 Source/UI/Layout/PointEditing/PointBoxSelect.h
 496 Source/Modules/Lfo/LfoCustomWave.h
@@ -138,7 +138,6 @@
 491 Source/UI/Layout/KeyGlide/KeyedPointTween.h
 489 Source/Modules/CardLayout.h
 488 Source/UI/Graph/CardWidgets/CardSegmentedSwitch.h
-486 Source/Modules/FX/ParametricEQModule.h
 485 Source/TestMode/TestModeStateSource.h
 483 Source/Project/DeferredAssetLoads.h
 482 Source/UI/Timeline/TimelineViewState.h
@@ -173,7 +172,6 @@
 430 Source/Modules/Sampler/SamplerRegionEdit.h
 430 Source/UI/Layout/EdgeResizeHandle.h
 429 Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h
-429 Source/UI/ModuleViews/FrequencyGrid.h
 427 Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h
 427 Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h
 427 Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.h
@@ -186,7 +184,6 @@
 425 Source/UI/Graph/CardBody/CardBlockFade.h
 425 Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentPickerRow.h
 425 Source/UI/Layout/NoteRangePicker/NoteRangePicker.h
-425 Source/UI/ModuleViews/EQCurveComponent.h
 425 Source/UI/ModuleViews/SampleWaveformComponent.h
 424 Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h
 424 Source/UI/Timeline/AutomationLanes/LaneTarget.h
@@ -196,7 +193,6 @@
 424 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
 423 Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h
 423 Source/UI/Layout/ExitEnterList/ExitEnterListMotion.h
-423 Source/UI/ModuleViews/EQWindow.h
 423 Source/UI/ModuleViews/ThresholdControlComponent.h
 422 Source/UI/ModuleViews/ScopeComponent.h
 422 Source/UI/ModuleViews/WavetableDisplayComponent.h

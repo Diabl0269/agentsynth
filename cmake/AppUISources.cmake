@@ -334,6 +334,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
     Source/UI/Layout/ReorderDrag/ReorderFramePump.h
     Source/UI/Layout/ReorderDrag/ReorderDragSession.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.cpp
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/ExitEnterRowSlots.h
@@ -767,6 +769,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModMatrixKeyboard.h
     Source/UI/Graph/ModMatrixPicker.cpp
     Source/UI/Graph/ModMatrixPicker.h
+    Source/UI/Layout/SwitchGlide.h
+    Source/UI/Layout/TagHue.cpp
+    Source/UI/Layout/TagHue.h
     Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.cpp
     Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.h
     Source/UI/Settings/SettingsTabs.cpp

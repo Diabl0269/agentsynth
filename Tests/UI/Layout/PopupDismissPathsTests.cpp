@@ -9,8 +9,10 @@
 #include "NativeWindowTestGuard.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthPopup.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -419,6 +421,163 @@ TEST_F(PopupDismissPaths, ADialogFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeact
 }
 
 } // namespace
+
+// ---- pickers: a real ModMatrixPicker in the box launchPopover opens ------------------------------------------------
+// A picker grows out of the row that opened it and shrinks back into it; the box's own background, arrow and shadow
+// scale with it, so the list never shrinks inside a full-size box. A popover whose content does not grow keeps the
+// rise.
+
+namespace {
+
+struct AnimationModeGuard {
+    explicit AnimationModeGuard(synth::ui::AnimationMode mode) { synth::ui::setAnimationMode(mode); }
+    ~AnimationModeGuard() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+};
+
+struct PickerRig {
+    PickerRig() {
+        std::vector<synth::ui::ModMatrixPicker::Item> items;
+        for (int i = 0; i < 20; ++i) {
+            synth::ui::ModMatrixPicker::Item item;
+            item.id = i + 1;
+            item.category = i < 10 ? "First" : "Second";
+            item.text = "Row " + juce::String(i);
+            items.push_back(item);
+        }
+        auto content = std::make_unique<synth::ui::ModMatrixPicker>("test", std::move(items), 0, [](int) {});
+        picker = content.get();
+        box = synth::ui::launchPopover(std::move(content), area, nullptr);
+        safeBox = box;
+    }
+    float contentScale() const { return scaleOf(picker); }
+    bool gone() const { return safeBox == nullptr; }
+
+    ~PickerRig() {
+        if (safeBox != nullptr)
+            safeBox->exitModalState(0); // a failed assertion must not leave the modal box behind
+    }
+
+    // How much of the box's own painting (background, arrow, shadow: the content is hidden) is there: the pixels the
+    // box painted offscreen as a window shows it.
+    int boxPaintedPixels() const {
+        juce::Image image(juce::Image::ARGB, box->getWidth(), box->getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        picker->setVisible(false);
+        box->paintEntireComponent(g, true);
+        picker->setVisible(true);
+        int painted = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+                painted += image.getPixelAt(x, y).getAlpha() > 0 ? 1 : 0;
+        return painted;
+    }
+
+    const juce::Rectangle<int> area{200, 200, 60, 22};
+    synth::ui::ModMatrixPicker* picker = nullptr;
+    juce::CallOutBox* box = nullptr;
+    juce::Component::SafePointer<juce::CallOutBox> safeBox;
+};
+
+} // namespace
+
+TEST_F(PopupDismissPaths, APickerGrowsOutOfWhatOpenedItAndItsBoxBackgroundGrowsWithIt) {
+    PickerRig rig;
+    ASSERT_NE(rig.box, nullptr);
+    ASSERT_TRUE(rig.picker->growsFromOpener());
+
+    PopupMotion::stepMotionForTest(*rig.box, 0.0);
+    EXPECT_LT(rig.contentScale(), 1.0f) << "the list starts small";
+    EXPECT_LT(rig.box->getAlpha(), 1.0f);
+    const int smallPainted = rig.boxPaintedPixels();
+
+    float previous = rig.contentScale();
+    for (const double fraction : {0.25, 0.5, 0.75}) {
+        PopupMotion::stepMotionForTest(*rig.box, synth::ui::popup_motion::kGrowInMs * fraction);
+        EXPECT_GE(rig.contentScale(), previous - 1e-4f) << "it only grows";
+        previous = rig.contentScale();
+    }
+    ASSERT_TRUE(pumpUntil([&] { return rig.box->getAlpha() >= 0.999f && !rig.picker->isTransformed(); }));
+    EXPECT_EQ(rig.contentScale(), 1.0f);
+    EXPECT_TRUE(rig.box->getLocalBounds().contains(rig.picker->getBounds()))
+        << "the settled box holds the whole list, not the 40% it started at";
+    const int wholePainted = rig.boxPaintedPixels();
+    ASSERT_GT(wholePainted, 0) << "the box paints a background of its own";
+    EXPECT_LT(smallPainted, wholePainted / 2)
+        << "the box background is scaled with the content (0.4 x 0.4 of the area)";
+
+    rig.box->keyPressed(escape());
+}
+
+TEST_F(PopupDismissPaths, APickerShrinksBackIntoItsOpenerOnEscapeAndLeavesOnce) {
+    PickerRig rig;
+    ASSERT_NE(rig.box, nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return rig.box->getAlpha() >= 0.999f && !rig.picker->isTransformed(); }));
+    const auto settledBounds = rig.box->getBounds();
+
+    ASSERT_TRUE(rig.box->keyPressed(escape()));
+    ASSERT_TRUE(PopupMotion::isDismissing(*rig.box));
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 0) << "the live window fades, no picture on top of it";
+    std::vector<Frame> frames;
+    for (const double fraction : {0.0, 0.25, 0.5, 0.75, 0.99}) {
+        PopupMotion::stepMotionForTest(*rig.box, synth::ui::popup_motion::kGrowOutMs * fraction);
+        frames.push_back({rig.box->getAlpha(), rig.contentScale()});
+        EXPECT_EQ(rig.box->getBounds(), settledBounds) << "the window itself does not move or resize";
+    }
+    EXPECT_GT(frames.front().alpha, 0.9f);
+    for (size_t i = 1; i < frames.size(); ++i) {
+        EXPECT_LE(frames[i].alpha, frames[i - 1].alpha + 1e-4f) << "only fainter, frame " << i;
+        EXPECT_LE(frames[i].scale, frames[i - 1].scale + 1e-4f) << "only smaller, frame " << i;
+    }
+    EXPECT_LT(frames.back().scale, 0.5f);
+    EXPECT_LT(frames.back().alpha, 0.5f);
+
+    rig.box->keyPressed(escape()); // a second Escape while it leaves does nothing
+    EXPECT_TRUE(pumpUntil([&] { return rig.gone(); }));
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 0) << "one Escape, one leave";
+}
+
+TEST_F(PopupDismissPaths, APickerOnlyFadesUnderReduceMotionAndAppearsAtOnceWhenAnimationsAreOff) {
+    {
+        synth::ui::setReducedMotionForTest(true);
+        PickerRig rig;
+        ASSERT_NE(rig.box, nullptr);
+        PopupMotion::stepMotionForTest(*rig.box, 0.0);
+        EXPECT_LT(rig.box->getAlpha(), 1.0f) << "a fade";
+        EXPECT_EQ(rig.contentScale(), 1.0f) << "and no scale";
+        rig.box->keyPressed(escape());
+        PopupMotion::stepMotionForTest(*rig.box, 40.0);
+        EXPECT_LT(rig.box->getAlpha(), 1.0f);
+        EXPECT_EQ(rig.contentScale(), 1.0f);
+        EXPECT_TRUE(pumpUntil([&] { return rig.gone(); }));
+    }
+    synth::ui::setReducedMotionForTest(std::nullopt);
+    {
+        const AnimationModeGuard off(synth::ui::AnimationMode::off);
+        PickerRig rig;
+        ASSERT_NE(rig.box, nullptr);
+        EXPECT_EQ(rig.box->getAlpha(), 1.0f) << "there at once";
+        EXPECT_EQ(rig.contentScale(), 1.0f);
+        rig.box->keyPressed(escape());
+        EXPECT_TRUE(pumpUntil([&] { return rig.gone(); }));
+    }
+}
+
+TEST_F(PopupDismissPaths, APopoverWhoseContentDoesNotGrowKeepsTheRise) {
+    auto content = std::make_unique<juce::Component>();
+    content->setSize(120, 60);
+    auto* raw = content.get();
+    auto* box = synth::ui::launchPopover(std::move(content), juce::Rectangle<int>(200, 200, 60, 22), nullptr);
+    ASSERT_NE(box, nullptr);
+    juce::Component::SafePointer<juce::CallOutBox> safe(box);
+    PopupMotion::stepMotionForTest(*box, 0.0);
+    const auto risen = box->getPosition();
+    EXPECT_FALSE(raw->isTransformed()) << "nothing scales";
+    EXPECT_LT(box->getAlpha(), 1.0f);
+    ASSERT_TRUE(pumpUntil([&] { return box->getAlpha() >= 0.999f; }));
+    EXPECT_NE(box->getPosition(), risen) << "the box rises into place";
+    box->keyPressed(escape());
+    EXPECT_TRUE(pumpUntil([&] { return safe == nullptr; }));
+}
 
 // ---- the suite never beeps -------------------------------------------------------------------------------------
 // A press outside a modal prompt makes JUCE play the system beep, and the tests above do that on purpose.

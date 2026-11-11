@@ -1,0 +1,24 @@
+# Jumping the transport on purpose (Return to Start, a loop locator, a marker) glides the drawn cursor to its target over
+# 160 ms instead of teleporting; the audio jumps at once.
+#
+# What a user does: opens a project, shows the timeline, then presses the Return to Start button and
+# watches the line travel to the start.
+#
+# The glide is on screen for 160 ms, so `glide` films it frame by frame. Test mode has no audio device, so the transport
+# never publishes a position and an applied locate never reaches the playhead: this scenario checks what a user can do
+# here (the click and the button) and what the playhead reports about its frames. The frame by frame check of the glide
+# itself is the gtest TimelinePlayheadGlideTest.AnArmedLocateDrawsTheOldPlaceThenGlidesAndLandsOnTheTargetAt160Ms.
+record: true
+save_project: playhead-locate-glide
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - getState: {id: timelinePlayhead}
+  - glide: {name: locate-glide, frames: 12, do: {click: {id: timelineTransportReturnToStart}}}
+  - wait: {}
+  - mark: {check: 1, name: locate-glide}
+  - getState: {id: timelinePlayhead}

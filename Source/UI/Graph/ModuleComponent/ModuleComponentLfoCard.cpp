@@ -338,11 +338,11 @@ int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int content
         x += buttonWidth + kLfoToolbarGap;
         lfoToolsButton->setBounds(x, y, buttonWidth, rowH);
     }
-    y += blockHeight(lfoFade_, kRowHeight + 2);
+    y += blockHeight(lfoFade_, kRowHeight + synth::cardbody::kBlockGap);
 
     if (apply)
         lfoCurveEditor->setBounds(contentX, y, contentW, blockHeight(lfoFade_, kLfoWaveGraphHeight));
-    y += blockHeight(lfoFade_, kLfoWaveGraphHeight + 8);
+    y += blockHeight(lfoFade_, kLfoWaveGraphHeight + synth::cardbody::kBlockGap);
 
     return y;
 }

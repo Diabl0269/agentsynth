@@ -470,6 +470,185 @@ class StalePixelCheckTests(unittest.TestCase):
                                                      "checkStalePixels"])
 
 
+class PopApp(FakeApp):
+    """Answers popWatchCheck from a script: one reply per check, in order (the last repeats)."""
+
+    def __init__(self, replies, **kwargs):
+        super().__init__(**kwargs)
+        self.replies = list(replies)
+
+    def call(self, cmd, timeout_ms=None, **args):
+        if cmd == "popWatchCheck":
+            self.calls.append((cmd, args))
+            return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+
+SETTLED = {"changed": False, "framesSeen": 3}
+POPPED = {"changed": True, "pop": True, "regionX": 1, "regionY": 2, "regionW": 30, "regionH": 40, "regionPixels": 900,
+          "framesSeen": 2, "intermediateFrames": 0}
+FADED = dict(POPPED, pop=False, intermediateFrames=4)
+
+
+def edit(reply, before=1, after=2):
+    return dict(reply, undoSerialBefore=before, undoSerialAfter=after)
+
+
+class PopCheckTests(unittest.TestCase):
+    MOTION = "motion: true\nsteps:\n"
+
+    def run_steps(self, text, app, known=None):
+        with tempfile.TemporaryDirectory() as out:
+            runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app,
+                                known_pops=known or {})
+            return runner.run(), out, runner
+
+    def names(self, app):
+        return [c[0] for c in app.calls]
+
+    def test_the_check_is_on_under_motion_and_off_without_it(self):
+        self.assertEqual(run.parse_scenario(self.MOTION + "  - wait: {}\n", "x").pop_check, {})
+        self.assertIsNone(run.parse_scenario("- wait: {}\n", "x").pop_check)
+        s = run.parse_scenario("motion: true\npop_check: {ignore: [caret], ms: 400, undo: false}\nsteps:\n  - wait: {}\n", "x")
+        self.assertEqual(s.pop_check, {"ignore": ["caret"], "ms": 400, "undo": False})
+
+    def test_turning_it_off_needs_a_reason(self):
+        text = "motion: true\npop_check: %s\nsteps:\n  - wait: {}\n"
+        self.assertIsNone(run.parse_scenario(text % '{off: "a text editor"}', "x").pop_check)
+        for bad in ["false", "{off: ''}", "{off: 3}", "{off: why, ms: 5}", "{nope: 1}", "{ms: -1}", "{undo: 2}", "{ignore: a}"]:
+            with self.assertRaises(run.ScenarioError, msg=bad):
+                run.parse_scenario(text % bad, "x")
+
+    def test_an_instant_step_needs_a_reason(self):
+        with self.assertRaises(run.ScenarioError):
+            run.parse_scenario(self.MOTION + "  - click: {id: a, instant: ''}\n", "x")
+
+    def test_a_watch_goes_around_each_action_that_can_change_the_window_and_only_those(self):
+        app = PopApp([SETTLED], states={"a": {"id": "a"}})
+        text = (self.MOTION + "  - click: {id: a}\n  - hover: {id: a}\n  - type: {text: x}\n  - wait: {}\n  - mouseDown: {id: a}\n"
+                "  - mouseMoveHeld: {id: a}\n  - mouseUp: {id: a}\n  - keyDown: {keys: right}\n  - keyUp: {}\n"
+                "  - expect: {id: a, exists: true}\n  - getState: {id: a}\n  - drag: {from: a, to: a}\n"
+                "  - wheel: {id: a, dy: 1}\n  - key: {keys: escape}\n")
+        (ok, message), out, _ = self.run_steps(text, app)
+        self.assertTrue(ok, message)
+        checked = [c[1]["dir"] for c in app.calls if c[0] == "popWatchCheck"]
+        self.assertEqual([os.path.basename(d) for d in checked],
+                         ["pop-step-01", "pop-step-07", "pop-step-09", "pop-step-12", "pop-step-13", "pop-step-14"])
+        self.assertEqual(self.names(app).count("popWatchStart"), 6)
+        # The watch starts before the action and the check comes after it.
+        self.assertEqual(self.names(app)[:3], ["popWatchStart", "click", "popWatchCheck"])
+        self.assertNotIn("instant", " ".join(self.names(app)))
+
+    def test_nothing_is_watched_without_the_option(self):
+        app = PopApp([POPPED])
+        (ok, _), _, _ = self.run_steps("- click: {id: a}\n", app)
+        self.assertTrue(ok)
+        self.assertEqual(self.names(app), ["click"])
+
+    def test_a_pop_on_an_unlisted_step_fails_with_the_region_and_the_folder(self):
+        app = PopApp([POPPED])
+        (ok, message), out, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n  - click: {id: b}\n", app)
+        self.assertFalse(ok)
+        self.assertIn("step 1", message)
+        self.assertIn("x 1 y 2 w 30 h 40", message)
+        self.assertIn(os.path.join(out, "pop-step-01"), message)
+        self.assertIn("step 2", message)  # the run goes on, so one run reports every pop
+
+    def test_a_fade_and_a_step_that_changes_nothing_pass(self):
+        app = PopApp([FADED, SETTLED])
+        (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n  - click: {id: b}\n", app)
+        self.assertTrue(ok, message)
+
+    def test_an_instant_step_may_pop_and_the_reason_is_not_sent_to_the_app(self):
+        app = PopApp([POPPED])
+        (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a, instant: a text value}\n", app)
+        self.assertTrue(ok, message)
+        self.assertIn(("click", {"id": "a"}), app.calls)
+
+    def test_a_known_pop_passes_and_says_so(self):
+        app = PopApp([POPPED])
+        known = {("demo", "1"): ("FRO9", "[timeline] swaps in one frame")}
+        with mock.patch("sys.stdout") as stdout:
+            (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n", app, known)
+        self.assertTrue(ok, message)
+        self.assertIn("known pop", "".join(c.args[0] for c in stdout.write.call_args_list))
+
+    def test_a_listed_step_that_no_longer_pops_passes_with_a_note_to_remove_it(self):
+        app = PopApp([FADED])
+        known = {("demo", "1"): ("FRO9", "[timeline] swaps")}
+        with mock.patch("sys.stderr") as stderr:
+            (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n", app, known)
+        self.assertTrue(ok, message)
+        self.assertIn("remove it from known-pops.txt", "".join(c.args[0] for c in stderr.write.call_args_list))
+
+    def test_a_listed_step_that_does_not_exist_or_is_not_checked_fails(self):
+        for label, steps in [("3", "  - click: {id: a}\n"), ("2", "  - click: {id: a}\n  - hover: {id: a}\n")]:
+            app = PopApp([POPPED])
+            (ok, message), _, _ = self.run_steps(self.MOTION + steps, app, {("demo", label): ("FRO9", "x")})
+            self.assertFalse(ok, label)
+            self.assertIn("known-pops.txt lists step %s" % label, message)
+            self.assertEqual(app.calls, [])
+
+    def test_undo_and_redo_are_checked_only_after_an_edit(self):
+        app = PopApp([SETTLED, edit(SETTLED), SETTLED, SETTLED])
+        (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n  - click: {id: b}\n", app)
+        self.assertTrue(ok, message)
+        buttons = [c[1]["id"] for c in app.calls if c[0] == "click" and c[1]["id"].endswith("Button")]
+        self.assertEqual(buttons, ["undoButton", "redoButton"])
+        dirs = [os.path.basename(c[1]["dir"]) for c in app.calls if c[0] == "popWatchCheck"]
+        self.assertEqual(dirs, ["pop-step-01", "pop-step-02", "pop-step-02u", "pop-step-02r"])
+
+    def test_a_pop_in_an_undo_fails_unless_that_step_is_listed(self):
+        replies = [edit(SETTLED), POPPED, SETTLED]
+        (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n", PopApp(replies))
+        self.assertFalse(ok)
+        self.assertIn("undo", message)
+        known = {("demo", "1u"): ("FRO9", "[graph] undo swaps"), }
+        (ok, message), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n", PopApp(replies), known)
+        self.assertTrue(ok, message)
+
+    def test_undo_checks_can_be_turned_off(self):
+        app = PopApp([edit(SETTLED)])
+        text = "motion: true\npop_check: {undo: false}\nsteps:\n  - click: {id: a}\n"
+        (ok, _), _, _ = self.run_steps(text, app)
+        self.assertTrue(ok)
+        self.assertEqual(self.names(app).count("click"), 1)
+
+    def test_without_an_undo_serial_undo_is_skipped_and_one_line_says_so(self):
+        app = PopApp([SETTLED])
+        with mock.patch("sys.stdout") as stdout:
+            (ok, _), _, _ = self.run_steps(self.MOTION + "  - click: {id: a}\n  - click: {id: b}\n", app)
+        self.assertTrue(ok)
+        self.assertEqual(self.names(app).count("click"), 2)
+        self.assertEqual("".join(c.args[0] for c in stdout.write.call_args_list).count("no undo serial"), 1)
+
+    def test_a_glide_is_watched_by_its_do_and_the_frames_are_still_filmed(self):
+        app = PopApp([SETTLED])
+        text = ("record: true\nmotion: true\nsteps:\n  - glide: {name: g, do: {click: {id: a}}, frames: 4, instant: why}\n"
+                "  - glide: {name: h, do: {hover: {id: a}}, frames: 4}\n")
+        with tempfile.TemporaryDirectory() as out:
+            runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app, known_pops={})
+            runner._glide = lambda args: {"do": next(iter(args["do"]))}
+            runner.recorder = None
+            ok, message = runner._run_steps()
+        self.assertTrue(ok, message)
+        self.assertEqual(self.names(app).count("popWatchStart"), 1)
+
+    def test_known_pops_file_parses_comments_and_refuses_a_malformed_line(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "k.txt")
+            with open(path, "w") as f:
+                f.write("# c\n\nsc 05u FRO1 [area] it pops\nsc 7 FRO2 reason\n")
+            self.assertEqual(run.load_known_pops(path), {("sc", "5u"): ("FRO1", "[area] it pops"), ("sc", "7"): ("FRO2", "reason")})
+            with open(path, "w") as f:
+                f.write("sc x FRO1 reason\n")
+            with self.assertRaises(run.ScenarioError):
+                run.load_known_pops(path)
+
+    def test_every_listed_scenario_in_the_shipped_file_exists(self):
+        self.assertEqual(run._stale_known_scenarios(), [])
+
+
 class ShotLoggingApp(DrawingApp):
     def call(self, cmd, timeout_ms=None, **args):
         if cmd == "screenshot":

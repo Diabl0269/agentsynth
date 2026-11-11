@@ -704,6 +704,7 @@ Its rows paint under these rules:
   an item's `searchText` adds words the row does not show.
   Test seams: `ModMatrixComponent::setPickerLauncherForTest` (capture the picker instead of launching a
   window) and `ModMatrixPicker::setSearchTextForTest`.
+  Every picker opens at the top of its list (the highlight only scrolls once the view has a height); `ModMatrixPickerFirstRowTests` builds every producer and a new producer joins that list.
 - **Labels follow the card title.** Every module in the source and destination combos is listed under
   `synth::moduleTitle` (`Source/AudioEngine/ModuleTitle.h`): the custom title the user gave the card,
   else the auto-numbered name ("LFO 3"). The 10 Hz tick compares a hash of every module title

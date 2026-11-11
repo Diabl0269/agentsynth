@@ -98,6 +98,7 @@ std::optional<ScreenFrame> captureScreenFrame(float scale, juce::String& error) 
         if (!shot.isValid())
             continue;
         const auto at = capture.screenBounds.getPosition() - canvas.getPosition();
+        g.setOpacity(capture.component->getAlpha()); // a popup mid-fade is drawn as faint as the user sees it
         g.drawImageAt(shot, juce::roundToInt((float)at.x * scale), juce::roundToInt((float)at.y * scale));
         frame.windows.push_back({windowId(*capture.component), capture.screenBounds.withPosition(at)});
     }

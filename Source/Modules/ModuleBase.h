@@ -906,10 +906,8 @@ public:
     // instead of setExtraState. Override it only when the state is pure data (no file, path or
     // other resource name) and parsing it clamps every value, e.g. the LFO's drawn Custom curve.
     virtual void setUntrustedExtraState(const juce::var& state) { juce::ignoreUnused(state); }
-    // Called at the end of AIStateMapper::applyParamsToProcessor, on the trusted and the untrusted path, with
-    // the node's whole "params" object. A module that dropped parameters (a pattern that moved into its state)
-    // reads the old keys here so old saves, presets and AI patches still load. Values come straight from the
-    // file or the model: clamp every one. A params object without the old keys must change nothing.
+    // Called after AIStateMapper::applyParamsToProcessor (trusted or not) with the node's whole "params", so a module
+    // that dropped parameters reads the old keys. Clamp every value; with no old keys, change nothing.
     virtual void adoptLegacyParams(const juce::NamedValueSet& params) { juce::ignoreUnused(params); }
     // Called on a module created from a stored node (a project, preset, snapshot or generated patch), after its
     // params are applied; `storedParams` is empty when the node has none. A module whose default moved puts the
@@ -922,6 +920,8 @@ public:
         juce::ignoreUnused(id);
         return false;
     }
+    // False for a parameter it keeps (saved, loaded, played) but no surface may offer yet: card, automation, AI, diff.
+    virtual bool isParameterExposed(const juce::String&) const { return true; }
 
     // Which optional panels this module's card has open (scope / response / spectrum). Message thread
     // only; never read by audio. Saved as the node's "cardView" key and, like "state", restored on the

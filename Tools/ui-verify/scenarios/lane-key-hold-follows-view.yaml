@@ -1,8 +1,8 @@
-# A held Alt+Right carried a lane dot out of sight past the right edge of the view; now the view jumps ahead each time
-# the dot would leave it.
+# A held Alt+Right carried a lane dot out of sight past the right edge of the view; now the view scrolls along with the
+# dot's drawn place, never jumping.
 #
 # What a user does: opens a project whose Cutoff lane has one point at beat 52, near the right edge of the view
-# (fixture lane-edge.agsproj), clicks it and holds Alt+Right: the view jumps ahead so the dot stays in sight. One Cmd+Z
+# (fixture lane-edge.agsproj), clicks it and holds Alt+Right: the view scrolls along so the dot stays in sight. One Cmd+Z
 # puts it back.
 record: true
 motion: true
