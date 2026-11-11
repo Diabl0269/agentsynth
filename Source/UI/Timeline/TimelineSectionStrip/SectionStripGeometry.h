@@ -156,6 +156,13 @@ inline juce::String blockTooltip(const juce::String& name, double lengthBeats, d
            commandKey + " + D)";
 }
 
+/** What a selected block's tooltip adds when `selected` blocks are selected; empty for one or none. */
+inline juce::String selectionTooltipSuffix(int selected, const juce::String& commandKey) {
+    if (selected < 2)
+        return {};
+    return ", " + juce::String(selected) + " selected: drag, Delete or " + commandKey + " + D acts on all";
+}
+
 /** The tooltip over a block's variation chip. */
 inline juce::String chipTooltip(const juce::String& letter, const juce::String& sectionName) {
     return "Variation " + letter + " of " + sectionName + ". Click to switch, add or play it everywhere.";

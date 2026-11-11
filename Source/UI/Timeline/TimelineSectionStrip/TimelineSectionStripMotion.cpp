@@ -86,15 +86,23 @@ void TimelineSectionStrip::paintBlockDrag(juce::Graphics& g) const {
         g.fillRect((float)xAtBeat(dragPlan_.landing) - kDropLineWidth * 0.5f, 0.0f, kDropLineWidth, (float)getHeight());
     }
 
-    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
-    auto rect = dragBlock_.bounds.withX(x).translated(0.0f, -kLiftRaisePx * lift);
-    juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2}).drawForRectangle(g, rect.toNearestInt());
     const auto nameFont = synth::theme::AppLookAndFeel::uiSemiBoldFont(11.0f);
     const juce::Font countFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 10.0f, juce::Font::plain));
     const float alpha = blockDragging_ ? kGhostAlpha : kGhostAlpha * lift;
-    paintBlock(g, dragBlock_, rect, alpha, nameFont, countFont);
-    g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha));
-    g.drawRect(rect, 1.0f);
+    const auto paintGhost = [&](const Block& block, juce::Rectangle<float> at) {
+        const auto rect = at.translated(0.0f, -kLiftRaisePx * lift);
+        juce::DropShadow(juce::Colours::black.withAlpha(0.35f * lift), 4, {0, 2})
+            .drawForRectangle(g, rect.toNearestInt());
+        paintBlock(g, block, rect, alpha, nameFont, countFont);
+        g.setColour((dragCopy_ ? colors.accent : colors.border).withAlpha(alpha));
+        g.drawRect(rect, 1.0f);
+    };
+    // The other members of a group drag ride back to back beside the pressed one, which is drawn last, on top.
+    for (std::size_t i = 0; i < dragMembers_.size(); ++i)
+        if (dragMembers_[i].block.id != dragBlock_.id)
+            paintGhost(dragMembers_[i].block, memberGhostRect(i));
+    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
+    paintGhost(dragBlock_, dragBlock_.bounds.withX(x));
 }
 
 } // namespace synth::ui

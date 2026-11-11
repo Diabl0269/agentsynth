@@ -19,6 +19,7 @@
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
 #include <algorithm>
 #include <cmath>
 
@@ -50,7 +51,8 @@ void TimelinePanelComponent::wirePianoRollLoopRequest() {
 }
 
 TimelinePanelComponent::TimelinePanelComponent()
-    : clipSizingButton_(std::make_unique<ClipSizingButton>())
+    : trackSelection_(std::make_unique<TrackSelectionModel>())
+    , clipSizingButton_(std::make_unique<ClipSizingButton>())
     , topBarKeys_(std::make_unique<KeyRing>(*this, [this] { return topBarStops(); })) {
     // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
