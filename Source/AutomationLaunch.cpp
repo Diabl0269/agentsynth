@@ -4,6 +4,7 @@
 
 #include "AutomationLaunch.h"
 #include "Auth/KeychainTokenStore.h"
+#include "Modules/Sampler/SoundPackLibrary.h"
 #include "UserSettings.h"
 
 namespace synth {
@@ -52,6 +53,10 @@ juce::String applySettingsDirForLaunch(const juce::StringArray& commandLineArgs)
     juce::File(dir).createDirectory();
     setSettingsDirOverride(dir);
     setAutomationUserFolders(commandLineArgs.contains(kAutomationFlag));
+    // A test run that was given its own SoundPacks folder sees only the packs in it (and downloads land there).
+    const auto packs = juce::File(dir).getChildFile("SoundPacks");
+    if (commandLineArgs.contains(kAutomationFlag) && packs.isDirectory())
+        synth::sampler::SoundPackLibrary::setOnlyRoot(packs);
     return dir;
 }
 

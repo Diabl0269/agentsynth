@@ -12,6 +12,10 @@
 
 void ModuleComponent::createSamplerControls() {
     synth::ui::InstrumentChrome::Host host{this, undoManager, &owner.getAudioEngine().getGraph(), {}};
+    host.openSoundPacks = [this] {
+        if (owner.drumKit.openSoundPacks)
+            owner.drumKit.openSoundPacks();
+    };
     if (auto* sampler = dynamic_cast<SamplerModule*>(module)) {
         instrumentChrome_ = std::make_unique<synth::ui::SamplerChrome>(host, *sampler);
     } else if (auto* kit = dynamic_cast<DrumKitModule*>(module)) {

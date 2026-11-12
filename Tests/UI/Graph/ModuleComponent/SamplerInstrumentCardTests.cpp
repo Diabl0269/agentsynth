@@ -174,7 +174,8 @@ TEST(SamplerInstrumentCard, ThePickerListsPackInstrumentsAndTheFileLoaders) {
     ASSERT_NE(list, nullptr);
     EXPECT_EQ(list->getVisibleRowNamesForTest(),
               (std::vector<juce::String>{"Built in", "Grand Piano", "Upright Piano", "Your files",
-                                         "Load an instrument file (.sfz)...", "Load recordings..."}));
+                                         "Load an instrument file (.sfz)...", "Load recordings...", "Get more",
+                                         "Get more sounds..."}));
     EXPECT_EQ(list->getVisibleItemDetailsForTest()[0], "Keys") << "the pack name sits dim under the instrument";
 }
 

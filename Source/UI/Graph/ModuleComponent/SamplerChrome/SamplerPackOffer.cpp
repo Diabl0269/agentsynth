@@ -54,7 +54,13 @@ SamplerPackOffer::SamplerPackOffer() {
 
 SamplerPackOffer::~SamplerPackOffer() { installer_->removeListener(this); }
 
-bool SamplerPackOffer::isNeeded() { return synth::sampler::SoundPackLibrary::listInstruments().empty(); }
+// The strip is about the core pack, so any other installed pack (the animals) leaves it showing.
+bool SamplerPackOffer::isNeeded() {
+    for (const auto& instrument : synth::sampler::SoundPackLibrary::listInstruments())
+        if (instrument.packId == kCorePackId)
+            return false;
+    return true;
+}
 
 void SamplerPackOffer::onDownloadClicked() {
     if (installer_->indexStatus() == Installer::IndexStatus::Loaded && installer_->row(kCorePackId))
