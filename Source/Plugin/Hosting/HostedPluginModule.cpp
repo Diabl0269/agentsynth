@@ -338,6 +338,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // the audio thread's acquire-load before it can see the pointer.
     activeInstance_.store(raw, std::memory_order_release);
     instanceParametersStale_.store(true, std::memory_order_relaxed);
+    modKnobReconcilePending_ = true;
 
     statusMessage_.clear();
 

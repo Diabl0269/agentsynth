@@ -10,6 +10,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -291,6 +292,9 @@ public:
      *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */
     std::optional<float> modSlotBase(const juce::String& paramId) const;
 
+    /** Message thread. True once per publish; the card then shows a knob for each bound mod slot lacking one. */
+    bool takeModKnobReconcile() noexcept { return std::exchange(modKnobReconcilePending_, false); }
+
     /** Message thread. Fired after a publish with the bound parameter ids the new instance does not
      *  have; the owner removes their cables. */
     std::function<void(const juce::StringArray& missingParamIds)> onModSlotsUnresolved;
@@ -516,6 +520,7 @@ private:
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
+    bool modKnobReconcilePending_ = false;
     bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared

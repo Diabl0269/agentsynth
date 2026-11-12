@@ -726,6 +726,7 @@ private:
     void relayoutHostedPluginCard();
     // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
     void refreshHostedLoadStatus(bool relayoutOnChange = true);
+    void reconcileHostedModKnobs();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
     // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);

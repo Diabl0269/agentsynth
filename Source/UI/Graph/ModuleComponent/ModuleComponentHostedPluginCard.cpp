@@ -11,6 +11,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
@@ -124,6 +125,7 @@ void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
     card_.repaint(); // the shown name can change when the plugin publishes
     if (card_.dualIOButton != nullptr)
         card_.dualIOButton->setVisible(module_.get() != nullptr && module_->hasStereoPairInstance());
+    card_.reconcileHostedModKnobs();
     card_.rebuildHostedPluginCard();
     card_.refreshHostedLoadStatus(); // a success clears the reason; it re-measures only when it changed
     card_.relayoutHostedPluginCard();
@@ -305,10 +307,34 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
 
     hostedCard_ = std::make_unique<HostedCardBinding>(*this, hosted, owner.getPluginCardLayoutStore());
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
-    if (hosted.hasInstance())
+    if (hosted.hasInstance()) {
+        reconcileHostedModKnobs();
         rebuildHostedPluginCard();
-    else
+    } else
         refreshHostedLoadStatus(/*relayoutOnChange*/ false); // createControls() ends with the measure
+}
+
+// Load-time reconciliation, once per publish (not a user edit, so no undo step): a project saved before a mod cable on
+// a plugin parameter always added its knob can hold a slot whose parameter is not on the card, so the cable would
+// end at nothing. Every such parameter gets its knob, through the same source bindHostedModTarget uses. That writes
+// this instance's layout override (the card only, never the plugin's shared default). The module's layout hook is
+// off while it runs: the caller rebuilds and re-measures right after, once.
+void ModuleComponent::reconcileHostedModKnobs() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || !hosted->hasInstance() || !hosted->takeModKnobReconcile())
+        return;
+
+    synth::ui::HostedCardLayoutSource source(*hosted, owner.getPluginCardLayoutStore(),
+                                             owner.getAudioEngine().getGraph(), nodeId, /*undoManager=*/nullptr);
+    auto onLayoutChanged = std::move(hosted->onCardLayoutChanged);
+    hosted->onCardLayoutChanged = nullptr;
+    for (int k = 0; k < synth::HostedPluginModule::kMaxModSlots; ++k) {
+        const auto paramId = hosted->modSlotParamId(synth::HostedPluginModule::kModChannelBase + k);
+        if (paramId.isNotEmpty() &&
+            source.parameterState(paramId) == synth::ui::HostedCardLayoutSource::ParameterState::Available)
+            source.showParameter(paramId);
+    }
+    hosted->onCardLayoutChanged = std::move(onLayoutChanged);
 }
 
 // The reason applies while there is no instance, no load is in flight and the module holds a message. It is
