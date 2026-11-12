@@ -7,6 +7,7 @@
 
 #include "../../TestWait.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -183,4 +184,70 @@ TEST(TimelineTrackVoiceToggleTest, TheToggleOfAHeaderThatIsStillArrivingLandsAtO
     EXPECT_TRUE(toggle.isVisible()) << "a toggle that goes later fades out first";
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
     EXPECT_FALSE(toggle.isVisible());
+}
+
+TEST(TimelineTrackVoiceToggleTest, PTogglesPolyOnAFocusedHeaderAndIsRebindable) {
+    Fixture f;
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead");
+    f.host.states[lead] = TrackPolyState::mono;
+    f.header()->refreshFromDoc();
+    const auto p = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+
+    EXPECT_TRUE(f.header()->keyPressed(p)) << "bare P with no manager installed";
+    ASSERT_EQ(f.host.requests.size(), 1u);
+    EXPECT_TRUE(f.host.requests[0].second);
+
+    ShortcutManager manager;
+    f.panel.setShortcutManager(&manager);
+    EXPECT_EQ(ShortcutManager::getCategory("trackHeaderTogglePoly"), ShortcutCategory::TrackHeader);
+    manager.setBinding("trackHeaderTogglePoly", juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(f.header()->keyPressed(p)) << "P was rebound away";
+    EXPECT_TRUE(f.header()->keyPressed(juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0)));
+    EXPECT_EQ(f.host.requests.size(), 2u);
+    f.panel.setShortcutManager(nullptr);
+}
+
+TEST(TimelineTrackVoiceToggleTest, PBubblesOnWhenTheTrackHasNoToggleSoLoopSelectionStillWorks) {
+    Fixture f;
+    f.doc.addTrack(TrackKind::Midi, "Lead"); // host answers none
+    EXPECT_FALSE(f.header()->keyPressed(juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0)));
+    EXPECT_TRUE(f.host.requests.empty());
+}
+
+TEST(TimelineTrackVoiceToggleTest, ThePressHintInTheTooltipFollowsTheBinding) {
+    Fixture f;
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead");
+    f.host.states[lead] = TrackPolyState::mono;
+    f.header()->refreshFromDoc();
+    EXPECT_TRUE(f.header()->getVoiceToggle().getTooltip().endsWith("(P)")) << f.header()->getVoiceToggle().getTooltip();
+}
+
+namespace {
+juce::Image renderToggle(synth::ui::TrackVoiceToggle& toggle) {
+    toggle.setBounds(0, 0, 18, 18);
+    juce::Image image(juce::Image::ARGB, 18, 18, true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    toggle.paintEntireComponent(g, false);
+    return image;
+}
+int differingPixels(const juce::Image& a, const juce::Image& b) {
+    int count = 0;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            count += a.getPixelAt(x, y) != b.getPixelAt(x, y) ? 1 : 0;
+    return count;
+}
+} // namespace
+
+TEST(TimelineTrackVoiceToggleTest, MonoPolyAndHalfPolyEachPaintTheirOwnLook) {
+    synth::ui::TrackVoiceToggle toggle;
+    toggle.setState(TrackPolyState::mono, "Lead");
+    const auto mono = renderToggle(toggle);
+    toggle.setState(TrackPolyState::poly, "Lead");
+    const auto poly = renderToggle(toggle);
+    toggle.setState(TrackPolyState::mixed, "Lead");
+    const auto mixed = renderToggle(toggle);
+    EXPECT_GT(differingPixels(mono, poly), 10);
+    EXPECT_GT(differingPixels(poly, mixed), 10) << "half poly is outlined, not filled";
+    EXPECT_GT(differingPixels(mono, mixed), 10);
 }

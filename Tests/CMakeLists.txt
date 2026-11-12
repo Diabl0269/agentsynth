@@ -143,6 +143,7 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceMuteSoloTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceSamplerVoiceCountTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
@@ -532,6 +533,7 @@ add_executable(Tests
     UI/Graph/CardNavigationTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
     Macros/MacroOwnerIndexTests.cpp
+    Macros/MacroPortRepairTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
     Macros/MacroContainer/MacroContainerInteractionTests.cpp

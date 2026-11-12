@@ -53,3 +53,27 @@ TEST_F(TrackVoiceToggleAppTest, PressingItOnAnInstrumentTrackSwitchesItsChainAnd
     EXPECT_EQ(toggle.getState(), TrackPolyState::mono) << "one undo step puts the whole chain back";
     EXPECT_FALSE(toggle.getToggleState());
 }
+
+TEST_F(TrackVoiceToggleAppTest, TheFocusedHeadersPKeyFlipsPolyAndOneUndoStepPutsItBack) {
+    mc->getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto* header = mc->getTimelinePanel().getTrackHeaderAt(mc->getTimelinePanel().getTrackHeaderCount() - 1);
+    ASSERT_NE(header, nullptr);
+    header->refreshFromDoc();
+    auto& toggle = header->getVoiceToggle();
+    ASSERT_TRUE(toggle.isVisible());
+    const auto pKey = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+
+    if (toggle.getState() == TrackPolyState::poly) {
+        ASSERT_TRUE(header->keyPressed(pKey));
+        synth::test::flushMessageQueue();
+    }
+    const auto before = toggle.getState();
+    EXPECT_EQ(before, TrackPolyState::mono);
+
+    EXPECT_TRUE(header->keyPressed(pKey)) << "the header claims P, so it never also loops the selection";
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(toggle.getState(), TrackPolyState::poly);
+
+    mc->getUndoManager().undo();
+    EXPECT_EQ(toggle.getState(), before) << "Cmd+Z undoes the P press in one step";
+}

@@ -136,6 +136,8 @@ public:
      * the user asks for by description (a card's own load) still goes ahead. Message thread. */
     void skipPluginForNextLoad(const juce::String& name, const juce::String& bundlePath);
     bool isSkippedForNextLoad(const juce::PluginDescription& description) const;
+    bool isSkippedForNextLoad(const PluginIdentity& identity) const;
+    void clearSkipFor(const PluginIdentity& identity);
     void clearSkippedPlugins() noexcept { skippedPlugins_.clear(); }
     bool hasSkippedPlugins() const noexcept { return !skippedPlugins_.empty(); }
 

@@ -66,6 +66,20 @@ public:
      */
     TrackPolyState trackPolyState(juce::AudioProcessorGraph::NodeID trackSource) const;
 
+    /** While alive, trackPolyState reads one cable index and one track-ownership map, built on its first call, instead
+     *  of building both per call (every header of a reconcile asks). Nothing may change the graph's nodes or cables,
+     *  or the tracks, while it is open. Scopes nest; the outermost one owns the batch. */
+    class StateBatch {
+    public:
+        explicit StateBatch(PolyChainController& controller);
+        ~StateBatch();
+        StateBatch(const StateBatch&) = delete;
+        StateBatch& operator=(const StateBatch&) = delete;
+
+    private:
+        PolyChainController& controller_;
+    };
+
     /** The header switch was clicked: the same plan, question and ONE undo step as polyPillClicked, started from the
      *  track's source node (which has no pill of its own, so nothing falls back to it). */
     void trackPolyClicked(juce::AudioProcessorGraph::NodeID trackSource, bool poly);
@@ -108,6 +122,9 @@ private:
 
     GraphEditor& editor_;
     int suppressJoin_ = 0;
+    struct Batch; // the open StateBatch's index and ownership map (PolyChainController.cpp)
+    int batchDepth_ = 0;
+    mutable std::unique_ptr<Batch> batch_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };
 

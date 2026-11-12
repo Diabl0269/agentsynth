@@ -50,6 +50,8 @@ const char* persistedName(ShortcutCategory category) {
         return "LayoutEditor";
     case ShortcutCategory::EQ:
         return "EQ";
+    case ShortcutCategory::TrackHeader:
+        return "TrackHeader";
     }
     return "";
 }

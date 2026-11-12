@@ -3,6 +3,7 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginDualIOTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginOutputsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginTitleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginEditorWindowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Plugin/HostedPluginLaneTests.cpp

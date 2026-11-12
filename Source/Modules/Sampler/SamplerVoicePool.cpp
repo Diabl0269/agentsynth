@@ -70,6 +70,14 @@ int VoicePool::activeVoiceCount() const {
     return (int)std::count_if(voices_.begin(), voices_.end(), [](const Voice& v) { return v.active; });
 }
 
+int VoicePool::heldNoteCount() const {
+    std::bitset<128> notes;
+    for (const auto& v : voices_)
+        if (v.active && !v.releaseVoice && v.stage != Stage::Release)
+            notes.set((size_t)v.note);
+    return (int)notes.count();
+}
+
 std::bitset<128> VoicePool::soundingNotes() const {
     std::bitset<128> notes;
     for (const auto& v : voices_)

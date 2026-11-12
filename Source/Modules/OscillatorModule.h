@@ -593,6 +593,9 @@ private:
         return glideCurveParam->getIndex() == 1 ? synth::GlideCurve::Exponential : synth::GlideCurve::Linear;
     }
     void clearPendingRestarts();
+    /** The Octave/Coarse/Fine knobs in semitones, added to each poly voice's pitch CV; 0 in Fixed rate mode, where
+     *  baseFrequencyHz() already applies them to the rate. */
+    float polyKnobSemitones() const;
     /** Adds a restart at sample `offset`, keeping `restartOffsets` sorted and free of duplicates; past
         kMaxRestartsPerBlock a further offset is dropped. `lead` is restartVoice's, for a gate edge. */
     void addRestartOffset(int offset, float lead = 0.0f);

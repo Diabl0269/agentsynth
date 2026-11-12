@@ -1,0 +1,47 @@
+# A module Cmd-dragged out of a macro and back in on a big project (20 tracks, 20 open macros, about 250 modules)
+# moves with the pointer: the tick that crosses the border and the drop do not stall, and each Cmd+Z glides back.
+#
+# Needs a big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check. The counters behind it are in MacroDragMembershipTests and ScaleHangTests.
+#
+# What a user does:
+#   1. Cmd-drags VCA 8 left out of its macro onto empty canvas and lets go: it leaves the macro.
+#   2. Cmd-drags it back onto its old spot inside the macro and lets go: it is a member again.
+#   3. Presses Cmd+Z: it is out again. Presses Cmd+Z once more: it is back at its first spot inside the macro.
+motion: true
+record: true
+save_project: large-project-macro-drag
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy"}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 860, y: 318, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 760, y: 322, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 660, y: 326, mods: cmd}
+  - glide: {name: cross-out, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseMoveHeld: {id: window, x: 540, y: 330, mods: cmd}}}
+  - mouseMoveHeld: {id: window, x: 440, y: 330, mods: cmd}
+  - glide: {name: drop-out, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseUp: {id: window, x: 420, y: 330, mods: cmd}}}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 1, name: dragged-out-of-macro}
+  - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 480, y: 330, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 560, y: 326, mods: cmd}
+  - glide: {name: cross-in, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseMoveHeld: {id: window, x: 660, y: 322, mods: cmd}}}
+  - mouseMoveHeld: {id: window, x: 800, y: 318, mods: cmd}
+  - glide: {name: drop-in, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseUp: {id: window, x: 885, y: 316, mods: cmd}}}
+  - wait: {}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 2, name: dragged-back-in}
+  - glide: {name: undo-in, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
+  - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
+  - glide: {name: undo-out, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
+  - expect: {id: "card:VCA 8", bounds: {x: 851, y: 312, w: 68, h: 43}, within_ms: 2000}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 3, name: two-undos-restore}

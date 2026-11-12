@@ -72,15 +72,6 @@ juce::String uuidOfNode(Graph& graph, NodeID id) {
     return node != nullptr ? node->properties["uuid"].toString() : juce::String();
 }
 
-NodeID nodeForUuid(Graph& graph, const juce::String& uuid) {
-    if (uuid.isEmpty())
-        return {};
-    for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == uuid)
-            return node->nodeID;
-    return {};
-}
-
 // Where a track's forward reach ends: a Channel Strip (another channel's terminus), Master, a Record Tap, an output.
 bool endsTrackReach(const juce::AudioProcessor* processor) {
     return processor == nullptr || isStrip(processor) || dynamic_cast<const MasterModule*>(processor) != nullptr ||
@@ -112,11 +103,37 @@ bool hasPolyParameter(const juce::AudioProcessor* processor) {
     return polyParameter(const_cast<juce::AudioProcessor*>(processor)) != nullptr;
 }
 
+int& polyTrackOwnerPassesForTest() noexcept {
+    static int passes = 0;
+    return passes;
+}
+
+PolyTrackOwners polyTrackOwners(Graph& graph, const ConnectionIndex& index, const std::vector<PolyTrackRef>& tracks) {
+    ++polyTrackOwnerPassesForTest();
+    std::map<juce::String, NodeID> byUuid; // the first node carrying each uuid, as a scan in node order finds it
+    for (auto* node : graph.getNodes())
+        if (const auto uuid = node->properties["uuid"].toString(); uuid.isNotEmpty())
+            byUuid.emplace(uuid, node->nodeID);
+    PolyTrackOwners owners;
+    for (int t = 0; t < (int)tracks.size(); ++t)
+        if (const auto found = byUuid.find(tracks[(size_t)t].sourceUuid); found != byUuid.end())
+            for (const auto id : reachFrom(graph, index, found->second))
+                owners[id].insert(t);
+    return owners;
+}
+
 PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::vector<PolyTrackRef>& tracks) {
+    if (graph.getNodeForId(clicked) == nullptr)
+        return {};
+    const ConnectionIndex index(graph);
+    return planPolyVoiceGraph(graph, clicked, tracks, index, polyTrackOwners(graph, index, tracks));
+}
+
+PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::vector<PolyTrackRef>& tracks,
+                                      const ConnectionIndex& index, const PolyTrackOwners& owners) {
     PolyVoiceGraphPlan plan;
     if (graph.getNodeForId(clicked) == nullptr)
         return plan;
-    const ConnectionIndex index(graph);
 
     // The voice graph: undirected, reaching but not expanding boundaries.
     std::vector<NodeID> voiceGraph{clicked};
@@ -134,14 +151,9 @@ PolyVoiceGraphPlan planPolyVoiceGraph(Graph& graph, NodeID clicked, const std::v
         }
     }
 
-    // Track ownership: node -> the tracks (by index) whose source reaches it.
-    std::map<NodeID, std::set<int>> owners;
-    for (int t = 0; t < (int)tracks.size(); ++t)
-        if (const auto source = nodeForUuid(graph, tracks[(size_t)t].sourceUuid); source.uid != 0)
-            for (const auto id : reachFrom(graph, index, source))
-                owners[id].insert(t);
-
-    const std::set<int> clickedTracks = owners.count(clicked) > 0 ? owners[clicked] : std::set<int>{};
+    // Track ownership (`owners`): node -> the tracks (by index) whose source reaches it.
+    const auto clickedOwners = owners.find(clicked);
+    const std::set<int> clickedTracks = clickedOwners != owners.end() ? clickedOwners->second : std::set<int>{};
     std::set<int> otherTracks;
     for (const auto id : voiceGraph) {
         if (!hasPolyParameter(processorFor(graph, id)))
@@ -241,6 +253,23 @@ void wirePolyMidi(Graph& graph, NodeID polyMidi, const std::vector<NodeID>& modu
     }
 }
 
+// A poly ADSR takes its gates from the Poly MIDI fan and never reads the raw MIDI at its MIDI input
+// (ADSRModule::processModuleBlock scans midiMessages only in its mono branch), so the direct `source -> ADSR` MIDI
+// cable is redundant once Poly MIDI feeds it and goes. Only that exact cable, only for an ADSR, only when Poly MIDI
+// really is wired in: the same source's cable to a mono module is another cable and stays. An Oscillator or Wavetable
+// is NOT dropped here: poly voice 0 still restarts on a raw note-on and falls back to the raw note's pitch
+// (OscillatorModule::scanMidi, WavetableOscillatorModule::scanMidi), so its raw cable is not provably redundant.
+// restoreRawMidi puts the cable back when the module goes mono again.
+void dropRedundantRawMidi(Graph& graph, NodeID source, NodeID polyMidi, const std::vector<NodeID>& modules) {
+    for (const auto module : modules) {
+        if (!isType(processorFor(graph, module), ModuleType::ADSR))
+            continue;
+        if (!graph.isConnected({{polyMidi, 8}, {module, 0}}))
+            continue;
+        graph.removeConnection({{source, Graph::midiChannelIndex}, {module, Graph::midiChannelIndex}});
+    }
+}
+
 void insertPolyMidi(Graph& graph, const std::vector<NodeID>& flipped, const PolyVoiceGraphOptions& options,
                     PolyVoiceGraphResult& result) {
     std::vector<NodeID> wantsMidi;
@@ -259,6 +288,7 @@ void insertPolyMidi(Graph& graph, const std::vector<NodeID>& flipped, const Poly
             result.addedPolyMidi.push_back(polyMidi);
         }
         wirePolyMidi(graph, polyMidi, group.modules);
+        dropRedundantRawMidi(graph, group.source, polyMidi, group.modules);
     }
 }
 

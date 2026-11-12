@@ -109,7 +109,8 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
             basePitchHz = pitchCVCache[v][(size_t)ns - 1];
         }
         if (basePitchHz < 20.0f && v == 0)
-            basePitchHz = getTargetFrequency();
+            basePitchHz =
+                440.0f * std::pow(2.0f, (voices[0].lastMidiNote - 69.0f) / 12.0f); // the knobs apply at render
         if (basePitchHz < 20.0f) {
             voices[v].active = false;
             continue;
@@ -168,7 +169,9 @@ void OscillatorModule::renderPolyVoice(int voice, float* output, float* outputR,
 void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* outputR, int numSamples, float basePitchHz,
                                              const PolyVoiceSettings& set) {
     const int ns = std::min(numSamples, 4096);
-    const float freq = juce::jlimit(minRenderHz(), 20000.0f, basePitchHz);
+    const float knobShift = polyKnobSemitones();
+    const float freq = juce::jlimit(minRenderHz(), 20000.0f,
+                                    knobShift != 0.0f ? basePitchHz * std::pow(2.0f, knobShift / 12.0f) : basePitchHz);
     const float baseDt = freq / (float)currentSampleRate;
     const int wf = waveformParam->getIndex();
     const int unisonCount = unisonMix.renderCount;
@@ -222,6 +225,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
     const float minHz = minRenderHz();
+    const float knobShift = polyKnobSemitones();
 
     // Each unison voice's detune ratio is a block constant, so never per sample
     float ratios[MAX_UNISON];
@@ -235,7 +239,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
             restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead, s);
         const int idx = std::min(s, ns - 1);
 
-        float extraPitchShift = 0.0f;
+        float extraPitchShift = knobShift;
         if (polyCV.octave)
             extraPitchShift += std::round(octaveCVCache[idx] * 4.0f) * 12.0f;
         if (polyCV.coarse)

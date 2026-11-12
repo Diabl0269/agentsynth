@@ -38,6 +38,7 @@ table, `DrumKitModulePads.cpp` for the message thread, `DrumKitModulePadAudio.cp
   - All of it is written only when the table differs from the defaults, so an untouched kit saves what it saved before.
   - Everything is clamped on read, and a file pad without a file reads as a built-in pad.
   - File pads decode on `DeferredAssetLoads` while a project opens.
+- **Status bar count.** A recorded hit counts as a voice until its sound ends (`displayVoiceCount` reads the recorded pool's active voices): a drum one-shot's tail is the sound and Note-Off is ignored, so there is no held key to follow. This differs on purpose from the Sampler, Pluck and Mallet, which count keys held ([`sampler-instruments.md`](sampler-instruments.md)).
 - **Threads.** The table and the decoded samples reach the audio thread as one immutable `PadSnapshot` under a
   try-lock (as with `InstrumentPlayer`). Replaced snapshots and samples wait in message-thread lists until the audio
   thread lets go of them.

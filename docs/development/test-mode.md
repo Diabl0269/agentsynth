@@ -60,6 +60,7 @@ thread is never blocked and timers and animations run in between.
 | `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created. `id: "screen"` is what a user sees (see [Screen frame](#screen-frame)) and also answers `windows` and `pointer` |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
+| `skipPluginForNextLoad` | `name`, `bundlePath?` | `{name}`; what answering "Open without it" at launch does (an automation launch never asks): that plugin is switched off for the next `openProject` only, so its card is a placeholder with a Turn on button |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
@@ -187,7 +188,7 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
   `ignore: [ids]` (components that change on their own; the toolbar's Undo and Redo buttons are always ignored), `ms` and `undo: false`.
 - `instant: "<reason>"` in a step's arguments (in a `glide`, beside `do`) lets that step pop: a deliberately instant
   change of text, a value, a selection or a caret. The reason is required and is not sent to the app.
-- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
+- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes (after a step that is itself an undo, Cmd+Z or the Undo button, it redoes and then undoes, so the step stays undone), each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
   `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
   `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
   answers they are skipped and one line says so. The click takes focus, so a name field an edit opened (a new
@@ -242,7 +243,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `type: {text, target?}` | one `key` per character, each sent to `target` when given (a text field of another window, e.g. `name` in the Save Snippet dialog) |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
-| `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
+| `copyFixture: {name, from?}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy; `from` (`~` expanded) copies a bundle outside the repository instead, such as the private Load test project, without its autosave sidecars, and fails the step when it is missing |
 | `screenshot: {id?, name}` | saves `<name>.png` in the output folder (default id `window`) |
 | `expect: {id, field: value, ...}` | equality on `getState` fields |
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
@@ -294,6 +295,12 @@ takes no frame of its own after the command, films `frames` screen frames back t
 into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part of the frame that moves, two to a row).
 Then `wait`, and put the `mark` on the landed state, never mid-motion. Start the clip in the state the check starts from
 and end the scenario in it too, so the `save_project` bundle opens there. Read the strip before attaching the clip.
+
+A check of a static state (a selected dot, a tag's position) puts its mark right after the click that changes the screen
+(click the dot, open the picker). With `record`, a `click` first films the pointer approaching: four `hover` frames
+from 60 px up-left of the click point, 0.1 s each (`approach: false` on the step skips it; a click point outside the
+main window is sent as it is), so the clip holds the before, the approach and the after, which the review needs at least
+four distinct frames of. If there is truly nothing to see, the review says why there is no video.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an

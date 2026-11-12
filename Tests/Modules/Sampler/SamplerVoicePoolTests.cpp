@@ -462,3 +462,61 @@ TEST(SamplerVoicePoolTest, MonoStrikesAFreshNoteWhenTheKeyIsOutsideTheSoundingRe
     EXPECT_NEAR(out.left.back(), 0.6f, 1.0e-3f) << "the old recording faded out, the new one plays alone";
     EXPECT_EQ(rig.pool.activeVoiceCount(), 1);
 }
+
+// The status bar number: notes held (key or pedal), never a fade-out, a note's layers once.
+TEST(SamplerVoicePoolTest, TwoSequentialNotesNeverCountTwoHeldNotes) {
+    Rig rig(dcInstrument());
+    const auto p = defaults();
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 512, p);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 1);
+    rig.pool.noteOff(60, p);
+    rig.pool.noteOn(64, 0.8f, p); // the first note is still fading out
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 2) << "the real count (voice limit) still includes the fade";
+    EXPECT_EQ(rig.pool.heldNoteCount(), 1);
+}
+
+TEST(SamplerVoicePoolTest, AHeldChordOfThreeCountsThree) {
+    Rig rig(dcInstrument());
+    const auto p = defaults();
+    for (int n : {60, 64, 67})
+        rig.pool.noteOn(n, 0.8f, p);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 3);
+}
+
+TEST(SamplerVoicePoolTest, TheLayersOfOneNoteCountOnce) {
+    Rig rig(makeInstrument({makeRegion(dcSample(0.2f)), makeRegion(dcSample(0.3f))}));
+    const auto p = defaults();
+    rig.pool.noteOn(60, 0.8f, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 2);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 1);
+}
+
+TEST(SamplerVoicePoolTest, PedalHeldNotesStillCountUntilThePedalLifts) {
+    Rig rig(dcInstrument());
+    const auto p = defaults();
+    rig.pool.sustainPedal(true, p);
+    rig.pool.noteOn(60, 0.8f, p);
+    rig.pool.noteOn(64, 0.8f, p);
+    rig.pool.noteOff(60, p);
+    rig.pool.noteOff(64, p);
+    render(rig.pool, 4096, p);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 2);
+    rig.pool.sustainPedal(false, p);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 0) << "a fade-out is not counted";
+    render(rig.pool, 44100, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 0);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 0);
+}
+
+TEST(SamplerVoicePoolTest, AfterNoteOffTheHeldCountIsZeroAndTheRealCountFollowsOnceReleased) {
+    Rig rig(dcInstrument());
+    const auto p = defaults();
+    rig.pool.noteOn(60, 0.8f, p);
+    render(rig.pool, 512, p);
+    rig.pool.noteOff(60, p);
+    EXPECT_EQ(rig.pool.heldNoteCount(), 0);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 1) << "still fading";
+    render(rig.pool, 44100, p);
+    EXPECT_EQ(rig.pool.activeVoiceCount(), 0);
+}

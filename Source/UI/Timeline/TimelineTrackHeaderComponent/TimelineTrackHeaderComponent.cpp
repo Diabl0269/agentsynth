@@ -335,7 +335,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     const auto polyState =
         host_ != nullptr && !isSectionHeader() ? host_->getTrackPolyState(trackId_) : TrackPolyState::none;
     if (polyState != TrackPolyState::none)
-        voiceToggle_.setState(polyState, t->name);
+        voiceToggle_.setState(polyState, t->name, bindingText("trackHeaderTogglePoly", plainKey('p')));
     if (voiceToggleFade_.isShown() != (polyState != TrackPolyState::none)) {
         setControlShown(voiceToggleFade_, polyState != TrackPolyState::none, arriving_);
         resized(); // the toggle shares the bottom row with the binding chip
@@ -557,6 +557,12 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     // I flips an audio track's monitoring like its speaker button; elsewhere the key is left to bubble.
     if (monitorButton_.isVisible() && matchesAction(key, "timelineMonitorFocusedTrack", plainKey('i'))) {
         toggleMonitor();
+        return true;
+    }
+    // P flips this row's Poly voice toggle, the same request as a click on it; a row with no toggle lets P bubble
+    // to the panel's loop-selection key.
+    if (voiceToggle_.isVisible() && matchesAction(key, "trackHeaderTogglePoly", plainKey('p'))) {
+        voiceToggle_.press();
         return true;
     }
     // Cmd+D copies THIS row below itself. Claimed here, ahead of the app-wide Cmd+D (duplicate the

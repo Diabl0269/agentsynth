@@ -5,6 +5,7 @@
 //   --gtest_filter=UiVerifyFixture.DISABLED_WritesMacrosProject
 
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
+#include "../fixtures/saved-project/SavedProjectFixture.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -88,6 +89,18 @@ TEST_F(UiVerifyFixture, DISABLED_WritesMacrosProject) {
     bundle.getParentDirectory().createDirectory();
     ASSERT_TRUE(mc.saveProjectForTest(bundle));
     ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle));
+}
+
+// Tools/ui-verify/fixtures/macro-port-widgets.agsproj: the saved-project fixture with port widgets saved at the canvas
+// origin (folded, nested and open track macros with an inlet and an outlet each, plus a stray inlet and outlet no
+// macro lists); the macro-port-widgets scenario opens it.
+//   --gtest_filter=UiVerifyFixture.DISABLED_WritesMacroPortWidgetsProject
+TEST_F(UiVerifyFixture, DISABLED_WritesMacroPortWidgetsProject) {
+    synth::test::SavedProjectFixture project(/*withPortWidgets=*/true);
+    ASSERT_TRUE(project.wasSaved());
+    const auto bundle = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("macro-port-widgets.agsproj");
+    bundle.deleteRecursively();
+    ASSERT_TRUE(project.bundle().copyDirectoryTo(bundle));
 }
 
 TEST_F(UiVerifyFixture, TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro) {

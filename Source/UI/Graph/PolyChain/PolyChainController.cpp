@@ -7,6 +7,7 @@
 #include "AudioEngine/ConnectionIndex.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 #include <algorithm>
@@ -22,8 +23,24 @@ bool isPolyMidiNode(juce::AudioProcessor* processor) {
 }
 } // namespace
 
+struct PolyChainController::Batch {
+    std::vector<synth::PolyTrackRef> tracks;
+    synth::ConnectionIndex index;
+    synth::PolyTrackOwners owners;
+};
+
 PolyChainController::PolyChainController(GraphEditor& editor)
     : editor_(editor) {}
+
+PolyChainController::StateBatch::StateBatch(PolyChainController& controller)
+    : controller_(controller) {
+    ++controller_.batchDepth_;
+}
+
+PolyChainController::StateBatch::~StateBatch() {
+    if (--controller_.batchDepth_ == 0)
+        controller_.batch_.reset();
+}
 
 PolyChainController::~PolyChainController() { *alive_ = false; }
 
@@ -37,8 +54,19 @@ void PolyChainController::trackPolyClicked(NodeID trackSource, bool poly) {
 
 TrackPolyState PolyChainController::trackPolyState(NodeID trackSource) const {
     auto& graph = editor_.getAudioEngine().getGraph();
-    const auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
-    const auto plan = synth::planPolyVoiceGraph(graph, trackSource, tracks);
+    if (graph.getNodeForId(trackSource) == nullptr)
+        return TrackPolyState::none;
+    if (batchDepth_ > 0 && batch_ == nullptr) {
+        auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
+        synth::ConnectionIndex index(graph);
+        auto owners = synth::polyTrackOwners(graph, index, tracks);
+        batch_.reset(new Batch{std::move(tracks), std::move(index), std::move(owners)});
+    }
+    const auto plan =
+        batch_ != nullptr
+            ? synth::planPolyVoiceGraph(graph, trackSource, batch_->tracks, batch_->index, batch_->owners)
+            : synth::planPolyVoiceGraph(graph, trackSource,
+                                        trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{});
     int poly = 0;
     int mono = 0;
     for (const auto id : plan.thisTrackNodes) {
@@ -141,11 +169,23 @@ void PolyChainController::commit(const std::vector<NodeID>& nodes, bool poly) {
         editor_.updateComponents();
     };
 
+    // The same bracket undo and redo use (AppUndoManager::applyHistoryStep): the card the click adds grows in, the one
+    // it removes shrinks away, and the cables it adds or removes grow out of and pull back into their jacks, so a
+    // Poly click moves like Cmd+Z of it does (docs/layout/undo-glide.md). The Scope outlives the change and closes
+    // after it; reduced motion and Animations Off are decided inside the shared helpers.
+    const auto cablesBefore = editor_.snapshotCablesForRetract();
+    const auto hullsBefore = editor_.snapshotPaintedHulls();
+    {
+        CardGlideAnimator::Scope glideScope(editor_.getCardGlide(), /*restore=*/true);
+        auto* undo = editor_.getUndoManager();
+        if (undo != nullptr)
+            undo->recordGraphAndMacroChange(graph, editor_.getMacros(), change);
+        else
+            change();
+        editor_.retractCablesGoneSince(cablesBefore, /*growAdded=*/true);
+        editor_.glideHullsFrom(hullsBefore);
+    }
     auto* undo = editor_.getUndoManager();
-    if (undo != nullptr)
-        undo->recordGraphAndMacroChange(graph, editor_.getMacros(), change);
-    else
-        change();
     announce(changed, poly, undo != nullptr ? undo->getEditSerial() : 0);
     if (onVoiceGraphChanged)
         onVoiceGraphChanged();

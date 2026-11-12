@@ -67,10 +67,13 @@ public:
     /** Strings still sounding (held or ringing out); exposed for tests. */
     int activeVoiceCount() const noexcept;
 
+    /** Strings/bars whose key is still down: what the status bar shows (a tail fading out is not counted). */
+    int heldVoiceCount() const noexcept;
+
     int displayVoiceCount() const noexcept override { return publishedVoices_.load(std::memory_order_relaxed); }
 
 private:
-    std::atomic<int> publishedVoices_{0}; // activeVoiceCount() as of the end of the last block
+    std::atomic<int> publishedVoices_{0}; // heldVoiceCount() as of the end of the last block
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
                                         float skew = 1.0f,
                                         std::optional<juce::AudioParameterFloatAttributes> attributes = std::nullopt);

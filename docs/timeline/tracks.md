@@ -560,13 +560,21 @@ at once: the same plan, the same question when other tracks' modules would chang
   button, like the show-module and drum buttons; every child of the header stays inside it and none overlap at any row
   height (`TimelineTrackHeaderRowFitTests.cpp` sweeps heights, widths and control sets).
 - **Keyboard and screen reader.** A Tab stop (Return or Space presses it) that leaves focus on the row when clicked, with
-  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly).
+  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly). With the
+  row (or the toggle) focused, **P** (`trackHeaderTogglePoly`, rebindable, Track Header category, [shortcuts](../control/shortcuts.md#timeline))
+  presses it; the tooltip ends with the key's current text. P sits in its own category so it does not collide with the
+  Timeline's bare P (loop selection); a row with no toggle lets P bubble to loop selection.
+- **Why this icon.** Ableton Live and Bitwig have no per-track poly control (voices are a device setting), so there is
+  no convention to copy; a note head against a stack of note heads reads as "one note or a chord" without a word, and
+  the old two-word Mono | Poly switch could not show "Mono" in the 168 px minimum header width.
 - **Staying current.** A pill click, the toggle and an undo all end in a header refresh
   (`PolyChainController::onVoiceGraphChanged`, `reconcileTimelineAfterGraphChange`), so the toggle and the cards never
   disagree. The toggle fades in and out with the chip row ([header chips fade](#header-chips-fade)).
 
 Tests: `Tests/UI/Timeline/TimelineTrackVoiceToggleTests.cpp` (the header, against a stub host),
-`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height) and
+`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height, no part's words
+clipped at the narrowest width), `Tests/App/MainComponent/MainComponentTrackVoiceToggleTests.cpp` (P and a click end to
+end, one undo step) and
 `Tests/UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp` (the voice-graph switch from a track source).
 
 ## Routing from the side pane

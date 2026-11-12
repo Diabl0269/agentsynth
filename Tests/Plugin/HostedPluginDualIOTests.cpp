@@ -163,7 +163,7 @@ TEST(HostedPluginDualIOTest, DualOffCollapsesAStereoPluginToOneAudioJackOwningBo
 
     // The raw legs the cables and the mixer channel use do not move.
     EXPECT_EQ(module->rightAudioLegChannel(), 1);
-    EXPECT_EQ(module->getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels);
+    EXPECT_EQ(module->getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginOutputChannels);
 }
 
 TEST(HostedPluginDualIOTest, TheToggleOnlyTouchesTheSideThatHasExactlyTwoChannels) {

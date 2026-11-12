@@ -2,7 +2,9 @@
 
 Frames come from the app's own `screenshot` command (id `screen`: the main window with every other window of the app,
 such as a menu, a call-out or the shape editor window, and the pointer), so recording needs no Screen Recording
-permission and works while the window is hidden. The protocol answers one command at a time, so a recorded drag is sent as its press, moves and
+permission and works while the window is hidden. A recorded `click` is preceded by a short pointer approach (four
+`hover` frames at DRAG_HOLD_SECONDS, see Runner._recorded_approach), so a proof clip of a static state holds distinct
+frames. The protocol answers one command at a time, so a recorded drag is sent as its press, moves and
 release with a frame after each move (see Runner._recorded_drag), and plays back at DRAG_HOLD_SECONDS per frame.
 """
 

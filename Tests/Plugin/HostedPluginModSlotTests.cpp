@@ -65,7 +65,7 @@ struct Fixture {
 
     // One block with `cv` on `channel` (every other input silent), the way the graph hands the node its CV.
     void render(int channel, float cv) {
-        juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels + HostedPluginModule::kMaxModSlots,
+        juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels + HostedPluginModule::kMaxModSlots,
                                         kBlockSize);
         buffer.clear();
         if (channel >= 0)
