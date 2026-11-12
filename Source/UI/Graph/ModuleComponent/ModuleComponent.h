@@ -597,9 +597,8 @@ private:
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
-    std::unique_ptr<juce::Label> hostedStatusLabel; // Hosted Plugin: why the load failed, under Open Editor
-    // Hosted Plugin: "Turn on", under the status label while the plugin is switched off after a crash
-    std::unique_ptr<juce::TextButton> turnPluginBackOnButton;
+    std::unique_ptr<juce::Label> hostedStatusLabel;           // Hosted Plugin: why the load failed, under Open Editor
+    std::unique_ptr<juce::TextButton> turnPluginBackOnButton; // Hosted Plugin: "Turn on", after a crash switched it off
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
@@ -724,8 +723,7 @@ private:
     void unbindHostedPluginCard(bool paramsAlive);
     // detachFromProcessor()'s half: leaves the module's observers and unbinds; safe after the module is gone.
     void releaseHostedPluginCard();
-    // Re-measures the card and asks the canvas to accept its new size.
-    void relayoutHostedPluginCard();
+    void relayoutHostedPluginCard(); // re-measures the card and asks the canvas to accept its new size
     // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
     void refreshHostedLoadStatus(bool relayoutOnChange = true);
     void reconcileHostedModKnobs();
