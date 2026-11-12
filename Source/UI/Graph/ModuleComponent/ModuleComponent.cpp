@@ -8,6 +8,7 @@
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
+#include "ModuleComponentJackMemo.h"
 #include "ModuleComponentModChip.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"
@@ -403,6 +404,7 @@ void ModuleComponent::detachFromProcessor() {
     eqPopOutButton.reset();
     openPluginEditorButton.reset();
     hostedStatusLabel.reset();
+    turnPluginBackOnButton.reset();
     keyboardComponent.reset();
     // Same reasoning: the threshold control times itself and holds a reference to the module.
     thresholdControl = nullptr;

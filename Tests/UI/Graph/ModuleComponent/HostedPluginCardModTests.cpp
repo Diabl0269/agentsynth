@@ -7,6 +7,7 @@
 #include "../../../StubPluginInstance.h"
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "../ModMatrixPickerFirstRow.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
@@ -574,4 +575,103 @@ TEST(HostedPluginCardModTest, EveryPortPanelRowNamesItsDestinationLikeTheModMatr
     }
     EXPECT_EQ(compared, 2) << "the plugin slot and the Filter's Cutoff knob";
     EXPECT_GE(plain, 1);
+}
+
+// ---- A project saved before a cable always added its knob (bug kind: real-project)
+// ---------------------------
+
+namespace {
+
+// A project JSON whose LFO is cabled to a plugin parameter that is not on the card: made by cabling "p2" (on the card)
+// and then pointing the saved mod slot at "p9" (off it), which is the shape an older build wrote.
+juce::var legacyProjectJson(const juce::String& paramId) {
+    PluginCanvas source;
+    source.dropCableAt(source.knobPoint("p2"));
+    juce::var json = synth::AIStateMapper::graphToJSON(source.engine.getGraph());
+    for (auto& node : *json.getProperty("nodes", {}).getArray())
+        if (node.getProperty("type", {}).toString() == "Hosted Plugin")
+            (*node.getProperty("state", {}).getProperty("modSlots", {}).getArray())[0].getDynamicObject()->setProperty(
+                "paramId", paramId);
+    return json;
+}
+
+struct LoadedLegacyCanvas : CardCanvas {
+    StubBackend backend;
+    HostedPluginModule* hosted = nullptr;
+    NodeID pluginId;
+
+    bool hasKnob(const juce::String& paramId) {
+        auto* plugin = card(pluginId);
+        if (plugin == nullptr)
+            return false;
+        for (auto* child : plugin->getChildren())
+            if (child->getComponentID() == "hostedKnob:" + paramId)
+                return true;
+        return false;
+    }
+
+    LoadedLegacyCanvas(const juce::var& json, bool instanceBeforeCards) {
+        backend.setFactory(
+            [] { return std::make_unique<StubPluginInstance>(2, 2, "Mod Plugin", 0xC0DE02, "VST3", tenParams()); });
+        synth::HostedPluginBackend::ScopedDefault installed(&backend);
+        EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, engine.getGraph(), /*clearExisting=*/true,
+                                                           /*trusted=*/true));
+        for (auto* node : engine.getGraph().getNodes())
+            if (auto* plugin = dynamic_cast<HostedPluginModule*>(node->getProcessor())) {
+                hosted = plugin;
+                pluginId = node->nodeID;
+            }
+        EXPECT_NE(hosted, nullptr);
+        if (instanceBeforeCards)
+            EXPECT_TRUE(pumpUntil([this] { return hosted->hasInstance(); }));
+        editor.updateComponents();
+        EXPECT_TRUE(pumpUntil([this] { return hosted->hasInstance(); }));
+        pumpUntil([] { return false; }, 50);
+    }
+
+    bool cableEndsOnAKnob() {
+        for (const auto& cable : editor.buildVisibleCables())
+            if (cable.destNodeId == pluginId.uid && cable.landsOnKnob)
+                return true;
+        return false;
+    }
+};
+
+} // namespace
+
+TEST(HostedPluginCardModTest, ASavedRoutingOnAParameterWithNoKnobShowsItsKnobWhenTheProjectOpens) {
+    const auto json = legacyProjectJson("p9");
+    for (const bool instanceFirst : {false, true}) {
+        LoadedLegacyCanvas loaded(json, instanceFirst);
+        ASSERT_NE(loaded.card(loaded.pluginId), nullptr);
+        EXPECT_TRUE(loaded.hasKnob("p9")) << "instanceFirst=" << instanceFirst;
+        EXPECT_TRUE(loaded.cableEndsOnAKnob()) << "the cable's end is on the new knob";
+        EXPECT_FALSE(loaded.undo.canUndo()) << "load-time reconciliation is not a user edit";
+        EXPECT_EQ(loaded.hosted->modChannelForParam("p9"), HostedPluginModule::kModChannelBase);
+    }
+}
+
+TEST(HostedPluginCardModTest, ASavedRoutingOnAParameterAlreadyOnTheCardAddsNothing) {
+    LoadedLegacyCanvas loaded(legacyProjectJson("p2"), false);
+    EXPECT_TRUE(loaded.hasKnob("p2"));
+    EXPECT_FALSE(loaded.hasKnob("p9"));
+    EXPECT_TRUE(loaded.hosted->getCardLayoutOverride().isVoid()) << "no layout was written";
+    EXPECT_FALSE(loaded.undo.canUndo());
+}
+
+TEST(HostedPluginCardModTest, TheReconciledKnobIsThisInstancesAndAKnobHiddenLaterStaysHidden) {
+    LoadedLegacyCanvas loaded(legacyProjectJson("p9"), false);
+    ASSERT_TRUE(loaded.hasKnob("p9"));
+    EXPECT_FALSE(loaded.hosted->getCardLayoutOverride().isVoid()) << "written to this card's own override";
+
+    // The user hides it again: a rebuild must not bring it back (the check is once per publish).
+    synth::ui::HostedCardLayoutSource source(*loaded.hosted, loaded.editor.getPluginCardLayoutStore(),
+                                             loaded.engine.getGraph(), loaded.pluginId, nullptr);
+    synth::CardLayout layout;
+    layout.version = synth::CardLayout::kCurrentVersion;
+    layout.slots = source.currentLayout().flatSlots();
+    std::erase_if(layout.slots, [](const synth::CardSlot& slot) { return slot.paramId == "p9"; });
+    source.apply(layout, /*allOfType*/ false);
+    loaded.editor.updateComponents();
+    EXPECT_FALSE(loaded.hasKnob("p9"));
 }

@@ -2,6 +2,7 @@
 
 #include "TestMode/TestModeCommands.h"
 #include "MainComponent/MainComponent.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
 #include "ProjectBundle.h"
 #include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
@@ -383,6 +384,16 @@ StepResult cmdOpenProject(const juce::var& args, Scratch& s, int attempt) {
                                                  : StepResult::pending();
 }
 
+// What the launch-time "Open without it" answer does (Main.cpp), minus the dialog an automation launch never shows:
+// the named plugin is switched off for the next project load only (ScopedClearSkips ends it with that load).
+StepResult cmdSkipPluginForNextLoad(const juce::var& args, Scratch&, int) {
+    const auto name = args.getProperty("name", {}).toString();
+    if (name.isEmpty())
+        return StepResult::failed("skipPluginForNextLoad needs the plugin's name");
+    synth::HostedPluginBackend::getDefault().skipPluginForNextLoad(name, args.getProperty("bundlePath", {}).toString());
+    return StepResult::done(object({{"name", name}}));
+}
+
 StepResult cmdSaveProject(const juce::var& args, Scratch&, int) {
     const juce::File bundle(args.getProperty("path", {}).toString());
     auto* mc = mainComponent();
@@ -525,6 +536,7 @@ CommandTable CommandTable::standard() {
     table.add("screenshot", {cmdScreenshot});
     table.add("openProject", {cmdOpenProject});
     table.add("saveProject", {cmdSaveProject});
+    table.add("skipPluginForNextLoad", {cmdSkipPluginForNextLoad});
     table.add("waitForIdle", {cmdWaitForIdle});
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});

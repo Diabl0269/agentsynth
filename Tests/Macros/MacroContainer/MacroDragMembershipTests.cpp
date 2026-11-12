@@ -15,8 +15,10 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
 #include "Modules/VCAModule.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <map>
 
 namespace {
 
@@ -834,4 +836,88 @@ TEST(MacroDragMembership, CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExac
     EXPECT_EQ(macro->id, macroId);
     EXPECT_EQ(synth::GraphRebuildBatch::rebuildCountForTest() - beforeIn, 1)
         << "joining a macro with three crossing cables must rebuild the render sequence exactly once";
+}
+
+namespace {
+struct CrossingWork {
+    int reconciles = 0;    // GraphEditor::updateComponents runs, over every tick
+    int graphRebuilds = 0; // render-sequence rebuilds, over every tick
+    int existingCardsRebuilt = 0;
+    int dropReconciles = 0;
+    int dropGraphRebuilds = 0;
+};
+
+// A Cmd-drag of `comp` by `delta` in 24 real mouse ticks, counting the canvas work each tick does. A synthetic event's
+// position is relative to where the card is now, as a real one's is.
+CrossingWork countedCmdDrag(GraphEditor& editor, ModuleComponent& comp, juce::Point<int> delta) {
+    CrossingWork work;
+    const juce::Point<int> pressPos(comp.getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    comp.mouseDown(realMouseEvent(comp, pressPos, pressPos, kCmdClick));
+    const auto start = comp.getPosition();
+    auto& counters = graph_editor_paint::workCounters();
+    for (int i = 1; i <= 24; ++i) {
+        std::map<juce::uint32, ModuleComponent*> before;
+        for (auto* card : editor.getModuleComponents())
+            before[card->getNodeId().uid] = card;
+        counters = {};
+        const int rebuilds = synth::GraphRebuildBatch::rebuildCountForTest();
+        comp.mouseDrag(
+            realMouseEvent(comp, pressPos + delta * i / 24 - (comp.getPosition() - start), pressPos, kCmdClick, true));
+        work.reconciles += counters.componentUpdates;
+        work.graphRebuilds += synth::GraphRebuildBatch::rebuildCountForTest() - rebuilds;
+        for (auto* card : editor.getModuleComponents())
+            if (const auto it = before.find(card->getNodeId().uid); it != before.end() && it->second != card)
+                ++work.existingCardsRebuilt;
+    }
+    counters = {};
+    const int rebuilds = synth::GraphRebuildBatch::rebuildCountForTest();
+    comp.mouseUp(realMouseEvent(comp, pressPos + delta - (comp.getPosition() - start), pressPos, kCmdClick, true));
+    work.dropReconciles = counters.componentUpdates;
+    work.dropGraphRebuilds = synth::GraphRebuildBatch::rebuildCountForTest() - rebuilds;
+    return work;
+}
+} // namespace
+
+// A drag across a macro border changes the membership on the tick that crosses it: that tick reconciles the canvas
+// once and rebuilds the render sequence once, and every other tick and the drop do neither. Only the macro's new port
+// cards are built; no card that was already on the canvas is rebuilt. The same at 5 and at 20 other modules.
+TEST(MacroDragMembership, ACrossingReconcilesOnceAndRebuildsNoCardHoweverBigTheCanvas) {
+    for (const int others : {5, 20}) {
+        SCOPED_TRACE(others);
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        const auto outA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+        const auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 1000);
+        for (int i = 0; i < others; ++i)
+            addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1400 + 300 * (i % 5), 300 * (i / 5));
+        auto& graph = engine.getGraph();
+        ASSERT_TRUE(graph.addConnection({{a, 0}, {outA, 0}}));
+        ASSERT_TRUE(graph.addConnection({{src, 0}, {a, 2}}));
+        editor.updateComponents();
+
+        auto* comp = findComponent(editor, a);
+        ASSERT_NE(comp, nullptr);
+        const auto out = countedCmdDrag(editor, *comp, {2400, 0});
+        ASSERT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A left the macro";
+        EXPECT_EQ(out.reconciles, 1);
+        EXPECT_EQ(out.graphRebuilds, 1);
+        EXPECT_EQ(out.existingCardsRebuilt, 0);
+        EXPECT_EQ(out.dropReconciles, 0);
+        EXPECT_EQ(out.dropGraphRebuilds, 0);
+
+        comp = findComponent(editor, a);
+        ASSERT_NE(comp, nullptr);
+        const auto hull = editor.getMacroController().macroHullBounds(macroId);
+        const auto in = countedCmdDrag(editor, *comp, hull.getCentre() - comp->getBounds().getCentre());
+        ASSERT_NE(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A rejoined the macro";
+        EXPECT_EQ(in.reconciles, 1);
+        EXPECT_EQ(in.graphRebuilds, 1);
+        EXPECT_EQ(in.existingCardsRebuilt, 0);
+        EXPECT_EQ(in.dropReconciles, 0);
+        EXPECT_EQ(in.dropGraphRebuilds, 0);
+    }
 }

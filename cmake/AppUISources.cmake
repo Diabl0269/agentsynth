@@ -578,6 +578,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackLayout.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackMemo.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
     Source/UI/Graph/PortPanel/PortConnector.h

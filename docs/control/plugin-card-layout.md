@@ -446,6 +446,11 @@ Any parameter of a hosted plugin can take a mod cable, up to 48 at once per plug
   or not (`hostedDestinations`, the one list of them; a modulated one says "Modulated"). A pick binds it with the same
   code as a drop on the card's body (`bindHostedModTarget`: knob shown, slot claimed) and re-points the routing as
   one undo step; this is also the keyboard path to a parameter that is not on the card.
+- **A saved routing with no knob.** A project saved before a cable always added its knob can hold a routing on a
+  parameter that is not on the card. When the project opens and the plugin loads, that parameter gets its knob
+  (`ModuleComponent::reconcileHostedModKnobs`, once per publish), so the cable ends on a control. It is written to
+  this card's own layout, never the plugin's shared default, and is not an undo step: a knob hidden afterwards stays
+  hidden. Test: `HostedPluginCardModTests.cpp`, `ASavedRoutingOnAParameterWithNoKnob...`.
 - **The cable's end.** A cable on a plugin knob shows the parameter's short name, without the plugin's, in a small
   pill beside its landing dot (`CableEndName`), so a cable always says which control it drives.
 - **Replace with...** Another plugin: each cable follows its parameter id onto the new plugin's slot for it (a

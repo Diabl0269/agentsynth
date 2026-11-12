@@ -549,14 +549,14 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackMonoInstanceDuplicatesOntoBothChann
 
 TEST_F(ChannelFlowTest, PluginInstrumentTrackOverMaxChannelsIsRefusedGraphAndUndoUntouched) {
     // TEST GAP (finding 5b): a plugin instance whose real channel count exceeds
-    // HostedPluginModule::kMaxPluginChannels is REFUSED inside publishInstance(), never truncated
+    // HostedPluginModule::kMaxPluginOutputChannels is REFUSED inside publishInstance(), never truncated
     // (Source/Modules/CLAUDE.md's invariant). hasInstance() reads that refusal identically to an
     // outright backend failure, so this must behave exactly like
     // PluginInstrumentTrackFailedLoadLeavesGraphAndUndoUntouched: no track, no node, no undo step.
     InstrumentPluginStubBackendCFT backend;
     backend.factories["Huge Synth"] = [] {
-        return std::make_unique<synth::test::StubPluginInstance>(0, synth::HostedPluginModule::kMaxPluginChannels + 1,
-                                                                 "Huge Synth");
+        return std::make_unique<synth::test::StubPluginInstance>(
+            0, synth::HostedPluginModule::kMaxPluginOutputChannels + 1, "Huge Synth");
     };
     synth::HostedPluginBackend::ScopedDefault installed(&backend);
 
