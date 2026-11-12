@@ -12,7 +12,10 @@
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
+#include <set>
+#include <tuple>
 
 namespace {
 
@@ -217,8 +220,9 @@ TEST(PolyVoiceGraphTests, PolyOnInsertsOnePolyMidiWiredPitchAndGate) {
             << "Poly MIDI's Gate fan restarts the oscillator's phase " << voice;
     }
     EXPECT_EQ(rig.count(pm->nodeID, i.adsr->nodeID), 8);
-    EXPECT_EQ(rig.count(i.source->nodeID, i.osc->nodeID, true), 1) << "the raw MIDI cable stays";
-    EXPECT_EQ(rig.count(i.source->nodeID, i.adsr->nodeID, true), 1);
+    EXPECT_EQ(rig.count(i.source->nodeID, i.osc->nodeID, true), 1)
+        << "an oscillator's raw MIDI cable stays: poly voice 0 still reads it";
+    EXPECT_EQ(rig.count(i.source->nodeID, i.adsr->nodeID, true), 0) << "a poly ADSR's raw MIDI cable is redundant";
 }
 
 TEST(PolyVoiceGraphTests, PolyOnReusesAPolyMidiThatTheSameSourceAlreadyFeeds) {
@@ -265,9 +269,8 @@ TEST(PolyVoiceGraphTests, PolyOffRestoresRawMidiAndRemovesTheOrphanedPolyMidi) {
     const auto i = buildInstrument(rig);
     const std::vector<NodeID> chain{i.osc->nodeID, i.filter->nodeID, i.adsr->nodeID, i.vca->nodeID};
     synth::applyPolyVoiceGraph(rig.graph(), chain, true);
-    // The user took the raw cables away while poly was on, as the Poly MIDI node made them redundant.
-    for (auto* module : {i.osc, i.adsr})
-        rig.graph().removeConnection({{i.source->nodeID, kMidi}, {module->nodeID, kMidi}});
+    // The user took the oscillator's raw cable away too while poly was on.
+    rig.graph().removeConnection({{i.source->nodeID, kMidi}, {i.osc->nodeID, kMidi}});
     ASSERT_EQ(rig.nodesOfType("Poly MIDI").size(), 1u);
 
     const auto result = synth::applyPolyVoiceGraph(rig.graph(), chain, false);
@@ -417,5 +420,182 @@ TEST(PolyVoiceGraphTests, TheDefaultPolyInstrumentChainWiresTheGateFanOfAnOscill
             EXPECT_TRUE(
                 rig.graph().isConnected({{polyMidi->nodeID, 8 + voice}, {instrument->nodeID, gateBase + voice}}))
                 << type << " voice " << voice;
+    }
+}
+
+// ---- no redundant raw MIDI cable into a poly ADSR ----
+
+namespace {
+
+using Connection = juce::AudioProcessorGraph::Connection;
+
+std::set<std::tuple<juce::uint32, int, juce::uint32, int>> connectionSet(PolyRig& rig) {
+    std::set<std::tuple<juce::uint32, int, juce::uint32, int>> out;
+    for (const auto& c : rig.graph().getConnections())
+        out.insert({c.source.nodeID.uid, c.source.channelIndex, c.destination.nodeID.uid, c.destination.channelIndex});
+    return out;
+}
+
+// Plays one chord with a release through the Hosted engine and returns every output sample of every block.
+std::vector<float> renderChord(PolyRig& rig) {
+    rig.patch.engine.prepareForHost(44100.0, 512, 2, 2);
+    std::vector<float> samples;
+    for (int block = 0; block < 24; ++block) {
+        juce::AudioBuffer<float> buffer(2, 512);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        if (block == 0)
+            for (const int note : {60, 64, 67})
+                midi.addEvent(juce::MidiMessage::noteOn(1, note, 0.8f), 40);
+        if (block == 3)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 72, 0.6f), 100);
+        if (block == 12)
+            for (const int note : {60, 64, 67, 72})
+                midi.addEvent(juce::MidiMessage::noteOff(1, note), 7);
+        rig.patch.engine.processHostBlock(buffer, midi);
+        samples.insert(samples.end(), buffer.getReadPointer(0), buffer.getReadPointer(0) + 512);
+    }
+    rig.patch.engine.releaseFromHost();
+    return samples;
+}
+
+} // namespace
+
+TEST(PolyVoiceGraphTests, PolyOnDropsTheRawMidiCableIntoAnAdsrAndPolyOffBringsItBack) {
+    PolyRig rig;
+    const auto i = buildInstrument(rig);
+    const std::vector<NodeID> chain{i.osc->nodeID, i.filter->nodeID, i.adsr->nodeID, i.vca->nodeID};
+    const auto before = connectionSet(rig);
+
+    synth::applyPolyVoiceGraph(rig.graph(), chain, true);
+    EXPECT_FALSE(rig.graph().isConnected({{i.source->nodeID, kMidi}, {i.adsr->nodeID, kMidi}}));
+    EXPECT_TRUE(rig.graph().isConnected({{i.source->nodeID, kMidi}, {i.osc->nodeID, kMidi}}));
+    ASSERT_EQ(rig.nodesOfType("Poly MIDI").size(), 1u);
+
+    synth::applyPolyVoiceGraph(rig.graph(), chain, false);
+    EXPECT_TRUE(rig.graph().isConnected({{i.source->nodeID, kMidi}, {i.adsr->nodeID, kMidi}}));
+    EXPECT_EQ(connectionSet(rig), before) << "poly on then off returns exactly the original connections";
+}
+
+TEST(PolyVoiceGraphTests, ARawMidiCableToAMonoAdsrFromTheSameSourceStays) {
+    PolyRig rig;
+    const auto i = buildInstrument(rig);
+    auto* monoAdsr = rig.add("ADSR");
+    rig.midi(i.source, monoAdsr);
+    const auto before = connectionSet(rig);
+
+    synth::applyPolyVoiceGraph(rig.graph(), {i.osc->nodeID, i.adsr->nodeID}, true);
+    EXPECT_FALSE(rig.graph().isConnected({{i.source->nodeID, kMidi}, {i.adsr->nodeID, kMidi}}));
+    EXPECT_TRUE(rig.graph().isConnected({{i.source->nodeID, kMidi}, {monoAdsr->nodeID, kMidi}}))
+        << "the mono module keeps its cable";
+    EXPECT_FALSE(PolyRig::isPoly(monoAdsr));
+
+    synth::applyPolyVoiceGraph(rig.graph(), {i.osc->nodeID, i.adsr->nodeID}, false);
+    EXPECT_EQ(connectionSet(rig), before);
+}
+
+TEST(PolyVoiceGraphTests, TrackInIntoAnAdsrLosesTheRawCableAndGetsItBackOnMono) {
+    PolyRig rig;
+    juce::String uuid;
+    auto* trackIn = rig.addWithUuid("Track In", uuid);
+    auto* osc = rig.add("Oscillator");
+    auto* adsr = rig.add("ADSR");
+    auto* vca = rig.add("VCA");
+    rig.midi(trackIn, osc);
+    rig.midi(trackIn, adsr);
+    rig.wire(osc, 0, vca, 0);
+    rig.wire(adsr, 0, vca, 1);
+    const auto before = connectionSet(rig);
+    const auto plan = synth::planPolyVoiceGraph(rig.graph(), adsr->nodeID, {{uuid, "Keys"}});
+
+    synth::applyPolyVoiceGraph(rig.graph(), plan.thisTrackNodes, true);
+    EXPECT_FALSE(rig.graph().isConnected({{trackIn->nodeID, kMidi}, {adsr->nodeID, kMidi}}));
+    EXPECT_TRUE(rig.graph().isConnected({{trackIn->nodeID, kMidi}, {osc->nodeID, kMidi}}));
+    auto* polyMidi = rig.nodesOfType("Poly MIDI").front();
+    EXPECT_EQ(rig.count(polyMidi->nodeID, adsr->nodeID), 8);
+    const auto replan = synth::planPolyVoiceGraph(rig.graph(), adsr->nodeID, {{uuid, "Keys"}});
+    EXPECT_TRUE(has(replan.thisTrackNodes, vca)) << "the track still reaches the chain through Poly MIDI";
+
+    synth::applyPolyVoiceGraph(rig.graph(), replan.thisTrackNodes, false);
+    EXPECT_EQ(connectionSet(rig), before);
+}
+
+// The oscillator is the other module the question named: its raw cable is kept because poly voice 0 reads it (a raw
+// note-on restarts voice 0, a raw note is its pitch when no pitch CV is patched). This pins that the raw cable is not
+// provably redundant: with it, voice 0 sounds a note that Poly MIDI does not feed.
+TEST(PolyVoiceGraphTests, APolyOscillatorStillUsesItsRawMidiCable) {
+    auto build = [](PolyRig& rig, bool withRaw) {
+        auto* source = rig.add("Midi Input");
+        auto* osc = rig.add("Oscillator");
+        rig.wire(osc, 0, rig.patch.output, 0);
+        rig.midi(source, osc);
+        synth::applyPolyVoiceGraph(rig.graph(), {osc->nodeID}, true);
+        if (!withRaw)
+            rig.graph().removeConnection({{source->nodeID, kMidi}, {osc->nodeID, kMidi}});
+        // Cut Poly MIDI -> osc so only the raw MIDI could ever make voice 0 sound.
+        for (const auto& c : rig.graph().getConnections())
+            if (c.destination.nodeID == osc->nodeID && !c.source.isMIDI())
+                rig.graph().removeConnection(c);
+    };
+    PolyRig with;
+    build(with, true);
+    PolyRig without;
+    build(without, false);
+    const auto a = renderChord(with);
+    const auto b = renderChord(without);
+    float peakWith = 0.0f, peakWithout = 0.0f;
+    for (const auto x : a)
+        peakWith = std::max(peakWith, std::abs(x));
+    for (const auto x : b)
+        peakWithout = std::max(peakWithout, std::abs(x));
+    EXPECT_GT(peakWith, peakWithout) << "voice 0 plays from the raw MIDI alone";
+}
+
+// The user note "with poly on the pitch controls don't work": Octave, Coarse and Fine move the pitch of a poly
+// oscillator that Poly MIDI feeds, and Poly MIDI's cables land only on the per-voice Pitch and Gate inputs.
+TEST(PolyVoiceGraphTests, PitchKnobsMovePolyOscillatorFedByPolyMidiAndItsCablesLandOnlyOnPitchAndGate) {
+    auto zeroCrossingsFor = [](const juce::String& param, float value) {
+        PolyRig rig;
+        auto* source = rig.add("Midi Input");
+        auto* osc = rig.add("Oscillator");
+        rig.wire(osc, 0, rig.patch.output, 0);
+        rig.midi(source, osc);
+        synth::applyPolyVoiceGraph(rig.graph(), {osc->nodeID}, true);
+        if (param.isNotEmpty())
+            if (auto* p = findParameterByID(osc->getProcessor(), param))
+                p->setValueNotifyingHost(p->convertTo0to1(value));
+        const auto out = renderChord(rig);
+        int crossings = 0;
+        for (size_t n = 1; n < out.size(); ++n)
+            crossings += (out[n - 1] < 0.0f) != (out[n] < 0.0f) ? 1 : 0;
+        return crossings;
+    };
+    const int base = zeroCrossingsFor({}, 0.0f);
+    ASSERT_GT(base, 50);
+    EXPECT_GT(zeroCrossingsFor("octave", 1.0f), base * 3 / 2) << "one octave up roughly doubles the pitch";
+    EXPECT_GT(zeroCrossingsFor("coarse", 12.0f), base * 3 / 2) << "twelve semitones up roughly doubles the pitch";
+    EXPECT_GT(zeroCrossingsFor("fine", 100.0f), base) << "fine moves the pitch up";
+
+    PolyRig rig;
+    auto* source = rig.add("Midi Input");
+    auto* osc = rig.add("Oscillator");
+    auto* adsr = rig.add("ADSR");
+    rig.midi(source, osc);
+    rig.midi(source, adsr);
+    synth::applyPolyVoiceGraph(rig.graph(), {osc->nodeID, adsr->nodeID}, true);
+    auto* polyMidi = rig.nodesOfType("Poly MIDI").front();
+    for (const auto& c : rig.graph().getConnections()) {
+        if (c.source.nodeID != polyMidi->nodeID)
+            continue;
+        if (c.destination.nodeID == osc->nodeID) {
+            const bool pitch = c.source.channelIndex < 8 && c.destination.channelIndex == c.source.channelIndex;
+            const bool gate = c.source.channelIndex >= 8 &&
+                              c.destination.channelIndex == OscillatorModule::kGateBase + c.source.channelIndex - 8;
+            EXPECT_TRUE(pitch || gate) << "Poly MIDI " << c.source.channelIndex << " -> osc "
+                                       << c.destination.channelIndex;
+        } else {
+            EXPECT_EQ(c.destination.nodeID, adsr->nodeID);
+            EXPECT_EQ(c.destination.channelIndex, c.source.channelIndex - 8) << "ADSR takes only the gate fan";
+        }
     }
 }

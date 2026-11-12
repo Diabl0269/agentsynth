@@ -581,3 +581,154 @@ TEST_F(GraphEditorTest, ThePolyClickIsInstantWithAnimationsOff) {
     EXPECT_EQ(rig.editor.getCardGlideForTest().enterGhostCount(), 0);
     EXPECT_FALSE(rig.editor.getCardGlideForTest().isLive());
 }
+
+// One undo step restores the cable the click took away.
+TEST_F(GraphEditorTest, ThePolyClickDropsTheRawMidiCableIntoTheAdsrAndOneUndoBringsItBack) {
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    ASSERT_EQ(rig.count(i.source, i.adsr), 1);
+
+    rig.clickPill(i.osc);
+    EXPECT_EQ(rig.count(i.source, i.adsr), 0) << "Poly MIDI feeds the poly ADSR, the raw cable is redundant";
+    EXPECT_EQ(rig.count(i.source, i.osc), 1) << "a poly oscillator still reads raw MIDI on voice 0";
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.count(i.source, i.adsr), 1);
+    EXPECT_FALSE(rig.undo.getUndoManager().canUndo()) << "the click and its cable were one step";
+}
+
+// Every output sample of a chord with a release, through the Hosted engine.
+static std::vector<float> renderChordSamples(ChainRig& rig) {
+    rig.engine.prepareForHost(44100.0, 512, 2, 2);
+    std::vector<float> samples;
+    for (int block = 0; block < 24; ++block) {
+        juce::AudioBuffer<float> buffer(2, 512);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        if (block == 0)
+            for (const int note : {60, 64, 67})
+                midi.addEvent(juce::MidiMessage::noteOn(1, note, 0.8f), 40);
+        if (block == 3)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 72, 0.6f), 100);
+        if (block == 12)
+            for (const int note : {60, 64, 67, 72})
+                midi.addEvent(juce::MidiMessage::noteOff(1, note), 7);
+        rig.engine.processHostBlock(buffer, midi);
+        samples.insert(samples.end(), buffer.getReadPointer(0), buffer.getReadPointer(0) + 512);
+    }
+    rig.engine.releaseFromHost();
+    return samples;
+}
+
+// The proof the raw MIDI cable into a poly ADSR is redundant: the same chord renders sample for sample the same with
+// and without it.
+TEST_F(GraphEditorTest, APolyAdsrRendersTheSameWithAndWithoutItsRawMidiCable) {
+    ChainRig with;
+    const auto a = buildInstrument(with);
+    with.clickPill(a.osc);
+    ASSERT_EQ(with.count(a.source, a.adsr), 0);
+    with.midi(a.source, a.adsr); // put the raw cable back
+
+    ChainRig without;
+    const auto b = buildInstrument(without);
+    without.clickPill(b.osc);
+    ASSERT_EQ(without.count(b.source, b.adsr), 0);
+
+    const auto x = renderChordSamples(with);
+    const auto y = renderChordSamples(without);
+    ASSERT_EQ(x.size(), y.size());
+    float peak = 0.0f;
+    for (size_t n = 0; n < x.size(); ++n) {
+        ASSERT_EQ(x[n], y[n]) << "sample " << n;
+        peak = std::max(peak, std::abs(x[n]));
+    }
+    EXPECT_GT(peak, 0.001f) << "the chord is audible, so the comparison means something";
+}
+
+namespace {
+struct Ev {
+    int block;
+    int pos;
+    bool on;
+    int note;
+};
+
+std::vector<float> renderStream(ChainRig& rig, const std::vector<Ev>& stream) {
+    rig.engine.prepareForHost(44100.0, 512, 2, 2);
+    std::vector<float> samples;
+    for (int block = 0; block < 30; ++block) {
+        juce::AudioBuffer<float> buffer(2, 512);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        for (const auto& e : stream)
+            if (e.block == block)
+                midi.addEvent(e.on ? juce::MidiMessage::noteOn(1, e.note, 0.8f) : juce::MidiMessage::noteOff(1, e.note),
+                              e.pos);
+        rig.engine.processHostBlock(buffer, midi);
+        samples.insert(samples.end(), buffer.getReadPointer(0), buffer.getReadPointer(0) + 512);
+    }
+    rig.engine.releaseFromHost();
+    return samples;
+}
+} // namespace
+
+// The raw MIDI cable into a poly Oscillator is NOT redundant when Poly MIDI feeds its pitch and gate fans: voice 0 also
+// restarts on a raw note-on and keeps a raw pitch, so the render differs without it for every stream below except a
+// lone note. That is why Poly keeps the Oscillator's raw cable and removes only a poly ADSR's.
+TEST_F(GraphEditorTest, ARawMidiCableIntoAPolyOscillatorStillChangesWhatPlaysWhenPolyMidiFeedsIt) {
+    const std::vector<std::pair<const char*, std::vector<Ev>>> streams{
+        {"single note", {{0, 40, true, 60}, {10, 0, false, 60}}},
+        {"overlapping chord",
+         {{0, 10, true, 60},
+          {1, 300, true, 64},
+          {2, 0, true, 67},
+          {12, 5, false, 60},
+          {13, 5, false, 64},
+          {14, 5, false, 67}}},
+        {"retrigger same note, off then on in one block",
+         {{0, 0, true, 60}, {6, 100, false, 60}, {6, 100, true, 60}, {14, 0, false, 60}}},
+        {"same note struck again while held", {{0, 0, true, 60}, {6, 200, true, 60}, {14, 0, false, 60}}},
+        {"note arriving mid-block after silence",
+         {{0, 0, true, 60}, {3, 0, false, 60}, {8, 333, true, 67}, {16, 0, false, 67}}},
+        {"nine notes (voice steal)",
+         {{0, 0, true, 40},
+          {0, 1, true, 44},
+          {0, 2, true, 47},
+          {0, 3, true, 50},
+          {0, 4, true, 52},
+          {0, 5, true, 55},
+          {0, 6, true, 57},
+          {0, 7, true, 59},
+          {1, 0, true, 62},
+          {10, 0, false, 40}}},
+    };
+    for (const auto& [name, stream] : streams) {
+        SCOPED_TRACE(name);
+        ChainRig with;
+        const auto a = buildInstrument(with);
+        with.clickPill(a.osc);
+        ASSERT_EQ(with.count(a.source, a.osc), 1);
+        ChainRig without;
+        const auto b = buildInstrument(without);
+        without.clickPill(b.osc);
+        without.graph().removeConnection({{b.source, kMidi}, {b.osc, kMidi}});
+        ASSERT_EQ(without.count(b.source, b.osc), 0);
+
+        const auto x = renderStream(with, stream);
+        const auto y = renderStream(without, stream);
+        ASSERT_EQ(x.size(), y.size());
+        float peak = 0.0f;
+        int differing = 0;
+        size_t first = 0;
+        for (size_t n = 0; n < x.size(); ++n) {
+            peak = std::max(peak, std::abs(x[n]));
+            if (x[n] != y[n] && differing++ == 0)
+                first = n;
+        }
+        EXPECT_GT(peak, 0.001f);
+        if (juce::String(name) == "single note")
+            EXPECT_EQ(differing, 0) << "a lone note is the same either way";
+        else
+            EXPECT_GT(differing, 0) << "the raw cable changes the render (first would be at " << first << ")";
+    }
+}

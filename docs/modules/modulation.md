@@ -382,11 +382,16 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
      Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
      MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
      gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
-     MIDI cables stay: they are harmless in poly mode.
+     MIDI cable into a poly **ADSR** is then removed: a poly ADSR takes its gates from Poly MIDI and never reads raw MIDI.
+     An Oscillator's or Wavetable's raw MIDI cable stays: poly voice 0 still restarts on a raw note-on and plays a raw
+     note's pitch when no pitch CV is patched, so it is not redundant. A source's cable into a mono module is never touched.
    - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
-     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing), and a Poly MIDI left with no outgoing
-     cable is removed. The result is a mono patch that plays every note.
-4. **Feedback.** A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
+     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing; so poly on then off returns the original
+     cables), and a Poly MIDI left with no outgoing cable is removed. The result is a mono patch that plays every note.
+4. **Feedback.** The click glides like Cmd+Z of it does (`PolyChainController::commit` opens the same restore
+   `CardGlideAnimator::Scope` and cable retract/grow `AppUndoManager::applyHistoryStep` does, [undo-glide.md](../layout/undo-glide.md)):
+   the Poly MIDI card grows in or shrinks away and its cables grow out of or pull back into their jacks; Reduce Motion
+   and Animations Off are handled by the shared helpers. A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
    modules mono", with **Undo** ([`chrome.md`](../layout/chrome.md#toast)).
 5. **Only a user click propagates.** The pill does not toggle itself (`CardBody::installPolyPill`: `setClickingTogglesState(false)`; its attachment
    follows the parameter; the click goes to `GraphEditor::getPolyChain()`, and the track header's switch reads `TrackHeaderHost::getTrackPolyState`, never the graph), so no second or half undo step exists. Setting the parameter any other way (undo/redo
