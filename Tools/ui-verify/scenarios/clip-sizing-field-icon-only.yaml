@@ -23,4 +23,4 @@ steps:
   - expect: {id: timelineClipSizing, contains: {tooltip: "Stretch to fit"}}
   - mark: {check: 1, name: sizing-stretch-icon-only}
   - wait: {settleMs: 1000}
-  - screenshot: {id: timelineClipSizing, name: stretch-icon-only-button}
+  - screenshot: {id: timelineClipSizing, name: stretch-icon-only-button, scale: 8}

@@ -327,7 +327,7 @@ entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYN
 `ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
 directory. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
-built-in theme and requires each mode's icon to differ at one fixed size.
+built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
 A new control that shows its state only as a painted glyph joins that file.
 The popup menu's section titles (`addSectionHeader`) use `PopupMenu::headerTextColourId`, set to the theme's muted
 text; `MenuCornerTests` requires 4.5:1 against the menu surface in every theme. The sweep renders no open menu, so a

@@ -1,9 +1,12 @@
 // ThemeSweepGlyphTests.cpp -- controls that paint a glyph instead of text, which the text sweep cannot read: the
 // timeline's clip sizing button in every built-in theme and every mode (each mode must draw a different icon, and the
-// button keeps one size in all of them), and the origin badge (docs/layout/theming.md, "Theme sweep guard").
+// button keeps one size in all of them, and its menu-mark notch stays in the chip's corner), and the origin badge
+// (docs/layout/theming.md, "Theme sweep guard").
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Chrome/Badge/Badge.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include <algorithm>
@@ -50,6 +53,48 @@ TEST(ThemeSweepGlyphs, TheClipSizingButtonDrawsItsOwnIconPerModeInEveryThemeAtOn
                     << theme.id << ": " << synth::clipSizingModeKey(kModes[a]) << " and "
                     << synth::clipSizingModeKey(kModes[b]) << " look the same";
         field.setLookAndFeel(nullptr);
+    }
+}
+
+// The menu mark is a notch in the chip's lower-right corner. Against a plain toolbar button of the same icon, layout
+// and size, every pixel that differs lies inside the chip's lower-right 6 px square (so it never reaches the glyph,
+// which stays full size and centred), and the notch shows in every theme, with labels shown and with them off.
+TEST(ThemeSweepGlyphs, TheClipSizingNotchSitsInTheChipCornerAndNeverReachesTheGlyph) {
+    juce::MessageManager::getInstance();
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SweepEnvironment env(theme);
+        for (const bool captionShown : {true, false}) {
+            for (const auto mode : kModes) {
+                synth::ui::ClipSizingButton field;
+                field.setLookAndFeel(&env.lookAndFeel());
+                field.setCaptionShown(captionShown);
+                field.choose(mode);
+                field.setSize(field.getFixedWidth(), 28);
+
+                synth::ui::ToolbarButton plain("plain");
+                plain.setLookAndFeel(&env.lookAndFeel());
+                plain.setLayout(synth::ui::ToolbarButtonLayout::Inline);
+                plain.setIcon(field.getIcon(), synth::ui::ToolbarGroup::Edit);
+                plain.setButtonText(field.getButtonText());
+                plain.setSize(field.getWidth(), field.getHeight());
+
+                const auto chip = synth::theme::toolbarChipBounds(field).toNearestInt();
+                const auto corner = chip.withTrimmedLeft(chip.getWidth() - 6).withTrimmedTop(chip.getHeight() - 6);
+                const auto withNotch = renderToImage(field);
+                const auto without = renderToImage(plain);
+                const juce::String label = juce::String(theme.id) + " / " + synth::clipSizingModeKey(mode) +
+                                           (captionShown ? " / labels" : " / no labels");
+                EXPECT_GT(differingPixels(withNotch, without, corner), 3) << label << ": no notch in the corner";
+                EXPECT_EQ(differingPixels(withNotch, without, field.getLocalBounds()),
+                          differingPixels(withNotch, without, corner))
+                    << label << ": the notch reaches outside the chip's corner";
+                if (mode == ClipSizingMode::Stretch)
+                    writeSweepPng(juce::String("sizing-field-notch-") + (captionShown ? "labels" : "icon"), theme.id,
+                                  withNotch);
+                field.setLookAndFeel(nullptr);
+                plain.setLookAndFeel(nullptr);
+            }
+        }
     }
 }
 
