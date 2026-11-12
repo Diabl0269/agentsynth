@@ -81,7 +81,10 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
   on it (on release, so a press may still become a drag) and Return or Space on it open the Change parameter picker, with
   its search field. The button takes no mouse events of its own: the header handles the press (so the drag still starts
   on the name) and tells the button when it is hovered; the header's `getTooltip` answers the button's tip over the
-  name. The pointing-hand cursor stays.
+  name. The pointing-hand cursor stays. The button is as wide as its name, so the owning header (an automation lane's
+  header, a modulator row) wires `onPreferredWidthChanged` to its `resized()`: a name set under an existing layout
+  (a custom LFO's new row, a rename, its undo) widens the button at once and never shows "L.." until a resize. A new
+  owner wires it too; `AutomationLanesNameWidthTests` checks every owner.
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
