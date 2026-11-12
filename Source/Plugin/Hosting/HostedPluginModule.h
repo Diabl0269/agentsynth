@@ -89,6 +89,11 @@ public:
     /** True while a load is in flight (no instance yet, but one is coming). */
     bool isLoading() const noexcept { return loading_; }
 
+    /** Message thread. True while the plugin is switched off after a crash ("Open without it"). */
+    bool isSwitchedOffAfterCrash() const noexcept { return switchedOffAfterCrash_; }
+    /** Message thread. Reloads a switched-off plugin, keeping its saved state, layout and mod slots. */
+    void turnBackOn(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
+
     /** The identity this module names, whether or not it resolved. Empty when nothing is loaded. */
     const PluginIdentity& getIdentity() const noexcept { return identity_; }
 
@@ -511,6 +516,7 @@ private:
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
+    bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared
     // against the value captured when the load started.

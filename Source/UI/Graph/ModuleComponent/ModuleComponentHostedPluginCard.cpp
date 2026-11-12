@@ -268,6 +268,21 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     hostedStatusLabel->setVisible(false);
     addChildComponent(hostedStatusLabel.get());
 
+    // "Turn on": the way back after "Open without it" switched this plugin off for the open. It reloads the
+    // plugin into this module, which still holds its saved state, card layout and mod slots, so it is not an undo
+    // step (it restores what the project already holds). Same button kind as Open Editor.
+    turnPluginBackOnButton = std::make_unique<juce::TextButton>("Turn on");
+    turnPluginBackOnButton->setComponentID("turnPluginBackOn");
+    turnPluginBackOnButton->setTitle("Turn this plugin back on"); // named after the plugin when it shows
+    turnPluginBackOnButton->setTooltip("Load this plugin again in this project");
+    turnPluginBackOnButton->onClick = [this] {
+        if (auto* hostedModule = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr) {
+            hostedModule->turnBackOn();
+            refreshHostedLoadStatus(); // loading now: the status and this button go, the card re-measures
+        }
+    };
+    addChildComponent(turnPluginBackOnButton.get());
+
     // One split button for adding controls: the list picker on the left, "add by moving a control in the
     // plugin" on the right (the same split button as the mod dot panel's "Add source").
     addControlsSplit = std::make_unique<synth::ui::SplitButton>(
@@ -306,7 +321,9 @@ void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
 
     const bool show = !hosted->hasInstance() && !hosted->isLoading() && hosted->getStatusMessage().isNotEmpty();
     const juce::String message = show ? hosted->getStatusMessage() : juce::String();
-    const bool visibilityChanged = show != hostedStatusLabel->isVisible();
+    const bool showTurnOn = show && hosted->isSwitchedOffAfterCrash() && turnPluginBackOnButton != nullptr;
+    const bool turnOnChanged = turnPluginBackOnButton != nullptr && showTurnOn != turnPluginBackOnButton->isVisible();
+    const bool visibilityChanged = show != hostedStatusLabel->isVisible() || turnOnChanged;
 
     if (hostedStatusLabel->getText() != message)
         hostedStatusLabel->setText(message, juce::dontSendNotification);
@@ -315,6 +332,13 @@ void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
         openPluginEditorButton->setTooltip(tooltip);
     if (visibilityChanged) {
         hostedStatusLabel->setVisible(show);
+        if (turnPluginBackOnButton != nullptr) {
+            turnPluginBackOnButton->setVisible(showTurnOn);
+            if (showTurnOn) {
+                turnPluginBackOnButton->setTitle("Turn " + hosted->getPluginName() + " back on");
+                turnPluginBackOnButton->setTooltip("Load " + hosted->getPluginName() + " again in this project");
+            }
+        }
         if (relayoutOnChange)
             relayoutHostedPluginCard();
     }
@@ -495,6 +519,11 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
         if (apply)
             hostedStatusLabel->setBounds(narrowX, y, narrowW, kHostedStatusLines * kHostedStatusLineHeight);
         y += kHostedStatusLines * kHostedStatusLineHeight + 6;
+    }
+    if (turnPluginBackOnButton != nullptr && turnPluginBackOnButton->isVisible()) {
+        if (apply)
+            turnPluginBackOnButton->setBounds(narrowX, y, (narrowW - 4) / 2, kRowHeight);
+        y += kRowHeight + 6;
     }
     return y;
 }

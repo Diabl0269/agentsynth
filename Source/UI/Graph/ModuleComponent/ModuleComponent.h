@@ -596,6 +596,8 @@ private:
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
     std::unique_ptr<juce::Label> hostedStatusLabel; // Hosted Plugin: why the load failed, under Open Editor
+    // Hosted Plugin: "Turn on", under the status label while the plugin is switched off after a crash
+    std::unique_ptr<juce::TextButton> turnPluginBackOnButton;
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.

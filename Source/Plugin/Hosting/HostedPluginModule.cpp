@@ -75,6 +75,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
+    switchedOffAfterCrash_ = false;
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -118,6 +119,9 @@ void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPlugin
 void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, HostedPluginBackend& backend) {
     identity_ = identity;
     statusMessage_.clear();
+    // isSwitchedOffAfterCrash(): set when the load starts, cleared by a publish, by any other load and by unload.
+    // Checked now, while the load that carries the skip is still running: the skip ends with that load.
+    switchedOffAfterCrash_ = backend.isSkippedForNextLoad(identity);
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -141,6 +145,8 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
             } else {
                 module->publishInstance(std::move(instance));
             }
+            if (module->hasInstance())
+                module->switchedOffAfterCrash_ = false;
 
             if (!module->hasInstance())
                 module->fireLoadFailedEdge();
@@ -149,6 +155,16 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
             if (module->onLoadCompleted)
                 module->onLoadCompleted(module->hasInstance());
         });
+}
+
+// Reloads identity_ through startIdentityLoad, so the saved plugin state, the card layout override and the mod slots
+// are kept. Ends that plugin's skip first, so an explicit turn-on is never blocked by one still set. A no-op while an
+// instance is live or a load is in flight. Not an undo step: it restores what the project already holds.
+void HostedPluginModule::turnBackOn(HostedPluginBackend& backend) {
+    if (!identity_.isValid() || hasInstance() || loading_)
+        return;
+    backend.clearSkipFor(identity_);
+    startIdentityLoad(identity_, backend);
 }
 
 void HostedPluginModule::unloadPlugin() {
@@ -160,6 +176,7 @@ void HostedPluginModule::unloadPlugin() {
     setCardLayoutOverride({});
     modSlotsFromVar({});
     statusMessage_.clear();
+    switchedOffAfterCrash_ = false;
     // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
     setLatencyAndNotify(0);

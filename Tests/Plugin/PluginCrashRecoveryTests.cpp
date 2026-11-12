@@ -241,3 +241,72 @@ TEST(SkipPluginForNextLoadTest, AProjectLoadSkipsTheNamedPluginThenTheSkipEnds) 
     ASSERT_NE(loaded, nullptr);
     EXPECT_TRUE(synth::test::waitUntil([&] { return loaded->hasInstance(); }));
 }
+
+TEST(SkipPluginForNextLoadTest, ASkippedModuleKnowsItWasSwitchedOffAndTurnBackOnKeepsEverythingTheProjectHolds) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+    backend.setFactory([] {
+        return std::make_unique<synth::test::StubPluginInstance>(
+            2, 2, "Example Synth", 77, "VST3",
+            std::vector<synth::test::StubParamSpec>{{"cutoff", "Cutoff", 0.2f}, {"reso", "Resonance", 0.5f}});
+    });
+
+    // A saved plugin: its state, a card layout override and a mod slot.
+    juce::var saved;
+    {
+        HostedPluginModule source;
+        source.prepareToPlay(48000.0, 64);
+        source.loadPlugin(examplePluginIdentity(), backend);
+        ASSERT_TRUE(synth::test::waitUntil([&] { return source.hasInstance(); }));
+        ASSERT_GE(source.bindModSlot("cutoff"), 0);
+        saved = source.getExtraState();
+        auto* object = saved.getDynamicObject();
+        juce::MemoryBlock blob;
+        blob.append("saved-patch", 11);
+        object->setProperty("pluginState", blob.toBase64Encoding());
+        auto layout = juce::JSON::parse(R"({"version":1,"slots":[{"paramId":"reso"}]})");
+        object->setProperty("cardLayout", layout);
+    }
+
+    // Opened "without it": the load names the plugin but never creates it.
+    backend.createCount = 0;
+    skipExample(backend);
+    HostedPluginModule module;
+    module.prepareToPlay(48000.0, 64);
+    {
+        HostedPluginBackend::ScopedClearSkips endOfLoad;
+        module.setExtraState(saved);
+    }
+    ASSERT_TRUE(synth::test::waitUntil([&] { return !module.isLoading(); }));
+    EXPECT_FALSE(module.hasInstance());
+    EXPECT_TRUE(module.isSwitchedOffAfterCrash());
+    EXPECT_EQ(backend.createCount, 0);
+    EXPECT_FALSE(backend.hasSkippedPlugins()) << "the skip ended with the project load";
+    const auto layoutBefore = module.getCardLayoutOverride();
+    EXPECT_FALSE(layoutBefore.isVoid());
+
+    // Turn on, with the skip even still set: an explicit turn-on is never blocked, and only this plugin's skip goes.
+    skipExample(backend);
+    backend.skipPluginForNextLoad("Other Synth", "/Library/Audio/Plug-Ins/VST3/Other Synth.vst3");
+    module.turnBackOn(backend);
+    EXPECT_TRUE(module.isLoading());
+    ASSERT_TRUE(synth::test::waitUntil([&] { return module.hasInstance(); }));
+    EXPECT_FALSE(module.isSwitchedOffAfterCrash());
+    EXPECT_TRUE(backend.hasSkippedPlugins()) << "another plugin's skip is untouched";
+
+    auto* instance = dynamic_cast<synth::test::StubPluginInstance*>(module.getActiveInstanceForEditor());
+    ASSERT_NE(instance, nullptr);
+    EXPECT_EQ(instance->payload, "saved-patch") << "the saved plugin state reaches the instance";
+    EXPECT_EQ(juce::JSON::toString(module.getCardLayoutOverride()), juce::JSON::toString(layoutBefore));
+    EXPECT_EQ(module.modChannelForParam("cutoff"), HostedPluginModule::kModChannelBase) << "the mod slot is kept";
+}
+
+TEST(SkipPluginForNextLoadTest, ALoadThatFailsForAnotherReasonIsNotSwitchedOffAfterACrash) {
+    StubBackend backend;
+    backend.failWith = "Example Synth could not be opened.";
+    HostedPluginModule module;
+    module.loadPlugin(examplePluginIdentity(), backend);
+    ASSERT_TRUE(synth::test::waitUntil([&] { return !module.isLoading(); }));
+    EXPECT_FALSE(module.hasInstance());
+    EXPECT_FALSE(module.isSwitchedOffAfterCrash());
+}

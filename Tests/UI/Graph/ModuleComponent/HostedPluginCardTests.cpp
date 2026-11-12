@@ -832,6 +832,52 @@ TEST(HostedPluginCardTest, ASwitchedOffPluginsCardSaysItIsSwitchedOffForThisOpen
     EXPECT_EQ(rig.backend.createCount, 0) << "the plugin's code is never loaded";
 }
 
+TEST(HostedPluginCardTest, TurnOnShowsOnlyWhileSwitchedOffAndAClickLoadsThePluginAgain) {
+    Rig rig;
+    synth::HostedPluginBackend::ScopedDefault installed(&rig.backend); // the card's button loads through the default
+    rig.backend.skipPluginForNextLoad("Card Plugin", "/Library/Audio/Plug-Ins/VST3/Card Plugin.vst3");
+    auto* hosted = new HostedPluginModule();
+    auto node = rig.engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(hosted));
+    rig.module = hosted;
+    rig.nodeId = node->nodeID;
+    hosted->prepareToPlay(kSampleRate, kBlockSize);
+    auto card = rig.makeCard();
+    auto* turnOn = childWithId<juce::TextButton>(*card, "turnPluginBackOn");
+    ASSERT_NE(turnOn, nullptr);
+    EXPECT_FALSE(turnOn->isVisible()) << "nothing is switched off yet";
+
+    synth::PluginIdentity identity;
+    identity.name = "Card Plugin";
+    identity.format = "VST3";
+    identity.uid = 0xC0DE01;
+    hosted->loadPlugin(identity, rig.backend); // description-less identity load: the skip applies
+    ASSERT_TRUE(pumpUntil([&] { return !hosted->isLoading() && turnOn->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    EXPECT_TRUE(hosted->isSwitchedOffAfterCrash());
+    EXPECT_GE(turnOn->getY(), label->getBottom()) << "the button sits under the reason, nothing overlaps";
+    EXPECT_GE(card->getHeight(), turnOn->getBottom()) << "the card was re-measured to hold it";
+    EXPECT_EQ(turnOn->getTitle(), "Turn Card Plugin back on");
+    EXPECT_EQ(turnOn->getTooltip(), "Load Card Plugin again in this project");
+    EXPECT_TRUE(turnOn->getWantsKeyboardFocus()) << "a Tab stop like Open Editor";
+
+    rig.backend.setFactory([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Card Plugin", 0xC0DE01, "VST3",
+                                                    std::vector<StubParamSpec>{knobSpec("a", "Alpha")});
+    });
+    // A real press and release on the button (the skip is still set: an explicit turn-on clears it).
+    const auto centre = turnOn->getLocalBounds().getCentre().toFloat();
+    auto& asComponent = static_cast<juce::Component&>(*turnOn); // Button's own handlers are protected
+    asComponent.mouseDown(mouseEvent(*turnOn, centre, false, centre));
+    asComponent.mouseUp(mouseEvent(*turnOn, centre, false, centre));
+    EXPECT_FALSE(turnOn->isVisible()) << "hidden as soon as the load is in flight";
+    ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance() && !childrenOfType<juce::Slider>(*card).empty(); }));
+    EXPECT_FALSE(hosted->isSwitchedOffAfterCrash());
+    EXPECT_FALSE(turnOn->isVisible());
+    EXPECT_FALSE(statusLabelOf(*card)->isVisible());
+    EXPECT_FALSE(childrenOfType<juce::Slider>(*card).empty()) << "the card shows its knobs again";
+}
+
 TEST(HostedPluginCardTest, DetachingACardWhoseNodeWasAlreadyFreedTouchesNothing) {
     Rig rig;
     rig.addPlugin({knobSpec("a", "Alpha"), choiceSpec("c", "Choice", {"A", "B"})});
