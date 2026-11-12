@@ -1,0 +1,43 @@
+# FRO1207: an effect hung off an Oscillator track's oscillator and then cabled into its VCA shows in that track's
+# mixer column the moment the cable is made.
+# What a user does: adds an Oscillator track, opens the Mixer tab, opens the track on the canvas, adds a Delay and
+# cables Oscillator out -> Delay in (the Delay has no output yet, the column is unchanged), then Delay out -> VCA
+# audio in (the column now shows the chain as 2 paths: the Delay and the Dry row).
+record: true
+save_project: end
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - expect: {id: "card:VCA", exists: true}
+  - expect: {count: {prefix: "Split into", field: title, equals: 0}}
+  - key: {keys: cmd+f}
+  - type: {text: delay}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 250, toX: 1300, toY: 430}
+  - wait: {}
+  - drag: {from: "card:Delay", to: window, fromX: 40, fromY: 17, toX: 1380, toY: 400, steps: 30}
+  - wait: {}
+  - drag: {from: "card:Oscillator > Audio output", to: "card:Delay > Audio input"}
+  - wait: {}
+  - expect: {count: {prefix: "Split into", field: title, equals: 0}}
+  - drag: {from: "card:Delay > Audio output", to: "card:VCA > Audio input"}
+  - wait: {}
+  - expect: {count: {prefix: "Split into 2 paths", field: title, equals: 1}, within_ms: 1500}
+  - mark: {check: 1, name: insert-on-connect}
+  - screenshot: {name: mixer-insert-on-connect}
