@@ -45,6 +45,9 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
   track's voice graph, and the plan's ownership walk follows every track forward. The reconcile's header refresh holds
   one batch, so the cable index and `synth::polyTrackOwners` (`PolyVoiceGraph.h`) are built once for all headers, not
   once per header. `EditRefreshWork.AnUndoWorksOutTheTrackOwnershipOnceForEveryHeader` counts it.
+- **`LayoutUtil::findFreeSlot`** files the boxes it is given by grid cell once per call, so the spiral search that
+  places a new module tests each spot against the cards near it, not every card of the project
+  ([layout.md](../layout/layout.md#layoututil-api)).
 - **The canvas's macro geometry** (`MacroGroupControllerInternal.h`): a pass over many hulls (layout units, port
   docking) measures them against one card map; the undo step's border snapshot and glide open a
   `graph_editor_paint::CardMapScope` (`GraphEditorPaintMemo.h`) so `MacroGroupController::macroHullBounds` reads one

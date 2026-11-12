@@ -1,8 +1,9 @@
 // EditRefreshWorkTests.cpp -- what an edit, and its undo, refresh in the UI is the part that changed, each
 // whole-project pass runs once per edit, and the end state is the one a full refresh would give. Counted with the
 // panels' test counters (TimelinePanelComponent::getTrackHeadersBuiltForTest,
-// TimelineAutomationLanes::getRoutingDerivationsForTest).
+// TimelineAutomationLanes::getRoutingDerivationsForTest) and the canvas's (graph_editor_paint::workCounters).
 #include "AI/AIProvider.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
@@ -10,11 +11,13 @@
 #include "Mixer/ChannelFlows/PolyVoiceGraph.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <map>
+#include <set>
 
 namespace {
 
@@ -185,4 +188,91 @@ TEST(EditRefreshWork, AMacroOnlyUndoStillRunsTheCatchAll) {
     ASSERT_TRUE(undo.undo());
     EXPECT_NE(macros.find(macroId)->name, juce::String("Renamed"));
     EXPECT_EQ(rig.derivations() - before, 1) << "the catch-all re-derived the modulator rows; no reconcile follows";
+}
+
+namespace {
+// The whole-project passes one edit ran.
+struct EditPasses {
+    int canvasReconciles = 0;    // GraphEditor::updateComponents
+    int cableRebuilds = 0;       // the visible-cable rebuild
+    int renderRebuilds = 0;      // batched render-sequence rebuilds (GraphRebuildBatch)
+    int derivations = 0;         // the modulator rows' deriveRoutings
+    int mostHeaderRefreshes = 0; // the most times one kept track header re-read its track
+    bool operator==(const EditPasses&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& os, const EditPasses& p) {
+    return os << "{reconciles " << p.canvasReconciles << ", cable rebuilds " << p.cableRebuilds << ", render rebuilds "
+              << p.renderRebuilds << ", derivations " << p.derivations << ", header refreshes " << p.mostHeaderRefreshes
+              << "}";
+}
+
+EditPasses passesOf(EditRig& rig, const std::function<void()>& edit) {
+    auto& editor = rig.mc.getGraphEditor();
+    std::map<std::int64_t, int> refreshes;
+    for (const auto& [id, header] : rig.headers())
+        refreshes[id] = header->getRefreshCountForTest();
+    auto& counters = graph_editor_paint::workCounters();
+    counters = {};
+    const int cables = editor.getCableRebuildCountForTest();
+    const int renders = synth::GraphRebuildBatch::rebuildCountForTest();
+    const int derivations = rig.derivations();
+    edit();
+    EditPasses passes{counters.componentUpdates, editor.getCableRebuildCountForTest() - cables,
+                      synth::GraphRebuildBatch::rebuildCountForTest() - renders, rig.derivations() - derivations, 0};
+    for (const auto& [id, header] : rig.headers())
+        if (refreshes.count(id) != 0)
+            passes.mostHeaderRefreshes =
+                std::max(passes.mostHeaderRefreshes, header->getRefreshCountForTest() - refreshes[id]);
+    return passes;
+}
+
+struct AddDeleteUndoPasses {
+    EditPasses add, remove, undoRemove;
+};
+
+// Adds a library Filter at the view's centre, deletes it with the Delete key, and undoes the delete.
+AddDeleteUndoPasses addDeleteUndo(int tracks) {
+    EditRig rig(tracks);
+    auto& editor = rig.mc.getGraphEditor();
+    auto& graph = rig.mc.getAudioEngine().getGraph();
+    std::set<juce::uint32> before;
+    for (auto* node : graph.getNodes())
+        before.insert(node->nodeID.uid);
+    AddDeleteUndoPasses out;
+    out.add =
+        passesOf(rig, [&] { editor.addModuleAtCanvasPosition("Filter", editor.getViewportCentreInCanvasSpace(), {}); });
+    juce::AudioProcessorGraph::NodeID added;
+    for (auto* node : graph.getNodes())
+        if (before.count(node->nodeID.uid) == 0)
+            added = node->nodeID;
+    EXPECT_NE(added.uid, 0u) << "the Filter was added";
+    editor.setSelectedNodes({added});
+    out.remove = passesOf(rig, [&] { editor.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)); });
+    EXPECT_EQ(graph.getNodeForId(added), nullptr) << "the Filter was deleted";
+    out.undoRemove = passesOf(rig, [&] { EXPECT_TRUE(rig.mc.getUndoManager().undo()); });
+    EXPECT_NE(graph.getNodeForId(added), nullptr) << "the undo brought it back";
+    return out;
+}
+} // namespace
+
+// Adding a module, deleting it and undoing the delete each run every whole-project pass at most once (the cables are
+// built for the state before the step and after it, which the retract animation compares), and the same passes at 20
+// tracks as at 80: what the project's size changes is the cost of one pass, never how many run.
+TEST(EditRefreshWork, AddingDeletingAndUndoingAModuleRunEachPassOnceHoweverManyTracks) {
+    const auto small = addDeleteUndo(20);
+    const auto big = addDeleteUndo(80);
+    EXPECT_EQ(small.add, big.add);
+    EXPECT_EQ(small.remove, big.remove);
+    EXPECT_EQ(small.undoRemove, big.undoRemove);
+    const std::pair<const char*, const EditPasses*> edits[]{
+        {"add", &big.add}, {"delete", &big.remove}, {"undo delete", &big.undoRemove}};
+    for (const auto& [name, passes] : edits) {
+        SCOPED_TRACE(std::string(name) + " " + ::testing::PrintToString(*passes));
+        EXPECT_LE(passes->canvasReconciles, 1);
+        EXPECT_LE(passes->cableRebuilds, 2) << "the cables before the step (when no paint has built them) and after it";
+        EXPECT_LE(passes->renderRebuilds, 1);
+        EXPECT_LE(passes->derivations, 1);
+        EXPECT_LE(passes->mostHeaderRefreshes, 1);
+    }
 }

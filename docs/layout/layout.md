@@ -570,6 +570,11 @@ Finds the nearest grid-aligned top-left where a `w x h` box does not overlap any
 (excluding `selfId`). Starts at `snap(desired)`, then walks the expanding spiral. Returns
 `snap(desired)`, clamped to the canvas, when no clear slot is found inside the search radius — it
 never returns an out-of-bounds position.
+The spiral can try every spot of 256 rings, so each spot is tested only against the boxes near it: the call files
+`others` once by the cells of a grid laid over them and a spot reads only the cells it touches. The answer is the one
+testing every box would give (`LayoutUtilTest.FindFreeSlotPicksTheSameSpotAsTestingEveryBox`); testing every box
+made one library add on the Load test project spend most of its time here
+(`ScaleHang.PlacingANewCardTestsOnlyTheCardsNearItsSpot` counts it).
 
 **`computeHierarchicalArrange`**
 

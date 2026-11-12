@@ -75,6 +75,11 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 // grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to x,y >= 0 only (the canvas frame grows to fit).
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
+/** How many boxes findFreeSlot and intersectsAny have tested a spot against; message thread only (ScaleHangTests). */
+struct FreeSlotSearchCounters {
+    long long boxTests = 0;
+};
+FreeSlotSearchCounters& freeSlotSearchCountersForTest() noexcept;
 
 // Like findFreeSlot, but the search only walks DOWN from `desired` (snapped, clamped to x,y >= 0) in kGridSize
 // steps, so the result keeps the desired x: the first clear row under a spot beside a card. Gives up after

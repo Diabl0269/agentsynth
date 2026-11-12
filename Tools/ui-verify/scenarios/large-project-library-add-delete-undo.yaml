@@ -1,0 +1,40 @@
+# Adding a library module, deleting it and undoing the delete on a big project (20 tracks, 20 open macros, about 250
+# modules): each edit shows at once, with no stall.
+#
+# Needs a big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check. The counters behind it are in EditRefreshWorkTests and ScaleHangTests.
+#
+# What a user does:
+#   1. Finds Filter in the library (Cmd+F, "filter") and adds it with Return: a new Filter card appears.
+#   2. Clicks the new card and presses Delete: the card goes.
+#   3. Presses Cmd+Z: it comes back.
+motion: true
+record: true
+save_project: large-project-library-add
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Filter 11", showing: true}
+  - expect: {id: "card:Filter 12", exists: false}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down, instant: "the highlighted library row moves"}
+  - key: {keys: down, instant: "the highlighted library row moves"}
+  - glide: {name: add, frames: 14, do: {key: {keys: return}}}
+  - expect: {id: "card:Filter 12", showing: true, within_ms: 2000}
+  - wait: {timeoutMs: 1000, settleMs: 500}
+  - mark: {check: 1, name: filter-added}
+  - click: {id: "card:Filter 12", y: 4, instant: "the click selects the new card: its outline shows"}
+  - wait: {}
+  - glide: {name: delete, frames: 12, do: {key: {keys: backspace}}}
+  - expect: {id: "card:Filter 12", exists: false, within_ms: 2000}
+  - wait: {timeoutMs: 1000, settleMs: 500}
+  - mark: {check: 2, name: filter-deleted}
+  - glide: {name: undo-delete, frames: 12, do: {key: {keys: cmd+z}}}
+  - expect: {id: "card:Filter 12", showing: true, within_ms: 2000}
+  - wait: {timeoutMs: 1000, settleMs: 500}
+  - mark: {check: 3, name: filter-back-after-undo}

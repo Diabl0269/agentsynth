@@ -3,6 +3,7 @@
 #include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <optional>
 
 // ============================================================================
 // SnapRoundsToNearestGridMultiple
@@ -152,6 +153,66 @@ TEST(LayoutUtilTest, FindFreeSlotPicksTheNearestSpotOfItsRing) {
         const auto result = findFreeSlot({x, 80}, 280, 105, wide, juce::AudioProcessorGraph::NodeID{1});
         EXPECT_EQ(result.x, x) << "straight below the macro, not off to one side";
         EXPECT_EQ(result.y, 712);
+    }
+}
+
+namespace {
+// findFreeSlot as it was before its boxes were filed by grid cell: every spot tested against every box.
+juce::Point<int> findFreeSlotTestingEveryBox(juce::Point<int> desired, int w, int h,
+                                             const std::vector<synth::LayoutUtil::Box>& others,
+                                             juce::AudioProcessorGraph::NodeID selfId) {
+    using namespace synth::LayoutUtil;
+    auto clamp = [](juce::Point<int> p) { return juce::Point<int>{juce::jmax(0, p.x), juce::jmax(0, p.y)}; };
+    const auto snapped = clamp(snap(desired));
+    if (!intersectsAny({snapped.x, snapped.y, w, h}, others, selfId, kCollisionGap))
+        return snapped;
+    for (int ring = 1; ring <= kSpiralMaxRings; ++ring) {
+        const int step = kSpiralStep * ring;
+        std::optional<juce::Point<int>> best;
+        int64_t bestDist = 0;
+        auto consider = [&](int dx, int dy) {
+            const auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y + dy}));
+            if (intersectsAny({pt.x, pt.y, w, h}, others, selfId, kCollisionGap))
+                return;
+            const int64_t ex = pt.x - snapped.x, ey = pt.y - snapped.y;
+            if (!best.has_value() || ex * ex + ey * ey < bestDist) {
+                best = pt;
+                bestDist = ex * ex + ey * ey;
+            }
+        };
+        for (int dx = -step; dx <= step; dx += kSpiralStep)
+            consider(dx, -step);
+        for (int dy = -step + kSpiralStep; dy <= step; dy += kSpiralStep)
+            consider(step, dy);
+        for (int dx = step - kSpiralStep; dx >= -step; dx -= kSpiralStep)
+            consider(dx, step);
+        for (int dy = step - kSpiralStep; dy >= -step + kSpiralStep; dy -= kSpiralStep)
+            consider(-step, dy);
+        if (best.has_value())
+            return *best;
+    }
+    return snapped;
+}
+} // namespace
+
+// The search files its boxes by grid cell so a spot is tested only against the boxes near it; it must still pick the
+// same spot as testing every box, on crowded, sparse, huge and empty canvases, and with the card's own box listed.
+TEST(LayoutUtilTest, FindFreeSlotPicksTheSameSpotAsTestingEveryBox) {
+    using namespace synth::LayoutUtil;
+    juce::Random random(871);
+    for (int trial = 0; trial < 200; ++trial) {
+        SCOPED_TRACE("trial " + std::to_string(trial));
+        const int span = trial % 4 == 0 ? 60000 : 3000;
+        std::vector<Box> boxes;
+        const int count = trial % 10 == 0 ? 0 : 1 + random.nextInt(80);
+        for (int i = 0; i < count; ++i)
+            boxes.push_back({juce::AudioProcessorGraph::NodeID{(juce::uint32)(i + 2)},
+                             {random.nextInt(span), random.nextInt(span), 40 + random.nextInt(i % 7 == 0 ? 2400 : 400),
+                              40 + random.nextInt(600)}});
+        const juce::AudioProcessorGraph::NodeID self{(juce::uint32)(trial % 3 == 0 && count > 0 ? 2 : 1)};
+        const juce::Point<int> desired{random.nextInt(span) - 100, random.nextInt(span) - 100};
+        const int w = 120 + random.nextInt(300), h = 100 + random.nextInt(500);
+        EXPECT_EQ(findFreeSlot(desired, w, h, boxes, self), findFreeSlotTestingEveryBox(desired, w, h, boxes, self));
     }
 }
 
