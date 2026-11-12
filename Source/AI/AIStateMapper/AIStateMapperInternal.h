@@ -429,5 +429,12 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
 // always did.
 void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuverter);
 
+// -- Two-leg output jacks on load (AIStateMapperTwoLegJacks.cpp) ----------------------------------
+
+// A saved cable from a joined two-leg output jack (a mono-mode Oscillator or Wavetable with Dual I/O off) that fans
+// its left leg onto both legs of a far pair takes the jack's right leg on the far Right instead. Run once the patch's
+// connections are in.
+void repointFannedTwoLegJackEdges(juce::AudioProcessorGraph& graph);
+
 } // namespace detail
 } // namespace synth

@@ -459,9 +459,16 @@ LogicalPort WavetableOscillatorModule::mapOutputChannel(int raw) const {
         p.visibleJackIndex = 0;
         p.isPolyGroupHead = (raw == 0);
         p.polyVoiceSpan = (raw == 0) ? span : 1;
+        // Collapsed (Dual I/O off) in mono mode: the one Audio jack owns both legs, kRightBase apart, so a single
+        // cable carries the stack's right leg too (Width then spreads from it). Collapsed in poly mode the right
+        // block still renders but is not exposed as a jack.
+        if (raw == 0 && !isDualIO() && !poly) {
+            p.polyVoiceSpan = 2;
+            p.voiceStride = kRightBase;
+        }
         return p;
     }
-    // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed.
+    // Collapsed: the right block is not exposed as a jack of its own.
     if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
         p.visibleJackIndex = 1;
         p.isPolyGroupHead = (raw == kRightBase);

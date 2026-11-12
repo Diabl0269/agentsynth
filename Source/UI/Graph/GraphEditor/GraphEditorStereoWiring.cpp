@@ -271,10 +271,9 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             // c.destination.channelIndex, the very channel our left leg is already wired to, so it is
             // visible by construction.
             //
-            // A split-block source loses the extra cable on collapse for free (its right leg is a hidden
-            // block again). A contiguous-pair FX source keeps raw ch1 in its collapsed jack, so it only
-            // qualifies into a collapsed split-block peer, and removeSummedRightLegIntoCollapsedPeers
-            // takes the cable away on collapse, keeping the round-trip exact.
+            // A source whose collapsed jack hides its right leg (Filter, VCA, a poly voice module) loses the
+            // extra cable on collapse for free. One whose collapsed jack keeps it (an FX pair on raw ch1, a
+            // mono Oscillator or Wavetable on kRightBase) has removeSummedRightLegIntoCollapsedPeers take it.
             const auto* destMb = destNode != nullptr ? dynamic_cast<ModuleBase*>(destNode->getProcessor()) : nullptr;
             if (destLeg < 0 && destNode != nullptr &&
                 (mb->hasSplitBlockStereo() || (destMb != nullptr && destMb->hasSplitBlockStereo())) &&
@@ -405,20 +404,23 @@ bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawCha
 }
 
 namespace {
-// A contiguous-pair FX source (right leg on raw ch1) that is collapsed again: its summed second cable
-// into a collapsed split-block peer's one jack has no jack of its own any more, so it goes. Only a
-// cable whose left twin is wired to the very same peer channel counts as that sum.
+// A source whose joined jack still owns its right leg (a contiguous-pair FX on raw ch1, or a mono-mode Oscillator or
+// Wavetable on kRightBase) that is collapsed again: its summed second cable into a peer's one-leg jack (a collapsed
+// split-block peer, or a dedicated mono input such as the Ring Modulator's Modulator) has no jack of its own any
+// more, so it goes, and the one cable is the left leg, as a fresh drag wires it. Only a cable whose left twin is wired
+// to the very same peer channel counts as that sum.
 void removeSummedRightLegIntoCollapsedPeers(juce::AudioProcessorGraph& graph, const ModuleBase& mb,
                                             juce::AudioProcessorGraph::NodeID nodeId) {
-    if (mb.isDualIO() || mb.hasSplitBlockStereo() || mb.rightAudioLegChannel() != 1)
+    const int right = mb.rightAudioLegChannel();
+    if (mb.isDualIO() || right <= 0 || !GraphEditor::audioChannelReachableFromJack(mb, right, /*isInput=*/false))
         return;
 
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.destination.isMIDI() || c.source.channelIndex != 1)
+        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.destination.isMIDI() || c.source.channelIndex != right)
             continue;
         auto* destNode = graph.getNodeForId(c.destination.nodeID);
         auto* destMb = destNode != nullptr ? dynamic_cast<ModuleBase*>(destNode->getProcessor()) : nullptr;
-        if (destMb == nullptr || !destMb->hasSplitBlockStereo() || destMb->isDualIO())
+        if (destMb == nullptr)
             continue;
         if (graph.isConnected({{nodeId, 0}, c.destination}))
             graph.removeConnection(c);

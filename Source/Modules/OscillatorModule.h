@@ -441,10 +441,16 @@ public:
             p.visibleJackIndex = 0;
             p.isPolyGroupHead = (raw == 0);
             p.polyVoiceSpan = (raw == 0) ? span : 1;
+            // Collapsed (Dual I/O off) in mono mode: the one Audio jack owns both legs, kRightBase apart, so a
+            // single cable carries the stack's right leg too (Width then spreads from it). Collapsed in poly mode
+            // the right block still renders but is not exposed: nothing can be patched to it.
+            if (raw == 0 && !isDualIO() && !poly) {
+                p.polyVoiceSpan = 2;
+                p.voiceStride = kRightBase;
+            }
             return p;
         }
-        // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed as a
-        // jack, so nothing can be patched to it. Falls through to the non-head case below.
+        // Collapsed: the right block is not exposed as a jack of its own. Falls through to the non-head case below.
         if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
             p.visibleJackIndex = 1;
             p.isPolyGroupHead = (raw == kRightBase);
@@ -559,6 +565,9 @@ private:
     synth::UnisonMix unisonMix;
     void prepareUnisonMix(int unisonCount, int numSamples, float blend, float width);
     void fillUnisonRatios(float* ratios, int unisonCount, int renderCount, float detuneCents) const;
+    /** Whether the right leg reaches a cable: always when split, and from a collapsed jack in mono mode, whose one
+        jack owns both legs (mapOutputChannel). A collapsed poly jack still shows the left legs only. */
+    bool rightLegHeard() const { return isDualIO() || !polyParam->get(); }
 
     // ---- Notes and restart (OscillatorModuleNotes.cpp) ----
     /** A mono pitch change at a sample of this block: a note-on, or Legato going back to a held note. */

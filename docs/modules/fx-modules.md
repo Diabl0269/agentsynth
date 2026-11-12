@@ -198,7 +198,8 @@ lives, and that changes what "off" means:
 | Layout | Modules | Dual I/O off |
 |---|---|---|
 | **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Ring Modulator out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
-| **Split block** (`kRightBase`) | Oscillator, Wavetable, Filter, VCA | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+| **Split block** (`kRightBase`) | Filter, VCA; Oscillator and Wavetable in poly mode | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+| **Split block, two-leg output jack** (`kRightBase`, jack `voiceStride`) | Oscillator and Wavetable in mono mode (output) | One `"Audio"` jack **owning both raw legs**, `0` and `kRightBase` apart, so one cable carries Width and Pan ([width on a single cable](oscillator-voice.md#width-on-a-single-cable)). Collapsing hides nothing; a saved left-leg fan is re-pointed on load. |
 | **Split block, two-leg jack** (`kRightBase`, jack `voiceStride`) | Channel Strip (input of a stereo strip, main output of every strip) | One `"Audio"` jack **owning both raw legs**, `0` and `kRightBase` apart; nothing is hidden, so no cable is re-pointed or dropped. |
 
 Voice Mixer and Ring Modulator are **output-only**: their input jacks are not a stereo pair (eight

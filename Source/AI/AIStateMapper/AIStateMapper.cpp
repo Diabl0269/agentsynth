@@ -842,8 +842,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                 isModTarget = modBase->isAutoPromotableModTarget(dstPort);
                         }
 
-                        if (isModTarget) {
-                            // Create attenuverter chain: source -> attenuverter -> dest
+                        if (isModTarget) { // attenuverter chain: source -> attenuverter -> dest
                             auto attenNode = addNodeDeferred(graph, std::make_unique<AttenuverterModule>());
                             if (attenNode) {
                                 if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
@@ -861,6 +860,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
+    detail::repointFannedTwoLegJackEdges(graph); // joined two-leg jacks saved as one leg (AIStateMapperTwoLegJacks.cpp)
     // 3. Modulations (AIStateMapperModulations.cpp)
     if (auto* modList = rootObj->getProperty("modulations").getArray())
         detail::applyModulationEntries(*modList, graph, idMap, trusted);

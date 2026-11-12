@@ -186,7 +186,7 @@ reach: it starts at zero, so a master above twice the note only lets it climb pa
 
 ## Stereo output
 
-The module has two output jacks. `Width` (default 1; a single voice stays centred) pans the unison voices across the stereo field; `Pan` places
+Collapsed (Dual I/O off) in mono mode the one `Audio` jack owns both legs, so a single cable carries Width and Pan ([oscillator-voice.md](oscillator-voice.md#width-on-a-single-cable)). The module has two output jacks. `Width` (default 1; a single voice stays centred) pans the unison voices across the stereo field; `Pan` places
 the whole voice.
 
 - **Mono**: `Audio L` on ch0, `Audio R` on `kRightBase` (ch23).
