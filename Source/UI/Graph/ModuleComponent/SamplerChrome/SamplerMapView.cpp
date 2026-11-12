@@ -11,6 +11,7 @@ namespace {
 constexpr int kMargin = 14;
 constexpr int kGap = 10;
 constexpr int kNoticeHeight = 30;
+constexpr int kHintHeight = 20;
 constexpr int kFieldsHeight = 124; // the file row, a gap and two rows of captioned fields
 constexpr int kBottomBarHeight = 30;
 constexpr int kButtonWidth = 130;
@@ -30,10 +31,13 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     setTitle("Instrument map");
     addAndMakeVisible(blocks_);
     addAndMakeVisible(fields_);
-    for (juce::Component* c : {(juce::Component*)&notice_, (juce::Component*)&copyButton_,
+    for (juce::Component* c : {(juce::Component*)&notice_, (juce::Component*)&drumHint_, (juce::Component*)&copyButton_,
                                (juce::Component*)&addButton_, (juce::Component*)&doneButton_})
         addAndMakeVisible(*c);
     notice_.setAccessible(false);
+    drumHint_.setVisible(false);
+    drumHint_.setTitle(drumHint_.getText());
+    drumHint_.setTooltip("A drum kit plays one drum per key; the Drum Kit module has a pad for each");
     styleButton(copyButton_, "Make your own copy of this built-in instrument so its recordings can be changed");
     styleButton(addButton_, "Add one or more recordings after the selected one");
     styleButton(doneButton_, "Close the map (Esc)");
@@ -98,6 +102,13 @@ void SamplerMapView::applyReadOnly() {
     fields_.setEditable(!pack && sampler_ != nullptr);
     addButton_.setEnabled(!pack && sampler_ != nullptr);
     noticeFade_.setShown(pack);
+    const bool drums = sampler_ != nullptr && sampler_->isDrumKitInstrument();
+    blocks_.setDrumKit(drums);
+    if (drums != drumKit_) {
+        drumKit_ = drums;
+        drumHint_.setVisible(drums);
+        resized();
+    }
 }
 
 // Shows the module's list with `selected` selected (nothing when the list no longer has it).
@@ -217,6 +228,10 @@ void SamplerMapView::resized() {
     copyButton_.setBounds(notice.removeFromRight(kButtonWidth + 20));
     notice_.setBounds(notice);
     area.removeFromTop(kGap);
+    if (drumKit_) {
+        drumHint_.setBounds(area.removeFromTop(kHintHeight));
+        area.removeFromTop(kGap);
+    }
     blocks_.setBounds(area);
 }
 

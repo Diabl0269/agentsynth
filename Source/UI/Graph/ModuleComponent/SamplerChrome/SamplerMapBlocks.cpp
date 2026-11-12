@@ -1,5 +1,6 @@
 // SamplerMapBlocks.cpp -- the map's keyboard, rows and blocks: layout, painting, the arrow keys and the file drop.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h"
+#include "Modules/DrumKit/DrumKitPads.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
@@ -54,18 +55,26 @@ juce::Range<int> keySpanFor(const std::vector<synth::sampler::RegionSpec>& specs
 
 } // namespace
 
+// The drum a region plays: the General MIDI drum on its root key, else the one on its lowest key; empty for none.
+static int padNote(const synth::sampler::RegionSpec& spec) {
+    return synth::drums::soundName(spec.rootKey).isNotEmpty() ? spec.rootKey : spec.loKey;
+}
+
 // One recording on the map. Not a Tab stop: the map is, and its arrow keys walk the blocks.
 class SamplerMapBlock : public juce::Button {
 public:
-    SamplerMapBlock(SamplerMapBlocks& owner, int region, const synth::sampler::RegionSpec& spec, int attackRow)
-        : juce::Button(juce::File(spec.samplePath).getFileNameWithoutExtension())
+    SamplerMapBlock(SamplerMapBlocks& owner, int region, const synth::sampler::RegionSpec& spec, int attackRow,
+                    const juce::String& pad)
+        : juce::Button(pad.isNotEmpty() ? pad : juce::File(spec.samplePath).getFileNameWithoutExtension())
         , owner_(owner)
         , region_(region)
         , row_(attackRow)
         , release_(spec.releaseTrigger) {
         setWantsKeyboardFocus(false);
-        setTitle(synth::sampler::describeRegion(spec));
-        setTooltip(synth::sampler::describeRegion(spec) + ". Click to edit.");
+        const auto prefix =
+            pad.isNotEmpty() ? pad + ", " + synth::sampler::keyName(padNote(spec)) + ". " : juce::String();
+        setTitle(prefix + synth::sampler::describeRegion(spec));
+        setTooltip(prefix + synth::sampler::describeRegion(spec) + ". Click to edit.");
         onClick = [this] {
             owner_.select(region_);
             owner_.grabKeyboardFocus();
@@ -125,6 +134,19 @@ void SamplerMapBlocks::setRegions(const std::vector<synth::sampler::RegionSpec>&
     repaint();
 }
 
+juce::String SamplerMapBlocks::padNameFor(const synth::sampler::RegionSpec& spec) const {
+    return drumKit_ ? synth::drums::soundName(padNote(spec)) : juce::String();
+}
+
+void SamplerMapBlocks::setDrumKit(bool drumKit) {
+    if (drumKit_ == drumKit)
+        return;
+    drumKit_ = drumKit;
+    rebuildBlocks();
+    updateTitle();
+    repaint();
+}
+
 void SamplerMapBlocks::rebuildBlocks() {
     blocks_.clear();
     rowOfRegion_.assign(specs_.size(), 0);
@@ -134,7 +156,8 @@ void SamplerMapBlocks::rebuildBlocks() {
     blocks_.resize(specs_.size());
     for (size_t row = 0; row < layers_.size(); ++row)
         for (const int index : layers_[row].regions) {
-            blocks_[(size_t)index] = std::make_unique<SamplerMapBlock>(*this, index, specs_[(size_t)index], (int)row);
+            blocks_[(size_t)index] = std::make_unique<SamplerMapBlock>(*this, index, specs_[(size_t)index], (int)row,
+                                                                       padNameFor(specs_[(size_t)index]));
             addAndMakeVisible(*blocks_[(size_t)index]);
         }
     layoutBlocks();
@@ -210,8 +233,15 @@ void SamplerMapBlocks::select(int index) {
 }
 
 void SamplerMapBlocks::updateTitle() {
-    setTitle(selected_ >= 0 ? "Instrument map, " + synth::sampler::describeRegion(specs_[(size_t)selected_])
-                            : juce::String("Instrument map"));
+    if (selected_ < 0) {
+        setTitle("Instrument map");
+        return;
+    }
+    const auto& spec = specs_[(size_t)selected_];
+    const auto pad = padNameFor(spec);
+    setTitle("Instrument map, " +
+             (pad.isNotEmpty() ? pad + ", " + synth::sampler::keyName(padNote(spec)) + ". " : juce::String()) +
+             synth::sampler::describeRegion(spec));
 }
 
 // Every semitone gets an equal column so the keys line up with the blocks below. The white keys form one band under

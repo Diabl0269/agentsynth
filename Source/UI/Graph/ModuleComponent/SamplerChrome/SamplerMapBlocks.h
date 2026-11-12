@@ -36,6 +36,10 @@ public:
     void setRegions(const std::vector<synth::sampler::RegionSpec>& specs, int selected);
     /** False: the map can be walked and read but a drop does nothing. */
     void setEditable(bool editable) { editable_ = editable; }
+    /** True for a drum kit: each block is named by its pad ("Kick") and its tooltip and spoken name start with the
+     *  pad and key ("Kick, C1"), for the keys that have a General MIDI drum. */
+    void setDrumKit(bool drumKit);
+    bool isDrumKit() const noexcept { return drumKit_; }
 
     int getSelected() const noexcept { return selected_; }
     /** Selects `index` (-1 = none) and tells onSelect when it changed. */
@@ -74,6 +78,7 @@ public:
 private:
     friend class SamplerMapBlock;
     void rebuildBlocks();
+    juce::String padNameFor(const synth::sampler::RegionSpec& spec) const;
     void layoutBlocks();
     juce::Rectangle<int> keysArea() const;
     juce::Rectangle<int> rowsArea() const;
@@ -92,6 +97,7 @@ private:
     int dropKey_ = -1;
     int dropRegion_ = -1;
     bool editable_ = true;
+    bool drumKit_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerMapBlocks)
 };

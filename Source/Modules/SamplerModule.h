@@ -264,12 +264,12 @@ public:
 
     /** What the loaded instrument came from (None when nothing is loaded). */
     synth::sampler::InstrumentSource::Kind getInstrumentKind() const;
+    bool isDrumKitInstrument() const; // a sound pack instrument in the Drums category
 
     /** Drops the instrument; Instrument mode then renders silence. */
     void clearInstrument() override { instrumentSlot.clear(); }
 
     juce::String getInstrumentName() const override { return instrumentPlayer.name(); }
-
     /** Bumped on every publish or clear so UI caches know to rebuild. */
     int getInstrumentGeneration() const noexcept override { return instrumentPlayer.generation(); }
 

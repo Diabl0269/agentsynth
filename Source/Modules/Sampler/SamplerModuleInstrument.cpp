@@ -1,4 +1,5 @@
 // SamplerModuleInstrument.cpp -- the Sampler's instrument loading and editing entry points, kept out of the header.
+#include "Modules/Sampler/SoundPackLibrary.h"
 #include "Modules/SamplerModule.h"
 
 bool SamplerModule::loadInstrumentFromSfz(const juce::File& sfz) {
@@ -28,3 +29,11 @@ bool SamplerModule::editInstrumentRegions(const std::vector<synth::sampler::Regi
 }
 
 synth::sampler::InstrumentSource::Kind SamplerModule::getInstrumentKind() const { return instrumentSlot.loadedKind(); }
+
+bool SamplerModule::isDrumKitInstrument() const {
+    const auto& source = instrumentSlot.sourceToSave();
+    if (source.kind != synth::sampler::InstrumentSource::Kind::Pack)
+        return false;
+    const auto found = synth::sampler::SoundPackLibrary::find(source.packId, source.instrumentId);
+    return found.has_value() && found->category == "Drums";
+}

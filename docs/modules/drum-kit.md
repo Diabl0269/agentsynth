@@ -58,6 +58,10 @@ A project saved before pads opens as 8 pads carrying its group values, and rende
 One intended difference: two notes that shared an old voice (35/36, 38/40, 42/44, 49/57, 51/59) now overlap instead
 of restarting each other, and the second one starts from a fresh voice instead of the filter state the first left.
 
+## Kits in a Sampler
+
+A kit loaded into a Sampler (Edit map) says it is best played from the Drum Kit module and names its pads ([sampler-instruments](sampler-instruments.md#the-map-window)). Note 36 (C1, the kick) is heard with the kick's Recorded switch on (the recording) and off (the synth kick), and in a Sampler with the kit loaded (`DrumKitRecorded.NoteC1IsAudibleWithKickRecordedOnAndOff`, `ASamplerWithTheKitLoadedPlaysNoteC1`).
+
 ## The card
 
 The card is 280 px wide. From the top:
