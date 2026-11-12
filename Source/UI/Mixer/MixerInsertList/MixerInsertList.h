@@ -151,6 +151,13 @@ public:
     static std::vector<juce::String> effectPickerTypesForTest();
     /** When set, showAddPicker() hands its picker here instead of opening a call-out. */
     static std::function<void(std::unique_ptr<ModMatrixPicker>)>& pickerHookForTest();
+    /** Opens row `rowIndex`'s right-click menu from the keyboard (Shift+F10 on a focused row), beside the row instead
+     *  of at the pointer: a split row's menu ("Add before/after all paths", "Add to path N"), a module's (Move, Remove,
+     *  "Add after"). The "+ Insert" row and a dry path open their picker, as Return does. False when the row has no
+     *  menu (out of range, the list not editable). */
+    bool showMenuForKeyboardRow(int rowIndex);
+    /** Test seam: when set, a row menu is handed here (with the callback its choice calls) instead of being shown. */
+    static std::function<void(juce::PopupMenu&, std::function<void(int)>)>& menuHookForTest();
     static void resetRecentPicksForTest();
 
     // ---- Splits (docs/mixer/mixer.md#parallel-paths) ----
@@ -315,8 +322,10 @@ private:
     void rebuildVisibleRows();
     void refreshRows();
     void notifyHeightChanged();
-    void showSplitMenu(int rowIndex);
-    void showRowMenu(int rowIndex);
+    void showSplitMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor = std::nullopt);
+    void showRowMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor = std::nullopt);
+    void presentRowMenu(juce::PopupMenu& menu, const std::optional<juce::Rectangle<int>>& keyboardAnchor,
+                        std::function<void(int)> chosen);
     bool mutateAndNotify(const std::function<bool()>& mutation, bool holdPanelRebuild = false);
     void rebuildRowAccessibilityProxies();
     void rebuildBypassButtons();

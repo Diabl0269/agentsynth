@@ -85,7 +85,42 @@ std::function<void(std::unique_ptr<ModMatrixPicker>)>& MixerInsertList::pickerHo
     return hook;
 }
 
+std::function<void(juce::PopupMenu&, std::function<void(int)>)>& MixerInsertList::menuHookForTest() {
+    static std::function<void(juce::PopupMenu&, std::function<void(int)>)> hook;
+    return hook;
+}
+
 // ---- Mouse and menus -------------------------------------------------------------------------------------------
+
+void MixerInsertList::presentRowMenu(juce::PopupMenu& menu, const std::optional<juce::Rectangle<int>>& keyboardAnchor,
+                                     std::function<void(int)> chosen) {
+    if (auto& hook = menuHookForTest()) {
+        hook(menu, std::move(chosen));
+        return;
+    }
+    menu.showMenuAsync(synth::ui::contextMenuOptions(keyboardAnchor), std::move(chosen));
+}
+
+bool MixerInsertList::showMenuForKeyboardRow(int rowIndex) {
+    if (!isEditable() || rowIndex < 0 || rowIndex >= getRowCount())
+        return false;
+    if (isAddRow(rowIndex)) {
+        activateAddRow();
+        return true;
+    }
+    if (isDryRow(rowIndex)) {
+        activateDryRow(rowIndex);
+        return true;
+    }
+    const auto anchor = std::optional<juce::Rectangle<int>>(localAreaToGlobal(getRowBounds(rowIndex)));
+    if (isSplitRow(rowIndex))
+        showSplitMenu(rowIndex, anchor);
+    else if (entryForRow(rowIndex) != nullptr)
+        showRowMenu(rowIndex, anchor);
+    else
+        return false;
+    return true;
+}
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     pressedRow_ = -1;
@@ -172,7 +207,7 @@ void MixerInsertList::mouseExit(const juce::MouseEvent&) {
     }
 }
 
-void MixerInsertList::showSplitMenu(int rowIndex) {
+void MixerInsertList::showSplitMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor) {
     juce::PopupMenu menu;
     menu.addItem(1, isSplitOpen(rowIndex) ? "Fold paths" : "Show paths");
     menu.addItem(2, isSplitBypassed(visible_[(size_t)rowIndex]) ? "Turn every path back on" : "Bypass every path");
@@ -184,7 +219,7 @@ void MixerInsertList::showSplitMenu(int rowIndex) {
     for (int p = 0; p < paths; ++p)
         menu.addItem(10 + p, "Add to path " + juce::String(p + 1), pathAddTarget(rowIndex, p).has_value());
     const auto area = getRowBounds(rowIndex);
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex, entryIndex, paths, area](int result) {
+    presentRowMenu(menu, keyboardAnchor, [this, rowIndex, entryIndex, paths, area](int result) {
         if (result == 1)
             setSplitOpen(rowIndex, !isSplitOpen(rowIndex));
         else if (result == 2)
@@ -200,7 +235,7 @@ void MixerInsertList::showSplitMenu(int rowIndex) {
     });
 }
 
-void MixerInsertList::showRowMenu(int rowIndex) {
+void MixerInsertList::showRowMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor) {
     juce::PopupMenu menu;
     menu.addItem(1, "Move Up", canMoveRow(rowIndex, -1));
     menu.addItem(2, "Move Down", canMoveRow(rowIndex, 1));
@@ -211,7 +246,7 @@ void MixerInsertList::showRowMenu(int rowIndex) {
     const bool canAddAfter = graph_ != nullptr && isSet(synth::soleSignalNeighbour(*graph_, node, false, stripNodeId_));
     menu.addItem(4, "Add after", canAddAfter);
     const auto area = getRowBounds(rowIndex);
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex, node, area](int result) {
+    presentRowMenu(menu, keyboardAnchor, [this, rowIndex, node, area](int result) {
         if (result == 1)
             moveRow(rowIndex, -1);
         else if (result == 2)

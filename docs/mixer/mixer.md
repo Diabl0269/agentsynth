@@ -450,8 +450,10 @@ behind every path, before the strip. The line above a split row adds in front of
 or track source that feeds them now feeds the new module), and the line below one, above the module they
 merge into, behind all of them; the split row's right-click menu offers "Add before all paths" and "Add after
 all paths". A module hung off the fork with no output is no path and keeps its cable. Each path still takes
-one through "Add to path". Keys: Return on the "+ Insert" row opens the picker like any other chain; the
-split-side lines and menu items are mouse entries, like the gap line between two modules. Tests:
+one through "Add to path". Keys: Return on the "+ Insert" row opens the picker like any other chain, and Shift+F10
+on a focused row opens that row's right-click menu beside it (`MixerInsertList::showMenuForKeyboardRow`), so a
+split row's "Add before all paths" and "Add after all paths" are reachable without the mouse; the gap lines
+themselves stay mouse entries, like the line between two modules. Tests:
 `InsertAddAffordanceMatrix` (`Tests/UI/Mixer/MixerInsertListAcrossTests.cpp`) walks every chain shape x entry
 point, and `MixerModelSpliceAcrossTests` asserts the raw edges.
 

@@ -283,6 +283,9 @@ TEST(MixerInsertListAcrossTests, PlusInsertAfterTheLastSplitRoutesEveryPathThrou
     EXPECT_EQ(r.list.getAddRowIndex(), 1);
     EXPECT_EQ(r.list.describeRow(1), "Add an insert after all paths");
     EXPECT_EQ(r.list.tooltipAt({40, r.list.getRowBounds(1).getCentreY()}), "Add an effect after all paths");
+    ASSERT_NE(r.list.getRowAccessibilityComponentForTest(1), nullptr);
+    EXPECT_EQ(r.list.getRowAccessibilityComponentForTest(1)->getTitle(), "Add an insert after all paths")
+        << "the screen-reader name of the row says where the add lands";
 
     const auto nodes = nodeUids(r);
     PickerCapture capture;
@@ -375,4 +378,42 @@ TEST(MixerInsertListAcrossTests, TheLineBelowASplitAddsBehindEveryPath) {
     EXPECT_TRUE(p.wired(chorus, p.vca));
     EXPECT_FALSE(p.wired(p.delay, p.vca));
     EXPECT_FALSE(p.wired(p.reverb, p.vca));
+}
+
+// Keyboard: Shift+F10 on a focused split row opens its menu beside the row, and the two new items add across every
+// path. The menu never runs headless, so the hook hands over the menu and the callback its choice calls.
+TEST(MixerInsertListAcrossTests, TheSplitRowMenuOpenedFromTheKeyboardOffersAddBeforeAndAfterAllPaths) {
+    SplitListRig r;
+    const auto delay = r.add("Delay", 300, 250);
+    r.wire(r.source, delay);
+    r.wire(r.source, r.strip);
+    r.wire(delay, r.strip);
+    r.refresh();
+    ASSERT_TRUE(r.list.isSplitRow(0));
+
+    std::vector<juce::String> texts;
+    std::function<void(int)> chosen;
+    MixerInsertList::menuHookForTest() = [&](juce::PopupMenu& menu, std::function<void(int)> callback) {
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            texts.push_back(it.getItem().text);
+        chosen = std::move(callback);
+    };
+    ASSERT_TRUE(r.list.showMenuForKeyboardRow(0));
+    MixerInsertList::menuHookForTest() = nullptr;
+    EXPECT_NE(std::find(texts.begin(), texts.end(), "Add before all paths"), texts.end());
+    EXPECT_NE(std::find(texts.begin(), texts.end(), "Add after all paths"), texts.end());
+
+    const auto nodes = nodeUids(r);
+    PickerCapture capture;
+    chosen(4);
+    capture.pick("Compressor");
+    NodeID comp;
+    for (auto uid : nodeUids(r))
+        if (nodes.count(uid) == 0)
+            comp = NodeID{uid};
+    ASSERT_NE(comp.uid, 0u);
+    EXPECT_TRUE(r.wired(delay, comp));
+    EXPECT_TRUE(r.wired(r.source, comp));
+    EXPECT_TRUE(r.wired(comp, r.strip));
 }

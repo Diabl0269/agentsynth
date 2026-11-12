@@ -7,8 +7,10 @@
 #      Oscillator's own way) that meet at the strip.
 #   2. The column ends in "+ Insert": picks a Compressor, which lands after the merge.
 #   3. Hovers the line above the 2-paths row and picks a Chorus: it lands before the split.
+#      The two adds are filmed as glides (proof/*-adds-strip.png): the new rows slide in with no jump.
 #   4. Presses Cmd+Z: the add is gone in one step and the paths are as before.
 record: true
+motion: true
 save_project: across-paths
 steps:
   - click: {id: New empty project}
@@ -48,13 +50,13 @@ steps:
   - click: {id: mixerInsertList, x: 30, y: 46}
   - wait: {}
   - type: {text: compressor}
-  - key: {keys: return}
+  - glide: {name: compressor-adds, frames: 14, do: {key: {keys: return}}}
   - wait: {}
   - mark: {check: 2, name: compressor-after-merge}
   - click: {id: mixerInsertList, x: 40, y: 18}
   - wait: {}
   - type: {text: chorus}
-  - key: {keys: return}
+  - glide: {name: chorus-adds, frames: 14, do: {key: {keys: return}}}
   - wait: {}
   - mark: {check: 3, name: chorus-before-split}
   - key: {keys: cmd+z}
