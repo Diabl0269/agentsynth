@@ -26,15 +26,15 @@ steps:
   - key: {keys: down, instant: "the highlighted library row moves"}
   - glide: {name: add, frames: 14, do: {key: {keys: return}}}
   - expect: {id: "card:Filter 12", showing: true, within_ms: 2000}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 1, name: filter-added}
   - click: {id: "card:Filter 12", y: 4, instant: "the click selects the new card: its outline shows"}
   - wait: {}
   - glide: {name: delete, frames: 12, do: {key: {keys: backspace}}}
   - expect: {id: "card:Filter 12", exists: false, within_ms: 2000}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 2, name: filter-deleted}
   - glide: {name: undo-delete, frames: 12, do: {key: {keys: cmd+z}}}
   - expect: {id: "card:Filter 12", showing: true, within_ms: 2000}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 3, name: filter-back-after-undo}

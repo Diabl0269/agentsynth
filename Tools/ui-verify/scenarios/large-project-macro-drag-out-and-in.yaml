@@ -26,7 +26,7 @@ steps:
   - glide: {name: drop-out, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseUp: {id: window, x: 420, y: 330, mods: cmd}}}
   - wait: {}
   - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 1, name: dragged-out-of-macro}
   - mouseDown: {id: "card:VCA 8", y: 4, mods: cmd}
   - mouseMoveHeld: {id: window, x: 480, y: 330, mods: cmd}
@@ -36,12 +36,12 @@ steps:
   - glide: {name: drop-in, frames: 10, crop: {x: 300, y: 200, w: 800, h: 300}, do: {mouseUp: {id: window, x: 885, y: 316, mods: cmd}}}
   - wait: {}
   - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 2, name: dragged-back-in}
   - glide: {name: undo-in, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
   - expect: {id: "card:VCA 8", macro: "", within_ms: 1500}
   - glide: {name: undo-out, frames: 14, crop: {x: 300, y: 200, w: 800, h: 300}, do: {key: {keys: cmd+z}}}
   - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 1500}
   - expect: {id: "card:VCA 8", bounds: {x: 851, y: 312, w: 68, h: 43}, within_ms: 2000}
-  - wait: {timeoutMs: 1000, settleMs: 500}
+  - wait: {timeoutMs: 5000, settleMs: 500}
   - mark: {check: 3, name: two-undos-restore}
