@@ -369,7 +369,8 @@ const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) 
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return nullptr;
-    for (const auto& target : mb->getModulationTargets()) {
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
         if (!target.knobOnly || mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
             continue;
         const int si = sliderIndexForModTarget(target);
@@ -387,7 +388,8 @@ std::optional<juce::Point<float>> ModuleComponent::foldedJackCentre(int destChan
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return std::nullopt;
-    for (const auto& target : mb->getModulationTargets()) {
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
         if (target.channelIndex != destChannel)
             continue;
         const int visible = mb->getVisibleInputPortCount();
@@ -418,7 +420,8 @@ std::optional<juce::Point<float>> ModuleComponent::parkedCableEnd(int destChanne
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
         return std::nullopt;
-    for (const auto& target : mb->getModulationTargets()) {
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
         if (target.channelIndex != destChannel)
             continue;
         if (!target.knobOnly || getModTargetKnobAnchor(destChannel).has_value())

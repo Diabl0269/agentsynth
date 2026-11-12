@@ -1,0 +1,24 @@
+# Native Instruments' Maschine 2 Audio Unit (8 in / 32 out, refuses every reduced bus layout) loads as a Hosted Plugin
+# card instead of being refused for being wider than 16 channels, and its window opens.
+#
+# What a user does:
+#   1. Opens a project with a Maschine 2 (Audio Unit) card (listed through the seeded scan list, because test mode does
+#      not scan): the card shows, with no refusal message under its Open Editor button, and only the main bus's two
+#      output jacks (Out L, Out R), not all 32 channels.
+#   2. Clicks Open Editor: Maschine's own window opens.
+record: true
+save_project: fro753-maschine-au
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="Maschine 2" descriptiveName="Maschine 2" format="AudioUnit" category="Synth" manufacturer="Native Instruments" version="1" file="AudioUnit:Synths/aumu,NiM2,-NI-" uniqueId="0" isInstrument="1" numInputs="0" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/maschine-au.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Maschine 2", showing: true, within_ms: 30000}
+  - expect: {id: hostedLoadStatus, showing: false, within_ms: 15000}
+  - expect: {count: {prefix: "Out ", field: title, equals: 2}}   # an old project (no "outputs" key) shows the main bus only, not all 32
+  - wait: {}
+  - mark: {check: 1, name: maschine-au-loaded}
+  - click: {id: openPluginEditor}
+  - expect: {id: "hostedPluginWindow:Maschine 2", showing: true, within_ms: 20000}
+  - wait: {}
+  - mark: {check: 2, name: maschine-editor}

@@ -30,6 +30,7 @@ class GraphEditor;                // Forward declaration
 class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
+struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
@@ -207,8 +208,8 @@ public:
 
     /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
-    /** Message thread only. While alive, each card works out drawnInputJackIndices() once; nothing may change a card's
-     *  controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+    /** Message thread only. While alive, each card reads its modulation targets, its jack column and each jack's knob
+     *  anchor once; nothing may change a card's controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
     struct JackLayoutPass {
         JackLayoutPass();
         ~JackLayoutPass();
@@ -222,6 +223,8 @@ public:
     std::optional<juce::Point<float>> foldedJackCentre(int destChannel) const;
 
 private:
+    /** getModulationTargets(), read once per JackLayoutPass; outside one, filled into `fresh`. */
+    const std::vector<ModulationTarget>& modulationTargetsForPass(std::vector<ModulationTarget>& fresh) const;
     /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
@@ -452,8 +455,7 @@ private:
     bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
-    mutable std::vector<int> drawnJacksMemo_; // drawnInputJackIndices() for drawnJacksPass_ (JackLayoutPass)
-    mutable juce::uint32 drawnJacksPass_ = 0;
+    mutable std::unique_ptr<ModuleComponentJackMemo> jackMemo_; // one JackLayoutPass's answers (see the .h)
     juce::ComponentDragger dragger;
 
     // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
@@ -596,6 +598,8 @@ private:
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
     std::unique_ptr<juce::Label> hostedStatusLabel; // Hosted Plugin: why the load failed, under Open Editor
+    // Hosted Plugin: "Turn on", under the status label while the plugin is switched off after a crash
+    std::unique_ptr<juce::TextButton> turnPluginBackOnButton;
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
@@ -724,6 +728,7 @@ private:
     void relayoutHostedPluginCard();
     // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
     void refreshHostedLoadStatus(bool relayoutOnChange = true);
+    void reconcileHostedModKnobs();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
     // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);

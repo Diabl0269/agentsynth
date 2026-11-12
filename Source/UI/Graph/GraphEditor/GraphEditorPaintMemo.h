@@ -111,8 +111,9 @@ private:
 };
 
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,
- *  whole-cable-set scans, the cables and macro borders a paint actually drew, canvas frame fits, and the plugin card
- *  layout models built to answer where a parameter stands. */
+ *  whole-cable-set scans, the cables and macro borders a paint actually drew, canvas frame fits, the plugin card
+ *  layout models built to answer where a parameter stands, the canvas reconciles (updateComponents) and the module
+ *  cards they built. */
 struct WorkCounters {
     int hullComputations = 0;
     int nodeScans = 0;
@@ -122,6 +123,9 @@ struct WorkCounters {
     int canvasFrameFits = 0;
     int cardLayoutModelBuilds = 0;
     int modRowRefreshes = 0;
+    int componentUpdates = 0;
+    int cardsBuilt = 0;
+    int modTargetReads = 0; // a card asked its module for every modulation target (ModuleComponentJackLayout.cpp)
 };
 
 /** Message thread only. */

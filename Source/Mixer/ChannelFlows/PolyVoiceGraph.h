@@ -2,10 +2,13 @@
 
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
+#include <set>
 #include <vector>
 
 namespace synth {
 
+class ConnectionIndex;
 class MacroSet;
 
 /** One timeline track as the voice-graph planner needs it: the uuid of its source node (Track In / Track Audio)
@@ -43,6 +46,19 @@ bool hasPolyParameter(const juce::AudioProcessor* processor);
  */
 PolyVoiceGraphPlan planPolyVoiceGraph(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID clicked,
                                       const std::vector<PolyTrackRef>& tracks);
+
+/** Which tracks (by index into `tracks`) reach each node: planPolyVoiceGraph's track-ownership walk, which costs one
+ *  forward walk per track. A pass that plans many voice graphs on one unchanged graph (every track header's Mono/Poly
+ *  switch) works it out once and hands it to the overload below. */
+using PolyTrackOwners = std::map<juce::AudioProcessorGraph::NodeID, std::set<int>>;
+PolyTrackOwners polyTrackOwners(juce::AudioProcessorGraph& graph, const ConnectionIndex& index,
+                                const std::vector<PolyTrackRef>& tracks);
+/** The same plan, from an index and an ownership map built for `graph` as it stands. */
+PolyVoiceGraphPlan planPolyVoiceGraph(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID clicked,
+                                      const std::vector<PolyTrackRef>& tracks, const ConnectionIndex& index,
+                                      const PolyTrackOwners& owners);
+/** How many times polyTrackOwners has run; message thread only (EditRefreshWorkTests). */
+int& polyTrackOwnerPassesForTest() noexcept;
 
 /** How applyPolyVoiceGraph reaches the parts that differ between a headless caller and the app. */
 struct PolyVoiceGraphOptions {

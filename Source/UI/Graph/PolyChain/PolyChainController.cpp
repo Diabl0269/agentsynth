@@ -23,8 +23,24 @@ bool isPolyMidiNode(juce::AudioProcessor* processor) {
 }
 } // namespace
 
+struct PolyChainController::Batch {
+    std::vector<synth::PolyTrackRef> tracks;
+    synth::ConnectionIndex index;
+    synth::PolyTrackOwners owners;
+};
+
 PolyChainController::PolyChainController(GraphEditor& editor)
     : editor_(editor) {}
+
+PolyChainController::StateBatch::StateBatch(PolyChainController& controller)
+    : controller_(controller) {
+    ++controller_.batchDepth_;
+}
+
+PolyChainController::StateBatch::~StateBatch() {
+    if (--controller_.batchDepth_ == 0)
+        controller_.batch_.reset();
+}
 
 PolyChainController::~PolyChainController() { *alive_ = false; }
 
@@ -38,8 +54,19 @@ void PolyChainController::trackPolyClicked(NodeID trackSource, bool poly) {
 
 TrackPolyState PolyChainController::trackPolyState(NodeID trackSource) const {
     auto& graph = editor_.getAudioEngine().getGraph();
-    const auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
-    const auto plan = synth::planPolyVoiceGraph(graph, trackSource, tracks);
+    if (graph.getNodeForId(trackSource) == nullptr)
+        return TrackPolyState::none;
+    if (batchDepth_ > 0 && batch_ == nullptr) {
+        auto tracks = trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{};
+        synth::ConnectionIndex index(graph);
+        auto owners = synth::polyTrackOwners(graph, index, tracks);
+        batch_.reset(new Batch{std::move(tracks), std::move(index), std::move(owners)});
+    }
+    const auto plan =
+        batch_ != nullptr
+            ? synth::planPolyVoiceGraph(graph, trackSource, batch_->tracks, batch_->index, batch_->owners)
+            : synth::planPolyVoiceGraph(graph, trackSource,
+                                        trackProvider ? trackProvider() : std::vector<synth::PolyTrackRef>{});
     int poly = 0;
     int mono = 0;
     for (const auto id : plan.thisTrackNodes) {
