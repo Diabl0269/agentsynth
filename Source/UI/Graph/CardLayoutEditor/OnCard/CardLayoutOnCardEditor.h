@@ -296,6 +296,10 @@ private:
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
     void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
     void openControlPanel(const juce::String& paramId);
+    /** `options` with a Macros knob's own name and polarity (read off the module, not the layout). */
+    void addMacroKnobOptions(ControlOptions& options) const;
+    /** A Macros knob's Name or Polarity field: one undo step, then the card, outlines and panel follow. */
+    void changeMacroKnob(const juce::String& paramId, std::optional<juce::String> name, std::optional<bool> bipolar);
     void closePanel();
     void refreshPanel();
     void writeLayout(const CardLayout& layout);

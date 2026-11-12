@@ -43,15 +43,21 @@ inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
 inline constexpr const char* kShowSpectrumText = "Show Spectrum";
 
+// The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.
+inline constexpr int kMacroJackGutter = 60;
+
 /** Where body content may go on a card of `width`. */
 struct BodyGeometry {
     int width = 0;
+    int rightGutter = 0; ///< Kept clear of body content; a card is "double width" only without it.
     int contentX = 0;
     int contentW = 0;
     int narrowX = 0; ///< The centred band combos use.
     int narrowW = 0;
 
-    static BodyGeometry forCardWidth(int width);
+    /** `rightGutter` keeps the card's right edge clear of the jack labels (the Macros card, whose body sits beside
+     *  its jacks); 0 for a card whose body sits below them. */
+    static BodyGeometry forCardWidth(int width, int rightGutter = 0);
     bool isDoubleWidth() const;
 };
 

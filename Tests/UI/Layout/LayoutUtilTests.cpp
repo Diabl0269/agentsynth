@@ -331,27 +331,3 @@ TEST(LayoutUtilTest, FindFreeSlotBelowClampsToTheCanvasOrigin) {
     using namespace synth::LayoutUtil;
     EXPECT_EQ(findFreeSlotBelow({-300, -16}, 280, 100, {}), juce::Point<int>(0, 0));
 }
-
-// ============================================================================
-// MacroBankGeometry
-// ============================================================================
-
-TEST(LayoutUtilTest, MacroBank_HeightGrowsOneRowPerMacro) {
-    using namespace synth::LayoutUtil;
-
-    EXPECT_EQ(macroBankHeight(4), kMacroHeaderH + 4 * kMacroRowH + kMacroBottomPad);
-    EXPECT_EQ(macroBankHeight(8) - macroBankHeight(4), 4 * kMacroRowH);
-    EXPECT_EQ(macroBankHeight(16) - macroBankHeight(8), 8 * kMacroRowH);
-    EXPECT_GT(macroBankHeight(1), kMacroHeaderH);
-}
-
-TEST(LayoutUtilTest, MacroBank_RowCentresAreEvenlySpacedAndInsideTheBank) {
-    using namespace synth::LayoutUtil;
-
-    EXPECT_EQ(macroRowCentreY(1) - macroRowCentreY(0), kMacroRowH);
-    EXPECT_GT(macroRowCentreY(0), kMacroHeaderH);
-
-    // Every visible row's jack must sit inside the component it belongs to.
-    for (int count = 1; count <= 16; ++count)
-        EXPECT_LT(macroRowCentreY(count - 1), macroBankHeight(count)) << "count " << count;
-}

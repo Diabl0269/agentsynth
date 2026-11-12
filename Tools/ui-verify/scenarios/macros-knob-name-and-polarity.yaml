@@ -1,0 +1,48 @@
+# FRO1285: each Macros knob has its own name and its own Uni/Bi polarity in place of the old bank-wide Bipolar
+# switch. In Edit Layout the control panel of a macro knob shows a Name field and a Uni/Bi switch (no Label field); a
+# name shows as the knob's caption and the jack's label, and polarity is per knob.
+#
+# What a user does: opens a patch with a Macros card, picks Edit Layout..., double-clicks the M3 knob's outline to
+# open its panel, types the name Cutoff, flips Polarity to Bi, and closes the panel: the caption and the jack of
+# macro 3 now read Cutoff while the other seven keep M1..M8; Undo takes the change back.
+record: true
+save_project: macros-knob-name-and-polarity
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 533, y: 330, clicks: 2}
+  - wait: {settleMs: 500}
+  - screenshot: {name: panel-open}
+  - mark: {check: 1, name: panel-has-name-and-polarity-and-no-label}
+  - click: {id: Name}
+  - key: {keys: cmd+a, target: Name}
+  - type: {text: Cutoff, target: Name}
+  - key: {keys: return, target: Name}
+  - wait: {settleMs: 500}
+  - screenshot: {name: name-typed}
+  - mark: {check: 2, name: name-shows-as-caption-and-jack-label}
+  - click: {id: Bi}
+  - wait: {settleMs: 500}
+  - screenshot: {name: polarity-bi}
+  - mark: {check: 3, name: polarity-switch-is-bi-for-this-knob-only}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - screenshot: {name: panel-closed}
+  - mark: {check: 4, name: panel-closed-other-knobs-keep-their-names}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - screenshot: {name: undone-twice}
+  - mark: {check: 5, name: two-undos-take-polarity-and-name-back}

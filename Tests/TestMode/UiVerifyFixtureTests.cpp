@@ -91,6 +91,28 @@ TEST_F(UiVerifyFixture, DISABLED_WritesMacrosProject) {
     ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle));
 }
 
+// Tools/ui-verify/fixtures/macros-bank.agsproj: a Macros bank (Edit Layout, presets, per-knob names and polarity)
+// beside an open macro holding an LFO and an ADSR and a free Oscillator; the macros-card-layout scenarios open it.
+//   --gtest_filter=UiVerifyFixture.DISABLED_WritesMacrosBankProject
+TEST_F(UiVerifyFixture, DISABLED_WritesMacrosBankProject) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+
+    addModule(mc, "Macros", {100, 100});
+    addModule(mc, "Oscillator", {700, 100});
+    const auto lfo = addModule(mc, "LFO", {400, 500});
+    const auto env = addModule(mc, "ADSR", {700, 500});
+    ASSERT_FALSE(group(mc, {lfo, env}, "Open macro", false).isEmpty());
+
+    const auto bundle = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("macros-bank.agsproj");
+    bundle.deleteRecursively();
+    bundle.getParentDirectory().createDirectory();
+    ASSERT_TRUE(mc.saveProjectForTest(bundle));
+    ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle));
+}
+
 // Tools/ui-verify/fixtures/macro-port-widgets.agsproj: the saved-project fixture with port widgets saved at the canvas
 // origin (folded, nested and open track macros with an inlet and an outlet each, plus a stray inlet and outlet no
 // macro lists); the macro-port-widgets scenario opens it.

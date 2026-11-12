@@ -65,6 +65,9 @@ public:
     void setSectionHidden(const juce::String& sectionId, bool hidden);
     /** Re-reads every condition now; on a change, re-lays out the card (and makes room if it grew). */
     void refreshConditions();
+    /** The Macros card: puts each knob's own name on its caption and screen-reader title (a rename, an undo, a load).
+     */
+    void refreshMacroNames();
     /** Adds the dimmed hint to dimmed controls' tooltip and description; call once the card has named
      *  its controls (their tooltips are set after the body is built). */
     void applyDimHints();

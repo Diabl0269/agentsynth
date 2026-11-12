@@ -36,7 +36,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
   control's right-click menu or the layout editor ([Editing a layout](#editing-a-layout)).
 - Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
   parameter and the Wavetable's Table choice (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO
-  custom-wave editor, the Sampler/Wavetable chrome, and fully bespoke bodies for MIDI Keyboard, Macros, Attenuverter, Parametric EQ and External MIDI. The Wavetable's
+  custom-wave editor, the Sampler/Wavetable chrome, and fully bespoke bodies for MIDI Keyboard, Attenuverter, Parametric EQ and External MIDI. The Macros card is layout data. The Wavetable's
   tab strip is layout data (`tab` sections in its code default).
 - Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
   an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
@@ -86,7 +86,7 @@ reads the disk), each rebuilt card then making room for its new height. A card o
 binding (most tests) skips the per-type step. The size estimate for a card before it exists
 (`CardBodyMeasure`) measures the type's code default (or the automatic layout) with its conditions read
 at the fresh module's values, so it never sees a stored default: a type with one is placed at its
-code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Macros, Parametric EQ, Attenuverter, macro ports) always build from the
+code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Parametric EQ, Attenuverter, macro ports) always build from the
 automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 A card builds its body once; when its node's `cardLayout` changes (a quick-path click, its undo or
 redo), `GraphEditor::updateComponents` sees that the card was built from a different override and
@@ -304,7 +304,8 @@ envelope, LFO curve and threshold components plug in unchanged.
   from `heightForWidth`, so measure equals apply and a row appearing resizes the card through `onPreferredHeightChanged`),
   the selected band's row (Freq / Gain / Q knobs re-bound by `ModuleComponent::EqBandRow`, the on toggle, the type pill),
   the Output / Show Spectrum / Open EQ Window row, then the scope. The card holds the same widgets at 4 and 24 bands.
-- **Bespoke cards.** MIDI Keyboard, Macros, Attenuverter, Parametric EQ
+- **Macros card.** A layout card (`DefaultCardLayoutsMacros.cpp`): the Knobs count in a section of its own, then the sixteen knobs in macro order, a grid of four across by default (two rows of four for the standard eight). Edit Layout works on it like any module, and its Preset menu offers three built-in presets before the user's own: **Row** (eight across), **Grid** (four across) and **Faders** (vertical faders, eight across); picking one is one undo step. The Knobs count (1-16) never touches the layout: a knob above the count is hidden and takes no cell (the code rule `macroCountRules` in `CardBodyPlan.cpp`), and growing the count brings it back in place; the card's height follows the layout (measure equals apply). The card is double width (`kDoubleWidth`, 560, like the Sequencer), so a body of eight across has room; the body starts under the header, beside a 60 px right-edge gutter (`kMacroJackGutter`, `BodyGeometry::rightGutter`) that holds the output jacks, one per visible macro in macro order, whatever the preset. The height floors at the lowest jack, so a short body never leaves a jack outside the card. Picking a preset glides the controls to their new cells like Undo does (reduced motion: they jump). Each knob's Name and Polarity are set in its per-control panel, in place of Label (docs/modules/modules.md, Macro Control Module).
+- **Bespoke cards.** MIDI Keyboard, Attenuverter, Parametric EQ
   and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
   knob row they expose. The Wavetable is a layout card: its pages are `presentation: tab` sections of
   its code default (built). ADSR, LFO and Sampler become ordinary layouts with views.

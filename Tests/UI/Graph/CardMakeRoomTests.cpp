@@ -68,8 +68,8 @@ struct Canvas {
 constexpr int kSmall = 4;
 constexpr int kLarge = 16;
 
-// A bank at (400, 300) and a neighbour to its lower right: the grown bank covers it, and the shortest way out is
-// to the right (about 292 px) rather than down (about 470 px).
+// A bank at (400, 300) and a neighbour just below the small bank: the grown bank covers it, and the shortest way out
+// is to the right.
 struct Scene {
     Canvas c;
     NodeID bank, neighbour;
@@ -77,7 +77,7 @@ struct Scene {
 
     Scene() {
         bank = c.bank(400, 300, kSmall);
-        neighbour = c.neighbourCard(504, 620);
+        neighbour = c.neighbourCard(920, c.rect(bank).getBottom() + synth::LayoutUtil::kCollisionGap);
         neighbourHome = c.rect(neighbour);
     }
 };
@@ -92,7 +92,7 @@ TEST(CardMakeRoom, ABankThatGrowsPushesTheNeighbourItCoversTheShortestWay) {
 
     const auto bank = s.c.rect(s.bank);
     EXPECT_EQ(bank.getPosition(), juce::Point<int>(400, 300)) << "the grower never moves";
-    ASSERT_GT(bank.getHeight(), s.neighbourHome.getBottom() - bank.getY()) << "premise: the bank now covers it";
+    ASSERT_GT(bank.getBottom(), s.neighbourHome.getY()) << "premise: the bank now covers it";
     const auto moved = s.c.rect(s.neighbour);
     EXPECT_FALSE(moved.expanded(synth::LayoutUtil::kCollisionGap).intersects(bank));
     EXPECT_EQ(moved.getY(), s.neighbourHome.getY()) << "it went sideways, not down";

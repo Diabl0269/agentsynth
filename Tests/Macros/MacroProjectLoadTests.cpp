@@ -12,8 +12,10 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "MacroSet.h"
+#include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/MacroControlModule.h"
 #include "Modules/OscillatorModule.h"
 #include <gtest/gtest.h>
 
@@ -158,4 +160,105 @@ TEST(MacroProjectLoad, LoadNeverMovesNeighboursOrRecordsDisplacement) {
         for (const auto& macro : c.editor.getMacros().getAll())
             EXPECT_TRUE(macro.displaced.empty());
     }
+}
+
+namespace {
+
+// A saved project as the app writes it: the nodes with their params, and one macro grouping the LFO and the ADSR.
+juce::var savedMacrosProject(const juce::NamedValueSet& macrosParams, const juce::var& macrosState) {
+    auto node = [](int id, const juce::String& type, const juce::NamedValueSet& params) {
+        auto* object = new juce::DynamicObject();
+        object->setProperty("id", id);
+        object->setProperty("type", type);
+        object->setProperty("x", 100 * id);
+        object->setProperty("y", 300);
+        auto* paramsObject = new juce::DynamicObject();
+        for (const auto& entry : params)
+            paramsObject->setProperty(entry.name, entry.value);
+        object->setProperty("params", juce::var(paramsObject));
+        return object;
+    };
+    auto* macrosNode = node(1, "Macros", macrosParams);
+    if (!macrosState.isVoid())
+        macrosNode->setProperty("state", macrosState);
+    juce::Array<juce::var> nodes{juce::var(macrosNode), juce::var(node(2, "LFO", {})), juce::var(node(3, "ADSR", {}))};
+    auto* patch = new juce::DynamicObject();
+    patch->setProperty("nodes", juce::var(nodes));
+    return juce::var(patch);
+}
+
+MacroControlModule* macrosOf(LoadCanvas& c) {
+    for (auto* node : c.engine.getGraph().getNodes())
+        if (auto* macros = dynamic_cast<MacroControlModule*>(node->getProcessor()))
+            return macros;
+    return nullptr;
+}
+
+} // namespace
+
+// Regression test for the per-knob polarity change: a project saved with the old bank-wide Bipolar switch on
+// opens with every knob bipolar, beside an LFO and an ADSR in a macro, with every card built where it was saved.
+TEST(MacroProjectLoad, AnOldProjectWithTheBankWideBipolarSwitchOpensWithEveryKnobBipolar) {
+    LoadCanvas c;
+    juce::NamedValueSet params;
+    params.set("macroBipolar", true);
+    params.set("macroCount", 8);
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(savedMacrosProject(params, {}), c.engine.getGraph(), true,
+                                                       /*trusted=*/true, /*autoConnectNewNodes=*/false));
+    auto* macros = macrosOf(c);
+    ASSERT_NE(macros, nullptr);
+    std::vector<LoadedNode> members;
+    for (auto* node : c.engine.getGraph().getNodes())
+        if (node->getProcessor() != nullptr && node->getProcessor() != macros &&
+            node->properties.contains("uuid") == false)
+            node->properties.set("uuid", juce::Uuid().toDashedString());
+    for (auto* node : c.engine.getGraph().getNodes())
+        if (node->getProcessor() != macros) {
+            node->properties.set("x", 100 * (int)node->nodeID.uid);
+            node->properties.set("y", 300);
+            members.push_back({node->nodeID,
+                               node->properties["uuid"].toString(),
+                               {(int)node->properties["x"], (int)node->properties["y"]}});
+        }
+    ASSERT_EQ(members.size(), 2u);
+    c.addMacro(members, /*collapsed=*/false);
+    c.openProject();
+
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i)
+        EXPECT_TRUE(macros->isBipolar(i)) << "knob " << i + 1;
+    c.expectLoadedAsSaved(members);
+}
+
+TEST(MacroProjectLoad, AnOldProjectWithTheSwitchOffOpensWithEveryKnobUnipolar) {
+    LoadCanvas c;
+    juce::NamedValueSet params;
+    params.set("macroBipolar", false);
+    ASSERT_TRUE(
+        synth::AIStateMapper::applyJSONToGraph(savedMacrosProject(params, {}), c.engine.getGraph(), true, true, false));
+    c.openProject();
+    auto* macros = macrosOf(c);
+    ASSERT_NE(macros, nullptr);
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i)
+        EXPECT_FALSE(macros->isBipolar(i));
+}
+
+TEST(MacroProjectLoad, KnobNamesAndPolaritySaveAndReloadThroughTheProjectJson) {
+    LoadCanvas c;
+    ASSERT_TRUE(
+        synth::AIStateMapper::applyJSONToGraph(savedMacrosProject({}, {}), c.engine.getGraph(), true, true, false));
+    auto* macros = macrosOf(c);
+    ASSERT_NE(macros, nullptr);
+    macros->setMacroName(0, "Drive");
+    macros->getBipolarParameter(4)->setValueNotifyingHost(1.0f);
+    const auto saved = synth::AIStateMapper::graphToJSON(c.engine.getGraph());
+
+    LoadCanvas reopened;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(saved, reopened.engine.getGraph(), true, true, false));
+    reopened.openProject();
+    auto* copy = macrosOf(reopened);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_EQ(copy->getMacroName(0), "Drive");
+    EXPECT_EQ(copy->getMacroName(1), "M2");
+    EXPECT_TRUE(copy->isBipolar(4));
+    EXPECT_FALSE(copy->isBipolar(0));
 }

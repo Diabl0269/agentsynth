@@ -842,6 +842,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsMacros.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSequencers.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h

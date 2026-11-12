@@ -18,17 +18,18 @@ void place(juce::Component* component, juce::Rectangle<int> bounds) {
 
 // Body content sits below every jack, so it gets nearly the full card width. Single-column widgets
 // (combos, the load row) look stretched at full width, so they stay centred in a narrower band.
-BodyGeometry BodyGeometry::forCardWidth(int width) {
+BodyGeometry BodyGeometry::forCardWidth(int width, int rightGutter) {
     BodyGeometry g;
     g.width = width;
+    g.rightGutter = rightGutter;
     g.contentX = kContentMargin;
-    g.contentW = std::max(60, width - kContentMargin * 2);
+    g.contentW = std::max(60, width - kContentMargin * 2 - rightGutter);
     g.narrowW = std::min(g.contentW, kNarrowContentWidth);
     g.narrowX = g.contentX + (g.contentW - g.narrowW) / 2;
     return g;
 }
 
-bool BodyGeometry::isDoubleWidth() const { return width >= synth::LayoutUtil::kDoubleWidth; }
+bool BodyGeometry::isDoubleWidth() const { return width - rightGutter >= synth::LayoutUtil::kDoubleWidth; }
 
 // A double-width card pairs combos up; otherwise a high parameter count alone would add ~180px of
 // dead single-column height.

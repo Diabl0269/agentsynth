@@ -6,7 +6,6 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
-#include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -622,15 +621,6 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {x, kMacroPortWidgetHeaderY + clamped * kMacroPortWidgetRowStep};
     }
 
-    // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        if (!isInput) {
-            const int visible = macro->getVisibleOutputPortCount();
-            const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
-            return {getWidth() - 10, synth::LayoutUtil::macroRowCentreY(clamped)};
-        }
-    }
-
     // A shown aux output of a multi-output plugin sits where the fold line and its glide put it.
     if (!isInput && hostedOutputs_ != nullptr)
         if (const auto centre = hostedOutputs_->jackCentre(index))
@@ -809,11 +799,6 @@ void ModuleComponent::resized() {
 
     if (dualIOButton)
         dualIOButton->setBounds(getWidth() - 98, 2, 22, 20);
-
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        layoutMacroBank(macro->getMacroCount());
-        return;
-    }
 
     if (getType(module) == ModuleType::ParametricEQ) {
         layoutParametricEQ();

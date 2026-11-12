@@ -101,7 +101,7 @@ struct CardSection {
 
     juce::String id;
     std::optional<juce::String> title;
-    int columns = kDefaultColumns; ///< 1..6.
+    int columns = kDefaultColumns; ///< 1..8.
     CardPresentation presentation = CardPresentation::Grid;
     std::optional<CardCondition> visibleWhen;
     std::vector<CardItem> items;

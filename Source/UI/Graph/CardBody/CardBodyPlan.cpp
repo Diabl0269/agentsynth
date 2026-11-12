@@ -43,6 +43,8 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
     if (dynamic_cast<const juce::AudioParameterBool*>(&param) != nullptr &&
         (id == "bypassed" || id == "muted" || id == "dualIO"))
         return true;
+    if (MacroControlModule::isBipolarParamId(id) && dynamic_cast<const MacroControlModule*>(&module) != nullptr)
+        return true; // each Macros knob's polarity is set in Edit Layout's per-control panel
     if (isAdsr(module)) {
         if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve")
             return true;
@@ -401,7 +403,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     for (const auto* source : order) {
         CardBodyPlan::Section section;
         section.id = source->id;
-        section.columns = juce::jlimit(1, 6, source->columns);
+        section.columns = juce::jlimit(1, 8, source->columns);
         section.title = source->title;
         section.visibleWhen = source->visibleWhen;
         section.footer = source->id == CardSection::kFooterId;
@@ -430,6 +432,8 @@ void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& 
         bound.item = index;
         bound.dims = rule.dims;
         bound.hides = rule.hides;
+        bound.collapses = rule.hides && rule.collapses;
+        plan.items[(size_t)index].collapses = bound.collapses;
         bound.disabledHint = rule.disabledHint;
         for (const auto& id : rule.watched)
             if (auto* param = findParameterByID(&module, id))
@@ -455,6 +459,24 @@ std::vector<CardDimRule> joinedJackRules(juce::AudioProcessor& module) {
     return {pan, width};
 }
 
+// The Macros knobs above the Knobs count are not on the card, and take no cell, so a layout keeps its place for them
+// and growing the count brings them back in order. The rules describe the module, so they apply to every layout.
+std::vector<CardDimRule> macroCountRules(juce::AudioProcessor& module) {
+    if (dynamic_cast<MacroControlModule*>(&module) == nullptr)
+        return {};
+    std::vector<CardDimRule> rules;
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i) {
+        CardDimRule rule{"macro" + juce::String(i + 1), {"macroCount"}, [i](juce::AudioProcessor& m) {
+                             const auto* macros = dynamic_cast<MacroControlModule*>(&m);
+                             return macros != nullptr && i >= macros->getMacroCount();
+                         }};
+        rule.hides = true;
+        rule.collapses = true;
+        rules.push_back(std::move(rule));
+    }
+    return rules;
+}
+
 } // namespace
 
 CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
@@ -465,10 +487,16 @@ CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::op
         placeFromLayout(module, *layout, plan);
         bindDimRules(module, dimRules, plan);
         bindDimRules(module, joinedJackRules(module), plan);
+        bindDimRules(module, macroCountRules(module), plan);
         plan.evaluateConditions(module);
     } else {
         placeAutomatically(module, plan);
+        if (dynamic_cast<MacroControlModule*>(&module) != nullptr) {
+            bindDimRules(module, macroCountRules(module), plan);
+            plan.evaluateConditions(module);
+        }
     }
+    applyMacroNames(module, plan);
     return plan;
 }
 
@@ -528,6 +556,28 @@ int CardBodyPlan::findParam(const juce::String& paramId) const {
     return -1;
 }
 
+// The Macros knob named `paramId` ("macro3" is 3), or -1.
+int macroIndexOf(const juce::String& paramId) {
+    if (!paramId.startsWith("macro") || !paramId.substring(5).containsOnly("0123456789") || paramId.length() <= 5)
+        return -1;
+    const int number = paramId.substring(5).getIntValue();
+    return number >= 1 && number <= MacroControlModule::kMaxMacros ? number - 1 : -1;
+}
+
+// A Macros knob is captioned with its own name (Edit Layout's Name field), whatever label a layout gave it.
+void applyMacroNames(juce::AudioProcessor& module, CardBodyPlan& plan) {
+    auto* macros = dynamic_cast<MacroControlModule*>(&module);
+    if (macros == nullptr)
+        return;
+    for (auto& item : plan.items) {
+        const int index = item.param != nullptr ? macroIndexOf(item.param->paramID) : -1;
+        if (index < 0)
+            continue;
+        const auto name = macros->getMacroName(index);
+        item.caption = name == MacroControlModule::macroName(index) ? std::nullopt : std::optional(name);
+    }
+}
+
 bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module) {
     return dynamic_cast<MidiKeyboardModule*>(&module) == nullptr &&
            dynamic_cast<ExternalMidiModule*>(&module) == nullptr &&
@@ -537,7 +587,7 @@ bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module) {
 // The bespoke cards lay their widgets out themselves, so a stored layout never moves anything on them;
 // they always build from the automatic plan.
 bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module) {
-    if (!cardBodyBuildsWidgetsFor(module) || dynamic_cast<MacroControlModule*>(&module) != nullptr)
+    if (!cardBodyBuildsWidgetsFor(module))
         return false;
     switch (typeOf(module)) {
     case ModuleType::Attenuverter:

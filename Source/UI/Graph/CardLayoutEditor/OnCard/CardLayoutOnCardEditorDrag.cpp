@@ -4,6 +4,7 @@
 // where everything stood to where the layout put it. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -42,7 +43,7 @@ juce::Rectangle<int> CardLayoutOnCardEditor::clampToTarget(int section, juce::Re
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (body == nullptr)
         return rect;
-    const auto clamped = oncard::clampToLimits(rect, limitsFor(*body, section, card_->getWidth()));
+    const auto clamped = oncard::clampToLimits(rect, limitsFor(*body, section, card_->bodyGeometry()));
     return clamped.withY(std::min(clamped.getY(), body->getPlan().sections[(size_t)section].cellBottom));
 }
 
@@ -142,7 +143,7 @@ std::vector<juce::Rectangle<int>> CardLayoutOnCardEditor::pushedNeighbours(int s
             origins.push_back(origins_.at(cells_[(size_t)i].key)
                                   .withSize(cells_[(size_t)i].rect.getWidth(), cells_[(size_t)i].rect.getHeight()));
         }
-    const auto limits = limitsFor(*card_->getCardBody(), section, card_->getWidth());
+    const auto limits = limitsFor(*card_->getCardBody(), section, card_->bodyGeometry());
     const auto droppedOrigin = except >= 0 ? origins_.at(cells_[(size_t)except].key) : kNowhereRect;
     return oncard::returnHome(oncard::pushAside(dropped, start, standing, limits), homes, origins, dropped,
                               droppedOrigin);
@@ -246,7 +247,7 @@ void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Poi
         }
     const auto size =
         target != cells_[(size_t)cell].section ? addedCellSize(target, cells_[(size_t)cell].key) : juce::Point<int>();
-    const auto limits = limitsFor(*body, target, card_->getWidth());
+    const auto limits = limitsFor(*body, target, card_->bodyGeometry());
     const auto drop =
         oncard::dropIntoRow(size.isOrigin() ? rect : rect.withSize(size.x, size.y), pointer, others, limits, context);
     drag_.placed.clear();
@@ -503,7 +504,7 @@ void CardLayoutOnCardEditor::repackAfterResize(const juce::String& paramId, juce
         if (indices[k] == cell)
             changed = k;
     }
-    const auto packed = oncard::repackRow(rects, changed, before, limitsFor(*body, section, card_->getWidth()));
+    const auto packed = oncard::repackRow(rects, changed, before, limitsFor(*body, section, card_->bodyGeometry()));
     if (packed == rects)
         return;
     CellRects finals;
@@ -524,7 +525,7 @@ void CardLayoutOnCardEditor::writeSection(int section, const std::vector<std::pa
         placed.push_back(cells_[(size_t)index]);
         placed.back().rect = rect;
     }
-    const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
+    const auto g = card_->bodyGeometry();
     writeLayout(withCellPositions(body->explicitLayout(), placed, collectViews(*card_, section), g.contentX,
                                   body->getPlan().sections[(size_t)section].cellTop));
 }

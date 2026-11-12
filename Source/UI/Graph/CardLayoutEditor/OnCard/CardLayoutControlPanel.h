@@ -26,6 +26,10 @@ public:
 
     std::function<void(CardWidget)> onShowAs;
     std::function<void(const juce::String& text)> onLabel;
+    /** A Macros knob's Name field was committed. */
+    std::function<void(const juce::String& text)> onMacroName;
+    /** A Macros knob's Polarity switch was picked: true = Bi. */
+    std::function<void(bool bipolar)> onMacroPolarity;
     /** A valid range was typed; nullopt = the full range. */
     std::function<void(std::optional<juce::Range<double>>)> onRange;
     std::function<void()> onHide;
@@ -46,6 +50,13 @@ public:
     bool isSizeRowShownForTest() const { return sizeFade_ != nullptr && sizeFade_->isShown(); }
     bool isDirectionRowShownForTest() const { return directionFade_ != nullptr && directionFade_->isShown(); }
     juce::TextEditor& getLabelEditorForTest() noexcept { return label_; }
+    juce::TextEditor& getNameEditorForTest() noexcept { return name_; }
+    CardSegmentedSwitch* getPolarityForTest() const noexcept { return polarity_.get(); }
+    bool isMacroRowsShownForTest() const {
+        return nameFade_.isShown() && polarityFade_ != nullptr && polarityFade_->isShown();
+    }
+    bool isLabelRowShownForTest() const { return labelFade_.isShown(); }
+    void commitNameForTest() { commitName(); }
     juce::TextEditor& getMinimumEditorForTest() noexcept { return minimum_; }
     juce::TextEditor& getMaximumEditorForTest() noexcept { return maximum_; }
     juce::TextButton& getHideButtonForTest() noexcept { return hide_; }
@@ -63,6 +74,7 @@ private:
                          CardWidget second);
     void styleEditor(juce::TextEditor& editor, const juce::String& title, const juce::String& tooltip);
     void commitLabel();
+    void commitName();
     void commitRange();
     void fillFields();
     int arrange();
@@ -84,10 +96,14 @@ private:
     juce::Label directionCaption_{{}, "Direction"};
     juce::Label showAsCaption_{{}, "Show as"};
     juce::Label labelCaption_{{}, "Label"};
+    juce::Label nameCaption_{{}, "Name"};
+    juce::Label polarityCaption_{{}, "Polarity"};
     juce::Label rangeCaption_{{}, "Range"};
     juce::Label rangeTo_{{}, "to"};
     juce::Label hint_;
     juce::TextEditor label_;
+    juce::TextEditor name_;                         ///< A Macros knob's name (in place of Label).
+    std::unique_ptr<CardSegmentedSwitch> polarity_; ///< A Macros knob's Uni | Bi.
     juce::TextEditor minimum_;
     juce::TextEditor maximum_;
     juce::TextButton hide_{"Hide from card"};
@@ -96,6 +112,9 @@ private:
     std::unique_ptr<synth::ui::FadeVisibility> sizeFade_;
     std::unique_ptr<synth::ui::FadeVisibility> directionFade_;
     std::unique_ptr<synth::ui::FadeVisibility> faderSizeFade_;
+    std::unique_ptr<synth::ui::FadeVisibility> polarityFade_; ///< Caption and switch, made with the switch.
+    synth::ui::FadeVisibility labelFade_{&labelCaption_, &label_};
+    synth::ui::FadeVisibility nameFade_{&nameCaption_, &name_};
     synth::ui::FadeVisibility rangeFade_{&rangeCaption_, &rangeTo_, &minimum_, &maximum_};
     synth::ui::FadeVisibility hintFade_{&hint_};
     int focusTries_ = 0;

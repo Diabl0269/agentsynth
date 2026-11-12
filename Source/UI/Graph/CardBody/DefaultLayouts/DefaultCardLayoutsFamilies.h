@@ -13,6 +13,7 @@ void registerEnvelopeCardLayouts(DefaultCardLayouts& defaults);
 void registerFilterDynamicsCardLayouts(DefaultCardLayouts& defaults);
 void registerEffectCardLayouts(DefaultCardLayouts& defaults);
 void registerSequencerCardLayouts(DefaultCardLayouts& defaults);
+void registerMacroCardLayouts(DefaultCardLayouts& defaults);
 
 namespace cardlayout {
 

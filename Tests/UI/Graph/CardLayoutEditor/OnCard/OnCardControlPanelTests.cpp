@@ -2,9 +2,11 @@
 // double-click and Return on an outline, every field writing live through the session, and the panel
 // staying open until Esc or Hide. The range rules are pinned as pure functions.
 
+#include "../../../../TestWait.h"
 #include "../../../Accessibility/AccessibilityAudit.h"
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/MacroControlModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
@@ -56,6 +58,48 @@ void typeRange(CardLayoutControlPanel& panel, const juce::String& lo, const juce
     panel.getMaximumEditorForTest().setText(hi, false);
     panel.commitRangeForTest();
 }
+
+struct MacrosRig {
+    OnCardRig rig;
+    MacroControlModule* macros = nullptr;
+    NodeID id;
+    CardLayoutOnCardEditor* editor = nullptr;
+
+    MacrosRig() {
+        auto module = std::make_unique<MacroControlModule>();
+        macros = module.get();
+        id = rig.add(std::move(module), 200, 200);
+        editor = rig.openOnCard(id);
+    }
+
+    ModuleComponent& card() { return *rig.card(id); }
+    juce::Point<int> pos(const juce::String& key) { return widgetOf(card(), key)->getPosition(); }
+
+    void choosePreset(const juce::String& name) {
+        const auto menu = editor->buildPresetMenuForTest();
+        const auto* item = cardbody_test::menuItem(menu, name);
+        ASSERT_NE(item, nullptr) << name;
+        ASSERT_TRUE(item->action);
+        item->action();
+    }
+
+    bool undo() {
+        const bool did = rig.canvas.undo.undo();
+        editor->runQueuedSyncForTest();
+        return did;
+    }
+
+    void setCount(int count) {
+        juce::AudioParameterInt* param = nullptr;
+        for (auto* p : macros->getParameters())
+            if (auto* i = dynamic_cast<juce::AudioParameterInt*>(p); i != nullptr && i->paramID == "macroCount")
+                param = i;
+        ASSERT_NE(param, nullptr);
+        param->setValueNotifyingHost(param->convertTo0to1(count));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the card re-measures on the next turn
+        card().getCardBody()->refreshConditions();
+    }
+};
 
 } // namespace
 
@@ -453,4 +497,204 @@ TEST(OnCardControlOptions, KindsFoldTheWidgetChoicesAndPairsNeedBothHalves) {
     EXPECT_FALSE(synth::ui::offersKnobSize({CardWidget::Knob, CardWidget::Choice}, CardWidget::Knob));
     EXPECT_EQ(synth::ui::widgetForKind(WidgetKind::Fader, CardWidget::KnobLarge, choices), CardWidget::FaderV);
     EXPECT_EQ(synth::ui::widgetForKind(WidgetKind::Knob, CardWidget::FaderH, choices), CardWidget::Knob);
+}
+
+// ---- The Macros card: presets, the Knobs count and the per-knob Name and Polarity ----
+
+TEST(OnCardMacros, EditLayoutOpensOnTheMacrosCardWithAnOutlinePerVisibleKnob) {
+    MacrosRig m;
+    ASSERT_NE(m.editor, nullptr);
+    EXPECT_NE(m.editor->getOutlineForTest("macro1"), nullptr);
+    EXPECT_NE(m.editor->getOutlineForTest("macro8"), nullptr);
+    EXPECT_EQ(m.editor->getOutlineForTest("macro9"), nullptr) << "a knob above the count is not on the card";
+}
+
+TEST(OnCardMacros, TheDefaultIsAGridOfTwoRowsOfFourAndTheJacksStayInTheRightGutter) {
+    MacrosRig m;
+    EXPECT_EQ(m.pos("macro1").y, m.pos("macro4").y);
+    EXPECT_GT(m.pos("macro5").y, m.pos("macro1").y);
+    EXPECT_EQ(m.pos("macro5").x, m.pos("macro1").x);
+    for (int i = 0; i < 8; ++i)
+        EXPECT_EQ(m.card().getPortCenter(i, false).x, m.card().getWidth() - 10);
+}
+
+TEST(OnCardMacros, TabReachesTheCountThenEveryMacroKnobInOrderAndEveryStopIsNamed) {
+    MacrosRig m;
+    m.editor->cancel();
+    const auto walk = synth::test::walkTabOrder(m.card());
+    EXPECT_TRUE(walk.isCompleteCycle());
+    auto names = walk.names();
+    names.removeString("<unnamed SliderLabelComp>", false); // a knob's own value box: its knob is the named stop
+    EXPECT_FALSE(names.joinIntoString("|").contains("<unnamed")) << names.joinIntoString("|");
+    int last = names.indexOf("Knobs");
+    EXPECT_GE(last, 0) << names.joinIntoString("|");
+    for (int i = 1; i <= 8; ++i) {
+        const int at = names.indexOf("M" + juce::String(i));
+        EXPECT_GT(at, last) << "M" << i << " follows M" << i - 1 << " in the tab order: " << names.joinIntoString("|");
+        last = at;
+    }
+}
+
+TEST(OnCardMacros, APresetGlidesTheKnobsToTheirNewPlacesInsteadOfJumpingThem) {
+    MacrosRig m;
+    synth::ui::setReducedMotionForTest(false); // the rig starts with motion off
+    const auto before = m.pos("macro5");
+    m.editor->setForceAnimateForTest(true);
+    m.choosePreset("Row");
+    EXPECT_TRUE(m.editor->isGlidingForTest());
+    EXPECT_EQ(m.pos("macro5"), before) << "the first frame still shows the knob where it was";
+    m.editor->stepGlideForTest(80.0f);
+    const auto midway = m.pos("macro5");
+    m.editor->stepGlideForTest(1000.0f);
+    const auto after = m.pos("macro5");
+    ASSERT_NE(after, before);
+    EXPECT_NE(midway, before) << "it has left its old place";
+    EXPECT_NE(midway, after) << "and not yet landed";
+    EXPECT_EQ(m.editor->getCellRectForTest("macro5").getX(), after.x) << "the outline lands with the knob";
+}
+
+TEST(OnCardMacros, TheBodySitsBesideTheJackGutterUnderTheHeaderAndNeverUnderOrOverTheJacks) {
+    MacrosRig m;
+    const int gutterLeft = m.card().getWidth() - synth::cardbody::kMacroJackGutter;
+    const int lastJack = m.card().getPortCenter(7, false).y;
+    for (const char* preset : {"Grid", "Row", "Faders"}) {
+        m.choosePreset(preset);
+        for (int i = 1; i <= 8; ++i) {
+            const auto bounds = widgetOf(m.card(), "macro" + juce::String(i))->getBounds();
+            EXPECT_LE(bounds.getRight(), gutterLeft) << preset << " macro" << i << " stays left of the jack labels";
+        }
+        EXPECT_LT(widgetOf(m.card(), "macroCount")->getY(), 70)
+            << preset << ": the count control starts right under the header";
+        EXPECT_LT(m.pos("macro1").y, 140) << preset << ": the knobs follow it, not the jacks";
+        EXPECT_LT(m.card().getHeight(), lastJack + 200) << preset << ": no large empty area";
+    }
+    m.choosePreset("Grid");
+    EXPECT_LT(m.card().getHeight(), lastJack + 140)
+        << "the default card is about as tall as its jack gutter plus the body";
+}
+
+TEST(OnCardMacros, ThePresetMenuListsRowGridAndFadersAndEachReshapesTheCard) {
+    MacrosRig m;
+    const auto menu = m.editor->buildPresetMenuForTest();
+    for (const auto* name : {"Row", "Grid", "Faders"})
+        EXPECT_NE(cardbody_test::menuItem(menu, name), nullptr) << name;
+
+    m.choosePreset("Row");
+    EXPECT_EQ(m.pos("macro1").y, m.pos("macro8").y) << "the row runs eight across";
+    const int rowHeight = m.card().getHeight();
+
+    m.choosePreset("Faders");
+    EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(widgetOf(m.card(), "macro1")), nullptr);
+    EXPECT_NE(m.card().getHeight(), rowHeight) << "the size follows the layout";
+
+    m.choosePreset("Grid");
+    EXPECT_GT(m.pos("macro5").y, m.pos("macro1").y);
+    EXPECT_EQ(dynamic_cast<synth::ui::CardFader*>(widgetOf(m.card(), "macro1")), nullptr);
+}
+
+TEST(OnCardMacros, APresetIsOneUndoStepAndTheCardMeasuresWhatItDraws) {
+    MacrosRig m;
+    const auto before = m.pos("macro5");
+    const int heightBefore = m.card().getHeight();
+    m.choosePreset("Row");
+    ASSERT_NE(m.pos("macro5"), before);
+    ASSERT_TRUE(m.undo());
+    EXPECT_EQ(m.pos("macro5"), before);
+    EXPECT_EQ(m.card().getHeight(), heightBefore);
+    EXPECT_FALSE(m.editor->isClosed());
+}
+
+TEST(OnCardMacros, TheKnobsCountKeepsTheLayoutAndGrowingItBringsTheKnobsBackInPlace) {
+    MacrosRig m;
+    m.choosePreset("Faders");
+    const auto layout = m.card().getCardBody()->explicitLayout();
+    const auto fifth = m.pos("macro5");
+    const int full = m.card().getHeight();
+
+    m.setCount(4);
+    EXPECT_EQ(m.card().getCardBody()->explicitLayout(), layout) << "the layout is untouched by the count";
+    EXPECT_FALSE(widgetOf(m.card(), "macro5")->isVisible());
+    EXPECT_TRUE(widgetOf(m.card(), "macro4")->isVisible());
+    EXPECT_LT(m.card().getHeight(), full + 1);
+
+    m.setCount(8);
+    EXPECT_TRUE(widgetOf(m.card(), "macro5")->isVisible());
+    EXPECT_EQ(m.pos("macro5"), fifth) << "back where the layout puts it";
+    EXPECT_EQ(m.card().getHeight(), full);
+}
+
+TEST(OnCardMacros, DraggingAKnobToTheNextRowWritesTheLayoutThroughTheRealMousePathAndUndoTakesItBack) {
+    MacrosRig m;
+    ASSERT_NE(m.editor, nullptr);
+    const auto start = m.pos("macro1");
+    const auto fifth = m.pos("macro5");
+    {
+        Pointer pointer(*m.editor, "macro1");
+        pointer.moveBy({0, fifth.y - start.y});
+        pointer.release();
+    }
+    ASSERT_TRUE(m.rig.storedLayout(m.id).has_value()) << "the drop wrote the node's layout";
+    EXPECT_GT(m.pos("macro1").y, start.y) << "the rebuilt card draws the knob on the second row";
+    ASSERT_TRUE(m.undo());
+    EXPECT_EQ(m.pos("macro1"), start);
+    EXPECT_FALSE(m.rig.storedLayout(m.id).has_value());
+}
+
+TEST(OnCardMacros, ThePanelOfAMacroKnobHasNameAndPolarityInPlaceOfLabel) {
+    MacrosRig m;
+    auto* panel = openControlPanel(m.rig, *m.editor, "macro3");
+    ASSERT_NE(panel, nullptr);
+    EXPECT_TRUE(panel->isMacroRowsShownForTest());
+    EXPECT_FALSE(panel->isLabelRowShownForTest());
+    EXPECT_EQ(panel->getNameEditorForTest().getTitle(), "Name");
+    EXPECT_EQ(panel->getPolarityForTest()->getTitle(), "Polarity");
+    EXPECT_FALSE(panel->getNameEditorForTest().getTooltip().isEmpty());
+    EXPECT_FALSE(panel->getPolarityForTest()->getTooltip().isEmpty());
+    EXPECT_TRUE(panel->getPolarityForTest()->getWantsKeyboardFocus());
+    const auto panelWalk = synth::test::walkTabOrder(*panel);
+    EXPECT_TRUE(panelWalk.isCompleteCycle());
+    EXPECT_EQ(panelWalk.names(),
+              juce::StringArray({"Show as", "Size", "Name", "Polarity", "Minimum", "Maximum", "Hide from card"}));
+    EXPECT_TRUE(synth::test::auditAccessibility(*panel).empty()) << "Name and Polarity are named, tipped, focusable";
+
+    OnCardRig other;
+    const auto filter = other.add(std::make_unique<FilterModule>());
+    auto* filterEditor = other.openOnCard(filter);
+    auto* filterPanel = openControlPanel(other, *filterEditor, "cutoff");
+    ASSERT_NE(filterPanel, nullptr);
+    EXPECT_FALSE(filterPanel->isMacroRowsShownForTest());
+    EXPECT_TRUE(filterPanel->isLabelRowShownForTest());
+}
+
+TEST(OnCardMacros, RenamingAKnobCaptionsTheCardNamesTheJackAndIsOneUndoStep) {
+    MacrosRig m;
+    auto* panel = openControlPanel(m.rig, *m.editor, "macro3");
+    ASSERT_NE(panel, nullptr);
+    panel->getNameEditorForTest().setText("Cutoff", false);
+    panel->commitNameForTest();
+
+    EXPECT_EQ(m.macros->getMacroName(2), "Cutoff");
+    EXPECT_EQ(m.macros->getOutputPortLabel(2), "Cutoff");
+    EXPECT_EQ(widgetOf(m.card(), "macro3")->getTitle(), "Cutoff");
+    EXPECT_EQ(panel->getNameEditorForTest().getText(), "Cutoff");
+
+    ASSERT_TRUE(m.undo());
+    synth::test::waitUntil(
+        [&] { return widgetOf(m.card(), "macro3")->getTitle() == "M3"; }); // the card's poll puts the caption back
+    EXPECT_EQ(m.macros->getMacroName(2), "M3") << "one step takes the name back";
+    EXPECT_EQ(widgetOf(m.card(), "macro3")->getTitle(), "M3");
+}
+
+TEST(OnCardMacros, FlippingAKnobToBiThroughThePanelSwitchIsPerKnobAndOneUndoStep) {
+    MacrosRig m;
+    auto* panel = openControlPanel(m.rig, *m.editor, "macro2");
+    ASSERT_NE(panel, nullptr);
+    clickSegment(panel->getPolarityForTest(), 1);
+    EXPECT_TRUE(m.macros->isBipolar(1));
+    EXPECT_FALSE(m.macros->isBipolar(0));
+    EXPECT_FALSE(m.macros->isBipolar(2));
+    EXPECT_EQ(panel->getPolarityForTest()->getSelectedIndex(), 1);
+
+    ASSERT_TRUE(m.undo());
+    EXPECT_FALSE(m.macros->isBipolar(1));
 }

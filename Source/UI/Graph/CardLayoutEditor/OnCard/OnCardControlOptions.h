@@ -23,6 +23,14 @@ struct ControlOptions {
     std::optional<juce::Range<double>> range; ///< The layout's narrowed range.
     std::optional<juce::Range<double>>
         fullRange; ///< Set only when the Range row applies (a float shown as a knob or fader).
+    /** A Macros knob: its own name and polarity. Set, the panel shows Name and Polarity in place of Label. */
+    struct MacroKnob {
+        int index = 0;
+        juce::String name;
+        bool bipolar = false;
+        bool operator==(const MacroKnob&) const = default;
+    };
+    std::optional<MacroKnob> macroKnob;
 };
 
 /** What a control is drawn as, apart from its size or direction: the panel's Show as lists these, and a knob's

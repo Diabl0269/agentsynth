@@ -30,22 +30,6 @@ inline constexpr int kSingleWidth = 280; // standard module
 inline constexpr int kDoubleWidth = 560; // Sequencer / PolySequencer / MidiKeyboard (= 2 × kSingleWidth)
 // Note: kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 (no duplicate constant needed)
 
-// ---- Macro Control bank geometry ----
-// The Macro bank is the one module whose footprint changes at runtime (its "Knobs" parameter
-// picks how many macros are exposed). Its geometry lives here, not in ModuleComponent, so the
-// three places that must agree on it — the component layout, the output-jack hit test, and the
-// drag-preview size estimate — all read the same numbers, and so the growth maths stays
-// headless-testable.
-inline constexpr int kMacroHeaderH = 94;   // title bar + the Knobs / Bipolar row
-inline constexpr int kMacroRowH = 44;      // one macro knob and its output jack
-inline constexpr int kMacroBottomPad = 12; // padding below the last row
-
-// Total component height for a bank showing `count` macros.
-inline constexpr int macroBankHeight(int count) { return kMacroHeaderH + count * kMacroRowH + kMacroBottomPad; }
-
-// Vertical centre of macro row `index` — where both the knob and its output jack sit.
-inline constexpr int macroRowCentreY(int index) { return kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2; }
-
 enum class ModuleWidthBucket { Narrow, Single, Double };
 
 // Maps a ModuleType to its width bucket.
