@@ -283,8 +283,7 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomMagnitude = std::abs((double)dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
-    const bool optionVertical =
-        e.mods.isAltDown() && !e.mods.isCommandDown() && std::abs(wheel.deltaY) >= std::abs(wheel.deltaX);
+    const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
     if (e.mods.isCommandDown() || optionVertical)
         wheelTween_.stop();
     if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {

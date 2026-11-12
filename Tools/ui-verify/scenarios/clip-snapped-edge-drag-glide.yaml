@@ -1,0 +1,36 @@
+# Dragging a clip's edge with snap on glides the clip (and its notes) from one grid line to the next instead of popping.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and double-clicks the empty lane to make a clip (closing the piano
+#      roll it opens). Snap is on.
+#   2. Presses on the clip's right edge and drags it two grid lines wider with the button held: the edge slides to the
+#      new line over about a sixth of a second (the strip shows the frames), it does not jump.
+#   3. Lets go: no jump at the drop, the clip is two beats longer. Cmd+Z glides it back.
+record: true
+motion: true
+save_project: clip-snapped-edge-drag-glide
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - key: {keys: escape}                      # the double-click opened the piano roll; back to the clip lane
+  - wait: {}
+  - mouseDown: {id: timelineClipLaneArea, x: 95, y: 50}   # the right edge: the clip is 4 beats of 24 px
+  - glide: {name: edge-step, frames: 12, crop: {x: 190, y: 755, w: 260, h: 80}, do: {mouseMoveHeld: {id: timelineClipLaneArea, x: 144, y: 50}}}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", clipGliding: false, within_ms: 1000}
+  - mark: {check: 1, name: edge-step-landed}
+  - mouseUp: {id: timelineClipLaneArea, x: 144, y: 50}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:6.000", within_ms: 2000}
+  - screenshot: {name: 2-dropped}
+  - glide: {name: undo-back, frames: 10, crop: {x: 190, y: 755, w: 260, h: 80}, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}

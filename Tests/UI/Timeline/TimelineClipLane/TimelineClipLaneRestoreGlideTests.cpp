@@ -31,6 +31,7 @@ struct TrimRig : ClipLaneFixture {
         lane.mouseDrag(leftDrag(lane, dragged, edge));
         lane.mouseUp(leftDrag(lane, dragged, edge));
         lane.refreshFromDoc();
+        lane.getClipGlideForTest().stepForTest(400.0); // the snapped drag's own glide, settled
     }
     int drawnX() const { return lane.getDrawnClipRectForTest(clip).getX(); }
 };
@@ -42,7 +43,6 @@ TEST(TimelineClipLaneRestoreGlide, UndoAndRedoOfALeftTrimGlideTheClipEdge) {
     TrimRig r;
     const int home = r.drawnX();
     r.trimLeftEdge();
-    EXPECT_FALSE(r.lane.getClipGlideForTest().isAnimating()) << "the trim itself lands at once";
     const int trimmed = r.drawnX();
     ASSERT_GT(trimmed, home);
 
