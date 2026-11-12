@@ -15,6 +15,10 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
   glides back and forth with its cables. A card for a node the restore creates grows in, and one it removes shrinks away
   ([delete and undo animation](animation.md#delete-and-undo-animation)); a project load never goes through `undo()` and so never glides
   (it comes to life instead: [project load reveal](animation.md#project-load-reveal)).
+- **A forward edit that adds or removes cards glides the same way.** The Poly click (the pill and the track header's
+  switch) brackets its change with the same `Scope(restore=true)` and `retractCablesGoneSince(..., growAdded=true)`
+  / `glideHullsFrom`, so the Poly MIDI card grows in and its cables grow out like Cmd+Z of it. The registry of such
+  entry points is `structuralEdits()` in `Tests/UI/Layout/UndoGlideSurfacesTests.cpp`; a new structural click adds a row.
 - **Edit Layout controls.** While the on-card layout editor is open, the card an undo or redo rebuilds gives the
   editor's controls the same treatment: `CardLayoutOnCardEditor` remembers each cell's rect before the re-sync and
   glides every control whose rect changed from there to the restored place (`startGlide`, 160 ms `easeOutCubic`, the
