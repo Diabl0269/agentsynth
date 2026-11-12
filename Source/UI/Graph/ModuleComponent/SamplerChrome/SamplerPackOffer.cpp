@@ -28,6 +28,7 @@ juce::String percent(float progress) {
 
 SamplerPackOffer::SamplerPackOffer() {
     setTitle("Get the core instruments");
+    setComponentID("samplerPackOffer");
     setAccessible(true);
     addAndMakeVisible(panel_);
     panel_.addAndMakeVisible(message_);
