@@ -30,6 +30,7 @@ class GraphEditor;                // Forward declaration
 class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
+struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
@@ -207,8 +208,8 @@ public:
 
     /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
-    /** Message thread only. While alive, each card works out drawnInputJackIndices() once; nothing may change a card's
-     *  controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+    /** Message thread only. While alive, each card reads its modulation targets, its jack column and each jack's knob
+     *  anchor once; nothing may change a card's controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
     struct JackLayoutPass {
         JackLayoutPass();
         ~JackLayoutPass();
@@ -222,6 +223,8 @@ public:
     std::optional<juce::Point<float>> foldedJackCentre(int destChannel) const;
 
 private:
+    /** getModulationTargets(), read once per JackLayoutPass; outside one, filled into `fresh`. */
+    const std::vector<ModulationTarget>& modulationTargetsForPass(std::vector<ModulationTarget>& fresh) const;
     /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
@@ -452,8 +455,7 @@ private:
     bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
-    mutable std::vector<int> drawnJacksMemo_; // drawnInputJackIndices() for drawnJacksPass_ (JackLayoutPass)
-    mutable juce::uint32 drawnJacksPass_ = 0;
+    mutable std::unique_ptr<ModuleComponentJackMemo> jackMemo_; // one JackLayoutPass's answers (see the .h)
     juce::ComponentDragger dragger;
 
     // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).

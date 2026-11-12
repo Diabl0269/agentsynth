@@ -1,0 +1,37 @@
+# Deleting a macro with its modules on a big project (20 tracks, 20 open macros, about 250 modules) starts the
+# shrink-away at once, and Cmd+Z grows it back, with no stall in either.
+#
+# Needs a big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check.
+#
+# What a user does:
+#   1. Shift-clicks the name chip of the macro holding Oscillator 8 and VCA 8: the macro and its modules are selected.
+#   2. Presses Delete: a track plays the macro, so the question asks about it; Keep track deletes the macro and its
+#      modules and leaves the track.
+#   3. Presses Cmd+Z: the macro and its modules grow back.
+motion: true
+record: true
+save_project: large-project-macro-delete
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - click: {id: window, x: 610, y: 309, mods: shift}
+  - wait: {}
+  - expect: {id: "card:VCA 8", selected: true}
+  - expect: {id: "card:Oscillator 8", selected: true}
+  - screenshot: {name: 1-selected}
+  - key: {keys: backspace, instant: "only asks the Remove / Keep track question; nothing on the canvas moves yet"}
+  - wait: {}
+  - expect: {id: "Keep track", showing: true, within_ms: 2000}
+  - screenshot: {name: 2-question}
+  - glide: {name: delete-macro, frames: 14, crop: {x: 560, y: 250, w: 560, h: 300}, do: {click: {id: "Keep track"}}}
+  # Card titles count by type, so with the macro gone "VCA 8" is the next macro's VCA, one row down.
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy copy", within_ms: 2000}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 1, name: macro-deleted}
+  - glide: {name: undo-delete-macro, frames: 14, crop: {x: 560, y: 250, w: 560, h: 300}, do: {key: {keys: cmd+z}}}
+  - expect: {id: "card:VCA 8", macro: "Plucky Lead copy copy copy copy copy", within_ms: 2000}
+  - expect: {id: "card:VCA 8", bounds: {x: 851, y: 312, w: 68, h: 43}, within_ms: 2000}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 2, name: macro-back-after-undo}
