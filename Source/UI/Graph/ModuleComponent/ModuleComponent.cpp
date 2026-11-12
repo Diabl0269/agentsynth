@@ -29,6 +29,7 @@
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
@@ -476,6 +477,8 @@ void ModuleComponent::applyHeaderButtonIcons() {
         if (auto d = lf->getIcon(synth::theme::Icon::ModuleDualIO))
             dualIOButton->setImages(d.get());
     }
+    if (hostedOutputs_ != nullptr) // the Outputs button wears the routing icon
+        hostedOutputs_->setIcon(lf->getIcon(synth::theme::Icon::ModuleDualIO).get());
 }
 
 void ModuleComponent::refreshWaveformComboIcons() {

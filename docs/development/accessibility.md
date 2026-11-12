@@ -87,7 +87,7 @@ A stepper (`CardStepper`, the number field) is ONE Tab stop titled after the par
 focus ring; Up/Down (Left/Right in a row) step, Enter or a digit opens the type-in box (typable fields), and to a screen
 reader it is one element whose value is the value text. Its tooltip names the gestures. A composite control (the stepper) is registered for
 MIDI Learn as a whole: a right click on any part of it resolves to the registered ancestor
-(`ModuleComponent::mouseDown`). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
+(`ModuleComponent::mouseDown`). A Hosted Plugin's "+ N more outputs" fold line is a Tab stop that Enter or Space toggles, and its Outputs panel is a popover whose Show switches are Tab stops (Up/Down move between rows, Space toggles, Esc closes), each titled and with a tooltip ([plugin-card-layout](../control/plugin-card-layout.md#outputs-panel)). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
 "Audio L input" and so on, for the accessibility tree only; there is no keyboard cable creation.
 
 ## Which focus helper

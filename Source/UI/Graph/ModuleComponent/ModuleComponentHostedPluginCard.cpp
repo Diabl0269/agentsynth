@@ -13,6 +13,8 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -69,7 +71,10 @@ ModuleComponent::HostedCardBinding::HostedCardBinding(ModuleComponent& card, syn
     // output that went hidden are dropped first (an invisible jack cannot be unplugged).
     module.onOutputsChanged = [this] {
         card_.owner.dropRoutingsOnHiddenJacks(card_.nodeId);
-        card_.applyDualIOLayoutChange();
+        if (card_.hostedOutputs_ != nullptr) // the aux jacks glide, then the card is re-laid at its final rows
+            card_.hostedOutputs_->modelChanged([this] { card_.applyDualIOLayoutChange(); });
+        else
+            card_.applyDualIOLayoutChange();
     };
     module.onParameterContextMenu = [this](const juce::String& paramId, juce::PopupMenu& menu) {
         appendParameterMenuItems(paramId, menu);
@@ -120,6 +125,8 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
     card_.unbindHostedPluginCard(/*paramsAlive*/ true);
     if (card_.dualIOButton != nullptr)
         card_.dualIOButton->setVisible(false); // nothing to split until the next instance publishes
+    if (card_.hostedOutputs_ != nullptr)
+        card_.hostedOutputs_->routingButton().setVisible(false);
 
     juce::Component::SafePointer<ModuleComponent> safeCard(&card_);
     juce::MessageManager::callAsync([safeCard] {
@@ -130,8 +137,7 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
 
 void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
     card_.repaint(); // the shown name can change when the plugin publishes
-    if (card_.dualIOButton != nullptr)
-        card_.dualIOButton->setVisible(module_.get() != nullptr && module_->hasStereoPairInstance());
+    card_.syncHostedRoutingButtons();
     card_.reconcileHostedModKnobs();
     card_.rebuildHostedPluginCard();
     card_.refreshHostedLoadStatus(); // a success clears the reason; it re-measures only when it changed
@@ -312,7 +318,20 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     addControlsSplit->rightHalf().onClick = [this] { setPluginTouchToAdd(!isPluginTouchToAdd()); };
     addAndMakeVisible(addControlsSplit.get());
 
+    hostedOutputs_ = std::make_unique<synth::ui::HostedOutputsStrip>(
+        *this, hosted,
+        synth::ui::HostedOutputsStrip::Callbacks{[this] {
+                                                     updateLayout();
+                                                     owner.notifyModuleContentChanged();
+                                                     repaint();
+                                                 },
+                                                 [this] { owner.handleModuleResized(this); },
+                                                 [this] { synth::ui::showHostedOutputsPanel(*this); },
+                                                 [this] { synth::ui::toggleHostedOutputsFold(*this); }});
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        hostedOutputs_->setIcon(lf->getIcon(synth::theme::Icon::ModuleDualIO).get());
     hostedCard_ = std::make_unique<HostedCardBinding>(*this, hosted, owner.getPluginCardLayoutStore());
+    syncHostedRoutingButtons();
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
     if (hosted.hasInstance()) {
         reconcileHostedModKnobs();
@@ -504,6 +523,7 @@ void ModuleComponent::releaseHostedPluginCard() {
     }
     unbindHostedPluginCard(paramsAlive);
     addControlsSplit.reset();
+    hostedOutputs_.reset();
     hostedCard_.reset();
 }
 
@@ -537,6 +557,8 @@ void ModuleComponent::handleHostedGesture(const juce::AudioProcessorParameter& p
 // Both buttons share one row at the top of the body, each half of the narrow band. The knobs, toggles and
 // combos the layout put on the card are placed by the generic grid in layoutDefaultContent, below this.
 int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply) {
+    if (apply && hostedOutputs_ != nullptr)
+        hostedOutputs_->layout();
     if (openPluginEditorButton == nullptr)
         return y;
 
@@ -567,4 +589,19 @@ void ModuleComponent::reflectHostedRestingValues() {
         return;
     for (auto* attachment : hostedAttachments_)
         attachment->reflectRestingValue();
+}
+
+// ---- Outputs ----------------------------------------------------------------------------------------------
+
+// A plugin with more than one output bus replaces the Dual I/O button with the Outputs button (the main bus's
+// Joined | L/R switch lives in the panel); a plain stereo pair keeps the Dual I/O flip.
+void ModuleComponent::syncHostedRoutingButtons() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || hostedOutputs_ == nullptr)
+        return;
+    const bool multi = hosted->hasMultipleOutputBuses();
+    if (dualIOButton != nullptr)
+        dualIOButton->setVisible(hosted->hasStereoPairInstance() && !multi);
+    hostedOutputs_->syncButton();
+    hostedOutputs_->snapToModel();
 }
