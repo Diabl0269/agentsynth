@@ -143,6 +143,7 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceMuteSoloTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceSamplerVoiceCountTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
