@@ -347,11 +347,24 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
     if (mb == nullptr)
         return;
 
+    // A raw channel is hidden when no visible jack owns it. Jack index == raw channel only holds for a module whose
+    // jacks are a prefix of its channels (Audio Input); a Hosted Plugin can hide the middle of its outputs.
     const int visible = mb->getVisibleOutputPortCount();
+    std::vector<bool> reachable((size_t)juce::jmax(0, mb->getTotalNumOutputChannels()), false);
+    for (int jack = 0; jack < visible; ++jack)
+        for (const auto& t : mb->getJackTargets(jack, /*isInput=*/false))
+            for (int v = 0; v < t.voiceSpan; ++v) {
+                const int raw = t.rawHeadChannel + v * t.rawStride;
+                if (raw >= 0 && raw < (int)reachable.size())
+                    reachable[(size_t)raw] = true;
+            }
     std::vector<juce::AudioProcessorGraph::Connection> toRemove;
 
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+        if (c.source.nodeID != nodeId || c.source.isMIDI())
+            continue;
+        if (c.source.channelIndex >= 0 && c.source.channelIndex < (int)reachable.size() &&
+            reachable[(size_t)c.source.channelIndex])
             continue;
 
         if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {

@@ -289,6 +289,7 @@ bool HostedPluginModule::applyStateInPlace(const PluginIdentity& identity, const
     // After the plugin's bytes: the slot bases are the resting values, and the restore may have set a parameter to a
     // value it only had because it was being modulated when that state was saved.
     modSlotsFromVar(object.getProperty(kModSlotsKey));
+    applySavedOutputs(object.getProperty("outputs"), object.hasProperty("outputs"));
     return true;
 }
 
