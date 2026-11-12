@@ -89,8 +89,7 @@ public:
     juce::AudioProcessor* getModule() const { return module; }
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
-    // Safely detach from the processor before graph rebuild.
-    // Removes listeners, destroys attachments, stops timer, nulls module pointer.
+    // Detach from the processor before a graph rebuild: drops listeners and attachments, stops the timer.
     void detachFromProcessor();
 
     /** A docked macro-port widget's jack colour: the port's own colour when set, else `kindTint` (same rule as
@@ -98,8 +97,7 @@ public:
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
-    // transient, so a pick pushes no undo step. Each setter is idempotent: it reports whether this
-    // surface actually changed, so a tick that left the colour alone repaints nothing.
+    // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
     bool setPortColourPreview(juce::Colour c) {
         if (portColourPreview_ && *portColourPreview_ == c)
             return false;
