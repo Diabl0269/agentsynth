@@ -532,6 +532,7 @@ add_executable(Tests
     UI/Graph/CardNavigationTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
     Macros/MacroOwnerIndexTests.cpp
+    Macros/MacroPortRepairTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
     Macros/MacroContainer/MacroContainerInteractionTests.cpp

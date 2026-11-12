@@ -16,6 +16,10 @@
 //   - "Plain group" is a folded macro no track plays: an Oscillator, a Filter and a Hosted Plugin stand-in
 //     (Tests/StubPluginInstance.h's stub, the only kind of plugin this repo can load; open() installs the stub as the
 //     default backend while it opens, so the plugin reloads instead of staying an unresolved placeholder).
+//   - With `withPortWidgets`: an inlet and an outlet port on the folded, the nested and the open track macros, plus a
+//     stray Macro In and Macro Out that no macro lists, all saved at the canvas origin (the shape the Load test project
+//     had: port widgets that were never docked), and a stray Macro In cabled into Audio 1's Gate
+//     (wiredStrayInletUuid(): opening the project makes it a port of Audio 1's macro again).
 // Use: `synth::test::SavedProjectFixture project; auto mc = project.open(); project.trackMacroId(*mc, 1)`.
 
 #include "../../StubPluginInstance.h"
@@ -27,6 +31,8 @@
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/FilterModule.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -67,7 +73,7 @@ public:
     static constexpr const char* kPlainGroup = "Plain group";
 
     /** Builds the project in a throwaway MainComponent and saves it; the bundle is deleted with the fixture. */
-    SavedProjectFixture() {
+    explicit SavedProjectFixture(bool withPortWidgets = false) {
         bundle_ = synth::test::uniqueTempPath("saved-project-fixture", ".agsproj");
         MainComponent builder{std::make_unique<SavedProjectFixtureProvider>()};
         builder.setSize(1400, 900);
@@ -76,6 +82,8 @@ public:
         for (int i = 0; i < 3; ++i)
             builder.simulateAddAudioTrackClick();
         build(builder);
+        if (withPortWidgets)
+            wiredStrayInlet_ = addPortWidgets(builder);
         saved_ = builder.saveProjectForTest(bundle_);
     }
     ~SavedProjectFixture() { bundle_.deleteRecursively(); }
@@ -84,6 +92,8 @@ public:
 
     bool wasSaved() const { return saved_; }
     const juce::File& bundle() const { return bundle_; }
+    /** The uuid of the stray Macro In cabled into Audio 1's Gate (empty without `withPortWidgets`). */
+    const juce::String& wiredStrayInletUuid() const { return wiredStrayInlet_; }
 
     /** A fresh MainComponent with the project opened the way the app opens a file. Null when the open failed. */
     std::unique_ptr<MainComponent> open() const {
@@ -154,6 +164,42 @@ private:
         return node;
     }
 
+    static void addPort(MainComponent& mc, bool inlet, const juce::String& macroId) {
+        std::unique_ptr<juce::AudioProcessor> processor;
+        if (inlet)
+            processor = std::make_unique<MacroInletModule>();
+        else
+            processor = std::make_unique<MacroOutletModule>();
+        auto node = addNode(mc, std::move(processor), 0, 0);
+        const auto uuid = node->properties["uuid"].toString();
+        if (auto* macro = mc.getGraphEditor().getMacros().find(macroId)) {
+            macro->members.push_back(uuid);
+            synth::MacroPort port;
+            port.nodeUuid = uuid;
+            port.isInput = inlet;
+            port.name = inlet ? "In" : "Out";
+            port.order = (int)macro->ports.size();
+            macro->ports.push_back(port);
+        }
+    }
+
+    static juce::String addPortWidgets(MainComponent& mc) {
+        for (int track = 0; track < 3; ++track) {
+            addPort(mc, true, trackMacroId(mc, track));
+            addPort(mc, false, trackMacroId(mc, track));
+        }
+        addPort(mc, true, {});
+        addPort(mc, false, {});
+        // A stray inlet that feeds a member of exactly one macro: the load makes it that macro's port again.
+        auto wired = addNode(mc, std::make_unique<MacroInletModule>(), 0, 0);
+        const auto gate = memberUuidOfType(mc, trackMacroId(mc, 0), "Gate");
+        for (auto* node : mc.getAudioEngine().getGraph().getNodes())
+            if (node->properties["uuid"].toString() == gate)
+                mc.getAudioEngine().getGraph().addConnection({{wired->nodeID, 0}, {node->nodeID, 0}});
+        mc.getGraphEditor().updateComponents();
+        return wired->properties["uuid"].toString();
+    }
+
     static void build(MainComponent& mc) {
         auto& editor = mc.getGraphEditor();
         auto& macros = editor.getMacros();
@@ -213,6 +259,7 @@ private:
 
     juce::File bundle_;
     bool saved_ = false;
+    juce::String wiredStrayInlet_;
 };
 
 } // namespace synth::test
