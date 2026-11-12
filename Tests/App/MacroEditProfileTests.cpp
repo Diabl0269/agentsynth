@@ -362,6 +362,41 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestEditProfile) {
     timedEdit(*mc, "undo delete track", [&] { undo.undo(); });
 }
 
+// The track edits on their own, one project size per run (PROFILE_PROJECT=<bundle> a grown copy of the Load test
+// project, see ManyTracksProfileTests.cpp): duplicate, delete and a three-track paste, each with its undo and redo.
+//   PROFILE_ON_SCREEN=1 ./Tests --gtest_also_run_disabled_tests --gtest_filter='*LoadTestTrackEditProfile*'
+TEST_F(ChannelFlowTest, DISABLED_LoadTestTrackEditProfile) {
+    juce::File copy;
+    auto mc = openBenchCopy(copy);
+    const struct RemoveCopy {
+        juce::File dir;
+        ~RemoveCopy() { dir.deleteRecursively(); }
+    } removeCopy{copy};
+    ASSERT_NE(mc, nullptr);
+    auto& undo = mc->getUndoManager();
+    auto& host = (synth::ui::TrackHeaderHost&)*mc; // a private base; the header's own call path
+    const auto& tracks = mc->getTimelineDoc().getTracks();
+    std::printf("[track-edit] tracks=%d\n", (int)tracks.size());
+    const auto first = tracks.front().id;
+    const auto last = tracks.back().id;
+    for (int round = 0; round < 2; ++round) { // the first round warms caches; the second is what a user feels
+        timedEdit(*mc, "duplicate track", [&] { host.duplicateTrack(first); });
+        timedEdit(*mc, "undo duplicate", [&] { undo.undo(); });
+        timedEdit(*mc, "redo duplicate", [&] { (void)undo.redo(); });
+        timedEdit(*mc, "undo duplicate", [&] { undo.undo(); });
+        timedEdit(*mc, "delete track", [&] { host.deleteTrack(last); });
+        timedEdit(*mc, "undo delete", [&] { undo.undo(); });
+        timedEdit(*mc, "redo delete", [&] { (void)undo.redo(); });
+        timedEdit(*mc, "undo delete", [&] { undo.undo(); });
+        const std::vector<synth::TrackId> three = {tracks[0].id, tracks[1].id, tracks[2].id};
+        host.copyTracks(three);
+        timedEdit(*mc, "paste 3 tracks", [&] { host.pasteTracks(last); });
+        timedEdit(*mc, "undo paste", [&] { undo.undo(); });
+        timedEdit(*mc, "redo paste", [&] { (void)undo.redo(); });
+        timedEdit(*mc, "undo paste", [&] { undo.undo(); });
+    }
+}
+
 // Opening the project as the app does: the open call, the first full paint, and the longest stall while the load
 // reveal plays. PROFILE_ON_SCREEN=1 PROFILE_AUDIO=1 for the on-screen path.
 TEST_F(ChannelFlowTest, DISABLED_LoadTestOpenProfile) {
