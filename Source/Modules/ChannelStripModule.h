@@ -12,8 +12,9 @@
  * @brief "Channel Strip" — the end of one mixer channel (docs/mixer/mixer.md#node-types).
  *
  * The node the mixer enumerates: a channel's chain terminates here, and the strip's gain, pan,
- * mute and solo are what a mixer column drives. Output is always stereo (Left on ch0, Right on
- * kRightBase); the INPUT is Mono or Stereo, decided once when the strip is created.
+ * mute and solo are what a mixer column drives. The output is always stereo on the raw channels
+ * (Left on ch0, Right on kRightBase); the INPUT is Mono or Stereo, decided once when the strip is
+ * created. Dual I/O only changes how many jacks show (below), never a raw channel.
  *
  * CHANNEL SHAPE (docs/mixer/mixer.md#mono-and-stereo). JUCE settles the bus layout in the ModuleBase constructor,
  * so the node always carries kNumInputs raw input channels and kNumOutputs raw output channels,
@@ -73,7 +74,10 @@
  * branch stays `buffer.clear()` per the root CLAUDE.md two-branch contract, a deliberate departure
  * from DAWs that keep a pre-fader cue alive under mute.
  *
- * DUAL I/O (input side only, StereoAudio::Declared, ships SPLIT; docs/mixer/mixer.md#mono-and-stereo).
+ * DUAL I/O (StereoAudio::Declared, ships SPLIT; docs/mixer/mixer.md#mono-and-stereo). Split, the main output
+ * shows Left and Right and a Stereo strip's input shows Left and Right. Collapsed, the main output is one "Audio" jack
+ * owning raw ch0 and kRightBase (span 2, stride kRightBase), and a Stereo strip's input is one "Audio" jack the same
+ * way; send jacks never collapse and just move up one slot. Only the visible jacks change: no raw edge moves.
  *
  * SOLO (docs/mixer/mixer.md#solo-is-a-render-time-gate). `soloed_` is NOT an AudioParameter: not host-visible, not
  * automatable, persisted only in the trusted extra state. Whether ANY strip is soloed is an
@@ -298,7 +302,7 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
 
     int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo && isDualIO() ? 2 : 1; }
-    int getVisibleOutputPortCount() const override { return 2 + 2 * getActiveSendCount(); }
+    int getVisibleOutputPortCount() const override { return mainOutputJackCount() + 2 * getActiveSendCount(); }
 
     juce::String getInputPortLabel(int visibleJack) const override {
         if (mods_.ownsChannel(visibleJack))
@@ -310,14 +314,14 @@ public:
         return visibleJack == 1 ? "Right" : "Left";
     }
     juce::String getOutputPortLabel(int visibleJack) const override {
-        if (visibleJack < 2)
-            return visibleJack == 1 ? "Right" : "Left";
+        if (visibleJack < mainOutputJackCount())
+            return stereoOutputLabel(visibleJack);
         const int slot = slotForVisibleJack(visibleJack);
         if (slot < 0)
             return ModuleBase::getOutputPortLabel(visibleJack);
         // Named by SLOT, not by visible position: removing a middle send renumbers the jacks but
         // must not renumber what a row and its sendNLevel parameter call themselves.
-        return "Send " + juce::String(slot + 1) + ((visibleJack % 2) == 0 ? " L" : " R");
+        return "Send " + juce::String(slot + 1) + ((visibleJack - mainOutputJackCount()) % 2 == 0 ? " L" : " R");
     }
 
     LogicalPort mapInputChannel(int rawChannel) const override {
@@ -340,10 +344,19 @@ public:
         return {}; // reserved / hidden: role Other, not a group head
     }
     LogicalPort mapOutputChannel(int rawChannel) const override {
-        if (rawChannel == 0)
-            return audioJack(0);
-        if (rawChannel == kRightBase)
-            return audioJack(1);
+        if (rawChannel == 0) {
+            auto port = audioJack(0);
+            if (!isDualIO()) {
+                port.polyVoiceSpan = 2; // the one jack owns both legs, kRightBase apart
+                port.voiceStride = kRightBase;
+            }
+            return port;
+        }
+        if (rawChannel == kRightBase) {
+            auto port = audioJack(isDualIO() ? 1 : 0);
+            port.isPolyGroupHead = isDualIO();
+            return port;
+        }
         for (int slot = 0; slot < kMaxSends; ++slot) {
             if (!isSendActive(slot))
                 continue;
@@ -616,8 +629,11 @@ private:
         for (int below = 0; below < slot; ++below)
             if (isSendActive(below))
                 ++position;
-        return 2 + 2 * position;
+        return mainOutputJackCount() + 2 * position;
     }
+
+    /** Main output jacks: Left and Right when Dual I/O is on, one Audio jack owning both legs when off. */
+    int mainOutputJackCount() const noexcept { return stereoVisibleOutputCount(); }
 
     /** Inverse of visibleJackForSlot for the L jack of a pair; -1 when `visibleJack` names no
      *  active slot. */

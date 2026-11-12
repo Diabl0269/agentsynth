@@ -14,6 +14,7 @@
 #include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 using namespace detail;
 
@@ -151,6 +152,7 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
                              1.0f);
         }
     }
+    paintLeavingRows(g, themeColors);
 
     // '+' always; '-' only when its side has a port, fading with the names.
     const auto glyphColour = themeColors.textMuted.withAlpha(0.75f);
@@ -234,6 +236,93 @@ float MacroCardComponent::getPortShown(const juce::String& portUuid) const {
 void MacroCardComponent::stepPortEnterForTest(double ms) {
     if (portEnterFade_ != nullptr)
         portEnterFade_->stepForTest(ms);
+}
+
+std::vector<MacroCardComponent::RowPicture> MacroCardComponent::currentRowPictures() const {
+    std::vector<RowPicture> out;
+    if (owner.getMacros().find(macroId) == nullptr)
+        return out;
+    for (const auto& p : owner.getMacroController().macroCardPortLayout(macroId))
+        out.push_back({p.nodeUuid, p.isInput, p.kind, p.name, p.jackPos, p.labelArea, p.row, p.colour});
+    return out;
+}
+
+// A port that goes (Cmd+Z of a cable drop, the '-' button, Delete port) does not vanish: the row it had at the bottom
+// of its side is kept as a picture and fades out, its dot shrinking, over 170 ms easeInCubic, while the cable retracts
+// (ShownFade: a plain 80 ms fade under Reduce Motion, at once under Animations Off or off screen). A row with rows
+// below it is not kept: the rows below would move up through it. A new port, redo of a removal included, grows in
+// through growInPort. A second change lands the rows still fading and starts the new ones; a port that comes back
+// mid-fade drops its ghost. A pass that finds the card hidden (folded away, expanded) or new only takes the rows.
+void MacroCardComponent::refreshPortRows(bool animate) {
+    auto rows = currentRowPictures();
+    const auto has = [](const std::vector<RowPicture>& list, const juce::String& uuid) {
+        return std::any_of(list.begin(), list.end(), [&](const auto& r) { return r.nodeUuid == uuid; });
+    };
+    if (!animate) {
+        if (!leavingRows_.empty() && portExitFade_ != nullptr)
+            portExitFade_->jumpTo(0.0f);
+        leavingRows_.clear();
+        shownRows_ = std::move(rows);
+        return;
+    }
+    for (const auto& row : rows)
+        if (!has(shownRows_, row.nodeUuid))
+            growInPort(row.nodeUuid);
+    std::erase_if(leavingRows_, [&](const auto& r) { return has(rows, r.nodeUuid); });
+
+    std::vector<RowPicture> gone;
+    for (const auto& old : shownRows_) {
+        if (has(rows, old.nodeUuid))
+            continue;
+        const bool rowsBelow = std::any_of(shownRows_.begin(), shownRows_.end(), [&](const auto& o) {
+            return o.isInput == old.isInput && o.row > old.row && has(rows, o.nodeUuid);
+        });
+        if (!rowsBelow)
+            gone.push_back(old);
+    }
+    shownRows_ = std::move(rows);
+    if (gone.empty())
+        return;
+    if (portExitFade_ == nullptr) {
+        portExitFade_ = std::make_unique<synth::ui::ShownFade>(*this);
+        portExitFade_->onFrame = [this] {
+            if (portExitFade_->alpha() <= 0.0f)
+                leavingRows_.clear();
+            repaint();
+        };
+    }
+    leavingRows_ = std::move(gone);
+    portExitFade_->jumpTo(1.0f);
+    portExitFade_->fadeTo(0.0f, 170.0, synth::ui::easeInCubic);
+}
+
+void MacroCardComponent::paintLeavingRows(juce::Graphics& g, const synth::theme::Colors& themeColors) {
+    if (leavingRows_.empty() || portExitFade_ == nullptr)
+        return;
+    const float shown = portExitFade_->alpha();
+    const float nameAlpha = portNameAlpha();
+    const float radius = 5.0f * (synth::ui::prefersReducedMotion() ? 1.0f : shown);
+    for (const auto& port : leavingRows_) {
+        const juce::Colour kindTint =
+            port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
+        g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint).withMultipliedAlpha(shown));
+        g.fillEllipse((float)port.jackPos.x - radius, (float)port.jackPos.y - radius, radius * 2.0f, radius * 2.0f);
+        if (nameAlpha > 0.0f && port.name.isNotEmpty()) {
+            g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha * shown));
+            g.drawFittedText(port.name, port.labelArea,
+                             port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
+                             1.0f);
+        }
+    }
+}
+
+float MacroCardComponent::getLeavingPortShownForTest() const {
+    return portExitFade_ != nullptr && !leavingRows_.empty() ? portExitFade_->alpha() : 0.0f;
+}
+
+void MacroCardComponent::stepPortExitForTest(double ms) {
+    if (portExitFade_ != nullptr)
+        portExitFade_->stepForTest(ms);
 }
 
 // The card outlined in the accent colour with a soft glow, and its port row marked: a ring round the jack of the port

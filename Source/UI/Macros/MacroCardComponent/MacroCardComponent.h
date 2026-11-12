@@ -141,7 +141,31 @@ public:
     float getPortShown(const juce::String& portUuid) const;
     void stepPortEnterForTest(double ms);
 
+    /** Called by GraphEditor::syncMacroCards on every pass. Compares the card's rows with the ones it showed last pass
+     *  and, when `animate` (the card was on screen before and after the pass), grows in each new row and keeps a ghost
+     * of each row that went from the bottom of its side (an undo, '-' or a port delete) to fade and shrink away.
+     *  Otherwise it just takes the rows as they are and drops any ghost. */
+    void refreshPortRows(bool animate);
+    /** How many ghost rows are drawn now, and how shown they are (1 = whole, 0 = gone). */
+    int getLeavingPortRowCountForTest() const noexcept { return (int)leavingRows_.size(); }
+    float getLeavingPortShownForTest() const;
+    void stepPortExitForTest(double ms);
+
 private:
+    /** A row as it was drawn, kept while it fades out after its port is gone. */
+    struct RowPicture {
+        juce::String nodeUuid;
+        bool isInput = false;
+        synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
+        juce::String name;
+        juce::Point<int> jackPos;
+        juce::Rectangle<int> labelArea;
+        int row = 0;
+        std::optional<juce::Colour> colour;
+    };
+    std::vector<RowPicture> currentRowPictures() const;
+    void paintLeavingRows(juce::Graphics& g, const synth::theme::Colors& themeColors);
+
     /** `priorSelection`: whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
      *  captured by the caller rather than read fresh in here. */
@@ -229,6 +253,9 @@ private:
     std::unique_ptr<synth::ui::ShownFade> hintFade_;
     juce::String enteringPortUuid_; // the row growInPort is fading in
     std::unique_ptr<synth::ui::ShownFade> portEnterFade_;
+    std::vector<RowPicture> shownRows_;   // the rows the last syncMacroCards pass drew
+    std::vector<RowPicture> leavingRows_; // rows of removed ports, drawn while portExitFade_ goes 1 -> 0
+    std::unique_ptr<synth::ui::ShownFade> portExitFade_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

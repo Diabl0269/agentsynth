@@ -3,8 +3,10 @@
 # icon and caption are the state.
 #
 # What a user does: opens the timeline with Select as the tool, clicks a lane, then presses 1 twice (Trim -> Carry
-# contents -> Stretch to fit). After every press the control keeps its width. The proof still is the control at
-# Stretch with the labels shown; clip-sizing-field-icon-only runs the same with Show button labels off.
+# contents -> Stretch to fit). After every press the control keeps its width. The proof stills are the control at
+# Stretch with the labels shown (the spring icon, the notch in the chip's lower-right corner marking the menu, never
+# touching the icon) and the menu open under it; clip-sizing-field-icon-only runs the same with Show button labels
+# off. Return on the control opens the menu too.
 record: true
 save_project: clip-sizing-field
 steps:
@@ -26,8 +28,18 @@ steps:
   - expect: {id: timelineClipSizingState, sizingMode: stretch, glyph: stretch, caption: Stretch}
   - mark: {check: 1, name: sizing-stretch}
   - wait: {settleMs: 1000}
-  - screenshot: {id: timelineClipSizing, name: stretch-button}
+  - screenshot: {id: timelineClipSizing, name: stretch-button, scale: 8}
   # The menu still picks a mode: Stretch is ticked; Down once and Return picks Trim.
+  - click: {id: timelineClipSizing}
+  - wait: {settleMs: 500}
+  - mark: {check: 2, name: sizing-menu-open}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  # The keyboard path is unchanged: Enter on the focused control opens the same menu.
+  - key: {keys: return, target: timelineClipSizing}
+  - wait: {settleMs: 500}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
   - click: {id: timelineClipSizing}
   - wait: {settleMs: 500}
   - key: {keys: down}

@@ -35,3 +35,5 @@ include(cmake/CommandRowSources.cmake)
 include(cmake/ModCurveUISources.cmake)
 # The Mod Matrix source picker's create rows.
 include(cmake/ModMatrixPickerCreateSources.cmake)
+# The Hosted Plugin card's outputs strip and Outputs panel.
+include(cmake/HostedOutputsSources.cmake)

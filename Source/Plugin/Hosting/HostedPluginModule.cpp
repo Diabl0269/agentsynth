@@ -75,6 +75,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
     modSlotsFromVar({});         // and so do the parameters its cables modulate
     savedOutputs_ = juce::var(); // and so does the choice of which outputs show: a fresh load shows the main bus only
     outputsRestored_ = false;
+    outputsFolded_ = false;
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
@@ -118,6 +119,7 @@ void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPlugin
     modSlotsFromVar({});
     savedOutputs_ = juce::var();
     outputsRestored_ = false;
+    outputsFolded_ = false;
     startIdentityLoad(identity, backend);
 }
 
@@ -722,6 +724,8 @@ juce::var HostedPluginModule::getExtraState() const {
 
     if (auto outputs = outputsToVar(); !outputs.isVoid())
         object->setProperty("outputs", outputs);
+    if (outputsFolded_)
+        object->setProperty("outputsFolded", true);
 
     // NOTE: no path is written here, ever — not the plugin binary's, not anything else. The identity
     // is format + uniqueId + name (see PluginIdentity). HostedPluginTests asserts it over the
@@ -746,6 +750,7 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
     modSlotsFromVar(object->getProperty("modSlots"));
     savedOutputs_ = object->getProperty("outputs");
     outputsRestored_ = true;
+    outputsFolded_ = static_cast<bool>(object->getProperty("outputsFolded"));
     setCardLayoutOverride(object->getProperty("cardLayout"));
     const juce::String encoded = object->getProperty("pluginState").toString();
     if (encoded.isNotEmpty())

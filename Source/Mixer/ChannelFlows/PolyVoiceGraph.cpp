@@ -253,6 +253,23 @@ void wirePolyMidi(Graph& graph, NodeID polyMidi, const std::vector<NodeID>& modu
     }
 }
 
+// A poly ADSR takes its gates from the Poly MIDI fan and never reads the raw MIDI at its MIDI input
+// (ADSRModule::processModuleBlock scans midiMessages only in its mono branch), so the direct `source -> ADSR` MIDI
+// cable is redundant once Poly MIDI feeds it and goes. Only that exact cable, only for an ADSR, only when Poly MIDI
+// really is wired in: the same source's cable to a mono module is another cable and stays. An Oscillator or Wavetable
+// is NOT dropped here: poly voice 0 still restarts on a raw note-on and falls back to the raw note's pitch
+// (OscillatorModule::scanMidi, WavetableOscillatorModule::scanMidi), so its raw cable is not provably redundant.
+// restoreRawMidi puts the cable back when the module goes mono again.
+void dropRedundantRawMidi(Graph& graph, NodeID source, NodeID polyMidi, const std::vector<NodeID>& modules) {
+    for (const auto module : modules) {
+        if (!isType(processorFor(graph, module), ModuleType::ADSR))
+            continue;
+        if (!graph.isConnected({{polyMidi, 8}, {module, 0}}))
+            continue;
+        graph.removeConnection({{source, Graph::midiChannelIndex}, {module, Graph::midiChannelIndex}});
+    }
+}
+
 void insertPolyMidi(Graph& graph, const std::vector<NodeID>& flipped, const PolyVoiceGraphOptions& options,
                     PolyVoiceGraphResult& result) {
     std::vector<NodeID> wantsMidi;
@@ -271,6 +288,7 @@ void insertPolyMidi(Graph& graph, const std::vector<NodeID>& flipped, const Poly
             result.addedPolyMidi.push_back(polyMidi);
         }
         wirePolyMidi(graph, polyMidi, group.modules);
+        dropRedundantRawMidi(graph, group.source, polyMidi, group.modules);
     }
 }
 

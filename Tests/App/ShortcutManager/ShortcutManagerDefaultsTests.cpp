@@ -157,6 +157,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelinePasteTracks",
         "timelineShowFocusedTrackModule",
         "timelineToggleFocusedTrackPluginWindow",
+        "trackHeaderTogglePoly", // TimelineTrackHeaderComponent::keyPressed
     };
     return ids;
 }

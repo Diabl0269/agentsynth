@@ -1,0 +1,42 @@
+# Gap: a new track's Channel Strip showed one Audio input but two output jacks (Left and Right), which read as a bug
+# beside every other module's one-cable-in, one-cable-out rule.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track.
+#   2. Looks at the track's Channel Strip: one Audio jack in, one Audio jack out.
+#   3. Clicks the strip's Dual I/O button: Left and Right appear on both sides, the cables stay attached.
+#   4. Clicks it again: back to one Audio jack on each side.
+# The raw edges (ch0 and kRightBase, both ways) are asserted by StripWiringHealMatrix and
+# ChannelStripOutputCollapseProject in the unit tests; test mode cannot read graph edges, so the cables are checked in
+# the proof stills.
+record: true
+save_project: channel-strip-one-audio-output
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 300, dy: -0.5, mods: cmd}      # zoom out, then scroll right to the Channel Strip
+  - wheel: {id: window, x: 900, y: 300, dx: -3}
+  - wheel: {id: window, x: 900, y: 300, dx: -3}
+  - wheel: {id: window, x: 900, y: 300, dx: -2.5}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false}
+  - screenshot: {name: 1-collapsed}
+  - mark: {check: 1, name: one-audio-in-and-out}
+  - click: {id: "card:Channel Strip > Dual I/O"}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: true, within_ms: 1500}
+  - screenshot: {name: 2-split}
+  - mark: {check: 2, name: left-right-on-both-sides}
+  - click: {id: "card:Channel Strip > Dual I/O"}
+  - wait: {}
+  - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false, within_ms: 1500}
+  - screenshot: {name: 3-collapsed-again}

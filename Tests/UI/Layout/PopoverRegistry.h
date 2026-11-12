@@ -20,6 +20,7 @@ inline const std::vector<PopoverUser>& popoverUsers() {
         {"Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp", {"CardLayoutControlPanel"}},
         {"Source/UI/Graph/ControlStyle/ControlStyleMenu.cpp", {"ControlStylePanel"}},
         {"Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", {"ColourPickerPopup"}},
+        {"Source/UI/Graph/HostedOutputs/HostedOutputsStrip.h", {"HostedOutputsPanel"}},
         {"Source/UI/Graph/ModMatrixComponent.cpp", {"ModMatrixPicker"}},
         {"Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp", {"CardLayoutOnCardEditor"}},
         {"Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp", {"ModMatrixPicker"}},

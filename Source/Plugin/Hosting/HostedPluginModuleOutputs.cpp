@@ -175,11 +175,42 @@ bool HostedPluginModule::applyOutputPolicy() {
     return changed;
 }
 
-void HostedPluginModule::applySavedOutputs(const juce::var& saved, bool keyPresent) {
+void HostedPluginModule::applySavedOutputs(const juce::var& saved, bool keyPresent, bool foldChanged) {
     savedOutputs_ = keyPresent ? saved : juce::var();
     outputsRestored_ = true;
-    if (!outputBuses_.empty() && applyOutputPolicy() && onOutputsChanged)
+    const bool changed = !outputBuses_.empty() && applyOutputPolicy();
+    if ((changed || foldChanged) && onOutputsChanged)
         onOutputsChanged();
+}
+
+int HostedPluginModule::getMainOutputJackCount() const {
+    for (const auto& bus : outputBuses_)
+        if (bus.busIndex == 0)
+            return isJoined(bus) ? 1 : bus.numChannels;
+    return outputBuses_.empty() ? getVisibleOutputPortCount() : 0;
+}
+
+int HostedPluginModule::getShownAuxOutputBusCount() const {
+    int count = 0;
+    for (const auto& bus : outputBuses_)
+        if (bus.busIndex != 0 && bus.shown)
+            ++count;
+    return count;
+}
+
+bool HostedPluginModule::isAuxOutputJack(int jack) const {
+    std::size_t pos = 0;
+    int leg = 0;
+    return !outputBuses_.empty() && locateJack(jack, pos, leg) && outputBuses_[pos].busIndex != 0;
+}
+
+bool HostedPluginModule::setOutputsFolded(bool folded) {
+    if (outputsFolded_ == folded)
+        return false;
+    outputsFolded_ = folded;
+    if (onOutputsChanged)
+        onOutputsChanged();
+    return true;
 }
 
 const std::vector<HostedPluginModule::OutputBusInfo>& HostedPluginModule::getOutputBuses() const {

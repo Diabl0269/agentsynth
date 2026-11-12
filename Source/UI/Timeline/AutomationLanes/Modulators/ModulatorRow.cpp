@@ -89,6 +89,7 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     nameButton_.onClick = [this] { openChangeSourcePicker(); };
     addAndMakeVisible(strip_);
     strip_.onPreferredWidthChanged = [this] { resized(); };
+    nameButton_.onPreferredWidthChanged = [this] { resized(); };
     strip_.onEditLookChanged = [this] { repaint(); };
     strip_.onContextMenu = [this](juce::Point<int> screen) { showMenuAt(contextMenuOptionsAtPoint(screen)); };
     if (info_.isLfo)
@@ -398,13 +399,15 @@ void ModulatorRow::resized() {
     strip_.placeTray(getBounds());
 }
 
-// What a scenario reads with getState: the look the row shows, its saved fold and whether a source swap is moving.
+// What a scenario reads with getState: the look the row shows, its saved fold, whether a source swap is moving and
+// whether the name button is as wide as the name needs.
 void ModulatorRow::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("compactLook", isCompactLook());
     into.setProperty("collapsed", collapsed_);
     into.setProperty("swapRunning", isSwapMotionRunning());
     into.setProperty("swapsStarted", swapsStarted_);
     into.setProperty("sourceTitle", info_.sourceTitle);
+    into.setProperty("nameFits", nameButton_.getWidth() >= nameButton_.getPreferredWidth());
 }
 
 void ModulatorRow::moved() {

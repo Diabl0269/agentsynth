@@ -1,5 +1,11 @@
 // UndoGlideSurfacesTests.cpp -- the guard behind the standing rule that anything which glides forward glides on undo
 // and redo: it walks UndoGlideSurfaces.h's one list, so a move path that snaps back fails here by name.
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UndoGlideSurfaces.h"
@@ -191,5 +197,93 @@ TEST(UndoGlideSurfaces, WithAnimationsOffEveryRestoreIsInstant) {
         EXPECT_FALSE(s->gliding());
         EXPECT_FLOAT_EQ(s->alpha(), 1.0f);
         EXPECT_NEAR(s->drawn(), before, 1.5);
+    }
+}
+
+// ---- Structural graph edits: every entry point that adds or removes a card must glide like its undo ----
+// A click that inserts or removes modules and cables (the Poly pill, the track header's Poly switch) runs through
+// the same bracket Cmd+Z does (CardGlideAnimator::Scope + retractCablesGoneSince, see PolyChainController::commit).
+// A new structural click adds a row to structuralEdits() so a version of it that pops fails here by name.
+namespace {
+
+using NodeID = juce::AudioProcessorGraph::NodeID;
+
+struct StructuralRig {
+    AudioEngine engine{AudioEngine::HostMode::Hosted};
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    NodeID source, osc, adsr, vca;
+
+    StructuralRig() {
+        engine.getGraph().setPlayConfigDetails(2, 2, 44100.0, 512);
+        undo.setGraphEditor(&editor);
+        editor.setSize(3000, 1600);
+        editor.getCardGlideForTest().setForceAnimateForTest(true); // not on screen: the glide is what is under test
+        source = add("Midi Input", 320);
+        osc = add("Oscillator", 640);
+        adsr = add("ADSR", 960);
+        vca = add("VCA", 1280);
+        const int midi = juce::AudioProcessorGraph::midiChannelIndex;
+        engine.getGraph().addConnection({{source, midi}, {osc, midi}});
+        engine.getGraph().addConnection({{source, midi}, {adsr, midi}});
+        engine.getGraph().addConnection({{osc, 0}, {vca, 0}});
+        engine.getGraph().addConnection({{adsr, 0}, {vca, 1}});
+    }
+    NodeID add(const juce::String& type, int x) {
+        auto node = engine.getGraph().addNode(synth::AIStateMapper::createModule(type));
+        node->properties.set("uuid", juce::Uuid().toDashedString());
+        node->properties.set("x", x);
+        node->properties.set("y", 100);
+        editor.updateComponents();
+        return node->nodeID;
+    }
+};
+
+struct StructuralEdit {
+    const char* name;
+    bool startsPoly; // the rig is switched to poly first, so the edit removes the Poly MIDI node
+    std::function<void(StructuralRig&)> run;
+};
+
+const std::vector<StructuralEdit>& structuralEdits() {
+    static const std::vector<StructuralEdit> edits{
+        {"Poly pill on", false, [](StructuralRig& r) { r.editor.getPolyChain().polyPillClicked(r.osc, true); }},
+        {"Poly pill off", true, [](StructuralRig& r) { r.editor.getPolyChain().polyPillClicked(r.osc, false); }},
+        {"Track header Poly switch on", false,
+         [](StructuralRig& r) { r.editor.getPolyChain().trackPolyClicked(r.source, true); }},
+        {"Track header Poly switch off", true,
+         [](StructuralRig& r) { r.editor.getPolyChain().trackPolyClicked(r.source, false); }},
+    };
+    return edits;
+}
+
+} // namespace
+
+TEST(UndoGlideSurfaces, EveryStructuralGraphEditEntryPointGlidesLikeUndo) {
+    ASSERT_FALSE(structuralEdits().empty());
+    for (const auto& edit : structuralEdits()) {
+        SCOPED_TRACE(edit.name);
+        FullMotion motion;
+        StructuralRig rig;
+        auto& glide = rig.editor.getCardGlideForTest();
+        if (edit.startsPoly) {
+            rig.editor.getPolyChain().polyPillClicked(rig.osc, true);
+            rig.editor.finishCardGlideForTest();
+        }
+        edit.run(rig);
+        EXPECT_GE(glide.enterGhostCount() + glide.exitGhostCount(), 1)
+            << "an added card grows in and a removed one shrinks away";
+        rig.editor.finishCardGlideForTest();
+
+        // The same edit under Animations Off is instant, never a glide.
+        StructuralRig off;
+        if (edit.startsPoly) {
+            off.editor.getPolyChain().polyPillClicked(off.osc, true);
+            off.editor.finishCardGlideForTest();
+        }
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        edit.run(off);
+        EXPECT_EQ(
+            off.editor.getCardGlideForTest().enterGhostCount() + off.editor.getCardGlideForTest().exitGhostCount(), 0);
     }
 }

@@ -21,8 +21,13 @@ LaneNameButton::LaneNameButton()
 void LaneNameButton::setName(const juce::String& text) {
     if (text_ == text)
         return;
+    const int widthBefore = getPreferredWidth();
     text_ = text;
     repaint();
+    // The owner sizes this button from its name, so a name that needs another width must reach its layout: the owner's
+    // setName call cannot be trusted to remember resized().
+    if (onPreferredWidthChanged && getPreferredWidth() != widthBefore)
+        onPreferredWidthChanged();
 }
 
 void LaneNameButton::setActionText(const juce::String& accessibleName, const juce::String& tooltip) {

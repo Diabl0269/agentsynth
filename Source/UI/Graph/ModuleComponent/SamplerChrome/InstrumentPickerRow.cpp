@@ -99,6 +99,10 @@ void InstrumentPickerRow::chooseInstrument(const InstrumentChoice& choice) {
     case InstrumentChoice::Kind::Recordings:
         launchRecordingsChooser();
         break;
+    case InstrumentChoice::Kind::GetMore:
+        if (host_.openSoundPacks)
+            host_.openSoundPacks();
+        break;
     case InstrumentChoice::Kind::SynthDrums:
         loadUndoably([](synth::sampler::InstrumentHost& h) {
             h.clearInstrument();

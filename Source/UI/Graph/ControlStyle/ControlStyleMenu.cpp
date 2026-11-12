@@ -5,6 +5,7 @@
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/ControlStyle/ControlStylePanel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/PopupHost.h"
 
@@ -57,6 +58,11 @@ void appendLayoutAndStyleMenuItems(juce::PopupMenu& menu, ModuleComponent& card)
                 safeCard->onChooseKnobsRequested();
         });
         appendControlStyleMenuItem(menu, card);
+        if (hosted->hasMultipleOutputBuses())
+            menu.addItem("Outputs...", [safeCard] {
+                if (safeCard != nullptr)
+                    synth::ui::showHostedOutputsPanel(*safeCard);
+            });
         // Starts "add by moving a control in the plugin" (no popover).
         menu.addItem("Add control from plugin window...", hosted->hasInstance(), false, [safeCard] {
             if (safeCard != nullptr)

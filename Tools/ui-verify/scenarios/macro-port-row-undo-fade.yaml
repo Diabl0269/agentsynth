@@ -1,0 +1,41 @@
+# Check: undoing a cable dropped on a folded macro fades and shrinks the new port row away with the cable, and redo grows
+# it back in (docs/macros/ports.md#a-cable-dropped-on-a-folded-card, MacroCardPortExit.* headless).
+#
+# What a user does (macros fixture: the free "Oscillator 1" beside the folded "Collapsed macro", which has no ports):
+#   1. Drags a cable from Oscillator 1's output and lets go on the folded card's body: a new input port row grows in.
+#   2. Cmd+Z: the cable pulls back into Oscillator 1 while the row's dot shrinks and the row fades out (a `glide`).
+#   3. Cmd+Shift+Z: the row grows back in and the cable grows out again (a `glide`).
+# The marks sit on the landed states, never mid-motion; proof/<glide>-strip.png is the frames across each motion.
+# `leavingPortRows` on the card is the number of ghost rows still fading: 1 right after Cmd+Z, 0 once landed.
+motion: true
+record: true
+save_project: "fro1656 test"
+steps:
+  - copyFixture: {name: macros.agsproj}
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dx: 1.0}                  # pan right: Oscillator 1 starts under the library
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", collapsed: true, members: 2}
+  - screenshot: {name: 1-before}
+
+  - mouseDown: {id: "card:Oscillator 1", x: 269, y: 58}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 480, y: 64}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 720, y: 70}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
+  - mouseUp: {id: "card:Oscillator 1", x: 720, y: 70}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 3, leavingPortRows: 0}
+  - screenshot: {name: 2-dropped}
+
+  - glide: {name: undo-row-fades-frames, frames: 14, crop: {x: 380, y: 340, w: 600, h: 160}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 2, leavingPortRows: 0, within_ms: 1500}
+  - mark: {check: 1, name: undo-row-faded-away}                    # landed: no row, cable back in Oscillator 1
+  - screenshot: {name: 3-undone}
+
+  - glide: {name: redo-row-grows-frames, frames: 14, crop: {x: 380, y: 340, w: 600, h: 160}, do: {key: {keys: cmd+shift+z}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 3, leavingPortRows: 0, within_ms: 1500}
+  - mark: {check: 2, name: redo-row-grew-back}                     # landed: the row is back with its cable
+  - screenshot: {name: 4-redone}

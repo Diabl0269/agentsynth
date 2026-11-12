@@ -1,0 +1,43 @@
+# A mod row made by "Create custom LFO" shows its whole name at once; before, the name button stayed cut to "L.." until
+# the tracks pane was resized.
+#
+# What a user does: opens the project with a lane on Filter cutoff, selects two points, right-clicks inside the stretch
+# and picks "Create custom LFO": the new LFO's mod row names itself in full (the row's nameFits state is true). Undo
+# removes the row and redo brings it back, its name whole each time. (The card sits off screen in this project, so a
+# rename through the card is not reachable here; the rename path is covered by AutomationLanesNameWidthTests.)
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo and redo steps are the check
+record: true
+save_project: lane-custom-lfo-name
+steps:
+  - openProject: {path: "${FIXTURES}/lane-with-lfo.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - drag: {from: dockResizeHandle, fromX: 200, fromY: 2, to: window, toX: 200, toY: 280, steps: 20}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:LFO", equals: 1}}
+  - click: {id: automationLaneState, x: 48, y: 27}
+  - click: {id: automationLaneState, x: 192, y: 29, mods: shift}
+  - expect: {id: automationLaneState, selectedPoints: 2}
+  - click: {id: automationLaneState, x: 120, y: 29, button: right}
+  - wait: {settleMs: 500} # the menu fades in before it takes keys
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - mark: {check: 1, name: new-lfo-name-whole}
+  - wait: {settleMs: 600}
+  - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}
+  - screenshot: {name: after-create}
+  - expect: {id: "LFO 2 mod lane on Cutoff > modulatorRowState", nameFits: true, within_ms: 2000}
+  # Undo removes the row, redo brings it back: the name is whole again at once.
+  - key: {keys: cmd+z}
+  - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
+  - wait: {settleMs: 600}
+  - screenshot: {name: after-undo}
+  - key: {keys: cmd+shift+z}
+  - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}
+  - wait: {settleMs: 600}
+  - expect: {id: "LFO 2 mod lane on Cutoff > modulatorRowState", nameFits: true, within_ms: 2000}
+  - screenshot: {name: after-redo}

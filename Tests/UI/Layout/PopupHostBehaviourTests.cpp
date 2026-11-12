@@ -6,6 +6,7 @@
 // modes; the frames of the whole open-and-close sequence must rise once and fall once (isUnimodal), which is what a
 // close-and-reopen flicker breaks.
 #include "../../TestWait.h"
+#include "AudioEngine/AudioEngine.h"
 #include "NativeWindowTestGuard.h"
 #include "PopoverRegistry.h"
 #include "PopupAlphaTrace.h"
@@ -13,6 +14,8 @@
 #include "TestMode/AutomationHiding.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/DrumMachine/DrumIdeasPanel.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/PopupHost.h"
@@ -57,6 +60,19 @@ std::unique_ptr<juce::Component> sized(std::unique_ptr<juce::Component> content)
         content->setSize(280, 240);
     return content;
 }
+
+// The Outputs panel on a graph with no Hosted Plugin node: it shows its title and footer, which is all the open, close
+// and fade frames need. Owns the engine and editor it points at.
+struct OutputsPanelRig {
+    AudioEngine engine;
+    GraphEditor editor{engine};
+};
+struct OwnedOutputsPanel
+    : private OutputsPanelRig
+    , public synth::ui::HostedOutputsPanel {
+    OwnedOutputsPanel()
+        : synth::ui::HostedOutputsPanel(editor, juce::AudioProcessorGraph::NodeID()) {}
+};
 
 std::vector<ContentEntry> contentEntries() {
     const auto colourPicker = [] {
@@ -123,6 +139,7 @@ std::vector<ContentEntry> contentEntries() {
         {"CardLayoutControlPanel", {}, "exempt: built from a live card's control options inside an editing session"},
         {"CardLayoutOnCardEditor", {}, "exempt: opens a session on a card of a live graph with an undo manager"},
         {"ControlStylePanel", {}, "exempt: needs a GraphEditor and one of its cards"},
+        {"HostedOutputsPanel", [] { return std::make_unique<OwnedOutputsPanel>(); }, nullptr},
         {"AccountFlowPanel", {}, "exempt: needs the account service and its sign-in state"},
         {"DualIOPerModulePopupContent", {}, "exempt: the class is private to PreferencesSettingsTabGraphBehaviour.cpp"},
     };
