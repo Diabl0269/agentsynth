@@ -98,6 +98,7 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     : viewState_(viewState) {
     tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: initHeaderChips and focusLost use it
     setComponentID("pianoRollComponent");
+    addTestModeProbe();
     setTitle("Piano roll");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);

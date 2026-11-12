@@ -188,6 +188,7 @@ add_executable(Tests
     Mixer/MixerModel/MixerModelColumnTests.cpp
     Mixer/MixerModel/MixerModelColumnColourTests.cpp
     Mixer/MixerModel/MixerModelInsertTests.cpp
+    Mixer/MixerModel/MixerModelSpliceAcrossTests.cpp
     Mixer/MixerModel/MixerModelSplitInsertTests.cpp
     Mixer/MixerModel/MixerModelBusColumnTests.cpp
     Mixer/MixerModel/MixerGraphIndexTests.cpp
@@ -721,6 +722,7 @@ add_executable(Tests
     UI/Mixer/MixerInsertListTests.cpp
     UI/Mixer/MixerInsertListSplitTests.cpp
     UI/Mixer/MixerInsertListAddTests.cpp
+    UI/Mixer/MixerInsertListAcrossTests.cpp
     UI/Mixer/MixerPlacementControllerTests.cpp
     UI/Mixer/MixerPlacementControllerRenderTests.cpp
     UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp

@@ -161,6 +161,41 @@ TEST(UndoGlideSurfaces, EveryMoveSurfaceGlidesOnUndoAndRedo) {
     }
 }
 
+// A snapped drag step eases: dragging a thing across a grid line with the button down draws it gliding from the old
+// line to the new one, never popping, and Reduce Motion lands it at once. Surfaces with a snapped drag opt in through
+// Surface::dragStep.
+TEST(UndoGlideSurfaces, EverySnappedDragStepEases) {
+    int covered = 0;
+    for (const auto& entry : surfaces()) {
+        SCOPED_TRACE(entry.name);
+        FullMotion motion;
+        auto probe = entry.make();
+        const double from = probe->drawn();
+        if (!probe->dragStep())
+            continue;
+        ++covered;
+        probe->stepTo(1000.0);
+        const double to = probe->drawn();
+        probe->releaseDrag();
+
+        auto s = entry.make();
+        ASSERT_TRUE(s->dragStep());
+        expectGlide(*s, from, to, "a snapped drag step glides");
+        s->releaseDrag();
+        EXPECT_NEAR(s->drawn(), to, 1.5) << "the drop does not jump";
+        s->stepTo(1000.0);
+
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
+        synth::ui::setReducedMotionForTest(true);
+        auto plain = entry.make();
+        ASSERT_TRUE(plain->dragStep());
+        EXPECT_FALSE(plain->gliding()) << "Reduce Motion lands the step at once";
+        EXPECT_NEAR(plain->drawn(), to, 1.5);
+        plain->releaseDrag();
+    }
+    EXPECT_GT(covered, 0);
+}
+
 TEST(UndoGlideSurfaces, UnderReduceMotionARestoredThingLandsAtOnceAndFadesIn) {
     for (const auto& entry : surfaces()) {
         SCOPED_TRACE(entry.name);

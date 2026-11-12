@@ -117,6 +117,15 @@ the drag's preview from it (`TimelineClipLaneArea::resizePreviewFor`) and the dr
 length, so it previews and takes every mode's change too, except a left Trim, which unlinks the dragged clip
 ([linked clips](linked-clips.md)).
 
+**With snap on, the drawn clip glides from one grid line to the next** instead of popping. The preview jumps to each
+new line at once (hit tests and the drop read it, never the drawn rectangle) and `TimelineClipLaneArea::updateDragPreviewFromLastPointer`
+retargets the clip's `clipGlide_` tween, the one an undo uses, from where the clip is drawn to the new line, for the
+dragged clip and its linked copies. The notes inside follow by the sizing rule (Trim keeps them on their beat under the
+sliding edge, Carry takes them along with the left edge, Stretch scales them), and a whole-clip move drag glides the same
+way. A step under 1 px (snap off, where the preview moves a pixel or less per pointer event) is not eased, so the clip
+stays with the pointer. The glide still running at the drop carries across the commit, and Cmd+Z glides back. An
+Option copy-drag moves ghosts, not the clips, so nothing glides. Plain under Reduce Motion and Animations Off.
+
 While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
 length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
 once it is back at the original length.

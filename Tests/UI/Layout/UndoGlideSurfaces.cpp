@@ -279,6 +279,7 @@ const std::vector<Entry>& surfaces() {
     static const std::vector<Entry> all = [] {
         auto withContents = list;
         appendClipContentsEntries(withContents);
+        appendClipDragEntries(withContents);
         return withContents;
     }();
     return all;

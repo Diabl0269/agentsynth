@@ -106,7 +106,7 @@ The bindings follow Cubase:
 | Shift+wheel, or a trackpad's own `deltaX` | Scrolls horizontally, converted to beats at the current zoom — a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time zoomed in |
 | Cmd+wheel | Zooms horizontally around the cursor |
 | Cmd+Shift+wheel | Zooms vertically, scaling `TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, anchored so the row under the pointer stays put |
-| Option + vertical wheel / two-finger scroll | Vertical zoom, the same `zoomTrackRows` path and anchor as Cmd+Shift+wheel; the trackpad's one-hand vertical zoom. An Option + sideways scroll stays a horizontal scroll |
+| Option + vertical wheel / two-finger scroll | Vertical zoom, the same `zoomTrackRows` path and anchor as Cmd+Shift+wheel; the trackpad's one-hand vertical zoom. An Option + sideways scroll stays a horizontal scroll. The test is `synth::ui::isOptionVerticalZoom()` (`ScrollPolicy.h`), shared with the piano roll, which answers Option + vertical wheel with pitch-row height the same way |
 | Trackpad pinch (`mouseMagnify()`) | Zooms time (around the pinch x) and the track rows (around the pinch y) together by the same factor, so sizes grow and shrink as one, like the patch canvas. Option+pinch (or Shift+pinch) zooms the rows only; Cmd+pinch zooms time only. macOS reports a pinch as one scale factor with no axis, so a modifier is the only way to ask for one axis. Same mapping inside the piano roll (time and pitch rows; Shift or Option = pitch rows only, Cmd = time only) |
 
 `rowHeightScale` multiplies the themed row height in BOTH `TimelineClipLaneArea::getRowHeight()`

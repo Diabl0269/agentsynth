@@ -11,6 +11,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"

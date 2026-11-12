@@ -9,10 +9,13 @@
 #include "MainComponent/MainComponent.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/VCAModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
 
@@ -268,6 +271,63 @@ TEST(MixerPanelIncrementalRebuild, AModulePatchedIntoATrackOnTheCanvasShowsInIts
     EXPECT_EQ(insertUuids(*rig.columns().at(1)), insertsBefore) << "undoing the cable takes the insert away";
     for (auto* shown : rig.columns())
         EXPECT_TRUE(shown->isFaderBoundForTest());
+}
+
+// A cable made on the canvas from a hung-off Delay into the VCA of an Oscillator track puts the Delay on the
+// column at once (as two paths with the Dry row), with no reload, and undoing the cable takes it away again.
+TEST(MixerPanelIncrementalRebuild, ADelayCabledIntoAnOscillatorTracksVcaShowsInItsColumnAtOnce) {
+    MixerRig rig;
+    rig.mc.simulateAddInstrumentTrackClick(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    deliverBroadcasts();
+    const auto names = [&](synth::ui::MixerColumnComponent& column) {
+        std::vector<juce::String> out;
+        auto& list = column.getInsertListForTest();
+        for (int row = 0; row < list.getRowCount(); ++row)
+            if (row != list.getAddRowIndex())
+                out.push_back(list.getRowUuid(row));
+        return out;
+    };
+    const auto find = [&](const juce::String& type) {
+        juce::AudioProcessorGraph::Node* found = nullptr;
+        for (auto* node : rig.graph().getNodes())
+            if (node->getProcessor()->getName() == type)
+                found = node;
+        return found;
+    };
+    auto* osc = find("Oscillator");
+    auto* vca = find("VCA");
+    ASSERT_TRUE(osc != nullptr && vca != nullptr);
+    ASSERT_EQ(rig.columns().size(), 4u);
+    const auto before = names(*rig.columns()[3]);
+
+    rig.mc.getGraphEditor().addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+    deliverBroadcasts();
+    juce::AudioProcessorGraph::Node* delay = find("Delay");
+    ASSERT_NE(delay, nullptr);
+    rig.undo().recordStructuralChange(rig.graph(), [&] {
+        rig.graph().addConnection({{osc->nodeID, 0}, {delay->nodeID, 0}});
+        rig.graph().addConnection({{osc->nodeID, 1}, {delay->nodeID, 1}});
+    });
+    deliverBroadcasts();
+    EXPECT_EQ(names(*rig.columns()[3]), before) << "a Delay with no output shows nothing yet";
+
+    rig.undo().recordStructuralChange(rig.graph(), [&] {
+        rig.graph().addConnection({{delay->nodeID, 0}, {vca->nodeID, 0}});
+        rig.graph().addConnection({{delay->nodeID, 1}, {vca->nodeID, VCAModule::kRightBase}});
+    });
+    deliverBroadcasts();
+    synth::test::waitUntil([&] { return names(*rig.columns()[3]) != before; });
+    const auto shown = names(*rig.columns()[3]);
+    // The two paths show as one collapsed "2 paths" row (no module uuid) where the oscillator's single cable was.
+    EXPECT_EQ(shown.size(), before.size() + 1);
+    EXPECT_EQ(std::count(shown.begin(), shown.end(), juce::String()), 1) << "one split row";
+
+    ASSERT_TRUE(rig.undo().undo());
+    deliverBroadcasts();
+    EXPECT_EQ(names(*rig.columns()[3]), before) << "undoing the cable takes the Delay away";
+    ASSERT_TRUE(rig.undo().redo());
+    deliverBroadcasts();
+    EXPECT_NE(names(*rig.columns()[3]), before) << "redo brings it back";
 }
 
 // A hidden mixer does no work (docs/layout/rendering.md, "A closed panel does no work"): rebuildIfStale() only notes

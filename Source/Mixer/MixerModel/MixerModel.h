@@ -179,6 +179,21 @@ bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph
 bool spliceInInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID predecessor,
                     juce::AudioProcessorGraph::NodeID successor, juce::AudioProcessorGraph::NodeID node);
 
+/** Splices `node` into every direct signal cable from a node in `predecessors` to a node in `successors`, channel for
+ *  channel as spliceInInsert does: each such source feeds `node` (cables into one input sum) and `node` feeds each
+ *  destination once. This is how an add lands in front of a split's paths (one predecessor, every path's first
+ *  node) or behind them (every path's last node, one successor). False (nothing changed) when no such cable exists. */
+bool spliceInInsertAcross(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::NodeID>& predecessors,
+                          const std::vector<juce::AudioProcessorGraph::NodeID>& successors,
+                          juce::AudioProcessorGraph::NodeID node);
+
+/** The distinct nodes outside `region` that a live signal cable from inside `region` reaches (a dangling branch that
+ *  never reaches `stripEnd` is not live). For a split's own nodes and its fork this is the merge it feeds. */
+std::vector<juce::AudioProcessorGraph::NodeID> liveExitsOf(juce::AudioProcessorGraph& graph,
+                                                           const std::vector<juce::AudioProcessorGraph::NodeID>& region,
+                                                           juce::AudioProcessorGraph::NodeID stripEnd = {});
+
 /** Moves an already-connected `node` to a new position between `newPredecessor` and
  *  `newSuccessor`: spliceOutInsert() then spliceInInsert() as one call, so a caller never has to
  *  get the two-step sequence right itself. False if either step fails (graph left as spliceOutInsert

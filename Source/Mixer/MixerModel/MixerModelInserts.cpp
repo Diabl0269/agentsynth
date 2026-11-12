@@ -550,11 +550,16 @@ bool spliceOutInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID strip
     return true;
 }
 
-bool spliceInInsert(juce::AudioProcessorGraph& graph, NodeID predecessor, NodeID successor, NodeID node) {
+bool spliceInInsertAcross(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& predecessors,
+                          const std::vector<NodeID>& successors, NodeID node) {
     const auto connections = graph.getConnections();
+    const auto has = [](const std::vector<NodeID>& ids, NodeID id) {
+        return std::find(ids.begin(), ids.end(), id) != ids.end();
+    };
     std::vector<Connection> between;
     for (const auto& c : connections)
-        if (c.source.nodeID == predecessor && c.destination.nodeID == successor && isSignalEdge(graph, connections, c))
+        if (has(predecessors, c.source.nodeID) && has(successors, c.destination.nodeID) &&
+            isSignalEdge(graph, connections, c))
             between.push_back(c);
     if (between.empty())
         return false;
@@ -563,7 +568,8 @@ bool spliceInInsert(juce::AudioProcessorGraph& graph, NodeID predecessor, NodeID
     // right leg vs. e.g. ChannelStripModule's kRightBase) -- left is always ch0
     // (Source/Modules/CLAUDE.md), right is whichever channel `node` itself reports as its own
     // right leg, read off the connection being replaced only to decide WHICH leg (left vs. right)
-    // this connection carries, never to pick node's channel number directly.
+    // this connection carries, never to pick node's channel number directly. Several cables into one `node` input
+    // sum, and a cable `node` already has to a destination is not added twice (addConnection refuses a duplicate).
     auto* nodeModule = dynamic_cast<ModuleBase*>(processorFor(graph, node));
     const int nodeRight = nodeModule != nullptr ? nodeModule->rightAudioLegChannel() : -1;
 
@@ -575,6 +581,26 @@ bool spliceInInsert(juce::AudioProcessorGraph& graph, NodeID predecessor, NodeID
         graph.addConnection({{node, nodeChannel}, c.destination});
     }
     return true;
+}
+
+bool spliceInInsert(juce::AudioProcessorGraph& graph, NodeID predecessor, NodeID successor, NodeID node) {
+    return spliceInInsertAcross(graph, {predecessor}, {successor}, node);
+}
+
+std::vector<NodeID> liveExitsOf(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& region, NodeID stripEnd) {
+    const auto connections = graph.getConnections();
+    const auto live = liveEdgeTest(graph, connections, stripEnd);
+    std::vector<NodeID> exits;
+    for (const auto& c : connections) {
+        const auto destination = c.destination.nodeID;
+        if (std::find(region.begin(), region.end(), c.source.nodeID) == region.end() ||
+            std::find(region.begin(), region.end(), destination) != region.end() ||
+            std::find(exits.begin(), exits.end(), destination) != exits.end())
+            continue;
+        if (isSignalEdge(graph, connections, c) && live(c))
+            exits.push_back(destination);
+    }
+    return exits;
 }
 
 bool reorderInsert(juce::AudioProcessorGraph& graph, NodeID node, NodeID newPredecessor, NodeID newSuccessor,
