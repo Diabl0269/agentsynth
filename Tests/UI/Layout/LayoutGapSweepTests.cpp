@@ -123,9 +123,6 @@ const std::vector<KnownGap> kKnownGaps = {
      "FRO1713"},
     {"Settings / Label 'Output': is not 6 px from its control ComboBox 'Output'", "FRO1713"},
     {"Settings [min] / Label 'Input': is not 6 px from its control ComboBox 'Input'", "FRO1713"},
-    {"Settings [min] / Label 'Jacks come in neighbouring p': is not 6 px from its control FoldSectionHeader "
-     "'Remembered interfaces, expan'",
-     "FRO1713"},
     {"Settings [min] / Label 'Output': is not 6 px from its control ComboBox 'Output'", "FRO1713"},
     // Shape editor
     {"Shape editor / Label 'Grid': is not 6 px from its control TextButton 'Off'", "FRO1713"},

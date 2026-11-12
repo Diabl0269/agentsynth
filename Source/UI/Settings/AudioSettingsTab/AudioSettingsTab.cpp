@@ -5,6 +5,7 @@
 
 namespace {
 constexpr const char* kFoldedKey = "audioFolded";
+constexpr const char* kAdvancedKey = "audioDeviceAdvancedOpen";
 // Written first in the saved list so the key is never empty: an empty list would mean "nothing saved", which opens the
 // default folds, and a user who unfolded everything must get everything unfolded back.
 constexpr const char* kFoldMarker = "saved";
@@ -76,6 +77,17 @@ AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
     outputs_ = outputs.get();
     recording_ = recording.get();
     midi_ = midi.get();
+    // The Advanced rows start collapsed; once the user opens them they stay open, across windows and launches.
+    const bool advancedOpen = props_ != nullptr && props_->getUserSettings() != nullptr &&
+                              props_->getUserSettings()->getBoolValue(kAdvancedKey, false);
+    device_->setAdvancedOpen(advancedOpen, false);
+    device_->onAdvancedToggled = [this](bool open) {
+        if (props_ == nullptr || props_->getUserSettings() == nullptr)
+            return;
+        props_->getUserSettings()->setValue(kAdvancedKey, open);
+        props_->saveIfNeeded();
+    };
+    device_->onLayoutChanged = [this] { layoutContent(); };
     std::array<std::unique_ptr<AudioSettingsSection>, kNumSections> bodies{std::move(device),     std::move(inputs),
                                                                            std::move(interfaces), std::move(outputs),
                                                                            std::move(recording),  std::move(midi)};
@@ -91,8 +103,9 @@ AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
         headers_[(size_t)i]->onOpenRequested = [this, section](bool open) { setSectionOpen(section, open); };
         content_.addAndMakeVisible(*headers_[(size_t)i]);
 
-        bodies_[(size_t)i] = bodies[(size_t)i].release();
         slots_[(size_t)i] = std::make_unique<Slot>();
+        slots_[(size_t)i]->body = std::move(bodies[(size_t)i]);
+        bodies_[(size_t)i] = slots_[(size_t)i]->body.get();
         slots_[(size_t)i]->addAndMakeVisible(*bodies_[(size_t)i]);
         content_.addAndMakeVisible(*slots_[(size_t)i]);
         // What is there when the tab opens does not fade.
