@@ -43,6 +43,7 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     clipLaneArea_.kitRowsProvider = [this](synth::TrackId track, KitRows& rows) {
         return trackHeaderHost_ != nullptr && trackHeaderHost_->drumKitRows(track, &rows);
     };
+    clipLaneArea_.kitsExistProvider = [this] { return trackHeaderHost_ == nullptr || trackHeaderHost_->anyDrumKit(); };
     clipLaneArea_.refreshKitRows();
     routingPane_.setHost(host);
     automationLanes_.setHost(host); // lane headers name their parameter and module through it
@@ -410,6 +411,8 @@ void TimelinePanelComponent::syncTrackHeaders() {
     // Every header below reads its channel link from ONE node-to-channel map instead of a graph walk per header.
     const synth::ui::ChannelLinkBatch linkBatch(trackHeaderHost_ != nullptr ? trackHeaderHost_->getChannelLinkSurface()
                                                                             : nullptr);
+    // Likewise each header's Mono/Poly switch reads one voice-graph pass, not one per header (tracks x graph).
+    const auto polyStates = trackHeaderHost_ != nullptr ? trackHeaderHost_->holdTrackPolyStates() : nullptr;
 
     // Rebuild only when the SET of tracks changed. A mute toggle, a rename or a re-bind must not
     // destroy and re-create every row (it would drop an in-progress name edit and churn the UI).

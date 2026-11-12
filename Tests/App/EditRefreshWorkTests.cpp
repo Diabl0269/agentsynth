@@ -276,3 +276,45 @@ TEST(EditRefreshWork, AddingDeletingAndUndoingAModuleRunEachPassOnceHoweverManyT
         EXPECT_LE(passes->mostHeaderRefreshes, 1);
     }
 }
+
+namespace {
+EditPasses pasteThreeTracksPasses(int tracks) {
+    EditRig rig(tracks);
+    auto& host = (synth::ui::TrackHeaderHost&)rig.mc; // a private base; the header's own call path
+    const auto& doc = rig.mc.getTimelineDoc().getTracks();
+    host.copyTracks({doc[0].id, doc[1].id, doc[2].id});
+    const auto last = doc.back().id;
+    const auto passes = passesOf(rig, [&] { host.pasteTracks(last); });
+    EXPECT_EQ(rig.mc.getTimelineDoc().getTracks().size(), static_cast<size_t>(tracks + 3)) << "three tracks pasted";
+    return passes;
+}
+} // namespace
+
+// Regression test for FRO877: pasting several tracks rebuilt the whole canvas once per copied track, so the
+// first animation frame came late and the paste cost grew with the copies. The cards of all copies are built once.
+TEST(EditRefreshWork, PastingThreeTracksReconcilesTheCanvasOnceHoweverManyTracks) {
+    const auto small = pasteThreeTracksPasses(6);
+    const auto big = pasteThreeTracksPasses(12);
+    EXPECT_EQ(small, big);
+    EXPECT_LE(big.canvasReconciles, 1) << ::testing::PrintToString(big);
+    EXPECT_LE(big.renderRebuilds, 1);
+    EXPECT_LE(big.derivations, 2);
+}
+
+// Regression test for FRO876: deleting a track re-read every header's Mono/Poly switch outside the reconcile's batch,
+// so each header built its own cable index and track-ownership map (headers x graph). The panel's own sync batches
+// them.
+TEST(EditRefreshWork, DeletingATrackWorksOutTheTrackOwnershipOnceHoweverManyTracks) {
+    int passes[2]{};
+    int sizeIndex = 0;
+    for (const int tracks : {4, 14}) {
+        EditRig rig(tracks);
+        auto& host = (synth::ui::TrackHeaderHost&)rig.mc; // a private base; the header's own call path
+        const int before = synth::polyTrackOwnerPassesForTest();
+        host.deleteTrack(rig.mc.getTimelineDoc().getTracks().back().id);
+        passes[sizeIndex++] = synth::polyTrackOwnerPassesForTest() - before;
+        EXPECT_EQ(rig.mc.getTimelineDoc().getTracks().size(), static_cast<size_t>(tracks - 1));
+    }
+    EXPECT_EQ(passes[0], passes[1]) << "the same number of passes at 4 tracks as at 14";
+    EXPECT_LE(passes[1], 3);
+}

@@ -431,6 +431,8 @@ public:
     void refreshFromDoc();
     /** A Drum Kit track's clips draw the kit's shown pads as their rows; set by the panel, which owns the app host. */
     std::function<bool(synth::TrackId, KitRows&)> kitRowsProvider;
+    /** Optional: false skips every track's lookup (no Drum Kit in the project), however many tracks there are. */
+    std::function<bool()> kitsExistProvider;
     /** Re-reads every track's kit rows; repaints when they changed (a pad switched on or off on the card). */
     void refreshKitRows();
 

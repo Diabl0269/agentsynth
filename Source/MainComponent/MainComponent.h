@@ -497,7 +497,10 @@ private:
         MainComponent& owner_;
     };
     /** duplicateTrack's graph + timeline work (MainComponentTrackDuplicate.cpp); the caller owns the undo step. */
-    synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName);
+    synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName,
+                                      std::map<int, juce::AudioProcessorGraph::NodeID>* deferredCopies = nullptr);
+    /** After a bulk duplicate: builds every collected copy's cards once and glides them out of their originals. */
+    void showDuplicatedTracks(const std::map<int, juce::AudioProcessorGraph::NodeID>& copies);
     std::vector<juce::AudioProcessorGraph::NodeID> nodesAttachedToTrack(synth::TrackId track);
     /** Shared insert path; opens NO undo transaction of its own -- the caller must. */
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
@@ -646,12 +649,14 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     bool drumKitRows(synth::TrackId track, synth::ui::KitRows* rows) const override;
+    bool anyDrumKit() const override;
     void toggleShowAllDrumKitPads(synth::TrackId track) override;
     void setDrumKitPadsShown(synth::TrackId track, const std::vector<int>& pads, bool shown) override;
     bool startClipPreview(synth::TrackId track, double startBeat, double endBeat) override;
     void stopClipPreview(synth::TrackId track) override;
     double clipPreviewBeat(synth::TrackId track) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
+    std::shared_ptr<void> holdTrackPolyStates() override;
     synth::ui::TrackAudioInputSurface* getAudioInputSurface() override { return &audioInputSurface_; }
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
     void setTrackPoly(synth::TrackId track, bool poly) override;

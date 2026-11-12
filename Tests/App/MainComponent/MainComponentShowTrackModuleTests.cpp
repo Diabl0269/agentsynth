@@ -327,3 +327,13 @@ TEST_F(DrumKitShowAllAppTest, HidingADrumWithHitsFromTheRowMenuAsksTheCardsQuest
     EXPECT_FALSE(kit->padShown(2)) << "Show all's second press hid it again";
     EXPECT_TRUE(asked.empty()) << "without asking: it restores the person's own choice";
 }
+
+// Regression test for FRO876: the timeline's kit-row refresh skips every track's lookup while no Drum Kit exists, and
+// finds the kit again once one is added.
+TEST_F(DrumKitShowAllAppTest, AnyDrumKitFollowsTheGraphsDrumKits) {
+    auto& host = (synth::ui::TrackHeaderHost&)*mc; // a private base; the panel's own call path
+    EXPECT_TRUE(host.anyDrumKit());
+    EXPECT_TRUE(host.isDrumKitTrack(track));
+    mc->newPatchForTest();
+    EXPECT_FALSE(host.anyDrumKit()) << "a patch without a kit has nothing to look up";
+}
