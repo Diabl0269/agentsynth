@@ -356,11 +356,10 @@ juce::String ShortcutManager::getCategoryName(ShortcutCategory category) {
 /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
  *  getActionTable(). */
 const std::vector<ShortcutCategory>& ShortcutManager::getCategoryOrder() {
-    static const std::vector<ShortcutCategory> order{ShortcutCategory::General,      ShortcutCategory::Graph,
-                                                     ShortcutCategory::Timeline,     ShortcutCategory::PianoRoll,
-                                                     ShortcutCategory::DrumMachine,  ShortcutCategory::Mixer,
-                                                     ShortcutCategory::LayoutEditor, ShortcutCategory::EQ,
-                                                     ShortcutCategory::TrackHeader};
+    static const std::vector<ShortcutCategory> order{
+        ShortcutCategory::General,      ShortcutCategory::Graph,       ShortcutCategory::Timeline,
+        ShortcutCategory::PianoRoll,    ShortcutCategory::DrumMachine, ShortcutCategory::Mixer,
+        ShortcutCategory::LayoutEditor, ShortcutCategory::EQ,          ShortcutCategory::TrackHeader};
     return order;
 }
 
