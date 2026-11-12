@@ -9,17 +9,18 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
-#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -42,6 +43,7 @@ class TransportService;
 // the clip lanes (the same rect the piano roll uses) when such a clip is double-clicked. It reads and writes the same
 // notes the piano roll shows; docs/timeline/drum-machine.md has the cell mapping and the gesture table.
 namespace synth::ui {
+class CardKnobSlider;
 class EditorTabWalk;
 
 class DrumMachineComponent
@@ -198,7 +200,7 @@ public:
     double getHumanise() const noexcept { return humanise_; }
     void setHumanise(double amount);
     CardStepper& getSwingField() noexcept { return swingField_; }
-    CardKnobSlider& getHumaniseKnob() noexcept { return humaniseKnob_; }
+    CardKnobSlider& getHumaniseKnob() noexcept { return *humaniseKnob_; }
     /** The knob positions (percent) of a clip's swing and back: 0.5 is 0%, 0.75 is 100%. */
     static double swingToPercent(double swing) noexcept { return (swing - synth::Clip::kStraightSwing) * 400.0; }
     static double percentToSwing(double percent) noexcept { return synth::Clip::kStraightSwing + percent / 400.0; }
@@ -287,6 +289,10 @@ public:
     /** Test seams: animate although the grid is off screen, and land every running motion. */
     static void setAnimateOffScreenForTest(bool animate);
     void finishMotionsForTest();
+    /** Test seams: one tick of the edge scroll a drag held at the grid's or a lane's edge runs, and its state. */
+    void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    double getScrollYForTest() const noexcept { return scrollY_; }
 
     // ---- juce::Component ----
     void paint(juce::Graphics& g) override;
@@ -459,6 +465,13 @@ private:
     int gridHeight() const noexcept;
     juce::Range<int> stepXRange(int step) const;
 
+    // DrumMachineEdgeScroll.cpp
+    bool gridDragFollows() const noexcept;
+    void trackGridDrag(juce::Point<int> pointer);
+    void trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer);
+    void edgeScrollTick();
+    void stopEdgeScroll();
+
     // DrumMachineRowLength.cpp
     int storedRowLength(int pitch) const;
     int rawRowLength(int pitch) const;
@@ -538,6 +551,8 @@ private:
     double cellsStepBeats_ = 0.0;
     Cell focus_{0, 0};
     Gesture gesture_;
+    EdgeScrollTimer edgeScroll_;
+    DrumHitLane* edgeLane_ = nullptr; ///< the lane whose ramp is held at an edge, or null for the grid
 
     double swing_ = synth::Clip::kStraightSwing;
     int selectedPitch_ = kDefaultSelectedPitch;
@@ -586,7 +601,7 @@ private:
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
     CardStepper swingField_{"Swing"};
-    CardKnobSlider humaniseKnob_;
+    std::unique_ptr<CardKnobSlider> humaniseKnob_; // held by pointer so this header does not pull in the card knob
     LaneChipRow chips_;
     std::unique_ptr<EditorTabWalk> tabWalk_; // UI/Layout/EditorTabWalk.h
     std::array<LaneBand, kDrumLaneKindCount> bands_;

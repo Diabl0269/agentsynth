@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include <algorithm>
@@ -16,6 +17,14 @@
 namespace synth::ui {
 
 using namespace synth::ui::detail;
+
+namespace {
+// A pen or ramp on the velocity strip follows the roll's view sideways only: the strip sits under the grid, so the
+// grid's vertical zones would read its pointer as held at the bottom edge.
+bool velocityLaneFollows(const std::unique_ptr<PianoRollVelocityLane>& lane) {
+    return lane != nullptr && lane->followsView();
+}
+} // namespace
 
 //==============================================================================
 // ---- Mouse ----
@@ -344,7 +353,8 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
 }
 
 void PianoRollComponent::updateAutoScrollArming() {
-    const bool dragging = dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
+    const bool lane = velocityLaneFollows(velocityLane_);
+    const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
     const auto grid = gridRegion();
     // maxPerTick=1.0 on both axes here only probes zero-vs-nonzero — the REAL, axis-specific
@@ -352,7 +362,8 @@ void PianoRollComponent::updateAutoScrollArming() {
     const bool insideEdgeZone =
         dragging &&
         (edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(), synth::ui::kEdgeZonePx, 1.0) != 0.0 ||
-         edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(), synth::ui::kEdgeZonePx, 1.0) != 0.0);
+         (!lane &&
+          edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(), synth::ui::kEdgeZonePx, 1.0) != 0.0));
     if (insideEdgeZone && !autoScrollTimer_.isTimerRunning())
         autoScrollTimer_.startTimer(1000 / synth::ui::kEdgeScrollHz);
     else if (!insideEdgeZone && autoScrollTimer_.isTimerRunning())
@@ -364,7 +375,8 @@ void PianoRollComponent::autoScrollTick() {
     // The drag can have ended (mouseUp) or moved out of the zone since the last arming check
     // without another tick having run updateAutoScrollArming() itself — re-check both here rather
     // than trusting the timer's own "it was armed a tick ago" state.
-    const bool dragging = dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
+    const bool lane = velocityLaneFollows(velocityLane_);
+    const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
     if (!dragging) {
         autoScrollTimer_.stopTimer();
@@ -374,16 +386,21 @@ void PianoRollComponent::autoScrollTick() {
     const auto grid = gridRegion();
     const double hVelocityPxPerTick = edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(),
                                                          synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
-    const double vVelocityRowsPerTick = edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
-                                                           synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
+    const double vVelocityRowsPerTick = lane
+                                            ? 0.0
+                                            : edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
+                                                                 synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
     if (hVelocityPxPerTick == 0.0 && vVelocityRowsPerTick == 0.0) {
         autoScrollTimer_.stopTimer(); // the pointer drifted back into the dead middle band
         return;
     }
 
     bool horizontalMoved = false;
+    double movedPx = 0.0;
     if (hVelocityPxPerTick != 0.0 && rollView_.pixelsPerBeat > 0.0) {
+        const double before = rollView_.firstVisibleBeat;
         rollView_.scrollBeats(hVelocityPxPerTick / rollView_.pixelsPerBeat);
+        movedPx = (rollView_.firstVisibleBeat - before) * rollView_.pixelsPerBeat;
         horizontalMoved = true;
     }
     if (vVelocityRowsPerTick != 0.0 && !visiblePitches_.empty()) {
@@ -405,7 +422,10 @@ void PianoRollComponent::autoScrollTick() {
     // the same last-known pointer position. Every branch of updateDragPreviewFromLastPointer
     // already repaints on a real change, so nothing further is needed here for that half of it —
     // only the scroll itself (which touched no note geometry) needs its own repaint below.
-    updateDragPreviewFromLastPointer();
+    if (lane)
+        velocityLane_->followScroll(movedPx);
+    else
+        updateDragPreviewFromLastPointer();
     if (horizontalMoved && onHorizontalViewChanged)
         onHorizontalViewChanged();
     repaint();

@@ -5,6 +5,7 @@
 #include "DrumMachineComponent.h"
 
 #include "AppUndoManager.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/FadeVisibility.h"
 #include <algorithm>
 #include <cmath>
@@ -46,7 +47,7 @@ void DrumMachineComponent::setupPercentKnob(CardKnobSlider& knob, const juce::St
 
 void DrumMachineComponent::setupGroove() {
     setupSwing();
-    setupPercentKnob(humaniseKnob_, "drumHumanise", "Humanise",
+    setupPercentKnob(*humaniseKnob_, "drumHumanise", "Humanise",
                      "Humanise: small random changes to each hit's loudness and timing (0% is exact)",
                      humaniseValueBounds_, humaniseDragging_, updatingHumanise_, [this] { commitHumaniseKnob(); });
     setupLanes();
@@ -96,7 +97,7 @@ void DrumMachineComponent::setSwing(double swing) {
     refreshFromDoc();
 }
 
-void DrumMachineComponent::commitHumaniseKnob() { setHumanise(humaniseKnob_.getValue() / 100.0); }
+void DrumMachineComponent::commitHumaniseKnob() { setHumanise(humaniseKnob_->getValue() / 100.0); }
 
 void DrumMachineComponent::setHumanise(double amount) {
     const auto* c = clip();
@@ -116,7 +117,7 @@ void DrumMachineComponent::refreshGroove() {
         showSwing();
     if (!humaniseDragging_) {
         updatingHumanise_ = true;
-        humaniseKnob_.setValue(humanise_ * 100.0, juce::dontSendNotification);
+        humaniseKnob_->setValue(humanise_ * 100.0, juce::dontSendNotification);
         updatingHumanise_ = false;
     }
     repaint(humaniseValueBounds_);

@@ -2,6 +2,7 @@
 // speaks "Kick, step 5, hit, loudness 100, accent" or "Kick, step 5, empty".
 
 #include "DrumMachineComponent.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/EditorTabWalk.h"
 
 #include "TestMode/TestModeStateSource.h"
@@ -72,8 +73,8 @@ void DrumMachineComponent::focusLost(FocusChangeType) {
 void DrumMachineComponent::setupTabWalk() {
     tabWalk_->setShortcuts([this] { return shortcuts_; });
     tabWalk_->setStops([this] {
-        return std::vector<juce::Component*>{&viewSwitch_, &playClipButton_, &showAllButton_, &stepsCombo_,
-                                             &swingField_, &humaniseKnob_,   &ideasButton_};
+        return std::vector<juce::Component*>{&viewSwitch_, &playClipButton_,    &showAllButton_, &stepsCombo_,
+                                             &swingField_, humaniseKnob_.get(), &ideasButton_};
     });
 }
 

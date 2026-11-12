@@ -32,6 +32,9 @@ public:
         std::function<juce::Range<int>(int step)> stepRange;
         std::function<int(int x)> stepAt;
         int gutterWidth = 0;
+        /** Every drag event with the pointer (lane coordinates), and the drag's end: the owner's edge scroll. */
+        std::function<void(juce::Point<int>)> onDragAt;
+        std::function<void()> onDragEnd;
     };
 
     explicit DrumHitLane(DrumLaneKind kind);
@@ -50,6 +53,9 @@ public:
     /** The bar of the hit at `index`, in this component's coordinates (empty when out of range). */
     juce::Rectangle<int> barBounds(int index) const;
     juce::String getAccessibilityValueText() const;
+    bool isDragging() const noexcept { return dragging_; }
+    /** The columns moved `movedPx` under the still `pointer`: the hits that passed under it take its height. */
+    void followScroll(int movedPx, juce::Point<int> pointer);
 
     /** Fired once per gesture (a whole drag, or one key press) with the hits whose value changed. */
     std::function<void(const std::vector<Hit>& changed)> onCommit;
