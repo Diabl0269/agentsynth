@@ -34,6 +34,9 @@ public:
 
     /** Row keys: a module row by its uuid, a split row by its fork's uuid, a send row by its slot. */
     static juce::String insertKey(const synth::MixerInsertEntry& entry);
+    /** A not-connected row: "dangling:" and its module's uuid, so a module that joins or leaves the chain is a row that
+     *  comes or goes. */
+    static juce::String danglingKey(const synth::MixerDanglingEntry& entry);
     static juce::String sendKey(const synth::MixerSendEntry& entry);
 
     /** `listRows` are in the list's coordinates. Empty (nothing moves) when the frame is hidden, empty or scrolled. */

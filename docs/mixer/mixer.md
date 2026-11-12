@@ -413,6 +413,23 @@ the split row itself cannot be moved or removed. The dry row is dimmed italic te
 or grab handle; Return or a click on it offers the same add as the split's "Add to path N", and its screen-reader
 name is "Path N: dry, no effects".
 
+### Not-connected modules
+
+A module fed from the chain that never reaches the strip (an effect dragged off the chain with its output unplugged, or
+one whose output goes only to a CV jack) is no part of the sound, but the column still lists it so the work done on the
+canvas is not hidden. `MixerColumn::dangling` holds each one with the chain row it hangs off (`anchorRow`, -1 for the
+track's source) and its depth along a not-connected branch; every module reachable from the track's source appears
+exactly once, as an `inserts` row or here (`MixerModelNotConnectedTests`). Only modules reachable from the chain are
+listed: a module with no cable is not, and a branch fed only by note data (an instrument's Track In feeding its ADSR) is
+voice plumbing, not a loose module. The flat fallback walk, buses and Master list none.
+
+`MixerInsertList` draws each as a dimmed italic row with a dashed rail and a "not connected" caption, in place right
+under its anchor row. It has no row index: keyboard focus, Alt+Up/Down and the "+ Insert" row never land on it, the
+add gap below it still adds on the chain's own cable, and a mouse drag-reorder stays between such rows (Alt+Up/Down moves past them). A double-click
+shows its card on the canvas, like any module row; a screen reader says "<name>, not connected". Plugging it in or
+unplugging it moves it between this list and the chain rows on the next rebuild. Its motion key is `dangling:<uuid>`
+([row motion](row-motion.md)). The alternative look (a dimmed "Not connected" group under the inserts) is not built.
+
 ### Reordering inserts
 
 A module row reorders three ways, all through `MixerInsertList::moveRowTo` and ONE undo step: drag it by its name

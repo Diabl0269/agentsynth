@@ -6,6 +6,8 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Modules/ModuleBase.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -177,6 +179,50 @@ TEST(MixerRowsMotion, AnInsertAddedFromThePickerGrowsIn) {
     ASSERT_EQ(rig.track().getInsertListForTest().getEntryCountForTest(), before + 1);
     ASSERT_TRUE(rig.inserts().isRunning());
     EXPECT_TRUE(rig.inserts().timeline().hasEnter);
+}
+
+// A cable from the chain to a module that leads nowhere puts a not-connected row in (it opens a gap and grows in);
+// cutting the cable takes it out again (it shrinks away and the rows below close up).
+TEST(MixerRowsMotion, ANotConnectedRowGrowsInOnConnectAndShrinksAwayOnDisconnect) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.addInsert("Reverb");
+    rig.inserts().finishNow();
+    auto& graph = rig.mc.getAudioEngine().getGraph();
+    const auto firstUuid = rig.track().getInsertListForTest().getRowUuid(0);
+    juce::AudioProcessorGraph::Node* first = nullptr;
+    for (auto* node : graph.getNodes())
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            if (juce::String(module->getNodeUuid()) == firstUuid)
+                first = node;
+    ASSERT_NE(first, nullptr);
+    rig.mc.getGraphEditor().addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+    juce::AudioProcessorGraph::Node* delay = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node->getProcessor()->getName() == "Delay")
+            delay = node;
+    ASSERT_NE(delay, nullptr);
+    rig.mixer().rebuild();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 0) << "no cable yet, nothing to show";
+    rig.inserts().finishNow();
+
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        graph.addConnection({{first->nodeID, 0}, {delay->nodeID, 0}});
+        graph.addConnection({{first->nodeID, 1}, {delay->nodeID, 1}});
+    });
+    rig.mixer().rebuild();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 1);
+    ASSERT_TRUE(rig.inserts().isRunning());
+    EXPECT_TRUE(rig.inserts().timeline().hasEnter);
+    EXPECT_FALSE(rig.inserts().timeline().hasExit);
+    rig.inserts().finishNow();
+
+    ASSERT_TRUE(rig.mc.getUndoManager().undo()); // the cable goes
+    rig.mixer().rebuild();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 0);
+    ASSERT_TRUE(rig.inserts().isRunning());
+    EXPECT_TRUE(rig.inserts().timeline().hasExit);
+    EXPECT_EQ(rig.inserts().exitGhostCount(), 1);
 }
 
 TEST(MixerRowsMotion, ReduceMotionFadesTheRowInsteadOfScalingIt) {

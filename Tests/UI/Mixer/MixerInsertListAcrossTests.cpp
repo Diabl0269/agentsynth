@@ -348,7 +348,7 @@ TEST(MixerInsertListAcrossTests, ADanglingModuleOffTheForkIsNotRoutedThroughTheN
     r.wire(r.source, loose);
     r.refresh();
 
-    const auto target = r.list.gapTargetAt({40, 0});
+    const auto target = r.list.gapTargetAt({40, r.list.getRowBounds(0).getY()});
     ASSERT_TRUE(target.has_value());
     r.list.addModuleAt("Chorus", *target);
     EXPECT_TRUE(r.wired(r.source, loose)) << "the dangling cable stays on the fork";

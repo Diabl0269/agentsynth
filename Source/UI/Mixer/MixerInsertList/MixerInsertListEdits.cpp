@@ -132,6 +132,8 @@ void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
         return;
     }
     const int row = rowIndexAt(event.getPosition());
+    if (row < 0 && danglingIndexAt(event.getPosition()) >= 0)
+        return; // a not-connected row has no menu and no drag; a double-click shows it on the canvas
     if (isAddRow(row)) {
         activateAddRow();
         return;
@@ -179,6 +181,10 @@ void MixerInsertList::activateDryRow(int rowIndex) {
 void MixerInsertList::mouseDoubleClick(const juce::MouseEvent& event) {
     if (event.mods.isPopupMenu() || !onFocusModule)
         return;
+    if (const int d = danglingIndexAt(event.getPosition()); d >= 0) {
+        onFocusModule(dangling_[(size_t)d].uuid);
+        return;
+    }
     const auto* entry = entryForRow(rowIndexAt(event.getPosition()));
     if (entry != nullptr && entry->kind == Kind::Module && event.x < getWidth() - rowButtonsWidth(*entry))
         onFocusModule(entry->uuid);

@@ -24,6 +24,8 @@ juce::String MixerRowsMotion::insertKey(const synth::MixerInsertEntry& entry) {
     return entry.kind == Kind::Split ? "split:" + entry.uuid : entry.uuid;
 }
 
+juce::String MixerRowsMotion::danglingKey(const synth::MixerDanglingEntry& entry) { return "dangling:" + entry.uuid; }
+
 juce::String MixerRowsMotion::sendKey(const synth::MixerSendEntry& entry) { return juce::String(entry.slot); }
 
 // A section scrolled away from its top is left out: the new list starts at the top, so the rows would not line up.

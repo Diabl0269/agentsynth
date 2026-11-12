@@ -40,6 +40,11 @@ class ModMatrixPicker;
 // outlives the list, so a column rebuilt after an edit keeps it. Rows can be bypassed, moved within their path and
 // removed; the split row's bypass covers every module under it.
 //
+// Not-connected modules (docs/mixer/mixer.md#not-connected-modules): a module hanging off the chain that leads nowhere
+// shows as a dimmed row with a dashed rail, in place right after the row it hangs off. It is not a chain row: it has no
+// row index, so keyboard focus, Alt+Up/Down and drag-reorder never land on it, and an add or move acts on the chain
+// rows around it as if it were not there. A double-click on it, like on any module row, shows its card on the canvas.
+//
 // Any other branch: the same list, read-only (no "+ Insert" row; the column header's "Edit on canvas" button is the
 // way into the canvas for every chain, whatever its shape).
 //
@@ -59,7 +64,8 @@ public:
 
     /** `stripNodeId` is the node the chain feeds: the strip itself, or Master's chain terminator. */
     void setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
-                    juce::AudioProcessorGraph::NodeID sourceNodeId, juce::AudioProcessorGraph::NodeID stripNodeId);
+                    juce::AudioProcessorGraph::NodeID sourceNodeId, juce::AudioProcessorGraph::NodeID stripNodeId,
+                    const std::vector<synth::MixerDanglingEntry>& dangling = {});
 
     /** Fires when a split folds or opens (every frame while it animates): the column re-reads getPreferredHeight(). */
     std::function<void()> onPreferredHeightChanged;
@@ -106,6 +112,17 @@ public:
      *  this list's coordinates. See MixerRowsMotion. */
     std::vector<juce::String> entryKeys() const;
     std::vector<ExitEnterListRow> motionRows() const;
+    /** The not-connected rows, in the order they are drawn (they are no part of the row index space above). */
+    int getDanglingCount() const noexcept { return (int)dangling_.size(); }
+    /** Dangling row `index`'s bounds in this list's coordinates; empty when out of range. */
+    juce::Rectangle<int> getDanglingBounds(int index) const;
+    /** What a screen reader says for it: "Distortion, not connected". */
+    juce::String describeDangling(int index) const;
+    /** The not-connected row under `position`, or -1. */
+    int danglingIndexAt(juce::Point<int> position) const;
+    juce::Component* getDanglingAccessibilityComponentForTest(int index) const noexcept {
+        return index >= 0 && index < (int)danglingProxies_.size() ? danglingProxies_[(size_t)index].get() : nullptr;
+    }
     /** The row's module uuid (what "select on canvas" resolves), or empty when out of range or a split row. */
     juce::String getRowUuid(int rowIndex) const;
     /** A linear or split chain can be edited row by row; any other branch is read-only. */
@@ -274,6 +291,11 @@ private:
     /** The width a row's buttons take at its right edge: bypass, and "Show on canvas" for a module. */
     int rowButtonsWidth(const synth::MixerInsertEntry& entry) const noexcept;
     int rowIndexAt(juce::Point<int> position) const;
+    /** Not-connected rows that sit right after chain row `slot` (-1: before the first row). */
+    int danglingAfterSlot(int slot) const noexcept;
+    /** Whether a dragged run of rows `first..last` has a not-connected row between two of its rows. */
+    bool danglingWithin(int first, int last) const noexcept;
+    void paintDangling(juce::Graphics& g, int index);
     int rowTop(int rowIndex) const;
     int rowHeight(int rowIndex) const;
     int contentHeight() const;
@@ -337,6 +359,11 @@ private:
     GraphEditor* graphEditor_ = nullptr;
 
     std::vector<synth::MixerInsertEntry> entries_;
+    /** The not-connected modules, and for each the visible row it sits after (-1: above the first), read when the rows
+     *  were last rebuilt. */
+    std::vector<synth::MixerDanglingEntry> dangling_;
+    std::vector<int> danglingSlot_;
+    std::vector<std::unique_ptr<RowAccessibilityProxy>> danglingProxies_;
     /** The entries on screen, in order: every row except those under a folded split. */
     std::vector<int> visible_;
     bool linear_ = false;

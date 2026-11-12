@@ -38,6 +38,24 @@ struct MixerInsertEntry {
     bool operator==(const MixerInsertEntry&) const = default;
 };
 
+/** A module that hangs off a column's chain but leads nowhere: fed from the chain (an unplugged Distortion, or an
+ * effect whose output goes only to a CV jack) and never reaching the strip, so it is not in the sound. The column shows
+ * it as a dimmed "not connected" row in place, right after the chain row it hangs off
+ * (docs/mixer/mixer.md#not-connected-modules). A module with no cable at all is not listed: only what is reachable from
+ * the chain. */
+struct MixerDanglingEntry {
+    juce::AudioProcessorGraph::NodeID nodeId;
+    juce::String uuid;
+    juce::String name;
+    bool bypassed = false;
+    /** Index in `MixerColumn::inserts` of the module row it hangs off, or -1 when it hangs off the track's source. */
+    int anchorRow = -1;
+    /** 1 for a module fed straight from the chain, +1 for each dangling module between it and the chain. */
+    int depth = 1;
+
+    bool operator==(const MixerDanglingEntry&) const = default;
+};
+
 /** How many modules `inserts` lists (its Split rows are not modules). */
 inline int countInsertModules(const std::vector<MixerInsertEntry>& inserts) {
     return (int)std::count_if(inserts.begin(), inserts.end(),
@@ -102,6 +120,11 @@ struct MixerColumn {
      *  branching. Master's is the forward walk to `chainEndNodeId`. Empty for Direct and for a non-bus orphan
      *  strip. */
     std::vector<MixerInsertEntry> inserts;
+
+    /** The modules hanging off `inserts` (or the source) that lead nowhere, in chain order, each after the one it is
+     * fed from. Every module reachable from the track's source appears exactly once, as an `inserts` row or here. Empty
+     *  for Direct, Master, buses and any chain `inserts` could not list row by row. */
+    std::vector<MixerDanglingEntry> dangling;
 
     /** Kind::Master only: the Rec Tap / Audio Output the chain feeds -- its terminator, never an insert. */
     juce::AudioProcessorGraph::NodeID chainEndNodeId;

@@ -9,6 +9,8 @@ retarget or a toggle changes no key and does not animate. A change that adds and
 off its top, or an off-screen panel lands at once. The motion is the shared `ExitEnterListMotion`
 ([animation](../layout/animation.md#delete-and-undo-animation)). Tests: `Tests/UI/Mixer/MixerRowsMotionTests.cpp`.
 
+A not-connected row ([mixer](mixer.md#not-connected-modules)) has the key `dangling:<module uuid>`, so a cable that newly lists a module opens a gap and grows it in, and cutting it shrinks it away; a module that moves between a not-connected row and a chain row changes key and lands at once.
+
 A drag-reorder or Alt+Up/Down move of an insert is the same shape as a send's: `MixerInsertList` runs the shared
 `Layout/ReorderDrag/` session over its feasible run, the commit holds the panel's rebuild, and the dropped row settles
 from where it was let go (`pendingInsertSettle_`, played on the rebuilt column's list). A dry row has the key

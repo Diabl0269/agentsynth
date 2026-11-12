@@ -189,7 +189,8 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     header_.setSources(showsSources_ ? sources : juce::String());
     // A branching chain names its own target (the first boxed module's macro); any other column edits its channel.
     editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId);
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId,
+                           column.dangling);
 
     // The first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -600,6 +601,8 @@ MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::
     std::vector<juce::String> insertKeys, sendKeys;
     for (const auto& entry : next.inserts)
         insertKeys.push_back(MixerRowsMotion::insertKey(entry));
+    for (const auto& entry : next.dangling)
+        insertKeys.push_back(MixerRowsMotion::danglingKey(entry));
     for (const auto& entry : next.sends)
         sendKeys.push_back(MixerRowsMotion::sendKey(entry));
     MixerRowsMotion::Snapshot snapshot;
