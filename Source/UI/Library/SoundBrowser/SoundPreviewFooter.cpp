@@ -1,6 +1,7 @@
 // SoundPreviewFooter.cpp -- the waveform, Play/Stop, preview volume and Auto-play controls under the Sounds list.
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -43,20 +44,21 @@ SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(autoPlay_);
 
     using Player = synth::soundbrowser::SoundPreviewPlayer;
-    volume_.setTitle("Preview volume");
-    volume_.setWantsKeyboardFocus(true); // juce::Slider turns it off; the volume is a keyboard stop
-    volume_.setTooltip("Preview volume, only for previews");
-    volume_.setRange(Player::kMinGainDb, Player::kMaxGainDb, 1.0);
-    volume_.setValue(Player::kDefaultGainDb, juce::dontSendNotification);
-    volume_.setDoubleClickReturnValue(true, Player::kDefaultGainDb);
-    volume_.setTextBoxIsEditable(false);
-    volume_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 20);
-    volume_.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + " dB"; };
-    volume_.onValueChange = [this] {
+    volume_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+    volume_->setTitle("Preview volume");
+    volume_->setWantsKeyboardFocus(true); // juce::Slider turns it off; the volume is a keyboard stop
+    volume_->setTooltip("Preview volume, only for previews");
+    volume_->setRange(Player::kMinGainDb, Player::kMaxGainDb, 1.0);
+    volume_->setValue(Player::kDefaultGainDb, juce::dontSendNotification);
+    volume_->setDoubleClickReturnValue(true, Player::kDefaultGainDb);
+    volume_->setTextBoxIsEditable(false);
+    volume_->setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 20);
+    volume_->textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + " dB"; };
+    volume_->onValueChange = [this] {
         if (onGainChanged)
-            onGainChanged((float)volume_.getValue());
+            onGainChanged((float)volume_->getValue());
     };
-    addAndMakeVisible(volume_);
+    addAndMakeVisible(*volume_);
 }
 
 SoundPreviewFooter::~SoundPreviewFooter() {
@@ -139,7 +141,7 @@ void SoundPreviewFooter::applyShapeMix() {
     const bool transport = shapeMix_ < 1.0f;
     const bool picture = shapeMix_ > 0.0f && !compact_;
     const float transportAlpha = 1.0f - shapeMix_;
-    for (juce::Component* c : {static_cast<juce::Component*>(&play_), static_cast<juce::Component*>(&volume_)}) {
+    for (juce::Component* c : {static_cast<juce::Component*>(&play_), static_cast<juce::Component*>(volume_.get())}) {
         c->setVisible(transport);
         c->setAlpha(transportAlpha);
     }
@@ -157,7 +159,7 @@ void SoundPreviewFooter::resized() {
         auto row = getLocalBounds().withTrimmedTop(1).reduced(12, 4);
         play_.setBounds(row.removeFromLeft(56));
         const int volumeWidth = juce::jmax(64, juce::jmin(100, row.getWidth() - 60));
-        volume_.setBounds(row.removeFromRight(juce::jmin(volumeWidth, row.getWidth())));
+        volume_->setBounds(row.removeFromRight(juce::jmin(volumeWidth, row.getWidth())));
         compactName_ = row.reduced(6, 0);
         return;
     }
@@ -174,7 +176,7 @@ void SoundPreviewFooter::resized() {
         area.removeFromTop(4);
         auto levelRow = area.removeFromTop(22);
         play_.setBounds(levelRow.removeFromLeft(56));
-        volume_.setBounds(levelRow);
+        volume_->setBounds(levelRow);
         return;
     }
     play_.setBounds(row.removeFromLeft(56));
@@ -182,7 +184,7 @@ void SoundPreviewFooter::resized() {
     autoPlay_.setBounds(row.removeFromRight(switchWidth));
     matchKey_.setBounds(row.removeFromRight(switchWidth));
     area.removeFromTop(4);
-    volume_.setBounds(area.removeFromTop(22));
+    volume_->setBounds(area.removeFromTop(22));
 }
 
 } // namespace synth::ui

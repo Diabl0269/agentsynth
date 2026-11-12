@@ -2,6 +2,7 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.h"
 #include "Modules/Sampler/SamplerNoteNames.h"
 #include "Modules/Sampler/SamplerRegionEdit.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
@@ -48,7 +49,8 @@ SamplerMapFields::SamplerMapFields() {
     setWantsKeyboardFocus(false);
     std::vector<juce::Component*> detail{&fileLabel_, &replaceButton_, &removeButton_};
     for (int f = 0; f < NumFields; ++f) {
-        fields_[(size_t)f] = std::make_unique<juce::Slider>(juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft);
+        fields_[(size_t)f] =
+            std::make_unique<synth::ui::FineDragSlider>(juce::Slider::IncDecButtons, juce::Slider::TextBoxLeft);
         styleField((Field)f, kInfo[f].name, kInfo[f].tooltip);
         captions_[(size_t)f].setText(kInfo[f].name, juce::dontSendNotification);
         captions_[(size_t)f].setFont(juce::Font(juce::FontOptions(kCaptionFontSize)));

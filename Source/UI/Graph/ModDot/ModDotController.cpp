@@ -2,6 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotPopover.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <cmath>
@@ -110,6 +111,8 @@ void ModDotController::pressed(juce::AudioProcessorGraph::NodeID card, int destC
     g.knob = &knob;
     g.anchor = &anchor;
     g.startPos = e.position;
+    g.fine = std::make_shared<synth::ui::FineDrag>();
+    g.fine->begin(e.position);
     g.startAmount = attenuverterAmount(editor_.getAudioEngine().getGraph(), g.attenuverter);
     g.doubleClick = e.getNumberOfClicks() >= 2 && editor_.getDoubleClickPortDisconnectEnabled();
     gesture_ = g;
@@ -121,13 +124,14 @@ void ModDotController::dragged(const juce::MouseEvent& e) {
     if (!gesture_.has_value() || cancelled_ || gesture_->doubleClick || gesture_->attenuverter.uid == 0)
         return;
     auto& g = *gesture_;
+    const float travelledY = g.fine->travelled(e).y;
     if (!g.started) {
         if (e.position.getDistanceFrom(g.startPos) < kClickThresholdPx)
             return;
         g.started = true;
         editor_.beginModAmountGesture(); // captured lazily: a click leaves no undo step
     }
-    setAmount(g.attenuverter, g.startAmount + (g.startPos.y - e.position.y) * kAmountPerPixel);
+    setAmount(g.attenuverter, g.startAmount + -travelledY * kAmountPerPixel);
     if (g.knob != nullptr)
         showTooltip(g.card, g.destChannel, g.attenuverter);
 }

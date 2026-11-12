@@ -1,5 +1,6 @@
 // StepGridRandomizePanel.cpp -- the Randomize popover's controls and layout.
 #include "StepGridRandomizePanel.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -44,15 +45,16 @@ StepGridRandomizePanel::StepGridRandomizePanel(const sequencer_ops::RandomizeSet
     };
     addAndMakeVisible(range_);
 
-    density_.setRange(0.0, 100.0, 1.0);
-    density_.setValue(std::round(settings_.density * 100.0f), juce::dontSendNotification);
-    density_.setTitle("Steps that play");
-    density_.setTooltip("How many steps play, as a share of the pattern. Ignored while Keep my rhythm is on");
-    density_.onValueChange = [this] {
-        settings_.density = (float)density_.getValue() / 100.0f;
+    density_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+    density_->setRange(0.0, 100.0, 1.0);
+    density_->setValue(std::round(settings_.density * 100.0f), juce::dontSendNotification);
+    density_->setTitle("Steps that play");
+    density_->setTooltip("How many steps play, as a share of the pattern. Ignored while Keep my rhythm is on");
+    density_->onValueChange = [this] {
+        settings_.density = (float)density_->getValue() / 100.0f;
         settingsChanged();
     };
-    addAndMakeVisible(density_);
+    addAndMakeVisible(*density_);
 
     keepRhythm_.setTitle("Keep my rhythm");
     keepRhythm_.setTooltip("Keep which steps play and their gate; only the notes change");
@@ -118,7 +120,7 @@ void StepGridRandomizePanel::resized() {
     auto densityRow = area.removeFromTop(kLabelHeight);
     densityValue_.setBounds(densityRow.removeFromRight(40));
     densityLabel_.setBounds(densityRow);
-    density_.setBounds(area.removeFromTop(18));
+    density_->setBounds(area.removeFromTop(18));
     area.removeFromTop(kGap);
     const int pillWidth = theme::AppLookAndFeel::togglePillWidth(keepRhythm_.getButtonText());
     keepRhythm_.setBounds(area.removeFromTop(theme::AppLookAndFeel::kTogglePillHeight).removeFromLeft(pillWidth));

@@ -44,6 +44,8 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // moment Record is clicked. Both persist themselves via setApplicationProperties.
 namespace synth::ui {
 
+class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this header is wide
+
 // "Record also starts playback" (default ON): the Settings key, read at use time by the record flow and the tooltip.
 inline constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
 
@@ -232,14 +234,15 @@ private:
     // own editDoubleClick handling.
     class BpmDragLabel : public synth::ui::NonModalLabel {
     public:
-        explicit BpmDragLabel(TimelineTransportBar& owner) noexcept
-            : owner_(owner) {}
+        explicit BpmDragLabel(TimelineTransportBar& owner);
+        ~BpmDragLabel() override;
         void mouseDown(const juce::MouseEvent& e) override;
         void mouseDrag(const juce::MouseEvent& e) override;
 
     private:
         TimelineTransportBar& owner_;
         float dragAnchorY_ = 0.0f;
+        std::unique_ptr<FineDrag> fine_; // Shift slows the tempo drag
         double dragAnchorBpm_ = 120.0;
     };
 

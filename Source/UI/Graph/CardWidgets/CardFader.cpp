@@ -2,6 +2,7 @@
 // reset), routed through the card gestures first, and the geometry of its modulation bar and cable
 // landing point. The look is AppLookAndFeel's fader painter, chosen by the slider's own size.
 #include "CardFader.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 
 namespace synth::ui {
@@ -147,7 +148,7 @@ void CardFader::mouseDrag(const juce::MouseEvent& e) {
     const auto t = travelBounds();
     const double length = std::max(1.0f, isVerticalFader() ? t.getHeight() : t.getWidth());
     const double pixels = isVerticalFader() ? anchorMouse_.y - e.position.y : e.position.x - anchorMouse_.x;
-    const double proportion = juce::jlimit(0.0, 1.0, anchorProportion_ + pixels / length * (shift ? kFineRate : 1.0));
+    const double proportion = juce::jlimit(0.0, 1.0, anchorProportion_ + pixels / length * FineDrag::rateFor(e.mods));
     setValue(proportionOfLengthToValue(proportion), juce::sendNotificationSync);
 }
 

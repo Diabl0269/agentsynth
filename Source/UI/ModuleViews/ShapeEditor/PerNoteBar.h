@@ -37,7 +37,7 @@ public:
     std::function<void()> onEdited;
 
     CardSegmentedSwitch& getModeSwitch() noexcept { return mode_; }
-    juce::Slider& getSmoothness() noexcept { return smoothness_; }
+    juce::Slider& getSmoothness() noexcept { return *smoothness_; }
     NoteKeyStrip& getKeyStrip() noexcept { return keys_; }
     juce::TextButton& getOctaveDown() noexcept { return octaveDown_; }
     juce::TextButton& getOctaveUp() noexcept { return octaveUp_; }
@@ -59,7 +59,7 @@ private:
 
     ShapeListAdapter& adapter_;
     CardSegmentedSwitch mode_;
-    juce::Slider smoothness_;
+    std::unique_ptr<juce::Slider> smoothness_; // a FineDragSlider, made in the constructor
     NoteKeyStrip keys_;
     juce::TextButton octaveDown_{"<"};
     juce::TextButton octaveUp_{">"};

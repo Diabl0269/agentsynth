@@ -4,6 +4,11 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+
+namespace synth::ui {
+std::unique_ptr<juce::Slider> makeFineDragSlider(); // FineDragSlider.h; not included, this header is wide
+}
 
 /** Live threshold readout, optionally with an attached slider.
  *
@@ -40,7 +45,7 @@ public:
         , scale(sourceToWatch.getThresholdScale())
         , minDb(sourceToWatch.getThresholdMinDecibels()) {
         if (thresholdParam != nullptr) {
-            slider = std::make_unique<juce::Slider>();
+            slider = synth::ui::makeFineDragSlider();
             slider->setComponentID(thresholdParam->getName(100));
             slider->setSliderStyle(juce::Slider::LinearHorizontal);
             slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 16);

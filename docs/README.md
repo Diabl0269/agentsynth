@@ -53,6 +53,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
 - [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut
 - [`docs/layout/note-length-menu.md`](layout/note-length-menu.md) — the shared note-length menu (S / T / D and chips) every rate box opens, its box, popup, keys, motion and the triplet and dotted name lists
+- [`docs/layout/fine-drag.md`](layout/fine-drag.md) — Shift while dragging any slider, knob, fader, number field or amount bar moves it at a tenth; the one shared helper (`FineDrag`, `FineDragSlider`), where Shift already meant something, and the guard
 - [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
 - [`docs/layout/macro-fold-motion.md`](layout/macro-fold-motion.md) — a macro folding and unfolding: module flights, the border, crossing cables that slide, pushed neighbours that glide, nested macros
 - [`docs/layout/undo-glide.md`](layout/undo-glide.md) — what glides on Cmd+Z / Cmd+Shift+Z, `KeyedTween`/`RestoreWatch`, the `UndoGlideSurfaces` checklist, and the drag-surface and popup-user registries

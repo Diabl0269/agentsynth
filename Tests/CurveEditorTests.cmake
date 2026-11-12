@@ -32,6 +32,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/QuitRequestTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopoverRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragSurfaceRegistryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Controls/FineDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupMotionRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupDismissPathsTests.cpp

@@ -2,6 +2,7 @@
 
 #include "DrumIdeasPanel.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 
 #include "DrumLanes.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
@@ -196,12 +197,13 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
     setTogglePillStyle(everyFourth_, true);
     addAndMakeVisible(everyFourth_);
 
-    amount_.setRange(0.0, 100.0, 1.0);
-    amount_.setValue(40.0, juce::dontSendNotification);
-    amount_.setTitle("Amount");
-    amount_.setTooltip("How much each take changes: Subtle moves a hit or two, Wild changes a lot");
-    amount_.setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
-    addAndMakeVisible(amount_);
+    amount_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+    amount_->setRange(0.0, 100.0, 1.0);
+    amount_->setValue(40.0, juce::dontSendNotification);
+    amount_->setTitle("Amount");
+    amount_->setTooltip("How much each take changes: Subtle moves a hit or two, Wild changes a lot");
+    amount_->setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
+    addAndMakeVisible(*amount_);
 
     makeTakes_.setTitle("Make 3 takes");
     makeTakes_.setTooltip("Make three variations of this clip to hear and pick from");
@@ -229,12 +231,13 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         addAndMakeVisible(pick);
     }
 
-    density_.setRange(0.0, 100.0, 1.0);
-    density_.setValue(50.0, juce::dontSendNotification);
-    density_.setTitle("Density");
-    density_.setTooltip("How many hits the new pattern has, from Sparse to Busy");
-    density_.setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
-    addAndMakeVisible(density_);
+    density_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+    density_->setRange(0.0, 100.0, 1.0);
+    density_->setValue(50.0, juce::dontSendNotification);
+    density_->setTitle("Density");
+    density_->setTooltip("How many hits the new pattern has, from Sparse to Busy");
+    density_->setWantsKeyboardFocus(true); // a slider without a text box is not a Tab stop by default
+    addAndMakeVisible(*density_);
     keep_.setTitle("Keep kick and snare");
     keep_.setTooltip("Keep the kick and snare hits that are there and randomize only the other drums");
     setTogglePillStyle(keep_, true);
@@ -243,7 +246,7 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
     randomize_.setTooltip("Fill this clip with a new random pattern. Each press is one undo step");
     randomize_.onClick = [this] {
         if (onRandomize)
-            onRandomize(density_.getValue() / 100.0, keep_.getToggleState(), nextSeed());
+            onRandomize(density_->getValue() / 100.0, keep_.getToggleState(), nextSeed());
     };
     addAndMakeVisible(randomize_);
 
@@ -285,7 +288,7 @@ int DrumIdeasPanel::nextSeed() {
 void DrumIdeasPanel::makeTakes() {
     audition_.stop();
     const auto ctx = context_ ? context_() : DrumIdeasContext{};
-    const double amount = amount_.getValue() / 100.0;
+    const double amount = amount_->getValue() / 100.0;
     for (int i = 0; i < kTakes; ++i) {
         auto variation = drumideas::vary(ctx.notes, ctx.grid, amount, nextSeed());
         takes_[(size_t)i] = variation.notes;
@@ -365,7 +368,7 @@ void DrumIdeasPanel::resized() {
     amountRow.removeFromRight(kGap);
     subtleLabel_.setBounds(amountRow.removeFromLeft(44));
     wildLabel_.setBounds(amountRow.removeFromRight(30));
-    amount_.setBounds(amountRow);
+    amount_->setBounds(amountRow);
     area.removeFromTop(kGap);
     auto takesRow = area.removeFromTop(kTakeHeight);
     const int takeWidth = (area.getWidth() - (kTakes - 1) * kGap) / kTakes;
@@ -384,7 +387,7 @@ void DrumIdeasPanel::resized() {
     auto densityRow = area.removeFromTop(kRowHeight);
     sparseLabel_.setBounds(densityRow.removeFromLeft(44));
     busyLabel_.setBounds(densityRow.removeFromRight(30));
-    density_.setBounds(densityRow);
+    density_->setBounds(densityRow);
     area.removeFromTop(kGap);
     auto lastRow = area.removeFromTop(kRowHeight);
     randomize_.setBounds(lastRow.removeFromRight(96));

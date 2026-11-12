@@ -450,6 +450,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/DeleteTrackConfirm.cpp
     Source/UI/Timeline/DeleteTrackConfirm.h
     Source/UI/Chrome/ExportAudioDialog.cpp
+    Source/UI/Chrome/ExpandingRangeSlider.h
     Source/UI/Chrome/ExportAudioDialog.h
     Source/UI/Chrome/Toast/ToastComponent.h
     Source/UI/Chrome/Toast/ToastComponent.cpp

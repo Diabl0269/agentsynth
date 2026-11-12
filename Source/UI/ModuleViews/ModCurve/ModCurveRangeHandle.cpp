@@ -53,6 +53,7 @@ void ModCurveRangeHandle::paint(juce::Graphics& g) {
 
 void ModCurveRangeHandle::mouseDown(const juce::MouseEvent& e) {
     dragging_ = true;
+    fine_.begin(e.position);
     if (onBegin)
         onBegin();
     changeTo(valueForY(e.position.y));
@@ -60,7 +61,7 @@ void ModCurveRangeHandle::mouseDown(const juce::MouseEvent& e) {
 
 void ModCurveRangeHandle::mouseDrag(const juce::MouseEvent& e) {
     if (dragging_)
-        changeTo(valueForY(e.position.y));
+        changeTo(valueForY(fine_.advance(e).y));
 }
 
 void ModCurveRangeHandle::mouseUp(const juce::MouseEvent&) {

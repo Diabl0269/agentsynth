@@ -116,13 +116,13 @@ bool SaturationBrightnessField::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-void SaturationBrightnessField::mouseDrag(const juce::MouseEvent& e) {
+void SaturationBrightnessField::applyPointer(juce::Point<float> pointer) {
     const auto area = getLocalBounds().reduced(kEdge);
     if (area.isEmpty())
         return;
     Hsb next = hsb_;
-    next.saturation = juce::jlimit(0.0f, 1.0f, (float)(e.x - kEdge) / (float)area.getWidth());
-    next.brightness = juce::jlimit(0.0f, 1.0f, 1.0f - (float)(e.y - kEdge) / (float)area.getHeight());
+    next.saturation = juce::jlimit(0.0f, 1.0f, (pointer.x - (float)kEdge) / (float)area.getWidth());
+    next.brightness = juce::jlimit(0.0f, 1.0f, 1.0f - (pointer.y - (float)kEdge) / (float)area.getHeight());
     userChanged(next);
 }
 
@@ -187,12 +187,12 @@ bool HueBar::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-void HueBar::mouseDrag(const juce::MouseEvent& e) {
+void HueBar::applyPointer(juce::Point<float> pointer) {
     const auto area = getLocalBounds().reduced(kEdge);
     if (area.isEmpty())
         return;
     Hsb next = hsb_;
-    next.hue = juce::jlimit(0.0f, 1.0f, (float)(e.y - kEdge) / (float)area.getHeight());
+    next.hue = juce::jlimit(0.0f, 1.0f, (pointer.y - (float)kEdge) / (float)area.getHeight());
     userChanged(next);
 }
 

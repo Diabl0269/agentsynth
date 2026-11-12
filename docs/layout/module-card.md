@@ -304,7 +304,7 @@ out as its own run, by the same measure-and-apply walk:
   `CardControlGestures` (the modulation-amount drag, the cable pickup on its landing dot, the hover
   that highlights the landing cable, the keyboard steps) and is in the card's slider list, so
   Automate, MIDI Learn, value reflection and the modulation-target lookup treat it as a knob. Its own
-  drag is the mixer fader's: Shift drags at an eighth of the rate (re-anchored where the drag is, so
+  drag is the mixer fader's: Shift drags at a tenth of the rate ([fine drag](fine-drag.md); re-anchored where the drag is, so
   the value never jumps), Cmd-click and double-click reset to the parameter's default, each one change
   gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
   one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
@@ -325,7 +325,7 @@ out as its own run, by the same measure-and-apply walk:
   In a tall cell (`setOrientation(vertical)`) the arrows sit above and below. Up/Down or Left/Right step; a click on
   an arrow steps; holding it pauses 0.4 s, then repeats from 6 to 30 steps a second, and stops on release or focus
   loss; dragging the number steps every `CardControlGestures::stepperDragPixelsPerStep` (about 3 px, fewer for a long
-  range), Shift at an eighth of the rate, never jumping when Shift toggles mid-drag; a double-click (or Enter, or a
+  range), Shift at a tenth of the rate, never jumping when Shift toggles mid-drag; a double-click (or Enter, or a
   digit) opens a text box over the number (Enter commits, Escape cancels; a typable field only); Cmd-click resets to
   the default. A step blocked at a limit turns the number amber. The owner applies each step (`onStep`) and groups the
   steps of one gesture between `onGestureBegin` and `onGestureEnd`, so a click, a hold, a drag, a reset or a typed

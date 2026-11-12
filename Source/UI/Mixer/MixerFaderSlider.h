@@ -4,7 +4,7 @@
 
 // MixerFaderSlider.h (docs/mixer/fader.md): MixerFader's own juce::Slider subclass,
 // giving the vertical fader the Cubase drag conventions stock juce::Slider doesn't provide:
-// Shift-drag = fine adjust at 1/8 rate, anchored to wherever the drag IS when Shift toggles (never
+// Shift-drag = fine adjust at FineDrag::kRate, anchored to wherever the drag IS when Shift toggles (never
 // a jump), Shift+wheel = a finer wheel step, and Cmd-click (Ctrl-click on Windows)/double-click
 // both reset to 0 dB as one undo step.
 //

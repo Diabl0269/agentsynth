@@ -60,9 +60,9 @@ void ModulatorRow::refreshValues() {
         const bool synced = host_->getNodeParameter(lfo, "mode") >= 0.5f;
         sync_.setToggleState(synced, juce::dontSendNotification);
         setPartVisible(syncRate_, synced && !isCompactLook());
-        setPartVisible(rateHz_, !synced && !isCompactLook());
-        if (dragging_ != &rateHz_)
-            set(rateHz_, host_->getNodeParameter(lfo, "rateHz"));
+        setPartVisible(*rateHz_, !synced && !isCompactLook());
+        if (dragging_ != rateHz_.get())
+            set(*rateHz_, host_->getNodeParameter(lfo, "rateHz"));
     }
 }
 

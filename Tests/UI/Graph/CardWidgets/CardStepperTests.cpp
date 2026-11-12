@@ -176,17 +176,17 @@ TEST(CardStepper, ManySmallMovesAddUpToTheSameWholeStepsAsOneBigMove) {
     EXPECT_EQ(f.total(), 10);
 }
 
-TEST(CardStepper, ShiftDragIsAnEighthOfTheSpeedAndNeverJumpsWhenShiftChanges) {
+TEST(CardStepper, ShiftDragIsATenthOfTheSpeedAndNeverJumpsWhenShiftChanges) {
     Field f;
     f.stepper.setRange(0, 100, 0);
     f.stepper.setValue(50);
     const auto start = f.centre(CardStepper::Zone::number);
     f.stepper.mouseDown(pressAt(f.stepper, start));
-    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 24), kStepShift));
-    EXPECT_EQ(f.total(), 1) << "24 px with Shift is one step";
-    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 24)));
+    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 30), kStepShift));
+    EXPECT_EQ(f.total(), 1) << "30 px with Shift is one step";
+    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 30)));
     EXPECT_EQ(f.total(), 1) << "letting go of Shift moves nothing by itself";
-    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 27)));
+    f.stepper.mouseDrag(pressAt(f.stepper, start - juce::Point<int>(0, 33)));
     EXPECT_EQ(f.total(), 2) << "then full speed again";
     f.stepper.mouseUp(pressAt(f.stepper, start));
     EXPECT_FALSE(f.stepper.isRepeating());

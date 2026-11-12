@@ -11,6 +11,7 @@
 #include "GraphEditorCableMenu.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
@@ -893,7 +894,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     if (e.mods.isLeftButtonDown() && !isDraggingConnection) {
         pendingEmptyCanvasClick = false;
         if (draggingAttenuverterNodeId.uid != 0) {
-            const float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
+            const float delta =
+                (e.getPosition().y - lastMousePos.y) * -0.01f * (float)synth::ui::FineDrag::rateFor(e.mods);
             adjustModAmount(draggingAttenuverterNodeId, delta); // shared gesture helper
             lastMousePos = e.getPosition();
             return;

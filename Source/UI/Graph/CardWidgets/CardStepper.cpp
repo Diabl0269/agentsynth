@@ -4,6 +4,7 @@
 #include "CardStepper.h"
 #include "CardControlGestures.h"
 #include "TestMode/TestModeStateSource.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -383,8 +384,8 @@ void CardStepper::mouseDrag(const juce::MouseEvent& e) {
         return;
     // The rate follows the Shift state of each move, and only the travel since the last move counts, so pressing or
     // releasing Shift mid-drag never makes the value jump.
-    const double perStep = CardControlGestures::stepperDragPixelsPerStep(ranged_ ? max_ - min_ : 0) *
-                           (e.mods.isShiftDown() ? CardControlGestures::kFineDragDivisor : 1.0);
+    const double perStep =
+        CardControlGestures::stepperDragPixelsPerStep(ranged_ ? max_ - min_ : 0) * (1.0 / FineDrag::rateFor(e.mods));
     dragRemainder_ += (double)(dragLastY_ - e.position.y) / perStep; // up is more
     dragLastY_ = e.position.y;
     // A tiny nudge toward the next whole step, so 30 px at 3 px a step is 10 steps and not 9.99999 of them.

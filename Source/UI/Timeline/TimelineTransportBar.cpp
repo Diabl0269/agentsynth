@@ -1,5 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -78,16 +79,23 @@ TimelineTransportBar::GlyphButton::GlyphButton(const juce::String& name, Glyph g
 }
 
 //==============================================================================
+TimelineTransportBar::BpmDragLabel::BpmDragLabel(TimelineTransportBar& owner)
+    : owner_(owner)
+    , fine_(std::make_unique<FineDrag>()) {}
+
+TimelineTransportBar::BpmDragLabel::~BpmDragLabel() = default;
+
 void TimelineTransportBar::BpmDragLabel::mouseDown(const juce::MouseEvent& e) {
     juce::Label::mouseDown(e);
     dragAnchorY_ = e.position.y;
+    fine_->begin(e.position);
     dragAnchorBpm_ = owner_.currentBpmForDrag();
 }
 
 void TimelineTransportBar::BpmDragLabel::mouseDrag(const juce::MouseEvent& e) {
     if (isBeingEdited())
         return; // the text editor owns the mouse now — never fight it
-    owner_.applyDraggedBpm(dragAnchorBpm_, dragAnchorY_ - e.position.y, e.mods.isCommandDown());
+    owner_.applyDraggedBpm(dragAnchorBpm_, dragAnchorY_ - fine_->advance(e).y, e.mods.isCommandDown());
 }
 
 //==============================================================================

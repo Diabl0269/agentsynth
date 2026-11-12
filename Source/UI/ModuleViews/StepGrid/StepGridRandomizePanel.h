@@ -23,7 +23,7 @@ public:
 
     const sequencer_ops::RandomizeSettings& getSettings() const noexcept { return settings_; }
     NoteRangePicker& getRangePicker() noexcept { return range_; }
-    juce::Slider& getDensitySlider() noexcept { return density_; }
+    juce::Slider& getDensitySlider() noexcept { return *density_; }
     juce::ToggleButton& getKeepRhythm() noexcept { return keepRhythm_; }
     juce::TextButton& getRollButton() noexcept { return roll_; }
 
@@ -51,7 +51,7 @@ private:
     juce::Label densityLabel_{"densityLabel", "Steps that play"};
     juce::Label densityValue_{"densityValue"};
     NoteRangePicker range_;
-    juce::Slider density_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
+    std::unique_ptr<juce::Slider> density_; // a FineDragSlider, made in the constructor
     juce::ToggleButton keepRhythm_{"Keep my rhythm"};
     juce::TextButton roll_{"Roll"};
 

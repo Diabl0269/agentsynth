@@ -35,6 +35,8 @@ class GraphEditor;
 
 namespace synth::ui {
 
+class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this header is wide
+
 class ModDotPopover;
 class ModDotPanelFrame;
 
@@ -152,6 +154,7 @@ private:
         juce::Component::SafePointer<juce::Component> knob;
         juce::Component::SafePointer<juce::Component> anchor;
         juce::Point<float> startPos;
+        std::shared_ptr<synth::ui::FineDrag> fine; // Shift slows the amount drag
         float startAmount = 0.0f;
         bool started = false;
         bool doubleClick = false; // handled on the press; the rest of the press does nothing

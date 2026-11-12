@@ -1,6 +1,7 @@
 // Concern: the modulator row's construction, names, layout and paint. The edits, the live-value refresh and
 // the menu live in ModulatorRowEdits.cpp; the band in the lanes region is ModulatorBand.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 
 #include "Modules/LfoRateDivisions.h"
 #include "TestMode/TestModeStateSource.h"
@@ -76,6 +77,7 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     , host_(host)
     , parameterName_(parameterName)
     , strip_(LaneControlKind::Mod, controls, controlActions()) {
+    rateHz_ = std::make_unique<synth::ui::FineDragSlider>();
     setComponentID("modulatorRow");
     // The row is a keyboard stop of its own, like a lane header (Up/Down walk the track list through it). A press does
     // not grab focus (it may become a drag); a plain click on the row, not on a control, takes it on release.
@@ -122,13 +124,13 @@ void ModulatorRow::initLfoControls() {
         shape_.addItem(shapes[i], i + 1);
     syncRate_.setChoices(synth::lfoRateDivisions());
 
-    rateHz_.setSliderStyle(juce::Slider::LinearBar);
-    rateHz_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    rateHz_.setNormalisableRange(juce::NormalisableRange<double>(0.01, 20.0, 0.01, 0.5));
-    rateHz_.textFromValueFunction = [](double v) { return juce::String(v, v < 10.0 ? 2 : 1) + " Hz"; };
+    rateHz_->setSliderStyle(juce::Slider::LinearBar);
+    rateHz_->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    rateHz_->setNormalisableRange(juce::NormalisableRange<double>(0.01, 20.0, 0.01, 0.5));
+    rateHz_->textFromValueFunction = [](double v) { return juce::String(v, v < 10.0 ? 2 : 1) + " Hz"; };
     sync_.setButtonText("Sync");
 
-    for (juce::Component* c : std::initializer_list<juce::Component*>{&shape_, &syncRate_, &rateHz_, &sync_}) {
+    for (juce::Component* c : std::initializer_list<juce::Component*>{&shape_, &syncRate_, rateHz_.get(), &sync_}) {
         c->setMouseClickGrabsKeyboardFocus(false);
         c->setWantsKeyboardFocus(true);
         c->addKeyListener(this);
@@ -149,7 +151,7 @@ void ModulatorRow::initLfoControls() {
         edit(info_.sourceUuid, "mode", sync_.getToggleState() ? 1.0f : 0.0f, ParameterEditPhase::Once);
         refreshValues(); // swaps the sync-rate combo and the Hz bar
     };
-    wireDragEdits(rateHz_, "rateHz", [](double v) { return (float)v; });
+    wireDragEdits(*rateHz_, "rateHz", [](double v) { return (float)v; });
 
     // The picture is display only; a right-click on it reaches the row's menu through the row's mouse listener.
     addAndMakeVisible(shapeIcon_);
@@ -237,7 +239,7 @@ void ModulatorRow::applySourceKind() {
     setPartVisible(shapeIcon_, show);
     if (!info_.isLfo) {
         setPartVisible(syncRate_, false);
-        setPartVisible(rateHz_, false);
+        setPartVisible(*rateHz_, false);
     }
 }
 
@@ -251,7 +253,7 @@ void ModulatorRow::setPartVisible(juce::Component& part, bool visible) {
 std::vector<juce::Component*> ModulatorRow::sourceParts() {
     std::vector<juce::Component*> parts{&nameButton_};
     if (lfoControlsBuilt_)
-        parts.insert(parts.end(), {&shapeIcon_, &shape_, &syncRate_, &rateHz_, &sync_});
+        parts.insert(parts.end(), {&shapeIcon_, &shape_, &syncRate_, rateHz_.get(), &sync_});
     return parts;
 }
 
@@ -297,7 +299,7 @@ void ModulatorRow::applyNames() {
     strip_.refresh();
     name(shape_, who + " shape");
     name(syncRate_, who + " sync rate");
-    name(rateHz_, who + " rate");
+    name(*rateHz_, who + " rate");
     name(sync_, who + " sync");
     const auto fold = info_.sourceTitle + (parameterName_.isNotEmpty() ? " on " + parameterName_ : juce::String());
     foldArrow_.setStateWithText(!collapsed_, (collapsed_ ? "Expand " : "Collapse ") + fold,
@@ -427,7 +429,7 @@ void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Recta
     const int rateWidth = juce::jmin(rateFit, shapeLine.getWidth());
     syncRate_.setBounds(shapeLine.withWidth(rateWidth).reduced(0, 1));
     rateTextArea_ = shapeLine.removeFromRight(kRateTextWidth);
-    rateHz_.setBounds(shapeLine.reduced(0, 3));
+    rateHz_->setBounds(shapeLine.reduced(0, 3));
 
     sync_.setBounds(amountLine.removeFromLeft(kSyncWidth).reduced(0, 1));
     amountLine.removeFromLeft(kGap);
@@ -503,7 +505,7 @@ void ModulatorRow::paintOverChildren(juce::Graphics& g) {
         g.drawRect(outline, 1);
     }
     const auto text = coloursFor(*this).text;
-    paintSliderValue(g, rateHz_, rateTextArea_, text);
+    paintSliderValue(g, *rateHz_, rateTextArea_, text);
     for (auto* child : getChildren())
         if (child->isVisible() && child != &shapeIcon_ && child != &foldArrow_ && child != &nameButton_ &&
             child != &marker_ && child != &strip_) // the arrow, the name button and the chips paint their own ring

@@ -2,14 +2,11 @@
 // double-click reset, Shift fine-wheel). See MixerFaderSlider.h's class comment for why every
 // override below is self-contained rather than calling the juce::Slider base class.
 #include "MixerFaderSlider.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 
 namespace synth::ui {
 
 namespace {
-
-// Shift = 1/8 rate, for both a drag and a wheel step -- one constant, one feel, both places the
-// ticket asks for "fine adjustment".
-constexpr double kFineRateFactor = 1.0 / 8.0;
 
 // Mirrors juce::Slider::Pimpl::getMouseWheelDelta's own proportion-space sensitivity (0.15 of the
 // slider's travel per unit of wheel.deltaY), instead of stepping a FIXED dB amount per wheel
@@ -96,7 +93,7 @@ void MixerFaderSlider::mouseDrag(const juce::MouseEvent& e) {
     const double trackLength = (double)juce::jmax(1, getLookAndFeel().getSliderLayout(*this).sliderBounds.getHeight());
     // LinearVertical: moving the mouse UP (smaller y) increases the value.
     const double pixelDelta = (double)(anchorMousePos_.y - e.position.y);
-    const double rate = shiftIsDown ? kFineRateFactor : 1.0;
+    const double rate = FineDrag::rateFor(e.mods);
     const double proportionDelta = (pixelDelta / trackLength) * rate;
 
     // Drag math happens in PROPORTION space (the slider's 0..1 thumb position), not dB space --
@@ -132,7 +129,7 @@ void MixerFaderSlider::mouseWheelMove(const juce::MouseEvent& e, const juce::Mou
         return;
 
     const double signedNotch = (double)(wheel.isReversed ? -notch : notch);
-    const double rate = e.mods.isShiftDown() ? kFineRateFactor : 1.0;
+    const double rate = FineDrag::rateFor(e.mods);
 
     // Same proportion-space math as mouseDrag() above: scale by the wheel's own deltaY rather than
     // stepping a fixed dB amount, so many small trackpad events accumulate at a normal rate instead

@@ -27,8 +27,6 @@ public:
     static constexpr int kVerticalWidth = 40;
     /** The modulation bar's thickness, px. */
     static constexpr float kModBarThickness = 3.0f;
-    /** Shift-drag rate. */
-    static constexpr double kFineRate = 1.0 / 8.0;
 
     /** The parameter's own text with its spaces dropped ("1.00 s" reads "1.00s", "50 %" reads "50%"), so a
         value fits the box of a narrow fader without truncating. */

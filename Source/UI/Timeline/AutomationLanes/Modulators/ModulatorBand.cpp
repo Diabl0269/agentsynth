@@ -2,6 +2,7 @@
 // accessible value, its picture, and the knob gestures (drag, Up/Down, double-click) while no amount lane
 // exists. The proxy doc behind the curve editor lives in ModulatorBandEdits.cpp.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -43,6 +44,7 @@ ModulatorBand::ModulatorBand(TimelineViewState& viewState)
     : viewState_(viewState) {
     setComponentID("modulatorBand");
     toolCursors_ = std::make_unique<LaneToolCursors>();
+    fine_ = std::make_unique<FineDrag>();
     setInterceptsMouseClicks(false, false);
     setAccessible(false);
     proxy_.addListener(this);
@@ -266,6 +268,7 @@ void ModulatorBand::mouseDown(const juce::MouseEvent& e) {
     updateMouseCursor();
     bubble_.hide();
     knobDragStart_ = knobAmount();
+    fine_->begin(e.position);
 }
 
 bool ModulatorBand::showContextMenuForKeyboardFocus() {
@@ -282,7 +285,7 @@ void ModulatorBand::mouseDrag(const juce::MouseEvent& e) {
         tool_ == EditTool::Draw || !e.mods.isLeftButtonDown() || getHeight() <= 0 || knobCancelled_)
         return;
     const double value =
-        juce::jlimit(-1.0, 1.0, knobDragStart_ - (double)e.getDistanceFromDragStartY() * 2.0 / (double)getHeight());
+        juce::jlimit(-1.0, 1.0, knobDragStart_ - (double)fine_->travelled(e).y * 2.0 / (double)getHeight());
     const auto phase = knobDragging_ ? ParameterEditPhase::Change : ParameterEditPhase::Begin;
     knobDragging_ = true;
     host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)value, phase);

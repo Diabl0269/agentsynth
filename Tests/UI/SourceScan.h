@@ -89,4 +89,44 @@ inline void expectCountsMatch(const char* what, const std::map<std::string, int>
     }
 }
 
+/** The class or struct whose body contains `pos`, found by walking back out of the braces; "" when there is none. */
+inline std::string enclosingClass(const std::string& text, size_t pos) {
+    static const std::regex head(R"(\b(?:class|struct)\s+(\w+))");
+    int depth = 0;
+    for (size_t i = pos; i-- > 0;) {
+        if (text[i] == '}') {
+            ++depth;
+        } else if (text[i] == '{' && depth-- == 0) {
+            const size_t from = text.find_last_of(";}{", i == 0 ? 0 : i - 1);
+            const auto declaration = text.substr(from == std::string::npos ? 0 : from + 1, i - (from + 1));
+            for (std::sregex_iterator it(declaration.begin(), declaration.end(), head), end; it != end; ++it) {
+                const auto before = declaration.find_last_not_of(" \t\n", (size_t)it->position(0) - 1);
+                const bool templateArg =
+                    before != std::string::npos && (declaration[before] == '<' || declaration[before] == ',');
+                const bool enumClass =
+                    before != std::string::npos && before >= 3 && declaration.compare(before - 3, 4, "enum") == 0;
+                if (!templateArg && !enumClass)
+                    return (*it)[1];
+            }
+            depth = 0;
+        }
+    }
+    return "";
+}
+
+/** Every class that overrides mouseDrag(const juce::MouseEvent&), with the file that declares it. */
+inline std::map<std::string, std::string> classesOverridingMouseDrag() {
+    static const std::regex pattern(R"(void\s+mouseDrag\s*\(\s*const\s+juce::MouseEvent\s*&[^)]*\)\s*override)");
+    std::map<std::string, std::string> classes;
+    for (const auto& [file, text] : sourceTexts()) {
+        if (text.find("mouseDrag") == std::string::npos)
+            continue;
+        for (std::sregex_iterator it(text.begin(), text.end(), pattern), end; it != end; ++it) {
+            const auto cls = enclosingClass(text, (size_t)it->position(0));
+            classes[cls.empty() ? "?" + file : cls] = file;
+        }
+    }
+    return classes;
+}
+
 } // namespace synth::test::source_scan

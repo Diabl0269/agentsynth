@@ -116,7 +116,7 @@ public:
 
     /** A number field's drag: pixels of vertical travel per step. The whole range takes about
      *  kStepperDragRangePixels, a step never under kStepperDragMinPixels or over kStepperDragMaxPixels; a field with
-     *  no known range (`span` 0) takes kStepperDragDefaultPixels. Shift divides the rate by kFineDragDivisor. */
+     *  no known range (`span` 0) takes kStepperDragDefaultPixels. Shift slows it to FineDrag::kRate. */
     static double stepperDragPixelsPerStep(int span) noexcept {
         if (span <= 0)
             return kStepperDragDefaultPixels;
@@ -136,7 +136,6 @@ public:
     static constexpr double kStepperDragMinPixels = 2.0;
     static constexpr double kStepperDragMaxPixels = 8.0;
     static constexpr double kStepperDragDefaultPixels = 3.0;
-    static constexpr double kFineDragDivisor = 8.0;
     static constexpr int kHoldPauseMs = 400;
     static constexpr double kHoldStartPerSecond = 6.0;
     static constexpr double kHoldFastPerSecond = 30.0;

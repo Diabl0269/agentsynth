@@ -107,11 +107,11 @@ public:
     juce::TextButton& getSnareRollButton() noexcept { return snareRoll_; }
     juce::TextButton& getTomFillButton() noexcept { return tomFill_; }
     juce::ToggleButton& getEveryFourthToggle() noexcept { return everyFourth_; }
-    juce::Slider& getAmountSlider() noexcept { return amount_; }
+    juce::Slider& getAmountSlider() noexcept { return *amount_; }
     juce::TextButton& getMakeTakesButton() noexcept { return makeTakes_; }
     DrumMiniGrid& getTakeGrid(int index) noexcept { return *takeGrids_[(size_t)index]; }
     juce::TextButton& getPickButton(int index) noexcept { return *picks_[(size_t)index]; }
-    juce::Slider& getDensitySlider() noexcept { return density_; }
+    juce::Slider& getDensitySlider() noexcept { return *density_; }
     juce::ToggleButton& getKeepToggle() noexcept { return keep_; }
     juce::TextButton& getRandomizeButton() noexcept { return randomize_; }
     DrumTakeAudition& getAudition() noexcept { return audition_; }
@@ -146,12 +146,12 @@ private:
     juce::Label randomizeLabel_{"randomizeLabel", "Randomize"};
     juce::Label sparseLabel_{"sparse", "Sparse"};
     juce::Label busyLabel_{"busy", "Busy"};
-    juce::Slider amount_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
+    std::unique_ptr<juce::Slider> amount_; // a FineDragSlider, made in the constructor
     juce::TextButton snareRoll_{"Snare roll"};
     juce::TextButton tomFill_{"Tom fill"};
     juce::ToggleButton everyFourth_{"Every 4th bar"};
     juce::TextButton makeTakes_{"Make 3 takes"};
-    juce::Slider density_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
+    std::unique_ptr<juce::Slider> density_; // a FineDragSlider, made in the constructor
     juce::ToggleButton keep_{"Keep kick and snare"};
     juce::TextButton randomize_{"Randomize"};
     std::array<std::vector<synth::MidiNote>, kTakes> takes_;
