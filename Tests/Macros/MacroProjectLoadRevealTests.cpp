@@ -270,5 +270,31 @@ TEST(MacroProjectLoadReveal, ASavedProjectWithUndockedPortWidgetsOpensWithNoneAt
             onStrip = onStrip || entry.widgetBounds.getPosition() == card->getPosition();
         EXPECT_TRUE(onStrip) << "a port widget off its macro's hull edge strip";
     }
-    EXPECT_GE(portCards, 8) << "the fixture's own ports and the added ones were all checked";
+    const auto* audio1 = editor.getMacros().find(synth::test::SavedProjectFixture::trackMacroId(*mc, 0));
+    ASSERT_NE(audio1, nullptr);
+    EXPECT_TRUE(audio1->memberIsPort(project.wiredStrayInletUuid()))
+        << "a stray inlet cabled into one macro is that macro's port again after the open";
+    EXPECT_GE(portCards, 9) << "the fixture's own ports and the added ones were all checked";
+}
+
+// A port module no macro lists is hidden, so no cable is drawn to it either: a cable that ends where nothing is shown
+// would run to the edge of the canvas.
+TEST(MacroProjectLoadReveal, ACablesEndOnAHiddenStrayPortIsNotDrawn) {
+    PortCanvas c;
+    const auto a = c.add(std::make_unique<LFOModule>(), 400, 300);
+    const auto b = c.add(std::make_unique<OscillatorModule>(), 800, 300);
+    const auto loose = c.add(std::make_unique<OscillatorModule>(), 1300, 300);
+    c.addMacro({a, b}, false, {380, 280, 600, 400});
+    const auto stray = c.addPort(true, {});
+    c.engine.getGraph().addConnection({{stray.id, 0}, {b, 2}});
+    c.engine.getGraph().addConnection({{loose, 0}, {b, 2}});
+    c.editor.updateComponents();
+    ASSERT_FALSE(findComponent(c.editor, stray.id)->isVisible());
+    int drawn = 0;
+    for (const auto& cable : c.editor.buildVisibleCables()) {
+        EXPECT_NE(cable.id.srcUid, stray.id.uid);
+        EXPECT_NE(cable.id.dstUid, stray.id.uid);
+        ++drawn;
+    }
+    EXPECT_GE(drawn, 1) << "the cable of an ordinary card is still drawn";
 }

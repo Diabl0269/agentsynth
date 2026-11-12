@@ -18,7 +18,8 @@
 //     default backend while it opens, so the plugin reloads instead of staying an unresolved placeholder).
 //   - With `withPortWidgets`: an inlet and an outlet port on the folded, the nested and the open track macros, plus a
 //     stray Macro In and Macro Out that no macro lists, all saved at the canvas origin (the shape the Load test project
-//     had: port widgets that were never docked).
+//     had: port widgets that were never docked), and a stray Macro In cabled into Audio 1's Gate
+//     (wiredStrayInletUuid(): opening the project makes it a port of Audio 1's macro again).
 // Use: `synth::test::SavedProjectFixture project; auto mc = project.open(); project.trackMacroId(*mc, 1)`.
 
 #include "../../StubPluginInstance.h"
@@ -82,7 +83,7 @@ public:
             builder.simulateAddAudioTrackClick();
         build(builder);
         if (withPortWidgets)
-            addPortWidgets(builder);
+            wiredStrayInlet_ = addPortWidgets(builder);
         saved_ = builder.saveProjectForTest(bundle_);
     }
     ~SavedProjectFixture() { bundle_.deleteRecursively(); }
@@ -91,6 +92,8 @@ public:
 
     bool wasSaved() const { return saved_; }
     const juce::File& bundle() const { return bundle_; }
+    /** The uuid of the stray Macro In cabled into Audio 1's Gate (empty without `withPortWidgets`). */
+    const juce::String& wiredStrayInletUuid() const { return wiredStrayInlet_; }
 
     /** A fresh MainComponent with the project opened the way the app opens a file. Null when the open failed. */
     std::unique_ptr<MainComponent> open() const {
@@ -180,14 +183,21 @@ private:
         }
     }
 
-    static void addPortWidgets(MainComponent& mc) {
+    static juce::String addPortWidgets(MainComponent& mc) {
         for (int track = 0; track < 3; ++track) {
             addPort(mc, true, trackMacroId(mc, track));
             addPort(mc, false, trackMacroId(mc, track));
         }
         addPort(mc, true, {});
         addPort(mc, false, {});
+        // A stray inlet that feeds a member of exactly one macro: the load makes it that macro's port again.
+        auto wired = addNode(mc, std::make_unique<MacroInletModule>(), 0, 0);
+        const auto gate = memberUuidOfType(mc, trackMacroId(mc, 0), "Gate");
+        for (auto* node : mc.getAudioEngine().getGraph().getNodes())
+            if (node->properties["uuid"].toString() == gate)
+                mc.getAudioEngine().getGraph().addConnection({{wired->nodeID, 0}, {node->nodeID, 0}});
         mc.getGraphEditor().updateComponents();
+        return wired->properties["uuid"].toString();
     }
 
     static void build(MainComponent& mc) {
@@ -249,6 +259,7 @@ private:
 
     juce::File bundle_;
     bool saved_ = false;
+    juce::String wiredStrayInlet_;
 };
 
 } // namespace synth::test

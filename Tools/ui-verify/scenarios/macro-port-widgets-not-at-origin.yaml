@@ -2,10 +2,12 @@
 # widget at the top-left of the canvas, and the ports still follow their macros when a folded macro is opened.
 #
 # The fixture macro-port-widgets.agsproj is the saved-project fixture with `withPortWidgets` (folded, nested and open
-# track macros with an inlet and an outlet each, plus a stray inlet and outlet no macro lists).
+# track macros with an inlet and an outlet each, plus a stray inlet and outlet no macro lists and a stray inlet cabled
+# into Audio 1's Gate).
 #   1. Opens the project: the stray ports and the ports of the folded macros stay hidden; the open macro's ports sit on
 #      its edges (proof 1, the top-left of the canvas is empty).
-#   2. Opens the folded macro "Audio 1": its inlet and outlet appear on its hull edges, none at the origin (proof 2).
+#   2. Opens the folded macro "Audio 1": its inlet and outlet appear on its hull edges, and so does the stray inlet that was
+#      cabled into its Gate (the load made it Audio 1's port again), none at the origin (proof 2).
 #      Ports of macros nested in a folded macro are covered by MacroProjectLoadReveal in the unit tests.
 record: true
 save_project: macro-port-widgets-not-at-origin
@@ -20,7 +22,7 @@ steps:
   - mark: {check: 1, name: after-load-top-left-empty}
   - click: {id: "macroCard:Audio 1", x: 262, y: 18}
   - waitForIdle: {settleMs: 1000}
-  - expect: {count: {prefix: "card:Macro In", equals: 3}}
+  - expect: {count: {prefix: "card:Macro In", equals: 4}}
   - expect: {count: {prefix: "card:Macro Out", equals: 4}}
   - screenshot: {name: 2-after-opening}
   - mark: {check: 2, name: after-opening-folded-macro}
