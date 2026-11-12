@@ -205,8 +205,9 @@ void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
 }
 
 // Runs against the (possibly just-scrolled) view state, factored out of mouseDrag() so a real
-// pointer move and an auto-scroll tick (which has no MouseEvent of its own) can't drift apart.
-void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
+// pointer move and an auto-scroll tick (which has no MouseEvent of its own) can't drift apart. The glide of the
+// drawn clips onto each new snapped step wraps it in updateDragPreviewFromLastPointer (TimelineClipLaneDragGlide.cpp).
+void TimelineClipLaneArea::stepDragPreview() {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
 

@@ -620,6 +620,10 @@ shortcut.
   snapped step) ease the drawn point 160 ms, except snapped steps that come faster than the ease runs, which move the
   drawn point with the hold; a snapped hold tops out at 12 grid steps a second; the value bubble sits on the drawn
   dot; plain under Reduce Motion ([details](../timeline/automation-points.md#keyboard-moves)).
+- **Snapped clip drags glide**: dragging a clip's edge or body with snap on eases the drawn clip and its notes 160 ms
+  from each grid line to the next (the same tween as an undo), final at once underneath; steps under 1 px (snap off) stay
+  plain, the glide carries across the drop, and Reduce Motion lands each step at once
+  ([details](../timeline/clips.md#edge-sizing)).
 - **A selection box eases to its new rectangle and follows what it frames during a drag**
   ([details](../timeline/automation-points.md#stretching-a-selection)).
 

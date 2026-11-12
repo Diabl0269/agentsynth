@@ -76,6 +76,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
+  A **snapped drag step** glides through the same tween: while an edge or body drag is live, each time the snapped preview
+  jumps (a step of 1 px or more) `updateDragPreviewFromLastPointer` retargets `clipGlide_` from the clip's drawn place to the
+  new line and sets the notes' `ClipNoteGlide` from the sizing mode, the preview staying final at once. The offsets carry
+  across the drop. `UndoGlideSurfaces.EverySnappedDragStepEases` walks every surface that implements `Surface::dragStep`
+  (the clip's left edge, right edge and body, and the notes of each sizing mode and edge): the first frame is at the old
+  line, a later one between, it settles on the new line, and Reduce Motion lands it at once.
   A finished section edit and a repeat stamp glide clips too (a stamp only those in the placements it rewrote), and a
   clip that arrives on a known track grows from its left edge while one that leaves shrinks toward its centre where it
   was: `ClipLaneEnterExit` keeps a copy of every clip at each sync and draws the leaving ones with the real `paintClip`

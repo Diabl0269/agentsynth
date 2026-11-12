@@ -16,10 +16,19 @@ juce::Rectangle<int> TimelineClipLaneArea::drawnClipRect(synth::ClipId id, juce:
     return drawn.withWidth(std::max(drawn.getWidth(), 1));
 }
 
+// Where the clip rests right now: its place in the document, or the live drag's preview of it.
 juce::Rectangle<int> TimelineClipLaneArea::getDrawnClipRectForTest(synth::ClipId id) const {
-    for (const auto& [clipId, rect] : collectClipRects())
-        if (clipId == id)
-            return drawnClipRect(id, rect);
+    if (doc_ == nullptr)
+        return {};
+    const auto layout = getRowLayout();
+    const auto& tracks = doc_->getTracks();
+    for (int row = 0; row < (int)tracks.size(); ++row)
+        for (const auto& clip : tracks[(size_t)row].clips)
+            if (clip.id == id) {
+                const auto geometry = effectiveGeometryFor(clip);
+                return drawnClipRect(
+                    id, computeClipRect(viewState_, layout, effectiveRowFor(id, row), geometry.start, geometry.length));
+            }
     return {};
 }
 
@@ -34,13 +43,25 @@ double TimelineClipLaneArea::glidedNoteX(synth::ClipId id, double restingX, juce
     return synth::glidedNoteX(mode->second, restingX, rest.getX(), rest.getWidth(), drawn.getX(), drawn.getWidth());
 }
 
+// The notes are the ones painted: a live edge drag shows the notes the drop will leave (resizePreviewFor).
 double TimelineClipLaneArea::getDrawnNoteXForTest(synth::ClipId id, int index) const {
-    const auto* clip = doc_ != nullptr ? doc_->getClip(id) : nullptr;
-    if (clip == nullptr || index < 0 || index >= (int)clip->notes.size())
+    if (doc_ == nullptr)
         return 0.0;
-    for (const auto& [clipId, rect] : collectClipRects())
-        if (clipId == id)
-            return glidedNoteX(id, viewState_.beatToX(clip->startBeat + clip->notes[(size_t)index].startBeat), rect);
+    const auto layout = getRowLayout();
+    const auto& tracks = doc_->getTracks();
+    for (int row = 0; row < (int)tracks.size(); ++row)
+        for (const auto& clip : tracks[(size_t)row].clips) {
+            if (clip.id != id)
+                continue;
+            const auto geometry = effectiveGeometryFor(clip);
+            const auto rest =
+                computeClipRect(viewState_, layout, effectiveRowFor(id, row), geometry.start, geometry.length);
+            const auto preview = resizePreviewFor(clip);
+            const auto& notes = preview ? preview->notes : clip.notes;
+            if (index < 0 || index >= (int)notes.size())
+                return 0.0;
+            return glidedNoteX(id, viewState_.beatToX(geometry.start + notes[(size_t)index].startBeat), rest);
+        }
     return 0.0;
 }
 

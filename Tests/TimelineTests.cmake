@@ -189,9 +189,11 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesEq.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesDrumPad.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesClipContents.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesClipDrag.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesSections.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneRestoreGlideTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneDragGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneSectionGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/PianoRoll/PianoRollDragPreviewCommitTests.cpp
 )

@@ -1,4 +1,5 @@
 #include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.h"
 
@@ -55,13 +56,16 @@ const char* waveformSourceName(WaveformSource source) {
 // pill an edge drag draws on the clip ("200%" while stretching), empty when none. `clipLengths`, "Clip 1:4.000;Clip
 // 2:2.500": every clip's length in beats, so a scenario can see whether a drag committed. `clipPitches`, "Clip
 // 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a count, because a scenario
-// checking Fit to key needs to see that notes moved, and which way.
+// checking Fit to key needs to see that notes moved, and which way. `clipDrawn`, "Clip 1:80,10,160,50;...": every
+// clip's rectangle as drawn right now (x,y,width,height; it trails the clip's place while a snapped drag step or a
+// restore glides), and `clipGliding`: whether a clip glide runs.
 void TimelineClipLaneArea::addTestModeProbe() {
     testModeProbe_ = std::make_unique<ClipPitchesProbe>([this](juce::DynamicObject& into) {
         juce::StringArray clips;
         juce::StringArray lengths;
         juce::StringArray audio;
         juce::StringArray shapes;
+        juce::StringArray drawn;
         if (doc_ != nullptr)
             for (const auto& track : doc_->getTracks())
                 for (const auto& clip : track.clips) {
@@ -69,6 +73,9 @@ void TimelineClipLaneArea::addTestModeProbe() {
                     for (const auto& note : clip.notes)
                         pitches.add(juce::String(note.pitch));
                     lengths.add(clip.name + ":" + juce::String(clip.lengthBeats, 3));
+                    const auto rect = getDrawnClipRectForTest(clip.id);
+                    drawn.add(clip.name + ":" + juce::String(rect.getX()) + "," + juce::String(rect.getY()) + "," +
+                              juce::String(rect.getWidth()) + "," + juce::String(rect.getHeight()));
                     clips.add(clip.name + ":" + pitches.joinIntoString(","));
                     if (clip.assetRef.isNotEmpty()) {
                         shapes.add(clip.name + ":" + getWaveformShapeForTest(clip.id));
@@ -78,6 +85,8 @@ void TimelineClipLaneArea::addTestModeProbe() {
                 }
         into.setProperty("clipPitches", clips.joinIntoString(";"));
         into.setProperty("clipLengths", lengths.joinIntoString(";"));
+        into.setProperty("clipDrawn", drawn.joinIntoString(";"));
+        into.setProperty("clipGliding", clipGlide_->isAnimating());
         into.setProperty("clipAudio", audio.joinIntoString(";"));
         into.setProperty("clipWaveform", shapes.joinIntoString(";"));
         into.setProperty("waveformSource", waveformSourceName(lastWaveformSource_));
