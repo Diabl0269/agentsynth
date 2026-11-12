@@ -31,7 +31,11 @@ struct HungPatch : SplitListRig {
     }
     juce::Image paintImage() {
         list.setSize(160, list.getPreferredHeight());
-        return list.createComponentSnapshot(list.getLocalBounds(), false, 1.0f);
+        // SoftwareImageType(): the default (native) image type differs per platform (Direct2D on Windows).
+        juce::Image image(juce::Image::ARGB, list.getWidth(), list.getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        list.paintEntireComponent(g, false);
+        return image;
     }
 };
 } // namespace
@@ -57,17 +61,23 @@ TEST(MixerInsertListNotConnected, TheMarkedRowIsDrawnDimmedWithADashedRailUnlike
     const auto inkOf = [&](juce::Rectangle<int> row) {
         float brightest = 0.0f;
         for (int y = row.getY(); y < row.getBottom(); ++y)
-            for (int x = 2; x < 100; ++x)
-                brightest = juce::jmax(brightest, image.getPixelAt(x, y).getPerceivedBrightness());
+            for (int x = 2; x < 100; ++x) {
+                // Weighted by alpha: a near-transparent antialiasing fringe pixel un-premultiplies to near white on
+                // some platforms (Linux), which would make every row read as full ink.
+                const auto pixel = image.getPixelAt(x, y);
+                brightest = juce::jmax(brightest, pixel.getPerceivedBrightness() * pixel.getFloatAlpha());
+            }
         return brightest;
     };
     EXPECT_LT(inkOf(hung), inkOf(chain)) << "the name is dimmer than a chain row's";
     // The rail is dashed: some rows of pixels on its column are ink and some are the background.
     int ink = 0, gaps = 0;
     const int railX = 6;
-    const auto background = image.getPixelAt(railX + 40, hung.getY() + 1);
-    for (int y = hung.getY(); y < hung.getBottom(); ++y)
-        (image.getPixelAt(railX, y) != background ? ink : gaps)++;
+    for (int y = hung.getY(); y < hung.getBottom(); ++y) {
+        const float alpha = image.getPixelAt(railX, y).getFloatAlpha();
+        ink += alpha > 0.5f ? 1 : 0;
+        gaps += alpha < 0.1f ? 1 : 0;
+    }
     EXPECT_GT(ink, 0);
     EXPECT_GT(gaps, 0) << "dashed, not solid";
 }
