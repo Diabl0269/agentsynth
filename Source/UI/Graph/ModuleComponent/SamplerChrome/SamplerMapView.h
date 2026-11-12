@@ -53,6 +53,7 @@ public:
     juce::TextButton& getAddButton() noexcept { return addButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Label& getNotice() noexcept { return notice_; }
+    juce::Label& getDrumHint() noexcept { return drumHint_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -70,6 +71,7 @@ private:
     SamplerMapBlocks blocks_;
     SamplerMapFields fields_;
     juce::Label notice_{"Notice", "This is a built-in instrument. Making your own copy lets you change it."};
+    juce::Label drumHint_{"DrumHint", "Drum kits are best played from the Drum Kit module"};
     juce::TextButton copyButton_{"Make my own copy"};
     juce::TextButton addButton_{"Add recording..."};
     juce::TextButton doneButton_{"Done"};
@@ -78,6 +80,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     int shownGeneration_ = -1;
     bool readOnly_ = false;
+    bool drumKit_ = false;
     bool committing_ = false;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerMapView)

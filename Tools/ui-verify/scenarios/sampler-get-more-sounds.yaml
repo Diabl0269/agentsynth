@@ -7,6 +7,7 @@
 #   2. Opens the Instrument list: Cat under Animals, the file loaders, then "Get more sounds..." as the last row, and
 #      under the list the "Get the core instruments" strip with its Download button.
 #   3. Walks down to "Get more sounds..." and presses Return: Settings opens on its Sound packs tab.
+#   4. Opens the Animals pack's row (its chevron), so the tab is seen listing the pack that is installed.
 # The Mode switch has three segments (Sample, Granular, Instrument); the click lands in the third.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 record: true
@@ -47,4 +48,6 @@ steps:
   - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
   - expect: {id: "settingsTab:Sound packs", showing: true, within_ms: 3000}
   - expect: {id: "settingsTab:Sound packs", toggleState: true}
+  - click: {id: "packDisclosure:animals"}
+  - wait: {settleMs: 800}
   - mark: {check: 2, name: get-more-opens-sound-packs}

@@ -682,3 +682,94 @@ TEST(SamplerMapWindow, ACardThatGoesAwayTakesItsMapViewDown) {
     holder->poll();
     EXPECT_EQ(holder->getBlocks().getBlockCount(), 0);
 }
+
+namespace {
+
+// A pack "drums" with a Drums-category kit (kick on 35-36 rooted on 36, snare on 38, one sound on key 100 that no
+// General MIDI drum owns) and a Keys-category instrument, for the map's drum-kit wording.
+struct DrumPackRoot {
+    DrumPackRoot() {
+        const auto pack = root.file("drums");
+        pack.createDirectory();
+        writeWav(pack.getChildFile("hit.wav"), 8820, 1, kRate, [](int, int) { return 0.5f; });
+        pack.getChildFile("kit.sfz").replaceWithText("<region> sample=hit.wav lokey=35 hikey=36 pitch_keycenter=36\n"
+                                                     "<region> sample=hit.wav key=38\n"
+                                                     "<region> sample=hit.wav key=100\n");
+        pack.getChildFile("keys.sfz").replaceWithText("<region> sample=hit.wav key=36\n");
+        pack.getChildFile("pack.json")
+            .replaceWithText(R"({"id":"drums","name":"Drums","instruments":[)"
+                             R"({"id":"kit","name":"Acoustic Kit","sfz":"kit.sfz","category":"Drums"},)"
+                             R"({"id":"bass","name":"Low Keys","sfz":"keys.sfz","category":"Keys"}]})");
+        synth::sampler::SoundPackLibrary::setRootsForTests(std::vector<juce::File>{root.path()});
+    }
+    ~DrumPackRoot() { synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt); }
+    TempDir root;
+};
+
+} // namespace
+
+TEST(SamplerMapWindow, ADrumKitSaysItIsBestPlayedFromTheDrumKitAndNamesEachPadAndKey) {
+    DrumPackRoot packs;
+    Scene scene;
+    scene.setMode(SamplerModule::kModeInstrument);
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("drums", "kit"));
+    ASSERT_TRUE(scene.sampler().isDrumKitInstrument());
+    std::unique_ptr<SamplerMapView> holder;
+    auto* view = openMap(scene, holder);
+    ASSERT_NE(view, nullptr);
+
+    auto& hint = view->getDrumHint();
+    EXPECT_TRUE(hint.isVisible());
+    EXPECT_EQ(hint.getText(), "Drum kits are best played from the Drum Kit module");
+    EXPECT_EQ(hint.getTitle(), hint.getText()) << "a screen reader reads it";
+    EXPECT_FALSE(hint.getTooltip().isEmpty());
+    EXPECT_FALSE(hint.getBounds().isEmpty());
+    EXPECT_FALSE(hint.getBounds().intersects(view->getBlocks().getBounds())) << "the caption does not cover the map";
+
+    const auto& blocks = view->getBlocks();
+    const int kick = regionWithRoot(scene.sampler(), 36);
+    const int snare = regionWithRoot(scene.sampler(), 38);
+    const int other = regionWithRoot(scene.sampler(), 100);
+    ASSERT_GE(kick, 0);
+    ASSERT_GE(snare, 0);
+    ASSERT_GE(other, 0);
+    EXPECT_EQ(blocks.getBlock(kick)->getButtonText(), "Kick");
+    EXPECT_TRUE(blocks.getBlock(kick)->getTitle().startsWith("Kick, C1. "));
+    EXPECT_TRUE(blocks.getBlock(kick)->getTooltip().startsWith("Kick, C1. "));
+    EXPECT_TRUE(blocks.getBlock(snare)->getTitle().startsWith("Snare, D1. "));
+    EXPECT_EQ(blocks.getBlock(other)->getButtonText(), "hit") << "no drum on that key: the file name stays";
+    EXPECT_FALSE(blocks.getBlock(other)->getTitle().startsWith("Kick"));
+
+    blocks.getBlock(kick)->onClick();
+    EXPECT_TRUE(view->getBlocks().getTitle().startsWith("Instrument map, Kick, C1. "));
+}
+
+TEST(SamplerMapWindow, AnInstrumentThatIsNotADrumKitHasNoDrumCaptionOrPadNames) {
+    DrumPackRoot packs;
+    Scene scene;
+    scene.setMode(SamplerModule::kModeInstrument);
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("drums", "bass"));
+    EXPECT_FALSE(scene.sampler().isDrumKitInstrument());
+    std::unique_ptr<SamplerMapView> holder;
+    auto* view = openMap(scene, holder);
+    ASSERT_NE(view, nullptr);
+    EXPECT_FALSE(view->getDrumHint().isVisible());
+    EXPECT_EQ(view->getBlocks().getBlock(0)->getButtonText(), "hit") << "key 36 has a drum name but this is no kit";
+    EXPECT_FALSE(view->getBlocks().getBlock(0)->getTitle().startsWith("Kick"));
+}
+
+TEST(SamplerMapWindow, TheDrumCaptionFollowsAnInstrumentChangeWhileTheMapIsOpen) {
+    DrumPackRoot packs;
+    Scene scene;
+    scene.setMode(SamplerModule::kModeInstrument);
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("drums", "bass"));
+    std::unique_ptr<SamplerMapView> holder;
+    auto* view = openMap(scene, holder);
+    ASSERT_NE(view, nullptr);
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("drums", "kit"));
+    view->poll();
+    EXPECT_TRUE(view->getDrumHint().isVisible());
+    ASSERT_TRUE(scene.sampler().loadInstrumentFromPack("drums", "bass"));
+    view->poll();
+    EXPECT_FALSE(view->getDrumHint().isVisible());
+}

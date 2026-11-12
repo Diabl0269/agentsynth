@@ -1,0 +1,46 @@
+# A drum kit loaded in the Sampler's Instrument mode says so in its Edit map window: a caption "Drum kits are best played
+# from the Drum Kit module" above the map, and each block carries its drum's name ("Kick") instead of the sample's file
+# name. An instrument that is not a drum kit shows neither (covered by SamplerInstrumentCardTests).
+#
+# What a user does (a pack with a Drums-category instrument, the SoundPacksDrums fixture folder):
+#   1. Adds a Sampler from the library and switches its Mode to Instrument.
+#   2. Opens the Instrument list and picks "Tiny Kit" (the pack's kit: kick on keys 35-36, snare on 38).
+#   3. Presses Edit map: the window opens with the caption and "Kick" and "Snare" on the blocks.
+# The Mode switch has three segments (Sample, Granular, Instrument); the click lands in the third.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-map-drum-kit
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksDrums"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Tiny"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapDrumHint, showing: true, within_ms: 3000}
+  - expect: {id: samplerMapDrumHint, contains: {title: "Drum kits are best played from the Drum Kit module"}}
+  - mark: {check: 1, name: drum-caption-and-pad-names}

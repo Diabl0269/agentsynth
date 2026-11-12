@@ -1,0 +1,2 @@
+<region> sample=kick.wav lokey=35 hikey=36 pitch_keycenter=36
+<region> sample=snare.wav key=38
