@@ -17,6 +17,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -194,20 +195,30 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // For now, we assume MIDI out takes the "first" audio output slot.
     // A more robust solution would involve explicit port mapping.
     int audioOutStartIndex = midiOutDrawn ? 1 : 0;
-    for (int i = audioOutStartIndex; i < numOuts + audioOutStartIndex;
+    // A multi-output plugin's aux jacks fade with their glide, and one just switched off fades out after the model
+    // dropped it (the ghosts, drawn past the model's own jacks).
+    const int ghosts = hostedOutputs_ != nullptr ? hostedOutputs_->ghostJackCount() : 0;
+    for (int i = audioOutStartIndex; i < numOuts + ghosts + audioOutStartIndex;
          ++i) { // Adjust index for display if midi out is present
+        const float jackAlpha = hostedOutputs_ != nullptr ? hostedOutputs_->jackAlpha(i) : 1.0f;
+        if (jackAlpha <= 0.0f)
+            continue;
         auto p = getPortCenter(i, false);
-        g.setColour(jackAccentColour);
+        g.setColour(jackAccentColour.withMultipliedAlpha(jackAlpha));
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
         juce::String label = "Out " + juce::String(i);
-        if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        if (i >= numOuts + audioOutStartIndex)
+            label = hostedOutputs_->ghostLabel(i);
+        else if (auto* mb = dynamic_cast<ModuleBase*>(module))
             label = mb->getOutputPortLabel(i);
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
-        g.setColour(labelColour);
+        g.setColour(labelColour.withMultipliedAlpha(jackAlpha));
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
     }
+    if (hostedOutputs_ != nullptr)
+        hostedOutputs_->paintFoldDot(g, jackAccentColour);
 
     paintModulationRings(g, mod, jackAccentColour);
 
@@ -620,6 +631,11 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         }
     }
 
+    // A shown aux output of a multi-output plugin sits where the fold line and its glide put it.
+    if (!isInput && hostedOutputs_ != nullptr)
+        if (const auto centre = hostedOutputs_->jackCentre(index))
+            return *centre;
+
     int yStep = 20;
     int headerHeight = kPortGutterHeaderHeight;
 
@@ -695,7 +711,8 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
             nearest(best, bestDistance, getMidiPortCenter(true), juce::AudioProcessorGraph::midiChannelIndex, false,
                     true); // Matches paint()
         for (int i = 0; i < numOuts; ++i)
-            nearest(best, bestDistance, getPortCenter(i, false), i, false, false);
+            if (hostedOutputs_ == nullptr || hostedOutputs_->jackHittable(i)) // a folded aux jack is not a target
+                nearest(best, bestDistance, getPortCenter(i, false), i, false, false);
         return best;
     };
     // Inputs -- a knob-bound jack is never hit-tested here at all (it draws no gutter dot

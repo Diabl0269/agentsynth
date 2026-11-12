@@ -360,7 +360,22 @@ public:
      *  that is not 2 channels, an unknown bus or no change. Fires onOutputsChanged. */
     bool setOutputJoined(int busIndex, bool joined);
 
-    /** Single slot, owned by the module's card: fired after the shown/joined set changed, the way a Dual I/O
+    /** True when the instance has more than one enabled output bus: the card's routing button opens the Outputs panel
+     *  instead of flipping Dual I/O. */
+    bool hasMultipleOutputBuses() const { return outputBuses_.size() > 1; }
+    /** Jacks of the main bus (always shown, always first), and how many aux buses show. */
+    int getMainOutputJackCount() const;
+    int getShownAuxOutputBusCount() const;
+    /** True when output jack `jack` belongs to a shown aux bus (what the card's fold line gathers). */
+    bool isAuxOutputJack(int jack) const;
+
+    /** The card's fold line: while true the shown aux outputs gather under one "+ N more outputs" line and their
+     *  cables leave from it; false shows every switched-on output. View state kept in the module's extra state
+     *  ("outputsFolded"). Fires onOutputsChanged; false (nothing happens) when unchanged. */
+    bool getOutputsFolded() const noexcept { return outputsFolded_; }
+    bool setOutputsFolded(bool folded);
+
+    /** Single slot, owned by the module's card: fired after the shown/joined/folded set changed, the way a Dual I/O
      *  change re-lays the card; the owner drops cables left on a hidden output. */
     std::function<void()> onOutputsChanged;
 
@@ -417,7 +432,7 @@ private:
     void enableOutputBuses(juce::AudioPluginInstance& instance);
 
     void buildOutputBuses(const juce::AudioPluginInstance& instance);
-    void applySavedOutputs(const juce::var& saved, bool keyPresent);
+    void applySavedOutputs(const juce::var& saved, bool keyPresent, bool foldChanged = false);
     bool applyOutputPolicy();
     juce::var outputsToVar() const;
     bool isJoined(const OutputBusInfo& bus) const;
@@ -528,6 +543,7 @@ private:
     std::vector<int> defaultEnabledOutputBuses_;
     juce::var savedOutputs_;
     bool outputsRestored_ = false; // a state restore is pending (so a missing key means "old project")
+    bool outputsFolded_ = false;   // the card gathers the shown aux outputs under its fold line
 
     // Modulation slots. The parameter index is -1 while a slot is free or unresolved; the base can be
     // moved by the audio thread when something else (the plugin's window, the card knob, automation)

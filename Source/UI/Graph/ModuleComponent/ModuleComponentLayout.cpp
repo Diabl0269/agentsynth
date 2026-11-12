@@ -16,6 +16,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 
@@ -130,6 +131,8 @@ int ModuleComponent::getContentTopY() {
         y = std::max(y, getPortCenter(i, true).y + kPortLabelClearance);
     if (numOuts > 0)
         y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
+    if (hostedOutputs_ != nullptr) // the fold line and the aux rows, as far down as they are right now
+        y = std::max(y, hostedOutputs_->bottomCentreY() + kPortLabelClearance);
 
     return y;
 }

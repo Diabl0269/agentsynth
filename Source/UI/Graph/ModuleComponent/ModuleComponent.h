@@ -39,6 +39,7 @@ class CurveEditorComponent;  // Forward declaration — see UI/ModuleViews/Curve
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
 class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
 class NoteLengthBox;         // Forward declaration — see UI/Layout/NoteLengthMenu/NoteLengthBox.h
+class HostedOutputsStrip;    // Forward declaration — see UI/Graph/HostedOutputs/HostedOutputsStrip.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -358,12 +359,12 @@ public:
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
-    /** Hosted-plugin card only; empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
-    std::function<void()> onChooseKnobsRequested;
+    std::function<void()> onChooseKnobsRequested; // Hosted-plugin card only; empty otherwise
 
     /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
      *  See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    synth::ui::HostedOutputsStrip* getHostedOutputs() const { return hostedOutputs_.get(); } // multi-bus plugins
     /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
      *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
      *  the window's "Adding controls" tab. Off is a no-op when it was not on. */
@@ -604,6 +605,7 @@ private:
     juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
     class HostedCardBinding;
     std::unique_ptr<HostedCardBinding> hostedCard_;
+    std::unique_ptr<synth::ui::HostedOutputsStrip> hostedOutputs_; // the fold line and aux jack motion; multi-bus only
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     ThresholdControlComponent* thresholdControl = nullptr; // owned by cardBody_ (its Threshold view)
 
@@ -725,6 +727,7 @@ private:
     void refreshHostedLoadStatus(bool relayoutOnChange = true);
     void reconcileHostedModKnobs();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
+    void syncHostedRoutingButtons(); // Outputs button on a multi-bus plugin, Dual I/O on a plain pair
     // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
     // External MIDI's device + channel combos, extracted out of createControls to keep
