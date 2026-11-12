@@ -11,6 +11,10 @@ target_sources(AppUI PRIVATE
 target_sources(AppUI PRIVATE
     Source/MainComponent/MainComponentAudioSettingsSource.cpp
     Source/MainComponent/MainComponentAudioSettingsSource.h
+    Source/UI/Settings/AudioSettingsTab/AudioAdvancedToggle.cpp
+    Source/UI/Settings/AudioSettingsTab/AudioAdvancedToggle.h
+    Source/UI/Settings/AudioSettingsTab/AudioBluetooth.cpp
+    Source/UI/Settings/AudioSettingsTab/AudioBluetooth.h
     Source/UI/Settings/AudioSettingsTab/AudioDeviceSection.cpp
     Source/UI/Settings/AudioSettingsTab/AudioDeviceSection.h
     Source/UI/Settings/AudioSettingsTab/AudioInputLevelCell.cpp

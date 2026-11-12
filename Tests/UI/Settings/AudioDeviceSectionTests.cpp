@@ -1,6 +1,7 @@
 // AudioDeviceSectionTests.cpp: the Audio tab's Device section picking an output device, against a fake device type
 // whose second device has a different default buffer size from the first.
 #include "../../FakeAudioIODevice.h"
+#include "../../TestWait.h"
 #include "UI/Settings/AudioSettingsTab/AudioDeviceSection.h"
 #include <gtest/gtest.h>
 
@@ -147,4 +148,94 @@ TEST(AudioDeviceSectionTest, PickingAnOutputOpensItAtItsOwnDefaultBufferSize) {
     EXPECT_EQ(manager.getAudioDeviceSetup().outputDeviceName, "Pods");
     EXPECT_EQ(manager.getAudioDeviceSetup().bufferSize, kPodsDefaultBuffer);
     EXPECT_EQ(output.getText(), "Pods");
+}
+
+// The device type, sample rate and buffer size sit under a collapsed Advanced row; the output is always there.
+TEST(AudioDeviceSectionTest, SampleRateAndBufferSitUnderACollapsedAdvancedRow) {
+    Rig rig;
+    auto& section = *rig.section;
+    EXPECT_FALSE(section.isAdvancedOpen());
+    EXPECT_TRUE(section.getOutputBoxForTest().isVisible());
+    EXPECT_FALSE(section.getSampleRateBoxForTest().isShowing());
+    const int collapsed = section.preferredHeight(520);
+
+    section.setAdvancedOpen(true, false);
+    EXPECT_TRUE(section.isAdvancedOpen());
+    EXPECT_FLOAT_EQ(section.advancedProgressForTest(), 1.0f);
+    EXPECT_TRUE(section.getSampleRateBoxForTest().isVisible());
+    EXPECT_TRUE(section.getBufferBoxForTest().isVisible());
+    EXPECT_EQ(section.preferredHeight(520), collapsed + 2 * AudioSettingsSection::kRowHeight);
+
+    section.setAdvancedOpen(false, false);
+    EXPECT_EQ(section.preferredHeight(520), collapsed);
+}
+
+// Return and Space on the focused Advanced row ask for the other state, the owner is told, and the name says which.
+TEST(AudioDeviceSectionTest, TheAdvancedRowOpensWithReturnAndSpaceAndNamesItsState) {
+    Rig rig;
+    auto& toggle = rig.section->getAdvancedToggleForTest();
+    std::vector<bool> told;
+    rig.section->onAdvancedToggled = [&](bool open) { told.push_back(open); };
+    EXPECT_TRUE(toggle.getTitle().contains("collapsed"));
+    // A key press clicks on the next message.
+    EXPECT_TRUE(toggle.pressKeyForTest(juce::KeyPress(juce::KeyPress::spaceKey)));
+    synth::test::waitUntil([&] { return rig.section->isAdvancedOpen(); });
+    EXPECT_TRUE(rig.section->isAdvancedOpen());
+    EXPECT_TRUE(toggle.getTitle().contains("expanded"));
+    EXPECT_TRUE(toggle.pressKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return !rig.section->isAdvancedOpen(); });
+    EXPECT_FALSE(rig.section->isAdvancedOpen());
+    EXPECT_EQ(told, (std::vector<bool>{true, false}));
+}
+
+// A Bluetooth output shows a one-line note and a wired one does not; the note adds height.
+TEST(AudioDeviceSectionTest, ABluetoothOutputShowsANote) {
+    Rig rig;
+    rig.section->isBluetooth = [](const juce::String& name) { return name == "Pods"; };
+    rig.section->refresh();
+    EXPECT_FALSE(rig.section->getBluetoothNoteForTest().isVisible());
+    const int wired = rig.section->preferredHeight(520);
+
+    rig.pick(2);
+    EXPECT_EQ(rig.manager.getAudioDeviceSetup().outputDeviceName, "Pods");
+    EXPECT_TRUE(rig.section->getBluetoothNoteForTest().isVisible());
+    EXPECT_GT(rig.section->preferredHeight(520), wired);
+
+    rig.pick(1);
+    EXPECT_FALSE(rig.section->getBluetoothNoteForTest().isVisible());
+    EXPECT_EQ(rig.section->preferredHeight(520), wired);
+}
+
+// A Bluetooth microphone picked as the input shows the call-mode warning; "No device" and a wired input do not.
+TEST(AudioDeviceSectionTest, ABluetoothMicrophoneAsInputShowsAWarning) {
+    Rig rig;
+    rig.section->isBluetooth = [](const juce::String& name) { return name == "Pods"; };
+    rig.section->refresh();
+    EXPECT_FALSE(rig.section->getMicWarningForTest().isVisible());
+
+    rig.section->getInputBoxForTest().setSelectedId(2, juce::sendNotificationSync);
+    ASSERT_EQ(rig.manager.getAudioDeviceSetup().inputDeviceName, "Pods");
+    EXPECT_TRUE(rig.section->getMicWarningForTest().isVisible());
+
+    rig.section->getInputBoxForTest().setSelectedId(1, juce::sendNotificationSync);
+    EXPECT_FALSE(rig.section->getMicWarningForTest().isVisible());
+}
+
+// With no device open there is no rate or buffer to show, so the open Advanced row says what to do instead of
+// opening onto nothing.
+TEST(AudioDeviceSectionTest, AdvancedWithNoDeviceOpenShowsAHint) {
+    Rig rig;
+    auto& section = *rig.section;
+    section.setAdvancedOpen(true, false);
+    EXPECT_FALSE(section.getAdvancedHintForTest().isVisible());
+
+    rig.manager.closeAudioDevice();
+    section.refresh();
+    EXPECT_TRUE(section.getAdvancedHintForTest().isVisible());
+    EXPECT_FALSE(section.getSampleRateBoxForTest().isVisible());
+    const int hinted = section.preferredHeight(520);
+
+    rig.pick(2);
+    EXPECT_FALSE(section.getAdvancedHintForTest().isVisible());
+    EXPECT_EQ(section.preferredHeight(520), hinted + AudioSettingsSection::kRowHeight);
 }

@@ -137,7 +137,7 @@ and MIDI folded.
 
 | Section | Holds | Header summary |
 |---|---|---|
-| Device | interface (type), output device, input device where separate, Test, Control panel, sample rate, buffer size | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
+| Device | output device with Test, input device where separate, a collapsed Advanced row (interface type, sample rate, buffer size, Control panel), Bluetooth notes | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
 | Inputs | the table below | "<device> · N jacks" |
 | Remembered interfaces | every interface the app has seen | none |
 | Outputs | output channel ticks (at least one stays on) | none |
@@ -148,6 +148,15 @@ The Device section is built on `AudioDeviceManager` and `AudioDeviceSetup` direc
 `AudioDeviceSelectorComponent` cannot be split into sections). What the stock panel did that this does not: no
 Bluetooth MIDI button, no input level meter beside the input device, no "Reset device" button, and outputs are one
 tick per channel instead of a channel-pair list.
+
+**Advanced and Bluetooth.** Only the output (and the input where inputs and outputs are separate) is always visible.
+The interface type, sample rate, buffer size and Control panel sit under an **Advanced** row (`AudioAdvancedToggle`:
+chevron, Tab stop, Return/Space/click, its accessible name says collapsed or expanded). It starts collapsed; once
+opened it stays open (user setting `audioDeviceAdvancedOpen`). Opening fades the rows in while the section's height
+follows, so the sections below slide. A Bluetooth output, found by CoreAudio's transport type
+(`synth::audio::isBluetoothDevice`, macOS only), shows a one-line note under the Output row (fixed rate, added delay);
+a Bluetooth device picked as the input shows a warning in the warning colour (its microphone puts AirPods into a
+low-quality call mode).
 
 **Switching device.** An output pick opens the device with what the user last had on it (sample rate, buffer size and
 output channels, saved per device by `AudioEngine::rememberOpenDeviceSettings` whenever the user's own setup changes,

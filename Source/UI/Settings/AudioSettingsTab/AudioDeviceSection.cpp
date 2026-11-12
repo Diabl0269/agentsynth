@@ -2,8 +2,11 @@
 #include "UI/Settings/AudioSettingsTab/AudioDeviceSection.h"
 
 #include "UI/Layout/FocusRing.h"
+#include "UI/Settings/AudioSettingsTab/AudioBluetooth.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
+constexpr int kAdvancedToggleWidth = 110;
 juce::String dot() { return juce::String::fromUTF8(" \xC2\xB7 "); }
 
 void name(juce::ComboBox& box, juce::Label& label, const juce::String& title) {
@@ -19,10 +22,46 @@ void name(juce::ComboBox& box, juce::Label& label, const juce::String& title) {
 AudioDeviceSection::AudioDeviceSection(juce::AudioDeviceManager& deviceManager, AudioSettingsSource& source)
     : deviceManager_(deviceManager)
     , source_(source) {
-    for (auto* box : {&type_, &output_, &input_, &rate_, &buffer_})
+    isBluetooth = [](const juce::String& deviceName) { return synth::audio::isBluetoothDevice(deviceName); };
+    for (auto* box : {&output_, &input_})
         addChildComponent(*box);
+    for (auto* box : {&type_, &rate_, &buffer_})
+        advanced_.addChildComponent(*box);
     addChildComponent(test_);
-    addChildComponent(controlPanel_);
+    advanced_.addChildComponent(controlPanel_);
+    advancedToggle_.setComponentID("audioAdvancedToggle");
+    addAndMakeVisible(advancedToggle_);
+    addChildComponent(advanced_);
+    for (auto* note : {&bluetoothNote_, &micWarning_}) {
+        note->setFont(juce::Font(juce::FontOptions(11.5f)));
+        note->setMinimumHorizontalScale(1.0f);
+        note->setJustificationType(juce::Justification::topLeft);
+        note->setInterceptsMouseClicks(false, false);
+        addChildComponent(*note);
+    }
+    bluetoothNote_.setText("Bluetooth output: it runs at a fixed sample rate and adds delay, so playing live feels "
+                           "late. A wired output is faster.",
+                           juce::dontSendNotification);
+    micWarning_.setText("This Bluetooth microphone drops the headphones into a low-quality call mode. Pick the "
+                        "built-in microphone as the input instead.",
+                        juce::dontSendNotification);
+    advancedHint_.setText("Choose an output device to see its sample rate and buffer size.",
+                          juce::dontSendNotification);
+    advancedHint_.setFont(juce::Font(juce::FontOptions(11.5f)));
+    advancedHint_.setJustificationType(juce::Justification::centredLeft);
+    advancedHint_.setInterceptsMouseClicks(false, false);
+    advanced_.addChildComponent(advancedHint_);
+    bluetoothNote_.setTitle("Bluetooth output note");
+    micWarning_.setTitle("Bluetooth microphone warning");
+    advancedFade_.onFrame = [this] {
+        if (onLayoutChanged)
+            onLayoutChanged();
+    };
+    advancedToggle_.onOpenRequested = [this](bool open) {
+        setAdvancedOpen(open);
+        if (onAdvancedToggled)
+            onAdvancedToggled(open);
+    };
     name(type_, typeLabel_, "Audio device type");
     name(output_, outputLabel_, "Output");
     name(input_, inputLabel_, "Input");
@@ -122,14 +161,55 @@ juce::String AudioDeviceSection::openPicked(juce::AudioDeviceManager::AudioDevic
     return deviceManager_.setAudioDeviceSetup(defaults, true);
 }
 
-int AudioDeviceSection::visibleRows() const {
+// The rows under Advanced that have something to show.
+int AudioDeviceSection::advancedRows() const {
     int rows = 0;
-    for (auto* box : {&type_, &output_, &input_, &rate_, &buffer_})
+    for (auto* box : {&type_, &rate_, &buffer_})
         rows += box->isVisible() ? 1 : 0;
-    return juce::jmax(rows, 1);
+    return rows + (advancedHint_.isVisible() ? 1 : 0);
 }
 
-int AudioDeviceSection::preferredHeight(int) const { return kPad * 2 + visibleRows() * kRowHeight; }
+int AudioDeviceSection::noteHeight(const juce::Label& note, int width) const {
+    if (!note.isVisible())
+        return 0;
+    return wrappedHeight(note.getText(), note.getFont(), width - 2 * kPad - kLabelWidth) + 4;
+}
+
+// The Advanced rows take their height from the fade, so the sections below slide with it.
+int AudioDeviceSection::preferredHeight(int width) const {
+    const int outputRows = (output_.isVisible() ? 1 : 0) + (input_.isVisible() ? 1 : 0);
+    const int advancedHeight = juce::roundToInt((float)(advancedRows() * kRowHeight) * advancedFade_.progress());
+    return kPad * 2 + juce::jmax(outputRows, 1) * kRowHeight + noteHeight(bluetoothNote_, width) +
+           noteHeight(micWarning_, width) + kRowHeight + advancedHeight;
+}
+
+void AudioDeviceSection::setAdvancedOpen(bool open, bool animate) {
+    advancedToggle_.setOpen(open, animate);
+    if (animate)
+        advancedFade_.setShown(open);
+    else
+        advancedFade_.snapTo(open);
+    if (onLayoutChanged)
+        onLayoutChanged();
+    resized();
+}
+
+void AudioDeviceSection::lookAndFeelChanged() {
+    const auto& colours = synth::theme::themeOf(*this).colors;
+    bluetoothNote_.setColour(juce::Label::textColourId, colours.textMuted);
+    advancedHint_.setColour(juce::Label::textColourId, colours.textMuted);
+    micWarning_.setColour(juce::Label::textColourId, colours.warning);
+}
+
+// A Bluetooth output is slower and fixed-rate; a Bluetooth microphone switches the headphones to the call profile.
+void AudioDeviceSection::updateNotes(const juce::AudioDeviceManager::AudioDeviceSetup& setup, bool separate) {
+    const auto bluetooth = [this](const juce::String& deviceName) {
+        return deviceName.isNotEmpty() && isBluetooth && isBluetooth(deviceName);
+    };
+    bluetoothNote_.setVisible(output_.isVisible() && bluetooth(setup.outputDeviceName));
+    micWarning_.setVisible(separate && input_.isVisible() && bluetooth(setup.inputDeviceName));
+    lookAndFeelChanged();
+}
 
 juce::String AudioDeviceSection::summary() const {
     const auto info = source_.currentInterface();
@@ -175,6 +255,7 @@ void AudioDeviceSection::populate() {
     output_.setTooltip(outputLabel_.getText());
     outputLabel_.setVisible(output_.isVisible());
     inputLabel_.setVisible(input_.isVisible());
+    updateNotes(setup, separate);
 
     auto* device = deviceManager_.getCurrentAudioDevice();
     rate_.clear(juce::dontSendNotification);
@@ -195,6 +276,7 @@ void AudioDeviceSection::populate() {
     bufferLabel_.setVisible(device != nullptr);
     test_.setVisible(device != nullptr && output_.isVisible());
     controlPanel_.setVisible(device != nullptr && device->hasControlPanel());
+    advancedHint_.setVisible(device == nullptr);
     resized();
 }
 
@@ -203,19 +285,45 @@ void AudioDeviceSection::refresh() { populate(); }
 void AudioDeviceSection::resized() {
     auto area = getLocalBounds().reduced(kPad);
     const int buttonWidth = 100;
-    for (auto* box : {&type_, &output_, &input_, &rate_, &buffer_}) {
-        if (!box->isVisible())
-            continue;
+    const int noteIndent = kLabelWidth;
+    const auto placeNote = [&](juce::Label& note) {
+        if (!note.isVisible())
+            return;
+        auto row = area.removeFromTop(noteHeight(note, getWidth()));
+        note.setBounds(row.withTrimmedLeft(noteIndent));
+    };
+    if (output_.isVisible()) {
         auto row = area.removeFromTop(kRowHeight);
         row.removeFromLeft(kLabelWidth);
-        if (box == &output_ && test_.isVisible()) {
+        if (test_.isVisible()) {
             test_.setBounds(row.removeFromRight(buttonWidth).reduced(0, 2));
             row.removeFromRight(kPad);
         }
+        output_.setBounds(row.reduced(0, 2));
+        placeNote(bluetoothNote_);
+    }
+    if (input_.isVisible()) {
+        auto row = area.removeFromTop(kRowHeight);
+        row.removeFromLeft(kLabelWidth);
+        input_.setBounds(row.reduced(0, 2));
+        placeNote(micWarning_);
+    }
+    advancedToggle_.setBounds(area.removeFromTop(kRowHeight).removeFromLeft(kAdvancedToggleWidth));
+    // Full height: the section's own bounds clip it while the fade is part way.
+    const int rows = advancedRows();
+    advanced_.setBounds(area.removeFromTop(rows * kRowHeight));
+    auto inner = advanced_.getLocalBounds();
+    for (auto* box : {&type_, &rate_, &buffer_}) {
+        if (!box->isVisible())
+            continue;
+        auto row = inner.removeFromTop(kRowHeight);
+        row.removeFromLeft(kLabelWidth);
         if (box == &buffer_ && controlPanel_.isVisible()) {
             controlPanel_.setBounds(row.removeFromRight(buttonWidth + 20).reduced(0, 2));
             row.removeFromRight(kPad);
         }
         box->setBounds(row.reduced(0, 2));
     }
+    if (advancedHint_.isVisible())
+        advancedHint_.setBounds(inner.removeFromTop(kRowHeight).withTrimmedLeft(kLabelWidth));
 }

@@ -73,7 +73,10 @@ private:
     static int index(Section section) { return static_cast<int>(section); }
 
     // The body sits in a slot that is squashed to the fade's height, so the body is clipped rather than squeezed.
-    struct Slot : juce::Component {};
+    // Holds its section: the section is deleted with the slot, so a section's own animations end with the tab.
+    struct Slot : juce::Component {
+        std::unique_ptr<AudioSettingsSection> body;
+    };
 
     void changeListenerCallback(juce::ChangeBroadcaster*) override { refreshAll(); }
     void inputLayoutChanged() override { refreshAll(); }

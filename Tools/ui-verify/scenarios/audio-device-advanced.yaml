@@ -1,0 +1,14 @@
+# Settings > Audio: the Device section shows the Output first, with the sample rate and buffer size folded under a
+# collapsed "Advanced" row; clicking it opens them.
+#
+# What a user does: opens Settings (Cmd+,), its Audio tab, then clicks Advanced.
+record: true
+save_project: "fro1517 device advanced"
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Audio"}
+  - wait: {}
+  - click: {id: audioAdvancedToggle}
+  - wait: {}
+  - mark: {check: 1, name: advanced-open}
