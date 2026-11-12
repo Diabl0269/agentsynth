@@ -4,7 +4,6 @@
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/DrumMachine/DrumLanes.h"
-#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
@@ -76,6 +75,7 @@ template <typename T>
 class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
+class RestoreWatch;
 struct ClipLaneChange;
 struct WaveformInk;
 class WaveformSampleCache;
@@ -863,7 +863,7 @@ private:
     std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
     std::unique_ptr<KeyedRectTween> clipGlide_;
     std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
-    RestoreWatch restoreWatch_;
+    std::unique_ptr<RestoreWatch> restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;

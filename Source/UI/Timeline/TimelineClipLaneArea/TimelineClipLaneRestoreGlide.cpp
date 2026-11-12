@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "TimelineClipLaneArea.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 
 namespace synth::ui {
@@ -73,9 +74,9 @@ void TimelineClipLaneArea::glideRestoredClips() {
     bool restored = false;
     if (undoManager_ != watchedUndo_) {
         watchedUndo_ = undoManager_;
-        restoreWatch_ = RestoreWatch(undoManager_ != nullptr ? undoManager_->getRestoreSerial() : 0);
+        restoreWatch_ = std::make_unique<RestoreWatch>(undoManager_ != nullptr ? undoManager_->getRestoreSerial() : 0);
     } else if (undoManager_ != nullptr) {
-        restored = restoreWatch_.take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
+        restored = restoreWatch_->take(undoManager_->isRestoring(), undoManager_->getRestoreSerial());
     }
     const auto change = doc_ != nullptr ? enterExit_->classify(*doc_, restored) : ClipLaneChange{};
     if (change.intermediate)
