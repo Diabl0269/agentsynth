@@ -455,10 +455,8 @@ private:
     bool wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level);
     void migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId);
 
-    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a
-     *  module a track-creation flow builds. Handed to the Core chain builders through
-     *  DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). NOT used by track presets,
-     *  which keep their saved jacks. */
+    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a module a
+     *  track-creation flow builds, via DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). */
     std::function<void(juce::AudioProcessor&, const juce::String&)> newModuleHook();
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
@@ -497,7 +495,8 @@ private:
         MainComponent& owner_;
     };
     /** duplicateTrack's graph + timeline work (MainComponentTrackDuplicate.cpp); the caller owns the undo step. */
-    synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName);
+    synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName,
+                                      std::map<int, juce::AudioProcessorGraph::NodeID>* deferredCopies = nullptr);
     std::vector<juce::AudioProcessorGraph::NodeID> nodesAttachedToTrack(synth::TrackId track);
     /** Shared insert path; opens NO undo transaction of its own -- the caller must. */
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
@@ -559,8 +558,7 @@ private:
     void copyTracks(const std::vector<synth::TrackId>& tracks) override;
     bool canPasteTracks() const override;
     void pasteTracks(synth::TrackId after) override;
-    /** A copy of every one of `sources` (timeline order) directly below `after`, in the same order, as ONE undo step;
-     *  the copies become the selection. `verb` words the status line ("Duplicated" / "Pasted"). */
+    /** Copies `sources` below `after` as ONE undo step and selects the copies; `verb` words the status line. */
     void duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
                               const juce::String& verb);
     void deleteTracksAfterConfirm(const std::vector<synth::TrackId>& tracks);
@@ -646,12 +644,14 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     bool drumKitRows(synth::TrackId track, synth::ui::KitRows* rows) const override;
+    bool anyDrumKit() const override;
     void toggleShowAllDrumKitPads(synth::TrackId track) override;
     void setDrumKitPadsShown(synth::TrackId track, const std::vector<int>& pads, bool shown) override;
     bool startClipPreview(synth::TrackId track, double startBeat, double endBeat) override;
     void stopClipPreview(synth::TrackId track) override;
     double clipPreviewBeat(synth::TrackId track) override;
     synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override;
+    std::shared_ptr<void> holdTrackPolyStates() override;
     synth::ui::TrackAudioInputSurface* getAudioInputSurface() override { return &audioInputSurface_; }
     synth::ui::TrackPolyState getTrackPolyState(synth::TrackId track) override;
     void setTrackPoly(synth::TrackId track, bool poly) override;

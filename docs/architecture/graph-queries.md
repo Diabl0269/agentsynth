@@ -44,7 +44,17 @@ duplicate took about 50 ms at 20 tracks, 300 ms at 80 and 1.6 s at 200, and undo
 - **`PolyChainController::StateBatch`** (`PolyChainController.h`): every track header's Mono/Poly switch plans its
   track's voice graph, and the plan's ownership walk follows every track forward. The reconcile's header refresh holds
   one batch, so the cable index and `synth::polyTrackOwners` (`PolyVoiceGraph.h`) are built once for all headers, not
-  once per header. `EditRefreshWork.AnUndoWorksOutTheTrackOwnershipOnceForEveryHeader` counts it.
+  once per header. `TimelinePanelComponent::syncTrackHeaders` holds one too (through `TrackHeaderHost::holdTrackPolyStates`),
+  so a doc change outside the reconcile (a track delete's own sync) pays the pass once, not once per header.
+  `EditRefreshWork.AnUndoWorksOutTheTrackOwnershipOnceForEveryHeader` and
+  `EditRefreshWork.DeletingATrackWorksOutTheTrackOwnershipOnceHoweverManyTracks` count it.
+- **The clip lane's kit rows** (`TimelineClipLaneArea::refreshKitRows`, on every timeline change): finding a track's
+  instrument walks every cable, so the lane first asks `TrackHeaderHost::anyDrumKit` (one pass over the nodes) and skips
+  every track's lookup in a project with no Drum Kit (`TimelineClipKitRows.AProjectWithNoKitAsksNoTrackForItsRows`).
+- **A multi-track paste or duplicate** (`MainComponent::duplicateTracksBelow`) builds every copy's cards in one
+  `GraphEditor::updateComponents` after the last copy (`showDuplicatedTracks`), not one per copied track, and holds the
+  modulator rows (`TimelineAutomationLanes::ModulatorHold`) so they are derived once
+  (`EditRefreshWork.PastingThreeTracksReconcilesTheCanvasOnceHoweverManyTracks`).
 - **`LayoutUtil::findFreeSlot`** files the boxes it is given by grid cell once per call, so the spiral search that
   places a new module tests each spot against the cards near it, not every card of the project
   ([layout.md](../layout/layout.md#layoututil-api)).

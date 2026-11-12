@@ -111,8 +111,7 @@ enum class GridLineLevel { Subdivision = 0, Beat, Bar };
 constexpr double kMinGridLinePixels = 3.0;
 
 /** True when lines `spacingBeats` apart at `pixelsPerBeat` are still readable — the density guard
- *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never
- *  draws. */
+ *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never draws. */
 inline bool gridLevelIsReadable(double spacingBeats, double pixelsPerBeat) noexcept {
     if (!std::isfinite(spacingBeats) || !std::isfinite(pixelsPerBeat) || spacingBeats <= 0.0)
         return false;
@@ -431,6 +430,7 @@ public:
     void refreshFromDoc();
     /** A Drum Kit track's clips draw the kit's shown pads as their rows; set by the panel, which owns the app host. */
     std::function<bool(synth::TrackId, KitRows&)> kitRowsProvider;
+    std::function<bool()> kitsExistProvider;
     /** Re-reads every track's kit rows; repaints when they changed (a pad switched on or off on the card). */
     void refreshKitRows();
 

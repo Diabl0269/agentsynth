@@ -80,3 +80,21 @@ TEST(TimelineClipKitRows, AClipOnATrackWithoutAKitKeepsThePitchScale) {
     k.f.lane.refreshKitRows();
     EXPECT_FALSE(k.noteLineYs().empty()) << "a piano-roll track is not affected by any kit";
 }
+
+// Regression test for FRO876: every doc change re-read every track's kit rows, and finding a track's instrument walks
+// every cable, so a big project with no kit paid tracks x cables on each edit. No kit anywhere skips the lookups.
+TEST(TimelineClipKitRows, AProjectWithNoKitAsksNoTrackForItsRows) {
+    KitClipFixture k;
+    int asked = 0;
+    k.f.lane.kitRowsProvider = [&asked](synth::TrackId, synth::ui::KitRows&) {
+        ++asked;
+        return false;
+    };
+    bool kitExists = false;
+    k.f.lane.kitsExistProvider = [&kitExists] { return kitExists; };
+    k.f.lane.refreshKitRows();
+    EXPECT_EQ(asked, 0);
+    kitExists = true;
+    k.f.lane.refreshKitRows();
+    EXPECT_EQ(asked, 1) << "one Drum Kit track, one lookup";
+}

@@ -5,8 +5,11 @@
 #include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 
 // The whole selection (timeline order, tracks only) when `clicked` is one of two or more selected tracks, else just
@@ -74,17 +77,21 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
     {
         const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
         CardGlideAnimator::Scope glide(graphEditor.getCardGlide()); // each copy's cards glide out of its original's
+        // The modulator rows are derived once for the whole paste, not after each copied track and each reorder.
+        const synth::ui::TimelineAutomationLanes::ModulatorHold hold(timelinePanel.getAutomationLanes());
         pushed = undoManager.recordGraphTimelineAndMacroChange(
             audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &sources, after, &copies, &origins] {
                 synth::GraphRebuildBatch oneRebuild(audioEngine.getGraph()); // one render-sequence rebuild for all
+                std::map<int, juce::AudioProcessorGraph::NodeID> newCards;   // built once, after the last track
                 for (const auto source : sources)
                     if (const auto* t = timelineDoc.getTrack(source)) {
-                        const auto copy = duplicateTrackBody(source, t->name + " copy");
+                        const auto copy = duplicateTrackBody(source, t->name + " copy", &newCards);
                         if (copy.isValid()) {
                             copies.push_back(copy);
                             origins.emplace_back(copy, source);
                         }
                     }
+                showDuplicatedTrackCards(graphEditor, newCards);
                 // Each copy landed right below its own source; gather them below `after`, in the sources' order.
                 std::vector<synth::TrackId> order;
                 for (const auto& t : timelineDoc.getTracks())

@@ -142,8 +142,7 @@ struct TrackHeaderHost {
     virtual void addMidiTrack() = 0;
 
     /** The "Add Track" button's Audio entry: a "Track Audio" node wired into the master bus,
-     *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of
-     *  addMidiTrack(). */
+     *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of addMidiTrack(). */
     virtual void addAudioTrack() = 0;
 
     /** The "Add Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
@@ -435,6 +434,7 @@ struct TrackHeaderHost {
     /** True for a Drum Kit track: its clips open in the drum machine. `rows`, when given, gets the shown pads. */
     bool isDrumKitTrack(synth::TrackId t) const { return drumKitRows(t, nullptr); }
     virtual bool drumKitRows(synth::TrackId, KitRows*) const { return false; } // rows: null for just the yes/no
+    virtual bool anyDrumKit() const { return true; }
     /** The track's Drum Kit: Show all as a toggle, and Shown for `pads` (hiding asks first); each one undo step. */
     virtual void toggleShowAllDrumKitPads(synth::TrackId) {}
     virtual void setDrumKitPadsShown(synth::TrackId, const std::vector<int>& /*pads*/, bool /*shown*/) {}
@@ -484,6 +484,7 @@ struct TrackHeaderHost {
      *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
      *  simply has no channel behaviour, and every existing implementer keeps compiling. */
     virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
+    virtual std::shared_ptr<void> holdTrackPolyStates() { return nullptr; }
     /** The audio Input row's view of the app's inputs, same one-accessor shape; null for a host with none. */
     virtual TrackAudioInputSurface* getAudioInputSurface() { return nullptr; }
 
