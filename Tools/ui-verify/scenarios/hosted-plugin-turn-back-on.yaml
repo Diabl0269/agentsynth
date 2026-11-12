@@ -25,9 +25,11 @@ steps:
   - wait: {}
   - hover: {id: turnPluginBackOn}
   - wait: {}
-  - glide: {name: turn-on-glide, frames: 24, do: {click: {id: turnPluginBackOn}}}   # the press, then the plugin loading back
+  - glide: {name: turn-on-glide, frames: 12, do: {click: {id: turnPluginBackOn}}}   # the press, then the plugin loading back
   - expect: {id: turnPluginBackOn, showing: false, within_ms: 10000}
   - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 10000}
   - expect: {id: hostedLoadStatus, showing: false, within_ms: 2000}
   - wait: {}
+  - click: {id: "card:AUDelay", x: 20, y: 12}    # the pointer approaches and rests on the loaded card (its frames are the clip)
+  - click: {id: "card:AUDelay", x: 150, y: 12}
   - mark: {check: 1, name: turn-back-on}

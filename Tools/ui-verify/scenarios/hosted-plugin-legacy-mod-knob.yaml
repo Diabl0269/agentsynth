@@ -2,17 +2,21 @@
 #
 # What a user does: opens an older project whose LFO modulates Apple's AUDelay "Delay Time" through a saved mod slot
 # while the card (its automatic layout: three knobs) has no knob for it. The knob appears on the card and the cable ends
-# on it, instead of running under the card to nothing. Opening is the whole gesture, so the clip holds the project opening.
+# on it, instead of running under the card to nothing. Opening lands in one command, so the mark sits right after it and the clip then films the pointer
+# gliding from the LFO along the cable to the added knob, which shows its value.
 record: true
 save_project: fro1354-legacy-mod
 settings:
   pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
 steps:
-  - glide: {name: open-glide, frames: 24, do: {openProject: {path: "${FIXTURES}/hosted-plugin-legacy-mod.agsproj"}}}   # the project opening, card and cable arriving
+  - openProject: {path: "${FIXTURES}/hosted-plugin-legacy-mod.agsproj"}
+  - wait: {}
   - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
   - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 10000}
   - expect: {id: "card:AUDelay", contains: {cableEndOnKnob: "true"}, within_ms: 3000}
   - wait: {}
-  - hover: {id: "card:AUDelay"}
-  - wait: {}
   - mark: {check: 1, name: legacy-cable-on-knob}
+  - click: {id: "card:LFO", x: 20, y: 12}   # the pointer starts at the cable's source
+  - click: {id: "card:AUDelay", x: 20, y: 12}   # and crosses to the card
+  - glide: {name: pointer-to-knob, frames: 24, do: {hover: {id: "hostedKnob:1"}}}   # onto the added knob: its value shows
+  - wait: {}
