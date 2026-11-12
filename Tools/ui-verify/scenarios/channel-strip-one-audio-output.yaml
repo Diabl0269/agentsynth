@@ -31,7 +31,7 @@ steps:
   - expect: {id: "card:Channel Strip > Dual I/O", toggleState: false}
   - screenshot: {name: 1-collapsed}
   - mark: {check: 1, name: one-audio-in-and-out}
-  - click: {id: "card:Channel Strip > Dual I/O"}
+  - glide: {name: dual-io-on, frames: 12, do: {click: {id: "card:Channel Strip > Dual I/O"}}}   # films the toggle and the jacks splitting
   - wait: {}
   - expect: {id: "card:Channel Strip > Dual I/O", toggleState: true, within_ms: 1500}
   - screenshot: {name: 2-split}
