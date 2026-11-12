@@ -455,10 +455,8 @@ private:
     bool wasSectionsLane(const synth::Track& track, const synth::AutomationLane& level);
     void migrateSectionsLane(synth::LaneId levelId, synth::TrackId trackId);
 
-    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a
-     *  module a track-creation flow builds. Handed to the Core chain builders through
-     *  DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). NOT used by track presets,
-     *  which keep their saved jacks. */
+    /** Applies the "Split Left/Right jacks on new modules" preference (and per-module overrides) to a module a
+     *  track-creation flow builds, via DefaultChannelLayout::onNewModule (Core cannot see GraphEditor). */
     std::function<void(juce::AudioProcessor&, const juce::String&)> newModuleHook();
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
@@ -499,8 +497,6 @@ private:
     /** duplicateTrack's graph + timeline work (MainComponentTrackDuplicate.cpp); the caller owns the undo step. */
     synth::TrackId duplicateTrackBody(synth::TrackId track, const juce::String& copyName,
                                       std::map<int, juce::AudioProcessorGraph::NodeID>* deferredCopies = nullptr);
-    /** After a bulk duplicate: builds every collected copy's cards once and glides them out of their originals. */
-    void showDuplicatedTracks(const std::map<int, juce::AudioProcessorGraph::NodeID>& copies);
     std::vector<juce::AudioProcessorGraph::NodeID> nodesAttachedToTrack(synth::TrackId track);
     /** Shared insert path; opens NO undo transaction of its own -- the caller must. */
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
@@ -562,8 +558,7 @@ private:
     void copyTracks(const std::vector<synth::TrackId>& tracks) override;
     bool canPasteTracks() const override;
     void pasteTracks(synth::TrackId after) override;
-    /** A copy of every one of `sources` (timeline order) directly below `after`, in the same order, as ONE undo step;
-     *  the copies become the selection. `verb` words the status line ("Duplicated" / "Pasted"). */
+    /** Copies `sources` below `after` as ONE undo step and selects the copies; `verb` words the status line. */
     void duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
                               const juce::String& verb);
     void deleteTracksAfterConfirm(const std::vector<synth::TrackId>& tracks);

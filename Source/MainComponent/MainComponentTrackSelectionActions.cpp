@@ -5,6 +5,7 @@
 #include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
@@ -90,7 +91,7 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
                             origins.emplace_back(copy, source);
                         }
                     }
-                showDuplicatedTracks(newCards);
+                showDuplicatedTrackCards(graphEditor, newCards);
                 // Each copy landed right below its own source; gather them below `after`, in the sources' order.
                 std::vector<synth::TrackId> order;
                 for (const auto& t : timelineDoc.getTracks())

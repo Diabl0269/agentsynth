@@ -296,11 +296,11 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
     return timelineDoc.duplicateTrack(trackId, copyName, synth::ui::trackPaletteColour(index).getARGB(), uuidRemap);
 }
 
-void MainComponent::showDuplicatedTracks(const std::map<int, juce::AudioProcessorGraph::NodeID>& copies) {
+void showDuplicatedTrackCards(GraphEditor& editor, const std::map<int, juce::AudioProcessorGraph::NodeID>& copies) {
     if (copies.empty())
         return;
-    graphEditor.updateComponents();
-    glideCopyOutOfOriginal(graphEditor, copies);
+    editor.updateComponents();
+    glideCopyOutOfOriginal(editor, copies);
 }
 
 void MainComponent::duplicateTrack(synth::TrackId trackId) {
