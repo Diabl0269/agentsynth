@@ -191,6 +191,7 @@ void MixerInsertList::mouseDoubleClick(const juce::MouseEvent& event) {
 }
 
 void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
+    pointer_ = event.getPosition();
     updateHoverCursor(event.getPosition());
     int gap = -1;
     if (gapTargetAt(event.getPosition())) {
@@ -205,6 +206,7 @@ void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
 }
 
 void MixerInsertList::mouseExit(const juce::MouseEvent&) {
+    pointer_ = {-1, -1};
     if (!rowDrag_.animator().isDragging())
         endDragCursor(*this);
     if (hoverGap_ >= 0) {

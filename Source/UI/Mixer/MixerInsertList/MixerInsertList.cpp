@@ -17,6 +17,7 @@ namespace {
 using Kind = synth::MixerInsertEntry::Kind;
 
 constexpr double kFoldMs = 180.0;
+constexpr double kFlipMs = 220.0;
 
 // The splits a person opened, by the uuid of the node that fans out. View state, so it lives outside every list:
 // the column that shows a split is rebuilt after any recorded edit (bypassing one of its paths included), and the
@@ -40,7 +41,10 @@ MixerInsertList::MixerInsertList() {
     setInterceptsMouseClicks(true, false);
 }
 
-MixerInsertList::~MixerInsertList() { foldAnimation_.stop(vblank_); }
+MixerInsertList::~MixerInsertList() {
+    foldAnimation_.stop(vblank_);
+    flipAnimation_.stop(vblank_);
+}
 
 void MixerInsertList::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                                 GraphEditor& graphEditor) {
@@ -55,6 +59,8 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
                                  juce::AudioProcessorGraph::NodeID stripNodeId,
                                  const std::vector<synth::MixerDanglingEntry>& dangling) {
     foldAnimation_.stop(vblank_);
+    flipAnimation_.stop(vblank_);
+    flipFrom_.clear();
     rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
     animatingSplit_ = -1;
     entries_ = entries;
@@ -548,6 +554,9 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
     if (row.getHeight() <= 0)
         return;
     juce::Graphics::ScopedSaveState clip(g);
+    const float flipDim = kindFlipDimFor(entry.uuid);
+    if (entry.kind == Kind::Module && isKindFlipRunning())
+        g.addTransform(juce::AffineTransform::translation(0.0f, flipOffsetFor(entry.uuid, (float)row.getY())));
     g.reduceClipRegion(row);
     // A growing row reveals from the top: lay it out at full height and let the clip show what fits.
     auto full = row.withHeight(kRowHeight);
@@ -582,9 +591,57 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
                    true);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
     } else {
-        g.setColour(entry.bypassed ? disabled : text);
+        g.setColour((entry.bypassed ? disabled : text).interpolatedWith(disabled, flipDim));
+        if (flipDim > 0.5f)
+            g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
         g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
     }
+}
+
+// ---- Joining and leaving the chain -----------------------------------------------------------------------------
+
+void MixerInsertList::startKindFlip(const std::vector<ExitEnterListRow>& flips) {
+    flipAnimation_.stop(vblank_);
+    flipFrom_.clear();
+    for (const auto& flip : flips)
+        flipFrom_[flip.key] = flip.start;
+    if (flipFrom_.empty())
+        return;
+    flipAmount_ = 0.0f;
+    flipAnimation_.start(
+        vblank_, kFlipMs, easeOutCubic,
+        [this](float t) {
+            flipAmount_ = t;
+            repaint();
+        },
+        [this] {
+            flipFrom_.clear();
+            flipAmount_ = 1.0f;
+            repaint();
+        });
+    repaint();
+}
+
+void MixerInsertList::setKindFlipAmountForTest(float t) {
+    flipAmount_ = t;
+    if (t >= 1.0f)
+        flipFrom_.clear();
+    repaint();
+}
+
+float MixerInsertList::kindFlipDimFor(const juce::String& uuid) const {
+    if (flipFrom_.count(uuid) == 0)
+        return 0.0f;
+    const bool nowDangling = std::any_of(dangling_.begin(), dangling_.end(),
+                                         [&](const synth::MixerDanglingEntry& d) { return d.uuid == uuid; });
+    return nowDangling ? flipAmount_ : 1.0f - flipAmount_;
+}
+
+// How far the row is drawn from where it stands now: the whole way as the flip begins, none once it lands.
+float MixerInsertList::flipOffsetFor(const juce::String& uuid, float top) const {
+    const auto it = flipFrom_.find(uuid);
+    return it == flipFrom_.end() ? 0.0f : (1.0f - flipAmount_) * (it->second - top);
 }
 
 // A module that leads nowhere: its name dimmed and italic with "not connected" after it, and a dashed rail where a
@@ -593,21 +650,27 @@ void MixerInsertList::paintDangling(juce::Graphics& g, int index) {
     const auto& theme = synth::theme::themeOf(*this);
     const auto& d = dangling_[(size_t)index];
     const auto row = getDanglingBounds(index);
+    const bool flipping = flipFrom_.count(d.uuid) != 0;
+    const float dim = flipping ? kindFlipDimFor(d.uuid) : 1.0f;
+    const float railAlpha = dim;
+    juce::Graphics::ScopedSaveState state(g);
+    if (flipping)
+        g.addTransform(juce::AffineTransform::translation(0.0f, flipOffsetFor(d.uuid, (float)row.getY())));
     const int anchorDepth =
         d.anchorRow >= 0 && d.anchorRow < (int)entries_.size() ? entries_[(size_t)d.anchorRow].depth : 0;
     const int level = anchorDepth + d.depth;
-    g.setColour(theme.colors.textDisabled);
+    g.setColour(theme.colors.textDisabled.withMultipliedAlpha(railAlpha));
     for (int y = row.getY() + 1; y < row.getBottom(); y += 6)
         g.fillRect((level - 1) * kIndent + 6, y, 2, juce::jmin(3, row.getBottom() - y));
     auto content = row.withTrimmedLeft(2 + level * kIndent).withTrimmedRight(2);
-    g.setColour(theme.colors.textDisabled);
+    g.setColour(theme.colors.textPrimary.interpolatedWith(theme.colors.textDisabled, dim));
     g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
     g.drawText(d.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
     const int nameWidth = juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), d.name);
     const auto caption = content.reduced(2, 0).withTrimmedLeft(nameWidth + 6);
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
     if (caption.getWidth() >= juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "not connected")) {
-        g.setColour(theme.colors.textMuted);
+        g.setColour(theme.colors.textMuted.withMultipliedAlpha(railAlpha));
         g.drawText("not connected", caption, juce::Justification::centredLeft, true);
     }
     g.setFont(juce::Font(juce::FontOptions(12.0f)));

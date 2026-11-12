@@ -9,6 +9,7 @@
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 
 class AppUndoManager;
@@ -120,6 +121,15 @@ public:
     juce::String describeDangling(int index) const;
     /** The not-connected row under `position`, or -1. */
     int danglingIndexAt(juce::Point<int> position) const;
+    /** A module joined or left the chain between two builds (a not-connected row became an insert or the reverse): each
+     *  row (key = the module's uuid, start = where its row stood) slides to where it stands now while its look dims or
+     *  brightens. */
+    void startKindFlip(const std::vector<ExitEnterListRow>& flips);
+    bool isKindFlipRunning() const noexcept { return !flipFrom_.empty(); }
+    /** How not-connected the module's row looks now: 1 dimmed, 0 a chain row's (0 when it is not flipping). */
+    float kindFlipDimFor(const juce::String& uuid) const;
+    /** Puts the flip at `t` (0 start, 1 landed), what each frame does; tests call it by hand. */
+    void setKindFlipAmountForTest(float t);
     juce::Component* getDanglingAccessibilityComponentForTest(int index) const noexcept {
         return index >= 0 && index < (int)danglingProxies_.size() ? danglingProxies_[(size_t)index].get() : nullptr;
     }
@@ -192,7 +202,7 @@ public:
     static void resetSplitOpenStateForTest();
 
     /** The tooltip for whatever part of the list the pointer is over. */
-    juce::String getTooltip() override { return tooltipAt(getMouseXYRelative()); }
+    juce::String getTooltip() override { return tooltipAt(pointer_.x >= 0 ? pointer_ : getMouseXYRelative()); }
     /** The tooltip at `position`: on a split row "Split" over its icon, else the split's paths, one line each. */
     juce::String tooltipAt(juce::Point<int> position) const;
 
@@ -375,6 +385,14 @@ private:
     bool animatingOpen_ = false;
     juce::VBlankAnimatorUpdater vblank_{this};
     AnimationDriver foldAnimation_;
+    // A module flipping between a chain row and a not-connected row: where its row came from, how far along it is, and
+    // whether it ends up dimmed.
+    std::map<juce::String, float> flipFrom_;
+    float flipAmount_ = 1.0f;
+    AnimationDriver flipAnimation_;
+    float flipOffsetFor(const juce::String& uuid, float top) const;
+    // Where the last mouse move or hover landed; (-1, -1) once the pointer has left.
+    juce::Point<int> pointer_{-1, -1};
     int focusedRow_ = -1;
     // The row boundary the pointer is on with a "+" showing there, or -1.
     int hoverGap_ = -1;

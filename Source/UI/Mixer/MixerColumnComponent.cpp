@@ -613,8 +613,11 @@ MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::
 
 void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before) {
     const auto background = synth::theme::themeOf(*this).colors.surface;
-    rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts,
-                     MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()), background);
+    const auto insertsAfter = MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows());
+    const bool played = rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts, insertsAfter, background);
+    // A module that only joined or left the chain keeps its row: it slides and dims (or brightens) in place.
+    if (!played && !insertsAfter.rows.empty())
+        insertList_.startKindFlip(MixerRowsMotion::kindFlips(before.inserts, insertsAfter));
     rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
                      MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
 }

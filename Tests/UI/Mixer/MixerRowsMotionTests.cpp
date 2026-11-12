@@ -225,6 +225,130 @@ TEST(MixerRowsMotion, ANotConnectedRowGrowsInOnConnectAndShrinksAwayOnDisconnect
     EXPECT_EQ(rig.inserts().exitGhostCount(), 1);
 }
 
+// A module that is a not-connected row and then an insert (or the reverse) is one row: no row comes or goes, no picture
+// plays over the list; the row itself dims (or brightens) as it slides to its place. Plugging in = the cable from the
+// chain's last module to the strip moves to the module hung off it; unplugging is the undo.
+TEST(MixerRowsMotion, AModuleThatJoinsOrLeavesTheChainSlidesAndDimsInPlaceInsteadOfLandingAtOnce) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.addInsert("Reverb");
+    rig.inserts().finishNow();
+    auto& graph = rig.mc.getAudioEngine().getGraph();
+    const auto firstUuid = rig.track().getInsertListForTest().getRowUuid(0);
+    juce::AudioProcessorGraph::Node* first = nullptr;
+    for (auto* node : graph.getNodes())
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            if (juce::String(module->getNodeUuid()) == firstUuid)
+                first = node;
+    ASSERT_NE(first, nullptr);
+    rig.mc.getGraphEditor().addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+    juce::AudioProcessorGraph::Node* delay = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node->getProcessor()->getName() == "Delay")
+            delay = node;
+    ASSERT_NE(delay, nullptr);
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        graph.addConnection({{first->nodeID, 0}, {delay->nodeID, 0}});
+        graph.addConnection({{first->nodeID, 1}, {delay->nodeID, 1}});
+    });
+    rig.mixer().rebuild();
+    rig.inserts().finishNow();
+    auto& list = rig.track().getInsertListForTest();
+    ASSERT_EQ(list.getDanglingCount(), 1);
+    const auto delayUuid = juce::String(dynamic_cast<ModuleBase*>(delay->getProcessor())->getNodeUuid());
+    list.setKindFlipAmountForTest(1.0f);
+
+    // Plug in: the first module's cable to the strip moves to the Delay, so the Delay is the chain's last insert.
+    std::vector<juce::AudioProcessorGraph::Connection> towardStrip;
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == first->nodeID && c.destination.nodeID != delay->nodeID)
+            towardStrip.push_back(c);
+    ASSERT_FALSE(towardStrip.empty());
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        for (const auto& c : towardStrip) {
+            graph.removeConnection(c);
+            graph.addConnection({{delay->nodeID, c.source.channelIndex}, c.destination});
+        }
+    });
+    rig.mixer().rebuild();
+    auto& plugged = rig.track().getInsertListForTest();
+    ASSERT_EQ(plugged.getDanglingCount(), 0);
+    ASSERT_EQ(plugged.getRowCount() >= 3, true) << "Reverb, Delay and the + Insert row";
+    EXPECT_FALSE(rig.inserts().isRunning()) << "no row came or went, so no picture plays over the list";
+    ASSERT_TRUE(plugged.isKindFlipRunning());
+    EXPECT_FLOAT_EQ(plugged.kindFlipDimFor(delayUuid), 1.0f) << "it starts dimmed, as it was";
+    plugged.setKindFlipAmountForTest(0.5f);
+    EXPECT_NEAR(plugged.kindFlipDimFor(delayUuid), 0.5f, 1e-4f);
+    plugged.setKindFlipAmountForTest(1.0f);
+    EXPECT_FALSE(plugged.isKindFlipRunning());
+    EXPECT_FLOAT_EQ(plugged.kindFlipDimFor(delayUuid), 0.0f);
+
+    // Unplug (undo): the same row dims again where it stands.
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    rig.mixer().rebuild();
+    auto& unplugged = rig.track().getInsertListForTest();
+    ASSERT_EQ(unplugged.getDanglingCount(), 1);
+    EXPECT_FALSE(rig.inserts().isRunning());
+    ASSERT_TRUE(unplugged.isKindFlipRunning());
+    EXPECT_FLOAT_EQ(unplugged.kindFlipDimFor(delayUuid), 0.0f) << "it starts as a chain row";
+    unplugged.setKindFlipAmountForTest(0.5f);
+    EXPECT_NEAR(unplugged.kindFlipDimFor(delayUuid), 0.5f, 1e-4f);
+    unplugged.setKindFlipAmountForTest(1.0f);
+    EXPECT_FALSE(unplugged.isKindFlipRunning());
+}
+
+// Plugging a not-connected module into the strip beside the chain makes a split whose paths are folded: the module's
+// row goes under the fold and the split row grows in where it stood (and the reverse on undo), instead of the two
+// swapping in one frame.
+TEST(MixerRowsMotion, APluggedInModuleBecomesAFoldedSplitWithMotionAndComesBackOutOfItOnUndo) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    rig.addInsert("Reverb");
+    rig.inserts().finishNow();
+    auto& graph = rig.mc.getAudioEngine().getGraph();
+    const auto firstUuid = rig.track().getInsertListForTest().getRowUuid(0);
+    juce::AudioProcessorGraph::Node* first = nullptr;
+    for (auto* node : graph.getNodes())
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            if (juce::String(module->getNodeUuid()) == firstUuid)
+                first = node;
+    ASSERT_NE(first, nullptr);
+    rig.mc.getGraphEditor().addModuleAtCanvasPosition("Delay", {3000, 3000}, nullptr);
+    juce::AudioProcessorGraph::Node* delay = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node->getProcessor()->getName() == "Delay")
+            delay = node;
+    ASSERT_NE(delay, nullptr);
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        graph.addConnection({{first->nodeID, 0}, {delay->nodeID, 0}});
+        graph.addConnection({{first->nodeID, 1}, {delay->nodeID, 1}});
+    });
+    rig.mixer().rebuild();
+    rig.inserts().finishNow();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 1);
+
+    std::vector<juce::AudioProcessorGraph::Connection> towardStrip;
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == first->nodeID && c.destination.nodeID != delay->nodeID)
+            towardStrip.push_back(c);
+    ASSERT_FALSE(towardStrip.empty());
+    rig.mc.getUndoManager().recordStructuralChange(graph, [&] {
+        for (const auto& c : towardStrip)
+            graph.addConnection({{delay->nodeID, c.source.channelIndex}, c.destination});
+    });
+    rig.mixer().rebuild();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 0);
+    ASSERT_TRUE(rig.inserts().isRunning()) << "the split row comes in; the module's row is not a row that went";
+    EXPECT_TRUE(rig.inserts().timeline().hasEnter);
+    rig.inserts().finishNow();
+
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    rig.mixer().rebuild();
+    ASSERT_EQ(rig.track().getInsertListForTest().getDanglingCount(), 1);
+    ASSERT_TRUE(rig.inserts().isRunning()) << "the split's rows shrink away; the module's row shows where they were";
+    EXPECT_TRUE(rig.inserts().timeline().hasExit);
+}
+
 TEST(MixerRowsMotion, ReduceMotionFadesTheRowInsteadOfScalingIt) {
     ReducedMotionGuard guard(true);
     Rig rig(true);

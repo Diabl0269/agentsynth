@@ -5,6 +5,7 @@
 # cables Delay out -> VCA audio in (the mark goes, the Delay is a real insert), undoes it (the marked row is back),
 # then double-clicks the marked row (the canvas shows and selects the Delay).
 record: true
+motion: true
 save_project: end
 steps:
   - click: {id: New empty project}
@@ -49,6 +50,8 @@ steps:
   - wait: {}
   - expect: {count: {prefix: "Delay, not connected", field: title, equals: 1}, within_ms: 1500}
   - mark: {check: 3, name: unplugged-goes-back}
+  - hover: {id: mixerInsertList, x: 40, y: 27}
+  - expect: {id: mixerInsertList, contains: {tooltip: "Delay is not connected"}, within_ms: 2000}
   - click: {id: mixerInsertList, x: 40, y: 27, clicks: 2}
   - wait: {settleMs: 1200}
   - expect: {id: "card:Delay", selected: true, within_ms: 2000}

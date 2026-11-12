@@ -34,8 +34,8 @@ public:
 
     /** Row keys: a module row by its uuid, a split row by its fork's uuid, a send row by its slot. */
     static juce::String insertKey(const synth::MixerInsertEntry& entry);
-    /** A not-connected row: "dangling:" and its module's uuid, so a module that joins or leaves the chain is a row that
-     *  comes or goes. */
+    /** A not-connected row: "dangling:" and its module's uuid. A module that joins or leaves the chain is still one
+     *  row: play() reads both keys as the module's uuid (see kindFlips). */
     static juce::String danglingKey(const synth::MixerDanglingEntry& entry);
     static juce::String sendKey(const synth::MixerSendEntry& entry);
 
@@ -44,6 +44,10 @@ public:
     /** rowsIn() plus a picture of the frame when `nextKeys` drops some of `listRows` and adds none. */
     static Part capture(juce::Component& host, const juce::Viewport& frame, std::vector<ExitEnterListRow> listRows,
                         const std::vector<juce::String>& nextKeys);
+
+    /** The modules that are a not-connected row in one of `before` and `after` and a chain row in the other, with where
+     *  their row stood in `before`. */
+    static std::vector<ExitEnterListRow> kindFlips(const Part& before, const Part& after);
 
     /** Plays the change from `before` to `after` in `list`; false when it has nothing to show or lands at once. */
     bool play(List list, const Part& before, const Part& after, juce::Colour background);

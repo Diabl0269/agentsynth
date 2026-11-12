@@ -88,7 +88,20 @@ TEST(MixerInsertListNotConnected, ADoubleClickOnTheMarkedRowRevealsItOnTheCanvas
     const auto hung = rig.list.getDanglingBounds(0);
     rig.list.mouseDoubleClick(mouseAt(rig.list, hung.getCentre(), 2));
     EXPECT_EQ(revealed, rig.hungUuid());
-    EXPECT_EQ(rig.list.getTooltip().isEmpty(), false);
+}
+
+// The tooltip over the marked row says it is not in the sound and how to find it, never the empty-space text.
+TEST(MixerInsertListNotConnected, TheTooltipOverTheMarkedRowSaysItIsNotConnected) {
+    HungPatch rig;
+    const auto hung = rig.list.getDanglingBounds(0);
+    for (const int x : {4, 40, 120}) {
+        const auto tip = rig.list.tooltipAt({x, hung.getCentreY()});
+        EXPECT_TRUE(tip.contains("Delay is not connected")) << tip;
+        EXPECT_TRUE(tip.contains("double-click")) << tip;
+        EXPECT_FALSE(tip.contains("Insert chain")) << tip;
+    }
+    // A chain row beside it keeps its own tooltip.
+    EXPECT_FALSE(rig.list.tooltipAt({40, rig.list.getRowBounds(0).getCentreY()}).contains("not connected"));
 }
 
 TEST(MixerInsertListNotConnected, AClickOrRightClickOnTheMarkedRowChangesNothing) {
