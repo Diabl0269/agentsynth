@@ -8,9 +8,11 @@ save_project: fro1354-legacy-mod
 settings:
   pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
 steps:
-  - openProject: {path: "${FIXTURES}/hosted-plugin-legacy-mod.agsproj"}
+  - glide: {name: open-glide, frames: 24, do: {openProject: {path: "${FIXTURES}/hosted-plugin-legacy-mod.agsproj"}}}   # the project opening, card and cable arriving
   - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
   - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 10000}
   - expect: {id: "card:AUDelay", contains: {cableEndOnKnob: "true"}, within_ms: 3000}
+  - wait: {}
+  - hover: {id: "card:AUDelay"}
   - wait: {}
   - mark: {check: 1, name: legacy-cable-on-knob}

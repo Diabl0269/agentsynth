@@ -22,8 +22,10 @@ steps:
   - expect: {id: turnPluginBackOn, showing: true, within_ms: 2000}
   - expect: {count: {prefix: "hostedKnob:", equals: 0}}
   - screenshot: {name: switched-off}
-  - click: {id: turnPluginBackOn}
   - wait: {}
+  - hover: {id: turnPluginBackOn}
+  - wait: {}
+  - glide: {name: turn-on-glide, frames: 24, do: {click: {id: turnPluginBackOn}}}   # the press, then the plugin loading back
   - expect: {id: turnPluginBackOn, showing: false, within_ms: 10000}
   - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 10000}
   - expect: {id: hostedLoadStatus, showing: false, within_ms: 2000}
