@@ -37,6 +37,7 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     notice_.setAccessible(false);
     drumHint_.setVisible(false);
     drumHint_.setTitle(drumHint_.getText());
+    drumHint_.setComponentID("samplerMapDrumHint"); // test mode reads that the caption shows
     drumHint_.setTooltip("A drum kit plays one drum per key; the Drum Kit module has a pad for each");
     styleButton(copyButton_, "Make your own copy of this built-in instrument so its recordings can be changed");
     styleButton(addButton_, "Add one or more recordings after the selected one");
