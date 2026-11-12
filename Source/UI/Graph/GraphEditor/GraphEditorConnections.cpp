@@ -219,25 +219,6 @@ void showMacroCardDropHints(juce::OwnedArray<MacroCardComponent>& cards,
         card->setCableDropHint(hint);
     }
 }
-
-// The ports `macroId` has now, to tell which one a drop made.
-std::vector<juce::String> macroPortUuids(const synth::MacroSet& macros, const juce::String& macroId) {
-    std::vector<juce::String> out;
-    if (const auto* macro = macros.find(macroId))
-        for (const auto& port : macro->ports)
-            out.push_back(port.nodeUuid);
-    return out;
-}
-
-// Grows in, on the macro's card, each port that is in `macroId` now but was not in `before`.
-void growInNewMacroPorts(juce::OwnedArray<MacroCardComponent>& cards, const synth::MacroSet& macros,
-                         const juce::String& macroId, const std::vector<juce::String>& before) {
-    for (auto* card : cards)
-        if (card != nullptr && card->getMacroId() == macroId)
-            for (const auto& uuid : macroPortUuids(macros, macroId))
-                if (std::find(before.begin(), before.end(), uuid) == before.end())
-                    card->growInPort(uuid);
-}
 } // namespace
 
 bool GraphEditor::isCableDragFrom(const ModuleComponent& card) const noexcept {
@@ -640,10 +621,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 else
                     doDrop();
             } else if (drop->kind == DropKind::newPort) {
-                const auto portsBefore = macroPortUuids(macros, drop->macroId);
                 macroController_.createMacroPortFromDroppedCable(drop->macroId, drop->portIsInput, dragSourceIsMidi,
                                                                  srcId, dragSourceChannel);
-                growInNewMacroPorts(macroCards(), macros, drop->macroId, portsBefore); // the new row grows in
             }
             armMacroPortSlide(cablesBefore, dropPoint);
         }
