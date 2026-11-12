@@ -296,6 +296,12 @@ into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part 
 Then `wait`, and put the `mark` on the landed state, never mid-motion. Start the clip in the state the check starts from
 and end the scenario in it too, so the `save_project` bundle opens there. Read the strip before attaching the clip.
 
+A check of a static state (a selected dot, a tag's position) puts its mark right after the click that changes the screen
+(click the dot, open the picker). With `record`, a `click` first films the pointer approaching: four `hover` frames
+from 60 px up-left of the click point, 0.1 s each (`approach: false` on the step skips it; a click point outside the
+main window is sent as it is), so the clip holds the before, the approach and the after, which the review needs at least
+four distinct frames of. If there is truly nothing to see, the review says why there is no video.
+
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an
 existing id). A UI change that moves or renames something a scenario uses updates that scenario in the same change, and a
