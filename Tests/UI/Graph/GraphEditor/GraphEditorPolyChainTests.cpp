@@ -11,7 +11,9 @@
 #include "Modules/MasterModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <bit>
 #include <memory>
 #include <set>
@@ -510,4 +512,72 @@ TEST_F(GraphEditorTest, TheTrackSwitchSetsAMixedChainToMonoAndLeavesTheSourceAlo
     for (const auto id : {i.osc, i.filter, i.adsr, i.vca})
         EXPECT_FALSE(rig.isPoly(id));
     EXPECT_EQ(rig.editor.getPolyChain().trackPolyState(i.source), synth::ui::TrackPolyState::mono);
+}
+
+// A Poly click moves the canvas the way Cmd+Z of it does (docs/layout/undo-glide.md): the Poly MIDI card grows
+// in, the cables grow out of their jacks, and a Mono click shrinks the card away and pulls the cables back.
+namespace {
+struct FullMotion {
+    FullMotion() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+        synth::ui::setReducedMotionForTest(false);
+    }
+    ~FullMotion() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+};
+} // namespace
+
+TEST_F(GraphEditorTest, ClickingPolyGrowsThePolyMidiCardInAndClickingMonoShrinksItAway) {
+    FullMotion motion;
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    auto& glide = rig.editor.getCardGlideForTest();
+    glide.setForceAnimateForTest(true); // not on screen: the glide is what is under test
+
+    rig.clickPill(i.osc);
+
+    ASSERT_EQ(rig.polyMidis().size(), 1u);
+    EXPECT_GE(glide.enterGhostCount(), 1) << "the Poly MIDI card grows in";
+    const auto polyMidi = rig.polyMidis().front();
+    rig.editor.finishCardGlideForTest();
+    EXPECT_EQ(glide.enterGhostCount(), 0);
+    ASSERT_NE(findModuleComp(rig.editor, rig.proc(polyMidi)), nullptr);
+
+    rig.clickPill(i.vca);
+
+    EXPECT_TRUE(rig.polyMidis().empty());
+    EXPECT_GE(glide.exitGhostCount(), 1) << "the Poly MIDI card shrinks away rather than vanishing";
+    rig.editor.finishCardGlideForTest();
+    EXPECT_EQ(glide.exitGhostCount(), 0);
+}
+
+TEST_F(GraphEditorTest, TheTrackHeaderPolySwitchGlidesToo) {
+    FullMotion motion;
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    auto& glide = rig.editor.getCardGlideForTest();
+    glide.setForceAnimateForTest(true);
+
+    rig.editor.getPolyChain().trackPolyClicked(i.source, true);
+    EXPECT_GE(glide.enterGhostCount(), 1);
+    rig.editor.finishCardGlideForTest();
+
+    rig.editor.getPolyChain().trackPolyClicked(i.source, false);
+    EXPECT_GE(glide.exitGhostCount(), 1);
+}
+
+TEST_F(GraphEditorTest, ThePolyClickIsInstantWithAnimationsOff) {
+    FullMotion motion;
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    ChainRig rig;
+    const auto i = buildInstrument(rig);
+    rig.editor.getCardGlideForTest().setForceAnimateForTest(true);
+
+    rig.clickPill(i.osc);
+
+    EXPECT_EQ(rig.polyMidis().size(), 1u);
+    EXPECT_EQ(rig.editor.getCardGlideForTest().enterGhostCount(), 0);
+    EXPECT_FALSE(rig.editor.getCardGlideForTest().isLive());
 }

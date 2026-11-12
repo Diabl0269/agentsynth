@@ -7,6 +7,7 @@
 #include "AudioEngine/ConnectionIndex.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 #include <algorithm>
@@ -141,11 +142,23 @@ void PolyChainController::commit(const std::vector<NodeID>& nodes, bool poly) {
         editor_.updateComponents();
     };
 
+    // The same bracket undo and redo use (AppUndoManager::applyHistoryStep): the card the click adds grows in, the one
+    // it removes shrinks away, and the cables it adds or removes grow out of and pull back into their jacks, so a
+    // Poly click moves like Cmd+Z of it does (docs/layout/undo-glide.md). The Scope outlives the change and closes
+    // after it; reduced motion and Animations Off are decided inside the shared helpers.
+    const auto cablesBefore = editor_.snapshotCablesForRetract();
+    const auto hullsBefore = editor_.snapshotPaintedHulls();
+    {
+        CardGlideAnimator::Scope glideScope(editor_.getCardGlide(), /*restore=*/true);
+        auto* undo = editor_.getUndoManager();
+        if (undo != nullptr)
+            undo->recordGraphAndMacroChange(graph, editor_.getMacros(), change);
+        else
+            change();
+        editor_.retractCablesGoneSince(cablesBefore, /*growAdded=*/true);
+        editor_.glideHullsFrom(hullsBefore);
+    }
     auto* undo = editor_.getUndoManager();
-    if (undo != nullptr)
-        undo->recordGraphAndMacroChange(graph, editor_.getMacros(), change);
-    else
-        change();
     announce(changed, poly, undo != nullptr ? undo->getEditSerial() : 0);
     if (onVoiceGraphChanged)
         onVoiceGraphChanged();

@@ -1,0 +1,45 @@
+# Bug: clicking Poly (or Mono) on a card popped the Poly MIDI node and its cables in and out; Cmd+Z of the same click
+# glided. Now the click glides like undo: the Poly MIDI card grows in with its cables, and Mono shrinks it away.
+# The cable rules (no raw Track In -> ADSR cable after Poly, the Oscillator keeps its own, Mono restores both) are
+# asserted in PolyVoiceGraphTests and GraphEditorPolyChainTests; the strips show the cables growing and pulling back.
+# The Poly MIDI card grows in after the cables (the phases run one after another), so the strip films 30 frames.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and opens it on the canvas (Track In > Osc, ADSR > VCA).
+#   2. Clicks the VCA's Poly pill (the Oscillator's sits below the bottom panel; one click switches the whole voice graph): the Poly MIDI card grows in and the cables grow out (a `glide` strip).
+#   3. Clicks the pill again (Mono): the card shrinks away and the original cables are back.
+# Each mark sits on the landed state, never mid-glide; proof/<glide>-strip.png is the frames across it.
+motion: true
+pop_check: {undo: false}   # the click is a Poly switch: its undo is the glide under test, covered by the unit tests
+record: true
+save_project: poly-glide
+steps:
+  - click: {id: New empty project, instant: "setup: not under test"}
+  - wait: {}
+  - key: {keys: cmd+j, instant: "setup: not under test"}
+  - click: {id: timelineAddTrackButton, instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track", instant: "setup: not under test"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2, instant: "setup: not under test"}
+  - wait: {}
+  - expect: {id: "card:VCA > Poly", toggleState: false}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}}
+  - getState: {id: "card:ADSR"}
+  - getState: {id: "card:Oscillator"}
+  - screenshot: {name: 1-mono}
+  - glide: {name: poly-on, frames: 30, crop: {x: 220, y: 270, w: 700, h: 300}, do: {click: {id: "card:VCA > Poly"}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "card:VCA > Poly", toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - mark: {check: 1, name: poly-glide}
+  - getState: {id: "card:ADSR"}
+  - getState: {id: "card:Oscillator"}
+  - screenshot: {name: 2-poly}
+  - glide: {name: poly-off, frames: 14, do: {click: {id: "card:VCA > Poly"}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "card:VCA > Poly", toggleState: false, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - getState: {id: "card:ADSR"}
+  - getState: {id: "card:Oscillator"}
+  - screenshot: {name: 3-mono-again}
