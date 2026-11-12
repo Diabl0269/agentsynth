@@ -2,7 +2,9 @@
 #include "PopupHost.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Layout/AppShortcutRelay.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/DialogTooltip.h"
 #include <map>
 
 namespace synth::ui {
@@ -63,6 +65,9 @@ juce::Point<int> pointerPosition() {
 //     modal while it fades, so the press never reaches the button and re-opens the popover.
 //   - A press anywhere else closes it the way JUCE does, so that press still lands where it was aimed; the leaving
 //     picture fades it. Click-away commits; only Escape cancels.
+//   - It is its own native window, so the main window's tooltip window draws its tips under it: the box hosts a tooltip
+//     window of its own (a child, deleted before the box), and every control in any popover gets its tip, a greyed
+//     one's reason included.
 class PopoverBox final
     : public juce::CallOutBox
     , private juce::FocusChangeListener {
@@ -84,10 +89,13 @@ public:
         if (!style.anchor)
             style.anchor = [area] { return area.getCentre(); };
         PopupMotion::setStyle(*this, std::move(style));
+        tooltip_ = std::make_unique<AppTooltipWindow>(this, dialog_tooltip::appProperties());
+        tooltip_->setComponentID("popoverTooltip"); // test mode reads and screenshots the tip by this id
         juce::Desktop::getInstance().addFocusChangeListener(this);
     }
 
     ~PopoverBox() override {
+        tooltip_.reset(); // the tip and its fading ghost go while the box's own window is still whole
         juce::Desktop::getInstance().removeFocusChangeListener(this);
         for (auto& editor : labelEditors_)
             if (editor != nullptr)
@@ -201,6 +209,7 @@ private:
     };
 
     juce::Component& content_;
+    std::unique_ptr<AppTooltipWindow> tooltip_;
     juce::Rectangle<int> lastContentBounds_;
     juce::Rectangle<int> area_;
     PopoverOptions options_;
