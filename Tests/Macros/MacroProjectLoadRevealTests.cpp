@@ -3,13 +3,17 @@
 // scales cards in place, an open macro's cards pop together with its border, and a collapsed macro pops as one card
 // (LoadRevealAnimator.h). Built the way MacroProjectLoadTests.cpp builds a load: graph and macros first, then cards.
 
+#include "../fixtures/saved-project/SavedProjectFixture.h"
 #include "MacroContainer/MacroContainerTestHelpers.h"
 
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -133,4 +137,138 @@ TEST(MacroProjectLoadReveal, AMidRevealTeardownRestoresEveryCard) {
         EXPECT_EQ(card->getAlpha(), 1.0f);
         EXPECT_TRUE(card->getTransform().isIdentity());
     }
+}
+
+namespace {
+
+// A project as saved with its port widgets never docked: every port module sits at the canvas origin.
+struct PortCanvas : RevealCanvas {
+    struct PortRef {
+        NodeID id;
+        juce::String macroId; // empty for a port module no macro lists
+    };
+    std::vector<PortRef> ports;
+
+    PortRef addPort(bool inlet, const juce::String& macroId) {
+        std::unique_ptr<juce::AudioProcessor> processor;
+        if (inlet)
+            processor = std::make_unique<MacroInletModule>();
+        else
+            processor = std::make_unique<MacroOutletModule>();
+        auto node = engine.getGraph().addNode(std::move(processor));
+        node->properties.set("x", 0);
+        node->properties.set("y", 0);
+        const auto uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        if (auto* macro = editor.getMacros().find(macroId)) {
+            macro->members.push_back(uuid);
+            synth::MacroPort port;
+            port.nodeUuid = uuid;
+            port.isInput = inlet;
+            port.name = inlet ? "In" : "Out";
+            port.order = (int)macro->ports.size();
+            macro->ports.push_back(port);
+        }
+        ports.push_back({node->nodeID, macroId});
+        return ports.back();
+    }
+
+    // Every port widget is hidden, or sits exactly where its macro's hull edge strip puts it, and none is at the
+    // origin.
+    void expectPortsDocked(const char* when) {
+        for (const auto& port : ports) {
+            auto* card = findComponent(editor, port.id);
+            ASSERT_NE(card, nullptr) << when;
+            if (!card->isVisible())
+                continue;
+            EXPECT_NE(card->getPosition(), juce::Point<int>(0, 0)) << when << ": a port widget sits at the origin";
+            const auto* macro = editor.getMacros().find(port.macroId);
+            ASSERT_NE(macro, nullptr) << when << ": a visible port widget with no macro";
+            EXPECT_FALSE(editor.getMacros().isEffectivelyCollapsed(macro->id)) << when << ": a hidden macro's port";
+            bool onStrip = false;
+            for (const auto& entry : editor.getMacroController().macroHullPortLayout(macro->id))
+                onStrip = onStrip || (entry.widgetBounds.getPosition() == card->getPosition());
+            EXPECT_TRUE(onStrip) << when << ": a port widget off its macro's hull edge strip";
+        }
+    }
+};
+
+} // namespace
+
+TEST(MacroProjectLoadReveal, PortWidgetsOfOpenFoldedNestedAndStrayMacrosNeverSitAtTheOrigin) {
+    PortCanvas c;
+    const auto a = c.add(std::make_unique<LFOModule>(), 400, 300);
+    const auto b = c.add(std::make_unique<OscillatorModule>(), 800, 300);
+    const auto f1 = c.add(std::make_unique<LFOModule>(), 400, 900);
+    const auto f2 = c.add(std::make_unique<ADSRModule>(), 800, 900);
+    const auto n1 = c.add(std::make_unique<LFOModule>(), 400, 1500);
+    const auto n2 = c.add(std::make_unique<ADSRModule>(), 800, 1500);
+    const auto openId = c.addMacro({a, b}, false, {380, 280, 600, 400});
+    const auto foldedId = c.addMacro({f1, f2}, true, {400, 900, 160, 60});
+    const auto childId = c.addMacro({n1, n2}, false, {380, 1480, 600, 400});
+    const auto p1 = c.add(std::make_unique<OscillatorModule>(), 1300, 1500);
+    const auto parentId = c.addMacro({p1}, true, {380, 1480, 160, 60});
+    ASSERT_TRUE(c.editor.getMacros().setParent(childId, parentId));
+    for (const auto& id : {openId, foldedId, childId}) {
+        c.addPort(true, id);
+        c.addPort(false, id);
+    }
+    c.addPort(true, {});         // an inlet no macro lists
+    c.addPort(false, {});        // and an outlet
+    c.editor.updateComponents(); // the load builds every card, then docks the ports
+    c.expectPortsDocked("after the build");
+
+    auto& reveal = c.editor.getLoadReveal();
+    reveal.start(lr::Motion::full, {}, /*drive=*/false);
+    ASSERT_TRUE(reveal.isLive());
+    c.expectPortsDocked("reveal start");
+    for (double t = 0.0; t <= reveal.endMs(); t += 10.0) {
+        reveal.applyAtMs(t);
+        c.expectPortsDocked("mid-reveal");
+        if (!reveal.isLive())
+            break;
+    }
+    reveal.applyAtMs(reveal.endMs());
+    c.expectPortsDocked("after the reveal");
+
+    // Opening the folded macro and folding the open ones again moves the ports with their macros.
+    c.editor.getMacros().find(foldedId)->collapsed = false;
+    c.editor.getMacros().find(openId)->collapsed = true;
+    c.editor.getMacros().find(parentId)->collapsed = false;
+    c.editor.updateComponents();
+    c.expectPortsDocked("after opening the folded and nested macros");
+    c.editor.getMacros().find(parentId)->collapsed = true;
+    c.editor.updateComponents();
+    c.expectPortsDocked("after folding the parent");
+}
+
+// A saved project whose port widgets were never docked, opened the way the app opens a file: no port widget sits at
+// the canvas origin, and the ones shown are on their macro's hull edge strip.
+TEST(MacroProjectLoadReveal, ASavedProjectWithUndockedPortWidgetsOpensWithNoneAtTheOrigin) {
+    synth::test::SavedProjectFixture project(/*withPortWidgets=*/true);
+    ASSERT_TRUE(project.wasSaved());
+    auto mc = project.open();
+    ASSERT_NE(mc, nullptr);
+    auto& editor = mc->getGraphEditor();
+    int portCards = 0;
+    for (auto* node : mc->getAudioEngine().getGraph().getNodes()) {
+        auto* processor = node->getProcessor();
+        if (dynamic_cast<MacroInletModule*>(processor) == nullptr &&
+            dynamic_cast<MacroOutletModule*>(processor) == nullptr)
+            continue;
+        ++portCards;
+        auto* card = findComponent(editor, node->nodeID);
+        ASSERT_NE(card, nullptr);
+        if (!card->isVisible())
+            continue;
+        EXPECT_NE(card->getPosition(), juce::Point<int>(0, 0)) << "a port widget sits at the origin";
+        const auto uuid = node->properties["uuid"].toString();
+        const auto* macro = editor.getMacros().findByMember(uuid);
+        ASSERT_NE(macro, nullptr);
+        bool onStrip = false;
+        for (const auto& entry : editor.getMacroController().macroHullPortLayout(macro->id))
+            onStrip = onStrip || entry.widgetBounds.getPosition() == card->getPosition();
+        EXPECT_TRUE(onStrip) << "a port widget off its macro's hull edge strip";
+    }
+    EXPECT_GE(portCards, 8) << "the fixture's own ports and the added ones were all checked";
 }

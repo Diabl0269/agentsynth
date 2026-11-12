@@ -293,6 +293,11 @@ start below the chip row) are painted under it by `paintMacroPortStrips` from
   (mirroring the Attenuverter's own "no header, nothing to click" early return), so nothing on the
   canvas can desync a widget from its hull. A right click is the one exception — see
   [`docs/macros/auto-ports.md`](auto-ports.md#ungroup-and-direct-deletion-of-a-port).
+- **A port widget no macro lists stays hidden.** `syncMacroCards()` shows a MacroInlet/Outlet (or MIDI pair) card only
+  while a macro lists its node as one of its `ports`; the dock is the only thing that places a port widget, so a stray
+  one (a saved project can hold one, at whatever position it was last saved, often the canvas origin) is hidden with its
+  node and cables untouched. Pinned by `MacroProjectLoadReveal.*PortWidgets*` (every reveal stage, with open, folded,
+  nested and stray ports) and by the saved-project fixture's `withPortWidgets` option.
 - **The hull-feedback trap.** `macroHullBounds()` unions only NON-PORT members. A port's own fronting
   node is excluded because if it counted toward the bounds that DEFINE the hull, docking it against
   that hull would grow the hull, which would push it out again, every layout pass. A macro made

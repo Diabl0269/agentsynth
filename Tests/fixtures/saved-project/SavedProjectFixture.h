@@ -16,6 +16,9 @@
 //   - "Plain group" is a folded macro no track plays: an Oscillator, a Filter and a Hosted Plugin stand-in
 //     (Tests/StubPluginInstance.h's stub, the only kind of plugin this repo can load; open() installs the stub as the
 //     default backend while it opens, so the plugin reloads instead of staying an unresolved placeholder).
+//   - With `withPortWidgets`: an inlet and an outlet port on the folded, the nested and the open track macros, plus a
+//     stray Macro In and Macro Out that no macro lists, all saved at the canvas origin (the shape the Load test project
+//     had: port widgets that were never docked).
 // Use: `synth::test::SavedProjectFixture project; auto mc = project.open(); project.trackMacroId(*mc, 1)`.
 
 #include "../../StubPluginInstance.h"
@@ -27,6 +30,8 @@
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/FilterModule.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -67,7 +72,7 @@ public:
     static constexpr const char* kPlainGroup = "Plain group";
 
     /** Builds the project in a throwaway MainComponent and saves it; the bundle is deleted with the fixture. */
-    SavedProjectFixture() {
+    explicit SavedProjectFixture(bool withPortWidgets = false) {
         bundle_ = synth::test::uniqueTempPath("saved-project-fixture", ".agsproj");
         MainComponent builder{std::make_unique<SavedProjectFixtureProvider>()};
         builder.setSize(1400, 900);
@@ -76,6 +81,8 @@ public:
         for (int i = 0; i < 3; ++i)
             builder.simulateAddAudioTrackClick();
         build(builder);
+        if (withPortWidgets)
+            addPortWidgets(builder);
         saved_ = builder.saveProjectForTest(bundle_);
     }
     ~SavedProjectFixture() { bundle_.deleteRecursively(); }
@@ -152,6 +159,35 @@ private:
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
             module->setNodeUuid(uuid);
         return node;
+    }
+
+    static void addPort(MainComponent& mc, bool inlet, const juce::String& macroId) {
+        std::unique_ptr<juce::AudioProcessor> processor;
+        if (inlet)
+            processor = std::make_unique<MacroInletModule>();
+        else
+            processor = std::make_unique<MacroOutletModule>();
+        auto node = addNode(mc, std::move(processor), 0, 0);
+        const auto uuid = node->properties["uuid"].toString();
+        if (auto* macro = mc.getGraphEditor().getMacros().find(macroId)) {
+            macro->members.push_back(uuid);
+            synth::MacroPort port;
+            port.nodeUuid = uuid;
+            port.isInput = inlet;
+            port.name = inlet ? "In" : "Out";
+            port.order = (int)macro->ports.size();
+            macro->ports.push_back(port);
+        }
+    }
+
+    static void addPortWidgets(MainComponent& mc) {
+        for (int track = 0; track < 3; ++track) {
+            addPort(mc, true, trackMacroId(mc, track));
+            addPort(mc, false, trackMacroId(mc, track));
+        }
+        addPort(mc, true, {});
+        addPort(mc, false, {});
+        mc.getGraphEditor().updateComponents();
     }
 
     static void build(MainComponent& mc) {

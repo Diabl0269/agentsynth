@@ -16,9 +16,29 @@
 
 #include "GraphEditorInternal.h"
 #include "MacroOwnerIndex.h"
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroMidiInletModule.h"
+#include "Modules/MacroMidiOutletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+namespace {
+// A port module (MacroInlet/Outlet or the MIDI pair) that no macro lists as one of its ports. Only the dock places a
+// port's widget (on its macro's hull edge); a stray has no hull to sit on, and its saved position can be the canvas
+// origin, so it stays hidden. The node and its cables are untouched.
+bool isStrayMacroPort(const synth::MacroOwnerIndex& owners, const juce::String& uuid, const juce::AudioProcessor* p) {
+    const bool isPortModule = dynamic_cast<const MacroInletModule*>(p) != nullptr ||
+                              dynamic_cast<const MacroOutletModule*>(p) != nullptr ||
+                              dynamic_cast<const MacroMidiInletModule*>(p) != nullptr ||
+                              dynamic_cast<const MacroMidiOutletModule*>(p) != nullptr;
+    if (!isPortModule || uuid.isEmpty())
+        return false;
+    const auto* owner = owners.ownerOf(uuid);
+    return owner == nullptr || !owner->memberIsPort(uuid);
+}
+} // namespace
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)
 // member ModuleComponents. Called at the end of updateComponents(), the same seam that
@@ -90,7 +110,9 @@ void GraphEditor::syncMacroCards() {
         if (comp == nullptr)
             continue;
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
-        comp->setVisible(uuid.isEmpty() || !owners.hiddenByCollapse(uuid));
+        const bool hidden =
+            !uuid.isEmpty() && (owners.hiddenByCollapse(uuid) || isStrayMacroPort(owners, uuid, comp->getModule()));
+        comp->setVisible(!hidden);
     }
     cardGlide_.fold().reassertHolds(); // this pass showed every card the model shows; a running fold holds its own
 }
