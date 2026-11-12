@@ -10,8 +10,8 @@
 namespace synth::ui {
 
 // The Timeline bar's clip sizing control: a toolbar button whose glyph (and caption, when labels are shown) names the
-// mode, at one width in every mode; a click opens a menu of the three modes. The mode is a user setting, the same in
-// every project.
+// mode, at one width in every mode, with a small corner notch marking the menu; a click opens a menu of the three
+// modes. The mode is a user setting, the same in every project.
 class ClipSizingButton : public ToolbarButton {
 public:
     ClipSizingButton();
@@ -36,6 +36,8 @@ public:
     juce::PopupMenu buildMenu() const;
     void showMenu();
     void clicked() override;
+    // The toolbar button plus the menu mark in the chip's lower-right corner.
+    void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
 
     static synth::theme::Icon iconFor(synth::ClipSizingMode mode) noexcept;
     // The caption shown beside the glyph: "Trim", "Carry" or "Stretch".

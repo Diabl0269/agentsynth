@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <!-- Toolbar icon, edit group (Stretch to fit: the notes stretch between the two clip edges). Colour roles are placeholders the icon library replaces: #FF00FF = group colour, #00FFFF = ink, #FFFF00 = paper. -->
-  <path d="M3.4 4V20M20.6 4V20" stroke-width="2.4" stroke-linecap="round" fill="none" stroke="#FFFF00" />
-  <path d="M7 12H17" stroke-width="3" stroke-linecap="round" fill="none" stroke="#FF00FF" />
-  <path d="M10 9L7 12L10 15M14 9L17 12L14 15" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#FFFF00" />
+  <!-- Toolbar icon, edit group (Stretch to fit: a spring pulled between the two clip edges, so the notes stretch with it). Colour roles are placeholders the icon library replaces: #FF00FF = group colour, #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M4 12H6.6L8.9 5.8L12 18.2L15.1 5.8L17.4 12H20" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#FF00FF" />
+  <path d="M3.4 3.6V20.4M20.6 3.6V20.4" stroke-width="2.4" stroke-linecap="round" fill="none" stroke="#FFFF00" />
 </svg>
