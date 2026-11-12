@@ -571,6 +571,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentModBand.h
     Source/UI/Graph/ModuleComponent/CardKnobSlider.h
     Source/UI/Graph/ModuleComponent/ModuleComponentCardView.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.h
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
@@ -693,6 +695,20 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/FrequencyGrid.h
     Source/UI/ModuleViews/EQCurveComponent.h
     Source/UI/ModuleViews/EQCurveKeyboard.cpp
+    Source/UI/ModuleViews/EQCurveInteraction.cpp
+    Source/UI/ModuleViews/EQCurvePaint.cpp
+    Source/UI/ModuleViews/EQCurveSolo.cpp
+    Source/UI/ModuleViews/EQCurveTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandKinds.h
+    Source/UI/ModuleViews/EQBandKinds.cpp
+    Source/UI/ModuleViews/EQBandStrip.h
+    Source/UI/ModuleViews/EQBandStrip.cpp
+    Source/UI/ModuleViews/EQBandTypeMenu.h
+    Source/UI/ModuleViews/EQBandTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandTypePill.h
+    Source/UI/ModuleViews/EQBandTypePill.cpp
+    Source/UI/ModuleViews/EQSoloButton.h
+    Source/UI/ModuleViews/EQSoloButton.cpp
     Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h

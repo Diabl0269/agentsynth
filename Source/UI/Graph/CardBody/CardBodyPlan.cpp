@@ -34,7 +34,8 @@ bool isSequencer(juce::AudioProcessor& module) { return dynamic_cast<SequencerMo
 // by the card's chrome beside the display it selects. A Drum Kit's pads area edits every one of its parameters but
 // the master Level. A sequencer's Scale and Follow Song Key are set by its Key
 // field, which stands in Key's cell, so a layout naming Key (a saved one too) still gets the whole key. A parameter a
-// registered view edits (the Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
+// registered view edits (the Threshold slider inside the Threshold view) gets no knob either. The Parametric EQ's band
+// parameters are bound by the card's selected-band row, one band at a time. The ADSR's tempoSync and
 // four note divisions are ordinary items: a layout swaps each division in for its time with a condition
 // on tempoSync (one mechanism, the layout's), and the automatic layout shows them as plain controls.
 bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
@@ -49,7 +50,9 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
     if (typeOf(module) == ModuleType::DrumKit && id != "level")
         return true;
     if (const auto* base = dynamic_cast<const ModuleBase*>(&module); base != nullptr && !base->isParameterExposed(id))
-        return true; // kept and saved, but offered on no surface yet
+        return true; // kept and saved, but offered on no surface
+    if (typeOf(module) == ModuleType::ParametricEQ && id.startsWith("band"))
+        return true; // 24 bands: the card's selected-band row binds its three knobs, toggle and type to one at a time
     if (typeOf(module) == ModuleType::Wavetable && id == "table")
         return true;
     if (isSequencer(module) && (id == sequencer_ids::kScale || id == sequencer_ids::kFollowSongKey))

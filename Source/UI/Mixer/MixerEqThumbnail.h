@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Modules/FX/ParametricEQModule.h"
 #include <array>
 #include <atomic>
 #include <functional>
@@ -41,6 +40,7 @@
 // handleAsyncUpdate() -- the same thread-hop HostedPluginModule::InstanceListener uses for its own
 // audioProcessorChanged callback. paint() reads only the cached result, never the module.
 class AppUndoManager;
+class ParametricEQModule;
 
 namespace synth::ui {
 
@@ -77,6 +77,12 @@ public:
     void flushForTest() { handleUpdateNowIfNeeded(); }
     float getDrawnMagnitudeDbForTest(int index) const { return cachedMagnitudesDb_[(size_t)index]; }
 
+    /** How many of the 24 bands are on; the badge shows it (none for 0) and the tooltip says it ("EQ: 16 bands.
+     *  Click to open."; "1 band" for one). */
+    int getBandCount() const noexcept { return bandCount_; }
+    /** The badge's text, empty when no band is on. */
+    juce::String getBadgeText() const { return bandCount_ > 0 ? juce::String(bandCount_) : juce::String(); }
+
     /** Fires on mouseUp -- MixerColumnComponent forwards this through its existing onEditOnCanvas
      *  seam with the EQ node's own uuid, exactly like a column header click or the insert list's
      *  own "Edit on canvas" link. */
@@ -103,9 +109,11 @@ private:
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     void handleAsyncUpdate() override;
 
+    void paintBadge(juce::Graphics& g) const;
     void detachListeners();
     void recompute();
     void syncFromModule(bool restored);
+    void refreshBandCount();
 
     ParametricEQModule* eq_ = nullptr;
     juce::AudioProcessorGraph* graph_ = nullptr;
@@ -114,11 +122,13 @@ private:
     AppUndoManager* undo_ = nullptr;
     std::atomic<bool> restorePending_{false};
     std::unique_ptr<EqBandGlide> glide_;
-    ParametricEQModule::BandSnapshots lastBands_{};
+    struct LastBands; // the module's last-read band snapshots (defined in the .cpp so this header stays narrow)
+    std::unique_ptr<LastBands> lastBands_;
     float lastOutputGainDb_ = 0.0f;
 
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;
+    int bandCount_ = 0;
     int recomputeCount_ = 0;
 
     static int liveUnbindCallCountForTest_;

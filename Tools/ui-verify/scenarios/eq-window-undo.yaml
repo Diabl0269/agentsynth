@@ -15,13 +15,13 @@ steps:
   - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
   - click: {id: eqWindowCurve, x: 120, y: 60, clicks: 2}
   - wait: {settleMs: 500}
-  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.044776916503906}
+  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.387557983398438}
   - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 120, fromY: 60, toX: 260, toY: 110, steps: 12}
   - wait: {settleMs: 800}
   - getState: {id: "card:Parametric EQ 2 > B1 Gain"}
   - key: {keys: cmd+z, target: eqWindowCurve}
   - wait: {settleMs: 600}
-  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.044776916503906, within_ms: 2000}
+  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.387557983398438, within_ms: 2000}
   - mark: {check: 1, name: eq-undo}
   - wait: {settleMs: 1000}
   - screenshot: {id: eqWindowCurve, name: band-back}

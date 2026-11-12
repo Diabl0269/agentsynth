@@ -31,6 +31,7 @@ inline const std::vector<PopoverUser>& popoverUsers() {
         {"Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp", {"AddControllerPopover"}},
         {"Source/UI/Mixer/MixerInsertList/MixerInsertListEdits.cpp", {"ModMatrixPicker"}},
         {"Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp", {"ColourPickerPopup"}},
+        {"Source/UI/ModuleViews/EQCurveTypeMenu.cpp", {"EQBandTypeMenu"}},
         {"Source/UI/ModuleViews/MorphMap/MorphMapKeyboard.cpp", {"ColourPickerPopup"}},
         {"Source/UI/ModuleViews/ShapeEditor/ShapeListEditorDraw.cpp", {"DrawShapeFlyout"}},
         {"Source/UI/ModuleViews/ShapeEditor/ShapeListEditorRing.cpp", {"ShapeStackPanel"}},

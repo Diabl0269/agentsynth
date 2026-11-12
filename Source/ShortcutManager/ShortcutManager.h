@@ -6,7 +6,7 @@
 #include <vector>
 
 /** Which part of the app an action belongs to: its Settings section and its conflict-check scope. */
-enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, DrumMachine, Mixer, LayoutEditor };
+enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, DrumMachine, Mixer, LayoutEditor, EQ };
 
 // Broadcasts every binding change, so several surfaces can each react. onBindingsChanged has one slot,
 // which MainComponent holds.
@@ -73,6 +73,7 @@ public:
     void addPianoRollDefaultBindings();
     void addDrumMachineDefaultBindings();
     void addLayoutEditorDefaultBindings();
+    void addEqDefaultBindings();
 
     /** How a binding reads on screen. On macOS each modifier is its Mac symbol (Command, Control, Option, Shift),
      *  never "Alt"; elsewhere it is Ctrl / Alt / Shift spelled out. */

@@ -4,6 +4,7 @@
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "ModuleComponent.h"
+#include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
@@ -500,6 +501,9 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         if (target.channelIndex != destChannel)
             continue;
         const int si = sliderIndexForModTarget(target);
+        // An EQ band the card's knobs are not showing now: its cable heads for the band's chip.
+        if (si < 0 && eqBand_ != nullptr)
+            return eqBand_->anchorFor(destChannel);
         if (const auto pad = si < 0 ? padKnobForTarget(target) : PadKnob{}; pad.slider != nullptr)
             return modRingPointForNorm(modRingCentreFor(*pad.slider, pad.bounds.toFloat()),
                                        modRingRadiusFor(pad.bounds.toFloat()) + knobLandingRadiusOffset(), 0.0f);

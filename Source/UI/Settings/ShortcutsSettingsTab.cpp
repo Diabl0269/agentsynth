@@ -1,4 +1,5 @@
 #include "ShortcutsSettingsTab.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Settings/SettingsFoldState.h"
@@ -47,6 +48,8 @@ const char* persistedName(ShortcutCategory category) {
         return "Mixer";
     case ShortcutCategory::LayoutEditor:
         return "LayoutEditor";
+    case ShortcutCategory::EQ:
+        return "EQ";
     }
     return "";
 }
@@ -60,9 +63,39 @@ void ShortcutsSettingsTab::saveFolds() {
     synth::ui::settingsfold::save(appProperties, kFoldedKey, folded);
 }
 
+class ShortcutsSettingsTab::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const ShortcutsSettingsTab& owner)
+        : owner_(owner) {
+        setComponentID("shortcutsSettingsState");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        juce::StringArray sections, eqRows;
+        for (const auto& entry : owner_.layout)
+            if (entry.isHeader)
+                sections.add(ShortcutManager::getCategoryName(entry.category));
+        for (int i = 0; i < owner_.actionIds.size(); ++i)
+            if (ShortcutManager::getCategory(owner_.actionIds[i]) == ShortcutCategory::EQ && owner_.isRowVisible(i))
+                eqRows.add(owner_.getRowDescription(i));
+        into.setProperty("sections", sections.joinIntoString(","));
+        into.setProperty("eqRows", eqRows.joinIntoString(","));
+    }
+
+private:
+    const ShortcutsSettingsTab& owner_;
+};
+
 ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::ApplicationProperties* props)
     : shortcutManager(sm)
     , appProperties(props) {
+    setComponentID("shortcutsSettingsTab");
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Keyboard Shortcuts", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
@@ -499,6 +532,8 @@ bool ShortcutsSettingsTab::isRowVisible(int index) const {
             return true;
     return false;
 }
+
+ShortcutsSettingsTab::~ShortcutsSettingsTab() = default;
 
 bool ShortcutsSettingsTab::isSectionVisible(ShortcutCategory category) const {
     for (const auto& entry : layout)

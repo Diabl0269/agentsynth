@@ -78,6 +78,12 @@ are also accepted.
 | `trackMuteOn` | `#FFFFA033` | Timeline track header — `M` button, active state |
 | `trackSoloOn` | `#FFFFD23D` | Timeline track header — `S` button, active state |
 | `trackArmOn` | `#FFE5484D` | Timeline track header — `R` (arm/record) button, active state |
+| `eqKindBell` | `#FF00D1FF` | Parametric EQ band kind: bell (dot ring and chip). The six `eqKind*` tokens are fixed across themes |
+| `eqKindShelf` | `#FFF5B94A` | Parametric EQ band kind: low and high shelf |
+| `eqKindCut` | `#FFA78BFA` | Parametric EQ band kind: low and high cut |
+| `eqKindNotch` | `#FFFF6B9A` | Parametric EQ band kind: notch |
+| `eqKindTilt` | `#FF3DDC97` | Parametric EQ band kind: tilt |
+| `eqKindBandPass` | `#FF7BE495` | Parametric EQ band kind: band pass |
 
 **Required minimum:** `bg0`, `surface`, `accent`, `textPrimary`, `audioWire`, `modWire`. Every other
 colour token is optional and falls back to the Obsidian defaults above. `ThemeLoader::parseTheme`

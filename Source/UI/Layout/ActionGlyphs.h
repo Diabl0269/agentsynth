@@ -14,6 +14,8 @@
 //   for a track that is half and half.
 // - paintSeverityGlyph: how serious a message is -- a circled "i" for info, a triangle with "!" for a warning, a
 //   circled "x" for an error. The toast paints it; any other message surface takes the same drawing.
+// - paintHeadphonesGlyph: "listen to this alone" (solo) -- a headband over two ear cups. The EQ window's band solo
+//   button draws it.
 namespace synth::ui {
 
 enum class VoiceGlyph { mono, poly, mixed };
@@ -23,6 +25,8 @@ void paintShowOnCanvasGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce
 
 void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, VoiceGlyph voice,
                      float strokeScale = 1.0f);
+
+void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale = 1.0f);
 
 void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
                         float strokeScale = 1.0f);

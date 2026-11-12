@@ -221,12 +221,36 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
 
 inline bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
 
-// A parameter the module keeps but no surface offers yet (ModuleBase::isParameterExposed; the Parametric EQ's bands
-// 5-24 and every band's Type and Slope). The model never sees or sets one; a node's JSON leaves it out while it is at
-// its default, so the saved JSON of a module that gained it is unchanged, and a trusted apply resets an absent one.
+// A parameter the module keeps but offers on no surface (ModuleBase::isParameterExposed). The model never sees or
+// sets one; a node's JSON leaves it out while it is at its default, and a trusted apply resets an absent one.
 inline bool isUnexposedParam(juce::AudioProcessor& processor, const juce::String& paramId) {
     const auto* module = dynamic_cast<const ModuleBase*>(&processor);
     return module != nullptr && !module->isParameterExposed(paramId);
+}
+
+// One of a Parametric EQ band's six parameters (bandNOn/Freq/Gain/Q/Type/Slope) while that band is off and every one
+// of the six is at its default: nothing the band says is worth showing the model, and a patch that leaves it out
+// leaves it exactly so. The model's compact view of a node (nodeToJSON's forModel) skips these.
+inline bool isDisabledDefaultEqBandParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    if (dynamic_cast<ParametricEQModule*>(&processor) == nullptr || !paramId.startsWith("band"))
+        return false;
+    const int band = paramId.substring(4).getIntValue();
+    if (band < 1 || band > ParametricEQModule::kMaxBands)
+        return false;
+    const juce::String prefix = "band" + juce::String(band);
+    if (!paramId.startsWith(prefix) || paramId.substring(prefix.length()).containsAnyOf("0123456789"))
+        return false;
+    int found = 0;
+    for (auto* param : processor.getParameters())
+        if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(param); r != nullptr && r->paramID.startsWith(prefix)) {
+            const auto rest = r->paramID.substring(prefix.length());
+            if (rest != "On" && rest != "Freq" && rest != "Gain" && rest != "Q" && rest != "Type" && rest != "Slope")
+                continue;
+            ++found;
+            if (r->getValue() != r->getDefaultValue())
+                return false;
+        }
+    return found == 6;
 }
 
 // The parameter as the model may see it, or null for one it never sees: the Drum Kit's per-pad parameters, which

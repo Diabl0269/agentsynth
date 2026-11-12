@@ -65,6 +65,25 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
     stem(6.2f, 0.8f, 9.2f);
 }
 
+// A headband arc over two filled ear cups, which sit on its ends.
+void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const float thickness = kRingThickness * unit * strokeScale;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(glyph.getX() + x * unit, glyph.getY() + y * unit);
+    };
+    g.setColour(ink);
+    juce::Path band;
+    const auto centre = at(6.0f, 6.4f);
+    const float radius = 4.3f * unit;
+    band.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, -juce::MathConstants<float>::halfPi,
+                       juce::MathConstants<float>::halfPi, true);
+    g.strokePath(band, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    for (const float x : {1.0f, 8.4f})
+        g.fillRoundedRectangle({at(x, 6.2f), at(x + 2.6f, 10.8f)}, 1.1f * unit);
+}
+
 // A circle with a mark inside it (info, error) or a triangle with an exclamation mark (warning). The mark is a stroke
 // or a dot, so it stays legible down to a 12 px square.
 void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,

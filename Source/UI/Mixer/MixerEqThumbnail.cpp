@@ -11,8 +11,13 @@ namespace synth::ui {
 
 int MixerEqThumbnail::liveUnbindCallCountForTest_ = 0;
 
+struct MixerEqThumbnail::LastBands {
+    ParametricEQModule::BandSnapshots bands{};
+};
+
 MixerEqThumbnail::MixerEqThumbnail()
-    : glide_(std::make_unique<EqBandGlide>(*this)) {
+    : glide_(std::make_unique<EqBandGlide>(*this))
+    , lastBands_(std::make_unique<LastBands>()) {
     setInterceptsMouseClicks(true, false);
     glide_->onChange = [this] {
         recompute();
@@ -39,9 +44,11 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     nodeId_ = nodeId;
 
     restorePending_ = false;
-    glide_->sync(lastBands_, lastOutputGainDb_, lastBands_, lastOutputGainDb_, false); // ends any glide of the old EQ
+    glide_->sync(lastBands_->bands, lastOutputGainDb_, lastBands_->bands, lastOutputGainDb_,
+                 false); // ends any glide of the old EQ
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
+        bandCount_ = 0;
         setVisible(false);
         return;
     }
@@ -50,7 +57,7 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
         if (param != nullptr)
             param->addListener(this);
 
-    lastBands_ = eq_->getBandSnapshots();
+    lastBands_->bands = eq_->getBandSnapshots();
     lastOutputGainDb_ = eq_->getOutputGainDb();
     setVisible(true);
     recompute(); // synchronous, so the first paint after binding already has data
@@ -101,8 +108,8 @@ void MixerEqThumbnail::syncFromModule(bool restored) {
         return;
     const auto bands = eq_->getBandSnapshots();
     const float outputGainDb = eq_->getOutputGainDb();
-    glide_->sync(lastBands_, lastOutputGainDb_, bands, outputGainDb, restored);
-    lastBands_ = bands;
+    glide_->sync(lastBands_->bands, lastOutputGainDb_, bands, outputGainDb, restored);
+    lastBands_->bands = bands;
     lastOutputGainDb_ = outputGainDb;
     recompute();
 }
@@ -111,10 +118,26 @@ void MixerEqThumbnail::recompute() {
     if (eq_ == nullptr)
         return;
     // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
-    const auto drawn = glide_->drawn(lastBands_, lastOutputGainDb_);
+    const auto drawn = glide_->drawn(lastBands_->bands, lastOutputGainDb_);
     cachedMagnitudesDb_ = EqResponseCurve::compute(drawn.curve, drawn.outputGainDb);
     cachedBypassed_ = eq_->isBypassed();
+    refreshBandCount();
     ++recomputeCount_;
+}
+
+// The count is of the real bands (not the glide's drawn ones). Tooltip and accessibility description say the same.
+void MixerEqThumbnail::refreshBandCount() {
+    int count = 0;
+    for (const auto& band : lastBands_->bands)
+        if (band.enabled)
+            ++count;
+    const bool changed = count != bandCount_;
+    bandCount_ = count;
+    const auto text = "EQ: " + juce::String(count) + (count == 1 ? " band" : " bands") + ".";
+    setTooltip(text + " Click to open.");
+    setDescription(text + " Selects this channel's EQ on the canvas.");
+    if (changed)
+        repaint();
 }
 
 void MixerEqThumbnail::mouseUp(const juce::MouseEvent&) {
@@ -157,6 +180,23 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
 
     g.setColour(fillColour);
     g.fillPath(fillPath);
+    paintBadge(g);
+}
+
+// The band count, small, in the top-right corner; nothing while no band is on.
+void MixerEqThumbnail::paintBadge(juce::Graphics& g) const {
+    if (bandCount_ <= 0)
+        return;
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const auto font = synth::theme::AppLookAndFeel::uiFont(9.0f);
+    const auto text = getBadgeText();
+    const int textW = juce::GlyphArrangement::getStringWidthInt(font, text);
+    const auto badge = juce::Rectangle<float>((float)(getWidth() - textW - 10), 2.0f, (float)textW + 8.0f, 12.0f);
+    g.setColour(colors.surface.withAlpha(0.85f));
+    g.fillRoundedRectangle(badge, badge.getHeight() * 0.5f);
+    g.setColour(cachedBypassed_ ? colors.textDisabled : colors.textPrimary);
+    g.setFont(font);
+    g.drawText(text, badge.toNearestInt(), juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

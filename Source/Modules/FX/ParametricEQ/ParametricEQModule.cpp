@@ -2,8 +2,8 @@
 // band maths in ParametricEQFilterDesign.cpp. docs/modules/fx-modules.md#parametric-eq-module.
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FX/ParametricEQ/ParametricEQFilterDesign.h"
-#include "Modules/FX/ParametricEQ/ParametricEQParamIds.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -67,15 +67,16 @@ void setChoice(juce::AudioParameterChoice* param, int index) {
 // Type and Slope (band1Type, band1Slope, band2Type, ...). An old patch has none of the appended keys, so each keeps
 // its default: slots 1-4 default to the types they always had, so the old patch loads and sounds the same.
 ParametricEQModule::ParametricEQModule()
-    : ModuleBase("Parametric EQ", 17, 2) { // 0-1 audio, 2-14 CV (2-5 the bells' bespoke curves), 15 Mix, 16 Pan
-    for (int b = 0; b < kShownBands; ++b)
+    : ModuleBase("Parametric EQ", kTotalInputChannels,
+                 2) { // 0-1 audio, 2-14 CV (2-5 the bells' bespoke curves), 15 Mix, 16 Pan
+    for (int b = 0; b < kOriginalBands; ++b)
         addBandParameters(b);
     addParameter(outputGainParam =
                      new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, plainAttributes(1)));
     addMuteParameter();
     addMixParameter(kMixCvChannel);
     addPanParameter(kPanCvChannel);
-    for (int b = kShownBands; b < kMaxBands; ++b)
+    for (int b = kOriginalBands; b < kMaxBands; ++b)
         addBandParameters(b);
     for (int b = 0; b < kMaxBands; ++b)
         addTypeAndSlopeParameters(b);
@@ -106,9 +107,6 @@ void ParametricEQModule::addTypeAndSlopeParameters(int b) {
                                                              synth::eq::kDefaultSlopeIndex));
 }
 
-// "band<N><Suffix>": hidden when N is 5-24 (any suffix), or for any band's Type and Slope.
-bool ParametricEQModule::isHiddenParamId(const juce::String& paramId) { return synth::eq::isHiddenParamId(paramId); }
-
 float ParametricEQModule::bandMagnitudeDb(BandType type, float centreHz, float gainDb, float q, float freq,
                                           int slopeDbPerOct) noexcept {
     return synth::eq::bandMagnitudeDb(type, centreHz, gainDb, q, freq, slopeDbPerOct);
@@ -119,49 +117,61 @@ void ParametricEQModule::writeBiquad(BandType type, float centreHz, float gainDb
     synth::eq::writeBiquad(type, centreHz, gainDb, q, sampleRate, dest);
 }
 
-// Parsed rather than listed so the AI and diff code can ask without building a module.
-bool synth::eq::isHiddenParamId(const juce::String& paramId) {
-    constexpr int kMaxBands = ParametricEQModule::kMaxBands;
-    constexpr int kShownBands = ParametricEQModule::kShownBands;
-    if (!paramId.startsWith("band"))
-        return false;
-    const auto rest = paramId.substring(4);
-    const auto digits = rest.initialSectionContainingOnly("0123456789");
-    if (digits.isEmpty())
-        return false;
-    const int band = digits.getIntValue();
-    const auto suffix = rest.substring(digits.length());
-    if (band < 1 || band > kMaxBands)
-        return false;
-    if (suffix == "Type" || suffix == "Slope")
-        return true;
-    return band > kShownBands && (suffix == "On" || suffix == "Freq" || suffix == "Gain" || suffix == "Q");
+// The original four bands' channels were added over time (see getInputPortLabel), so they are listed, not computed.
+int ParametricEQModule::bandCvChannel(int band, int field) noexcept {
+    static constexpr int kFreq[kOriginalBands] = {6, 2, 4, 8};
+    static constexpr int kGain[kOriginalBands] = {7, 3, 5, 9};
+    if (band < 0 || band >= kMaxBands || field < 0 || field >= kBandCvFields)
+        return -1;
+    if (band >= kOriginalBands)
+        return kFirstBandCvChannel + (band - kOriginalBands) * kBandCvFields + field;
+    return field == 0 ? kFreq[band] : field == 1 ? kGain[band] : 10 + band;
 }
 
 juce::String ParametricEQModule::getInputPortLabel(int i) const {
     // Appended after the original four (ch2-5) so saved patches that modulate B2/B3 keep working; see
-    // docs/modules/modulation.md#every-continuous-parameter-is-a-target. Bands 5-24 have no jacks.
+    // docs/modules/modulation.md#every-continuous-parameter-is-a-target. Bands 5-24's channels follow Pan and have no
+    // jack of their own.
     const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain", "B1 Freq", "B1 Gain", "B4 Freq", "B4 Gain",
                                "B1 Q",    "B2 Q",    "B3 Q",    "B4 Q",    "Output",  "Mix",     "Pan"};
+    if (i >= kFirstBandCvChannel && i < kTotalInputChannels) {
+        const int slot = i - kFirstBandCvChannel;
+        static constexpr const char* kField[kBandCvFields] = {"Freq", "Gain", "Q"};
+        return "B" + juce::String(kOriginalBands + 1 + slot / kBandCvFields) + " " + kField[slot % kBandCvFields];
+    }
     return stereoInputLabel(i, kNumCvInputs, cv);
 }
 
+// A band's Freq, Gain and Q are reached through the knobs of the card's selected-band row (and the pop-out window's),
+// never through a gutter jack of their own, so none of them takes a gutter row whichever band the card shows. Output
+// is the one knob that always stays on the card.
 std::vector<ModulationTarget> ParametricEQModule::getModulationTargets() const {
-    return {{"B2 Freq", 2, "band2Freq"},
-            {"B2 Gain", 3, "band2Gain"},
-            {"B3 Freq", 4, "band3Freq"},
-            {"B3 Gain", 5, "band3Gain"},
-            {"B1 Freq", 6, "band1Freq"},
-            {"B1 Gain", 7, "band1Gain"},
-            {"B4 Freq", 8, "band4Freq"},
-            {"B4 Gain", 9, "band4Gain"},
-            {"B1 Q", 10, "band1Q"},
-            {"B2 Q", 11, "band2Q"},
-            {"B3 Q", 12, "band3Q"},
-            {"B4 Q", 13, "band4Q"},
-            {"Output", 14, "outputGain"},
-            {"Mix", kMixCvChannel, "mix", true},
-            {"Pan", kPanCvChannel, "pan", true}};
+    std::vector<ModulationTarget> targets;
+    static constexpr const char* kField[kBandCvFields] = {"Freq", "Gain", "Q"};
+    for (int b = 0; b < kMaxBands; ++b)
+        for (int f = 0; f < kBandCvFields; ++f)
+            targets.push_back({"B" + juce::String(b + 1) + " " + kField[f], bandCvChannel(b, f),
+                               "band" + juce::String(b + 1) + kField[f], true});
+    targets.push_back({"Output", 14, "outputGain"});
+    targets.push_back({"Mix", kMixCvChannel, "mix", true});
+    targets.push_back({"Pan", kPanCvChannel, "pan", true});
+    // Channel order, as the four-band module listed them, so the lists that follow it keep their order.
+    std::sort(targets.begin(), targets.end(),
+              [](const ModulationTarget& a, const ModulationTarget& b) { return a.channelIndex < b.channelIndex; });
+    return targets;
+}
+
+// Raw channels past Pan are reached only through a band's knob: they never take a jack, so each maps to a jack index
+// of its own beyond the visible ones.
+LogicalPort ParametricEQModule::mapInputChannel(int raw) const {
+    if (raw < kFirstBandCvChannel)
+        return mapStereoPairInput(raw, kNumCvInputs);
+    LogicalPort port;
+    port.visibleJackIndex = raw;
+    port.role = PortRole::ModCV;
+    port.isPolyGroupHead = true;
+    port.polyVoiceSpan = 1;
+    return port;
 }
 
 // Values come from the parameters, so the curve tracks an edit even with no audio flowing; a band's live CV value is
@@ -249,12 +259,12 @@ void ParametricEQModule::setBandSlope(int band, int slopeDbPerOct) {
 }
 
 // The disabled shown slot whose home frequency is closest on a log axis, so a click down low lands on the low shelf
-// and one up top on the high shelf. Only the four shown slots: the curve cannot show a point in slots 5-24 yet.
+// and one up top on the high shelf. Only the four home slots: slots 5-24 are picked by findFreeBand.
 int ParametricEQModule::findBandForNewPoint(float freqHz) const {
     int best = -1;
     float bestDistance = 0.0f;
     const float target = std::log(juce::jlimit(kMinFreq, kMaxFreq, freqHz));
-    for (int b = 0; b < kShownBands; ++b) {
+    for (int b = 0; b < kOriginalBands; ++b) {
         if (bands[(size_t)b].on->get())
             continue;
         const float distance = std::abs(target - std::log(defaultFreqFor(b)));
@@ -289,7 +299,7 @@ int ParametricEQModule::addBand(float freqHz, BandType type) {
 ParametricEQModule::BandType ParametricEQModule::bandTypeFor(int index) noexcept {
     if (index == 0)
         return BandType::LowShelf;
-    if (index == kShownBands - 1)
+    if (index == kOriginalBands - 1)
         return BandType::HighShelf;
     return BandType::Peak;
 }
@@ -309,11 +319,11 @@ juce::String ParametricEQModule::rowLabelFor(int index) {
 // Slots 1-4 keep their four-band homes. Slots 5-24 spread evenly on a log axis from 40 Hz to 16 kHz, so a band added
 // there without a frequency still lands somewhere distinct.
 float ParametricEQModule::defaultFreqFor(int index) noexcept {
-    constexpr float shown[kShownBands] = {100.0f, 500.0f, 3000.0f, 8000.0f};
+    constexpr float shown[kOriginalBands] = {100.0f, 500.0f, 3000.0f, 8000.0f};
     const int slot = juce::jlimit(0, kMaxBands - 1, index);
-    if (slot < kShownBands)
+    if (slot < kOriginalBands)
         return shown[slot];
-    const float t = static_cast<float>(slot - kShownBands) / static_cast<float>(kMaxBands - kShownBands - 1);
+    const float t = static_cast<float>(slot - kOriginalBands) / static_cast<float>(kMaxBands - kOriginalBands - 1);
     return 40.0f * std::pow(16000.0f / 40.0f, t);
 }
 

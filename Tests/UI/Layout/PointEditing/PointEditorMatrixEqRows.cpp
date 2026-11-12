@@ -1,9 +1,11 @@
-// PointEditorMatrixEqRows.cpp -- the matrix row for the Parametric EQ's curve: four band slots, three of them on, in a
+// PointEditorMatrixEqRows.cpp -- the matrix row for the Parametric EQ's curve: 24 band slots, three of them on, in a
 // real graph. A point is an enabled band; its position is the octave of its frequency, its value its gain.
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "PointEditorMatrixDriver.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include <algorithm>
 #include <cmath>
 
 namespace point_matrix {
@@ -44,18 +46,31 @@ public:
     bool key(int code, int mods) override { return curve_->keyPressed(keyOf(code, mods)); }
     // An empty place high up between the first two bands.
     juce::Point<float> emptySpot() override { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
-    // The curve has no menu: a right-click is a plain press on the dot.
+    // A right-click on a band opens its type menu at the dot; the popover is captured, never shown, so no window is
+    // left open for the next test.
     std::optional<juce::Rectangle<int>> rightClick(int point) override {
+        std::optional<juce::Rectangle<int>> area;
+        auto& launcher = synth::ui::test_hooks::popoverLauncherForTest();
+        launcher = [&area](std::unique_ptr<juce::Component>, juce::Rectangle<int> at) -> juce::CallOutBox* {
+            area = at;
+            return nullptr;
+        };
         rightPress(dot(point));
-        return std::nullopt;
+        launcher = nullptr;
+        return area;
     }
 
 private:
+    // The points run in frequency order, not slot order: a duplicate lands in the lowest free slot but two semitones
+    // above its original, so "right after the original along the axis" is a frequency question.
     std::vector<int> enabled() const {
         std::vector<int> bands;
-        for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+        for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
             if (module_->isBandEnabled(b))
                 bands.push_back(b);
+        const auto snapshots = module_->getBandSnapshots();
+        std::stable_sort(bands.begin(), bands.end(),
+                         [&](int a, int b) { return snapshots[(size_t)a].freqHz < snapshots[(size_t)b].freqHz; });
         return bands;
     }
     ParametricEQModule::BandSnapshot snapshot(int point) const {

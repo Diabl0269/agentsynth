@@ -1,9 +1,12 @@
-// ModuleComponentEQCard.cpp -- the Parametric EQ card: its layout geometry (namespace eqCard),
-// knob placement, the pop-out EQ window, and the undo-gesture wiring for its curve editor.
+// ModuleComponentEQCard.cpp -- the Parametric EQ card: its layout geometry (namespace eqCard): the curve, the band
+// strip, the selected band's row (ModuleComponentEQBandRow.cpp), then the Output trim and the buttons; the pop-out EQ
+// window, and the undo-gesture wiring for its curve editor.
 // ModuleComponent is declared in ModuleComponent.h; the rest of its implementation lives in the
 // sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
+#include "ModuleComponentEQBandRow.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
@@ -14,8 +17,7 @@ namespace eqCard {
 constexpr int kMargin = 12;
 constexpr int kCurveHeight = 150;
 constexpr int kButtonRow = 28;
-constexpr int kToggleRow = 26;
-constexpr int kNumKnobRows = 3; // Freq / Gain / Q
+constexpr int kStripGap = 6;
 constexpr int kNumVisibleInputs = 6;
 constexpr int kScopeHeight = 100;
 
@@ -44,15 +46,9 @@ constexpr int kPortGutter = 88;
 constexpr int kCurveBottom = kCurveTop + kCurveHeight;
 constexpr int kContentTop = (kCurveBottom > kPortLabelBottom ? kCurveBottom : kPortLabelBottom) + 8;
 
-constexpr const char* kKnobSuffix[kNumKnobRows] = {"Freq", "Gain", "Q"};
+// A fresh EQ (every band off) shows only the + chip, one row.
+constexpr int kRestingStripHeight = 22;
 } // namespace eqCard
-
-juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) const {
-    for (auto* toggle : toggles)
-        if (toggle->getComponentID().equalsIgnoreCase(name))
-            return toggle;
-    return nullptr;
-}
 
 void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
     juce::ignoreUnused(h);
@@ -73,9 +69,9 @@ int ModuleComponent::parametricEQHeight() const {
     using namespace eqCard;
     // kContentTop already accounts for the curve, which is laid out beside the port labels.
     int h = kContentTop;
-    h += kKnobRow + 6;   // Show Spectrum + Open EQ Window, with the Output trim sharing the row
-    h += kToggleRow + 2; // per-band on/off row
-    h += kNumKnobRows * kKnobRow + 4;
+    h += (eqBand_ != nullptr ? eqBand_->stripHeight(getWidth() - kMargin * 2) : kRestingStripHeight) + kStripGap;
+    h += EqBandRow::kRowHeight + 4; // the selected band's Freq / Gain / Q, on/off and type
+    h += kKnobRow + 6;              // Show Spectrum + Open EQ Window, with the Output trim sharing the row
     if (scopeToggle)
         h += kButtonRow + 4;
     if (scopeComponent && scopeComponent->isVisible())
@@ -99,10 +95,14 @@ void ModuleComponent::layoutParametricEQ() {
     }
 
     int y = kContentTop;
+    if (eqBand_ != nullptr) {
+        y += eqBand_->layoutStrip(kMargin, y, contentW) + kStripGap;
+        eqBand_->layoutSelected(kMargin, y, contentW);
+        y += EqBandRow::kRowHeight + 4;
+    }
 
-    // Buttons on the left, Output trim on the right of the same row — a full-width row for one
-    // lone knob would leave three empty columns and make the card taller for nothing. The
-    // buttons are nudged down so they sit against the knob's centre rather than its label.
+    // Buttons on the left, Output trim on the right of the same row: a full-width row for one lone knob would
+    // leave empty columns. The buttons are nudged down so they sit against the knob's centre rather than its label.
     const int buttonY = y + (kKnobRow - kButtonRow) / 2;
     if (spectrumToggle)
         spectrumToggle->setBounds(kMargin, buttonY, 140, kButtonRow);
@@ -110,23 +110,6 @@ void ModuleComponent::layoutParametricEQ() {
         eqPopOutButton->setBounds(kMargin + 150, buttonY, 150, kButtonRow);
     layoutNamedKnob("Output", getWidth() - kMargin - kSliderWidth, y, kSliderWidth, kKnobRow);
     y += kKnobRow + 6;
-
-    // One column per band. The on/off toggle's text is the band's type ("1 Low Shelf"), so the
-    // column header and its enable control are the same widget.
-    const int colW = contentW / ParametricEQModule::kShownBands;
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
-        if (auto* toggle = findToggleByName(ParametricEQModule::rowLabelFor(b)))
-            toggle->setBounds(kMargin + b * colW, y, colW - 4, kToggleRow);
-    }
-    y += kToggleRow + 2;
-
-    for (int row = 0; row < kNumKnobRows; ++row) {
-        for (int b = 0; b < ParametricEQModule::kShownBands; ++b) {
-            const juce::String name = "B" + juce::String(b + 1) + " " + kKnobSuffix[row];
-            layoutNamedKnob(name, kMargin + b * colW, y + row * kKnobRow, colW - 4, kKnobRow);
-        }
-    }
-    y += kNumKnobRows * kKnobRow + 4;
 
     if (scopeToggle) {
         scopeToggle->setBounds(kMargin, y, contentW, kButtonRow);
@@ -176,6 +159,7 @@ void ModuleComponent::openEqWindow() {
 
     content->onAppShortcut = synth::ui::makeAppShortcutRelay(this);
     content->setUndoManager(undoManager);
+    content->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(content.release());
@@ -184,4 +168,12 @@ void ModuleComponent::openEqWindow() {
     options.useNativeTitleBar = true;
     options.resizable = true;
     eqWindow = synth::ui::PopupMotion::launchDialog(options);
+}
+
+void ModuleComponent::driveEqKnobGlideForTest(bool force, double stepMs) {
+    if (eqBand_ == nullptr)
+        return;
+    eqBand_->glideForTest().forceAnimateForTest(force);
+    if (stepMs > 0.0)
+        eqBand_->glideForTest().stepForTest(stepMs);
 }

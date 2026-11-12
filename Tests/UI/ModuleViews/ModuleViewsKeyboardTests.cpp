@@ -89,9 +89,11 @@ TEST(ModuleViewsTextTest, GainAlwaysCarriesASign) {
 }
 
 TEST(ModuleViewsTextTest, EqBandReadsFrequencyGainAndQ) {
-    EXPECT_EQ(describeEqBand(1, true, 1200.0f, 3.0f, 0.7071f), "Band 2, 1.2 kHz, +3.0 dB, Q 0.7");
-    EXPECT_EQ(describeEqBand(3, false, 8000.0f, 0.0f, 1.0f), "Band 4, off");
-    EXPECT_EQ(describeEqCurveSummary(2, 4), "No band selected, 2 of 4 bands on");
+    EXPECT_EQ(describeEqBand(1, "Bell", true, 1200.0f, 3.0f, 0.7071f), "Band 2, Bell, 1.2 kHz, +3.0 dB, Q 0.7");
+    EXPECT_EQ(describeEqBand(6, "Bell", true, 2400.0f, 3.0f, 0.7071f), "Band 7, Bell, 2.4 kHz, +3.0 dB, Q 0.7");
+    EXPECT_EQ(describeEqBand(3, "High Shelf", false, 8000.0f, 0.0f, 1.0f), "Band 4, High Shelf, off");
+    EXPECT_EQ(describeEqBandChip(6, "Bell", 2400.0f), "Band 7, Bell, 2.4 kHz");
+    EXPECT_EQ(describeEqCurveSummary(2, 24), "No band selected, 2 of 24 bands on");
 }
 
 TEST(ModuleViewsTextTest, CurvePointReadsPositionTimeAndLevel) {
@@ -122,11 +124,20 @@ TEST(EQCurveKeyboard, LeftAndRightSelectBandsAndClampAtTheEnds) {
     EXPECT_EQ(rig.curve->getSelectedBand(), -1);
     EXPECT_TRUE(rig.press(juce::KeyPress::rightKey));
     EXPECT_EQ(rig.curve->getSelectedBand(), 0);
-    for (int expected : {1, 2, 3, 3, 3}) {
+    for (int expected = 1; expected < ParametricEQModule::kMaxBands; ++expected) {
         rig.press(juce::KeyPress::rightKey);
         EXPECT_EQ(rig.curve->getSelectedBand(), expected);
     }
-    for (int expected : {2, 1, 0, 0}) {
+    rig.press(juce::KeyPress::rightKey);
+    EXPECT_EQ(rig.curve->getSelectedBand(), ParametricEQModule::kMaxBands - 1) << "clamped at band 24";
+    for (int expected : {22, 21}) {
+        rig.press(juce::KeyPress::leftKey);
+        EXPECT_EQ(rig.curve->getSelectedBand(), expected);
+    }
+    for (int i = 0; i < 30; ++i)
+        rig.press(juce::KeyPress::leftKey);
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "clamped at band 1";
+    for (int expected : {0}) {
         rig.press(juce::KeyPress::leftKey);
         EXPECT_EQ(rig.curve->getSelectedBand(), expected);
     }
@@ -141,19 +152,19 @@ TEST(EQCurveKeyboard, TabbingInSelectsTheFirstBandButAClickDoesNot) {
     EXPECT_EQ(rig.curve->getSelectedBand(), 0);
 }
 
-TEST(EQCurveKeyboard, UpAndDownChangeGainOneDbPerPressAsOneGesture) {
+TEST(EQCurveKeyboard, AltUpAndDownChangeGainOneDbPerPressAsOneGesture) {
     EqRig rig;
     rig.press(juce::KeyPress::rightKey); // band 1
-    EXPECT_TRUE(rig.press(juce::KeyPress::upKey));
+    EXPECT_TRUE(rig.press(juce::KeyPress::upKey, kAlt));
     EXPECT_NEAR(rig.band(0).gainDb, 1.0f, 0.01f);
     EXPECT_EQ(rig.starts, 1);
     EXPECT_EQ(rig.ends, 1);
-    rig.press(juce::KeyPress::downKey);
-    rig.press(juce::KeyPress::downKey);
+    rig.press(juce::KeyPress::downKey, kAlt);
+    rig.press(juce::KeyPress::downKey, kAlt);
     EXPECT_NEAR(rig.band(0).gainDb, -1.0f, 0.01f);
     EXPECT_EQ(rig.starts, 3);
     EXPECT_EQ(rig.ends, 3);
-    rig.press(juce::KeyPress::upKey, kShift);
+    rig.press(juce::KeyPress::upKey, kAlt | kShift);
     EXPECT_NEAR(rig.band(0).gainDb, -0.75f, 0.01f);
 }
 
@@ -164,7 +175,7 @@ TEST(EQCurveKeyboard, GainStopsAtTheRangeEndWithoutAnEmptyUndoStep) {
     int starts = 0;
     curve.onGestureStart = [&] { ++starts; };
     curve.keyPressed(key(juce::KeyPress::rightKey));
-    curve.keyPressed(key(juce::KeyPress::upKey));
+    curve.keyPressed(key(juce::KeyPress::upKey, kAlt));
     EXPECT_NEAR(rig.band(0).gainDb, ParametricEQModule::kMaxGainDb, 0.01f);
     EXPECT_EQ(starts, 0);
 }
@@ -235,14 +246,14 @@ TEST(EQCurveKeyboard, CommandAndControlChordsAreLeftToTheApp) {
 
 TEST(EQCurveKeyboard, TheSpokenValueFollowsTheSelectedBand) {
     EqRig rig;
-    EXPECT_EQ(spoken(*rig.curve), "No band selected, 2 of 4 bands on");
+    EXPECT_EQ(spoken(*rig.curve), "No band selected, 2 of 24 bands on");
     rig.press(juce::KeyPress::rightKey);
     rig.press(juce::KeyPress::rightKey);
-    EXPECT_EQ(spoken(*rig.curve), "Band 2, 2 kHz, +3.0 dB, Q 0.7");
-    rig.press(juce::KeyPress::upKey);
-    EXPECT_EQ(spoken(*rig.curve), "Band 2, 2 kHz, +4.0 dB, Q 0.7");
+    EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +3.0 dB, Q 0.7");
+    rig.press(juce::KeyPress::upKey, kAlt);
+    EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +4.0 dB, Q 0.7");
     rig.press(juce::KeyPress::rightKey);
-    EXPECT_EQ(spoken(*rig.curve), "Band 3, off");
+    EXPECT_EQ(spoken(*rig.curve), "Band 3, Bell, off");
 }
 
 // ---------------------------------------------------------------------------

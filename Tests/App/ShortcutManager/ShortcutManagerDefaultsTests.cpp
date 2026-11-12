@@ -8,7 +8,8 @@ namespace {
 // Every action id a COMPONENT resolves for itself, written out literally rather than derived from
 // the manager. That is the whole point: this list is a transcription of what
 // PianoRollComponent::keyPressed, TimelinePanelComponent::keyPressed,
-// TimelineClipLaneArea::keyPressed, MixerPanelComponent::keyPressed and CanvasCardKeyboard::keyPressed
+// TimelineClipLaneArea::keyPressed, MixerPanelComponent::keyPressed, EQCurveComponent::keyPressed and
+// CanvasCardKeyboard::keyPressed
 // actually ask for, so if one of them is missing from
 // ShortcutManager::resetToDefaults() the test fails instead of the KEY silently going dead.
 //
@@ -78,6 +79,20 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "layoutEditorNudgeUpBig",
         "layoutEditorNudgeDownBig",
         "layoutEditorRemoveControl",
+        // EQCurveComponent::keyPressed
+        "eqSelectPrev",
+        "eqSelectNext",
+        "eqMoveLeft",
+        "eqMoveRight",
+        "eqMoveUp",
+        "eqMoveDown",
+        "eqWidthUp",
+        "eqWidthDown",
+        "eqSolo",
+        "eqTypeMenu",
+        "eqAddBand",
+        "eqRemoveBand",
+        "eqDuplicateBand",
         // CanvasCardKeyboard::keyPressed
         "canvasSelectCardLeft",
         "canvasSelectCardRight",

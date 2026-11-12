@@ -5,6 +5,7 @@
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
+#include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "ModuleComponentModChip.h"
@@ -17,6 +18,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
@@ -232,8 +234,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
+        eqCurveComponent->setComponentID("eqCardCurve");
         wireEqGestureCallbacks(*eqCurveComponent);
+        eqCurveComponent->setShortcutManager(owner.getCardKeyboard().getShortcutManager());
         addAndMakeVisible(eqCurveComponent.get());
+        eqBand_ = std::make_unique<EqBandRow>(*this, *eqMod, *eqCurveComponent);
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
@@ -388,6 +393,9 @@ void ModuleComponent::detachFromProcessor() {
 
     // Same for the frequency-domain views: their 30 Hz timers poll the module for parameter
     // values and FFT samples, so they must go before the module pointer is dropped.
+    if (eqBand_ != nullptr)
+        eqBand_->shutdown(processorAlive);
+    eqBand_.reset(); // the strip and pill listen to the curve
     eqCurveComponent.reset();
     freqResponseComponent.reset();
     freqResponseToggle.reset();
@@ -966,3 +974,13 @@ void ModuleComponent::setRasterFrozen(bool frozen) {
 }
 
 bool ModuleComponent::isRasterFrozen() const noexcept { return rasterCache != nullptr && rasterCache->isFrozen(); }
+
+// Defined here, where CardKnobSlider is already included, so the band row unit stays out of its header's reach.
+juce::Slider* ModuleComponent::EqBandRow::newKnob() {
+    return card_.adoptBespokeWidget(new synth::ui::CardKnobSlider());
+}
+
+void ModuleComponent::EqBandRow::wireKnobGestures(juce::Slider& knob, juce::RangedAudioParameter* param) {
+    if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(&knob))
+        card_.wireCardControlGestures(knob, *gestures, param);
+}

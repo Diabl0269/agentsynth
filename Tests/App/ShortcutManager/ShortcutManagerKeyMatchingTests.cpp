@@ -187,22 +187,23 @@ TEST_F(ShortcutManagerTest, ArrowKeysGetReadableDisplayStrings) {
 // One keypress can now name more than one action (different categories). Command dispatch depends on
 // getActionsForKeyPress returning ALL of them so MainComponent can pick the one with a command.
 TEST_F(ShortcutManagerTest, GetActionsForKeyPressReportsEveryMatch) {
-    // Bare Left: the piano roll's nudge, the timeline's Previous Clip, the canvas's card step and the
-    // on-card layout editor's nudge, and NONE is a command.
+    // Bare Left: the piano roll's nudge, the timeline's Previous Clip, the canvas's card step, the
+    // on-card layout editor's nudge and the EQ curve's band step, and NONE is a command.
     const juce::KeyPress bareLeft(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0);
     const auto matches = manager.getActionsForKeyPress(bareLeft);
-    EXPECT_EQ(matches.size(), 4);
+    EXPECT_EQ(matches.size(), 5);
     EXPECT_TRUE(matches.contains("layoutEditorNudgeLeft"));
     EXPECT_TRUE(matches.contains("pianoRollNudgeLeft"));
     EXPECT_TRUE(matches.contains("timelineClipPrevious"));
     EXPECT_TRUE(matches.contains("canvasSelectCardLeft"));
+    EXPECT_TRUE(matches.contains("eqSelectPrev"));
     for (const auto& id : matches)
         EXPECT_EQ(AppCommands::getCommandForAction(id), AppCommands::kNoCommand);
 
     // Deliberately put a command action on the same key in another category and check both surface.
     manager.setBinding("autoArrange", bareLeft);
     const auto both = manager.getActionsForKeyPress(bareLeft);
-    EXPECT_EQ(both.size(), 5);
+    EXPECT_EQ(both.size(), 6);
     EXPECT_TRUE(both.contains("pianoRollNudgeLeft"));
     EXPECT_TRUE(both.contains("timelineClipPrevious"));
     EXPECT_TRUE(both.contains("autoArrange"));

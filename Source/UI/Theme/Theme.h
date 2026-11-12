@@ -84,6 +84,15 @@ struct Colors {
     juce::Colour trackSoloOn{0xffFFD23D}; // solo button, active
     juce::Colour trackArmOn{0xffE5484D};  // arm/record button, active
 
+    // Parametric EQ band kinds (docs/modules/fx-modules.md#parametric-eq-module): the ring of a band's dot and the
+    // body of its chip. Fixed across every theme, so a band reads the same wherever the EQ is shown.
+    juce::Colour eqKindBell{0xff00D1FF};     // bell (peak)
+    juce::Colour eqKindShelf{0xffF5B94A};    // low and high shelf
+    juce::Colour eqKindCut{0xffA78BFA};      // low and high cut
+    juce::Colour eqKindNotch{0xffFF6B9A};    // notch
+    juce::Colour eqKindTilt{0xff3DDC97};     // tilt
+    juce::Colour eqKindBandPass{0xff7BE495}; // band pass
+
     // Active-tool highlight in the timeline edit-tool strip (Select/Split/Glue/Erase/Mute/Draw
     // — see Source/UI/Timeline/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
     // there is no existing precedent in this struct for one token defaulting FROM another at

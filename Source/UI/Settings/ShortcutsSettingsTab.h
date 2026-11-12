@@ -60,7 +60,7 @@ public:
     // appProperties (nullable) is where the folded sections are remembered; null keeps them in memory only.
     explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager,
                                   juce::ApplicationProperties* appProperties = nullptr);
-    ~ShortcutsSettingsTab() override = default;
+    ~ShortcutsSettingsTab() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -264,5 +264,10 @@ private:
     std::vector<std::unique_ptr<synth::ui::FadeVisibility>> rowFades_;
     std::vector<std::unique_ptr<synth::ui::FadeVisibility>> headerFades_;
     bool laidOutOnce_ = false;
+    // Test mode: a hidden child (id `shortcutsSettingsState`) reports `sections` (the category names of the headers
+    // on screen, top to bottom, comma-separated) and `eqRows` (the descriptions of the rows of the EQ category, in
+    // table order, comma-separated; empty when the section is hidden or folded).
+    class StateProbe;
+    std::unique_ptr<StateProbe> stateProbe_;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutsSettingsTab)
 };

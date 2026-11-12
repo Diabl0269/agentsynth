@@ -31,7 +31,8 @@ TEST(ParametricEQModuleTest, NameTypeAndCategory) {
 
 TEST(ParametricEQModuleTest, ChannelLayoutIsStereoPlusThirteenCV) {
     ParametricEQModule eq;
-    EXPECT_EQ(eq.getTotalNumInputChannels(), 17);
+    // 17 original channels, then three knob-only CV channels for each of bands 5-24.
+    EXPECT_EQ(eq.getTotalNumInputChannels(), 17 + 20 * 3);
     EXPECT_EQ(eq.getTotalNumOutputChannels(), 2);
     EXPECT_EQ(eq.getVisibleInputPortCount(), 16);
     EXPECT_EQ(eq.getVisibleOutputPortCount(), 1);
@@ -59,7 +60,7 @@ TEST(ParametricEQModuleTest, PortLabelsNameAllFifteenInputs) {
 TEST(ParametricEQModuleTest, ModulationTargetsCoverEveryContinuousParameter) {
     ParametricEQModule eq;
     const auto targets = eq.getModulationTargets();
-    ASSERT_EQ(targets.size(), 15u);
+    ASSERT_EQ(targets.size(), 15u + 20u * 3u);
     for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(targets[(size_t)i].channelIndex, 2 + i);
         EXPECT_TRUE(eq.isAutoPromotableModTarget(targets[(size_t)i].channelIndex));
@@ -104,12 +105,12 @@ TEST(ParametricEQModuleTest, RowLabelsNameTheSlotAndItsType) {
 }
 
 TEST(ParametricEQModuleTest, DefaultFrequenciesAscendAcrossSlots) {
-    for (int b = 1; b < kShownBands; ++b)
+    for (int b = 1; b < kOriginalBands; ++b)
         EXPECT_GT(ParametricEQModule::defaultFreqFor(b), ParametricEQModule::defaultFreqFor(b - 1)) << "slot " << b;
     // Slots 5-24 spread on their own ladder, 40 Hz to 16 kHz.
-    EXPECT_NEAR(ParametricEQModule::defaultFreqFor(kShownBands), 40.0f, 0.01f);
+    EXPECT_NEAR(ParametricEQModule::defaultFreqFor(kOriginalBands), 40.0f, 0.01f);
     EXPECT_NEAR(ParametricEQModule::defaultFreqFor(kMaxBands - 1), 16000.0f, 1.0f);
-    for (int b = kShownBands + 1; b < kMaxBands; ++b)
+    for (int b = kOriginalBands + 1; b < kMaxBands; ++b)
         EXPECT_GT(ParametricEQModule::defaultFreqFor(b), ParametricEQModule::defaultFreqFor(b - 1)) << "slot " << b;
     // Out-of-range indices clamp rather than reading past the array.
     EXPECT_FLOAT_EQ(ParametricEQModule::defaultFreqFor(-5), ParametricEQModule::defaultFreqFor(0));
@@ -211,7 +212,7 @@ TEST(ParametricEQPointPlacement, SkipsSlotsAlreadyInUse) {
 
 TEST(ParametricEQPointPlacement, ReturnsMinusOneWhenAllSlotsAreUsed) {
     ParametricEQModule eq;
-    for (int b = 0; b < kShownBands; ++b)
+    for (int b = 0; b < kOriginalBands; ++b)
         eq.setBandEnabled(b, true);
     EXPECT_EQ(eq.findBandForNewPoint(1000.0f), -1);
 }

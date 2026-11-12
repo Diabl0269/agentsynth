@@ -378,6 +378,7 @@ protected:
     virtual void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int> anchor);
 
 public:
+    void driveEqKnobGlideForTest(bool force, double stepMs); ///< Test: the EQ knob glide while hidden.
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
      *  (also null for a hosted entry -- see findMidiLearnableEntryForTest() below). */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
@@ -577,6 +578,8 @@ private:
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
     std::unique_ptr<juce::ToggleButton> freqResponseToggle;
     std::unique_ptr<EQCurveComponent> eqCurveComponent;
+    class EqBandRow;
+    std::unique_ptr<EqBandRow> eqBand_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     // The Show Scope / Show Response panels fade with their height (ModuleComponentCardView.cpp); declared after
     // the panels they fade, so they go first.
@@ -931,9 +934,7 @@ private:
     void pollSequencerCard();
 
     // --- Parametric EQ card ---
-    // One column per band (on/off toggle above Freq / Gain / Q), so the knobs read as a grid
-    // instead of the generic two-up flow. Height is computed by parametricEQHeight() from the
-    // same constants the layout uses, so the two cannot drift apart.
+    // Curve, strip, the selected band's controls (EqBandRow), trim, buttons; height from parametricEQHeight().
     void layoutParametricEQ();
     int parametricEQHeight() const;
     // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
@@ -941,7 +942,6 @@ private:
     void wireEqGestureCallbacks(EQCurveComponent& curve);
     // Auto-UI controls are looked up by their parameter display name (set as the componentID in
     // createControls), which keeps the layout independent of parameter ordering.
-    juce::ToggleButton* findToggleByName(const juce::String& name) const;
     void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
 
     // --- Envelope (ADSR) card ---

@@ -300,6 +300,10 @@ envelope, LFO curve and threshold components plug in unchanged.
 - **Views whose height moves.** A view that folds parts of itself in and out while the card is up implements
   `CardAnimatedHeightView` (`CardBodyViews.h`): the live layout asks it for the height of this pass, where the static
   measure (and so the size estimate) asks the factory for the final height. The `stepGrid` view is the one such view.
+- **Parametric EQ card.** Top to bottom: the curve, the band strip (`EQBandStrip`, wrapping rows; its height comes
+  from `heightForWidth`, so measure equals apply and a row appearing resizes the card through `onPreferredHeightChanged`),
+  the selected band's row (Freq / Gain / Q knobs re-bound by `ModuleComponent::EqBandRow`, the on toggle, the type pill),
+  the Output / Show Spectrum / Open EQ Window row, then the scope. The card holds the same widgets at 4 and 24 bands.
 - **Bespoke cards.** MIDI Keyboard, Macros, Attenuverter, Parametric EQ
   and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
   knob row they expose. The Wavetable is a layout card: its pages are `presentation: tab` sections of
