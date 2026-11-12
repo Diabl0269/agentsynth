@@ -199,6 +199,7 @@ lives, and that changes what "off" means:
 |---|---|---|
 | **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Ring Modulator out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
 | **Split block** (`kRightBase`) | Oscillator, Wavetable, Filter, VCA | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+| **Split block, two-leg jack** (`kRightBase`, jack `voiceStride`) | Channel Strip (input of a stereo strip, main output of every strip) | One `"Audio"` jack **owning both raw legs**, `0` and `kRightBase` apart; nothing is hidden, so no cable is re-pointed or dropped. |
 
 Voice Mixer and Ring Modulator are **output-only**: their input jacks are not a stereo pair (eight
 voice inputs; Carrier + Modulator + three CV), so only the output pair collapses. On the Ring

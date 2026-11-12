@@ -92,7 +92,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             bestScore = score;
 
             int voiceCount = std::min(s.voiceSpan, d.voiceSpan);
-            int sourceStride = 1;
+            int sourceStride = s.rawStride;
             int destStride = d.rawStride;
 
             // One mono modulator patched onto a per-voice mod-CV fan drives every voice, the way a
@@ -147,7 +147,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
                 const int rightLeg = stereoPairRightLeg(dest, d.rawHeadChannel, destVisibleJack);
                 if (rightLeg >= 0) {
                     voiceCount = 2;
-                    sourceStride = 1;
+                    sourceStride = s.rawStride;
                     destStride = rightLeg - d.rawHeadChannel;
                 }
             }
@@ -168,7 +168,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
     if (dest == nullptr && destVisibleJack == 0) {
         for (const auto& s : sourceTargets) {
             if (s.role == PortRole::Audio && s.voiceSpan == 2) {
-                return PolyLink{s.rawHeadChannel, 0, 2, 1};
+                return PolyLink{s.rawHeadChannel, 0, 2, s.rawStride};
             }
         }
     }

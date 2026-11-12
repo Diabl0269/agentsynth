@@ -158,6 +158,7 @@ add_executable(Tests
     Mixer/MixerSoloTests.cpp
     Mixer/SidechainKeyGraphTests.cpp
     Mixer/ProjectLoadStripGainTests.cpp
+    Mixer/ChannelStripOutputCollapseProjectTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/MasterDualIOTests.cpp
     Mixer/MasterSafetyLimiterTests.cpp
@@ -314,6 +315,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
+    UI/Graph/GraphEditor/GraphEditorStripOutputDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
