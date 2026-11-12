@@ -65,6 +65,12 @@ ModuleComponent::HostedCardBinding::HostedCardBinding(ModuleComponent& card, syn
         card_.rebuildHostedPluginCard();
         card_.relayoutHostedPluginCard();
     };
+    // Showing, hiding or joining an output re-lays the card the way a Dual I/O change does; the cables left on an
+    // output that went hidden are dropped first (an invisible jack cannot be unplugged).
+    module.onOutputsChanged = [this] {
+        card_.owner.dropRoutingsOnHiddenJacks(card_.nodeId);
+        card_.applyDualIOLayoutChange();
+    };
     module.onParameterContextMenu = [this](const juce::String& paramId, juce::PopupMenu& menu) {
         appendParameterMenuItems(paramId, menu);
     };
@@ -85,6 +91,7 @@ void ModuleComponent::HostedCardBinding::shutdown() {
     if (auto* module = module_.get()) {
         module->removeInstanceObserver(this);
         module->onCardLayoutChanged = nullptr;
+        module->onOutputsChanged = nullptr;
         module->onParameterContextMenu = nullptr;
     }
     if (store_ != nullptr)
