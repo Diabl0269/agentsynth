@@ -29,6 +29,9 @@ void DrumMachineComponent::setupLanes() {
         mapping.gutterWidth = kLabelColumnWidth;
         mapping.stepRange = [this](int step) { return stepXRange(step); };
         mapping.stepAt = [this](int x) { return stepAtX(x); };
+        auto* lane = band.lane.get();
+        mapping.onDragAt = [this, lane](juce::Point<int> pointer) { trackLaneDrag(*lane, pointer); };
+        mapping.onDragEnd = [this] { stopEdgeScroll(); };
         band.lane->setMapping(std::move(mapping));
         band.lane->onCommit = [this, kind](const std::vector<DrumHitLane::Hit>& changed) { commitLane(kind, changed); };
     }

@@ -187,6 +187,17 @@ void DrumHitLane::mouseDrag(const juce::MouseEvent& e) {
     if (!dragging_)
         return;
     applyPoint(std::max(e.x, mapping_.gutterWidth), e.y);
+    if (mapping_.onDragAt)
+        mapping_.onDragAt(e.getPosition());
+}
+
+// The last sample is a pixel on the columns, so it moves with them; the line from there to the still pointer then
+// crosses exactly the hits that scrolled in under it.
+void DrumHitLane::followScroll(int movedPx, juce::Point<int> pointer) {
+    if (!dragging_ || movedPx == 0)
+        return;
+    lastX_ -= movedPx;
+    applyPoint(std::max(pointer.x, mapping_.gutterWidth), pointer.y);
 }
 
 void DrumHitLane::mouseUp(const juce::MouseEvent&) { endGesture(true); }
@@ -195,6 +206,8 @@ void DrumHitLane::endGesture(bool commit) {
     if (!dragging_)
         return;
     dragging_ = false;
+    if (mapping_.onDragEnd)
+        mapping_.onDragEnd();
     std::vector<Hit> changed;
     for (size_t i = 0; i < hits_.size() && i < preview_.size(); ++i)
         if (preview_[i] != hits_[i].value)
@@ -209,6 +222,11 @@ void DrumHitLane::endGesture(bool commit) {
 
 //==============================================================================
 bool DrumHitLane::keyPressed(const juce::KeyPress& key) {
+    // Esc mid-drag drops the ramp (nothing written) instead of reaching the drum machine, which would close.
+    if (key == juce::KeyPress::escapeKey && dragging_) {
+        endGesture(false);
+        return true;
+    }
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown() || hits_.empty())
         return false;

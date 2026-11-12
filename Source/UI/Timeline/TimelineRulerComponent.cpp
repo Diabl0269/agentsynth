@@ -4,7 +4,9 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/PopupHost.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include <algorithm>
 #include <cmath>
 
@@ -44,7 +46,13 @@ double beatsPerBarFrom(int numerator, int denominator) noexcept {
 
 //==============================================================================
 TimelineRulerComponent::TimelineRulerComponent(TimelineViewState& viewState)
-    : viewState_(viewState) {}
+    : viewState_(viewState)
+    , edgeScroll_(std::make_unique<EdgeScrollTimer>())
+    , cancelKey_(std::make_unique<ReorderCancelKey>()) {
+    edgeScroll_->onTick = [this] { edgeScrollTick(); };
+}
+
+TimelineRulerComponent::~TimelineRulerComponent() = default;
 
 //==============================================================================
 double TimelineRulerComponent::currentBeatsPerBar() const noexcept {
@@ -462,11 +470,14 @@ void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
     lastPostedLoopStart_ = -1.0; // nothing posted yet this gesture
     lastPostedLoopEnd_ = -1.0;
     lastPostedSeekBeat_ = -1.0;
+    const auto snap = transport_->getPositionSnapshot();
+    loopBefore_ = {snap.loopStartPpq, snap.loopEndPpq, snap.looping};
+    zoneDragging_ = true;
 
     // Playhead zone seeks on press, not on release — the cursor lands where you clicked and then
     // follows the drag.
     if (gestureZone_ == Zone::Playhead)
-        postSeekIfChanged(e);
+        postSeekIfChanged((double)e.position.x);
 }
 
 void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
@@ -479,22 +490,29 @@ void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
     // posts, and clamped at 0 because a marker's beat is >= 0 in the model.
     if (draggingMarker_.isValid()) {
         markerDragMoved_ = true;
-        const double raw = mapXToBeat((double)e.position.x) - markerDragGrabOffsetBeats_;
-        const double snapped = std::max(0.0, viewState_.snapBeat(raw, currentBeatsPerBar()));
-        if (snapped == markerDragBeat_)
-            return; // no new information — don't repaint once per pixel
-        markerDragBeat_ = snapped;
-        repaint();
+        previewMarkerAt((double)e.position.x);
+        trackDrag(e.getPosition());
         return;
     }
 
-    if (transport_ == nullptr || e.mods.isCommandDown())
+    if (transport_ == nullptr || e.mods.isCommandDown() || !zoneDragging_)
         return;
 
     if (gestureZone_ == Zone::Playhead)
-        postSeekIfChanged(e);
+        postSeekIfChanged((double)e.position.x);
     else
-        postLoopIfChanged(e);
+        postLoopIfChanged((double)e.position.x);
+    trackDrag(e.getPosition());
+}
+
+// The marker under a pointer at `x`, keeping the grab offset; a mouse move and an edge-scroll tick both land here.
+void TimelineRulerComponent::previewMarkerAt(double x) {
+    const double raw = mapXToBeat(x) - markerDragGrabOffsetBeats_;
+    const double snapped = std::max(0.0, viewState_.snapBeat(raw, currentBeatsPerBar()));
+    if (snapped == markerDragBeat_)
+        return; // no new information — don't repaint once per pixel
+    markerDragBeat_ = snapped;
+    repaint();
 }
 
 void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
@@ -504,6 +522,7 @@ void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu())
         return;
 
+    endDrag();
     if (draggingMarker_.isValid()) {
         const auto id = draggingMarker_;
         const double beat = markerDragBeat_;
@@ -519,20 +538,22 @@ void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
-    if (transport_ == nullptr || e.mods.isCommandDown())
-        return; // Cmd+click was already fully handled in mouseDown.
+    const bool zoneDragging = zoneDragging_;
+    zoneDragging_ = false;
+    if (transport_ == nullptr || e.mods.isCommandDown() || !zoneDragging)
+        return; // Cmd+click was already fully handled in mouseDown; an Esc already ended the drag.
 
     // Both finalisers are the same "only post when the snapped value changed" throttle their drag
     // path used, so a release that adds no new information is a no-op.
     if (gestureZone_ == Zone::Playhead) {
-        postSeekIfChanged(e);
+        postSeekIfChanged((double)e.position.x);
         return;
     }
 
     // Loop zone: a click with no drag does nothing, except on a dimmed brace — the loop range is
     // the only thing this half owns, and a stray click must not clear or collapse it.
     if (e.mouseWasDraggedSinceMouseDown()) {
-        postLoopIfChanged(e);
+        postLoopIfChanged((double)e.position.x);
         return;
     }
     reArmLoopIfClickOnInactiveBrace(e);
@@ -580,10 +601,10 @@ void TimelineRulerComponent::setHoveredZone(std::optional<Zone> zone) {
     repaint();
 }
 
-void TimelineRulerComponent::postSeekIfChanged(const juce::MouseEvent& e) {
+void TimelineRulerComponent::postSeekIfChanged(double x) {
     // Clamped the same way TransportService::locateBeat clamps, so the dedupe below can't be
     // fooled into re-posting identical seeks while the pointer drags left of beat 0.
-    const double beat = std::max(0.0, snappedBeatAtX((double)e.position.x));
+    const double beat = std::max(0.0, snappedBeatAtX(x));
     if (beat == lastPostedSeekBeat_)
         return; // unchanged since the last post — the FIFO dedupes nothing, so don't spam it
 
@@ -593,8 +614,8 @@ void TimelineRulerComponent::postSeekIfChanged(const juce::MouseEvent& e) {
     repaint();
 }
 
-void TimelineRulerComponent::postLoopIfChanged(const juce::MouseEvent& e) {
-    const double current = snappedBeatAtX((double)e.position.x);
+void TimelineRulerComponent::postLoopIfChanged(double x) {
+    const double current = snappedBeatAtX(x);
     const double start = std::min(dragAnchorBeat_, current);
     const double end = std::max(dragAnchorBeat_, current);
     if (end <= start)

@@ -419,6 +419,12 @@ which stick a press grabs, the pen/ramp line values, humanize) is free functions
 
 Precedence at the press, first match wins: Draw tool, Shift, a stick under the pointer, empty strip.
 
+**A pen or ramp follows the view.** Held at the strip's left or right edge, a pen stroke or a ramp scrolls the roll
+sideways on the roll's own edge timer (never up or down: the strip sits under the grid), faster nearer the edge. Each
+tick shifts the gesture's anchor by the scroll and re-runs it at the still pointer, so a ramp stays anchored to the
+note it began on and reaches the notes that scroll in, and a pen sets every note that passes under it. Release and
+Escape stop it, and the gesture stays one undo step. A stick drag only changes a value and never scrolls.
+
 **Preview and commit.** While dragging, the notes in the grid recolour live: the gesture's values
 reach the roll as a per-note override map (`velocityPreview_`, NoteId -> velocity) that
 `effectiveGeometryFor` applies, so `paintNote`'s `resolveNoteColourFor` and the sticks read the

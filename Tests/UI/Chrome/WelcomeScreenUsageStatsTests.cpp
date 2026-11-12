@@ -16,8 +16,6 @@
 
 namespace {
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 struct Stored {
     bool share = false;
     bool asked = false;
@@ -118,7 +116,11 @@ TEST_F(WelcomeUsageStatsTest, TheCardDoesNotReturnAfterAnAnswer) {
     {
         MainComponent mc(std::make_unique<MockProvider>());
         mc.getWelcomeScreenForTest()->getUsageStatsPromptForTest().getNoThanksButtonForTest().triggerClick();
-        pump();
+        // The answer is written asynchronously; wait for it rather than a fixed pump, which lost the race on a
+        // loaded CI runner and let the second window ask again.
+        synth::test::waitUntil(
+            [&] { return readStored().asked && !mc.getWelcomeScreenForTest()->isUsageStatsPromptShown(); });
+        ASSERT_TRUE(readStored().asked);
     }
     MainComponent again(std::make_unique<MockProvider>());
     EXPECT_FALSE(again.getWelcomeScreenForTest()->isUsageStatsPromptShown());

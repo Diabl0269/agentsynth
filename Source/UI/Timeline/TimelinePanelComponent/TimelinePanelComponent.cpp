@@ -63,6 +63,7 @@ TimelinePanelComponent::TimelinePanelComponent()
     setWantsKeyboardFocus(true);
 
     sectionStrip_ = std::make_unique<TimelineSectionStrip>(viewState_);
+    ruler_.setComponentID("timelineRuler");
     addAndMakeVisible(ruler_);
     addAndMakeVisible(*sectionStrip_);
     // "Select its clips": the panel owns the selection, and a selection never coexists with a Range-tool range.
@@ -77,6 +78,13 @@ TimelinePanelComponent::TimelinePanelComponent()
         if (follow_.enabled)
             setFollowPlayheadEnabled(false);
         ruler_.repaint();
+        repaint();
+    };
+    // The same for a marker, loop or scrub drag held at the ruler's edge.
+    ruler_.onViewScrolledByDrag = [this] {
+        if (follow_.enabled)
+            setFollowPlayheadEnabled(false);
+        sectionStrip_->repaint();
         repaint();
     };
     // The empty strip's tooltip names Shift+Cmd+J only when the key would make something (keyPressed acts on the same).

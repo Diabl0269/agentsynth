@@ -92,6 +92,14 @@ the whole stroke as ONE undo step and the hits keep the size they had (the previ
 Motion they fade in instead of growing. A stroke is announced ("Added 8 hits", "Removed 3 hits"); the keyboard form is one undo
 step per key press. The shortcuts are the rebindable actions `drumMachineCarryRight` and `drumMachineCarryLeft`.
 
+**A drag follows the view.** A paint or erase stroke, a drum's end edge and a ramp across a lane under the grid, held
+in the left or right 24 px edge zone, scroll the grid sideways, faster nearer the edge; a stroke held at the top or
+bottom of the grid also scrolls the rows (`DrumMachineEdgeScroll.cpp`, the shared `EdgeScrollTimer`). Each tick
+re-derives the drag from the still pointer, so the stroke and the ramp reach the cells and hits that scroll in and the
+end edge stays under the pointer; release, Escape and the pointer moving back in stop it, and the drag stays one undo
+step. A loudness drag on one hit only changes a value and never scrolls. Escape in a lane ends its ramp without
+closing the drum machine.
+
 An accent is a velocity of 120 or more. Every edit is one undo step through the `TimelineDoc` mutators.
 
 ## Mute and solo

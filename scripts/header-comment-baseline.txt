@@ -40,4 +40,4 @@
 33 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
 13 Source/UI/Timeline/TimelinePlayheadOverlay.h
-43 Source/UI/Timeline/TimelineRulerComponent.h
+22 Source/UI/Timeline/TimelineRulerComponent.h

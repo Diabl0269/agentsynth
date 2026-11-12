@@ -162,14 +162,14 @@ const std::vector<KnownGap> kKnownGaps = {
     {"mixer / TextButton 'Master mute, off': touches TextButton 'Mixer pan law (this project)'", "FRO1711"},
     // timeline
     {"timeline / Bodies 'automationLaneBodies': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
-    {"timeline / Bodies 'automationLaneBodies': touches TimelineRulerComponent", "FRO1710"},
+    {"timeline / Bodies 'automationLaneBodies': touches TimelineRulerComponent 'timelineRuler'", "FRO1710"},
     {"timeline / BpmDragLabel 'timelineTransportBpmLabel': is not 6 px from its control SongKeyField 'Song key'",
      "FRO1710"},
     {"timeline / ChannelChipComponent 'trackChannelChip': overlaps EdgeResizeHandle 'Resize Audio #'", "FRO1710"},
     {"timeline / ContextMenuForwardingLabel 'trackNameLabel': is not 6 px from its control ContextMenuForwardingButton "
      "'trackMuteButton'",
      "FRO1710"},
-    {"timeline / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent", "FRO1710"},
+    {"timeline / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent 'timelineRuler'", "FRO1710"},
     {"timeline / NonModalLabel 'timelineTransportTimeSigLabe': is not 6 px from its control SongKeyField 'Song key'",
      "FRO1710"},
     {"timeline / NonModalLabel 'timelineTransportTimeSigLabe': overlaps SongKeyField 'Song key'", "FRO1710"},
@@ -177,8 +177,8 @@ const std::vector<KnownGap> kKnownGaps = {
     {"timeline / SwatchButton 'trackColourSwatch': overlaps EdgeResizeHandle 'Resize Track #'", "FRO1710"},
     {"timeline / TextButton 'trackBindingChip': overlaps EdgeResizeHandle 'Resize Audio #'", "FRO1710"},
     {"timeline / TextButton 'trackBindingChip': overlaps EdgeResizeHandle 'Resize Track #'", "FRO1710"},
-    {"timeline / TimelineRulerComponent: overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
-    {"timeline / TimelineRulerComponent: touches Bodies 'automationLaneBodies'", "FRO1710"},
+    {"timeline / TimelineRulerComponent 'timelineRuler': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
+    {"timeline / TimelineRulerComponent 'timelineRuler': touches Bodies 'automationLaneBodies'", "FRO1710"},
     {"timeline / ToolbarButton 'Add': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
     {"timeline [drum machine open] / BpmDragLabel 'timelineTransportBpmLabel': is not 6 px from its control "
      "ToolbarButton 'Add'",
@@ -192,7 +192,8 @@ const std::vector<KnownGap> kKnownGaps = {
     {"timeline [drum machine open] / ContextMenuForwardingLabel 'trackNameLabel': is not 6 px from its control "
      "ContextMenuForwardingButton 'trackMuteButton'",
      "FRO1710"},
-    {"timeline [drum machine open] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent",
+    {"timeline [drum machine open] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent "
+     "'timelineRuler'",
      "FRO1710"},
     {"timeline [drum machine open] / NameButton 'Clap row': touches NameButton 'Closed hat row'", "FRO1710"},
     {"timeline [drum machine open] / NameButton 'Closed hat row': touches NameButton 'Open hat row'", "FRO1710"},
@@ -216,12 +217,13 @@ const std::vector<KnownGap> kKnownGaps = {
      "FRO1710"},
     {"timeline [drum machine open] / ToolbarButton 'Add': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
     {"timeline [min] / Bodies 'automationLaneBodies': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
-    {"timeline [min] / Bodies 'automationLaneBodies': touches TimelineRulerComponent", "FRO1710"},
+    {"timeline [min] / Bodies 'automationLaneBodies': touches TimelineRulerComponent 'timelineRuler'", "FRO1710"},
     {"timeline [min] / ChannelChipComponent 'trackChannelChip': overlaps EdgeResizeHandle 'Resize Audio #'", "FRO1710"},
     {"timeline [min] / ContextMenuForwardingLabel 'trackNameLabel': is not 6 px from its control "
      "ContextMenuForwardingButton 'trackMuteButton'",
      "FRO1710"},
-    {"timeline [min] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent", "FRO1710"},
+    {"timeline [min] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent 'timelineRuler'",
+     "FRO1710"},
     {"timeline [min] / SwatchButton 'trackColourSwatch': overlaps EdgeResizeHandle 'Resize Audio #'", "FRO1710"},
     {"timeline [min] / SwatchButton 'trackColourSwatch': overlaps EdgeResizeHandle 'Resize Track #'", "FRO1710"},
     {"timeline [min] / TextButton 'trackBindingChip': overlaps EdgeResizeHandle 'Resize Audio #'", "FRO1710"},
@@ -235,7 +237,9 @@ const std::vector<KnownGap> kKnownGaps = {
     {"timeline [piano roll open] / ContextMenuForwardingLabel 'trackNameLabel': is not 6 px from its control "
      "ContextMenuForwardingButton 'trackMuteButton'",
      "FRO1710"},
-    {"timeline [piano roll open] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent", "FRO1710"},
+    {"timeline [piano roll open] / EdgeResizeHandle 'Track column width': overlaps TimelineRulerComponent "
+     "'timelineRuler'",
+     "FRO1710"},
     {"timeline [piano roll open] / NonModalLabel 'timelineTransportTimeSigLabe': is not 6 px from its control "
      "ToolbarButton 'Add'",
      "FRO1710"},

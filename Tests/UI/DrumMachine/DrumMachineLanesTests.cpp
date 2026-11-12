@@ -5,6 +5,7 @@
 #include "../Accessibility/AccessibilityAudit.h"
 #include "DrumMachineGrooveFixture.h"
 #include "UI/DrumMachine/DrumCellMarks.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 
 using drumtest::AnimationModeGuard;
 using drumtest::GrooveFixture;

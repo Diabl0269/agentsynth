@@ -158,6 +158,14 @@ const std::vector<Follows> kFollow = {
      "follow:AutomationLanesEdgeScroll.ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer"},
     {"TimelineSectionStrip",
      "follow:TimelineSectionStripDragFollowTest.HoldingABlockAtTheRightEdgeScrollsTheViewAndTheDropFollows"},
+    // Beat-axis drags on their own edge timer (UI/Timeline/EdgeScrollTimer.h).
+    {"TimelineRulerComponent",
+     "follow:TimelineRulerEdgeScroll.AMarkerHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer"},
+    {"PianoRollVelocityLane",
+     "follow:PianoRollVelocityLaneEdgeScroll.ARampHeldAtTheRightEdgeScrollsTheRollAndReachesTheNotesThatScrollIn"},
+    {"DrumMachineComponent",
+     "follow:DrumMachineEdgeScroll.AStrokeHeldAtTheRightEdgeScrollsTheGridAndPaintsTheCellsThatScrollIn"},
+    {"DrumHitLane", "follow:DrumMachineEdgeScroll.ALaneRampHeldAtTheRightEdgeScrollsTheGridAndSetsTheHitsThatScrollIn"},
     {"ModuleComponent", kCanvasCards},
     {"MacroCardComponent", kCanvasCards},
     {"MorphMap", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
@@ -229,16 +237,11 @@ const std::vector<Follows> kFollow = {
     {"CardLayoutGroupHandle", "follow:OnCardEditorEdgeScroll.AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeStopsIt"},
 };
 
-// A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
-// each is built as a follow (a registered test) or moved to kFollow with an exemption.
-const std::vector<KnownGap> kFollowGaps = {
-    {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
-    {"PianoRollVelocityLane", "FRO1686", "a velocity ramp stops at the roll's edge"},
-    {"DrumMachineComponent", "FRO1686", "edge drags stop at the view edge"},
-    {"DrumHitLane", "FRO1686", "a ramp across a lane stops at the view edge"},
-};
-// What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 4;
+// A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: each
+// one is built as a follow (a registered test) or moved to kFollow with an exemption.
+const std::vector<KnownGap> kFollowGaps = {};
+// What kFollowGaps holds today; it may only go down. Every drag now follows or is exempt, so it stays empty.
+constexpr std::size_t kFollowGapCeiling = 0;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning

@@ -420,6 +420,21 @@ assert_fail "invokeDirectly followed by a k-constant pump at the end of a helper
 
 reset_repo
 write_file Tests/ATests.cpp <<EOF
+void pump() { $PUMP(50); }
+TEST(A, B) {
+    {
+        MainComponent mc(a);
+        mc.noThanks().triggerClick();
+        pump();
+    }
+    MainComponent again(a);
+    EXPECT_FALSE(again.cardShown());
+}
+EOF
+assert_fail "a pump() wrapper call that ends a short block after triggerClick is flagged" "Tests/ATests.cpp:6:"
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
 void settleAfter(juce::Button& button) {
     button.triggerClick();
     synth::test::flushMessageQueue();

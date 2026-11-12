@@ -17,6 +17,7 @@
 #
 # ALSO FLAGGED: a short helper (a block of at most 4 lines) that calls keyPressed / triggerClick /
 # invokeDirectly and ends with a fixed pump, e.g. `auto press = [&](auto& b) { b.triggerClick(); runDispatchLoopUntil(30); };`.
+# A call to a one-line pump wrapper (`pump()`) counts as the pump here too.
 # Those calls dispatch asynchronously, so the pump is a bet on the machine; use flushMessageQueue() from
 # Tests/TestWait.h, which runs exactly the messages already posted.
 #
@@ -210,11 +211,27 @@ function emit_helper(i) { printf "F\t%s\t%d\t%s\n", cur, i, trim(code[i]); seenl
 
 # A short helper (a block of at most 4 lines) that dispatches asynchronously and ends with a fixed pump: there is no
 # assertion after the pump here, but every caller is racing the same fixed time.
+# The pump is the literal runDispatchLoopUntil( or a call to a recognised one-line pump wrapper (pump(), settle()).
+# Sets pump_len to the length of the matched "name(" text and returns its position in the line, 0 when there is none.
+function pump_call_pos(line, isdef,   pos, rest, off, id) {
+    pos = index(line, "runDispatchLoopUntil(")
+    if (pos) { pump_len = length("runDispatchLoopUntil("); return pos }
+    if (isdef) return 0
+    rest = line; off = 0
+    while (match(rest, /[A-Za-z_][A-Za-z0-9_]*[ ]*\(/)) {
+        id = substr(rest, RSTART, RLENGTH); sub(/[ ]*\($/, "", id)
+        if (is_wrapper(id) && substr(rest, RSTART - 1, 1) !~ /[.>:]/) { pump_len = RLENGTH; return off + RSTART }
+        off += RSTART + RLENGTH - 1; rest = substr(rest, RSTART + RLENGTH)
+    }
+    return 0
+}
+
 function find_dispatch_helpers(   i, pos, rest, arg, nb, k, t, seen_open, tail) {
     for (i = 1; i <= nl; i++) {
-        pos = index(code[i], "runDispatchLoopUntil(")
-        if (!pos || seenline[i]) continue
-        rest = substr(code[i], pos + length("runDispatchLoopUntil("))
+        if (seenline[i]) continue
+        pos = pump_call_pos(code[i], defline[i])
+        if (!pos) continue
+        rest = substr(code[i], pos + pump_len)
         arg = grabparen(rest, 1)
         if (!fixed_arg(arg)) continue
         tail = substr(rest, length(arg) + 2)

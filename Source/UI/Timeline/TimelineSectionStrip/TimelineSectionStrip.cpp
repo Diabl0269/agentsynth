@@ -7,6 +7,7 @@
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Timeline/ListSelectionModel.h"
+#include "UI/Timeline/TimelineViewState.h"
 
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
@@ -300,5 +301,9 @@ void TimelineSectionStrip::paintLaneEdges(juce::Graphics& g, juce::Rectangle<int
                    (float)lanes.getHeight());
     }
 }
+
+double TimelineSectionStrip::beatAtX(double x) const noexcept { return viewState_.xToBeat(x); }
+
+double TimelineSectionStrip::xAtBeat(double beat) const noexcept { return viewState_.beatToX(beat); }
 
 } // namespace synth::ui

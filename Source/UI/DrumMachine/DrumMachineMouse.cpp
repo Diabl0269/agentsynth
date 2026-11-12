@@ -62,10 +62,12 @@ void DrumMachineComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
     if (gesture_.kind == Gesture::Kind::EdgeDrag) {
         dragEdgeTo(e.position.x);
+        trackGridDrag(e.getPosition());
         return;
     }
     if (gesture_.kind == Gesture::Kind::Stroke) {
         extendStroke(e.position);
+        trackGridDrag(e.getPosition());
         return;
     }
     const int dy = gesture_.startY - e.getPosition().y; // up is louder
@@ -79,6 +81,7 @@ void DrumMachineComponent::mouseDrag(const juce::MouseEvent& e) {
             const auto start = gesture_.lastPos;
             beginStroke(first, true, 0, start);
             extendStroke(e.position);
+            trackGridDrag(e.getPosition());
             return;
         }
         gesture_.kind = Gesture::Kind::Velocity;
@@ -95,6 +98,7 @@ void DrumMachineComponent::mouseUp(const juce::MouseEvent&) { endGesture(true); 
 
 // Commits (or, with `commit` false, drops) the gesture in flight; a velocity drag becomes one undo step here.
 void DrumMachineComponent::endGesture(bool commit) {
+    stopEdgeScroll();
     const auto gesture = gesture_;
     gesture_ = {};
     if (gesture.kind == Gesture::Kind::None)

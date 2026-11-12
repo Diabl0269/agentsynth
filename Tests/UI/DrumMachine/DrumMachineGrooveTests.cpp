@@ -2,6 +2,7 @@
 // timing. The lanes under the grid are in DrumMachineLanesTests.cpp.
 
 #include "DrumMachineGrooveFixture.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 
 using drumtest::AnimationModeGuard;
 using drumtest::GrooveFixture;
