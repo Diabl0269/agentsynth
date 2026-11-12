@@ -8,6 +8,7 @@ namespace {
 
 const char* const kBuiltIn = "Built in";
 const char* const kYourFiles = "Your files";
+const char* const kGetMore = "Get more";
 
 void addSynthDrums(InstrumentChoices& result, bool ticked) {
     ModMatrixPicker::Item row;
@@ -61,15 +62,29 @@ void addYourFiles(InstrumentChoices& result) {
     add(InstrumentChoice::Kind::Recordings, "Load recordings...");
 }
 
+// Always the last row, so the way to the download page stays one click away once the core strip is gone.
+void addGetMore(InstrumentChoices& result) {
+    ModMatrixPicker::Item row;
+    row.id = (int)result.choices.size() + 1;
+    row.category = kGetMore;
+    row.text = "Get more sounds...";
+    row.searchText = "download sound packs instruments";
+    row.detail = "Settings > Sound packs";
+    row.accessibleName = "Get more sounds, opens Settings, Sound packs";
+    result.items.push_back(row);
+    result.choices.push_back({InstrumentChoice::Kind::GetMore, {}, {}});
+}
+
 } // namespace
 
-// New groups ("Downloaded", "Get more") join here, between the built-in rows and the user's own files.
+// A new "Downloaded" group joins here, between the built-in rows and the user's own files.
 InstrumentChoices collectInstrumentChoices(const juce::String& currentPack, const InstrumentChoiceOptions& options) {
     InstrumentChoices result;
     if (options.offerSynthDrums)
         addSynthDrums(result, options.noKitLoaded);
     addBuiltIn(result, currentPack, options.category);
     addYourFiles(result);
+    addGetMore(result);
     return result;
 }
 

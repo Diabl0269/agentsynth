@@ -344,6 +344,7 @@ void MainComponent::wireGraphEditorCallbacks() {
     // layout editor re-lays out every card of that type.
     moduleCardLayoutBinding_ = std::make_unique<synth::ModuleCardLayoutBinding>(graphEditor, moduleCardLayoutStore);
     // A Drum Kit card's "Drum machine" button: enabled while a track plays the kit; the press shows the Timeline.
+    graphEditor.drumKit.openSoundPacks = [this] { launchSettingsWindow("Sound packs"); };
     graphEditor.drumKit.hasTrack = [this](juce::AudioProcessorGraph::NodeID id) {
         return trackPlayingNode(id).isValid();
     };

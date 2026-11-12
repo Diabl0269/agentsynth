@@ -35,6 +35,8 @@ public:
         std::function<void(CardKnobSlider& knob)> wireKnob;
         /** Drum Kit: the pad knobs are about to show another pad, which moves where its cables end. */
         std::function<void()> cableEndsMove;
+        /** The picker's "Get more sounds..." row: opens Settings on its Sound packs tab (empty: nothing happens). */
+        std::function<void()> openSoundPacks;
     };
 
     virtual ~InstrumentChrome() = default;

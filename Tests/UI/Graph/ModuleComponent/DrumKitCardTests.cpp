@@ -114,7 +114,8 @@ TEST(DrumKitCard, TheListOffersDrumKitsOnlyPlusSynthDrumsAndTheFileLoaders) {
     ASSERT_NE(list, nullptr);
     EXPECT_EQ(list->getVisibleRowNamesForTest(),
               (std::vector<juce::String>{"Built in", "Synth drums", "Acoustic Kit", "Your files",
-                                         "Load an instrument file (.sfz)...", "Load recordings..."}));
+                                         "Load an instrument file (.sfz)...", "Load recordings...", "Get more",
+                                         "Get more sounds..."}));
 }
 
 TEST(DrumKitCard, TheListSaysSoWhenNoDrumKitIsInstalled) {
