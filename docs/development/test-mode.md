@@ -60,6 +60,7 @@ thread is never blocked and timers and animations run in between.
 | `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created. `id: "screen"` is what a user sees (see [Screen frame](#screen-frame)) and also answers `windows` and `pointer` |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
+| `skipPluginForNextLoad` | `name`, `bundlePath?` | `{name}`; what answering "Open without it" at launch does (an automation launch never asks): that plugin is switched off for the next `openProject` only, so its card is a placeholder with a Turn on button |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |

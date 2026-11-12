@@ -10,6 +10,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -88,6 +89,11 @@ public:
 
     /** True while a load is in flight (no instance yet, but one is coming). */
     bool isLoading() const noexcept { return loading_; }
+
+    /** Message thread. True while the plugin is switched off after a crash ("Open without it"). */
+    bool isSwitchedOffAfterCrash() const noexcept { return switchedOffAfterCrash_; }
+    /** Message thread. Reloads a switched-off plugin, keeping its saved state, layout and mod slots. */
+    void turnBackOn(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
 
     /** The identity this module names, whether or not it resolved. Empty when nothing is loaded. */
     const PluginIdentity& getIdentity() const noexcept { return identity_; }
@@ -285,6 +291,9 @@ public:
     /** The resting value (0..1) of `paramId` while it is modulated: what the card knob shows and
      *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */
     std::optional<float> modSlotBase(const juce::String& paramId) const;
+
+    /** Message thread. True once per publish; the card then shows a knob for each bound mod slot lacking one. */
+    bool takeModKnobReconcile() noexcept { return std::exchange(modKnobReconcilePending_, false); }
 
     /** Message thread. Fired after a publish with the bound parameter ids the new instance does not
      *  have; the owner removes their cables. */
@@ -511,6 +520,8 @@ private:
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
+    bool modKnobReconcilePending_ = false;
+    bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared
     // against the value captured when the load started.
