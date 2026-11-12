@@ -725,17 +725,18 @@ scrolling the current one. Headless seams mirror the clip lanes': `tickAutoScrol
 
 ## Wheel bindings
 
-All four bindings are handled here and NOTHING bubbles to the panel: the roll's zoom and scroll are
+All five bindings are handled here and NOTHING bubbles to the panel: the roll's zoom and scroll are
 its own, so the shared `TimelineViewState` must not move when the wheel lands inside the roll.
 
 | Binding | Effect |
 |---|---|
 | Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(dominantWheelDelta(wheel) * 2.0)` factor as the panel's own zoom so the two feel identical |
 | Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
+| Option + vertical wheel / two-finger scroll | The same vertical zoom as Cmd+Shift+wheel, the trackpad's one-hand way and the same key the timeline uses for track height. Decided by `synth::ui::isOptionVerticalZoom()` (`ScrollPolicy.h`), which the timeline panel calls too, so the two surfaces cannot drift. An Option + sideways scroll stays a horizontal scroll. (Option+drag on a note is copy; that is a drag, not a wheel, so there is no clash) |
 | Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom), inverted by the same `scrollInverted_` / **Natural scrolling** preference as the panel (see [view](view.md#natural-scrolling)) |
 | Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]`, likewise inverted by `scrollInverted_` — and the one axis that needs its own sign flip on top of `scrollAmount()`, since `firstVisiblePitch_` is the pitch at the TOP row and pitch grows upward while the screen convention is "+y moves the view down" (the Natural-scrolling section in [view](view.md#natural-scrolling) has the full reasoning) |
 
-Both zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
+The zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
 reason the panel's own Cmd+Shift+wheel branch does
 ([view](view.md#wheel-and-trackpad-bindings)): macOS folds a Shift-held wheel gesture into
 `deltaX`, so a branch chosen by its modifiers must never assume the OS parked the gesture on

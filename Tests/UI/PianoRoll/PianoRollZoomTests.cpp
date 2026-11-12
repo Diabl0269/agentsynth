@@ -4,7 +4,11 @@
 // setZoomScrollInverted flips it), and SNAP vs the drawn grid: the chosen division stays visible
 // with snap off. Shared PianoRollFixture and wheelOnY live in PianoRollTestHelpers.h.
 
+#include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "PianoRollTestHelpers.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/ScrollPolicy.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
 // ============================================================================
 // 10. Wheel policy (ScrollPolicy.h) and the anchored zoom commands
@@ -543,4 +547,112 @@ TEST(PianoRollPinchTest, CmdPinchZoomsTimeOnly) {
     f.roll.mouseMagnify(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::commandModifier), 1.5f);
     EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), ppsBefore);
     EXPECT_GT(f.roll.getPixelsPerBeat(), ppbBefore);
+}
+
+// ============================================================================
+// 12. Option + a vertical scroll zooms row height, on the roll exactly as on the timeline
+// ============================================================================
+
+// Regression test for FRO1329: only Cmd+Shift+wheel zoomed the roll's rows while the timeline also
+// took Option+wheel, so the same gesture meant different things on the two surfaces.
+TEST(PianoRollWheelTest, OptionVerticalWheelZoomsRowsOnlyAndTheOppositeGestureCancelsIt) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const double ppb = f.roll.getPixelsPerBeat();
+    const int option = juce::ModifierKeys::altModifier;
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, option), wheelOnY(0.4f));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), ppb) << "Option+wheel changes height, never width";
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, option), wheelOnY(-0.4f));
+    EXPECT_NEAR(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone, 1.0e-9);
+}
+
+TEST(PianoRollWheelTest, OptionVerticalWheelKeepsTheRowUnderThePointerPut) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const int anchorY = f.roll.canvasTop() + 37;
+    const int pitchBefore = f.roll.pitchForY(anchorY);
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, (float)anchorY}, juce::ModifierKeys::altModifier), wheelOnY(0.4f));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+    EXPECT_EQ(f.roll.pitchForY(anchorY), pitchBefore);
+}
+
+TEST(PianoRollWheelTest, OptionWithASidewaysScrollStillScrollsHorizontally) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId);
+    const double pps = f.roll.getPixelsPerSemitone();
+    const double first = f.roll.xToBeat(300.0);
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::altModifier), wheelOnX(-0.5f));
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), pps) << "a mostly-horizontal delta is not a zoom";
+    EXPECT_NE(f.roll.xToBeat(300.0), first) << "it scrolled sideways instead";
+}
+
+TEST(PianoRollWheelTest, CmdShiftWheelStillZoomsRowsAfterOptionJoinedTheBranch) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const int mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), wheelOnY(0.4f));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+}
+
+// The sibling-gap guard for the wheel: one set of events goes through the shared predicate, the
+// timeline panel and the roll, and the three must agree on which gestures are a row-height zoom.
+TEST(WheelPolicyTest, TimelineAndRollAgreeOnWhichWheelGesturesZoomRowHeight) {
+    struct Gesture {
+        const char* name;
+        int mods;
+        float dx;
+        float dy;
+        bool rowZoom; // the shared predicate's expected answer
+    };
+    const int alt = juce::ModifierKeys::altModifier;
+    const Gesture gestures[] = {
+        {"option+vertical", alt, 0.0f, 0.4f, true},
+        {"option+diagonal vertical-dominant", alt, 0.1f, 0.4f, true},
+        {"option+sideways", alt, 0.5f, 0.0f, false},
+        {"option+cmd+vertical", alt | juce::ModifierKeys::commandModifier, 0.0f, 0.4f, false},
+        {"plain vertical", 0, 0.0f, 0.4f, false},
+        {"shift+vertical", juce::ModifierKeys::shiftModifier, 0.0f, 0.4f, false},
+    };
+    for (const auto& g : gestures) {
+        SCOPED_TRACE(g.name);
+        juce::MouseWheelDetails wheel{};
+        wheel.deltaX = g.dx;
+        wheel.deltaY = g.dy;
+        wheel.isSmooth = true;
+        EXPECT_EQ(synth::ui::isOptionVerticalZoom(juce::ModifierKeys(g.mods), wheel), g.rowZoom);
+
+        PianoRollFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+        f.open(clipId);
+        f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, g.mods), wheel);
+        const bool rollZoomed = f.roll.getPixelsPerSemitone() != PianoRollComponent::kPixelsPerSemitone;
+
+        synth::TimelineDoc doc;
+        synth::ui::TimelinePanelComponent panel;
+        panel.setTimelineDoc(&doc);
+        panel.setSize(1200, 320);
+        for (int i = 0; i < 12; ++i)
+            doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+        panel.getViewState().rowHeightScale = 1.0;
+        auto& clips = panel.getClipLaneArea();
+        panel.mouseWheelMove(makeClickEvent(panel, {(float)clips.getX() + 200.0f, (float)clips.getY() + 90.0f},
+                                            juce::ModifierKeys(g.mods)),
+                             wheel);
+        const bool panelZoomed = panel.getViewState().rowHeightScale != 1.0;
+
+        EXPECT_EQ(rollZoomed, g.rowZoom) << "the roll must follow the shared predicate";
+        EXPECT_EQ(panelZoomed, g.rowZoom) << "the timeline must follow the shared predicate";
+    }
 }

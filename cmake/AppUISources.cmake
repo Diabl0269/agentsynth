@@ -379,6 +379,7 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.h
     Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollTestState.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollCopyDrag.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp

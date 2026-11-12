@@ -650,10 +650,10 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     const bool shift = e.mods.isShiftDown();
     const auto pos = e.getPosition();
 
-    if (command && shift) {
-        // Vertical zoom. Direction is the PHYSICAL gesture (up zooms in by default — see
-        // wheelZoomFactor below), not the raw delta sign, so it reads the same whether or not the
-        // OS has natural scrolling on. The amount comes from dominantWheelDelta, NOT from
+    if ((command && shift) || isOptionVerticalZoom(e.mods, wheel)) {
+        // Vertical zoom (Cmd+Shift, or Option plus a vertical scroll, the same key the timeline uses). Direction is the
+        // PHYSICAL gesture (up zooms in by default — see wheelZoomFactor below), not the raw delta sign, so it reads
+        // the same whether or not the OS has natural scrolling on. The amount comes from dominantWheelDelta, NOT from
         // wheel.deltaY: macOS folds a Shift-held wheel gesture into deltaX, so reading deltaY here
         // meant this branch received exactly 0.0 and the vertical zoom was dead on the platform it
         // was written on.
