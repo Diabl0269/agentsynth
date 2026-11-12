@@ -12,6 +12,7 @@ The module outgrew one file and is split by concern:
 - `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, mode processing.
 - `WavetableOscillatorModuleRender.cpp` — the per-voice render loop and one sample of a stack.
 - `WavetableOscillatorModuleNotes.cpp` — MIDI note-ons, Gate edges and the restart hand-over.
+- `WavetableOscillatorModuleLiveDisplay.cpp` — the Position and Warp the display draws ([The display](#the-display)).
 - `WavetableOscillatorModuleVoicing.cpp` — the per-block unison ratios and gain mix.
 - `WavetableTableBuilder.h`/`.cpp` — table geometry (mip constants, `Wavetable`) and `TableBuilder`,
   the FFT-based mip-pyramid synthesiser (see [Table synthesis](#table-synthesis)), in a `wavetable`
@@ -48,6 +49,26 @@ The module outgrew one file and is split by concern:
 > channel numbers they have always had (mono ch1-5, poly ch8-12), because saved patches route by raw
 > index — inserting a new jack among them would silently repoint every existing modulation. New jacks
 > go on the end. `WavetableOscillatorModuleTest.LegacyModCVChannelsKeepTheirIndices` pins this.
+
+## The display
+
+The card's frame view (`WavetableDisplayComponent`, [visualizers](../layout/visualizers.md#wavetabledisplaycomponent))
+draws the Position and Warp the oscillator plays, not the knobs. Once per block the audio thread
+stores the block's last `positionRamp + Position CV` and `warpRamp + Warp CV` (clamped to 0..1) in two
+relaxed atomics (`WavetableOscillatorModuleLiveDisplay.cpp`); `getModulatedScanPosition()` and
+`getModulatedWarpAmount()` read them, or the knob when the module is at rest:
+
+- **No cable** on the jack (its channel silent this block): the knob, so a knob turn shows at once.
+- **No note held**: the knob, not the last position that sounded. A note is held while a MIDI note
+  is down (note-ons minus note-offs, cleared by All Notes Off) or any voice's Gate is high (above
+  `GateEdges::kThreshold` at the block's end). Before any note has started since `prepareToPlay` (a
+  drone with no keyboard or gate), the oscillator itself is the sound, so the display follows it.
+- **Bypassed, muted or no table**: the knob.
+
+Position and Warp CV are shared by every poly voice, so poly needs no voice choice: the shared value
+shows while any voice's Gate is held. A poly patch played by a pitch cable with no Gate fan counts a
+note only when it starts, so it shows the knob after its first note. Unison spreads pitch, not
+position, so it does not change what is drawn.
 
 ## Warp
 

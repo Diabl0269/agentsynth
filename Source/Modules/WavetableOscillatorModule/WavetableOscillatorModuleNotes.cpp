@@ -82,6 +82,7 @@ void WavetableOscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSa
     voices[0].nextMidiRestart = 0;
     for (const auto metadata : midi) {
         const auto msg = metadata.getMessage();
+        countHeldMidiNotes(msg);
         if (msg.isNoteOn()) {
             voices[0].lastMidiNote = (float)msg.getNoteNumber();
             voices[0].addMidiRestart(juce::jlimit(0, std::max(0, numSamples - 1), metadata.samplePosition));

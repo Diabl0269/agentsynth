@@ -943,6 +943,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/SoundPackRowGlideTests.cmake) # the Sound pa
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutManagerTests.cmake) # the shortcut table: defaults, conflicts, migrations
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/LiveDisplayTests.cmake) # displays that follow the modulated value
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroFoldTests.cmake) # the macro fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/MacroCardCableDropTests.cmake) # a cable dragged onto a folded macro card

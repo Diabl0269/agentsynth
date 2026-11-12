@@ -352,6 +352,8 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
     unisonMix.primed = false; // the next block starts the voice gains at their targets
     heldUnison_ = -1;
     noteSeen_ = false;
+    heldMidiNotes_ = 0;
+    publishLiveDisplayValues(0);
     lastSyncSample = 0.0f;
     blockPeakWarpAmount = 0.0f;
 }
@@ -366,6 +368,7 @@ void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buf
         buffer.clear();
         if (auto* vb = getVisualBuffer())
             vb->pushConstant(0.0f, buffer.getNumSamples());
+        publishLiveDisplayValues(0);
         return;
     }
 
@@ -677,22 +680,7 @@ bool WavetableOscillatorModule::stepWavetable(int delta) {
 }
 
 void WavetableOscillatorModule::getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position) const {
-    out.assign((size_t)std::max(2, numPoints), 0.0f);
-    const auto* wt = selectedTableForMessageThread();
-    if (wt == nullptr || wt->numFrames <= 0)
-        return;
-
-    const float posFrames = juce::jlimit(0.0f, 1.0f, position) * (float)(wt->numFrames - 1);
-    const int n = (int)out.size();
-
-    // Draw what the oscillator actually plays, warp included — a Warp knob you cannot see
-    // move is a knob users do not trust.
-    const Warp warp = (Warp)juce::jlimit(0, (int)Warp::Count - 1, warpParam->getIndex());
-    const float amount = warpAmountParam->get();
-    const bool hermite = interpolationParam->getIndex() == 1;
-
-    for (int i = 0; i < n; ++i)
-        out[(size_t)i] = readWarped(*wt, 0, posFrames, (float)i / (float)n, warp, amount, hermite);
+    getDisplayWaveformAt(out, numPoints, position, warpAmountParam->get());
 }
 
 const std::array<float, WavetableOscillatorModule::kDecimTaps>& WavetableOscillatorModule::decimationKernel() {
@@ -836,8 +824,10 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
         buffer.clear(ch, 0, numSamples);
 
     const Wavetable* wt = audioTable();
-    if (wt == nullptr)
+    if (wt == nullptr) {
+        publishLiveDisplayValues(0);
         return;
+    }
 
     fillParameterRamps(cacheLen);
     const BlockSettings bs = gatherBlockSettings(numSamples);
@@ -850,6 +840,7 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
     float* outR = (rightCh < numCh) ? buffer.getWritePointer(rightCh) : scratchRight.data();
     renderVoice(*wt, voices[0], outL, outR, numSamples, cacheLen, bs);
 
+    publishLiveDisplayValues(cacheLen);
     pushToVisualBuffer(buffer, numSamples);
 }
 
@@ -873,8 +864,10 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         buffer.clear(ch, 0, numSamples);
 
     const Wavetable* wt = audioTable();
-    if (wt == nullptr)
+    if (wt == nullptr) {
+        publishLiveDisplayValues(0);
         return;
+    }
 
     fillParameterRamps(cacheLen);
     const BlockSettings bs = gatherBlockSettings(numSamples);
@@ -913,6 +906,7 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
     for (int ch = MAX_VOICES; ch < kRightBase && ch < numCh; ++ch)
         buffer.clear(ch, 0, numSamples);
 
+    publishLiveDisplayValues(cacheLen);
     pushToVisualBuffer(buffer, numSamples);
 }
 
@@ -951,7 +945,4 @@ juce::String WavetableOscillatorModule::getWavetableName() const {
     return wt != nullptr ? wt->name : juce::String();
 }
 
-int WavetableOscillatorModule::getWarpSignature() const {
-    return warpParam->getIndex() * 1024 + (int)std::round(warpAmountParam->get() * 200.0f) * 2 +
-           interpolationParam->getIndex();
-}
+int WavetableOscillatorModule::getWarpSignature() const { return getWarpSignature(warpAmountParam->get()); }

@@ -3,6 +3,7 @@
 #include "TestMode/TestModeCommands.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
+#include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeInput.h"
 #include "TestMode/TestModePopWatch.h"
@@ -528,6 +529,7 @@ CommandTable CommandTable::standard() {
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});
     registerPopWatchCommands(table);
+    registerAudioPumpCommands(table);
     table.add("quit", {cmdQuit});
     table.add("requestQuit", {cmdRequestQuit});
     return table;

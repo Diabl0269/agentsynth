@@ -241,17 +241,29 @@ reading changes by a tenth of a dB, so a card buffered to an image is not invali
 ## WavetableDisplayComponent
 
 `Source/UI/ModuleViews/WavetableDisplayComponent.h`. The wavetable frame view on the `Wavetable`
-module card. It draws the frame currently under the scan position as a solid trace, with
+module card. It draws the frame the oscillator plays now as a solid trace, with
 `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack, so the scan
 direction and the table's depth read as three-dimensional. It is captioned with the table name and
 `frame/total`.
 
+**It shows the modulated position, not the knob.** The frame, the ghosts and the caption follow
+`getModulatedScanPosition()` and the trace is warped by `getModulatedWarpAmount()`: knob plus the
+Position (Warp) cable at the end of the last audio block while a note sounds, the knob alone at rest
+(no note held, nothing on the cable, bypassed). So an LFO on Position sweeps the drawn frame in time
+with the sound, and a released note or a removed cable settles it on the knob. What counts as
+"sounding" is in [wavetable](../modules/wavetable.md#the-display). Between the audio thread's values
+the drawn position glides toward the live one (a one-pole of `kGlideMs`, 60 ms, under full
+Animations; a jump under Reduce Motion or Off, `motionMs`), and the timer runs at 30 Hz only while the
+drawn or the live position moves, 15 Hz otherwise. Getter, glide and rate:
+`WavetableLiveDisplayTests.cpp`. The guard over every display that does the same is
+[`DisplaysShowModulatedValue`](#every-display-shows-the-modulated-value).
+
 **The trace is drawn warped.** `getDisplayWaveformAt()` runs the same `readWarped()` the audio path
 does. A Warp knob whose effect is invisible is a knob users do not trust.
 
-**Repaints are gated.** The 15 Hz timer compares a change signature — quantised scan position, table
-name, frame count, and `getWarpSignature()` (warp mode plus quantised amount plus interpolation
-mode) — and calls `repaint()` only when it differs. This is required by [rendering](rendering.md):
+**Repaints are gated.** The timer compares a change signature — quantised drawn position, table
+name, frame count, and `getWarpSignature(amount)` (warp mode plus the quantised live amount plus
+interpolation mode) — and calls `repaint()` only when it differs, so a held value repaints nothing. This is required by [rendering](rendering.md):
 the display is always visible inside a buffered module card, so an unconditional per-tick repaint
 would invalidate that cache 15 times a second.
 
@@ -267,6 +279,21 @@ hardcoded colours when the cast fails.
 
 The card chrome this display sits in — the two-column jack gutter, the tabbed control body and the
 chrome band beside the ports — is [module-card](module-card.md#wavetable-card).
+
+## Every display shows the modulated value
+
+A display shows what the sound does: a parameter's processor-side current value (knob plus
+modulation, as `FilterModule::getCurrentCutoff` and `WavetableOscillatorModule::getModulatedScanPosition`
+publish it, one relaxed atomic per value stored once per block), never the stored knob value while a
+cable or LFO moves the sound. The guard `DisplaysShowModulatedValue`
+(`Tests/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp`) finds every file under
+`Source/UI/ModuleViews/` that paints or ticks and fails until it is registered with what it shows (a
+live value, a live signal, editor data, or a known base-value display); a live-value display must
+read a `getModulated...`/`getCurrent...` getter, and no display outside the known list may read a
+stored value (`->get()`, `getValue()`, `getScanPosition()`...) in `paint` or `timerCallback`. The
+known list still on the stored value (shrink-only, never added to): the Sampler waveform's start and
+loop markers, the EQ curve, the Morph map cursor (card and shape window), the knob mod ring, and the
+ADSR graph.
 
 ## CurveEditorComponent
 

@@ -33,7 +33,8 @@ TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
                              "checkStalePixels",
                              "requestQuit",
                              "keyDown",
-                             "keyUp"})
+                             "keyUp",
+                             "audioPump"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }
@@ -251,6 +252,15 @@ TEST(TestModeCommands, OpenProjectNeedsAMainWindowAndABundle) {
         GTEST_SKIP() << "no native window in this environment";
     EXPECT_EQ(run("openProject", args({{"path", "/nonexistent.agsproj"}})).state, StepResult::State::failed);
     EXPECT_EQ(run("saveProject", args({{"path", "/nonexistent/not-a-bundle.json"}})).state, StepResult::State::failed);
+}
+
+TEST(TestModeCommands, AudioPumpNeedsTheAppsMainWindowAndSaysWhatItTakes) {
+    Rig rig; // a window, but not the app's
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    const auto noWindow = run("audioPump", args({{"run", true}}));
+    EXPECT_EQ(noWindow.state, StepResult::State::failed);
+    EXPECT_TRUE(noWindow.error.contains("main window")) << noWindow.error;
 }
 
 TEST(TestModeCommands, WaitForIdleReturnsOnceNothingAnimates) {
