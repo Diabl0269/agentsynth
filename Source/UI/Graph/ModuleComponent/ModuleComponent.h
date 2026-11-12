@@ -26,6 +26,9 @@
 #include <vector>
 
 class AudioEngine;
+namespace synth::cardbody {
+struct BodyGeometry; // Forward declaration — see UI/Graph/CardBody/CardBodyGeometry.h
+}
 class GraphEditor;                // Forward declaration
 class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
@@ -88,6 +91,8 @@ public:
     /** Test mode: selected, moduleType, title and nodeId (docs/development/test-mode.md). */
     void addTestModeState(juce::DynamicObject& into) const override;
     juce::AudioProcessor* getModule() const { return module; }
+    /** Where the body may go: the card's width, less the jack-label gutter on the Macros card. */
+    synth::cardbody::BodyGeometry bodyGeometry() const;
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
     // Detach from the processor before a graph rebuild: drops listeners and attachments, stops the timer.
@@ -878,9 +883,6 @@ private:
     // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
     // clear of the new footprint). Message thread only.
     void applyMacroCountChange();
-
-    // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
-    // rows above `count` without destroying their sliders or parameters.
 
     // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
     // rather than re-deriving the geometry, so content can never land on top of a port label —

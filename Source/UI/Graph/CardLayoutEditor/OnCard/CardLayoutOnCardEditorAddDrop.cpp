@@ -5,6 +5,7 @@
 #include "CardLayoutOnCardEditor.h"
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <utility>
 
@@ -60,7 +61,7 @@ void CardLayoutOnCardEditor::dragAdded(const juce::String& paramId, CardLayoutAd
     if (phase != CardLayoutAddRow::DragPhase::End && section >= 0 && cardArea().contains(at)) {
         const auto size = addedCellSize(section, paramId);
         addDrag_.ghost = oncard::clampToLimits({at - size / 2, at - size / 2 + size},
-                                               limitsFor(*card_->getCardBody(), section, card_->getWidth()));
+                                               limitsFor(*card_->getCardBody(), section, card_->bodyGeometry()));
     }
     repaint();
     if (phase != CardLayoutAddRow::DragPhase::End)
@@ -83,7 +84,7 @@ void CardLayoutOnCardEditor::dropAdded(const juce::String& paramId, juce::Point<
     flushNudge();
     const auto layout = body->explicitLayout();
     const int layoutSection = layoutSectionIndexOfPlan(layout, section);
-    const auto limits = limitsFor(*body, section, card_->getWidth());
+    const auto limits = limitsFor(*body, section, card_->bodyGeometry());
     const auto size = addedCellSize(section, paramId);
     const auto dropped = oncard::clampToLimits({at - size / 2, at - size / 2 + size}, limits);
 
@@ -96,7 +97,7 @@ void CardLayoutOnCardEditor::dropAdded(const juce::String& paramId, juce::Point<
         placed.back().rect = pushed[k];
         moves.push_back({placed.back().key, cells_[(size_t)indices[k]].rect, pushed[k], kPushMs, false});
     }
-    const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
+    const auto g = card_->bodyGeometry();
     const int top = body->getPlan().sections[(size_t)section].cellTop;
     const auto positioned = withCellPositions(layout, placed, collectViews(*card_, section), g.contentX, top);
     const int item = body->getPlan().findParam(paramId);

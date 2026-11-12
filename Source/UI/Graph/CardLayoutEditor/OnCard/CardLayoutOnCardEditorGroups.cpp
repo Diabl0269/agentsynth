@@ -4,6 +4,7 @@
 #include "CardLayoutOnCardEditor.h"
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <utility>
 
@@ -48,7 +49,7 @@ void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> 
             moves.push_back({staying.back().key, cells_[(size_t)i].rect, staying.back().rect, kPushMs, false});
         }
 
-    const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
+    const auto g = card_->bodyGeometry();
     const auto& sections = body->getPlan().sections;
     const int fromTop = sections[(size_t)from].cellTop;
     const int targetTop = sections[(size_t)target].cellTop;

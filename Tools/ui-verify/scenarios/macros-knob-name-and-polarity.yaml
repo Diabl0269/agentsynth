@@ -21,7 +21,7 @@ steps:
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 500}
-  - click: {id: window, x: 396, y: 500, clicks: 2}
+  - click: {id: window, x: 533, y: 330, clicks: 2}
   - wait: {settleMs: 500}
   - screenshot: {name: panel-open}
   - mark: {check: 1, name: panel-has-name-and-polarity-and-no-label}

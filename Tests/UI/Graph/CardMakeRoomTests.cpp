@@ -77,7 +77,7 @@ struct Scene {
 
     Scene() {
         bank = c.bank(400, 300, kSmall);
-        neighbour = c.neighbourCard(504, c.rect(bank).getBottom() + synth::LayoutUtil::kCollisionGap);
+        neighbour = c.neighbourCard(920, c.rect(bank).getBottom() + synth::LayoutUtil::kCollisionGap);
         neighbourHome = c.rect(neighbour);
     }
 };

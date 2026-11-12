@@ -11,6 +11,7 @@
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -68,10 +69,10 @@ void ModuleComponent::updateLayout() {
     // chrome sits beside a two-column jack gutter and its body's runs take their wide-card branches
     // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
     const auto type = getType(module);
-    const int cardWidth =
-        (type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer)
-            ? synth::LayoutUtil::kDoubleWidth
-            : synth::LayoutUtil::kSingleWidth;
+    const int cardWidth = (type == ModuleType::Wavetable || type == ModuleType::Sequencer ||
+                           type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
+                              ? synth::LayoutUtil::kDoubleWidth
+                              : synth::LayoutUtil::kSingleWidth;
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)
@@ -103,8 +104,17 @@ void ModuleComponent::layoutMacroPortWidget() {
     setSize(getWidth() > 0 ? getWidth() : kNominalWidth, rows * kMacroPortWidgetRowStep);
 }
 
+synth::cardbody::BodyGeometry ModuleComponent::bodyGeometry() const {
+    return synth::cardbody::BodyGeometry::forCardWidth(
+        getWidth(), getType(module) == ModuleType::MacroControl ? synth::cardbody::kMacroJackGutter : 0);
+}
+
 int ModuleComponent::getContentTopY() {
     int y = 38; // below the title bar (header hairline at 24 + 8px breathing room + jack radius)
+    // The Macros card's body sits beside its jacks, in the card's right-edge gutter, so it starts under the header;
+    // the card's height still clears the lowest jack (layoutDefaultContent).
+    if (getType(module) == ModuleType::MacroControl)
+        return y;
     if (module->acceptsMidi())
         y += 30; // the "Midi In"/"Midi Out" row
 
@@ -169,6 +179,9 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y = layoutWavetableChrome(y, contentX, contentW, apply);
 
     y = layoutBodyControls(y, width, apply);
+    if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && getType(module) == ModuleType::MacroControl)
+        if (const int outs = mb->getVisibleOutputPortCount(); outs > 0) // beside the gutter, still clear of the jacks
+            y = std::max(y, getPortCenter(outs - 1, false).y + kPortLabelClearance);
 
     // --- Drum Kit pads: the count, the pad grid and the picked pad's controls, under the master Level ---
     if (instrumentChrome_ != nullptr)
@@ -266,7 +279,8 @@ bool ModuleComponent::unfoldMoreRowForCableDrag(juce::Point<int> localPoint) {
 // slots) stacks its widget arrays in the generic order -- combos, toggles, knobs -- with the same runs.
 int ModuleComponent::layoutBodyControls(int y, int width, bool apply) {
     using namespace synth::cardbody;
-    const auto g = BodyGeometry::forCardWidth(width);
+    const auto g =
+        BodyGeometry::forCardWidth(width, getType(module) == ModuleType::MacroControl ? kMacroJackGutter : 0);
     if (cardBody_ != nullptr)
         return cardBody_->layout(y, g, apply);
 

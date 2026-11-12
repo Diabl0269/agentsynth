@@ -63,7 +63,8 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
 // single.
 int cardWidthFor(ModuleBase& module) {
     const auto type = module.getModuleType();
-    return type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer
+    return type == ModuleType::Wavetable || type == ModuleType::Sequencer || type == ModuleType::PolySequencer ||
+                   type == ModuleType::MacroControl
                ? synth::LayoutUtil::kDoubleWidth
                : synth::LayoutUtil::kSingleWidth;
 }
@@ -149,8 +150,12 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     const auto plan = entry != nullptr ? CardBodyPlan::forModule(module, entry->layout, entry->dimRules)
                                        : CardBodyPlan::forModule(module, std::nullopt);
     const int width = cardWidthFor(module);
-    const auto g = BodyGeometry::forCardWidth(width);
+    const bool macros = module.getModuleType() == ModuleType::MacroControl;
+    const auto g = BodyGeometry::forCardWidth(width, macros ? kMacroJackGutter : 0);
     int y = contentTopY(plan, module, width);
+    const int jackClear = y;
+    if (macros)
+        y = ModuleComponent::kPortGutterHeaderHeight; // the body sits beside its jacks, under the header
     if (dynamic_cast<SamplerModule*>(&module) != nullptr)
         y += kWaveformHeight + 8 + kRowHeight + 8;
     if (dynamic_cast<DrumKitModule*>(&module) != nullptr)
@@ -158,6 +163,8 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     if (module.getModuleType() == ModuleType::Wavetable) // beside the jack gutter on its double-width card
         y = std::max(y, ModuleComponent::wavetableChromeBottomY());
     y = layoutCardBodySections(plan, module, y, g, /*apply*/ false);
+    if (macros)
+        y = std::max(y, jackClear);
     if (auto* kit = dynamic_cast<DrumKitModule*>(&module))
         y += ui::DrumKitPadsSection::height(*kit);
     y = measureRowsBelowBody(plan, module, y, g);

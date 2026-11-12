@@ -15,6 +15,26 @@ steps:
   - wait: {}
   - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
   - wait: {}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 741, y: 188}
+  - wait: {settleMs: 500}
   - click: {id: Knobs}
   - key: {keys: down, target: Knobs}
   - key: {keys: down, target: Knobs}

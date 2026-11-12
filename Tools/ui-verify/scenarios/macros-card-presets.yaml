@@ -23,7 +23,7 @@ steps:
   - key: {keys: down}
   - key: {keys: return}
   - wait: {settleMs: 500}
-  - click: {id: window, x: 273, y: 188}
+  - click: {id: window, x: 554, y: 188}
   - wait: {settleMs: 300}
   - screenshot: {id: screen, name: preset-menu-lists-row-grid-faders}
   - mark: {check: 2, name: preset-menu-lists-row-grid-faders}
@@ -34,7 +34,7 @@ steps:
   - wait: {settleMs: 500}
   - screenshot: {name: row-preset}
   - mark: {check: 3, name: row-puts-eight-knobs-in-one-row}
-  - click: {id: window, x: 273, y: 188}
+  - click: {id: window, x: 554, y: 188}
   - wait: {settleMs: 300}
   - key: {keys: down}
   - key: {keys: down}
@@ -49,7 +49,7 @@ steps:
   - wait: {settleMs: 500}
   - screenshot: {name: undo-back-to-row}
   - mark: {check: 5, name: one-undo-step-goes-back-to-row}
-  - click: {id: window, x: 273, y: 188}
+  - click: {id: window, x: 554, y: 188}
   - wait: {settleMs: 300}
   - key: {keys: down}
   - key: {keys: down}
@@ -59,6 +59,6 @@ steps:
   - wait: {settleMs: 500}
   - screenshot: {name: grid-again}
   - mark: {check: 6, name: grid-puts-the-knobs-back-in-two-rows}
-  - click: {id: window, x: 461, y: 188}
+  - click: {id: window, x: 741, y: 188}
   - wait: {settleMs: 500}
   - screenshot: {name: done}

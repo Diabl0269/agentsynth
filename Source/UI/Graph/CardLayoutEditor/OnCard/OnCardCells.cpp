@@ -2,6 +2,7 @@
 // positions into a layout.
 #include "OnCardCells.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <map>
@@ -70,7 +71,7 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
     if (body == nullptr)
         return cells;
     const auto& plan = body->getPlan();
-    const auto g = cardbody::BodyGeometry::forCardWidth(card.getWidth());
+    const auto g = card.bodyGeometry();
     for (int s = 0; s < (int)plan.sections.size(); ++s) {
         const auto& section = plan.sections[(size_t)s];
         if (!section.visible)
@@ -101,8 +102,7 @@ std::vector<OnCardView> collectViews(const ModuleComponent& card, int section) {
     return views;
 }
 
-oncard::Limits limitsFor(const synth::CardBody& body, int section, int cardWidth) {
-    const auto g = cardbody::BodyGeometry::forCardWidth(cardWidth);
+oncard::Limits limitsFor(const synth::CardBody& body, int section, const cardbody::BodyGeometry& g) {
     return {g.contentX, g.contentX + g.contentW, body.getPlan().sections[(size_t)section].cellTop};
 }
 

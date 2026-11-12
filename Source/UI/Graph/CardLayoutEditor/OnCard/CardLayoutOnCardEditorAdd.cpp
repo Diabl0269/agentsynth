@@ -5,6 +5,7 @@
 #include "CardLayoutOnCardEditor.h"
 #include "OnCardAddControlModel.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
@@ -76,7 +77,7 @@ juce::Point<int> CardLayoutOnCardEditor::addedCellSize(int planSection, const ju
     const int item = body != nullptr ? body->getPlan().findParam(paramId) : -1;
     if (item < 0 || planSection < 0 || planSection >= (int)body->getPlan().sections.size())
         return {};
-    const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
+    const auto g = card_->bodyGeometry();
     return cardBodyCellSize(body->getPlan().items[(size_t)item].kind,
                             body->getPlan().sections[(size_t)planSection].columns, g);
 }
@@ -84,9 +85,9 @@ juce::Point<int> CardLayoutOnCardEditor::addedCellSize(int planSection, const ju
 // A place that overlaps nothing and keeps the 8 px gap, as a free position (from the group's content origin).
 juce::Point<int> CardLayoutOnCardEditor::freeSpotIn(int planSection, const juce::String& paramId) const {
     const auto* body = card_->getCardBody();
-    const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
+    const auto g = card_->bodyGeometry();
     const auto spot = oncard::findFreeSpot(addedCellSize(planSection, paramId), occupiedIn(planSection),
-                                           limitsFor(*body, planSection, card_->getWidth()));
+                                           limitsFor(*body, planSection, card_->bodyGeometry()));
     return {spot.x - g.contentX, spot.y - body->getPlan().sections[(size_t)planSection].cellTop};
 }
 

@@ -17,6 +17,7 @@ ModuleWidthBucket getModuleWidthBucket(ModuleType t) {
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
     case ModuleType::MidiKeyboard:
+    case ModuleType::MacroControl: // its body sits beside the jack gutter, so four knobs across fit
     // Parametric EQ needs the extra width for a readable response curve plus four band rows of
     // On / Freq / Gain / Q laid out side by side.
     case ModuleType::ParametricEQ:

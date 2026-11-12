@@ -32,7 +32,7 @@ TEST_F(ModuleComponentTest, MacroBankHeightFollowsItsLayoutAndFitsEveryJack) {
 
         ModuleComponent comp(&macros, juce::AudioProcessorGraph::NodeID(1), editor);
 
-        EXPECT_EQ(comp.getWidth(), synth::LayoutUtil::kSingleWidth) << "count " << count;
+        EXPECT_EQ(comp.getWidth(), synth::LayoutUtil::kDoubleWidth) << "count " << count;
         EXPECT_GE(comp.getHeight(), previous) << "the card never shrinks as knobs are added, count " << count;
         previous = comp.getHeight();
         const auto last = comp.getPortCenter(count - 1, /*isInput=*/false);
