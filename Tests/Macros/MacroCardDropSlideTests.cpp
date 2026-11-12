@@ -238,3 +238,131 @@ TEST(MacroCardDropSlide, UnderAnimationsOffTheNewRowIsThereAtOnce) {
     c.dropOnCardBody();
     EXPECT_FLOAT_EQ(c.card().getPortShown(c.macro().ports[0].nodeUuid), 1.0f);
 }
+
+// ---- The row a cable drop made fades out on undo and grows back on redo ----
+
+namespace {
+// Drops the Oscillator on the folded card (a new port), lets the slide and the row's grow-in land, and returns the
+// new port's uuid.
+juce::String dropAndLand(SlideCanvas& c) {
+    c.dropOnCardBody();
+    const auto port = c.macro().ports[0].nodeUuid;
+    c.editor.finishMacroCrossingAnimForTest();
+    c.card().stepPortEnterForTest(170.0);
+    return port;
+}
+} // namespace
+
+TEST(MacroCardPortExit, UndoKeepsTheRemovedRowDrawnAndFadesItOutThenItIsGone) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    dropAndLand(c);
+    ASSERT_TRUE(c.undo.undo());
+    ASSERT_TRUE(c.macro().ports.empty());
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 1) << "the live macro has no row: a ghost holds its place";
+    EXPECT_GT(c.card().getLeavingPortShownForTest(), 0.95f) << "it starts whole, not already gone";
+    c.card().stepPortExitForTest(85.0);
+    const float mid = c.card().getLeavingPortShownForTest();
+    EXPECT_GT(mid, 0.05f);
+    EXPECT_LT(mid, 0.95f) << "half way it is part faded";
+    c.card().stepPortExitForTest(170.0);
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0) << "and nothing is kept once it has faded";
+}
+
+TEST(MacroCardPortExit, RedoGrowsTheRowBackInAndDropsAnyGhostOfIt) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    dropAndLand(c);
+    ASSERT_TRUE(c.undo.undo());
+    c.card().stepPortExitForTest(50.0);
+    ASSERT_EQ(c.card().getLeavingPortRowCountForTest(), 1);
+    ASSERT_TRUE(c.undo.redo()); // a new edit mid-fade
+    ASSERT_EQ(c.macro().ports.size(), 1u);
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0) << "the ghost of a port that is back is dropped";
+    const auto port = c.macro().ports[0].nodeUuid;
+    EXPECT_LT(c.card().getPortShown(port), 0.05f) << "redo grows the row in from nothing";
+    c.card().stepPortEnterForTest(85.0);
+    EXPECT_GT(c.card().getPortShown(port), 0.05f);
+    EXPECT_LT(c.card().getPortShown(port), 1.0f);
+    c.card().stepPortEnterForTest(170.0);
+    EXPECT_FLOAT_EQ(c.card().getPortShown(port), 1.0f);
+}
+
+TEST(MacroCardPortExit, TheMinusButtonsRemovalFadesTheSameWay) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    dropAndLand(c);
+    c.editor.getMacroController().deleteBottomMacroPort(c.macroId, true);
+    ASSERT_TRUE(c.macro().ports.empty());
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 1);
+    c.card().stepPortExitForTest(170.0);
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0);
+}
+
+TEST(MacroCardPortExit, ARowWithRowsBelowItIsNotKeptSoNothingDrawsThroughIt) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    auto& controller = c.editor.getMacroController();
+    const auto first =
+        controller.addMacroPort(c.macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "A");
+    controller.addMacroPort(c.macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "B");
+    c.card().stepPortEnterForTest(170.0);
+    controller.deleteMacroPortManually(c.macroId, first);
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0) << "B moves up into A's row: A pops instead of overlapping";
+}
+
+TEST(MacroCardPortExit, ExpandingTheMacroMidFadeDropsTheGhostAndAGhostOutlivesNoCard) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    {
+        SlideCanvas c;
+        dropAndLand(c);
+        ASSERT_TRUE(c.undo.undo());
+        ASSERT_EQ(c.card().getLeavingPortRowCountForTest(), 1);
+        c.editor.getMacroController().setMacroCollapsed(c.macroId, false);
+        EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0) << "an expanded macro shows no card, so no ghost";
+    }
+    {
+        SlideCanvas c; // the card is destroyed with the editor while a ghost fades: nothing runs after it
+        dropAndLand(c);
+        ASSERT_TRUE(c.undo.undo());
+        ASSERT_EQ(c.card().getLeavingPortRowCountForTest(), 1);
+    }
+    SUCCEED();
+}
+
+TEST(MacroCardPortExit, UnderReduceMotionTheRowFadesOverTheShortFadeAndUnderOffItIsGoneAtOnce) {
+    {
+        MotionMode reduced(synth::ui::AnimationMode::reduced);
+        FadesOffScreen fades;
+        SlideCanvas c;
+        dropAndLand(c);
+        ASSERT_TRUE(c.undo.undo());
+        EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 1);
+        c.card().stepPortExitForTest(synth::ui::ShownFade::kReducedMs);
+        EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0);
+    }
+    MotionMode off(synth::ui::AnimationMode::off);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    dropAndLand(c);
+    ASSERT_TRUE(c.undo.undo());
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0);
+}
+
+TEST(MacroCardPortExit, APortThatArrivesWhileTheCardIsHiddenGrowsAndFadesNothing) {
+    MotionMode full(synth::ui::AnimationMode::full);
+    FadesOffScreen fades;
+    SlideCanvas c;
+    auto& controller = c.editor.getMacroController();
+    controller.setMacroCollapsed(c.macroId, false);
+    controller.addMacroPort(c.macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    controller.setMacroCollapsed(c.macroId, true); // the card comes back shown, row and all
+    ASSERT_EQ(c.macro().ports.size(), 1u);
+    EXPECT_FLOAT_EQ(c.card().getPortShown(c.macro().ports[0].nodeUuid), 1.0f);
+    EXPECT_EQ(c.card().getLeavingPortRowCountForTest(), 0);
+}
