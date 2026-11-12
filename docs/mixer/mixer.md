@@ -442,9 +442,18 @@ neighbour (its downstream one right after the track source), and its card lands 
 neighbour's card on the canvas, the cards after it sliding aside as for a keyboard insert
 ([layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others),
 `synth::insertModuleAfterNode`). Module, cables, macro and pushes are one undo step. A neighbour hidden in a
-collapsed macro gets the new node one spacing to its right without moving anything. A chain whose last
-top-level row is a split meets the strip on several cables, so it has no "+ Insert"; each path still takes
-one through "Add to path".
+collapsed macro gets the new node one spacing to its right without moving anything. Next to a split the add goes across
+all its paths at once (`spliceInInsertAcross`: every cable between the fork-side nodes and the merge-side
+nodes is routed through the new module, left on ch0 and right on the module's own right leg, several cables
+into one input summing). A chain whose last top-level row is a split keeps its "+ Insert": the pick lands
+behind every path, before the strip. The line above a split row adds in front of all its paths (the module
+or track source that feeds them now feeds the new module), and the line below one, above the module they
+merge into, behind all of them; the split row's right-click menu offers "Add before all paths" and "Add after
+all paths". A module hung off the fork with no output is no path and keeps its cable. Each path still takes
+one through "Add to path". Keys: Return on the "+ Insert" row opens the picker like any other chain; the
+split-side lines and menu items are mouse entries, like the gap line between two modules. Tests:
+`InsertAddAffordanceMatrix` (`Tests/UI/Mixer/MixerInsertListAcrossTests.cpp`) walks every chain shape x entry
+point, and `MixerModelSpliceAcrossTests` asserts the raw edges.
 
 **A bus has no source to walk from.** A bus column carries no feeding track, so
 `buildBusInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal

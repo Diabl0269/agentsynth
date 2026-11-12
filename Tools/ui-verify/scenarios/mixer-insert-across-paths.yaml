@@ -1,0 +1,62 @@
+# Check: a track whose chain ends in two parallel paths still ends in "+ Insert", and the line above the 2-paths row
+# offers an add too; each pick lands across both paths, and Cmd+Z removes it in one step.
+#
+# What a user does:
+#   1. Adds an Oscillator track, opens the Mixer tab and the track on the canvas, adds a Delay and cables Oscillator
+#      out -> Delay in and Delay out -> the Channel Strip in: the chain is now 2 paths (through the Delay, and the
+#      Oscillator's own way) that meet at the strip.
+#   2. The column ends in "+ Insert": picks a Compressor, which lands after the merge.
+#   3. Hovers the line above the 2-paths row and picks a Chorus: it lands before the split.
+#   4. Presses Cmd+Z: the add is gone in one step and the paths are as before.
+record: true
+save_project: across-paths
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - expect: {id: "card:VCA", exists: true}
+  - key: {keys: cmd+f}
+  - type: {text: delay}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - wait: {}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 100, fromY: 120, toX: 150, toY: 330, steps: 20}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 380, fromY: 40, toX: 60, toY: 20, steps: 20}
+  - wait: {}
+  - drag: {from: "card:Oscillator > Audio output", to: "card:Delay > Audio input"}
+  - wait: {}
+  - drag: {from: "card:Delay > Audio output", to: "card:Channel Strip > Audio input"}
+  - wait: {}
+  - mark: {check: 1, name: wired-two-paths-plus-insert}
+  - click: {id: mixerInsertList, x: 30, y: 46}
+  - wait: {}
+  - type: {text: compressor}
+  - key: {keys: return}
+  - wait: {}
+  - mark: {check: 2, name: compressor-after-merge}
+  - click: {id: mixerInsertList, x: 40, y: 18}
+  - wait: {}
+  - type: {text: chorus}
+  - key: {keys: return}
+  - wait: {}
+  - mark: {check: 3, name: chorus-before-split}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - mark: {check: 4, name: undo-one-step}

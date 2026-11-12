@@ -167,7 +167,7 @@ TEST(MixerInsertListAddTests, AddToPathGoesAtTheEndOfThatPathAndADryPathGetsItsF
     EXPECT_FALSE(p.wired(p.filter, p.vca));
 }
 
-TEST(MixerInsertListAddTests, AChainThatEndsInASplitHasNoPlusInsertButEachPathCanTakeOne) {
+TEST(MixerInsertListAddTests, AChainThatEndsInASplitHasAPlusInsertBehindThePathsAndEachPathCanTakeOne) {
     SplitListRig r;
     const auto delay = r.add("Delay", 300, 250);
     const auto reverb = r.add("Reverb", 300, 550);
@@ -176,7 +176,7 @@ TEST(MixerInsertListAddTests, AChainThatEndsInASplitHasNoPlusInsertButEachPathCa
     r.wire(delay, r.strip);
     r.wire(reverb, r.strip);
     r.refresh();
-    EXPECT_FALSE(r.list.hasAddRow()) << "the paths meet at the strip itself: no single cable to splice into";
+    EXPECT_TRUE(r.list.hasAddRow()) << "the paths meet at the strip itself: the add goes across all their cables";
     EXPECT_TRUE(r.list.pathAddTarget(0, 0).has_value());
     EXPECT_TRUE(r.list.pathAddTarget(0, 1).has_value());
 }

@@ -61,6 +61,13 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
     hasSplits_ = std::any_of(entries_.begin(), entries_.end(), [](const auto& e) { return e.kind == Kind::Split; });
     sourceNodeId_ = sourceNodeId;
     stripNodeId_ = stripNodeId;
+    endAcrossTarget_.reset();
+    for (int i = (int)entries_.size() - 1; i >= 0; --i)
+        if (entries_[(size_t)i].depth == 0) {
+            if (entries_[(size_t)i].kind == Kind::Split)
+                endAcrossTarget_ = afterSplitTarget(i);
+            break;
+        }
     refreshRows();
 }
 
@@ -348,10 +355,15 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
     if (hasAddRow()) {
         auto proxy = std::make_unique<RowAccessibilityProxy>();
         proxy->setInterceptsMouseClicks(false, false);
-        proxy->setTitle("Add an insert");
+        proxy->setTitle(addRowName());
         addAndMakeVisible(*proxy);
         rowProxies_.push_back(std::move(proxy));
     }
+}
+
+// What a screen reader says for the "+ Insert" row: after a trailing split it says the add goes behind the paths.
+juce::String MixerInsertList::addRowName() const {
+    return endTarget().isAcross() ? "Add an insert after all paths" : "Add an insert";
 }
 
 std::vector<juce::String> MixerInsertList::entryKeys() const {
@@ -390,7 +402,7 @@ void MixerInsertList::setFocusedRow(int rowIndex) {
 
 juce::String MixerInsertList::describeRow(int rowIndex) const {
     if (isAddRow(rowIndex))
-        return "Add an insert";
+        return addRowName();
     const auto* entry = entryForRow(rowIndex);
     if (entry == nullptr)
         return {};
@@ -412,11 +424,14 @@ juce::String MixerInsertList::getRowUuid(int rowIndex) const {
 }
 
 juce::String MixerInsertList::tooltipAt(juce::Point<int> mouse) const {
-    if (gapTargetAt(mouse))
-        return "Add an effect here";
+    if (const auto gap = gapTargetAt(mouse))
+        return !gap->isAcross()   ? "Add an effect here"
+               : gap->behindPaths ? "Add an effect after all paths"
+                                  : "Add an effect before all paths";
     const int row = rowIndexAt(mouse);
     if (isAddRow(row))
-        return "Add an effect at the end of this chain";
+        return endAcrossTarget_.has_value() && endTarget().isAcross() ? "Add an effect after all paths"
+                                                                      : "Add an effect at the end of this chain";
     if (const auto* entry = entryForRow(row)) {
         if (entry->kind == Kind::DryPath)
             return "Path " + juce::String(entry->path + 1) + " is wired straight through: click to add an effect to it";

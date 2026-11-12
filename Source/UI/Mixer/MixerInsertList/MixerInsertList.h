@@ -113,12 +113,24 @@ public:
 
     // ---- Adding (docs/mixer/mixer.md#adding-an-insert) ----
     /** Where an add lands: between `predecessor` and `successor` (an invalid successor means `predecessor`'s single
-     *  signal successor). */
+     *  signal successor). Next to a split the add goes across every path at once: `acrossPredecessors` and
+     *  `acrossSuccessors` then list every node whose cables the new module is spliced into (`predecessor` and
+     *  `successor` stay one representative pair, the anchor of the card and of the macro). */
     struct AddTarget {
+        AddTarget() = default;
+        AddTarget(juce::AudioProcessorGraph::NodeID predecessorIn, juce::AudioProcessorGraph::NodeID successorIn)
+            : predecessor(predecessorIn)
+            , successor(successorIn) {}
         juce::AudioProcessorGraph::NodeID predecessor;
         juce::AudioProcessorGraph::NodeID successor;
+        std::vector<juce::AudioProcessorGraph::NodeID> acrossPredecessors;
+        std::vector<juce::AudioProcessorGraph::NodeID> acrossSuccessors;
+        /** True for the add behind a split's paths, false for the one in front of them. */
+        bool behindPaths = false;
+        bool isAcross() const noexcept { return !acrossPredecessors.empty() && !acrossSuccessors.empty(); }
     };
-    /** True when the list ends in a "+ Insert" row: an editable chain that can take an add at its end. */
+    /** True when the list ends in a "+ Insert" row: an editable chain that can take an add at its end (after the
+     *  merged paths when the chain ends in a split). */
     bool hasAddRow() const noexcept { return canAddAtEnd(); }
     /** The "+ Insert" row's index (the last row), or -1. */
     int getAddRowIndex() const noexcept { return hasAddRow() ? (int)visible_.size() : -1; }
@@ -128,9 +140,12 @@ public:
     void activateAddRow();
     /** Adds module `moduleTypeName` at `target` (one undo step), placing its card on the canvas. */
     void addModuleAt(const juce::String& moduleTypeName, AddTarget target);
-    /** The gap "+" target at `position`, if the pointer is on the line between two rows that share a cable. */
+    /** The gap "+" target at `position`, if the pointer is on the line between two rows that share a cable: two
+     *  neighbours on a path, the source and the first row, the line above a split (before all its paths) and the line
+     *  below one (after all its paths, before the next row). */
     std::optional<AddTarget> gapTargetAt(juce::Point<int> position) const;
-    /** The "Add to path" target for path `path` (0-based) of split row `rowIndex`. */
+    /** The "Add to path" target for path `path` (0-based) of split row `rowIndex`: its last module, or across a nested
+     *  split the path ends in. */
     std::optional<AddTarget> pathAddTarget(int rowIndex, int path) const;
     /** The effect picker's rows: "Recent" first (this session's last picks), then the effect categories. */
     static std::vector<juce::String> effectPickerTypesForTest();
@@ -283,7 +298,18 @@ private:
     void paintRow(juce::Graphics& g, int rowIndex, float lift);
     void placeRows();
     bool canAddAtEnd() const noexcept;
-    AddTarget endTarget() const noexcept;
+    AddTarget endTarget() const;
+    juce::String addRowName() const;
+    /** The add in front of every path of the split at entry `splitEntry` (the fork feeds `node`, `node` feeds each
+     *  path), or after them (each path's end feeds `node`, `node` feeds the merge). Empty when a cable is missing. */
+    std::optional<AddTarget> beforeSplitTarget(int splitEntry, juce::AudioProcessorGraph::NodeID fork) const;
+    std::optional<AddTarget> afterSplitTarget(int splitEntry) const;
+    /** The add behind the split whose paths end where entry `entryIndex` begins; empty when none does. */
+    std::optional<AddTarget> afterSplitEndingAt(int entryIndex) const;
+    /** The fork that feeds the split at `splitEntry`, and the nodes of its paths (modules and, for a dry path, the
+     * fork). */
+    juce::AudioProcessorGraph::NodeID forkOfSplit(int splitEntry) const;
+    std::vector<juce::AudioProcessorGraph::NodeID> splitRegion(int splitEntry) const;
     int listedRowsHeight() const;
     bool isAddRow(int rowIndex) const noexcept { return rowIndex >= 0 && rowIndex == getAddRowIndex(); }
     void rebuildVisibleRows();
@@ -318,6 +344,8 @@ private:
     int hoverGap_ = -1;
     juce::AudioProcessorGraph::NodeID sourceNodeId_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
+    // For a chain that ends in a split: the add after all its paths, read when the entries were set; empty otherwise.
+    std::optional<AddTarget> endAcrossTarget_;
     // One per row on screen, rebuilt (and re-titled "<name>, bypassed"/"<name>") every
     // setEntries() and fold -- see RowAccessibilityProxy's own comment.
     std::vector<std::unique_ptr<RowAccessibilityProxy>> rowProxies_;
