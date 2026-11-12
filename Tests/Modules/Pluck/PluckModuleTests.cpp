@@ -351,3 +351,15 @@ TEST(PluckModule, TuneAndFineReadInSemitonesAndCents) {
     EXPECT_EQ(tune->getText(tune->convertTo0to1(-12.0f), 0), "-12.0 st");
     EXPECT_EQ(fine->getText(fine->convertTo0to1(25.0f), 0), "25.0 ct");
 }
+
+TEST(PluckModule, TheStatusBarCountDropsAtNoteOffWhileTheTailStillRings) {
+    auto m = makePluck();
+    setParam(*m, "decay", 4.0f);
+    setParam(*m, "release", 1.0f);
+    render(*m, {on(0, 60), off(2000, 60)}, 0.1, kRate);
+    EXPECT_EQ(m->activeVoiceCount(), 1) << "the tail is still fading";
+    EXPECT_EQ(m->displayVoiceCount(), 0) << "but the key is up, so the count follows the keys";
+    render(*m, {on(0, 62)}, 0.1, kRate);
+    EXPECT_EQ(m->activeVoiceCount(), 2);
+    EXPECT_EQ(m->displayVoiceCount(), 1) << "a second note after the first never reads 2";
+}

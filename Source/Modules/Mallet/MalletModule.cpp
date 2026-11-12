@@ -60,6 +60,14 @@ void MalletModule::stopAll() noexcept {
         v.stop();
 }
 
+// The status bar counts the keys held: a bar fading out after its key came up is not a new voice.
+int MalletModule::heldVoiceCount() const noexcept {
+    int n = 0;
+    for (const auto& v : voices_)
+        n += (v.active && v.held) ? 1 : 0;
+    return n;
+}
+
 int MalletModule::activeVoiceCount() const noexcept {
     int n = 0;
     for (const auto& v : voices_)
@@ -172,7 +180,7 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (int ch = kNumChannels; ch < buffer.getNumChannels(); ++ch)
         buffer.clear(ch, 0, numSamples);
 
-    publishedVoices_.store(activeVoiceCount(), std::memory_order_relaxed);
+    publishedVoices_.store(heldVoiceCount(), std::memory_order_relaxed);
 
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(left, numSamples);

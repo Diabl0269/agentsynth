@@ -517,11 +517,9 @@ private:
         return widget;
     }
 
-    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
-    // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
-    // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
-    // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
-    // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
+    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` / `comboBoxes`. Filled only
+    // in createControls()'s generic auto-UI branch; a control built by bespoke chrome, or the ExternalMidiModule
+    // device/channel combos, gets a null entry so the arrays stay aligned and a match is a safe no-op.
     juce::Array<juce::RangedAudioParameter*> sliderParams;
     juce::Array<juce::RangedAudioParameter*> comboParams;
 
@@ -671,10 +669,9 @@ private:
     std::map<int, float> gestureStartValues;
     juce::Point<int> dragStartPosition;
 
-    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
-    // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
-    // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
-    // longer toggles-without-dragging — see cmdReparentPending below.
+    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A Shift-click toggles
+    // selection WITHOUT arming the dragger, and this flag stops the next mouseDrag from moving a component the
+    // dragger was never started on. Cmd no longer toggles-without-dragging — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at

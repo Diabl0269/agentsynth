@@ -288,7 +288,7 @@ public:
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }
 
-    int displayVoiceCount() const noexcept override { return instrumentPlayer.activeVoiceCount(); }
+    int displayVoiceCount() const noexcept override { return instrumentPlayer.heldNoteCount(); }
 
     // =========================================================================
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)
