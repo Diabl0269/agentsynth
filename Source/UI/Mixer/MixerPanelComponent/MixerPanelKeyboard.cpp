@@ -100,6 +100,12 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
 bool MixerPanelComponent::showContextMenuForKeyboardFocus() {
     if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
         return false;
+    // A focused insert row opens its own menu (a split's "Add before/after all paths", a module's "Add after"), the
+    // way a right-click on the row does; no row focused, or any other row, keeps the channel menu.
+    if (rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Insert)
+        if (auto* inserts = focusedInsertList();
+            inserts != nullptr && inserts->showMenuForKeyboardRow(rowFocus_->index))
+            return true;
     const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
     showChannelMenu(entry.channelId, entry.component->getScreenBounds());
     return true;

@@ -752,3 +752,24 @@ TEST(MixerKeyboardReachTest, DownWalksInsertsThenSendsThenTheEqAndUpWalksBackToT
     EXPECT_EQ(panel.getFocusedColumnIndexForTest(), 0);
     EXPECT_EQ(rig.unhandled, 0);
 }
+
+// Regression test for the split-row add affordances being mouse-only: Shift+F10 on a focused insert row opens that
+// row's own menu, not the channel menu.
+TEST(MixerRowKeyboardTest, ShiftF10OnAFocusedInsertRowOpensTheRowsOwnMenu) {
+    RowRig rig;
+    rig.enterFirstColumnRows();
+    ASSERT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0}));
+    std::vector<juce::String> texts;
+    synth::ui::MixerInsertList::menuHookForTest() = [&](juce::PopupMenu& menu, std::function<void(int)>) {
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            texts.push_back(it.getItem().text);
+    };
+    rig.mc.setFocusedComponentOverrideForTest(&rig.panel());
+    const bool handled =
+        rig.mc.keyPressed(juce::KeyPress(juce::KeyPress::F10Key, juce::ModifierKeys::shiftModifier, 0));
+    synth::test::flushMessageQueue();
+    synth::ui::MixerInsertList::menuHookForTest() = nullptr;
+    EXPECT_TRUE(handled);
+    EXPECT_NE(std::find(texts.begin(), texts.end(), "Remove"), texts.end()) << "the module row's menu, from the key";
+}
