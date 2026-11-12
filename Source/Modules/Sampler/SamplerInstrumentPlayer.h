@@ -52,8 +52,8 @@ public:
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const;
 
-    /** Any thread. The voices sounding (held or releasing) at the end of the last block. */
-    int activeVoiceCount() const noexcept { return activeVoices_.load(std::memory_order_relaxed); }
+    /** Any thread. The notes held (key or pedal) at the end of the last block; a note fading out is not counted. */
+    int heldNoteCount() const noexcept { return activeVoices_.load(std::memory_order_relaxed); }
 
 private:
     bool acquireInstrument();

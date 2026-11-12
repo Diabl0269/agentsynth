@@ -52,6 +52,11 @@ public:
     void render(float* left, float* right, int start, int end, const VoiceParams& params);
 
     int activeVoiceCount() const;
+
+    /** The notes the player is still holding (key or pedal): voices fading out in Release do not count, and the
+        several voices one note starts (layers, round-robin hits) count once. This is the status bar's number;
+        `activeVoiceCount` stays the real count for the voice limit. */
+    int heldNoteCount() const;
     std::bitset<128> soundingNotes() const;
 
 private:
