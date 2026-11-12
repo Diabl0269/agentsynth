@@ -44,7 +44,8 @@ after the command; follow it with a `wait` and a `mark` on the landed state.
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
-changes its project and must not change the committed copy. An `expect` is retried for `within_ms` (default 500) so a
+changes its project and must not change the committed copy; `from: <bundle>` (`~` expanded) copies a project that is not
+in the repository instead (a private one on this machine), without its autosave sidecars. An `expect` is retried for `within_ms` (default 500) so a
 repaint that is still settling is not a failure; one that never arrives still is.
 """
 
@@ -77,6 +78,7 @@ POP_KEYS = {"ignore", "ms", "undo", "off"}
 KNOWN_POPS = os.path.join(HERE, "known-pops.txt")
 KNOWN_STEP = re.compile(r"^(\d+)([ur]?)$")
 UNDO_STEPS = (("u", "undoButton"), ("r", "redoButton"))  # the toolbar buttons: Cmd+Z in a text field would undo its text
+UNDO_KEYS = {"cmd+z", "ctrl+z"}
 
 
 class ScenarioError(ValueError):
@@ -482,9 +484,21 @@ class Runner:
         self._record(index, "popWatchCheck", args, dict(reply, step=label), not message, message or None)
         return reply, message
 
-    def _undo_redo(self, index, command, instant):
-        """After an edit: undo, then redo, each under a watch and each must animate too. Returns a failure message."""
-        for suffix, button in UNDO_STEPS:
+    @staticmethod
+    def _is_undo(command, args):
+        """Whether the step is itself an undo: Cmd+Z, the Undo button, or a glide whose `do` is one of those."""
+        if command == "glide":
+            inner = args.get("do") or {}
+            return len(inner) == 1 and Runner._is_undo(*next(iter(inner.items())))
+        if command == "key":
+            return str(args.get("keys", "")).lower() in UNDO_KEYS
+        return command == "click" and args.get("id") == "undoButton"
+
+    def _undo_redo(self, index, command, args, instant):
+        """After an edit: undo, then redo, each under a watch and each must animate too. After an undo the order is
+        redo, then undo: undoing first would undo the edit before it, or nothing when the stack is empty, and the redo
+        that follows would then put back the edit the step had just undone. Returns a failure message."""
+        for suffix, button in reversed(UNDO_STEPS) if self._is_undo(command, args) else UNDO_STEPS:
             label = "%d%s" % (index, suffix)
             self.app.call("popWatchStart")
             self.app.call("click", id=button)
@@ -514,7 +528,7 @@ class Runner:
             print("ui-verify: %s: undo and redo are not pop-checked: the app reports no undo serial" % self.scenario.name)
         if "undoSerialBefore" in reply and edited and self.scenario.pop_check.get("undo", True):
             self.undo_available = True
-            message = self._undo_redo(index, command, instant)
+            message = self._undo_redo(index, command, args, instant)
         return (False, message) if message else (True, "")
 
     def _record(self, index, command, args, reply, ok, error=None):
@@ -616,7 +630,14 @@ class Runner:
             reply = {"typed": len(str(args.get("text", "")))}
         elif command == "copyFixture":
             destination = os.path.join(self.settings_dir, args["name"])
-            shutil.copytree(os.path.join(FIXTURES, args["name"]), destination)
+            source = os.path.expanduser(args["from"]) if args.get("from") else os.path.join(FIXTURES, args["name"])
+            if not os.path.isdir(source):
+                self._record(index, command, args, None, False, "no project at " + source)
+                return False, "copyFixture: no project at %s" % source
+            shutil.copytree(source, destination)
+            for leftover in os.listdir(destination):  # openProject refuses a bundle with an autosave sidecar
+                if leftover.startswith("autosave") and leftover.endswith(".json"):
+                    os.remove(os.path.join(destination, leftover))
             reply = {"copied": destination}
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays

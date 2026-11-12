@@ -200,6 +200,26 @@ TEST(ScaleHang, AMatrixTickIndexesTheCablesOnceAndRefreshesEachRowOnce) {
     EXPECT_LE(scans[1], 1);
 }
 
+// A cable rebuild (every drag tick across a macro border, every undo) asks each card where each of its cable ends
+// lands; each answer used to read the module's whole modulation-target list again, so the rebuild grew with cards x
+// jacks x cables. Inside the rebuild's JackLayoutPass a card reads its list once.
+TEST(ScaleHang, ACableRebuildReadsEachCardsModulationTargetsOnce) {
+    int reads[2]{};
+    const int sizes[2]{10, 40};
+    for (int i = 0; i < 2; ++i) {
+        ManyRoutingCanvas c(sizes[i]);
+        c.editor.notifyModuleContentChanged(); // drops the cable memo, so the next build is a full rebuild
+        auto& counters = graph_editor_paint::workCounters();
+        counters = {};
+        const int rebuildsBefore = c.editor.getCableRebuildCountForTest();
+        EXPECT_EQ(c.editor.getVisibleCableCount(), sizes[i]);
+        EXPECT_EQ(c.editor.getCableRebuildCountForTest(), rebuildsBefore + 1);
+        reads[i] = counters.modTargetReads;
+        EXPECT_LE(reads[i], sizes[i] + 1) << "one read per card: " << sizes[i] << " Filters and the LFO";
+    }
+    EXPECT_LE(reads[1], 4 * reads[0] + 4);
+}
+
 namespace {
 std::vector<synth::ui::ModMatrixPicker::Item> manyPickerItems(int count) {
     std::vector<synth::ui::ModMatrixPicker::Item> items;

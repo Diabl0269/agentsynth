@@ -8,6 +8,7 @@
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
+#include "ModuleComponentJackMemo.h"
 #include "ModuleComponentModChip.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"

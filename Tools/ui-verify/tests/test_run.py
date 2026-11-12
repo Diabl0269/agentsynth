@@ -409,6 +409,32 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(project, "Audio", "tone.wav")))  # the original is untouched
             self.assertEqual([e["cmd"] for e in log], ["copyFixture", "openProject"])
 
+    def test_copy_fixture_from_copies_a_bundle_outside_the_repo_without_its_autosave(self):
+        with tempfile.TemporaryDirectory() as elsewhere:
+            project = os.path.join(elsewhere, "Private.agsproj")
+            os.makedirs(project)
+            for name in ("project.json", "autosave.json", "autosave-2.json"):
+                with open(os.path.join(project, name), "w") as f:
+                    f.write("{}")
+            seen = {}
+
+            class Checking(FakeApp):
+                def call(self, cmd, timeout_ms=None, **args):
+                    if cmd == "openProject":
+                        seen["files"] = sorted(os.listdir(args["path"]))
+                    return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+            (ok, _), _ = self.run_steps('- copyFixture: {name: p.agsproj, from: "%s"}\n'
+                                        '- openProject: {path: "${SCRATCH}/p.agsproj"}\n' % project, Checking())
+            self.assertTrue(ok)
+            self.assertEqual(seen["files"], ["project.json"])
+            self.assertEqual(len(os.listdir(project)), 3)  # the original keeps its sidecars
+
+    def test_copy_fixture_from_a_missing_bundle_fails_the_step(self):
+        (ok, message), _ = self.run_steps('- copyFixture: {name: p.agsproj, from: /nonexistent/x.agsproj}\n', FakeApp())
+        self.assertFalse(ok)
+        self.assertIn("/nonexistent/x.agsproj", message)
+
 
 class StalePixelCheckTests(unittest.TestCase):
     def run_steps(self, text, app):
@@ -597,6 +623,15 @@ class PopCheckTests(unittest.TestCase):
         self.assertEqual(buttons, ["undoButton", "redoButton"])
         dirs = [os.path.basename(c[1]["dir"]) for c in app.calls if c[0] == "popWatchCheck"]
         self.assertEqual(dirs, ["pop-step-01", "pop-step-02", "pop-step-02u", "pop-step-02r"])
+
+    def test_after_an_undo_step_the_check_redoes_first_so_the_step_stays_undone(self):
+        for steps in ["  - key: {keys: cmd+z}\n", "  - click: {id: undoButton}\n", "  - glide: {name: g, do: {key: {keys: cmd+z}}}\n"]:
+            app = PopApp([edit(SETTLED), SETTLED, SETTLED])
+            text = ("motion: true\nrecord: true\nsteps:\n" if "glide" in steps else self.MOTION) + steps
+            (ok, message), _, _ = self.run_steps(text, app)
+            self.assertTrue(ok, message)
+            buttons = [c[1]["id"] for c in app.calls if c[0] == "click" and c[1]["id"].endswith("Button")]
+            self.assertEqual(buttons[-2:], ["redoButton", "undoButton"], steps)
 
     def test_a_pop_in_an_undo_fails_unless_that_step_is_listed(self):
         replies = [edit(SETTLED), POPPED, SETTLED]

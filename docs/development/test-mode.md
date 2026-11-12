@@ -187,7 +187,7 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
   `ignore: [ids]` (components that change on their own; the toolbar's Undo and Redo buttons are always ignored), `ms` and `undo: false`.
 - `instant: "<reason>"` in a step's arguments (in a `glide`, beside `do`) lets that step pop: a deliberately instant
   change of text, a value, a selection or a caret. The reason is required and is not sent to the app.
-- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
+- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes (after a step that is itself an undo, Cmd+Z or the Undo button, it redoes and then undoes, so the step stays undone), each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
   `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
   `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
   answers they are skipped and one line says so. The click takes focus, so a name field an edit opened (a new
@@ -242,7 +242,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `type: {text, target?}` | one `key` per character, each sent to `target` when given (a text field of another window, e.g. `name` in the Save Snippet dialog) |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
-| `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
+| `copyFixture: {name, from?}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy; `from` (`~` expanded) copies a bundle outside the repository instead, such as the private Load test project, without its autosave sidecars, and fails the step when it is missing |
 | `screenshot: {id?, name}` | saves `<name>.png` in the output folder (default id `window`) |
 | `expect: {id, field: value, ...}` | equality on `getState` fields |
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |

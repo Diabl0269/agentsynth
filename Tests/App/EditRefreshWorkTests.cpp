@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelFlows/PolyVoiceGraph.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
@@ -45,11 +46,11 @@ private:
 struct EditRig {
     MainComponent mc{std::make_unique<MockProviderERW>()};
 
-    EditRig() {
+    explicit EditRig(int tracks = 3) {
         mc.setSize(1400, 900);
         mc.getAudioEngine().suspendDeviceCallback();
         mc.newPatchForTest();
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < tracks; ++i)
             mc.simulateAddAudioTrackClick();
     }
     synth::ui::TimelinePanelComponent& panel() { return mc.getTimelinePanel(); }
@@ -91,6 +92,27 @@ TEST(EditRefreshWork, AKnobUndoDerivesTheModulatorRowsOnce) {
     const int before = rig.derivations();
     ASSERT_TRUE(undo.undo());
     EXPECT_EQ(rig.derivations() - before, 1) << "once, by the reconcile after the step, not again per restored action";
+}
+
+// Each track header's Mono/Poly switch plans its track's voice graph, and each plan walked every track forward to
+// learn which track owns what: a reconcile cost headers x tracks x graph. The reconcile works the ownership out once.
+TEST(EditRefreshWork, AnUndoWorksOutTheTrackOwnershipOnceForEveryHeader) {
+    for (const int tracks : {3, 12}) {
+        SCOPED_TRACE(tracks);
+        EditRig rig(tracks);
+        auto* gain = rig.firstStripGain();
+        ASSERT_NE(gain, nullptr);
+        auto& undo = rig.mc.getUndoManager();
+        auto& graph = rig.mc.getAudioEngine().getGraph();
+        undo.captureBeforeState(graph);
+        gain->setValueNotifyingHost(gain->getValue() > 0.5f ? 0.1f : 0.9f);
+        undo.pushSnapshotFromCapture(graph);
+
+        const int before = synth::polyTrackOwnerPassesForTest();
+        ASSERT_TRUE(undo.undo());
+        EXPECT_EQ(synth::polyTrackOwnerPassesForTest() - before, 1)
+            << "once for the reconcile's " << tracks << " headers";
+    }
 }
 
 TEST(EditRefreshWork, ADuplicateAndItsUndoBuildOnlyTheCopysHeaderRow) {
