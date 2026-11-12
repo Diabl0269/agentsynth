@@ -25,6 +25,8 @@ Remote) uses the box `launchPopover` returns; the library's help popover builds 
 declined it, so a text field's own Cmd+Z and Escape keep working, and keys that act on the canvas selection (copy, paste,
 select all) stay with the popover.
 
+Every popover hosts its own tooltip window (the call-out is its own native window, so the main window's tip would draw under it): any control in any content gets its hover tip, a greyed one's reason included, with no work in the content. See [Tooltips](animation.md#tooltips).
+
 ## After an undo
 
 A popover that lists or shows project state built when it opened can go stale under an undo. Its content implements
