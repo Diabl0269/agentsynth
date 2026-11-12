@@ -285,22 +285,27 @@ inferred later from what gets plugged into it. This is the same rule macro ports
 ([`docs/macros/ports.md`](../macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)),
 applied to strips.
 
-Strip output is always stereo. A mono strip feeds both output legs from a single input jack, and its
+The strip's output is stereo on its raw channels in every shape (how many jacks show follows Dual I/O, below). A mono strip feeds both output legs from a single input jack, and its
 own pan is a real pan pot (see [Pan law](#pan-law) below); a stereo strip's "pan" stays a **balance**
 control (industry convention: pan pot on mono, balance on stereo). The right leg follows the
 `kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
 the split-block voice modules.
 
-**A stereo strip's inputs follow Dual I/O** (input side only; the outputs and send jacks never collapse). Split
-(the default, and what a project saved before the toggle loads as) it shows `Left` and `Right`; collapsed it
-shows one `Audio` jack whose cable feeds BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw
-channels `kRightBase` apart: `JackTarget::rawStride`, and `PolyLink::destStride` when a cable is made). A
-mono-shaped strip has one `In` jack whichever way the toggle is set, and its card hides the toggle. A strip
-made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks** preference and its
-per-module override (`Channel Strip` in the list), like every other new module; a strip loaded from a project
-or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
+**A strip's jacks follow Dual I/O.** Split (the default, and what a project saved before the toggle loads as) a
+stereo strip shows `Left` and `Right` on its input and its main output; collapsed it shows one `Audio` jack on each
+side, and each one owns BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw channels `kRightBase` apart:
+`JackTarget::rawStride`, and `PolyLink::sourceStride`/`destStride` when a cable is made). Only the visible jacks
+change: no raw edge moves, so a saved project's cables to Master, buses and the next strip, and its sends, keep
+every channel they had. Send jacks never collapse; with the main output collapsed they sit one jack higher
+(`Audio`, `Send 1 L`, `Send 1 R`, ...) and keep their `Send N` labels. A mono-shaped strip has one `In` jack
+whichever way the toggle is set, and its output collapses to one `Audio` jack the same way, so its card shows the
+toggle too. A strip made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks**
+preference and its per-module override (`Channel Strip` in the list), like every other new module; a strip loaded
+from a project or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
 [AI authorability](#ai-authorability)) yet appears in the Preferences list, which is discovered from
-`hasDualIOParameter()`.
+`hasDualIOParameter()`. The guard for the jack-raw-mismatch kind is `StripWiringHealMatrix` (collapsed and split
+strips on both sides) plus `ChannelStripOutputCollapseProject`, which collapses every strip of a saved multi-track
+project with a bus and a send and asserts no raw edge moved across a save and reopen.
 
 **Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
 same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a

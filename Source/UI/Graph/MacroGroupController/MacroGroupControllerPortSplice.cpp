@@ -138,6 +138,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         int headRaw = internalRaw;
         MacroPortShape thisShape = MacroPortShape::Mono;
         int thisSpan = 1;
+        int headStride = 1; // raw channels between the legs of a two-leg jack (a Channel Strip's is kRightBase)
         if (!isMidi) {
             if (internalMb == nullptr)
                 continue; // defensive: a non-ModuleBase node (graph I/O) can't be a macro member
@@ -152,11 +153,13 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
                                             : internalNode->getProcessor()->getTotalNumOutputChannels();
             PortRole headRole = p.role;
             int headSpan = 1;
+            headStride = 1;
             for (int raw = 0; raw < totalCh; ++raw) {
                 const auto hp = portIsInput ? internalMb->mapInputChannel(raw) : internalMb->mapOutputChannel(raw);
                 if (hp.visibleJackIndex == visibleJack && hp.isPolyGroupHead) {
                     headRaw = raw;
                     headSpan = std::max(1, hp.polyVoiceSpan);
+                    headStride = std::max(1, hp.voiceStride);
                     headRole = hp.role;
                     break;
                 }
@@ -202,7 +205,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         edge.externalNodeId = externalId;
         edge.externalRawChannel = externalRaw;
         edge.internalRawChannel = internalRaw;
-        edge.legIndex = isMidi ? 0 : (internalRaw - group->headRawChannel);
+        edge.legIndex = isMidi ? 0 : (internalRaw - group->headRawChannel) / headStride;
         group->edges.push_back(edge);
     }
 

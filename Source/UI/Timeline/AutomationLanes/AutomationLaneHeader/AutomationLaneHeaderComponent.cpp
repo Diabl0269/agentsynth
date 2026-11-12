@@ -53,6 +53,7 @@ AutomationLaneHeaderComponent::AutomationLaneHeaderComponent(synth::TimelineDoc&
 
     addAndMakeVisible(strip_);
     strip_.onPreferredWidthChanged = [this] { resized(); };
+    nameButton_.onPreferredWidthChanged = [this] { resized(); };
     strip_.onEditLookChanged = [this] { repaint(); };
     strip_.onContextMenu = [this](juce::Point<int> screen) { showMenuAt(contextMenuOptionsAtPoint(screen)); };
 

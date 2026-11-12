@@ -376,7 +376,7 @@ TEST(MacroPortFlow, EveryOutputJackOfATracksChannelStripDroppedOnACollapsedCardM
     ChannelRig probe;
     ASSERT_TRUE(probe.build());
     const int jacks = dynamic_cast<ModuleBase*>(probe.strip->getProcessor())->getVisibleOutputPortCount();
-    ASSERT_GE(jacks, 2);
+    ASSERT_GE(jacks, 1) << "a collapsed strip has one Audio output, a split one Left and Right";
     for (int jack = 0; jack < jacks; ++jack) {
         SCOPED_TRACE("Channel Strip out " + std::to_string(jack));
         ChannelRig rig;

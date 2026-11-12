@@ -29,6 +29,7 @@
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
@@ -295,9 +296,6 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
             // A hosted plugin shows it only while the published instance is a stereo pair (the live edge shows it).
             if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module))
                 dualIOButton->setVisible(hosted->hasStereoPairInstance());
-            // A Mono strip has one input jack whichever way the toggle is set: nothing to split.
-            if (auto* strip = dynamic_cast<ChannelStripModule*>(module))
-                dualIOButton->setVisible(strip->getShape() == ChannelStripModule::Shape::Stereo);
         }
     }
 
@@ -476,6 +474,8 @@ void ModuleComponent::applyHeaderButtonIcons() {
         if (auto d = lf->getIcon(synth::theme::Icon::ModuleDualIO))
             dualIOButton->setImages(d.get());
     }
+    if (hostedOutputs_ != nullptr) // the Outputs button wears the routing icon
+        hostedOutputs_->setIcon(lf->getIcon(synth::theme::Icon::ModuleDualIO).get());
 }
 
 void ModuleComponent::refreshWaveformComboIcons() {

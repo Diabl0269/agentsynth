@@ -6,10 +6,15 @@
 // multi-output sampler; there is no real plugin to load in CI.
 
 #include "../StubPluginInstance.h"
+#include "../TestWait.h"
+#include "../UI/Layout/MainPopoverKeys.h"
+#include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/DelayModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <chrono>
 #include <gtest/gtest.h>
@@ -412,4 +417,234 @@ TEST(HostedPluginOutputsTest, HidingAnOutputThroughTheCardDropsTheCablesLeftOnIt
         if (c.source.nodeID == hostedNode->nodeID && !c.source.isMIDI())
             EXPECT_LT(c.source.channelIndex, 2) << "a cable was left on the hidden Snare output";
     EXPECT_TRUE(graph.isConnected({{hostedNode->nodeID, 0}, {delayNode->nodeID, 0}})) << "the main bus's cable stays";
+}
+
+// ---- The Outputs panel and the fold line (card level)
+// ----------------------------------------------------------------
+
+namespace {
+
+/** A click the way the button does it, with the message it posts delivered. */
+void clickIt(juce::Button& button) {
+    bool fired = false;
+    auto original = std::move(button.onClick);
+    button.onClick = [&] {
+        if (original)
+            original();
+        fired = true;
+    };
+    button.triggerClick();
+    synth::test::waitUntil([&] { return fired; });
+    button.onClick = std::move(original);
+}
+
+/** A card on a live editor with an undo manager, showing the Hosted Plugin built by `factory`. */
+struct CardRig {
+    explicit CardRig(FakeBackend::Factory factory)
+        : backend(std::move(factory))
+        , installed(&backend)
+        , editor(engine, &undo)
+        , capture(editor) {
+        editor.setSize(800, 600);
+        auto& graph = engine.getGraph();
+        hosted = new HostedPluginModule();
+        hostedNode = graph.addNode(std::unique_ptr<juce::AudioProcessor>(hosted));
+        hosted->loadPlugin(description(), backend);
+        pumpUntil([&] { return hosted->hasInstance(); });
+        delayNode = graph.addNode(std::make_unique<DelayModule>());
+        editor.updateComponents();
+    }
+
+    ModuleComponent* card() {
+        for (auto* c : editor.getModuleComponents())
+            if (c->getModule() == hosted)
+                return c;
+        return nullptr;
+    }
+    synth::ui::HostedOutputsStrip* strip() { return card()->getHostedOutputs(); }
+    bool connected(int rawChannel) {
+        return engine.getGraph().isConnected({{hostedNode->nodeID, rawChannel}, {delayNode->nodeID, 0}});
+    }
+    void cable(int rawChannel) {
+        ASSERT_TRUE(engine.getGraph().addConnection({{hostedNode->nodeID, rawChannel}, {delayNode->nodeID, 0}}));
+    }
+    /** Opens the panel through the routing button and returns it. */
+    synth::ui::HostedOutputsPanel* openPanel() {
+        clickIt(card()->getHostedOutputs()->routingButton());
+        return dynamic_cast<synth::ui::HostedOutputsPanel*>(capture.content());
+    }
+    bool shown(int bus) {
+        for (const auto& b : hosted->getOutputBuses())
+            if (b.busIndex == bus)
+                return b.shown;
+        return false;
+    }
+
+    AppUndoManager undo;
+    FakeBackend backend;
+    HostedPluginBackend::ScopedDefault installed;
+    AudioEngine engine;
+    GraphEditor editor;
+    main_popover::Capture capture;
+    HostedPluginModule* hosted = nullptr;
+    juce::AudioProcessorGraph::Node::Ptr hostedNode, delayNode;
+};
+
+juce::DrawableButton* dualIOButtonOf(ModuleComponent& card) {
+    for (auto* child : card.getChildren())
+        if (auto* button = dynamic_cast<juce::DrawableButton*>(child))
+            if (button->getName() == "Dual I/O")
+                return button;
+    return nullptr;
+}
+} // namespace
+
+TEST(HostedPluginOutputsPanelTest, TheRoutingButtonOpensThePanelOnAMultiOutputPluginAndFlipsDualIOOnATwoOutOne) {
+    {
+        CardRig rig(samplerWithAux);
+        ASSERT_NE(rig.card(), nullptr);
+        ASSERT_NE(rig.strip(), nullptr);
+        EXPECT_TRUE(rig.strip()->routingButton().isVisible());
+        auto* dual = dualIOButtonOf(*rig.card());
+        ASSERT_NE(dual, nullptr);
+        EXPECT_FALSE(dual->isVisible()) << "the Outputs button takes the Dual I/O button's place";
+        auto* panel = rig.openPanel();
+        ASSERT_NE(panel, nullptr);
+        EXPECT_EQ(panel->getNumRowsForTest(), 4);
+        EXPECT_FALSE(panel->getShowToggleForTest(0).isEnabled()) << "the main bus is locked on";
+        EXPECT_EQ(panel->getShowToggleForTest(2).getTitle(), "Show Snare output");
+    }
+    {
+        CardRig rig([] { return std::make_unique<FakeMultiOut>(0, std::vector<OutBus>{{"Main", 2, true}}); });
+        ASSERT_NE(rig.card(), nullptr);
+        auto* dual = dualIOButtonOf(*rig.card());
+        ASSERT_NE(dual, nullptr);
+        ASSERT_TRUE(dual->isVisible());
+        auto* param = findParameterByID(rig.hosted, "dualIO");
+        ASSERT_NE(param, nullptr);
+        const float before = param->getValue();
+        clickIt(*dual);
+        EXPECT_NE(param->getValue(), before) << "a plain 2-out plugin keeps its Dual I/O flip";
+        EXPECT_EQ(rig.capture.opens, 0);
+    }
+}
+
+TEST(HostedPluginOutputsPanelTest, TheShowSwitchAddsAndRemovesTheJacks) {
+    CardRig rig(samplerWithAux);
+    auto* panel = rig.openPanel();
+    ASSERT_NE(panel, nullptr);
+    EXPECT_EQ(rig.hosted->getVisibleOutputPortCount(), 2);
+    clickIt(panel->getShowToggleForTest(2));
+    EXPECT_TRUE(rig.shown(2));
+    EXPECT_EQ(rig.hosted->getVisibleOutputPortCount(), 4);
+    EXPECT_TRUE(rig.hosted->getOutputPortLabel(2).contains("Snare"));
+    clickIt(panel->getShowToggleForTest(2));
+    EXPECT_FALSE(rig.shown(2));
+    EXPECT_EQ(rig.hosted->getVisibleOutputPortCount(), 2);
+}
+
+TEST(HostedPluginOutputsPanelTest, HidingAnOutputTakesItsCablesAndOneUndoBringsBothBack) {
+    CardRig rig(samplerWithAux);
+    auto* panel = rig.openPanel();
+    ASSERT_NE(panel, nullptr);
+    clickIt(panel->getShowToggleForTest(2));
+    rig.cable(4);
+    ASSERT_TRUE(rig.connected(4));
+
+    clickIt(panel->getShowToggleForTest(2)); // hide
+    EXPECT_FALSE(rig.shown(2));
+    EXPECT_FALSE(rig.connected(4)) << "the cable goes with the output";
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_TRUE(rig.shown(2)) << "one undo shows the output again";
+    EXPECT_TRUE(rig.connected(4)) << "and puts the cable back";
+}
+
+TEST(HostedPluginOutputsPanelTest, EachFooterActionIsOneUndoStep) {
+    CardRig rig(samplerWithAux);
+    auto* panel = rig.openPanel();
+    ASSERT_NE(panel, nullptr);
+
+    clickIt(panel->getFooterButtonForTest(0)); // Show all
+    EXPECT_TRUE(rig.shown(1) && rig.shown(2) && rig.shown(3));
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_FALSE(rig.shown(1) || rig.shown(2) || rig.shown(3)) << "one undo reverts the whole Show all";
+
+    ASSERT_TRUE(rig.undo.redo());
+    clickIt(panel->getFooterButtonForTest(1)); // Main only
+    EXPECT_FALSE(rig.shown(1) || rig.shown(2) || rig.shown(3));
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_TRUE(rig.shown(1) && rig.shown(2) && rig.shown(3));
+
+    clickIt(panel->getFooterButtonForTest(2)); // Join all
+    for (const auto& b : rig.hosted->getOutputBuses())
+        EXPECT_TRUE(b.joined) << "bus " << b.busIndex;
+    ASSERT_TRUE(rig.undo.undo());
+    for (const auto& b : rig.hosted->getOutputBuses())
+        EXPECT_FALSE(b.joined) << "bus " << b.busIndex;
+
+    clickIt(panel->getFooterButtonForTest(3)); // Split all: nothing is joined, so nothing to record
+    EXPECT_TRUE(rig.undo.canUndo());
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_FALSE(rig.shown(1)) << "a Split all that changed nothing recorded no step of its own";
+}
+
+TEST(HostedPluginOutputsPanelTest, FoldedCablesLeaveFromTheFoldLineAndUnfoldedOnesFromTheirRows) {
+    CardRig rig(samplerWithAux);
+    ASSERT_TRUE(rig.hosted->setOutputShown(2, true));
+    rig.strip()->advanceForTest(1.0f);
+    rig.cable(4);
+    auto* card = rig.card();
+    const auto row = card->getPortCenter(2, false);
+
+    synth::ui::toggleHostedOutputsFold(*card);
+    rig.strip()->advanceForTest(1.0f);
+    ASSERT_TRUE(rig.hosted->getOutputsFolded());
+    const auto folded = card->getPortCenter(2, false);
+    const auto line = rig.strip()->foldLine().getBounds();
+    EXPECT_EQ(folded.y, line.getCentreY()) << "a folded cable leaves from the fold line";
+    EXPECT_GE(folded.x, line.getX());
+    EXPECT_LE(folded.x, line.getRight() + 24);
+    EXPECT_TRUE(rig.connected(4)) << "folding keeps the cable";
+
+    synth::ui::toggleHostedOutputsFold(*card);
+    rig.strip()->advanceForTest(1.0f);
+    EXPECT_EQ(card->getPortCenter(2, false), row) << "unfolded, it is back on its own row";
+}
+
+TEST(HostedPluginOutputsPanelTest, TheFoldStateSurvivesSaveAndLoad) {
+    CardRig rig(samplerWithAux);
+    ASSERT_TRUE(rig.hosted->setOutputShown(2, true));
+    ASSERT_TRUE(rig.hosted->setOutputsFolded(true));
+    const juce::var state = rig.hosted->getExtraState();
+
+    HostedPluginModule restored;
+    restored.prepareToPlay(kSampleRate, kBlockSize);
+    restored.setExtraState(state);
+    ASSERT_TRUE(pumpUntil([&] { return restored.hasInstance(); }));
+    EXPECT_TRUE(restored.getOutputsFolded());
+    EXPECT_EQ(restored.getShownAuxOutputBusCount(), 1);
+
+    // The load path: a card built after the project loads folded.
+    CardRig loaded(samplerWithAux);
+    loaded.hosted->setExtraState(state);
+    pumpUntil([&] { return loaded.hosted->getOutputsFolded(); });
+    loaded.editor.updateComponents();
+    ASSERT_NE(loaded.strip(), nullptr);
+    loaded.strip()->advanceForTest(1.0f);
+    EXPECT_TRUE(loaded.strip()->foldLine().isVisible());
+}
+
+TEST(HostedPluginOutputsPanelTest, TheFoldLineIsATabStopThatEnterAndSpaceToggle) {
+    CardRig rig(samplerWithAux);
+    ASSERT_TRUE(rig.hosted->setOutputShown(2, true));
+    auto& line = rig.strip()->foldLine();
+    EXPECT_TRUE(line.getWantsKeyboardFocus());
+    EXPECT_FALSE(line.getTitle().isEmpty());
+    EXPECT_FALSE(line.getTooltip().isEmpty());
+    EXPECT_FALSE(rig.hosted->getOutputsFolded());
+    EXPECT_TRUE(line.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(rig.hosted->getOutputsFolded());
+    EXPECT_TRUE(line.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' ')));
+    EXPECT_FALSE(rig.hosted->getOutputsFolded());
 }

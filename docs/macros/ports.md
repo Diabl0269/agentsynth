@@ -359,11 +359,20 @@ dot and name fade in over 170 ms `easeOutCubic`. A card that grows a row for it 
   both are there at once.
 - **Undo and redo.** Cmd+Z pulls the cable back into its source jack and the card glides back to its old height, as
   every undone cable does ([cables](../layout/cables.md#retracting-removed-cables)); redo grows it out of its source
-  jack again, not from the drop point, since the drop point is not part of the undo record. The port's row goes at
-  once on undo and is there at once on redo: the card paints rows from the live macro, so a removed row has nothing
-  left to fade.
-- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames;
-  `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films it.
+  jack again, not from the drop point, since the drop point is not part of the undo record. The card paints rows from
+  the live macro, so a removed row would have nothing left to fade: `MacroCardComponent::refreshPortRows` (called by
+  `GraphEditor::syncMacroCards` on every pass) keeps a picture of it and draws that ghost fading out and shrinking
+  (170 ms `easeInCubic`, a `ShownFade`) while the cable retracts; redo grows the row back in through `growInPort`. The
+  same goes for every row that comes or goes on a shown card: the '+' button, the '-' button and Delete port.
+- **Ghost rows.** Only a row at the bottom of its side is kept: with rows below it they would move up through the
+  ghost, so that row pops. A second change lands the ghosts still fading and starts the new ones; a port that comes back
+  mid-fade drops its ghost; a card that folds away, expands or is destroyed drops them at once (no frames run for a
+  card that is not shown). Under Reduce Motion the ghost fades over 80 ms at full size; under Animations Off it is gone
+  at once. A card whose height shrinks with the row (three or more rows on a side) clips the ghost to the new height.
+  Test mode: the `macroCard` state's `leavingPortRows` counts the ghosts still fading.
+- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames and
+  `MacroCardPortExit.*` the ghost row; `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films the drop and
+  `macro-port-row-undo-fade.yaml` the undo and redo.
 
 ## Member counts report modules, not ports
 

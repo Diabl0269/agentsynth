@@ -66,8 +66,9 @@ macro-agnostic. Off, the send is the two direct cables it always was. See
 | | `kNumOutputs = 16` |
 
 **Each send's right leg is on its own block, so the "right leg never on ch1" invariant
-(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(15, 16)` is false, so no Dual
-I/O toggle is inherited.
+(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(15, 16)` is false, so the Dual
+I/O toggle comes from the strip's explicit `StereoAudio::Declared`. It collapses the main out to one `Audio` jack
+over `0` and `4` and shifts the send jacks up one; no raw channel in the table moves.
 
 ## What is a parameter and what is state
 

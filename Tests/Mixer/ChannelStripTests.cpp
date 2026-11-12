@@ -5,7 +5,7 @@
 //   • bypass / mute  -- the root CLAUDE.md two-branch contract: bypass is dry (no gain/pan, a mono
 //                        strip still feeds both legs), mute clears
 //   • shape          -- fixed once written or once live; a later width change is refused
-//   • ports          -- kRightBase split-block jack map, input-side Dual I/O (ships split)
+//   • ports          -- kRightBase split-block jack map, Dual I/O on both sides (ships split)
 //   • Master         -- Direct summed into Mix BEFORE the fader; bypass is a unity sum that keeps
 //                        Direct; mute clears
 //
@@ -316,7 +316,7 @@ TEST(ChannelStripTest, ExtraStateWithNoNamePropertyLeavesTheNameUnset) {
 
 TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     ChannelStripModule stereo;
-    EXPECT_TRUE(stereo.hasDualIOParameter()) << "declared, input side only";
+    EXPECT_TRUE(stereo.hasDualIOParameter()) << "declared: the toggle collapses both sides";
     EXPECT_TRUE(stereo.isDualIO()) << "ships split, so a project saved before the toggle opens unchanged";
     EXPECT_EQ(stereo.rightAudioLegChannel(), kRight);
     EXPECT_EQ(stereo.getVisibleInputPortCount(), 2);
@@ -330,7 +330,7 @@ TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     ChannelStripModule mono;
     ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
     EXPECT_EQ(mono.getVisibleInputPortCount(), 1);
-    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2) << "strip output is always stereo";
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2) << "the output is stereo in every shape";
     EXPECT_FALSE(mono.mapInputChannel(kRight).isPolyGroupHead) << "a mono strip has no right input jack";
     EXPECT_EQ(mono.getJackTargets(1, /*isInput=*/false).front().rawHeadChannel, kRight);
 }
@@ -358,22 +358,66 @@ TEST(ChannelStripTest, CollapsedStereoStripShowsOneAudioJackOwningBothLegs) {
     EXPECT_EQ(strip.getInputPortLabel(1), "Right");
 }
 
-TEST(ChannelStripTest, DualIONeverTouchesTheOutputsOrTheSendJacks) {
+// Bug kind: jack-raw-mismatch. Collapsing the output may only change which visible jack a raw channel
+// shows on; ch0 and kRightBase stay the two legs, and each send keeps its own raw pair.
+TEST(ChannelStripTest, CollapsedMainOutputIsOneAudioJackOwningBothLegsAndSendsMoveUpOne) {
     ChannelStripModule strip;
     strip.setSendActive(0, true);
     strip.setSendActive(2, true);
-    std::vector<juce::String> split;
-    for (int j = 0; j < strip.getVisibleOutputPortCount(); ++j)
-        split.push_back(strip.getOutputPortLabel(j));
-    ASSERT_EQ(split.size(), 6u);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 6);
+    EXPECT_EQ(strip.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Right");
+    EXPECT_EQ(strip.getOutputPortLabel(2), "Send 1 L");
 
     setParam(strip, "dualIO", 0.0f);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 5) << "one Audio jack plus two send pairs";
+    EXPECT_EQ(strip.getOutputPortLabel(0), "Audio");
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Send 1 L");
+    EXPECT_EQ(strip.getOutputPortLabel(2), "Send 1 R");
+    EXPECT_EQ(strip.getOutputPortLabel(3), "Send 3 L");
+    EXPECT_EQ(strip.getOutputPortLabel(4), "Send 3 R");
+
+    const auto targets = strip.getJackTargets(0, /*isInput=*/false);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight) << "the second leg sits on kRightBase, not on ch1";
+    EXPECT_EQ(strip.mapOutputChannel(kRight).visibleJackIndex, 0);
+    EXPECT_FALSE(strip.mapOutputChannel(kRight).isPolyGroupHead) << "kRightBase follows the one jack";
+    EXPECT_FALSE(strip.mapOutputChannel(1).isPolyGroupHead) << "ch1 stays reserved";
+
+    // Sends keep their raw channels; only the visible index moves.
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(0)).visibleJackIndex, 1);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendRightChannel(0)).visibleJackIndex, 2);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(2)).visibleJackIndex, 3);
+    EXPECT_EQ(strip.getJackTargets(3, /*isInput=*/false).front().rawHeadChannel,
+              ChannelStripModule::sendLeftChannel(2));
+
+    setParam(strip, "dualIO", 1.0f);
     ASSERT_EQ(strip.getVisibleOutputPortCount(), 6);
-    for (int j = 0; j < 6; ++j)
-        EXPECT_EQ(strip.getOutputPortLabel(j), split[(size_t)j]) << "jack " << j;
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Right");
     EXPECT_EQ(strip.mapOutputChannel(kRight).visibleJackIndex, 1);
     EXPECT_TRUE(strip.mapOutputChannel(kRight).isPolyGroupHead);
     EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(2)).visibleJackIndex, 4);
+}
+
+TEST(ChannelStripTest, AMonoShapedStripCollapsesItsStereoOutputToo) {
+    ChannelStripModule mono;
+    ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
+    setParam(mono, "dualIO", 0.0f);
+    EXPECT_EQ(mono.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(mono.getInputPortLabel(0), "In");
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(mono.getOutputPortLabel(0), "Audio");
+    const auto targets = mono.getJackTargets(0, /*isInput=*/false);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight);
+
+    setParam(mono, "dualIO", 1.0f);
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(mono.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(mono.getOutputPortLabel(1), "Right");
 }
 
 TEST(ChannelStripTest, AMonoStripHasOneInputJackWhateverTheToggleSays) {

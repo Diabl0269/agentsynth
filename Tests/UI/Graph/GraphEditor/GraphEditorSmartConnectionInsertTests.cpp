@@ -471,7 +471,7 @@ int audioEdgesInto(juce::AudioProcessorGraph& graph, NodeID dest) {
 
 // ---- The same two paths across every collapsed / split pairing --------------------------------
 
-enum class Kind { FxCollapsed, FxSplit, Filter, Strip, Master, MasterCollapsed, MasterDirect };
+enum class Kind { FxCollapsed, FxSplit, Filter, Strip, StripCollapsed, Master, MasterCollapsed, MasterDirect };
 
 const char* kindName(Kind k) {
     switch (k) {
@@ -483,6 +483,8 @@ const char* kindName(Kind k) {
         return "Filter";
     case Kind::Strip:
         return "Strip";
+    case Kind::StripCollapsed:
+        return "StripCollapsed";
     case Kind::Master:
         return "Master";
     case Kind::MasterCollapsed:
@@ -509,6 +511,12 @@ std::unique_ptr<juce::AudioProcessor> makeKind(Kind k) {
         m->setShape(ChannelStripModule::Shape::Stereo);
         return m;
     }
+    case Kind::StripCollapsed: {
+        auto m = std::make_unique<ChannelStripModule>();
+        m->setShape(ChannelStripModule::Shape::Stereo);
+        setDualIOParam(*m, false); // one Audio jack per side, each owning ch0 and kRightBase
+        return m;
+    }
     case Kind::Master:
     case Kind::MasterDirect:
         return std::make_unique<MasterModule>();
@@ -525,7 +533,7 @@ std::unique_ptr<juce::AudioProcessor> makeKind(Kind k) {
 std::array<int, 2> outLegs(Kind k) {
     if (k == Kind::Filter)
         return {0, FilterModule::kRightBase};
-    if (k == Kind::Strip)
+    if (k == Kind::Strip || k == Kind::StripCollapsed)
         return {0, ChannelStripModule::kRightBase};
     return {0, 1};
 }
@@ -603,7 +611,8 @@ TEST_F(GraphEditorTest, InsertAndDeleteBetweenCollapsedOutputAndSplitStripKeepsB
 
 // Regression test for FRO900: the delete heal restored one leg (or none) whenever the deleted module
 // and a survivor presented the stereo cable differently (one jack vs. two, an adjacent right leg vs.
-// a dedicated block).
+// a dedicated block). Bug kind jack-raw-mismatch: every presentation of a stereo cable, on the input AND
+// the output side, is a row here (a collapsed Channel Strip's output is one jack over ch0 and kRightBase).
 TEST_P(StripWiringHealMatrix, DeletingTheMiddleModuleRestoresBothLegs) {
     const auto [upKind, midKind, downKind] = GetParam();
     AudioEngine engine;
@@ -625,11 +634,13 @@ TEST_P(StripWiringHealMatrix, DeletingTheMiddleModuleRestoresBothLegs) {
 }
 
 INSTANTIATE_TEST_SUITE_P(CollapsedAndSplit, StripWiringHealMatrix,
-                         ::testing::Combine(::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter),
-                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter),
+                         ::testing::Combine(::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
+                                                              Kind::Strip, Kind::StripCollapsed),
                                             ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
-                                                              Kind::Strip, Kind::Master, Kind::MasterCollapsed,
-                                                              Kind::MasterDirect)),
+                                                              Kind::StripCollapsed),
+                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
+                                                              Kind::Strip, Kind::StripCollapsed, Kind::Master,
+                                                              Kind::MasterCollapsed, Kind::MasterDirect)),
                          [](const ::testing::TestParamInfo<HealParam>& info) {
                              return std::string(kindName(std::get<0>(info.param))) + "_" +
                                     kindName(std::get<1>(info.param)) + "_" + kindName(std::get<2>(info.param));
