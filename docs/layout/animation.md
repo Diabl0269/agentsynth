@@ -213,7 +213,9 @@ The rule: **anything that glides forward glides on undo and redo.** An undo that
 app from the edit it reverses. The two entry points are `AppUndoManager::undo()` and `redo()` (the Cmd+Z / Cmd+Shift+Z
 path); nothing else needs to know. Each surface, how it detects the restore and the Reduce Motion behaviour:
 [undo-glide.md](undo-glide.md). **`Tests/UI/Layout/UndoGlideSurfaces.h` is the checklist:** every undoable move surface has
-an entry there and one test walks them all, so a new move surface adds its entry in the same change.
+an entry there and one test walks them all, so a new move surface adds its entry in the same change. A Poly click
+(the pill, the track header switch) glides like undo of it: the Poly MIDI card grows in or shrinks away with its cables
+(`structuralEdits()` in the same test file lists such entry points).
 
 ### Controls swapping in place
 

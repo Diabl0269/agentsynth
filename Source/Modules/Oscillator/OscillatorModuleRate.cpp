@@ -19,5 +19,12 @@ float OscillatorModule::baseFrequencyHz(float midiNote) const {
     return modulateNormalised(*fixedRateParam, fixedRateParam->get(), fixedRateCv_) * std::pow(2.0f, semitones / 12.0f);
 }
 
+// Poly voices get their note from Poly MIDI's pitch CV (Hz), which carries no knob offset: the knobs shift it here.
+float OscillatorModule::polyKnobSemitones() const {
+    if (isFixedRate())
+        return 0.0f;
+    return (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
+}
+
 // Follow notes keeps the audible floor of 20 Hz; a Fixed rate may be a sub-audio modulation rate.
 float OscillatorModule::minRenderHz() const { return isFixedRate() ? 0.1f : 20.0f; }
