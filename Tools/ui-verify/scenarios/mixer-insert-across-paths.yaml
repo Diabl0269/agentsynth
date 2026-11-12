@@ -59,6 +59,6 @@ steps:
   - glide: {name: chorus-adds, frames: 14, do: {key: {keys: return}}}
   - wait: {}
   - mark: {check: 3, name: chorus-before-split}
-  - key: {keys: cmd+z}
+  - glide: {name: undo-removes, frames: 14, do: {key: {keys: cmd+z}}}
   - wait: {}
   - mark: {check: 4, name: undo-one-step}
