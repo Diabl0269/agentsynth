@@ -8,11 +8,14 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "MacroPortRepair.h"
 #include "Modules/MacroOutletModule.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace detail;
 
@@ -87,6 +90,20 @@ juce::Point<float> directionalEdgeAnchor(juce::Rectangle<int> cardBounds, juce::
 void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables) {
     if (macros.empty())
         return;
+
+    // A port module no macro lists is hidden (syncMacroCards), so a cable to it would run to nowhere: dropped from view
+    // like a cable wholly inside a collapsed card.
+    std::unordered_set<uint32_t> strayPortUids;
+    for (auto* node : graph().getNodes())
+        if (synth::isStrayMacroPort(macros, node->properties["uuid"].toString(), node->getProcessor()))
+            strayPortUids.insert(node->nodeID.uid);
+    if (!strayPortUids.empty())
+        cables.erase(std::remove_if(cables.begin(), cables.end(),
+                                    [&](const VisibleCable& c) {
+                                        return strayPortUids.count(c.id.srcUid) != 0 ||
+                                               strayPortUids.count(c.id.dstUid) != 0;
+                                    }),
+                     cables.end());
 
     // nodeID.uid -> the outermost collapsed macro hiding it.
     std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
