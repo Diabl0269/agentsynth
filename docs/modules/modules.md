@@ -684,7 +684,8 @@ reference: [`lfo.md`](lfo.md).
 - **Outputs**: ch0–15 carry macros M1–M16. Only the first `Knobs` channels are audible; the rest are cleared every block and their jacks are hidden.
 - **Parameters**:
     - `Knobs` (`macroCount`, int 1–16, default 8) — how many macros the bank exposes. See *Resizing* below.
-    - `Bipolar` (`macroBipolar`, bool, default off) — maps the knobs to −1…+1 instead of 0…1, so a centred knob means "no change".
+    - `Bipolar` per knob (`macro1Bipolar`…`macro16Bipolar`, bool, default off) — maps that knob to −1…+1 instead of 0…1, so a centred knob means "no change". Set with the Uni | Bi switch in Edit Layout's per-control panel; `isModSourceBipolarAt(channel)` feeds the modulation rings and mod routing per output. A project saved with the old bank-wide `macroBipolar` switch on opens with every knob bipolar (`adoptLegacyParams`; also read from a snapshot's state blob).
+    - Knob names — each macro has its own name (default `M1`…`M16`, at most 24 printable characters), set in the same panel. It is the knob's caption on the card, its output jack's label and the name the AI sees; it is saved in the node's extra state (`{"1": "Cutoff"}`, only names that differ from the default, nothing when none do) and is accepted from a patch's untrusted state like the other plain-text states.
     - `M1`…`M16` (`macro1`…`macro16`, float 0.0–1.0, default 0.0) — the knobs themselves.
 - **Processing**: each active channel is filled with its knob value, smoothed over 20 ms so a macro sweep never clicks. Bypass and mute both silence every channel (pure source module — there is no dry signal to pass through).
 - **Routing**: no N-to-M matrix of its own. Depth and polarity per destination come from the Attenuverter the graph inserts on every CV cable, so the same macro can push one target up while pulling another down.
@@ -695,7 +696,7 @@ JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it w
 
 ### Resizing
 
-Changing `Knobs` resizes the module in place, anchored at its top-left, at `LayoutUtil::kMacroRowH` (44 px) per macro:
+Changing `Knobs` resizes the module in place, anchored at its top-left; the height is whatever the card's layout measures for the visible knobs (the Macros card is layout data: [module-card-layout.md](../layout/module-card-layout.md)):
 
 - The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover aside the shortest way (`MacroGroupController::reflowForResizedModule`), and shrinking brings those neighbours back unless the user moved them or their old spot is taken.
 - **Shrinking disconnects the macros that disappear.** A jack that is no longer drawn cannot be unplugged, and the module already silences its channel, so any cable or mod routing on a hidden macro is removed rather than left as a dead entry in the mod matrix. The whole change — count, layout and disconnects — is one undo step.

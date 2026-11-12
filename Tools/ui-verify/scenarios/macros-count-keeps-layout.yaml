@@ -1,0 +1,32 @@
+# FRO1286: the Knobs count (1-16) never changes the card's layout: knobs above the count hide and take no cell, and
+# growing the count brings them back where the layout puts them. Also opens the shared macros.agsproj project (an open,
+# a collapsed and a nested macro) to show a real project loads with the Macros-card changes.
+#
+# What a user does: picks the Faders preset in Edit Layout, leaves it, lowers Knobs from 8 to 4 (the card shrinks to
+# four faders) and raises it to 8 again (the four come back in place).
+record: true
+save_project: macros-count-keeps-layout
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: real-project-macros-fixture-opens}
+  - mark: {check: 1, name: shared-macros-project-opens}
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: Knobs}
+  - key: {keys: down, target: Knobs}
+  - key: {keys: down, target: Knobs}
+  - key: {keys: down, target: Knobs}
+  - key: {keys: down, target: Knobs}
+  - wait: {settleMs: 500}
+  - screenshot: {name: count-four}
+  - mark: {check: 2, name: count-four-hides-the-upper-four-knobs-and-their-cells}
+  - key: {keys: up, target: Knobs}
+  - key: {keys: up, target: Knobs}
+  - key: {keys: up, target: Knobs}
+  - key: {keys: up, target: Knobs}
+  - wait: {settleMs: 500}
+  - screenshot: {name: count-eight-again}
+  - mark: {check: 3, name: count-eight-brings-them-back-in-place}

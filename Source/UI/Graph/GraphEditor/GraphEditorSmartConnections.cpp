@@ -20,7 +20,6 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 
-#include "Modules/MacroControlModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 
@@ -152,12 +151,6 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
         visible = isInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
 
     const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, jack) : 0;
-
-    if (auto* macro = dynamic_cast<MacroControlModule*>(proc)) {
-        if (!isInput) {
-            return {bounds.getRight() - 10, bounds.getY() + synth::LayoutUtil::macroRowCentreY(clamped)};
-        }
-    }
 
     if (isInput) {
         // A knob-bound jack draws no gutter dot -- its ghost preview cable lands on the

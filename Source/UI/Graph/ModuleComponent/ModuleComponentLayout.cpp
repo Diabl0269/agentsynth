@@ -8,7 +8,6 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/FilterModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -52,14 +51,8 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        // The bank is the only module whose footprint tracks a parameter: the "Knobs" count
-        // decides how many macro rows (knob + output jack) are shown. It grows downward from an
-        // unchanged top-left, so the module the user is turning never jumps under the cursor.
-        setSize(synth::LayoutUtil::kSingleWidth, synth::LayoutUtil::macroBankHeight(macro->getMacroCount()));
-        resized();
-        return;
-    }
+    // The Macros bank is a data-driven card like the rest: its body (the Knobs count and the knobs shown) is the
+    // generic path below, and the Knobs count changes the height through the body's own rules.
 
     // ADSR does not measure itself: its envelope graph is a view of the card body, its stage faders
     // and Time/Tempo switch items of the body's layout, so it takes the generic path below.

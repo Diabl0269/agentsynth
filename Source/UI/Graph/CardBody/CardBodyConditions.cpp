@@ -304,6 +304,19 @@ void CardBody::setSectionHidden(const juce::String& sectionId, bool hidden) {
         }
 }
 
+// A renamed Macros knob: the caption and the screen-reader title follow the module's name for it.
+void CardBody::refreshMacroNames() {
+    applyMacroNames(module_, plan_);
+    for (auto& item : plan_.items) {
+        if (item.param == nullptr || macroIndexOf(item.param->paramID) < 0)
+            continue;
+        if (auto* label = dynamic_cast<juce::Label*>(item.label))
+            label->setText(item.captionText(), juce::dontSendNotification);
+        if (item.widget != nullptr)
+            item.widget->setTitle(item.captionText());
+    }
+}
+
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card
 // goes through the same resize path as any other growth (make room, and give it back on a shrink).
 // A swap in place moves nothing else: the leaving controls are pictured before the card changes and shrink away,

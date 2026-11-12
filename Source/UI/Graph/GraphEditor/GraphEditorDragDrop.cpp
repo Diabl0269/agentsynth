@@ -25,7 +25,6 @@
 #include "CanvasAccessibilityClip.h"
 #include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
@@ -57,10 +56,6 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
-    if (typeName == "Macros")
-        // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
-        return {synth::LayoutUtil::kSingleWidth,
-                synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, a one-row band strip (a
         // fresh EQ has every band off), the selected band's row and the Output trim row. Mirrors parametricEQHeight().

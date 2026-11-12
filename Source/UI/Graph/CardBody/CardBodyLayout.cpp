@@ -30,6 +30,10 @@ std::vector<Cell> cellsOf(const CardBodyPlan& plan, const std::vector<int>& indi
     std::vector<Cell> cells;
     for (size_t i = 0; i < indices.size();) {
         const auto& item = plan.items[(size_t)indices[i]];
+        if (item.collapses && !item.shown) { // a rule took its cell away: the controls after it close up
+            ++i;
+            continue;
+        }
         if (!groupSwaps || item.swapGroup < 0) {
             cells.push_back({indices[i], item.kind, -1});
             ++i;

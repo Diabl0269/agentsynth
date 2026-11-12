@@ -149,8 +149,7 @@ edits only its own table:
 | Rec Tap / Track Audio | 131 |
 | Track In | 100 |
 
-The Sequencer and Poly Sequencer (560x482 at the default lanes) are measured from their layout like any other. From the table (bespoke): MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (tracks
-its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`),
+The Sequencer and Poly Sequencer (560x482 at the default lanes) are measured from their layout like any other. From the table (bespoke): MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (a layout card: its height follows the layout and the `Knobs` count), Attenuverter (square, `kNarrowWidth`),
 Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
 100 px floor.
 
@@ -364,17 +363,7 @@ while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape meas
 369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.
 
-The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component layout,
-the output-jack hit test and `estimateModuleSize` all read the same numbers:
-
-```cpp
-kMacroHeaderH  = 94   // title bar + Knobs / Bipolar row
-kMacroRowH     = 44   // one macro knob and its output jack
-kMacroBottomPad = 12
-
-macroBankHeight(count) == kMacroHeaderH + count * kMacroRowH + kMacroBottomPad
-macroRowCentreY(index) == kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2
-```
+The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. It is a layout card ([module-card-layout.md](module-card-layout.md)): its height is measured from its layout, so the component layout, the output-jack hit test and `estimateModuleSize` read the same number. Its output jacks sit in the right-edge gutter in macro order, whatever the layout.
 
 **Growth is anchored at the top-left and pushes neighbours, never itself.** Moving the module the
 user is currently interacting with would teleport it out from under the cursor, so

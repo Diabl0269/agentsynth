@@ -240,7 +240,7 @@ bool readSection(const juce::var& json, CardSection& out) {
             return false;
         out.presentation = *presentation;
     }
-    if (!readBoundedInt(*object, "columns", 1, 6, CardSection::kDefaultColumns, out.columns) ||
+    if (!readBoundedInt(*object, "columns", 1, 8, CardSection::kDefaultColumns, out.columns) ||
         !readCondition(*object, "visibleWhen", out.visibleWhen))
         return false;
 

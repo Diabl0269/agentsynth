@@ -530,7 +530,7 @@ TEST(CardLayoutV2Test, ANewerVersionIsRefusedAndBadNumbersOrNamesAreMalformed) {
         return CardLayout::fromVar(juce::JSON::parse(R"({"version":2,"sections":[{"id":"s",)" + body + "}]}")).status;
     };
     EXPECT_EQ(section(R"("items":[])"), CardLayout::ParseStatus::Ok);
-    EXPECT_EQ(section(R"("columns":7,"items":[])"), CardLayout::ParseStatus::Malformed) << "out of range is refused";
+    EXPECT_EQ(section(R"("columns":9,"items":[])"), CardLayout::ParseStatus::Malformed) << "out of range is refused";
     EXPECT_EQ(section(R"("columns":0,"items":[])"), CardLayout::ParseStatus::Malformed);
     EXPECT_EQ(section(R"("items":[{"paramId":"a","span":0}])"), CardLayout::ParseStatus::Malformed);
     EXPECT_EQ(section(R"("items":[{"paramId":"a","widget":"dial"}])"), CardLayout::ParseStatus::Malformed);

@@ -626,6 +626,7 @@ private:
     synth::CardBlockFade lfoFade_;      // editor + toolbar, fading with their height
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
+    int macroNamesSeen_ = 0;            // the Macros card: the last names revision its captions were set from
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
     synth::ui::RestoreWatch lfoRestoreWatch_;
     int lfoEditedShape_ = 0; // the shape the curve editor shows: the one nearest the morph cursor
@@ -880,7 +881,6 @@ private:
 
     // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
     // rows above `count` without destroying their sliders or parameters.
-    void layoutMacroBank(int count);
 
     // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
     // rather than re-deriving the geometry, so content can never land on top of a port label —
