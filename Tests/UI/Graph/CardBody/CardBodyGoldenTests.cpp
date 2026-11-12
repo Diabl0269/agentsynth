@@ -101,6 +101,29 @@ juce::String rectText(juce::Rectangle<int> r) {
            juce::String(r.getHeight());
 }
 
+// A tooltip that names a key spells it with macOS glyphs there and with words elsewhere; the golden holds the words,
+// so the same file is right on every platform.
+juce::String platformNeutral(const juce::String& text) {
+    juce::String out;
+    for (const auto c : text) {
+        switch (static_cast<unsigned>(c)) {
+        case 0x2318: // Command
+        case 0x2303: // Control
+            out += "Ctrl";
+            break;
+        case 0x2325: // Option
+            out += "Alt";
+            break;
+        case 0x21E7: // Shift
+            out += "Shift";
+            break;
+        default:
+            out += juce::String::charToString(c);
+        }
+    }
+    return out;
+}
+
 juce::String quoted(const juce::String& s) { return "\"" + s.replace("\n", "\\n") + "\""; }
 
 void describeCard(const juce::String& type, ModuleComponent& comp, juce::StringArray& out) {
@@ -109,7 +132,7 @@ void describeCard(const juce::String& type, ModuleComponent& comp, juce::StringA
     for (auto* child : comp.getChildren()) {
         juce::String tooltip;
         if (auto* client = dynamic_cast<juce::SettableTooltipClient*>(child))
-            tooltip = client->getTooltip();
+            tooltip = platformNeutral(client->getTooltip());
         out.add("  child " + juce::String(index++) + " " + kindOf(*child) + " id=" + quoted(child->getComponentID()) +
                 " at " + rectText(child->getBounds()) + " visible=" + juce::String((int)child->isVisible()) +
                 " title=" + quoted(child->getTitle()) + " tip=" + quoted(tooltip) +

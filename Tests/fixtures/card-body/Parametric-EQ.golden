@@ -1,5 +1,5 @@
 type Parametric EQ size 560x432
-  child 0 component id="eqCardCurve" at 88,60 384x150 visible=1 title="EQ curve" tip="EQ curve: Left / Right pick a band, Up / Down its width, ⌥ + Left / ⌥ + Right its frequency, ⌥ + Up / ⌥ + Down its gain, s solos it, t opens its type, + adds a band, ⌘ + D duplicates it, Backspace removes it, Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, scroll for Q, right-click a point for its type, Option-click to solo it" focusOrder=0 wantsFocus=1
+  child 0 component id="eqCardCurve" at 88,60 384x150 visible=1 title="EQ curve" tip="EQ curve: Left / Right pick a band, Up / Down its width, Alt + Left / Alt + Right its frequency, Alt + Up / Alt + Down its gain, s solos it, t opens its type, + adds a band, Ctrl + D duplicates it, Backspace removes it, Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, scroll for Q, right-click a point for its type, Option-click to solo it" focusOrder=0 wantsFocus=1
   child 1 component id="eqCardStrip" at 12,218 536x22 visible=1 title="EQ bands" tip="" focusOrder=0 wantsFocus=0
   child 2 knob id="B1 Freq" at 20,266 70x60 visible=1 title="B1 Freq" tip="B1 Freq" focusOrder=0 wantsFocus=1
   child 3 label id="" at 12,246 86x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
