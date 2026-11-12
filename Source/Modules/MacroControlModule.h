@@ -4,6 +4,7 @@
 #include "ModuleBase.h"
 #include "Modules/ParameterText.h"
 #include <array>
+#include <atomic>
 #include <juce_core/juce_core.h>
 
 /**
@@ -52,12 +53,15 @@ public:
     {
         addParameter(countParam =
                          new juce::AudioParameterInt("macroCount", "Knobs", kMinMacros, kMaxMacros, kDefaultMacros));
-        addParameter(bipolarParam = new juce::AudioParameterBool("macroBipolar", "Bipolar", false));
 
         for (int i = 0; i < kMaxMacros; ++i)
             addParameter(macroParams[(size_t)i] = new juce::AudioParameterFloat(
                              "macro" + juce::String(i + 1), macroName(i), juce::NormalisableRange<float>(0.0f, 1.0f),
                              0.0f, synth::fractionPercentAttributes()));
+        // Polarity is per knob (macro1Bipolar .. macro16Bipolar); Edit Layout's per-control panel sets it.
+        for (int i = 0; i < kMaxMacros; ++i)
+            addParameter(bipolarParams[(size_t)i] =
+                             new juce::AudioParameterBool(bipolarParamId(i), macroName(i) + " Bipolar", false));
 
         addMuteParameter();
         mods_.bind(*this);
@@ -115,7 +119,7 @@ public:
     int getVisibleOutputPortCount() const override { return countParam->get(); }
 
     juce::String getOutputPortLabel(int i) const override {
-        return (i >= 0 && i < kMaxMacros) ? macroName(i) : ModuleBase::getOutputPortLabel(i);
+        return (i >= 0 && i < kMaxMacros) ? getMacroName(i) : ModuleBase::getOutputPortLabel(i);
     }
 
     LogicalPort mapOutputChannel(int rawChannel) const override {
@@ -132,7 +136,14 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
-    bool isModSourceBipolar() const override { return isBipolar(); }
+    /** Per output channel: macro i+1's own polarity. The whole-module answer is "any knob is bipolar". */
+    bool isModSourceBipolarAt(int outputChannel) const { return isBipolar(outputChannel); }
+    bool isModSourceBipolar() const override {
+        for (int i = 0; i < kMaxMacros; ++i)
+            if (isBipolar(i))
+                return true;
+        return false;
+    }
     ModuleType getModuleType() const override { return ModuleType::MacroControl; }
 
     //==============================================================================
@@ -147,22 +158,124 @@ public:
         return (index >= 0 && index < kMaxMacros) ? macroParams[(size_t)index]->get() : 0.0f;
     }
 
-    /** The CV this macro emits — 0..1 unipolar, -1..1 when the bank is bipolar. */
+    /** The CV this macro emits — 0..1 unipolar, -1..1 when this knob is bipolar. */
     float getMacroOutput(int index) const { return (index >= 0 && index < kMaxMacros) ? outputFor(index) : 0.0f; }
 
-    bool isBipolar() const { return bipolarParam->get(); }
+    bool isBipolar(int index) const { return index >= 0 && index < kMaxMacros && bipolarParams[(size_t)index]->get(); }
 
-    /** Display name of macro `index` ("M1" … "M16"); also the slider ComponentID used by the UI. */
+    /** Parameter id of macro `index`'s polarity ("macro1Bipolar" ...). */
+    static juce::String bipolarParamId(int index) { return "macro" + juce::String(index + 1) + "Bipolar"; }
+    /** True for any of the sixteen polarity parameter ids. */
+    static bool isBipolarParamId(const juce::String& id) {
+        for (int i = 0; i < kMaxMacros; ++i)
+            if (id == bipolarParamId(i))
+                return true;
+        return false;
+    }
+    /** The parameter that holds macro `index`'s polarity (null out of range). */
+    juce::AudioParameterBool* getBipolarParameter(int index) const {
+        return index >= 0 && index < kMaxMacros ? bipolarParams[(size_t)index] : nullptr;
+    }
+
+    /** Default name of macro `index` ("M1" … "M16"); also the slider ComponentID used by the UI. */
     static juce::String macroName(int index) { return "M" + juce::String(index + 1); }
 
+    /** The name macro `index` shows: the card caption, its output jack and the AI's state. Its own name, else
+     *  `macroName`. Message thread only. */
+    juce::String getMacroName(int index) const {
+        if (index < 0 || index >= kMaxMacros)
+            return {};
+        const auto& custom = customNames_[(size_t)index];
+        return custom.isEmpty() ? macroName(index) : custom;
+    }
+    /** Names macro `index`; blank or the default name puts the default back. Cleaned like untrusted text
+     *  (trimmed, control characters dropped, at most kMaxNameLength characters). */
+    void setMacroName(int index, const juce::String& name) {
+        if (index < 0 || index >= kMaxMacros)
+            return;
+        auto cleaned = cleanName(name);
+        if (cleaned == macroName(index))
+            cleaned = {};
+        if (customNames_[(size_t)index] == cleaned)
+            return;
+        customNames_[(size_t)index] = cleaned;
+        ++namesRevision_;
+    }
+    /** Bumped whenever a name changes (a set, an undo, a load); the card polls it to refresh its captions. */
+    int getNamesRevision() const noexcept { return namesRevision_.load(); }
+    static constexpr int kMaxNameLength = 24;
+
+    /** The names as saved: an object keyed "1".."16" holding only the names that differ from the default;
+     *  void when none do, so a bank nobody renamed adds nothing to a project. */
+    juce::var getExtraState() const override {
+        auto* object = new juce::DynamicObject();
+        bool any = false;
+        for (int i = 0; i < kMaxMacros; ++i)
+            if (customNames_[(size_t)i].isNotEmpty()) {
+                object->setProperty(juce::String(i + 1), customNames_[(size_t)i]);
+                any = true;
+            }
+        if (!any) {
+            delete object;
+            return {};
+        }
+        return juce::var(object);
+    }
+    void setExtraState(const juce::var& state) override {
+        std::array<juce::String, kMaxMacros> next{};
+        if (const auto* object = state.getDynamicObject())
+            for (int i = 0; i < kMaxMacros; ++i) {
+                auto cleaned = cleanName(object->getProperty(juce::String(i + 1)).toString());
+                next[(size_t)i] = cleaned == macroName(i) ? juce::String() : cleaned;
+            }
+        if (next != customNames_) {
+            customNames_ = next;
+            ++namesRevision_;
+        }
+    }
+    /** The names are short plain text, cleaned the same way, so a model-authored patch may name the knobs. */
+    void setUntrustedExtraState(const juce::var& state) override { setExtraState(state); }
+
+    /** Projects saved before per-knob polarity had one Bipolar switch for the whole bank: on means every knob is. */
+    void adoptLegacyParams(const juce::NamedValueSet& params) override {
+        if (const auto* legacy = params.getVarPointer("macroBipolar"); legacy != nullptr && legacyOn(*legacy))
+            for (auto* bipolar : bipolarParams)
+                *bipolar = true;
+    }
+    bool isLegacyParamId(const juce::String& id) const override { return id == "macroBipolar"; }
+
+    /** The saved-state blob a snapshot or preset carried: the same legacy switch, read from its property. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes); xml != nullptr && xml->hasTagName("ModuleState")) {
+            const auto state = juce::ValueTree::fromXml(*xml);
+            if (state.hasProperty("macroBipolar") && (float)state.getProperty("macroBipolar") > 0.5f)
+                for (auto* bipolar : bipolarParams)
+                    *bipolar = true;
+        }
+    }
+
 private:
+    static bool legacyOn(const juce::var& value) { return value.isBool() ? (bool)value : (double)value > 0.5; }
+
+    /** Printable text only (no control characters), trimmed, at most kMaxNameLength characters. */
+    static juce::String cleanName(const juce::String& raw) {
+        juce::String kept;
+        for (auto c : raw)
+            if (juce::CharacterFunctions::isPrintable(c))
+                kept += c;
+        return kept.trim().substring(0, kMaxNameLength).trim();
+    }
+
     float outputFor(int index, float cv = 0.0f) const {
         const float knob = modulateNormalised(*macroParams[(size_t)index], macroParams[(size_t)index]->get(), cv);
-        return bipolarParam->get() ? (knob * 2.0f - 1.0f) : knob;
+        return bipolarParams[(size_t)index]->get() ? (knob * 2.0f - 1.0f) : knob;
     }
 
     juce::AudioParameterInt* countParam = nullptr;
-    juce::AudioParameterBool* bipolarParam = nullptr;
+    std::array<juce::AudioParameterBool*, kMaxMacros> bipolarParams{};
+    std::array<juce::String, kMaxMacros> customNames_{};
+    std::atomic<int> namesRevision_{0};
     std::array<juce::AudioParameterFloat*, kMaxMacros> macroParams{};
     synth::ModTargetList mods_{kModTargets};
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, kMaxMacros> smoothed{};
