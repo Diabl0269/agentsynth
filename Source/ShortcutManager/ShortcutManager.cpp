@@ -188,6 +188,7 @@ void ShortcutManager::resetToDefaults() {
     addDrumMachineDefaultBindings();
     addLayoutEditorDefaultBindings();
     addEqDefaultBindings();
+    addTrackHeaderDefaultBindings();
 }
 
 // The non-character keys named in words: their key codes are control characters (Return is 13, Escape 27) or sit
@@ -344,6 +345,8 @@ juce::String ShortcutManager::getCategoryName(ShortcutCategory category) {
         return "Layout Editor";
     case ShortcutCategory::EQ:
         return "EQ";
+    case ShortcutCategory::TrackHeader:
+        return "Track Header";
     case ShortcutCategory::General:
         break;
     }
@@ -356,7 +359,8 @@ const std::vector<ShortcutCategory>& ShortcutManager::getCategoryOrder() {
     static const std::vector<ShortcutCategory> order{ShortcutCategory::General,      ShortcutCategory::Graph,
                                                      ShortcutCategory::Timeline,     ShortcutCategory::PianoRoll,
                                                      ShortcutCategory::DrumMachine,  ShortcutCategory::Mixer,
-                                                     ShortcutCategory::LayoutEditor, ShortcutCategory::EQ};
+                                                     ShortcutCategory::LayoutEditor, ShortcutCategory::EQ,
+                                                     ShortcutCategory::TrackHeader};
     return order;
 }
 

@@ -702,3 +702,16 @@ TEST_F(ShortcutManagerTest, OnTheOtherTableEveryDefaultChordIsStillUniqueWithinI
         EXPECT_TRUE(inserted) << id << " shares its chord with " << it->second;
     }
 }
+
+// trackHeaderTogglePoly -- bare P while a track header holds focus. It lives in its own Track Header category so it
+// does not collide with the Timeline's bare P (loop the selection), which every other timeline surface keeps.
+TEST_F(ShortcutManagerTest, TrackHeaderTogglePolyIsBareP_InItsOwnCategoryWithNoConflict) {
+    EXPECT_TRUE(manager.getActionIds().contains("trackHeaderTogglePoly"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("trackHeaderTogglePoly"), "Poly On or Off for Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("trackHeaderTogglePoly"), ShortcutCategory::TrackHeader);
+    const auto kp = manager.getBinding("trackHeaderTogglePoly");
+    EXPECT_EQ(kp.getKeyCode(), static_cast<int>('p'));
+    EXPECT_FALSE(kp.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers));
+    EXPECT_TRUE(manager.getConflictingAction("trackHeaderTogglePoly", kp).isEmpty());
+    EXPECT_EQ(AppCommands::getCommandForAction("trackHeaderTogglePoly"), AppCommands::kNoCommand);
+}

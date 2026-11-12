@@ -114,6 +114,12 @@ void appendEqRows(std::vector<Entry>& rows) {
         rows.push_back(Entry{id, ShortcutCategory::EQ});
 }
 
+// Track Header -- keys read only while a track's header row holds focus (TimelineTrackHeaderComponent); last section.
+template <class Entry>
+void spliceTrackHeaderRow(std::vector<Entry>& rows) {
+    rows.push_back(Entry{"trackHeaderTogglePoly", ShortcutCategory::TrackHeader});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
     spliceCommandPaletteRow(rows);
@@ -123,6 +129,7 @@ void spliceRows(std::vector<Entry>& rows) {
     spliceDockKeyRows(rows);
     spliceSongKeyRow(rows);
     appendEqRows(rows);
+    spliceTrackHeaderRow(rows);
 }
 
 } // namespace
