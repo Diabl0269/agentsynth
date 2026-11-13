@@ -2,12 +2,6 @@
 # One per line: <scenario> <step>[u|r] <ticket> <reason...>. `u` is the undo and `r` the redo of that step.
 # Shrink-only: fix the animation and delete the line; never add one without a ticket. A listed step that does not pop
 # on a run prints a note, not a failure: which frames a busy machine catches varies, so one quiet run proves nothing.
-timeline-hotkey-toasts 23 FRO1706 [toast] the toast appears in one frame
-sequencer-outline-undo 27 FRO1707 [sequencer] undo rewrites the pattern notes in one frame
-sequencer-outline-undo 31 FRO1707 [sequencer] redo rewrites the pattern notes in one frame
-sequencer-outline-undo 22u FRO1707 [sequencer] undoing a key change rewrites the pattern notes in one frame
-sequencer-outline-undo 22r FRO1707 [sequencer] redoing a key change rewrites the pattern notes in one frame
-timeline-hotkey-toasts 20 FRO1706 [toast] the toast appears in one frame
 mod-dot-right-click-one-menu 8 FRO1709 [mod] the sources panel closes in one frame
 mod-row-cross-track-drag 8 FRO1708 [timeline] an automation lane appears in one frame
 mod-row-cross-track-drag 9 FRO1708 [timeline] an automation lane appears in one frame
@@ -15,9 +9,3 @@ mod-row-cross-track-drag 37 FRO1708 [timeline] the timeline toggle icon swaps in
 lane-change-parameter-rows-still 35 FRO1708 [timeline] the lane rows change in one frame
 mod-row-drag-follows-pointer 8 FRO1708 [timeline] an automation lane appears in one frame
 mod-row-drag-follows-pointer 9 FRO1708 [timeline] an automation lane appears in one frame
-sequencer-outline-undo 1u FRO1707 [sequencer] undoing the project load changes the window edge in one frame
-sequencer-outline-undo 22 FRO1707 [sequencer] the key change rewrites the pattern notes in one frame
-sequencer-outline-undo 31u FRO1707 [sequencer] undo rewrites the pattern notes in one frame
-sequencer-outline-undo 31r FRO1707 [sequencer] redo rewrites the pattern notes in one frame
-toast-severity-icons 19 FRO1706 [toast] the toast appears in one frame
-toast-severity-icons 20 FRO1706 [toast] the toast appears in one frame

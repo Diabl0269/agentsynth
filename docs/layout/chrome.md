@@ -576,7 +576,9 @@ The same page opens from Help > Join the Discord... (`AppCommands::joinDiscord`)
 `ToastComponent` (`Source/UI/Chrome/Toast/`) is a small message pill with one optional action, for a change that is
 bigger than what the user clicked ("Made 4 modules poly" with **Undo**). `MainComponent` owns one, a plain child laid
 out by `resized()` (centred, 20 px above the canvas' bottom edge) and raised when shown; a second `show()` replaces the
-first. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
+first: while the first is on screen the pill glides to the new width and the old icon, text, bar and action cross-fade
+into the new (140 ms `easeOutCubic`, no second slide-in; a plain 80 ms cross-fade without the width glide under Reduce
+Motion, at once under Animations Off), and an action that goes is not pressable while it fades. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
 fades (80 ms), under Animations Off or while its parent is not on screen it lands at once. It hides itself 4 s after
 the last `show()` unless the pointer is over it or its action holds the keyboard focus; Esc dismisses it. The action
 is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this change"); it dismisses the toast, then

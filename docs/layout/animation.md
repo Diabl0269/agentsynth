@@ -598,6 +598,9 @@ shortcut.
   grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
+- **Toasts.** A toast slides up 10 px while fading in (170 ms) and fades out (130 ms); a toast that replaces one still on
+  screen glides the pill to its new width while the old content cross-fades into the new (140 ms `easeOutCubic`),
+  never swapping text and width in one frame: [toast](chrome.md#toast).
 - **Popups.** A picker grows out of the row that opened it and shrinks back into it, like the mod dot panel
   ([Popup windows](#popup-windows)). Any other menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
   the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close (Escape and click-away included)
