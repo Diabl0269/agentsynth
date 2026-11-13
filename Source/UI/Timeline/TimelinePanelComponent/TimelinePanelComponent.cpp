@@ -111,6 +111,11 @@ TimelinePanelComponent::TimelinePanelComponent()
     addAndMakeVisible(addTrackButton_);
     setComponentID("timelinePanel");
     topBarRingProbe_ = makeKeyRingProbe(*topBarKeys_, "timelineTopBarRing");
+    // Down from the bar and Down on the panel root are one key path: both land on Add Track, the column's first stop.
+    topBarKeys_->onDown = [this] {
+        addTrackFromTop_ = true;
+        focusAddTrackButton();
+    };
     addChildComponent(*topBarRingProbe_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
     addTrackButton_.setIcon(synth::theme::Icon::ToolbarAddTrack, ToolbarGroup::Edit);

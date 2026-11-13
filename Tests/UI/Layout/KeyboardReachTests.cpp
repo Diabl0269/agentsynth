@@ -422,6 +422,19 @@ bool insideMixerColumn(juce::Component& c) {
     return false;
 }
 
+MixerFocusView mixerFocusView(MainComponent& mc) {
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    MixerFocusView view;
+    view.panel = &panel;
+    for (int i = 0; auto* column = panel.getStripColumnForTest(i); ++i)
+        view.stripsRinging += column->isKeyboardFocusedForTest() ? 1 : 0;
+    view.outlineShown = panel.isFocusedColumnOutlineShownForTest();
+    view.holdsKeys = panel.hasKeyboardFocus(true);
+    view.visible = panel.isVisible();
+    view.focusedColumn = panel.getFocusedColumnIndexForTest();
+    return view;
+}
+
 void setMixerSidePaneOpen(MainComponent& mc, bool open) {
     auto& panel = mc.getBottomDock().getMixerPanel();
     if (panel.getSidePane().isOpen() != open)
@@ -483,6 +496,34 @@ TEST_F(KeyboardReachDialogs, EveryControlInEveryDialogIsAKeyboardStop) {
         findings.add(walkSurface(surface.name, *window, surface.name, [](juce::Component&) { return true; }));
     }
     findings.expectOnlyKnownGaps();
+}
+
+// Regression test for FRO1525: with the bottom panel closed the key opened it but put no ring on the transport bar,
+// since the bar has no bounds until the slide lands.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedInEveryMainView) {
+    auto& panel = mc_->getTimelinePanel();
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    for (const Tab view : {Tab::Canvas, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (mc_->isBottomDockConfiguredVisible())
+            mc_->simulateToggleBottomPanelClick();
+        synth::test::waitUntil([&] { return !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        mc_->resized();
+        ASSERT_FALSE(mc_->isBottomDockConfiguredVisible()) << "view " << (int)view;
+        panel.getTopBarKeysForTest().leave();
+
+        // The key reaches the window's own handler (nothing in the timeline holds focus).
+        for (juce::Component* at = mc_.get(); at != nullptr; at = at->getParentComponent())
+            if (at->keyPressed(key))
+                break;
+        synth::test::waitUntil(
+            [&] { return panel.getTopBarKeysForTest().isActive() && !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        const auto* ringed = panel.getTopBarKeysForTest().getRingedStop();
+        EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "view " << (int)view;
+        EXPECT_EQ(ringed, &panel.getTransportBar().getPlayStopButton()) << "view " << (int)view;
+        EXPECT_TRUE(mc_->isBottomDockConfiguredVisible()) << "the key opened the panel, view " << (int)view;
+    }
 }
 
 // Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the

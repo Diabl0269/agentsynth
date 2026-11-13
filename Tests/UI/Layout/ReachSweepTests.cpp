@@ -28,11 +28,6 @@ namespace {
 
 // A gap that is known and has a ticket. Key: "<scene> / <region id> / <control>: <what>" as a finding prints it.
 const std::vector<KnownGap> kKnownGaps = {
-    // Mixer zones pane and rows: the side pane is not reached by any key.
-    {"mixer side pane / mixer / MixerZonesPane 'Zones and visibility': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Audio #': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Direct': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Master': not reached by keys", "FRO1529"},
     // Library sidebar switch and search box: the region lands on the list, no key steps to them.
     {"canvas / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
     {"canvas / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
@@ -205,10 +200,6 @@ const std::vector<KnownGap> kKnownGaps = {
     // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
     // timing of the mixer's column fade and the dock's closing.
     {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
-    {"canvas / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529", true},
-    {"canvas, AI panel and Mod Matrix / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529",
-     true},
-    {"library sounds / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529", true},
     {"canvas, dock closed / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
      "FRO1819", true},
 };
@@ -432,4 +423,41 @@ TEST_F(ReachSweepShell, TabFromThePreviewStripLeavesForTheRegionBesideTheSidebar
 #endif
     for (const auto& scene : scenes())
         checkPreviewStripTab(scene);
+}
+
+// Regression test for FRO1530: a strip clicked, then Cmd+1 (the timeline tab, which takes the keys onto the tab strip)
+// and Right (back to the Mixer tab) showed the strip's ring while no key acted on it.
+TEST_F(ReachSweepShell, ARingedMixerStripLosesItsRingWhenAnotherTabTakesTheKeysAndTheMixerComesBack) {
+    const auto view = [this] { return synth::test::reach::mixerFocusView(*mc_); };
+    const auto press = [this](const juce::KeyPress& key) {
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        return deliver(focused != nullptr ? *focused : *mc_, key).handled;
+    };
+    const juce::KeyPress right(juce::KeyPress::rightKey, juce::ModifierKeys(), 0);
+    const juce::KeyPress cmd1('1', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
+
+    mc_->setMainViewForTest(Tab::Canvas);
+    mc_->ensureBottomDockOpen();
+    mc_->getBottomDock().setActiveTab(Tab::Mixer);
+    mc_->resized();
+    ASSERT_TRUE(synth::test::waitUntil([&] { return view().visible; }, 2000));
+    ASSERT_TRUE(takeFocus(*view().panel)) << "this machine would not give a temporary window the keyboard";
+    ASSERT_TRUE(press(right));
+    ASSERT_EQ(view().focusedColumn, 0);
+    ASSERT_EQ(view().stripsRinging, 1);
+
+    ASSERT_TRUE(press(cmd1)); // the Timeline tab; the keys go to the tab strip
+    ASSERT_TRUE(synth::test::waitUntil([&] { return !view().visible; }, 2000));
+    ASSERT_TRUE(press(right)); // the tab strip's Right: the Mixer tab again
+    ASSERT_TRUE(synth::test::waitUntil([&] { return view().visible; }, 2000));
+    synth::test::flushMessageQueue();
+
+    EXPECT_FALSE(view().holdsKeys) << "the keys are on the tab strip, not the mixer";
+    EXPECT_EQ(view().stripsRinging, 0) << "no strip may show a ring the keys do not act on";
+    EXPECT_FALSE(view().outlineShown);
+
+    // A click or Tab into the mixer makes the ring honest again.
+    ASSERT_TRUE(takeFocus(*view().panel));
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(view().stripsRinging, 1);
 }

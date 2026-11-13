@@ -20,6 +20,14 @@ When another control takes the keyboard (a click on the canvas) the outline goes
 outline comes back with the keyboard. A pop-up window (a menu) holding the keyboard, or the app going to the background,
 keeps it (`MixerPanelComponent::noteKeyboardMoved`, `MixerPanelRowKeyboard.cpp`).
 
+The ring is read from real state, never trusted from the last event: `isKeyboardAwayNow()` says the keys are away when the
+panel is hidden (a swapped dock tab: JUCE drops its focus while nothing is focused yet, which looks like the app in the
+background, and the focus then lands on a sibling that never tells the panel) or when the side pane's list holds
+them (it shows its own cursor). `noteKeyboardMoved()` runs on every focus change, from `visibilityChanged()` (so a tab
+that comes back shows no ring until the keys are on it) and from `paintOverChildren()`, so no event can leave a stale
+ring. A track row's focus outline already reads `hasKeyboardFocus(true)` at paint time and needs no such cache.
+Test: `ReachSweepShell.ARingedMixerStripLosesItsRingWhenAnotherTabTakesTheKeysAndTheMixerComesBack` (`Tests/UI/Layout/ReachSweepTests.cpp`).
+
 ## Duplicate
 
 **Cmd+D** resolves the track row's `timelineDuplicateFocusedTrack` (one rebind covers both) and copies the focused
@@ -48,7 +56,7 @@ name the keys and follow a rebind.
 
 ## Test mode
 
-`getState` on `mixerFocusedColumn` (a hidden child of the panel) reports `focusedColumn`, the title of the column whose outline shows (empty when none), and `focusedRow` / `focusedRowIndex`, the focused row's screen-reader text and index (empty and -1 in column mode).
+`getState` on `mixerFocusedColumn` (a hidden child of the panel) reports `focusedColumn`, the title of the column whose outline shows (empty when none), and `focusedRow` / `focusedRowIndex`, the focused row's screen-reader text and index (empty and -1 in column mode), and `zonesCursor`, the channel the side pane's list cursor is on while the list holds the keys.
 `Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
 and presses Cmd+Up; `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` drives the same through the real ComponentPeer.
 `mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourDotTests.cpp` pins the keys.

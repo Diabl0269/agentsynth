@@ -30,8 +30,7 @@ bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
         return topBarKeys_->enter();
     if (key.isKeyCode(juce::KeyPress::downKey)) {
-        addTrackFromTop_ = true;
-        focusAddTrackButton();
+        topBarKeys_->onDown();
         return true;
     }
     // Tab from the root enters the track column on the focused row (else the first): the next stop after a row is its

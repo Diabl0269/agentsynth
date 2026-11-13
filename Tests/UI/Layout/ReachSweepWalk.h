@@ -376,7 +376,8 @@ private:
             auto* before = source->ringed();
             if (before != nullptr)
                 w.reached.insert(before);
-            if (!press(w, *f, kRight))
+            // The zones list steps by Down: its Right is the way back to the strips.
+            if (!press(w, *f, sourceName == "zones cursor" ? kDown : kRight))
                 break;
             auto* after = source->ringed();
             if (verbose())
@@ -481,6 +482,14 @@ private:
                 }
                 if (key == &kReturn && !takesReturn(*place, w.id))
                     continue;
+                // Left leaves the first strip for the side pane; the focused column is wherever the walk left it, so
+                // Left runs on to the first strip (not judged: it stays on the panel).
+                if (key == &kLeft && w.id == "mixer")
+                    for (int i = 0; i < 40 && juce::Component::getCurrentlyFocusedComponent() == place; ++i)
+                        deliver(*place, key->press);
+                if (key == &kLeft && w.id == "mixer" && juce::Component::getCurrentlyFocusedComponent() != place &&
+                    !refocus(*place))
+                    break;
                 const bool judged = press(w, *place, *key);
                 if (judged) {
                     enqueueLanding(w);

@@ -41,6 +41,17 @@ std::vector<RingSource> mixerRingSources(juce::Component& mixerPanel);
 /** True when `c` sits in a mixer strip, Direct or Master column, whose controls are reached by the column's own keys.
  */
 bool insideMixerColumn(juce::Component& c);
+/** What the mixer panel shows of its keyboard focus now: the strips drawing a ring, the focused column's outline,
+ *  whether the panel or a child holds the keys, and whether the panel is visible. */
+struct MixerFocusView {
+    juce::Component* panel = nullptr;
+    int stripsRinging = 0;
+    bool outlineShown = false;
+    bool holdsKeys = false;
+    bool visible = false;
+    int focusedColumn = -1;
+};
+MixerFocusView mixerFocusView(MainComponent& mc);
 /** Opens or closes the mixer panel's side pane (the zones and visibility list). */
 void setMixerSidePaneOpen(MainComponent& mc, bool open);
 
