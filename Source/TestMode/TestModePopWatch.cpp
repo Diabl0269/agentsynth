@@ -16,6 +16,10 @@ namespace {
 
 constexpr int kMaxFrames = 40;
 constexpr double kCaptureMs = 600.0;
+constexpr double kQuietMs = 100.0;
+// A window that still changes this long after `ms` is not waited for any longer (a caret blink or a playhead never
+// lets it rest).
+constexpr double kQuietGiveUpMs = 500.0;
 constexpr int kFewPixels = 4;
 
 bool pixelsDiffer(juce::Colour a, juce::Colour b, int tolerance) {
@@ -87,7 +91,9 @@ struct Watch {
     bool armed = false;
     juce::Image before;
     std::vector<juce::Image> frames;
+    juce::Image lastPresented; ///< the newest frame that differed from the one before it, kept past the capture limit
     double startMs = 0.0;
+    double lastChangeMs = 0.0; ///< when the window last presented a frame that differed from the one before it
     std::optional<int> undoSerial;
 };
 
@@ -124,12 +130,16 @@ bool sameImage(const juce::Image& a, const juce::Image& b) {
 // Called inside the peer's paint, so the copy is the picture the screen got at that moment.
 void captureFrame(const juce::Image& presented) {
     auto& w = watch();
-    if (!w.armed || (int)w.frames.size() >= kMaxFrames ||
-        juce::Time::getMillisecondCounterHiRes() - w.startMs > kCaptureMs)
+    if (!w.armed)
         return;
-    const auto& last = w.frames.empty() ? w.before : w.frames.back();
-    if (!sameImage(presented, last))
-        w.frames.push_back(presented.createCopy());
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    const auto& last = w.lastPresented.isValid() ? w.lastPresented : w.before;
+    if (sameImage(presented, last))
+        return;
+    w.lastPresented = presented.createCopy();
+    w.lastChangeMs = now; // an animation the desktop animator does not know (a fade on a VBlank driver) is still moving
+    if ((int)w.frames.size() < kMaxFrames && now - w.startMs <= kCaptureMs)
+        w.frames.push_back(w.lastPresented);
 }
 
 StepResult cmdPopWatchStart(const juce::var&, Scratch&, int) {
@@ -145,6 +155,7 @@ StepResult cmdPopWatchStart(const juce::var&, Scratch&, int) {
     if (auto* undo = appUndoManager())
         w.undoSerial = undo->getEditSerial();
     w.startMs = juce::Time::getMillisecondCounterHiRes();
+    w.lastChangeMs = w.startMs;
     w.armed = true;
     frame.setPaintObserver(captureFrame);
     return StepResult::done(
@@ -200,7 +211,11 @@ StepResult cmdPopWatchCheck(const juce::var& args, Scratch& s, int attempt) {
                 peer->performAnyPendingRepaintsNow();
     if (desktop.getAnimator().isAnimating())
         s.vars->setProperty("quietSince", now);
-    const bool quiet = now - static_cast<double>(s.vars->getProperty("quietSince")) >= 100.0;
+    // The window must also have stopped changing: a fade on a VBlank driver (the status bar's message) is no desktop
+    // animation, and a check that ended in its tail started the next watch on a picture still mid-fade.
+    if (now - w.lastChangeMs < kQuietMs && now - w.startMs < ms + kQuietGiveUpMs)
+        s.vars->setProperty("quietSince", now);
+    const bool quiet = now - static_cast<double>(s.vars->getProperty("quietSince")) >= kQuietMs;
     if (!(now - w.startMs >= ms && quiet && attempt >= 3)) {
         if (now - static_cast<double>(s.vars->getProperty("start")) > settleMs + ms)
             return StepResult::failed("not idle after " + juce::String(settleMs + ms) + " ms");

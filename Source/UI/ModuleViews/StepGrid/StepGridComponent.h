@@ -127,6 +127,8 @@ public:
     void stepMotionForTest(double ms);
     /** How dark the Steps shade over `step` is right now: 0 plays, 1 is past Steps, in between while it slides. */
     float dimAmountForTest(int step) const { return dimAmount(step); }
+    /** The pitch step `step`'s bar is drawn at right now: between the old and the new note while a glide runs. */
+    float drawnPitchForTest(int step) const { return shownPitch(step); }
     /** The opacity (0..1) of the written-note outline of `step` while undo, redo or Fit glide it: `fromSide` is the one
      *  fading out (the old note), otherwise the one fading in (the current note). */
     float writtenOutlineAlpha(int step, bool fromSide) const;
@@ -184,6 +186,7 @@ private:
     void startGlide(const SequencerPattern& from);
     void startGlide(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose);
     void startDim();
+    void captureDrawnAsGlideStart(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose);
     float glideMix(int step) const;
     float dimAmount(int step) const;
 
@@ -312,6 +315,14 @@ private:
     float dimT_ = 1.0f;
     MusicalScale glideFromScale_; ///< the scale the glide's old pattern was played through
     int glideFromTranspose_ = 0;
+    /** A glide that interrupts a running one starts from what is DRAWN at that moment, not from the old pattern: these
+     *  hold each step's drawn pitch and lane values then (valid while fromDrawn_). */
+    bool fromDrawn_ = false;
+    std::array<float, kMaxSequencerSteps> fromPitch_{};
+    std::array<std::array<float, kMaxSequencerSteps>, kSequencerLaneCount> fromNormal_{};
+    int glideStarts_ = 0;        ///< counts startGlide calls, so one poll can tell a glide began in it
+    bool glideThisPoll_ = false; ///< a pattern glide already began in this card tick
+    bool inPatternSync_ = false; ///< syncPattern is running (it starts its own glide)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridComponent)
 };

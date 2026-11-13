@@ -94,6 +94,31 @@ TEST(CardLayoutQuickEdit, RightClickHideFromCardFoldsTheKnobAwayAndOneUndoBrings
     EXPECT_TRUE(canvas.card(id)->getCardBody()->hasMoreRow());
 }
 
+// The edit runs in the bracket undo and redo use, so a forward Hide from card moves like its undo (the rebuilt card
+// glides and the controls and jack rows it changed fade) instead of landing in one frame.
+TEST(CardLayoutQuickEdit, HideFromCardGlidesTheCardLikeItsUndo) {
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    synth::ui::setReducedMotionForTest(false);
+    {
+        CardCanvas canvas;
+        const auto id = canvas.add(std::make_unique<FilterModule>(), 0, 0);
+        canvas.editor.updateComponents();
+        auto& glide = canvas.editor.getCardGlideForTest();
+        glide.setForceAnimateForTest(true); // not on screen: the glide is what is under test
+
+        pickFromControlMenu(canvas, id, "cutoff", "Hide from card");
+        EXPECT_TRUE(glide.isLive()) << "the card the edit rebuilt is animating";
+        canvas.editor.finishCardGlideForTest();
+        EXPECT_FALSE(glide.isLive());
+
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        pickFromControlMenu(canvas, id, "resonance", "Hide from card");
+        EXPECT_FALSE(glide.isLive()) << "Animations Off lands at once";
+    }
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
 TEST(CardLayoutQuickEdit, ShowOnCardFromTheMoreRowPutsTheControlBackWhereItWas) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<FilterModule>(), 0, 0);

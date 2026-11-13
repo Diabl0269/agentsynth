@@ -95,10 +95,11 @@ juce::Point<float> MinimapComponent::mapToWorld(juce::Point<float> mapPoint, juc
 //==============================================================================
 juce::Rectangle<float> MinimapComponent::getMapArea() const { return getLocalBounds().toFloat().reduced(4.0f); }
 
-void MinimapComponent::navigateTo(juce::Point<float> localPos) {
-    if (!onNavigate)
+void MinimapComponent::navigateTo(juce::Point<float> localPos, bool press) {
+    const auto& handler = press && onNavigateEased ? onNavigateEased : onNavigate;
+    if (!handler)
         return;
-    onNavigate(mapToWorld(localPos, computeWorldBounds(model_), getMapArea()));
+    handler(mapToWorld(localPos, computeWorldBounds(model_), getMapArea()));
 }
 
 //==============================================================================
@@ -194,8 +195,8 @@ void MinimapComponent::paintNodesAndCables(juce::Graphics& g, const juce::Affine
 }
 
 //==============================================================================
-void MinimapComponent::mouseDown(const juce::MouseEvent& e) { navigateTo(e.position); }
-void MinimapComponent::mouseDrag(const juce::MouseEvent& e) { navigateTo(e.position); }
+void MinimapComponent::mouseDown(const juce::MouseEvent& e) { navigateTo(e.position, true); }
+void MinimapComponent::mouseDrag(const juce::MouseEvent& e) { navigateTo(e.position, false); }
 
 void MinimapComponent::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) {
     if (onZoom)

@@ -22,16 +22,16 @@ steps:
   - screenshot: {id: keyPickerPanel, name: song-key-first-open}
   - key: {keys: escape, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
-  - click: {id: timelineTransportSongKey}
+  - click: {id: timelineTransportSongKey, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
   - screenshot: {id: keyPickerPanel, name: song-key-second-open}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: timelineTransportSongKey, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - key: {keys: escape}
+  - key: {keys: escape, instant: "the status bar text changes (plugin scan progress)"}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
-  - click: {id: New empty project}
+  - click: {id: New empty project, instant: "the keyboard focus outline moves to the canvas panel"}
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}

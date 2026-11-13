@@ -292,3 +292,98 @@ TEST(ToastComponentTests, TheScreenReaderHearsTheSeverityBeforeTheMessage) {
     f.toast.show("Low disk space", {}, {}, {}, Severity::warning);
     EXPECT_EQ(f.toast.getTitle(), "Warning: Low disk space");
 }
+
+namespace {
+struct ScopedFullMotion {
+    ScopedFullMotion() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+        synth::ui::setReducedMotionForTest(false);
+    }
+    ~ScopedFullMotion() {
+        synth::ui::setReducedMotionForTest(std::nullopt);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+    }
+};
+} // namespace
+
+// A toast already on screen that a new one replaces (a second hotkey toast, an error after an info) used to swap its
+// text and width in one frame; the width glides and the content cross-fades.
+TEST(ToastComponentTests, AToastReplacedWhileShownGlidesItsWidthAndCrossFadesInsteadOfSwappingInOneFrame) {
+    ScopedFullMotion motion;
+    ToastFixture f;
+    f.toast.show("Follow: Smooth");
+    f.toast.finishMotionForTest();
+    ASSERT_FLOAT_EQ(f.toast.getProgressForTest(), 1.0f);
+    const int oldWidth = f.toast.getWidth();
+
+    f.toast.show("Cannot connect: an output to an output is not a cable", {}, {}, {},
+                 synth::ui::ToastComponent::Severity::error);
+    ASSERT_TRUE(f.toast.isSwapRunningForTest());
+    EXPECT_FLOAT_EQ(f.toast.getSwapMixForTest(), 0.0f) << "frame 0 still shows the old content";
+    EXPECT_EQ(f.toast.getWidth(), oldWidth) << "frame 0 is as wide as the toast that was there";
+    EXPECT_FLOAT_EQ(f.toast.getProgressForTest(), 1.0f) << "it does not slide in again, it was already there";
+
+    f.toast.stepSwapForTest(40.0);
+    EXPECT_GT(f.toast.getSwapMixForTest(), 0.0f);
+    EXPECT_LT(f.toast.getSwapMixForTest(), 1.0f);
+    EXPECT_GT(f.toast.getWidth(), oldWidth) << "partway to the wider toast";
+
+    f.toast.finishMotionForTest();
+    EXPECT_FALSE(f.toast.isSwapRunningForTest());
+    EXPECT_FLOAT_EQ(f.toast.getSwapMixForTest(), 1.0f);
+    const int newWidth = f.toast.getWidth();
+    EXPECT_GT(newWidth, oldWidth + 40);
+}
+
+TEST(ToastComponentTests, TheActionOfAReplacedToastFadesInAndOutAndNeverClicksWhileLeaving) {
+    ScopedFullMotion motion;
+    ToastFixture f;
+    int runs = 0;
+    f.toast.show("Made 4 modules poly", "Undo", [&] { ++runs; }, "Undo this change");
+    f.toast.finishMotionForTest();
+    f.toast.show("Saved");
+    ASSERT_TRUE(f.toast.isSwapRunningForTest());
+    auto& action = f.toast.getActionButton();
+    EXPECT_TRUE(action.isVisible()) << "the old action stays while it fades out";
+    bool clicksSelf = true, clicksChildren = true;
+    action.getInterceptsMouseClicks(clicksSelf, clicksChildren);
+    EXPECT_FALSE(clicksSelf) << "and cannot be pressed, it no longer runs anything";
+    f.toast.stepSwapForTest(40.0);
+    EXPECT_LT(action.getAlpha(), 1.0f);
+    EXPECT_GT(action.getAlpha(), 0.0f);
+    f.toast.finishMotionForTest();
+    EXPECT_FALSE(action.isVisible());
+    EXPECT_EQ(runs, 0);
+
+    f.toast.show("Made 2 modules mono", "Undo", [&] { ++runs; }, "Undo this change");
+    ASSERT_TRUE(f.toast.isSwapRunningForTest());
+    EXPECT_FLOAT_EQ(action.getAlpha(), 0.0f) << "an arriving action fades in";
+    f.toast.finishMotionForTest();
+    EXPECT_FLOAT_EQ(action.getAlpha(), 1.0f);
+}
+
+TEST(ToastComponentTests, AReplacedToastFadesWithoutGlidingUnderReducedMotionAndLandsAtOnceWithAnimationsOff) {
+    ScopedFullMotion motion;
+    {
+        ToastFixture f;
+        f.toast.show("one");
+        f.toast.finishMotionForTest();
+        synth::ui::setReducedMotionForTest(true);
+        const int w = f.toast.getWidth();
+        f.toast.show("a message that is a good deal longer than the first");
+        ASSERT_TRUE(f.toast.isSwapRunningForTest());
+        EXPECT_GT(f.toast.getWidth(), w) << "Reduce Motion: the width lands at once, only the content fades";
+        f.toast.finishMotionForTest();
+    }
+    synth::ui::setReducedMotionForTest(false);
+    {
+        ToastFixture f;
+        f.toast.show("one");
+        f.toast.finishMotionForTest();
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        f.toast.show("two, different");
+        EXPECT_FALSE(f.toast.isSwapRunningForTest());
+        EXPECT_FLOAT_EQ(f.toast.getSwapMixForTest(), 1.0f);
+    }
+}

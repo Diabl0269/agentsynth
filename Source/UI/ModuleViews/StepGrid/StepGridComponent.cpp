@@ -213,6 +213,11 @@ void StepGridComponent::syncSettings() {
             dimToSteps_ = seenSteps_; // the first dim starts from the Steps the card was drawn with
         startDim();
     }
+    // A new key moves every note the steps play: the bars glide from where the old scale put them (undo and redo of a
+    // key change included). A glide a pattern change just started this poll already knows the old scale.
+    const bool glideKey = scaleChanged && seenRoot_ >= 0 && !inPatternSync_ && !glideThisPoll_;
+    const auto fromScale = scale_;
+    const int fromTranspose = transpose_;
     seenSteps_ = steps;
     seenTranspose_ = t;
     seenRoot_ = r;
@@ -220,6 +225,8 @@ void StepGridComponent::syncSettings() {
     transpose_ = t;
     if (scaleChanged)
         rebuildScale();
+    if (glideKey)
+        startGlide(module_.getPattern(), fromScale, fromTranspose);
     refreshPitchRange();
     updatePages();
     repaint();
@@ -235,8 +242,11 @@ void StepGridComponent::syncPattern() {
     const int fromTranspose = transpose_;
     lastSeen_ = module_.getPattern();
     seenGeneration_ = generation;
-    if (lastSeen_.customMask != seenMask_)
+    if (lastSeen_.customMask != seenMask_) {
+        inPatternSync_ = true; // the glide below carries the old scale; the key change must not start its own
         syncSettings();
+        inPatternSync_ = false;
+    }
     refreshPitchRange();
     syncOpenRandomizePanel();
     startGlide(from, fromScale, fromTranspose);
@@ -244,7 +254,9 @@ void StepGridComponent::syncPattern() {
 }
 
 void StepGridComponent::poll() {
+    const int startsBefore = glideStarts_;
     syncPattern();
+    glideThisPoll_ = glideStarts_ != startsBefore;
     syncSettings();
     updateToolAvailability();
     const bool running = runParam_ != nullptr && runParam_->get();
