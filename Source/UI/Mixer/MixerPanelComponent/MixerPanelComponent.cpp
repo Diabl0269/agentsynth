@@ -596,6 +596,7 @@ void MixerPanelComponent::visibilityChanged() {
         rebuild();
     else if (staleCheckPending_) {
         staleCheckPending_ = false;
+    noteKeyboardMoved(); // hidden: no ring; shown again: the ring only if the keys are back on the panel
         rebuildIfStale();
     }
 }

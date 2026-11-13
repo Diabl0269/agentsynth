@@ -431,6 +431,9 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
 std::vector<juce::Component*> MixerPanelComponent::topBarStops() {
     auto stops = toolbar_.getKeyStops();
     stops.push_back(&zonesPane_.getFilterField());
+    // No event can leave a ring that lies: a paint that finds the keys elsewhere takes the ring down (and repaints).
+    if (isKeyboardAwayNow() != keyboardAway_)
+        noteKeyboardMoved();
     for (auto chip : {MixerZonesPane::Chip::All, MixerZonesPane::Chip::Tracks, MixerZonesPane::Chip::Buses})
         stops.push_back(&zonesPane_.getChip(chip));
     if (masterColumn_ != nullptr)
