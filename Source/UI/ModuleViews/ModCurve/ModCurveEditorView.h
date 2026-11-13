@@ -21,10 +21,15 @@ public:
     /** Runs when the attenuverter is gone (deleted, or undone away). */
     std::function<void()> onTargetGone;
 
+    /** Shows the right-click point menu (a seam for tests: it sees the menu and the screen area it opens at); unset
+     *  opens it at the pointer. */
+    std::function<void(juce::PopupMenu&, juce::Rectangle<int>)> showMenu;
+
     void resized() override;
 
 private:
     void pushToTarget();
+    void showPointMenu(const juce::MouseEvent& e, CurveHitResult hit);
 
     std::shared_ptr<ModCurveEditTarget> target_;
     CurveEditorComponent editor_;

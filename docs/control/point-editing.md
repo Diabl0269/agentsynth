@@ -10,7 +10,7 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 |---|---|---|
 | Curve editor (`CurveEditorComponent`) | Envelope and LFO card curves, the Custom filter and LFO shape window | Free mode takes every key; a Fixed (envelope-shaped) curve has no insert, duplicate, paste or delete, and a pinned axis never moves. [`layout/visualizers.md`](../layout/visualizers.md) |
 | Automation and modulation lanes (`AutomationLaneEditor`) | Under each track | Points have a beat and a value; insert needs a next point. [`timeline/automation.md`](../timeline/automation.md) |
-| Mod curve editor (`ModCurveEditorView`, a `CurveEditorComponent` writing through its edit target) | The attenuverter's response curve | The curve editor's keys and mouse; a right-click on a point removes it at once, with no menu. |
+| Mod curve editor (`ModCurveEditorView`, a `CurveEditorComponent` writing through its edit target) | The attenuverter's response curve | The curve editor's keys and mouse; double-click empty space or the line adds a dot, double-click a dot removes it, and a right-click on a dot opens the shared point menu (Delete Point) at it. |
 | EQ curve (`EQCurveComponent`) | The Parametric EQ card | Points are the enabled bands (frequency along the line, gain up it); one band is selected, Delete switches it off and the selection stays on it. A band has no copy. |
 
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move

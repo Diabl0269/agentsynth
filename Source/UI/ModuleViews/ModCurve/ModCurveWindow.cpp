@@ -48,9 +48,9 @@ popup_motion::Style motionStyle(juce::Component::SafePointer<juce::Component> an
 } // namespace
 
 juce::String ModCurveWindowContent::hintText() {
-    return "Click the line to add a point. Drag a point to move it. Right-click a point to remove it. Drag the ring on "
-           "a "
-           "sloping segment to bend it. Snap rounds points to the grid; hold Shift to place them freely.";
+    return "Double-click to add a point; double-click a point to remove it. Drag a point to move it, or right-click it "
+           "for more. Drag the ring on a sloping segment to bend it. Snap rounds points to the grid; hold Shift to "
+           "place them freely.";
 }
 
 int ModCurveWindowContent::gridDivisions(const juce::String& itemText) {

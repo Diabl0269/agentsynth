@@ -172,7 +172,7 @@ mapper, and an untrusted apply resolves a bad one to linear.
 Every place edits that one curve through `ModCurveEditTarget` (a node id and the editor, never a processor pointer, so a
 deleted node is a safe no-op and a safe close):
 
-- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode with line-click editing, a draggable
+- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode (double-click the line to add a point, double-click a point to remove it, right-click a point for its menu), a draggable
   middle bend handle, the chips Linear / Exp / Log / S-curve, two range handles on the left edge (min and max output,
   Up/Down 1 percent, Shift 10), saved presets ("Load", "Save...") and Enlarge. Enlarge opens a window titled
   "Curve: <source> to <destination>" with a big editor, the chips, a Snap toggle and a Grid box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
