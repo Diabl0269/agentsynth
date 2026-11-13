@@ -197,15 +197,19 @@ void expectFirstDotPaintedWhole(CurveEditorComponent& editor, const juce::String
 
 std::set<juce::String> registeredUsers() {
     return {"Graph/CardBody/CardBodyViews.cpp", "Graph/ModuleComponent/ModuleComponentLfoCard.cpp",
-            "Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h", "ModuleViews/ModCurve/ModCurveEditorView.h",
+            "Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h", "ModuleViews/ModCurve/ModCurveEditorView.cpp",
             "ModuleViews/ShapeEditor/ShapeListEditor.h"};
 }
 
 } // namespace
 
 TEST_F(ModuleComponentTest, EveryCurveEditorUserIsCoveredByTheEdgeDotGuard) {
-    auto root = juce::File::getCurrentWorkingDirectory().getChildFile(__FILE__).getParentDirectory();
-    while (root.getParentDirectory() != root && !root.getChildFile("Source/UI").isDirectory())
+    // The checkout that holds this very test file, found from the working directory upwards: a plain "first
+    // directory with Source/UI" walk lands in an enclosing checkout when the tests run from a worktree's root.
+    auto root = juce::File::getCurrentWorkingDirectory();
+    const juce::String thisTest = "Tests/UI/ModuleViews/ModCurve/ModCurveEntryPointTests.cpp";
+    while (root.getParentDirectory() != root &&
+           !(root.getChildFile("Source/UI").isDirectory() && root.getChildFile(thisTest).existsAsFile()))
         root = root.getParentDirectory();
     const auto source = root.getChildFile("Source/UI");
     ASSERT_TRUE(source.isDirectory()) << source.getFullPathName();
