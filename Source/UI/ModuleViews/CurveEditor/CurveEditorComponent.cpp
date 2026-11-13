@@ -1,4 +1,5 @@
 #include "CurveEditorComponent.h"
+#include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -193,11 +194,7 @@ void CurveEditorComponent::dragBendBy(int segment, float deltaPixelsY) {
     if (startLevel == endLevel)
         return; // flat segment: bend has no visible effect
 
-    // Dragging toward the side the curve already bulges increases the bulge, for both a rising
-    // and a falling segment: rising (end > start) bulges upward for a positive bend (the curve
-    // reads closer to `end` at the midpoint, which is the higher value), so dragging UP (negative
-    // pixelsY) should increase bend; falling is the mirror image.
-    const float directionSign = (endLevel >= startLevel) ? -1.0f : 1.0f;
+    const float directionSign = upwardBendSign(startLevel, endLevel);
     const float bendDelta = directionSign * (deltaPixelsY / kBendSensitivityPx) * 2.0f;
     const float newBend = juce::jlimit(-1.0f, 1.0f, model_.getBend(segment) + bendDelta);
 

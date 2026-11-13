@@ -6,12 +6,14 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -26,6 +28,7 @@ namespace synth::ui {
 AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     : viewState_(viewState) {
     setComponentID("automationLaneEditor");
+    holdBlend_ = std::make_unique<LaneHoldBlend>(*this);
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
     setTitle("Automation curve");
@@ -48,8 +51,9 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and
     // `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
-    // shows and `holdSegments` how many segments are Hold and `dotsOutsideView` how many dots are drawn outside the
-    // lane.
+    // shows and `holdSegments` how many segments are Hold; `dotsOutsideView` how many dots are drawn outside the
+    // lane; `firstBend` how the first segment bends (`up`, `down`, `straight` or `step`) and `bendHold` whether a
+    // segment bend drag is showing a Hold now.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -70,6 +74,8 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("selectedInView", inView);
         into.setProperty("holdSegments", holds);
         into.setProperty("dotsOutsideView", dotsOutsideView());
+        into.setProperty("firstBend", firstSegmentBend());
+        into.setProperty("bendHold", dragMode_ == DragMode::TensionScrub && previewHold_);
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -354,9 +360,7 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         pts = replacePoints(pts, stretchRemoveBeats(stretch_.original(), stretch_.result()),
                             stretchAddPoints(stretch_.result()));
     } else if (dragMode_ == DragMode::TensionScrub) {
-        for (auto& p : pts)
-            if (p.beat == tensionSegLeftBeat_)
-                p.tension = previewTension_;
+        applyBendPreview(pts, previewHold_);
     }
 
     const juce::Colour curveColour = getResolvedCurveColour();
@@ -368,6 +372,10 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         // A delete, undo or paste re-forms the curve: the old shape fades out as the new one fades in.
         strokeCurve(g, glide_.before(), lane, curveColour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
         strokeCurve(g, pts, lane, curveColour.withMultipliedAlpha(glide_.amount()), 1.5f);
+        return;
+    }
+    if (dragMode_ == DragMode::TensionScrub) {
+        paintBendPreview(g, pts, lane, curveColour.brighter(0.4f));
         return;
     }
     strokeCurve(g, pointTween_.isAnimating() ? tweenedPoints(pts) : pts, lane,
@@ -575,11 +583,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
             previewValue_ = dragOriginalValue_;
             showBubbleAt(viewState_.xToBeat((double)pos.x), previewValue_);
         } else if (auto segIdx = onCurve(pos) ? hitTestSegmentLeftIndex(pos.x) : std::nullopt) {
-            const auto* lane = doc_->getLane(laneId_);
-            dragMode_ = DragMode::TensionScrub;
-            tensionSegLeftBeat_ = lane->points[(size_t)*segIdx].beat;
-            tensionOriginal_ = lane->points[(size_t)*segIdx].tension;
-            previewTension_ = tensionOriginal_;
+            beginBendDrag(*segIdx, pos);
         } else {
             selection_.pressEmpty(pos, e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown());
             boxAnchorBeat_ = viewState_.xToBeat((double)pos.x);
@@ -627,11 +631,9 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
         previewValue_ = clampValue(dragOriginalValue_ + yToValue(pos.y) - yToValue(mouseDownPos_.y));
         showBubbleAt(viewState_.xToBeat((double)pos.x), previewValue_);
         break;
-    case DragMode::TensionScrub: {
-        const double delta = ((double)mouseDownPos_.y - (double)pos.y) * 0.01;
-        previewTension_ = juce::jlimit(-1.0f, 1.0f, tensionOriginal_ + (float)delta);
+    case DragMode::TensionScrub:
+        dragBend(e);
         break;
-    }
     case DragMode::Pencil:
         pencilSamples_.push_back({viewState_.xToBeat((double)pos.x), clampValue(yToValue(pos.y))});
         break;
@@ -685,29 +687,9 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
         }
         break;
     }
-    case DragMode::TensionScrub: {
-        if (std::abs((double)previewTension_ - (double)tensionOriginal_) > 1e-6) {
-            const double beat = tensionSegLeftBeat_;
-            const float tension = previewTension_;
-            double value = 0.0;
-            int curve = static_cast<int>(synth::BreakpointCurve::Linear);
-            if (const auto* lane = doc_->getLane(laneId_))
-                for (const auto& bp : lane->points)
-                    if (bp.beat == beat) {
-                        value = bp.value;
-                        curve = bp.curve;
-                        break;
-                    }
-            auto mutate = [this, laneId, beat, value, tension, curve] {
-                doc_->addBreakpoint(laneId, beat, value, tension, curve);
-            };
-            if (undoManager_)
-                undoManager_->recordTimelineChange(*doc_, mutate);
-            else
-                mutate();
-        }
+    case DragMode::TensionScrub:
+        commitBend();
         break;
-    }
     case DragMode::Pencil: {
         if (pencilSamples_.size() >= 2) {
             double lo = pencilSamples_.front().beat;

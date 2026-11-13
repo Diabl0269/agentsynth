@@ -25,6 +25,11 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/PointEditing/PointGroupMove.cpp
     Source/UI/Layout/PointEditing/PointScale.h
     Source/UI/Layout/PointEditing/PointScale.cpp
+    Source/UI/Layout/PointEditing/SegmentBendDrag.h
+    Source/UI/Layout/PointEditing/SegmentBendDrag.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LaneHoldBlend.cpp
+    Source/UI/Timeline/AutomationLaneEditorBendDrag.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorBoxSelect.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorScale.cpp
     Source/UI/Layout/PointEditing/PointClipboard.h

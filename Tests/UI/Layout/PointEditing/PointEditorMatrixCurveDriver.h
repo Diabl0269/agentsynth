@@ -59,6 +59,22 @@ public:
     }
     bool key(int code, int mods) override { return curve().keyPressed(keyOf(code, mods)); }
 
+    // The first bendable segment that rises (or falls); the press lands on its bend handle.
+    std::optional<SegmentProbe> segment(bool rising) override {
+        auto& c = curve();
+        const auto& model = c.getModel();
+        const synth::ui::CurveEditorGeometry geometry(model, c.getLocalBounds().toFloat(), geometryConfig());
+        for (int seg = 0; seg < model.getNumSegments(); ++seg) {
+            const double start = model.getNode(seg).y, end = model.getNode(seg + 1).y;
+            const auto handle = geometry.bendHandlePosition(seg);
+            if (!handle || (end > start) != rising)
+                continue;
+            return SegmentProbe{*handle, [&c, seg] { return (double)c.getModel().valueAt(seg, 0.5f); },
+                                (start + end) * 0.5};
+        }
+        return std::nullopt;
+    }
+
     std::optional<HoldHooks> hold() override {
         auto& c = curve();
         HoldHooks h;
