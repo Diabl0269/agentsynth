@@ -42,6 +42,8 @@ public:
     void refresh();
     /** Closes the box (onClose) when its attenuverter has vanished; cheap enough for a 30 Hz tick. */
     void tick() { view_.refreshFromTarget(); }
+    /** Where a panel with its own Tab order walks the whole box (its controls in the box's own child order). */
+    void setTabOrder(int order);
     /** Gives the keyboard to the first control. */
     void focusFirstControl();
 

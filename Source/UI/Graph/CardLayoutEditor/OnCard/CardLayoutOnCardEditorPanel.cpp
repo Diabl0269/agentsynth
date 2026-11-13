@@ -12,6 +12,8 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/ModCurve/ModCurveEditTarget.h"
+#include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 #include <utility>
 
 namespace synth::ui {
@@ -75,6 +77,18 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
         if (auto* e = self.getComponent())
             e->changeMacroKnob(paramId, std::nullopt, bipolar);
     };
+    panel->onXYPartner = [self, paramId](const juce::String& yParamId) {
+        if (auto* e = self.getComponent())
+            e->editControl(paramId, [paramId, yParamId](CardLayout l, std::optional<int> section) {
+                return withXYPartner(std::move(l), paramId, yParamId, section);
+            });
+    };
+    panel->onButtonMode = [self, paramId](bool momentary) {
+        if (auto* e = self.getComponent())
+            e->editControl(paramId, [paramId, momentary](CardLayout l, std::optional<int> section) {
+                return withButtonMomentary(std::move(l), paramId, momentary, section);
+            });
+    };
     panel->onRange = [self, paramId](std::optional<juce::Range<double>> range) {
         if (auto* e = self.getComponent())
             e->editControl(paramId, [paramId, range](CardLayout l, std::optional<int> section) {
@@ -90,6 +104,20 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
             e->closePanel();
     };
     panel->setOptions(*options);
+    // A Macros knob's response curve: the small box inside the panel; Enlarge closes the panel and opens the window.
+    if (options->macroKnob.has_value())
+        if (auto* graph = graphEditor_.getComponent()) {
+            panel->setCurveTarget(ModCurveEditTarget::forMacroKnob(*graph, nodeId_, options->macroKnob->index));
+            panel->onEnlargeCurve = [self, index = options->macroKnob->index] {
+                auto* e = self.getComponent();
+                auto* g = e != nullptr ? e->graphEditor_.getComponent() : nullptr;
+                if (g == nullptr)
+                    return;
+                const auto bank = e->nodeId_;
+                e->closePanel();
+                openModCurveWindow(ModCurveEditTarget::forMacroKnob(*g, bank, index), g);
+            };
+        }
     panel_ = panel.get();
     panelParamId_ = paramId;
     launchPanel(std::move(panel), screenAreaOf(*outline));
@@ -100,6 +128,20 @@ void CardLayoutOnCardEditor::addMacroKnobOptions(ControlOptions& options) const 
     const int index = macros != nullptr ? macroIndexOf(options.paramId) : -1;
     if (index >= 0)
         options.macroKnob = ControlOptions::MacroKnob{index, macros->getMacroName(index), macros->isBipolar(index)};
+    if (index < 0 || options.widget != CardWidget::XYPad)
+        return;
+    // The Y axis can be any other macro the bank shows; the one the layout names is selected.
+    ControlOptions::XYPartner partner;
+    for (int i = 0; i < macros->getMacroCount(); ++i) {
+        if (i == index)
+            continue;
+        const auto id = "macro" + juce::String(i + 1);
+        if (options.yParamId == id)
+            partner.selected = (int)partner.ids.size();
+        partner.ids.push_back(id);
+        partner.names.add(macros->getMacroName(i));
+    }
+    options.xyPartner = std::move(partner);
 }
 
 // A Macros knob's name or polarity is the module's own state, so it is written to the module (not the layout) as one

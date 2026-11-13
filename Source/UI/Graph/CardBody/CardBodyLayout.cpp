@@ -9,10 +9,15 @@
 #include "CardBodyViews.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Graph/CardWidgets/CardXYPad.h"
 #include <algorithm>
 #include <limits>
 
 namespace synth {
+
+static_assert(cardbody::kXYPadWidth == synth::ui::CardXYPad::kSize &&
+                  cardbody::kXYPadHeight == synth::ui::CardXYPad::kHeight,
+              "the pad cell is the pad");
 
 namespace {
 
@@ -71,6 +76,10 @@ int naturalHeight(Kind kind) {
         return cardbody::kFaderVLongHeight;
     case Kind::FaderH:
         return cardbody::kFaderHHeight;
+    case Kind::XYPad:
+        return cardbody::kXYPadHeight;
+    case Kind::Button:
+        return cardbody::kButtonHeight;
     case Kind::Choice:
     case Kind::Segmented:
     case Kind::Stepper:
@@ -140,6 +149,11 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
     case Kind::FaderVLong:
         return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVLongHeight,
                                        synth::ui::CardFader::kVerticalWidth, y, g, apply);
+    case Kind::XYPad:
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kXYPadHeight, cardbody::kXYPadWidth, y, g, apply);
+    case Kind::Button:
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kButtonHeight, cardbody::kButtonWidth, y, g,
+                                       apply);
     case Kind::FaderH:
         return cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
     case Kind::Segmented:
@@ -366,6 +380,10 @@ int rowCellWidth(Kind kind) {
     case Kind::FaderV:
     case Kind::FaderVLong:
         return 40;
+    case Kind::XYPad:
+        return cardbody::kXYPadWidth;
+    case Kind::Button:
+        return cardbody::kButtonWidth;
     case Kind::View:
         break;
     }
@@ -488,6 +506,10 @@ juce::Point<int> cardBodyCellSize(CardBodyItem::Kind kind, int columns, const ca
         return {gridW, kLabelHeight + kFaderVHeight};
     case Kind::FaderVLong:
         return {gridW, kLabelHeight + kFaderVLongHeight};
+    case Kind::XYPad:
+        return {gridW, kLabelHeight + kXYPadHeight};
+    case Kind::Button:
+        return {gridW, kLabelHeight + kButtonHeight};
     case Kind::FaderH:
         return {g.contentW, kLabelHeight + kFaderHHeight};
     case Kind::Segmented:

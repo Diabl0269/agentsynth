@@ -1,5 +1,5 @@
-// DefaultCardLayoutsMacros.cpp -- the code-default card layout of the Macros bank and its three built-in presets
-// (Row, Grid, Faders). The sixteen knobs are always listed, in macro order: the ones above the Knobs count are
+// DefaultCardLayoutsMacros.cpp -- the code-default card layout of the Macros bank and its four built-in presets
+// (Row, Grid, Faders, XY). The sixteen knobs are always listed, in macro order: the ones above the Knobs count are
 // hidden by the module's own rule (CardBodyPlan.cpp, macroCountRules) and take no room, so a layout keeps its place
 // for them and growing the count brings them back in order. The output jacks are not part of any layout: they stay in
 // the card's right-edge gutter, one per macro.
@@ -30,6 +30,23 @@ CardLayout macrosLayout(CardWidget widget, int columns) {
     return layout;
 }
 
+// Macro 1 as the X axis and macro 2 as the Y axis of an XY pad, under the Knobs count; the other macros stay knobs
+// below it. Macro 2 is listed hidden: the pad stands in for its knob, and its jack stays in the gutter.
+CardLayout xyLayout() {
+    CardParamItem pad;
+    pad.paramId = "macro1";
+    pad.widget = CardWidget::XYPad;
+    pad.yParamId = "macro2";
+    CardLayout layout;
+    layout.sections = {countSection(), section("pad", std::nullopt, {CardItem(pad)}, 1)};
+    std::vector<CardItem> knobs;
+    for (int i = 2; i < MacroControlModule::kMaxMacros; ++i)
+        knobs.push_back(param("macro" + juce::String(i + 1), CardWidget::Knob));
+    layout.sections.push_back(section("macros", std::nullopt, std::move(knobs), 4));
+    layout.hidden.add("macro2");
+    return layout;
+}
+
 } // namespace
 
 // Grid is the default: two rows of four for the standard eight, which reads as a small controller; a bank of 16
@@ -39,6 +56,7 @@ void registerMacroCardLayouts(DefaultCardLayouts& defaults) {
     defaults.addPreset("Macros", "Row", macrosLayout(CardWidget::Knob, 8));
     defaults.addPreset("Macros", "Grid", macrosLayout(CardWidget::Knob, 4));
     defaults.addPreset("Macros", "Faders", macrosLayout(CardWidget::FaderV, 8));
+    defaults.addPreset("Macros", "XY", xyLayout());
 }
 
 } // namespace synth

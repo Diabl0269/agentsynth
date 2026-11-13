@@ -1,0 +1,32 @@
+# The Macros card's Knobs count changes its height: the card glides to the new height instead of snapping, the knobs
+# that go leave and the ones that come grow in, and Cmd+Z glides it back in one step. The `glide` steps film the frames
+# (the glide is 160 ms, one screenshot would catch a blur or the end); each mark sits on the landed state.
+# MacroCountGlide.* covers the frame heights, Reduce Motion and Off headlessly.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: fro1809 macro count height glides
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - screenshot: {name: 1-bank-at-eight}
+  - click: {id: Knobs}
+  # Eight to five keeps two rows of knobs (the card keeps its height); the step to four drops the second row.
+  - key: {keys: down, target: Knobs}
+  - key: {keys: down, target: Knobs}
+  - key: {keys: down, target: Knobs}
+  - wait: {settleMs: 600}
+  - glide: {name: count-down, frames: 14, do: {key: {keys: down, target: Knobs}}}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 2-bank-one-row}
+  - mark: {check: 1, name: card-shrinks-smoothly-as-the-count-drops}
+  - glide: {name: count-up, frames: 14, do: {key: {keys: up, target: Knobs}}}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 3-bank-two-rows}
+  - mark: {check: 2, name: card-grows-smoothly-as-the-count-rises}
+  - glide: {name: undo-glides-back, frames: 14, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 4-after-undo}
+  - mark: {check: 3, name: undo-glides-the-card-back}

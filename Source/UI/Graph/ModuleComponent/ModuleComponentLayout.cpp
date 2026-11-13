@@ -12,6 +12,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -79,8 +80,55 @@ void ModuleComponent::updateLayout() {
         setSize(cardWidth, juce::jmax(getHeight(), 100));
 
     const int bodyHeight = layoutDefaultContent(/*apply*/ false);
-    setSize(cardWidth, std::max(100, bodyHeight));
+    setSize(cardWidth, heightGlide_ ? heightGlide_->heightFor(std::max(100, bodyHeight))
+                                    : std::max(100, bodyHeight)); // the Macros bank's count glides
     resized();
+}
+
+// The Macros bank's height glide (docs/layout/animation.md, "Macros count").
+synth::CardHeightGlide& ModuleComponent::heightGlideForTest() {
+    if (heightGlide_ == nullptr)
+        heightGlide_ = std::make_unique<synth::CardHeightGlide>(*this);
+    return *heightGlide_;
+}
+
+// A Macros bank's height change glides (CardHeightGlide). The neighbours are asked for room as the card is measured at
+// its final height (a growth when the glide starts or is re-aimed higher), and again when it has landed; the routings
+// left on the jacks that vanished go at once. Every other card, and a bank off screen, lands at once like
+// updateLayout().
+bool ModuleComponent::updateLayoutGliding() {
+    if (getType(module) != ModuleType::MacroControl) {
+        updateLayout();
+        return false;
+    }
+    auto& glide = heightGlideForTest();
+    const int from = getHeight();
+    const int aimedBefore = glide.isGliding() ? glide.targetHeight() : from;
+    updateLayout();
+    auto makeRoomAt = [this](int finalHeight) {
+        const int drawn = getHeight();
+        setSize(getWidth(), finalHeight);
+        owner.handleModuleResized(this);
+        setSize(getWidth(), drawn);
+    };
+    if (glide.isGliding()) { // a measure re-aimed it, or an earlier one began it
+        if (glide.targetHeight() > aimedBefore)
+            makeRoomAt(glide.targetHeight());
+        return true;
+    }
+    const int to = getHeight();
+    if (from == to || !glide.canGlide())
+        return false;
+    if (to > from)
+        owner.handleModuleResized(this); // measured at the final height
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    glide.begin(from, to, [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->owner.handleModuleResized(safeThis.getComponent());
+    });
+    if (to < from)
+        owner.handleModuleResized(this); // drawn at the old height: only the routings go now
+    return true;
 }
 
 // Docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): one 16px row per jack

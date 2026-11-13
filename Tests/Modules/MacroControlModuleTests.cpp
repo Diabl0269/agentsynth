@@ -1,5 +1,6 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/MacroControlModule.h"
+#include "Modules/ModCurve.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -324,3 +325,80 @@ TEST(MacroControlModuleFactoryTest, OneMacroCanDriveSeveralDestinationsAtOnce) {
 }
 
 } // namespace
+
+//==============================================================================
+// Per-knob response curve
+//==============================================================================
+
+// A bent curve changes what the knob sends; the other knobs and a straight curve do not.
+TEST_F(MacroControlModuleTest, ABentCurveShapesTheKnobOutputAndOthersStayStraight) {
+    setFloat(macroParam(module, 0), 0.5f);
+    setFloat(macroParam(module, 1), 0.5f);
+    auto straight = renderSettled(module);
+    EXPECT_NEAR(straight.getSample(0, kBlockSize - 1), 0.5f, 1e-3f);
+
+    module.setMacroCurve(0, synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    auto bent = renderSettled(module);
+    const float shaped = bent.getSample(0, kBlockSize - 1);
+    EXPECT_LT(shaped, 0.3f) << "Exp sits below the straight line at the middle";
+    EXPECT_GT(shaped, 0.0f);
+    EXPECT_NEAR(bent.getSample(1, kBlockSize - 1), 0.5f, 1e-3f);
+    EXPECT_NEAR(module.getMacroOutput(0), shaped, 0.02f); // the card's own read agrees with the audio
+    // Render: knob 0.5 through Exp sends the value printed here instead of 0.5.
+    std::cout << "Render: macro1 knob 0.5 linear=0.5 exp=" << shaped << "\n";
+}
+
+// A Bi knob maps the curved 0..1 position to -1..1, so the ends stay at -1 and 1.
+TEST_F(MacroControlModuleTest, ABiKnobCurveKeepsTheEndsAndBendsTheMiddle) {
+    module.getBipolarParameter(0)->setValueNotifyingHost(1.0f);
+    module.setMacroCurve(0, synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    setFloat(macroParam(module, 0), 1.0f);
+    EXPECT_NEAR(renderSettled(module).getSample(0, kBlockSize - 1), 1.0f, 1e-3f);
+    setFloat(macroParam(module, 0), 0.0f);
+    EXPECT_NEAR(renderSettled(module).getSample(0, kBlockSize - 1), -1.0f, 1e-3f);
+    setFloat(macroParam(module, 0), 0.5f);
+    EXPECT_LT(renderSettled(module).getSample(0, kBlockSize - 1), 0.0f); // linear would be 0
+}
+
+// Changing a curve while the module plays stays finite and publishes without a block-size glitch.
+TEST_F(MacroControlModuleTest, ChangingACurveWhilePlayingStaysFinite) {
+    setFloat(macroParam(module, 0), 0.7f);
+    juce::AudioBuffer<float> buffer(MacroControlModule::kMaxMacros, kBlockSize);
+    juce::MidiBuffer midi;
+    for (int i = 0; i < 20; ++i) {
+        module.setMacroCurve(
+            0, synth::ModCurve::preset(i % 2 ? synth::ModCurve::Preset::Log : synth::ModCurve::Preset::SCurve));
+        buffer.clear();
+        module.processBlock(buffer, midi);
+        for (int s = 0; s < kBlockSize; ++s)
+            ASSERT_TRUE(std::isfinite(buffer.getSample(0, s)));
+    }
+}
+
+// The curves are saved by their own key, a straight bank adds no state, and a load puts them back (or straightens).
+TEST_F(MacroControlModuleTest, CurvesRoundTripThroughExtraState) {
+    EXPECT_TRUE(module.getExtraState().isVoid());
+    module.setMacroName(1, "Cutoff");
+    module.setMacroCurve(3, synth::ModCurve::preset(synth::ModCurve::Preset::Log));
+    const auto state = module.getExtraState();
+
+    MacroControlModule copy;
+    const int before = copy.getCurvesRevision();
+    copy.setExtraState(state);
+    EXPECT_EQ(copy.getMacroName(1), "Cutoff");
+    EXPECT_EQ(copy.getMacroCurve(3), synth::ModCurve::preset(synth::ModCurve::Preset::Log));
+    EXPECT_TRUE(copy.getMacroCurve(0).isLinear());
+    EXPECT_GT(copy.getCurvesRevision(), before);
+
+    copy.setExtraState(juce::var());
+    EXPECT_TRUE(copy.getMacroCurve(3).isLinear());
+}
+
+// Automation and MIDI Learn drive the knob's own parameter, which a curve leaves alone.
+TEST_F(MacroControlModuleTest, ACurveLeavesTheKnobParameterAndItsAutomationValueAlone) {
+    module.setMacroCurve(0, synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    auto* knob = macroParam(module, 0);
+    knob->setValueNotifyingHost(0.25f);
+    EXPECT_NEAR(knob->get(), 0.25f, 1e-6f);
+    EXPECT_NEAR(module.getMacroKnob(0), 0.25f, 1e-6f);
+}

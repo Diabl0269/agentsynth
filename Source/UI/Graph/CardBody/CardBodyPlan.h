@@ -12,21 +12,40 @@ namespace synth {
 /** One thing a card body shows: a parameter's widget or a view. */
 struct CardBodyItem {
     /** The widget drawn; each kind lays out as its own run (CardBodyLayout.cpp). */
-    enum class Kind { Choice, Knob, Toggle, View, KnobLarge, FaderV, FaderH, Segmented, Stepper, FaderVLong };
+    enum class Kind {
+        Choice,
+        Knob,
+        Toggle,
+        View,
+        KnobLarge,
+        FaderV,
+        FaderH,
+        Segmented,
+        Stepper,
+        FaderVLong,
+        XYPad,
+        Button
+    };
     /** A vertical fader, short or long. */
     static constexpr bool isVerticalFader(Kind kind) { return kind == Kind::FaderV || kind == Kind::FaderVLong; }
 
     Kind kind = Kind::Knob;
     juce::RangedAudioParameter* param = nullptr; ///< Null for a view.
     CardView view = CardView::Scope;             ///< Meaningful for a view only.
-    juce::Component* widget = nullptr;           ///< Null until built, and always in a measure-only plan.
-    juce::Component* label = nullptr;            ///< The caption above a knob or choice; null otherwise.
-    std::optional<juce::String> caption;         ///< The layout's label override; nullopt = the parameter's name.
-    std::optional<CardCondition> when;           ///< The layout item's condition; nullopt = none.
-    std::optional<juce::Point<int>> at;          ///< The layout item's free position; nullopt = flows.
-    std::optional<juce::Range<double>> range;    ///< The layout item's narrowed range; nullopt = the full one.
-    int section = -1;                            ///< Index into CardBodyPlan::sections; -1 = More or unplaced.
-    int swapGroup = -1;                          ///< Index into CardBodyPlan::swapGroups; -1 = none.
+    /** An XY pad only: the parameter its vertical axis drives (`param` drives the horizontal one). */
+    juce::RangedAudioParameter* partner = nullptr;
+    /** A Button only: held (on while pressed) instead of toggling. */
+    bool momentary = false;
+    /** Stands in an XY pad as its vertical axis: no widget, no cell and no More-row entry of its own. */
+    bool consumed = false;
+    juce::Component* widget = nullptr;        ///< Null until built, and always in a measure-only plan.
+    juce::Component* label = nullptr;         ///< The caption above a knob or choice; null otherwise.
+    std::optional<juce::String> caption;      ///< The layout's label override; nullopt = the parameter's name.
+    std::optional<CardCondition> when;        ///< The layout item's condition; nullopt = none.
+    std::optional<juce::Point<int>> at;       ///< The layout item's free position; nullopt = flows.
+    std::optional<juce::Range<double>> range; ///< The layout item's narrowed range; nullopt = the full one.
+    int section = -1;                         ///< Index into CardBodyPlan::sections; -1 = More or unplaced.
+    int swapGroup = -1;                       ///< Index into CardBodyPlan::swapGroups; -1 = none.
     /** Where else the item sits: one parameter named again in a section that is the other look of the same
      *  alternative group (the ADSR's Sustain, which has no note division, stands in both its looks). The one
      *  widget is placed by whichever of its sections is shown. */
@@ -178,7 +197,8 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
 
 /** The Macros knob a parameter id names ("macro3" is 2), or -1 for any other id. */
 int macroIndexOf(const juce::String& paramId);
-/** Captions every Macros knob in `plan` with its module's own name for it (nothing on any other module). */
+/** Captions every Macros knob in `plan` with its module's own name for it, and an XY pad with both its axes' names
+ *  (nothing on any other module). */
 void applyMacroNames(juce::AudioProcessor& module, CardBodyPlan& plan);
 
 /** True when the card builds its parameter widgets through a CardBody (every built-in module). */

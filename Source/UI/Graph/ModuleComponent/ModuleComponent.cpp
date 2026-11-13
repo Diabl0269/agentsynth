@@ -14,7 +14,6 @@
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Modules/ModSlotHost.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
@@ -23,6 +22,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
@@ -601,13 +601,9 @@ void ModuleComponent::timerCallback() {
             syncLfoCurveFromModule();
     }
     updateLfoWavePlayhead();
-    // A Macros knob renamed by an undo, a redo or a load this card did not make itself.
-    if (auto* macros = dynamic_cast<MacroControlModule*>(module);
-        macros != nullptr && cardBody_ != nullptr && macros->getNamesRevision() != macroNamesSeen_) {
-        macroNamesSeen_ = macros->getNamesRevision();
-        cardBody_->refreshMacroNames();
+    // A Macros knob renamed or re-curved by an undo, a redo or a load this card did not make itself.
+    if (cardBody_ != nullptr && cardBody_->pollMacros())
         repaint();
-    }
     if (morphCard_ != nullptr)
         morphCard_->poll();
     if (instrumentChrome_ != nullptr)

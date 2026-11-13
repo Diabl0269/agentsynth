@@ -162,6 +162,10 @@ int cellHeight(CardBodyItem::Kind kind) {
         return cardbody::kLabelHeight + cardbody::kFaderVHeight;
     case Kind::FaderVLong:
         return cardbody::kLabelHeight + cardbody::kFaderVLongHeight;
+    case Kind::XYPad:
+        return cardbody::kLabelHeight + cardbody::kXYPadHeight;
+    case Kind::Button:
+        return cardbody::kLabelHeight + cardbody::kButtonHeight;
     case Kind::KnobLarge:
         return cardbody::kLabelHeight + cardbody::kKnobLargeHeight;
     case Kind::Knob:
@@ -214,6 +218,7 @@ struct SectionPlacer {
         planned.when = source.when;
         planned.at = source.at;
         planned.range = source.range;
+        planned.momentary = source.momentary;
         if (source.at && !section.footer)
             section.freeform = true;
         if (section.footer)
@@ -259,7 +264,8 @@ CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, c
     if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong) && kind == CardBodyItem::Kind::Choice &&
         section.visibleWhen.has_value() && dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
         kind = p.widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
-    return kind;
+    // A pad needs its partner, which only placeItem binds; any other path draws the knob.
+    return kind == CardBodyItem::Kind::XYPad ? CardBodyItem::Kind::Knob : kind;
 }
 
 // A parameter named again in the other look of an alternative group stands in both looks, each at its own place.
@@ -301,6 +307,19 @@ void placeAlternate(CardBodyPlan& plan, int index, const CardParamItem& source, 
         section.freeform = true;
 }
 
+// An XY pad item draws a pad when its partner exists, is not the pad's own parameter and is not drawn anywhere else;
+// the partner then stands in the pad (no cell, no More-row entry of its own). Any other pad item draws a knob.
+void bindXYPartner(CardBodyPlan& plan, int index, const CardParamItem& source, std::set<int>& named) {
+    const int partner = source.yParamId.has_value() ? plan.findParam(*source.yParamId) : -1;
+    if (partner < 0 || partner == index || named.count(partner) > 0 || plan.items[(size_t)partner].section >= 0 ||
+        plan.items[(size_t)partner].kind != CardBodyItem::Kind::Knob)
+        return;
+    plan.items[(size_t)index].kind = CardBodyItem::Kind::XYPad;
+    plan.items[(size_t)index].partner = plan.items[(size_t)partner].param;
+    plan.items[(size_t)partner].consumed = true;
+    named.insert(partner);
+}
+
 // One layout item: a parameter (its widget, caption, and place unless hidden) or a view. An id the
 // module does not have, or one named a second time (but in an alternative look), is ignored.
 void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const CardItem& item, SectionPlacer& placer,
@@ -320,9 +339,11 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         planned.kind = kindOf(planned, *p, placer.section);
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
-        if (!layout.hidden.contains(p->paramId))
+        if (!layout.hidden.contains(p->paramId)) {
+            if (p->widget == CardWidget::XYPad && planned.kind == CardBodyItem::Kind::Knob)
+                bindXYPartner(plan, index, *p, named);
             placer.place(index, *p);
-        else
+        } else
             named.erase(index);
     } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
         placer.openGroupParam.clear();
@@ -419,7 +440,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     groupAlternatives(plan);
     for (int i = 0; i < (int)plan.items.size(); ++i)
         if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&
-            plan.items[(size_t)i].section < 0)
+            plan.items[(size_t)i].section < 0 && !plan.items[(size_t)i].consumed)
             plan.more.push_back(i);
 }
 
@@ -531,6 +552,10 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
         return continuous ? Kind::FaderVLong : automatic;
     case CardWidget::FaderH:
         return continuous ? Kind::FaderH : automatic;
+    case CardWidget::XYPad:
+        return continuous ? Kind::XYPad : automatic;
+    case CardWidget::Button:
+        return continuous && macroIndexOf(param.paramID) >= 0 ? Kind::Button : automatic;
     case CardWidget::Segmented:
         return (choice != nullptr || isBool(param)) && suitsSegmented(param) ? Kind::Segmented : automatic;
     case CardWidget::Stepper:
@@ -574,6 +599,10 @@ void applyMacroNames(juce::AudioProcessor& module, CardBodyPlan& plan) {
         if (index < 0)
             continue;
         const auto name = macros->getMacroName(index);
+        if (item.kind == CardBodyItem::Kind::XYPad && item.partner != nullptr) {
+            item.caption = name + " / " + macros->getMacroName(macroIndexOf(item.partner->paramID));
+            continue;
+        }
         item.caption = name == MacroControlModule::macroName(index) ? std::nullopt : std::optional(name);
     }
 }

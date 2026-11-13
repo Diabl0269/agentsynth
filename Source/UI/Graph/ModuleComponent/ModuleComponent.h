@@ -34,6 +34,9 @@ class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
 struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
+namespace synth {
+class CardHeightGlide; // Forward declaration -- see UI/Graph/CardBody/CardHeightGlide.h
+}
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
@@ -117,13 +120,13 @@ public:
         return true;
     }
 
-    // The jack's actual colour (preview > stored > tint) -- mirrors paint, so a headless test can read it.
+    // The jack's actual colour (preview > stored > tint), as paint draws it.
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
     bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
-    /** Re-measures the card after its visible port count changed outside a parameter gesture (Audio Input's jacks
-     *  follow the audio device); the same steps applyMacroCountChange takes. */
+    /** Re-measures the card after its visible port count changed outside a parameter gesture. */
     void refreshPortLayout();
+    synth::CardHeightGlide& heightGlideForTest(); // creates it on first use
 
     /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
      *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
@@ -590,7 +593,8 @@ private:
     synth::CardBlockFade scopeFade_;
     synth::CardBlockFade responseFade_;
     std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
-    bool settlingFootprint_ = false; // measuring at the final footprint (CardBlockFade::setShown)
+    bool settlingFootprint_ = false;                      // measuring at the final footprint (CardBlockFade::setShown)
+    std::unique_ptr<synth::CardHeightGlide> heightGlide_; // the Macros bank's height, drawn gliding to its count
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -631,7 +635,6 @@ private:
     synth::CardBlockFade lfoFade_;      // editor + toolbar, fading with their height
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
-    int macroNamesSeen_ = 0;            // the Macros card: the last names revision its captions were set from
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
     synth::ui::RestoreWatch lfoRestoreWatch_;
     int lfoEditedShape_ = 0; // the shape the curve editor shows: the one nearest the morph cursor
@@ -808,6 +811,7 @@ private:
     void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
     /** Hosted-card counterpart for a toggle/choice control (no RangedAudioParameter to key on). */
     void showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName);
+    bool showMacroWidgetMenu(juce::Component& widget); ///< Right-click on an XY pad or button; false for others.
     /** Right-click on a hosted-card KNOB: "Automate..." plus the shared MIDI Learn block. */
     void showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName);
 
@@ -879,19 +883,15 @@ private:
 
     void updateDualIOTooltip();
 
-    // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
-    // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
-    // clear of the new footprint). Message thread only.
-    void applyMacroCountChange();
+    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Knobs" count, the height gliding
+    /** updateLayout() with a Macros bank's height gliding; true when a glide began or runs (room is made). */
+    bool updateLayoutGliding();
 
-    // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
-    // rather than re-deriving the geometry, so content can never land on top of a port label —
-    // which is exactly what happened when two separate copies of the formula drifted apart.
+    // First y below the header, the MIDI row and every visible jack, derived from getPortCenter() so content never
+    // lands on a port label.
     int getContentTopY();
 
-    // Single source of truth for the default (non-Sequencer/ADSR/keyboard) body layout.
-    // apply == false measures only and touches no bounds; apply == true positions the children.
-    // Returns the total height the body needs, including bottom padding.
+    // The default (non-Sequencer/ADSR/keyboard) body layout; apply == false only measures. Returns the height needed.
     int layoutDefaultContent(bool apply);
 
     // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.

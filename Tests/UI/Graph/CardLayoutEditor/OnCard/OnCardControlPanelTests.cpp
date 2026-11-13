@@ -7,13 +7,16 @@
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/MacroControlModule.h"
+#include "Modules/ModCurve.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/MacroCurveGlyph.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/ModuleViews/ModCurve/ModCurveBox.h"
 
 using namespace oncard_test;
 using synth::CardWidget;
@@ -653,8 +656,11 @@ TEST(OnCardMacros, ThePanelOfAMacroKnobHasNameAndPolarityInPlaceOfLabel) {
     EXPECT_TRUE(panel->getPolarityForTest()->getWantsKeyboardFocus());
     const auto panelWalk = synth::test::walkTabOrder(*panel);
     EXPECT_TRUE(panelWalk.isCompleteCycle());
-    EXPECT_EQ(panelWalk.names(),
-              juce::StringArray({"Show as", "Size", "Name", "Polarity", "Minimum", "Maximum", "Hide from card"}));
+    const auto walked = panelWalk.names();
+    EXPECT_EQ(juce::StringArray(walked.strings.begin(), 6),
+              juce::StringArray({"Show as", "Size", "Name", "Polarity", "Minimum", "Maximum"}));
+    EXPECT_TRUE(walked.contains("Enlarge curve editor")) << "the curve box sits between Maximum and Hide";
+    EXPECT_EQ(walked[walked.size() - 1], "Hide from card");
     EXPECT_TRUE(synth::test::auditAccessibility(*panel).empty()) << "Name and Polarity are named, tipped, focusable";
 
     OnCardRig other;
@@ -697,4 +703,49 @@ TEST(OnCardMacros, FlippingAKnobToBiThroughThePanelSwitchIsPerKnobAndOneUndoStep
 
     ASSERT_TRUE(m.undo());
     EXPECT_FALSE(m.macros->isBipolar(1));
+}
+
+// ---- A Macros knob's response curve: the small box in the panel and the glyph on the card ----
+
+TEST(OnCardMacros, TheCurveBoxBendsTheKnobsCurveShowsTheGlyphAndIsOneUndoStep) {
+    MacrosRig m;
+    auto* panel = openControlPanel(m.rig, *m.editor, "macro3");
+    ASSERT_NE(panel, nullptr);
+    auto* box = panel->getCurveBoxForTest();
+    ASSERT_NE(box, nullptr);
+    auto* glyph = synth::MacroCurveGlyph::of(*widgetOf(m.card(), "macro3"));
+    ASSERT_NE(glyph, nullptr);
+    EXPECT_FALSE(glyph->isBent());
+    EXPECT_TRUE(m.macros->getMacroCurve(2).isLinear());
+
+    box->presetChip(1).onClick(); // Exp
+    EXPECT_EQ(m.macros->getMacroCurve(2), synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    EXPECT_TRUE(m.macros->getMacroCurve(0).isLinear()) << "only this knob bends";
+    synth::test::waitUntil([&] { return glyph->isBent(); });
+    EXPECT_TRUE(glyph->isBent());
+    EXPECT_FALSE(synth::MacroCurveGlyph::of(*widgetOf(m.card(), "macro1"))->isBent());
+
+    ASSERT_TRUE(m.undo());
+    EXPECT_TRUE(m.macros->getMacroCurve(2).isLinear()) << "one step takes the curve back";
+    synth::test::waitUntil([&] { return !glyph->isBent(); });
+    EXPECT_FALSE(glyph->isBent());
+}
+
+TEST(OnCardMacros, TheCurveBoxIsReachedByTabBeforeHideIsNamedAndTipped) {
+    MacrosRig m;
+    auto* panel = openControlPanel(m.rig, *m.editor, "macro3");
+    ASSERT_NE(panel, nullptr);
+    ASSERT_NE(panel->getCurveBoxForTest(), nullptr);
+    EXPECT_EQ(panel->getCurveBoxForTest()->enlargeButton().getTitle(), "Enlarge curve editor");
+    EXPECT_FALSE(panel->getCurveBoxForTest()->enlargeButton().getTooltip().isEmpty());
+    const auto walk = synth::test::walkTabOrder(*panel);
+    EXPECT_TRUE(walk.isCompleteCycle());
+    const auto names = walk.names();
+    const int hide = names.indexOf("Hide from card");
+    const int exp = names.indexOf("Exp curve");
+    const int enlarge = names.indexOf("Enlarge curve editor");
+    EXPECT_GE(exp, 0);
+    EXPECT_GE(enlarge, 0);
+    EXPECT_LT(enlarge, hide) << "the curve box is walked before Hide";
+    EXPECT_TRUE(synth::test::auditAccessibility(*panel).empty());
 }
