@@ -632,8 +632,8 @@ public:
 
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
-    /** The "Next Clip" key was pressed; returns false (key not consumed) when the track has no clips. */
-    std::function<bool()> onEnterClipsRequested;
+    /** Next Clip key (false: no clips); Tab with a clip editor open (true: focus went to its grid). */
+    std::function<bool()> onEnterClipsRequested, onTabRequested;
 
     // ---- Binding chip ---------------------------------------------------------
     // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
