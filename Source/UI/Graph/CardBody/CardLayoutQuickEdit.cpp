@@ -172,6 +172,10 @@ bool performCardQuickEdit(GraphEditor& editor, AppUndoManager* undo, juce::Audio
         if (auto* rebuilt = cardFor(editor, nodeId))
             editor.handleModuleResized(rebuilt);
     };
+    // The bracket undo and redo run in, so the edit moves the way its undo does: the rebuilt card glides to its new
+    // size, the controls it moved and its jack rows fade over it, the cards it pushes slide
+    // (docs/layout/undo-glide.md).
+    CardGlideAnimator::Scope glide(editor.getCardGlide(), /*restore=*/true);
     if (undo != nullptr)
         undo->recordStructuralChange(graph, apply);
     else

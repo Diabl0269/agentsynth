@@ -32,7 +32,7 @@ struct ShapeItem {
     }
 };
 
-/** A curve the "Start from" menu can stamp onto a shape. */
+/** A curve the shape window's Pick shape menu can stamp onto a shape. */
 struct ShapeStartFrom {
     juce::String name;
     LfoCustomWave curve;

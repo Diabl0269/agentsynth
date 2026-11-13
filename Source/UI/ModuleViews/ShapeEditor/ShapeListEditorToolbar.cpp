@@ -6,6 +6,8 @@
 #include "ShapeListEditorInternal.h"
 #include "ShapeWindowPrefs.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Layout/ActionTexts.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/ModuleViews/FilterSpectrumAnalyser.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -95,8 +97,9 @@ void ShapeListEditor::buildToolbar(int& order) {
     if (adapter_->getAxisGuides().has_value()) {
         guidesToggle_ = std::make_unique<juce::ToggleButton>("Guides");
         guidesToggle_->setTitle("Guides");
-        guidesToggle_->setTooltip("Guides: show the labelled reference lines (100, 1k, 10k and the dB levels). The "
-                                  "snapping lines of the grid stay");
+        setButtonTooltip(*guidesToggle_,
+                         "Show the labelled reference lines (100, 1k, 10k and the dB levels). The snapping "
+                         "lines of the grid stay");
         guidesToggle_->setWantsKeyboardFocus(true);
         guidesToggle_->setExplicitFocusOrder(order++);
         setTogglePillStyle(*guidesToggle_, true);
@@ -113,11 +116,9 @@ void ShapeListEditor::buildToolbar(int& order) {
     }
 
     if (adapter_->hasSpectrum()) {
-        spectrumToggle_ = std::make_unique<juce::ToggleButton>("Show spectrum");
-        spectrumToggle_->setTitle("Show spectrum");
-        spectrumToggle_->setTooltip(
-            "Show spectrum: draw the filter's output faintly behind the curve, before any volume stage, so a sound "
-            "still running into the filter keeps it moving after the notes stop");
+        spectrumToggle_ = std::make_unique<juce::ToggleButton>(actiontext::kShowSpectrum);
+        spectrumToggle_->setTitle(actiontext::kShowSpectrum);
+        setButtonTooltip(*spectrumToggle_, actiontext::kShowSpectrumFilterTip);
         spectrumToggle_->setWantsKeyboardFocus(true);
         spectrumToggle_->setExplicitFocusOrder(order++);
         setTogglePillStyle(*spectrumToggle_, true);

@@ -246,16 +246,6 @@ int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) 
     return index;
 }
 
-void CurveEditorComponent::setLineClickEditing(bool enabled) { lineClickEditing_ = enabled; }
-
-bool CurveEditorComponent::isOnCurveLine(juce::Point<float> point) const {
-    if (model_.getNumSegments() < 1)
-        return false;
-    const auto geometry = currentGeometry();
-    const auto onLine = geometry.playheadPosition(model_.playheadForX(geometry.timeForX(point.x)));
-    return std::abs(onLine.y - point.y) <= kLineClickSlopPx;
-}
-
 bool CurveEditorComponent::removeNode(int index) {
     if (model_.getMode() != CurveMode::Free)
         return false;
@@ -313,25 +303,6 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
         dragIndex_ = -1;
         if (onContextMenu)
             onContextMenu(e, hit);
-        return;
-    }
-
-    // With line-click editing a press on the line inserts a point and carries on as a drag of it,
-    // all inside one gesture, so a click-and-drag is a single undo step.
-    if (lineClickEditing_ && model_.getMode() == CurveMode::Free && hit.kind == CurveHitKind::None &&
-        isOnCurveLine(e.position)) {
-        dragFrozenRange_ = currentGeometry().getVisibleRange();
-        beginGesture();
-        gestureActive_ = true;
-        const int index = insertPointAt(e.position, e.mods.isShiftDown());
-        dragKind_ = index >= 0 ? DragKind::Node : DragKind::None;
-        dragIndex_ = index;
-        lastDragPos_ = e.position;
-        if (index < 0) {
-            endGesture();
-            gestureActive_ = false;
-            dragFrozenRange_.reset();
-        }
         return;
     }
 
@@ -442,7 +413,7 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         resetBend(hit.index);
         return;
     }
-    if (model_.getMode() != CurveMode::Free || lineClickEditing_)
+    if (model_.getMode() != CurveMode::Free)
         return;
     if (hit.kind == CurveHitKind::Node)
         removeNode(hit.index);

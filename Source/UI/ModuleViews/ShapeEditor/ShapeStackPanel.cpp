@@ -1,6 +1,7 @@
 // ShapeStackPanel.cpp -- the Stack harmonics popover's controls and layout.
 #include "ShapeStackPanel.h"
 #include "PitchGrid.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
@@ -76,10 +77,10 @@ ShapeStackPanel::ShapeStackPanel(const ringhelpers::StackOptions& initial)
     width_.setTooltip("Width: how wide each peak is (Narrow rings the most selectively)");
 
     cancel_.setTitle("Cancel");
-    cancel_.setTooltip("Cancel: close without changing the shape (Esc)");
+    setButtonTooltip(cancel_, "Close without changing the shape (Esc)");
     cancel_.onClick = [this] { closeHostingWindow(*this); };
     stack_.setTitle("Stack");
-    stack_.setTooltip("Stack: replace the selected shape's curve with these peaks. One undo step (Return)");
+    setButtonTooltip(stack_, "Replace the selected shape's curve with these peaks. One undo step (Return)");
     stack_.onClick = [this] {
         if (onStack)
             onStack(getOptions());

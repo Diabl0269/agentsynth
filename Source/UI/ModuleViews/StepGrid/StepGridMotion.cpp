@@ -109,8 +109,13 @@ void StepGridComponent::startPageSlide(float toPage) {
 void StepGridComponent::startGlide(const SequencerPattern& from) { startGlide(from, scale_, transpose_); }
 
 void StepGridComponent::startGlide(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose) {
+    ++glideStarts_;
+    const bool interrupts = gliding_ && FadeVisibility::canAnimateIn(this);
+    if (interrupts)
+        captureDrawnAsGlideStart(from, fromScale, fromTranspose);
     glideAnim_.stop(vblank_);
     gliding_ = false;
+    fromDrawn_ = interrupts;
     if (!FadeVisibility::canAnimateIn(this))
         return;
     glideFrom_ = from;
@@ -127,8 +132,35 @@ void StepGridComponent::startGlide(const SequencerPattern& from, const MusicalSc
         },
         [this] {
             gliding_ = false;
+            fromDrawn_ = false;
             repaint();
         });
+}
+
+// A second glide while the first runs (a second Cmd+Z, a key change under an undo) starts each bar where it is drawn
+// now: `from` is the state the running glide was heading for, so the drawn place is its start moved by its mix.
+void StepGridComponent::captureDrawnAsGlideStart(const SequencerPattern& from, const MusicalScale& fromScale,
+                                                 int fromTranspose) {
+    auto drawn = [this](float start, float target, int step) { return start + (target - start) * glideMix(step); };
+    for (int s = 0; s < kMaxSequencerSteps; ++s) {
+        const auto& oldStart = glideFrom_.steps[(size_t)s];
+        const float startPitch =
+            fromDrawn_
+                ? fromPitch_[(size_t)s]
+                : (float)glideFromScale_.snapPitch(juce::jlimit(0, 127, (int)oldStart.pitch + glideFromTranspose_));
+        const float targetPitch =
+            (float)fromScale.snapPitch(juce::jlimit(0, 127, (int)from.steps[(size_t)s].pitch + fromTranspose));
+        const float pitch = drawn(startPitch, targetPitch, s);
+        std::array<float, kSequencerLaneCount> normals{};
+        for (int lane = 0; lane < kSequencerLaneCount; ++lane) {
+            const float startNormal =
+                fromDrawn_ ? fromNormal_[(size_t)lane][(size_t)s] : laneNormal((SequencerLane)lane, oldStart);
+            normals[(size_t)lane] = drawn(startNormal, laneNormal((SequencerLane)lane, from.steps[(size_t)s]), s);
+        }
+        fromPitch_[(size_t)s] = pitch;
+        for (int lane = 0; lane < kSequencerLaneCount; ++lane)
+            fromNormal_[(size_t)lane][(size_t)s] = normals[(size_t)lane];
+    }
 }
 
 // How far step `step`'s bar has travelled from the old value to the new one (0..1, eased).

@@ -37,8 +37,8 @@ ModCurveBox::ModCurveBox(std::shared_ptr<ModCurveEditTarget> target, ModCurvePre
         addAndMakeVisible(*chip);
         chips_.push_back(std::move(chip));
     }
-    savedButton_.setTitle("Saved curves");
-    savedButton_.setTooltip("Your saved curves");
+    savedButton_.setTitle("Load a saved curve");
+    savedButton_.setTooltip("Load a saved curve");
     savedButton_.onClick = [this] { showSavedMenu(); };
     saveButton_.setTitle("Save curve as preset...");
     saveButton_.setTooltip("Save curve as preset...");

@@ -136,3 +136,10 @@ TEST(AutomationLaunchTest, KeychainPolicyLeavesNormalLaunchOnThePlatformStore) {
     EXPECT_FALSE(synth::applyKeychainPolicyForLaunch({}, {}, {}));
     EXPECT_FALSE(synth::KeychainTokenStore{}.isMemoryOnly());
 }
+
+TEST(AutomationLaunchTest, MuteMetronomeFlagOrEnvIsRequested) {
+    EXPECT_TRUE(synth::isMuteMetronomeRequested(juce::StringArray{"--mute-metronome"}, {}));
+    EXPECT_TRUE(synth::isMuteMetronomeRequested({}, "1"));
+    EXPECT_FALSE(synth::isMuteMetronomeRequested(juce::StringArray{"--no-keychain"}, {}));
+    EXPECT_FALSE(synth::isMuteMetronomeRequested({}, "0"));
+}

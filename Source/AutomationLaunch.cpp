@@ -67,6 +67,10 @@ bool isNoAudioDeviceLaunch(const juce::StringArray& commandLineArgs, const juce:
     return isTruthyEnv(envValue);
 }
 
+bool isMuteMetronomeRequested(const juce::StringArray& commandLineArgs, const juce::String& envValue) {
+    return commandLineArgs.contains(kMuteMetronomeFlag) || isTruthyEnv(envValue);
+}
+
 bool isNoKeychainRequested(const juce::StringArray& commandLineArgs, const juce::String& envValue) {
     return commandLineArgs.contains(kNoKeychainFlag) || isTruthyEnv(envValue);
 }

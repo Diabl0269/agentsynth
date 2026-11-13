@@ -180,6 +180,8 @@ window afresh, and takes the pixels that differ from the "before" picture (outsi
 1%), or when no presented frame shows it at all. A fade or slide has frames in between (`intermediateFrames`). The check
 answers either way; the runner decides.
 
+`popWatchCheck` also waits for the window to stop changing (100 ms with no new presented frame, given up on 500 ms after `ms`), because a fade on a VBlank driver, such as the status bar's message, is no desktop animation and a check that ended in its tail started the next watch on a picture still mid-fade (a pop in the undo step of the first action).
+
 A scenario with `motion: true` runs it around every action that can change the window: `click`, `drag` (the whole drag),
 `key`, `wheel`, `mouseUp`, `keyUp` and a `glide`'s `do`. Not checked: runner steps (`type` makes text appear per key
 by design), `hover`, `mouseDown`, `mouseMoveHeld`, `keyDown`, `openProject`, `saveProject`, `restart`, `quit`, `wait`
@@ -221,6 +223,13 @@ skips ahead), until `audioPump {run: false}`. Nothing is heard. `audioPump {note
 into the next block's MIDI (`down: false` a note-off); it reaches the modules the graph's MIDI input feeds. The pump is
 refused while a real device is running and stops on its own once the main window is gone
 (`Source/TestMode/TestModeAudioPump.cpp`).
+
+The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
+spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
+`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
+reports the loudest point drawn now. No fixture pushes a
+signal into a buffer: a source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
+`ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
 
 ## Scenarios
 

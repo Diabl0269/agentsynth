@@ -198,10 +198,6 @@ public:
      *  node's index, or -1 outside Free mode or when the curve is at CurveModel::kMaxNodes. */
     int addPointAt(juce::Point<float> point, bool bypassSnap = false);
 
-    /** Free mode only. On: a press on the drawn line adds a point (and a drag moves it, as one gesture), and a
-     *  double-click no longer adds or removes points. Off by default. */
-    void setLineClickEditing(bool enabled);
-
     /** Free mode only. Returns false if refused (pinned node, or would drop below 2 nodes) or
      *  outside Free mode. */
     bool removeNode(int index);
@@ -458,9 +454,6 @@ private:
 
     enum class DragKind { None, Node, Bend };
     int insertPointAt(juce::Point<float> point, bool bypassSnap);
-    bool isOnCurveLine(juce::Point<float> point) const;
-    static constexpr float kLineClickSlopPx = 6.0f;
-    bool lineClickEditing_ = false;
 
     DragKind dragKind_ = DragKind::None;
     int dragIndex_ = -1;

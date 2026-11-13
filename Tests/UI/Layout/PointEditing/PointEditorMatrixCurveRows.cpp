@@ -54,6 +54,7 @@ public:
         , view_(target_) {
         view_.setBounds(0, 0, 400, 160);
         view_.editor().setModel(looseCurveModel());
+        view_.showMenu = [](juce::PopupMenu&, juce::Rectangle<int>) {}; // no real popup in a test
     }
     ~ModCurveEditor() override { view_.onTargetGone = nullptr; }
     synth::ui::CurveEditorComponent& curve() override { return view_.editor(); }

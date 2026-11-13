@@ -627,6 +627,7 @@ add_executable(Tests
     UI/Layout/DisclosureChevronTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
+    UI/Layout/SnapToggleButtonTests.cpp
     UI/Layout/ButtonStateEaseTests.cpp
     UI/Layout/SharedChipControlsTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
@@ -737,6 +738,7 @@ add_executable(Tests
     UI/Mixer/MixerAccessibilityTests.cpp
     UI/Accessibility/AccessibilityCoverageTests.cpp
     UI/Accessibility/DialogKeyboardTests.cpp
+    UI/Accessibility/TooltipRulesTests.cpp
     UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp

@@ -16,8 +16,10 @@ namespace synth::ui {
  * on screen. It hides itself ~4 s after the last show() unless the pointer is over it or its action holds the
  * keyboard focus. The action is a real focusable button with a tooltip; it dismisses the toast, then runs.
  *
- * One toast at a time: a second show() replaces the first in place. Message thread only. The parent decides where it
- * sits (placeIn) and must keep it on top of its siblings (show() raises it).
+ * One toast at a time: a second show() replaces the first in place. While the first is on screen the pill glides to
+ * the new width (140 ms, `easeOutCubic`) and the old content (icon, text, bar, border colour, action) cross-fades into
+ * the new; a fade only under Reduce Motion, at once under Animations Off. Message thread only. The parent decides where
+ * it sits (placeIn) and must keep it on top of its siblings (show() raises it).
  */
 class ToastComponent
     : public juce::Component
@@ -27,6 +29,7 @@ public:
     static constexpr double kEnterMs = 170.0;
     static constexpr double kExitMs = 130.0;
     static constexpr double kReducedMs = 80.0;
+    static constexpr double kSwapMs = 140.0;
     static constexpr int kSlidePx = 10;
     static constexpr int kHeight = 36;
     static constexpr int kBottomMargin = 20;
@@ -60,6 +63,13 @@ public:
     juce::Rectangle<int> getTextBoundsForTest() const { return textBounds(); }
     /** The 0..1 shown amount as the animation has it (1 once landed). */
     float getProgressForTest() const noexcept { return progress_; }
+    /** True while a replaced toast's content cross-fades and its width glides. */
+    bool isSwapRunningForTest() const noexcept { return swapping_; }
+    /** 0..1 of the cross-fade (1 once settled): how much of the new content shows. */
+    float getSwapMixForTest() const noexcept { return swapMix_; }
+    /** Advances the swap `ms` after its first frame (an off-screen toast gets no VBlank), and lands every motion. */
+    void stepSwapForTest(double ms) { swapAnim_.stepForTest(ms); }
+    void finishMotionForTest();
     /** Runs the auto-hide as if its time had elapsed. */
     void expireForTest() { timerCallback(); }
 
@@ -73,6 +83,15 @@ private:
     juce::Rectangle<int> textBounds() const;
     void timerCallback() override;
     int preferredWidth() const;
+    struct Face {
+        juce::String message;
+        Severity severity = Severity::info;
+    };
+    void paintFace(juce::Graphics& g, const Face& face, float alpha) const;
+    void startSwap(const Face& leaving, bool actionLeaving, bool actionArriving);
+    void endSwap();
+    void settleSwap();
+    bool hasLiveAction() const { return action_.isVisible() && !actionLeaving_; }
     void applyProgress(float progress);
     void animateTo(bool shown);
     juce::Rectangle<int> restingBounds() const;
@@ -87,6 +106,13 @@ private:
     float progress_ = 0.0f;
     juce::VBlankAnimatorUpdater updater_{this};
     AnimationDriver driver_;
+    AnimationDriver swapAnim_;
+    bool swapping_ = false;
+    float swapMix_ = 1.0f;
+    int widthFrom_ = 0;
+    Face leaving_;
+    bool actionLeaving_ = false;
+    bool actionArriving_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ToastComponent)
 };

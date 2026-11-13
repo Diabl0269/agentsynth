@@ -742,6 +742,11 @@ bool MainComponent::initialiseAudioEngine() {
         synth::isNoAudioDeviceLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray(),
                                      juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
 
+    // A dev/verification launch can silence the metronome click without closing the device (--mute-metronome).
+    audioEngine.getMetronome().setMuted(
+        synth::isMuteMetronomeRequested(juce::JUCEApplicationBase::getCommandLineParameterArray(),
+                                        juce::SystemStats::getEnvironmentVariable(synth::kMuteMetronomeEnvVar, {})));
+
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file
     // has no say over it.

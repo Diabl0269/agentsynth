@@ -1,6 +1,7 @@
 // SamplerMapView.cpp -- the instrument map window's content: how a control or a drop becomes an edit of the
 // instrument's regions, and how the view follows the module.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -42,7 +43,7 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     drumHint_.setTooltip("A drum kit plays one drum per key; the Drum Kit module has a pad for each");
     styleButton(copyButton_, "Make your own copy of this built-in instrument so its recordings can be changed");
     styleButton(addButton_, "Add one or more recordings after the selected one");
-    styleButton(doneButton_, "Close the map (Esc)");
+    styleButton(doneButton_, synth::ui::actiontext::kDoneCloseWindowTip);
     blocks_.setExplicitFocusOrder(1);
     fields_.setExplicitFocusOrder(2);
     copyButton_.setExplicitFocusOrder(3);

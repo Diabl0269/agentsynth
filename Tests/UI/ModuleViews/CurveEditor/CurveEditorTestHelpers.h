@@ -44,10 +44,10 @@ inline CurveModel buildEnvelopeModel(const EnvelopeShape& shape = {}) {
 }
 
 inline juce::MouseEvent makeCurveMouseEvent(juce::Component& comp, juce::Point<float> position, juce::ModifierKeys mods,
-                                            bool mouseWasDragged, juce::Point<float> mouseDownPos) {
+                                            bool mouseWasDragged, juce::Point<float> mouseDownPos, int clickCount = 1) {
     return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
                             0.0f, &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos,
-                            juce::Time::getCurrentTime(), 1, mouseWasDragged);
+                            juce::Time::getCurrentTime(), clickCount, mouseWasDragged);
 }
 
 inline juce::MouseEvent curveLeftClick(juce::Component& comp, juce::Point<float> pos) {

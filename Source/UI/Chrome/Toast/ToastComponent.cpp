@@ -75,6 +75,7 @@ ToastComponent::ToastComponent() {
 ToastComponent::~ToastComponent() {
     stopTimer();
     driver_.stop(updater_);
+    swapAnim_.stop(updater_);
 }
 
 int ToastComponent::preferredWidth() const {
@@ -84,11 +85,13 @@ int ToastComponent::preferredWidth() const {
     // rounded down cut the end of the message to an ellipsis in a window with plenty of room.
     const int textW = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + kTextSlack;
     return kPadX * 2 + ToastComponent::kIconSlot + textW +
-           (action_.getButtonText().isNotEmpty() && action_.isVisible() ? kGap + kActionW : 0);
+           (action_.getButtonText().isNotEmpty() && hasLiveAction() ? kGap + kActionW : 0);
 }
 
 juce::Rectangle<int> ToastComponent::restingBounds() const {
-    const int w = juce::jmin(preferredWidth(), juce::jmax(160, area_.getWidth() - 40));
+    int w = juce::jmin(preferredWidth(), juce::jmax(160, area_.getWidth() - 40));
+    if (swapping_ && !prefersReducedMotion())
+        w = juce::roundToInt((float)widthFrom_ + (float)(w - widthFrom_) * swapMix_);
     return {area_.getCentreX() - w / 2, area_.getBottom() - kBottomMargin - kHeight, w, kHeight};
 }
 
@@ -131,21 +134,90 @@ void ToastComponent::animateTo(bool shown) {
 
 void ToastComponent::show(const juce::String& message, const juce::String& actionLabel, std::function<void()> action,
                           const juce::String& actionTooltip, Severity severity) {
+    // A toast already on screen is replaced in place: what it showed fades into the new content, never swapped in
+    // one frame.
+    const bool replacing = shown_ && isVisible() && progress_ > 0.0f &&
+                           FadeVisibility::canAnimateIn(getParentComponent()) &&
+                           (message != message_ || severity != severity_);
+    const Face before{message_, severity_};
+    const bool hadAction = hasLiveAction();
+    const int widthBefore = getWidth();
+    endSwap();
     message_ = message;
     severity_ = severity;
     onAction_ = std::move(action);
     const bool hasAction = actionLabel.isNotEmpty() && onAction_ != nullptr;
-    action_.setButtonText(actionLabel);
-    action_.setTitle(actionLabel);
+    const bool actionLeaves = replacing && hadAction && !hasAction;
+    if (!actionLeaves) {
+        action_.setButtonText(actionLabel);
+        action_.setTitle(actionLabel);
+    }
     action_.setTooltip(actionTooltip);
-    action_.setVisible(hasAction);
+    action_.setVisible(hasAction || actionLeaves);
+    action_.setInterceptsMouseClicks(!actionLeaves, !actionLeaves);
+    actionLeaving_ = actionLeaves;
     setTitle(severityName(severity_) + message);
     resized();
     if (auto* parent = getParentComponent())
         toFront(false), parent->repaint();
+    if (replacing) {
+        widthFrom_ = widthBefore;
+        startSwap(before, actionLeaves, hasAction && !hadAction);
+    }
     animateTo(true);
     startTimer(kAutoHideMs);
     repaint();
+}
+
+// The content that was on screen fades out while the new fades in, and the pill's width glides between the two (a
+// fade alone under Reduce Motion). The geometry is final at once; only what is drawn trails it.
+void ToastComponent::startSwap(const Face& leaving, bool actionLeaving, bool actionArriving) {
+    leaving_ = leaving;
+    swapping_ = true;
+    swapMix_ = 0.0f;
+    actionArriving_ = actionArriving;
+    actionLeaving_ = actionLeaving;
+    action_.setAlpha(actionArriving ? 0.0f : 1.0f);
+    swapAnim_.start(
+        updater_, motionMs(kSwapMs, kReducedMs), easeOutCubic,
+        [this](float t) {
+            swapMix_ = t;
+            if (actionArriving_)
+                action_.setAlpha(t);
+            else if (actionLeaving_)
+                action_.setAlpha(1.0f - t);
+            applyProgress(progress_);
+            repaint();
+        },
+        [this] { settleSwap(); });
+}
+
+void ToastComponent::endSwap() {
+    swapAnim_.stop(updater_);
+    settleSwap();
+}
+
+void ToastComponent::settleSwap() {
+    const bool wasLeaving = actionLeaving_;
+    swapping_ = false;
+    swapMix_ = 1.0f;
+    actionArriving_ = false;
+    actionLeaving_ = false;
+    action_.setAlpha(1.0f);
+    action_.setInterceptsMouseClicks(true, true);
+    if (wasLeaving) {
+        action_.setVisible(false);
+        action_.setButtonText({});
+        action_.setTitle({});
+    }
+    if (isVisible())
+        applyProgress(progress_);
+    repaint();
+}
+
+void ToastComponent::finishMotionForTest() {
+    swapAnim_.completeForTest();
+    driver_.completeForTest();
 }
 
 void ToastComponent::dismiss() {
@@ -161,6 +233,7 @@ void ToastComponent::dismissNow() {
     stopTimer();
     shown_ = false;
     driver_.stop(updater_);
+    endSwap();
     applyProgress(0.0f);
     setVisible(false);
 }
@@ -205,27 +278,41 @@ void ToastComponent::paint(juce::Graphics& g) {
     g.setColour(c.surfaceHi);
     g.fillRoundedRectangle(bounds, 8.0f);
     // A warning or an error is told by its theme colour on the border and a bar down the left edge, so it does not
-    // rest on the text alone.
-    const bool flagged = severity_ != Severity::info;
-    const auto flag = severity_ == Severity::error ? c.error : c.warning;
+    // rest on the text alone. The border changes colour through a swap; the rest of a face fades.
+    auto borderOf = [&](Severity severity) {
+        return severity == Severity::info ? c.border : severity == Severity::error ? c.error : c.warning;
+    };
+    g.setColour(swapping_ ? borderOf(leaving_.severity).interpolatedWith(borderOf(severity_), swapMix_)
+                          : borderOf(severity_));
+    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
+    if (swapping_)
+        paintFace(g, leaving_, 1.0f - swapMix_);
+    paintFace(g, Face{message_, severity_}, swapping_ ? swapMix_ : 1.0f);
+}
+
+void ToastComponent::paintFace(juce::Graphics& g, const Face& face, float alpha) const {
+    if (alpha <= 0.0f)
+        return;
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    const bool flagged = face.severity != Severity::info;
+    const auto flag = face.severity == Severity::error ? c.error : c.warning;
     if (flagged) {
         juce::Graphics::ScopedSaveState state(g);
         juce::Path pill;
         pill.addRoundedRectangle(bounds, 8.0f);
         g.reduceClipRegion(pill);
-        g.setColour(flag);
+        g.setColour(flag.withMultipliedAlpha(alpha));
         g.fillRect(bounds.withWidth(kBarWidth));
     }
-    g.setColour(flagged ? flag : c.border);
-    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
-    const auto accent = severity_ == Severity::info ? c.accent : flag;
-    const auto glyph = severity_ == Severity::error     ? SeverityGlyph::error
-                       : severity_ == Severity::warning ? SeverityGlyph::warning
-                                                        : SeverityGlyph::info;
-    paintSeverityGlyph(g, iconBounds().toFloat(), accent, glyph);
-    g.setColour(c.textPrimary);
+    const auto accent = face.severity == Severity::info ? c.accent : flag;
+    const auto glyph = face.severity == Severity::error     ? SeverityGlyph::error
+                       : face.severity == Severity::warning ? SeverityGlyph::warning
+                                                            : SeverityGlyph::info;
+    paintSeverityGlyph(g, iconBounds().toFloat(), accent.withMultipliedAlpha(alpha), glyph);
+    g.setColour(c.textPrimary.withMultipliedAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(kFontSize)));
-    g.drawText(message_, textBounds(), juce::Justification::centredLeft, true);
+    g.drawText(face.message, textBounds(), juce::Justification::centredLeft, true);
 }
 
 } // namespace synth::ui

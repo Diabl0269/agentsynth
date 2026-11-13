@@ -426,6 +426,11 @@ implemented in `AppLookAndFeel`:
   constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
   and the underline follows it. The text is its accessible title; description, tooltip and focus policy
   stay with the call site. It lives in `Core` next to `IconButton`.
+- **SnapToggleButton** — `synth::ui::SnapToggleButton` (`Source/UI/Chrome/ToolbarButton/ToolbarButton.h`) is the one button that
+  switches snapping, on the timeline transport bar, the curve window and both Snap switches of the shape editor: a
+  `ToolbarButton` with the Snap icon on an Edit-group chip, named "Snap". Each surface sets its own layout, caption,
+  tooltip (starting "Snap to grid" or its own name) and toggle behaviour; `SnapToggleButtonTests` fails on any other
+  button built with the text "Snap". It lives in `Core` next to `ToolbarButton`.
 - **ComboBox** — `drawComboBox` (pressed/disabled states, drawn chevron arrow, and the shared focus ring from
   `FocusRing.h` when it holds keyboard focus; the routing pane's `RoutingComboButton` paints the same ring),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).

@@ -97,12 +97,6 @@ const std::vector<KnownGap> kKnownGaps = {
      "FRO1713"},
     {"Macro ports prompt [min] / Label 'Macro has boundary cables': its text does not fit and it has no tooltip",
      "FRO1713"},
-    // Modulation curve
-    {"Modulation curve / ModCurvePresetButton 'Exp curve': touches ModCurvePresetButton 'Log curve'", "FRO1713"},
-    {"Modulation curve / ModCurvePresetButton 'Linear curve': touches ModCurvePresetButton 'Exp curve'", "FRO1713"},
-    {"Modulation curve / ModCurvePresetButton 'Log curve': touches ModCurvePresetButton 'S-curve curve'", "FRO1713"},
-    {"Modulation curve [min] / ModCurvePresetButton 'Linear curve': touches ModCurvePresetButton 'Exp curve'",
-     "FRO1713"},
     // Render progress
     {"Render progress / Label 'Render status': touches ProgressBar 'Render progress'", "FRO1712"},
     {"Render progress [min] / Label 'Render status': its text does not fit and it has no tooltip", "FRO1712"},

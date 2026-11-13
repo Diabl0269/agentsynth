@@ -201,15 +201,17 @@ void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float 
                juce::Justification::centred, false);
 }
 
-void EQCurveComponent::spectrumTick() {
-    if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
-        const bool hasSignal = updateSpectrum();
-        // Repaint while there is signal, plus one final frame once it goes quiet so the display settles instead of
-        // freezing mid-decay. A silent patch costs nothing.
-        if (hasSignal || spectrumWasActive)
-            repaint();
-        spectrumWasActive = hasSignal;
-    }
+bool EQCurveComponent::spectrumTick() {
+    if (!showSpectrum || eqModule.getVisualBuffer() == nullptr)
+        return false;
+    const bool hasSignal = updateSpectrum();
+    // Repaint while the trace moves (signal, or falling to the floor), plus one final frame when it comes to rest so
+    // the display settles on the floor instead of freezing mid-decay. A silent patch costs nothing.
+    const bool paintNow = hasSignal || spectrumWasActive;
+    if (paintNow)
+        repaint();
+    spectrumWasActive = hasSignal;
+    return paintNow;
 }
 
 bool EQCurveComponent::updateSpectrum() {
@@ -223,8 +225,19 @@ bool EQCurveComponent::updateSpectrum() {
     float peak = 0.0f;
     for (float s : samples)
         peak = std::max(peak, std::abs(s));
-    if (peak < kSilenceThreshold)
-        return false;
+    if (peak < kSilenceThreshold) {
+        // Silence is a reading too: the trace falls to the floor instead of keeping the last picture. True while it
+        // still moves; once every point rests, an idle patch costs nothing.
+        bool moving = false;
+        for (auto& m : spectrumMagnitudes) {
+            if (m <= kSpecMinDb)
+                continue;
+            m += kSpectrumSmoothing * (kSpecMinDb - m);
+            m = m < kSpecMinDb + kSpectrumRestDb ? kSpecMinDb : m;
+            moving = moving || m > kSpecMinDb;
+        }
+        return moving;
+    }
 
     std::fill(fftData.begin(), fftData.end(), 0.0f);
     const int copySize = std::min((int)samples.size(), fftSize);
@@ -254,7 +267,7 @@ bool EQCurveComponent::updateSpectrum() {
         const float db = 20.0f * std::log10(std::max(mag, 0.00001f));
         const float target = juce::jlimit(kSpecMinDb, kSpecMaxDb, db);
         // Exponential moving average so the display settles instead of flickering.
-        spectrumMagnitudes[(size_t)i] += 0.3f * (target - spectrumMagnitudes[(size_t)i]);
+        spectrumMagnitudes[(size_t)i] += kSpectrumSmoothing * (target - spectrumMagnitudes[(size_t)i]);
     }
     return true;
 }

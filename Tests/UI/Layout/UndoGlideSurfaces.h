@@ -45,6 +45,9 @@ struct Entry {
      *  land at once. */
     bool fadesUnderReduceMotion;
     std::function<std::unique_ptr<Surface>()> make;
+    /** True for a surface that still moves under Reduce Motion, in a glide shortened to 80 ms with no stagger (the
+     *  Sequencer's bars): not at its place on the first frame, but settled within the short glide. */
+    bool shortGlideUnderReduceMotion = false;
 };
 
 /** Every registered surface. */
@@ -60,6 +63,8 @@ std::unique_ptr<Surface> makeEqWindowCurve();
 std::unique_ptr<Surface> makeEqMixerThumbnail();
 /** The Drum Kit pad panel's Level knob (a pad pick glides the same knobs; see DrumKitPadGlideTests). */
 std::unique_ptr<Surface> makeDrumPadKnob();
+/** The Sequencer card's Key: the pitch bars glide to the notes the new scale plays, and back on undo. */
+std::unique_ptr<Surface> makeSequencerKey();
 /** A section moved by covering another: its clips in the clip lane, and its block on the Sections strip. */
 std::unique_ptr<Surface> makeSectionMoveClips();
 std::unique_ptr<Surface> makeSectionStripBlock();

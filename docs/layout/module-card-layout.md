@@ -462,7 +462,7 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
 
 ## Editing a layout
 
-- **Quick path, on any control:** the right-click menu gains **Hide from card**, **Show as
+- **Quick path, on any control** (the edit runs in the undo bracket, `CardGlideAnimator::Scope(restore)`, so the card glides, the controls and jack rows it changed fade and the cards it pushes slide, as its Cmd+Z does): the right-click menu gains **Hide from card**, **Show as
   fader / Show as knob** (for a continuous parameter) and **Edit Layout...**. On a
   control in the More row, **Show on card** puts it back where the default had it. Built: each click edits the layout the
   card draws now (the automatic layout written out as explicit items when the node has none), and Show
