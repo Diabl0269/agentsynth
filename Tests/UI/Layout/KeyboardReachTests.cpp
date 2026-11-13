@@ -18,6 +18,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -413,8 +414,12 @@ std::vector<RingSource> mixerRingSources(juce::Component& mixerPanel) {
 }
 
 bool insideMixerColumn(juce::Component& c) {
-    auto* panel = c.findParentComponentOfClass<synth::ui::MixerPanelComponent>();
-    return panel != nullptr && panel->getColumnIndexContainingForTest(&c) >= 0;
+    for (auto* p = c.getParentComponent(); p != nullptr; p = p->getParentComponent())
+        if (dynamic_cast<synth::ui::MixerColumnComponent*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerDirectColumn*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerMasterColumn*>(p) != nullptr)
+            return true;
+    return false;
 }
 
 void setMixerSidePaneOpen(MainComponent& mc, bool open) {
