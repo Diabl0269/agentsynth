@@ -178,6 +178,10 @@ already feeds the same channel. Collapsed, a Delay wired to a VCA carries only r
 puts raw1 on a mono jack), so the sum is always the toggle's own. The toggle matrix is
 `DualIOToggleMatrix` in `GraphEditorDualIOFxRightLegTests.cpp`.
 
+The destination toggle is the mirror: collapsing a split peer that a Dual I/O source's Right output
+feeds re-points that cable onto the peer's surviving jack as a summed second cable
+(`dropHiddenRightLegConnections`, input branch; `DualIOPeerCollapseMatrix`), and one undo restores both.
+
 Confined to the toggle handler on purpose: flipping Dual I/O is an explicit action on one module,
 whereas `resolvePolyLink` governs manual cable drags and smart-connect, where a split-block pair
 stays left-leg-only. Nothing here widens that. The rewire rides inside the parameter gesture's own
