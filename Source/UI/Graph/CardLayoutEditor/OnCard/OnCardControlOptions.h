@@ -21,6 +21,7 @@ struct ControlOptions {
     std::vector<CardWidget> widgetChoices;    ///< Fewer than 2 = no Show as row.
     CardWidget widget = CardWidget::Auto;     ///< The choice now in force (never Auto when there are choices).
     std::optional<juce::Range<double>> range; ///< The layout's narrowed range.
+    std::optional<juce::String> yParamId;     ///< An XY pad item's Y axis.
     std::optional<juce::Range<double>>
         fullRange; ///< Set only when the Range row applies (a float shown as a knob or fader).
     /** A Macros knob: its own name and polarity. Set, the panel shows Name and Polarity in place of Label. */
@@ -31,14 +32,23 @@ struct ControlOptions {
         bool operator==(const MacroKnob&) const = default;
     };
     std::optional<MacroKnob> macroKnob;
+    /** A Macros knob drawn as an XY pad: the macros it can take as its Y axis, and the one it has. Set, the panel
+     *  shows Y macro. */
+    struct XYPartner {
+        std::vector<juce::String> ids;
+        juce::StringArray names;
+        int selected = 0;
+        bool operator==(const XYPartner&) const = default;
+    };
+    std::optional<XYPartner> xyPartner;
 };
 
 /** What a control is drawn as, apart from its size or direction: the panel's Show as lists these, and a knob's
  *  Size and a fader's Direction are separate rows. */
-enum class WidgetKind { Auto, Knob, Fader, Toggle, Menu, Segmented, Stepper };
+enum class WidgetKind { Auto, Knob, Fader, Toggle, Menu, Segmented, Stepper, XYPad };
 
 WidgetKind widgetKindOf(CardWidget widget);
-/** "Knob", "Fader", "Toggle", "Menu", "Segmented", "Stepper". */
+/** "Knob", "Fader", "Toggle", "Menu", "Segmented", "Stepper", "XY pad". */
 juce::String widgetKindName(WidgetKind kind);
 /** The kinds `widgetChoices` offer, once each, in the order they first appear. */
 std::vector<WidgetKind> widgetKinds(const std::vector<CardWidget>& widgetChoices);
@@ -70,9 +80,16 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
 CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const synth::CardBody& body,
                           std::optional<int> layoutSection = std::nullopt);
 
-/** `layout` with `paramId`'s item drawn as `widget`, or unchanged when the layout has no such item. */
+/** `layout` with `paramId`'s item drawn as `widget`, or unchanged when the layout has no such item. Drawn as an XY pad,
+ *  a Macros knob takes the next macro as its Y axis (`withXYPartner` changes it) and that macro's own item leaves the
+ *  layout, hidden, because the pad stands in for it; drawn as anything else, the macro it stood in for comes back
+ *  as a knob right after it. */
 CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget,
                       std::optional<int> layoutSection = std::nullopt);
+/** `layout` with the XY pad item `paramId` taking `yParamId` as its Y axis: the macro it had comes back as a knob, the
+ *  new one leaves the layout (hidden). Unchanged when `paramId` is no pad item or `yParamId` is not another macro. */
+CardLayout withXYPartner(CardLayout layout, const juce::String& paramId, const juce::String& yParamId,
+                         std::optional<int> layoutSection = std::nullopt);
 /** `layout` with `paramId`'s caption override set from `text` (labelOverrideFor's rule). */
 CardLayout withControlLabel(CardLayout layout, const juce::String& paramId, const juce::String& displayName,
                             const juce::String& text, std::optional<int> layoutSection = std::nullopt);

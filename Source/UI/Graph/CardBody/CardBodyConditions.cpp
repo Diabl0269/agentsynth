@@ -314,7 +314,9 @@ void CardBody::refreshMacroNames() {
             continue;
         if (auto* label = dynamic_cast<juce::Label*>(item.label))
             label->setText(item.captionText(), juce::dontSendNotification);
-        if (item.widget != nullptr)
+        if (item.kind == CardBodyItem::Kind::XYPad)
+            refreshXYPad(item);
+        else if (item.widget != nullptr)
             item.widget->setTitle(item.captionText());
     }
 }
@@ -337,6 +339,9 @@ bool CardBody::pollMacros() {
     if (macros == nullptr)
         return false;
     bool changed = false;
+    for (auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::XYPad)
+            refreshXYPad(item); // an axis flipping Uni/Bi changes its reading
     if (macros->getNamesRevision() != macroNamesSeen_) {
         macroNamesSeen_ = macros->getNamesRevision();
         refreshMacroNames();

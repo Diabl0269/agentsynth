@@ -23,7 +23,7 @@ struct CardSlot {
 };
 
 /** How a v2 item is drawn. The first four map onto the v1 kinds; the rest need version 2. */
-enum class CardWidget { Auto, Knob, KnobLarge, FaderV, FaderH, Toggle, Choice, Segmented, Stepper, FaderVLong };
+enum class CardWidget { Auto, Knob, KnobLarge, FaderV, FaderH, Toggle, Choice, Segmented, Stepper, FaderVLong, XYPad };
 
 /** A read-only visual a v2 section can hold. */
 enum class CardView {
@@ -71,11 +71,14 @@ struct CardParamItem {
     std::optional<juce::Point<int>> at;
     /** Narrows a knob or fader to this min..max, in the parameter's own units. */
     std::optional<juce::Range<double>> range;
+    /** An `XYPad` item only: the parameter the pad's vertical axis drives (`paramId` drives the horizontal one). The
+     *  card draws that parameter's own item nowhere (the pad stands in for it), so a layout lists it hidden. */
+    std::optional<juce::String> yParamId;
 
     bool operator==(const CardParamItem& other) const noexcept {
         return paramId == other.paramId && indexHint == other.indexHint && node == other.node &&
                widget == other.widget && label == other.label && span == other.span && when == other.when &&
-               at == other.at && range == other.range;
+               at == other.at && range == other.range && yParamId == other.yParamId;
     }
 };
 

@@ -8,3 +8,4 @@ list(APPEND APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardGroupMove.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/OnCardGroupMove.h
 )
+include(cmake/CardXYPadSources.cmake) # appends the XY pad and the morph map's shared plot to APPUI_SOURCES

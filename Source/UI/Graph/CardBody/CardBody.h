@@ -108,6 +108,10 @@ public:
     // ---- Lookup ----------------------------------------------------------------------------------
     /** The widget bound to `paramId`, or null. */
     juce::Component* findWidget(const juce::String& paramId) const;
+    /** The two parameters an XY pad `widget` of this body drives (horizontal, vertical); nothing for any other widget.
+     */
+    std::optional<std::pair<juce::RangedAudioParameter*, juce::RangedAudioParameter*>>
+    xyPadParams(const juce::Component& widget) const;
     /** The view `view` placed in this body, or null. */
     juce::Component* findView(CardView view) const;
     /** Opens or closes a placed view: a closed view takes no height (the card re-measures). */
@@ -189,6 +193,8 @@ private:
     void createFader(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createSegmented(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
+    void createXYPad(CardBodyItem& item, juce::RangedAudioParameter& xParam, juce::RangedAudioParameter& yParam);
+    void refreshXYPad(CardBodyItem& item);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();
     void createTabStrips();

@@ -24,8 +24,8 @@ struct NameTable {
     }
 };
 
-constexpr NameTable<CardWidget, 10> kWidgets{
-    {"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice", "segmented", "stepper", "faderVLong"}};
+constexpr NameTable<CardWidget, 11> kWidgets{{"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice",
+                                              "segmented", "stepper", "faderVLong", "xyPad"}};
 constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
                                           "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
                                           "stepGrid"}};
@@ -157,6 +157,8 @@ juce::var itemToVar(const CardItem& item) {
         object->setProperty("x", param.at->x);
         object->setProperty("y", param.at->y);
     }
+    if (param.yParamId)
+        object->setProperty("yParam", *param.yParamId);
     if (param.range) {
         object->setProperty("min", param.range->getStart());
         object->setProperty("max", param.range->getEnd());
@@ -174,6 +176,7 @@ bool readParamItem(const juce::DynamicObject& object, CardParamItem& out) {
     out.indexHint = hint;
     out.node = readOptionalString(object, "node");
     out.label = readOptionalString(object, "label");
+    out.yParamId = readOptionalString(object, "yParam");
     if (object.hasProperty("widget")) {
         const auto widget = kWidgets.find(object.getProperty("widget").toString());
         if (!widget)
@@ -270,6 +273,7 @@ CardSlotKind slotKindFromWidget(CardWidget widget) {
     case CardWidget::FaderV:
     case CardWidget::FaderVLong:
     case CardWidget::FaderH:
+    case CardWidget::XYPad:
         return CardSlotKind::Knob;
     }
     return CardSlotKind::Auto;

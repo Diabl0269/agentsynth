@@ -40,6 +40,8 @@ public:
     std::function<void(const juce::String& text)> onMacroName;
     /** A Macros knob's Polarity switch was picked: true = Bi. */
     std::function<void(bool bipolar)> onMacroPolarity;
+    /** An XY pad's Y macro was picked: the macro's parameter id. */
+    std::function<void(const juce::String& paramId)> onXYPartner;
     /** A valid range was typed; nullopt = the full range. */
     std::function<void(std::optional<juce::Range<double>>)> onRange;
     std::function<void()> onHide;
@@ -62,6 +64,8 @@ public:
     juce::TextEditor& getLabelEditorForTest() noexcept { return label_; }
     juce::TextEditor& getNameEditorForTest() noexcept { return name_; }
     CardSegmentedSwitch* getPolarityForTest() const noexcept { return polarity_.get(); }
+    juce::ComboBox& getYMacroForTest() noexcept { return yMacro_; }
+    bool isYMacroRowShownForTest() const { return yMacroFade_.isShown(); }
     bool isMacroRowsShownForTest() const {
         return nameFade_.isShown() && polarityFade_ != nullptr && polarityFade_->isShown();
     }
@@ -109,10 +113,12 @@ private:
     juce::Label labelCaption_{{}, "Label"};
     juce::Label nameCaption_{{}, "Name"};
     juce::Label polarityCaption_{{}, "Polarity"};
+    juce::Label yMacroCaption_{{}, "Y macro"};
     juce::Label rangeCaption_{{}, "Range"};
     juce::Label rangeTo_{{}, "to"};
     juce::Label hint_;
     juce::TextEditor label_;
+    juce::ComboBox yMacro_;                         ///< An XY pad's Y macro.
     juce::TextEditor name_;                         ///< A Macros knob's name (in place of Label).
     std::unique_ptr<CardSegmentedSwitch> polarity_; ///< A Macros knob's Uni | Bi.
     juce::TextEditor minimum_;
@@ -126,6 +132,7 @@ private:
     std::unique_ptr<synth::ui::FadeVisibility> polarityFade_; ///< Caption and switch, made with the switch.
     synth::ui::FadeVisibility labelFade_{&labelCaption_, &label_};
     synth::ui::FadeVisibility nameFade_{&nameCaption_, &name_};
+    synth::ui::FadeVisibility yMacroFade_{&yMacroCaption_, &yMacro_};
     synth::ui::FadeVisibility rangeFade_{&rangeCaption_, &rangeTo_, &minimum_, &maximum_};
     synth::ui::FadeVisibility hintFade_{&hint_};
     std::unique_ptr<ModCurveBox> curveBox_; ///< A Macros knob's response curve.

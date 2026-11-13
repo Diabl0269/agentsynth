@@ -19,10 +19,12 @@
 #include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/CardWidgets/CardStepperBinding.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Graph/CardWidgets/CardXYPad.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
@@ -225,7 +227,11 @@ void CardBody::createViews() {
 // accessibility order) the generic card has always had, whatever order the layout places them in.
 void CardBody::createParameterWidgets() {
     for (auto& item : plan_.items) {
-        if (item.kind == CardBodyItem::Kind::Choice)
+        if (item.consumed)
+            continue; // stands in an XY pad
+        if (item.kind == CardBodyItem::Kind::XYPad)
+            createXYPad(item, *item.param, *item.partner);
+        else if (item.kind == CardBodyItem::Kind::Choice)
             createChoice(item, *static_cast<juce::AudioParameterChoice*>(item.param));
         else if (item.kind == CardBodyItem::Kind::Knob || item.kind == CardBodyItem::Kind::KnobLarge)
             createKnob(item, *item.param);
@@ -619,6 +625,83 @@ void CardBody::releaseBindings(bool processorAlive) {
         (void)buttonAttachments_.removeAndReturn(buttonAttachments_.size() - 1);
     while (paramAttachments_.size() > 0)
         (void)paramAttachments_.removeAndReturn(paramAttachments_.size() - 1);
+}
+
+// ---- XY pad: one pad bound to two parameters (a Macros card's two knobs) ----
+// It stands in for both knobs, so it carries what each carries: the value attachment, the MIDI Learn entry and the
+// gesture brackets automation and undo hear.
+namespace {
+
+// A macro knob is a float 0..1; its position is the parameter's normalised value, so a pad maps it straight through.
+float positionOf(const juce::RangedAudioParameter& param) { return param.getValue(); }
+
+} // namespace
+
+// The axes the pad names: each macro's own name, and whether the macro is bipolar (the pad then reads -1..1).
+void CardBody::refreshXYPad(CardBodyItem& item) {
+    auto* pad = dynamic_cast<synth::ui::CardXYPad*>(item.widget);
+    const auto* macros = dynamic_cast<const MacroControlModule*>(&module_);
+    if (pad == nullptr || item.param == nullptr || item.partner == nullptr)
+        return;
+    const int x = macroIndexOf(item.param->paramID);
+    const int y = macroIndexOf(item.partner->paramID);
+    if (macros != nullptr && x >= 0 && y >= 0)
+        pad->setAxes({macros->getMacroName(x), macros->isBipolar(x)}, {macros->getMacroName(y), macros->isBipolar(y)});
+    else
+        pad->setAxes({item.param->getName(100), false}, {item.partner->getName(100), false});
+}
+
+// Two parameter attachments move the pad when a value changes (automation, undo, a cable, MIDI) without notifying
+// back. A drag or key step is one gesture on both parameters, so automation records both and the card's undo
+// recording (ModuleComponent::parameterGestureChanged) makes it one step.
+void CardBody::createXYPad(CardBodyItem& item, juce::RangedAudioParameter& xParam, juce::RangedAudioParameter& yParam) {
+    auto* pad = new synth::ui::CardXYPad();
+    widgets_.add(pad);
+    pad->setComponentID("XY pad");
+    card_.addAndMakeVisible(pad);
+    pad->addMouseListener(&card_, false);
+    card_.registerMidiLearnable(*pad, &xParam);
+    card_.registerMidiLearnable(*pad, &yParam);
+
+    juce::Component::SafePointer<synth::ui::CardXYPad> safePad(pad);
+    const auto alive = widgetsAlive_;
+    const auto showValues = [safePad, alive, &xParam, &yParam] {
+        if (*alive && safePad != nullptr)
+            safePad->setValues(positionOf(xParam), positionOf(yParam));
+    };
+    auto* xAttachment =
+        paramAttachments_.add(new juce::ParameterAttachment(xParam, [showValues](float) { showValues(); }));
+    auto* yAttachment =
+        paramAttachments_.add(new juce::ParameterAttachment(yParam, [showValues](float) { showValues(); }));
+    xAttachment->sendInitialUpdate();
+    yAttachment->sendInitialUpdate();
+
+    pad->onGestureStart = [xAttachment, yAttachment] {
+        xAttachment->beginGesture();
+        yAttachment->beginGesture();
+    };
+    pad->onMoved = [xAttachment, yAttachment, &xParam, &yParam](float x, float y) {
+        xAttachment->setValueAsPartOfGesture(xParam.convertFrom0to1(x));
+        yAttachment->setValueAsPartOfGesture(yParam.convertFrom0to1(y));
+    };
+    pad->onGestureEnd = [xAttachment, yAttachment] {
+        xAttachment->endGesture();
+        yAttachment->endGesture();
+    };
+    pad->refusesEdit = [this] { return card_.owner.getLoadReveal().refuseEdit(); };
+
+    auto* label = addCaption(item, xParam, juce::Justification::centred);
+    label->setTooltip(xParam.getName(100) + " and " + yParam.getName(100));
+    item.widget = pad;
+    refreshXYPad(item);
+}
+
+std::optional<std::pair<juce::RangedAudioParameter*, juce::RangedAudioParameter*>>
+CardBody::xyPadParams(const juce::Component& widget) const {
+    for (const auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::XYPad && item.widget == &widget)
+            return std::pair{item.param, item.partner};
+    return std::nullopt;
 }
 
 } // namespace synth
