@@ -63,6 +63,12 @@ public:
      *  that nothing crashed. */
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
+    /** Space the fader leaves free under its level readout, so the readout sits one caption gap (6 px) above the mute
+     *  button that is inset 2 px in the row under the fader (MixerSectionLayout::kFaderToButtonsGap says the same). */
+    static constexpr int kClearBelowReadout = 4;
+    /** The pixel kept between the slider and the readout under it. */
+    static constexpr int kReadoutGap = 1;
+
     juce::Slider& getSlider() noexcept { return slider_; }
     const juce::Slider& getSlider() const noexcept { return slider_; }
 

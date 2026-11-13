@@ -350,7 +350,7 @@ public:
 
 private:
     // Where every part of the row sits, left to right: the colour dot, the name, then (right to left) the
-    // Edit on canvas button, the linked/bus badge, the receives badge and the sources button. Painting the badges
+    // linked/bus badge, the receives badge, the sources button and the Edit on canvas button. Painting the badges
     // and placing the child components both read this, so they can never drift apart; the name label takes
     // whatever is left.
     struct Slots {
@@ -361,8 +361,6 @@ private:
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0)
             slots.dot = bounds.removeFromLeft(kDotButtonWidth);
-        if (editOnCanvasButton_.isVisible())
-            slots.editOnCanvas = bounds.removeFromRight(kEditOnCanvasWidth);
         if (busBadgeVisible_)
             slots.badge = bounds.removeFromRight(kBusBadgeWidth);
         else if (linkedBadgeVisible_)
@@ -371,6 +369,19 @@ private:
             slots.receives = bounds.removeFromRight(kReceivesBadgeWidth);
         if (!sources_.isEmpty())
             slots.sources = bounds.removeFromRight(kSourcesBadgeWidth);
+        const bool hasBadges = !slots.badge.isEmpty() || !slots.receives.isEmpty() || !slots.sources.isEmpty();
+        // The button sits left of the badges so the name is its only neighbour on the left, a caption gap away.
+        if (editOnCanvasButton_.isVisible()) {
+            if (hasBadges)
+                bounds.removeFromRight(kPartGap);
+            slots.editOnCanvas = bounds.removeFromRight(kEditOnCanvasWidth);
+        }
+        // The name keeps off the dot (a part gap: the dot's click target is wider than the 10 px it paints) and
+        // a caption gap off the first thing to its right.
+        if (!slots.dot.isEmpty())
+            bounds.removeFromLeft(kPartGap);
+        if (!slots.editOnCanvas.isEmpty() || hasBadges)
+            bounds.removeFromRight(kCaptionGap);
         slots.name = bounds;
         return slots;
     }
@@ -420,6 +431,10 @@ private:
     static constexpr int kReceivesBadgeWidth = 22;
     static constexpr int kSourcesBadgeWidth = 16;
     static constexpr int kEditOnCanvasWidth = 16;
+    // The least that is not touching, and the design system's space unit a caption keeps to its control (the same
+    // values as MixerSectionLayout's, which this header leaves out to keep its reach small).
+    static constexpr int kPartGap = 1;
+    static constexpr int kCaptionGap = 6;
     static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()

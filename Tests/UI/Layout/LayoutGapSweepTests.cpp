@@ -129,25 +129,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"Sign in [min] / TextButton 'Open in Browser': overlaps TextButton 'Cancel'", "FRO1713"},
     // canvas
     {"canvas / Label 'Gain': is not 6 px from its control CardKnobSlider 'Gain'", "FRO1713"},
-    // mixer
-    {"mixer / CursorDelegatingLabel 'Audio # name': is not 6 px from its control TrackShowModuleButton 'Edit Audio # "
-     "on canvas'",
-     "FRO1711"},
-    {"mixer / CursorDelegatingLabel 'Audio # name': touches MixerColourDot 'Audio # colour'", "FRO1711"},
-    {"mixer / CursorDelegatingLabel 'Master name': is not 6 px from its control TrackShowModuleButton 'Edit Master on "
-     "canvas'",
-     "FRO1711"},
-    {"mixer / Label 'Audio # fader level': is not 6 px from its control TextButton> 'Audio # mute, off'", "FRO1711"},
-    {"mixer / Label 'Master fader level': is not 6 px from its control TextButton 'Master mute, off'", "FRO1711"},
-    {"mixer / MixerEqThumbnail 'Audio # EQ curve': touches MixerSectionDivider 'Resize EQ'", "FRO1711"},
-    {"mixer / MixerEqThumbnail 'Audio # EQ curve': touches MixerSectionDivider 'Resize Sends'", "FRO1711"},
-    {"mixer / MixerFaderSlider 'Audio # fader': touches Label 'Audio # fader level'", "FRO1711"},
-    {"mixer / MixerFaderSlider 'Master fader': touches Label 'Master fader level'", "FRO1711"},
-    {"mixer / MixerMeter 'Audio # meter': touches MixerMeterReadout 'Audio # peak'", "FRO1711"},
-    {"mixer / MixerMeter 'Master meter': touches MixerMeterReadout 'Master peak'", "FRO1711"},
-    {"mixer / MixerSectionDivider 'Resize EQ': touches Slider 'Audio # pan'", "FRO1711"},
-    {"mixer / Slider 'Audio # pan': touches MixerMeterReadout 'Audio # peak'", "FRO1711"},
-    {"mixer / TextButton 'Master mute, off': touches TextButton 'Mixer pan law (this project)'", "FRO1711"},
     // timeline
     {"timeline / Bodies 'automationLaneBodies': overlaps EdgeResizeHandle 'Track column width'", "FRO1710"},
     {"timeline / Bodies 'automationLaneBodies': touches TimelineRulerComponent 'timelineRuler'", "FRO1710"},
