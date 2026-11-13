@@ -32,6 +32,8 @@
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Layout/ActionTexts.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -226,11 +228,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
         addAndMakeVisible(freqResponseToggle.get());
 
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
-        spectrumToggle->setTooltip(
-            "Show spectrum: draw the filter's output behind the response, before any volume stage, "
-            "so a sound still running into the filter keeps it moving after the notes stop");
+        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumFilterTip);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
         attachBlockFade(responseFade_, {freqResponseComponent.get(), spectrumToggle.get()});
@@ -246,9 +246,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
-        spectrumToggle->setTooltip("Show spectrum: draw the EQ's output behind the curve");
+        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumEqTip);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
 

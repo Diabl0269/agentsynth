@@ -23,6 +23,12 @@ Every new or changed control:
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
 4. **Has a tooltip** that names its shortcut when it has one (`Play (Space)`).
+   A button that shows its words gets only the explanation ("Draw the filter's output...", never "Show Spectrum: draw
+   ..."); an icon-only button's tooltip starts with its name. `synth::ui::setButtonTooltip` (`Source/UI/Layout/ButtonTooltip.h`)
+   applies both, and an action with a button on two surfaces (a card and the window it opens) takes its label and tooltip
+   from one constant in `Source/UI/Layout/ActionTexts.h`. `Tests/UI/Accessibility/TooltipRulesTests.cpp` walks every card
+   and the EQ and Sampler windows for both, and `ShapeWindowThemeTests.cpp` runs the same walk
+   (`TooltipRulesWalk.h`) on the Filter and LFO shape windows.
 
 ## Lists with painted rows or messages
 

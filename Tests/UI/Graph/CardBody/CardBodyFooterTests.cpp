@@ -15,6 +15,7 @@
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace cardbody_test;
@@ -132,7 +133,7 @@ TEST(CardBodyFooter, TheFilterFooterHoldsShowResponseAndOpensItsViewAboveTheRows
     canvas.editor.updateComponents();
     auto* card = canvas.card(id);
     auto* response = chromeToggle(*card, synth::cardbody::kShowResponseText);
-    auto* spectrum = chromeToggle(*card, synth::cardbody::kShowSpectrumText);
+    auto* spectrum = chromeToggle(*card, synth::ui::actiontext::kShowSpectrum);
     ASSERT_NE(response, nullptr);
     ASSERT_NE(spectrum, nullptr);
     EXPECT_TRUE(isPill(*response));

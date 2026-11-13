@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Library/SoundBrowser/ShapeDropTarget.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -148,7 +149,7 @@ private:
     int morphYChannel_;
     MorphMap map_;
     juce::TextButton editButton_{"Edit shapes"};
-    juce::TextButton pickButton_{"Pick shape"};
+    juce::TextButton pickButton_{actiontext::kPickShape};
     juce::ToggleButton toggle_{"Show Morph Map"};
     std::unique_ptr<ShapeMapController> controller_;
     synth::CardBlockFade editFade_;

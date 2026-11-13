@@ -184,7 +184,7 @@ void DrumPadControls::refreshShownSwitch() {
     const auto& pad = kit_.pad(bound_);
     shown_.setToggleState(pad.shown, juce::dontSendNotification);
     shown_.setTitle("Shown: " + pad.name);
-    shown_.setTooltip("Shown: " + pad.name +
+    shown_.setTooltip(pad.name +
                       " is on the card, in the clip editor and in the drum machine. Off hides it; it still plays "
                       "(H on the pads)");
 }

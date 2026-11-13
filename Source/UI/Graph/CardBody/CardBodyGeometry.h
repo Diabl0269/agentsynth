@@ -37,11 +37,11 @@ inline constexpr int kFooterGap = 6;         // between footer items
 inline constexpr int kFooterRowGap = 4;      // between wrapped footer rows
 inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or combo gets
 
-// The card chrome toggles' text; the size estimate measures the footer pills from the same strings.
+// The card chrome toggles' text; the size estimate measures the footer pills from the same strings. Show Spectrum's
+// words are synth::ui::actiontext::kShowSpectrum (UI/Layout/ActionTexts.h), shared with the windows.
 inline constexpr const char* kShowScopeText = "Show Scope";
 inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
-inline constexpr const char* kShowSpectrumText = "Show Spectrum";
 
 // The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.
 inline constexpr int kMacroJackGutter = 60;

@@ -9,7 +9,7 @@ type Sampler size 280x565
   child 7 textButton id="" at 40,173 100x24 visible=1 title="Load Sample..." tip="Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler" focusOrder=0 wantsFocus=1
   child 8 label id="" at 146,173 94x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 9 button id="" at 12,93 178x24 visible=0 title="Instrument, none" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
-  child 10 textButton id="" at 196,93 72x24 visible=0 title="Edit map" tip="Edit map: see every recording on the keys and velocity layers, and change them" focusOrder=0 wantsFocus=1
+  child 10 textButton id="" at 196,93 72x24 visible=0 title="Edit map" tip="See every recording on the keys and velocity layers, and change them" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,121 256x16 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 component id="" at 12,139 256x58 visible=0 title="No instrument" tip="Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing notes light up. Double-click to edit the map. Click a key to play it." focusOrder=0 wantsFocus=0
   child 13 component id="Mode" at 12,223 256x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1

@@ -2,6 +2,7 @@
 
 #include "ModCurveChip.h"
 #include "UI/Graph/ModDot/ModDotPalette.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
@@ -77,7 +78,7 @@ ModCurveWindowContent::ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget>
     resetButton_.setTooltip("Back to the straight line and the full range");
     resetButton_.onClick = [this] { target_->setOnce(synth::ModCurve::linear()); };
     doneButton_.setTitle("Done");
-    doneButton_.setTooltip("Close the curve editor");
+    doneButton_.setTooltip(synth::ui::actiontext::kDoneCloseWindowTip);
     doneButton_.onClick = [this] { close(); };
     snapButton_.setTitle("Snap to grid");
     snapButton_.setTooltip("Snap to grid: points land on the grid lines (hold Shift to place a point freely)");

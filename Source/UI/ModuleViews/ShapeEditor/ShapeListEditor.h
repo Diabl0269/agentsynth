@@ -8,6 +8,7 @@
 #include "ShapeRingHelpers.h"
 #include "ShapeWindowMap.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -222,7 +223,7 @@ private:
     juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton ringButton_{"Ring helpers"};
     ringhelpers::StackOptions stackOptions_; ///< the Stack harmonics panel's last choices, for this window's life
-    juce::TextButton doneButton_{"Done"};
+    juce::TextButton doneButton_{actiontext::kDone};
     juce::Label statusLabel_;
     juce::uint32 statusClearsAtMs_ = 0;
     std::unique_ptr<PerNoteBar> perNote_;

@@ -330,7 +330,7 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVis
                                             "Grid",  // its Snap pill is off (disabled) while Grid is Off
                                             "Level", // likewise for Level Off
                                             "Guides",
-                                            "Show spectrum",
+                                            "Show Spectrum",
                                             "Shape curve",
                                             "Add shape",
                                             "Duplicate",
