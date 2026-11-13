@@ -457,10 +457,13 @@ void MixerMasterColumn::resized() {
         dividers_[i].setBounds(row(geometry.dividerTop[i], MixerSectionLayout::kDividerHeight));
 
     // Shares the mute row -- mute on the left, the pan-law control on the right.
-    auto bottomRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight).reduced(2);
-    muteButton_.setBounds(bottomRow.removeFromLeft(bottomRow.getWidth() / 3));
+    // The two buttons keep the same inset and gap as a strip's mute and solo pair.
+    auto bottomRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight).reduced(MixerSectionLayout::kMsButtonInset);
+    const int muteSlot = bottomRow.getWidth() / 3;
+    muteButton_.setBounds(bottomRow.removeFromLeft(muteSlot).withTrimmedRight(2 * MixerSectionLayout::kMsButtonInset));
     panLawButton_.setBounds(bottomRow);
-    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight));
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight)
+                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
     auto faderRow = row(geometry.faderTop, geometry.faderHeight);
     meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
     faderRow.removeFromRight(2);

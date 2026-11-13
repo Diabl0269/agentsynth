@@ -12,8 +12,11 @@
 class AudioEngine;
 class GraphEditor;
 namespace synth::ui {
+class ExitEnterListMotion;
 class ModMatrixLists;
-}
+struct ExitEnterListRow;
+struct ModMatrixRowSnapshot;
+} // namespace synth::ui
 
 class ModMatrixComponent
     : public juce::Component
@@ -74,6 +77,10 @@ public:
     juce::ComboBox* getRowDestComboForTest(int rowIndex);
     std::vector<std::pair<int, juce::String>> getSourceListForTest();
     int getNumRowsForTest() const noexcept { return (int)rows.size(); }
+    /** Tests: row motion plays although the matrix is not on screen. */
+    void setRowMotionForcedForTest(bool forced) noexcept { rowMotionForced_ = forced; }
+    /** The motion of the row that came or went now; null until one has played. */
+    synth::ui::ExitEnterListMotion* getRowMotionForTest();
 
     /** Where a row's searchable picker opens. The default is a juce::CallOutBox anchored on the combo; a
      *  headless test has no window to host one, so it substitutes a launcher that takes the picker. */
@@ -123,6 +130,17 @@ private:
     size_t lastNamesSignature = 0; // hash of every module title the combos list; a rename changes it
     PickerLauncher pickerLauncher;
     int hoveredRow_ = -1;
+
+    // Row motion (ModMatrixRowMotion.cpp): a row added or removed grows in or shrinks away instead of landing in one
+    // frame.
+    std::unique_ptr<synth::ui::ExitEnterListMotion> rowMotion_;
+    std::unique_ptr<synth::ui::ModMatrixRowSnapshot> clearedRows_; // the rows a clearRows() took away, to shrink from
+    bool rowMotionForced_ = false;
+    bool canAnimateRows() const;
+    std::vector<synth::ui::ExitEnterListRow> rowMotionRows() const;
+    std::unique_ptr<synth::ui::ModMatrixRowSnapshot> snapshotRows() const;
+    void playRowMotion(std::unique_ptr<synth::ui::ModMatrixRowSnapshot> before,
+                       const std::vector<juce::String>& startKeys);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixComponent)
 };

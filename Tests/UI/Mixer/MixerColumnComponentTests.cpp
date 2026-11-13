@@ -202,7 +202,8 @@ TEST(MixerColumnComponentTests, SectionsGetTheirSharedHeightWhenColumnIsTall) {
               juce::jmax(inserts.getHeight(), column.getInsertListForTest().getPreferredHeight()))
         << "the list is never shorter than its section";
     EXPECT_FALSE(inserts.isScrollable()) << "3 inserts fit in 5 rows";
-    EXPECT_EQ(column.getEqThumbnailForTest().getHeight(), Layout::kEqHeight);
+    EXPECT_EQ(column.getEqThumbnailForTest().getHeight(), Layout::kEqHeight - 2 * Layout::kPartGap)
+        << "a part gap above and below keeps the curve off the dividers";
 }
 
 TEST(MixerColumnComponentTests, ClickForwardsEqUuidThroughOnClicked) {

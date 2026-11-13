@@ -1,0 +1,30 @@
+# The Mod Matrix keeps its edits in motion: adding a row, picking its source (and creating a new LFO as the source), and
+# the undo and redo of each all glide or fade, never landing in one frame. The proof clips of the same flow are in
+# mod-matrix-create-source.yaml, which has its own no-pop check off because the undo and redo watches would play inside
+# its clips.
+#
+# What a user does: in a new project, opens the Mod Matrix, adds a row, opens its source search, types "lfo", picks
+# Create new LFO. Cmd+Z and Cmd+Shift+Z after each edit (the runner does both after every edit step).
+motion: true
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 0}}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - expect: {id: modMatrix, showing: true, within_ms: 2000}
+  - click: {id: addModulation}
+  - wait: {}
+  - click: {id: modSource}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: lf}
+  - wait: {}
+  - key: {keys: o}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Create new LFO", exists: true, within_ms: 2000}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: "card:LFO", exists: true, within_ms: 2000}
+  - expect: {id: modSource, contains: {text: LFO}, within_ms: 2000}

@@ -23,6 +23,11 @@ constexpr int kBpmLabelWidth = 52;
 constexpr int kTimeSigLabelWidth = 40;
 constexpr int kSongKeyFieldWidth = 132;
 constexpr int kReadoutWidth = 92;
+// The design system's space unit: the gap a label keeps to the control it names.
+constexpr int kCaptionGap = 6;
+// The tempo and time signature labels stop this far above the bar's bottom edge, which with the 2 px inset of the
+// Add Track button under the bar leaves a caption gap between the two.
+constexpr int kLabelHeightInset = 4;
 constexpr int kCountInComboWidth = 64;
 
 // Persistence keys — restored/persisted in setApplicationProperties(), the same idiom
@@ -359,12 +364,16 @@ void TimelineTransportBar::resized() {
     countInCombo_.setBounds(bounds.removeFromLeft(kCountInComboWidth));
     bounds.removeFromLeft(kGap * 2);
 
-    bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth));
+    const int labelHeight = std::max(0, bounds.getHeight() - kLabelHeightInset);
+    bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth).withSizeKeepingCentre(kBpmLabelWidth, labelHeight));
     bounds.removeFromLeft(kGap);
-    timeSigLabel_.setBounds(bounds.removeFromLeft(kTimeSigLabelWidth));
-    bounds.removeFromLeft(kGap);
-    songKeyField_.setBounds(bounds.removeFromLeft(kSongKeyFieldWidth)
-                                .withSizeKeepingCentre(kSongKeyFieldWidth, std::min(24, bounds.getHeight())));
+    timeSigLabel_.setBounds(
+        bounds.removeFromLeft(kTimeSigLabelWidth).withSizeKeepingCentre(kTimeSigLabelWidth, labelHeight));
+    bounds.removeFromLeft(kCaptionGap);
+    // The field takes what a short bar has left rather than overlapping the time signature.
+    const auto songKeySlot = bounds.removeFromLeft(kSongKeyFieldWidth);
+    songKeyField_.setBounds(
+        songKeySlot.withSizeKeepingCentre(songKeySlot.getWidth(), std::min(24, bounds.getHeight())));
     bounds.removeFromLeft(kGap * 2);
 
     readoutBounds_ = bounds.removeFromLeft(kReadoutWidth);

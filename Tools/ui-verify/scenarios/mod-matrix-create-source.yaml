@@ -6,7 +6,7 @@
 # row's source reads LFO. FRO1680: no Cmd+Z here, so the check-2 clip shows the card growing in and not the undo (Tal's
 # note); the undo and redo are covered by ModMatrixPickerTests. Both proof clips are glides: the picker filtering in, the LFO card entering.
 motion: true
-pop_check: {off: "FRO1680: the no-pop undo/redo watch plays inside the proof clip (Tal saw undo, not the card growing); no-pop for the matrix is FRO1709"}
+pop_check: {off: "the no-pop undo/redo watch plays inside the proof clip (Tal saw undo, not the card growing); the same steps run with the check on in mod-matrix-edits-no-pop.yaml"}
 record: true
 save_project: "fro1155 test"
 steps:

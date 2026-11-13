@@ -15,6 +15,13 @@ TimelineAutomationLanes::Bodies::Bodies() {
     setInterceptsMouseClicks(false, true);
 }
 
+void TimelineAutomationLanes::Bodies::setOpen(bool open) {
+    open_ = open;
+    childrenChanged();
+}
+
+void TimelineAutomationLanes::Bodies::childrenChanged() { setVisible(open_ && getNumChildComponents() > 0); }
+
 TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, juce::Component& headerParent)
     : viewState_(viewState)
     , headerParent_(headerParent)
@@ -48,6 +55,8 @@ TimelineAutomationLanes::~TimelineAutomationLanes() {
 }
 
 juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_; }
+
+void TimelineAutomationLanes::setBodiesOpen(bool open) { bodies_->setOpen(open); }
 
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {

@@ -55,8 +55,8 @@ steps:
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}
-  - click: {id: Show Timeline in the main area}
-  - wait: {}
+  # The saved project comes back with the timeline already in the main area (the choice is stored), so there is nothing to click.
+  - expect: {id: timelineTrackHeaderViewport, showing: true, within_ms: 2000}
   - click: {id: "Show Audio 3 automation (1 lane)"}
   - wait: {}
   - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}

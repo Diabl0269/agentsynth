@@ -25,6 +25,9 @@ namespace {
 // doesn't grow wider than necessary.
 constexpr int kMeterWidth = 32;
 
+static_assert(synth::ui::MixerFader::kClearBelowReadout == synth::ui::MixerSectionLayout::kFaderToButtonsGap,
+              "the fader leaves the gap the layout reckons with under its readout");
+
 // applyPanAccessibilityText moved to MixerPanAccessibilityText.h so MixerSendList's
 // own per-send pan knobs can share the exact same "Center"/"50% left"/"50% right" phrasing instead
 // of a second copy -- see that header's own comment for why every caller must reapply it AFTER
@@ -552,15 +555,20 @@ void MixerColumnComponent::resized() {
     layoutSections(geometry, inner);
 
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
-    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight).reduced(8, 0));
+    // A part gap above and below keeps the pan slider off the divider over it and the peak readout under it.
+    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight)
+                             .reduced(8, 0)
+                             .withTrimmedTop(MixerSectionLayout::kPartGap)
+                             .withTrimmedBottom(MixerSectionLayout::kPartGap));
 
     auto msRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight);
-    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(2));
-    soloButton_.setBounds(msRow.reduced(2));
+    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(MixerSectionLayout::kMsButtonInset));
+    soloButton_.setBounds(msRow.reduced(MixerSectionLayout::kMsButtonInset));
 
     // The clip readout sits directly above the meter+fader row it reports on (Cubase's own
     // "Meter Peak Level" placement).
-    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight));
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight)
+                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
     auto faderRow = row(geometry.faderTop, geometry.faderHeight);
     meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
     faderRow.removeFromRight(2);
@@ -585,7 +593,10 @@ void MixerColumnComponent::layoutSections(const MixerSectionLayout::Geometry& ge
         if (section == MixerSection::Eq) {
             const float open = sectionLayout_->getShownAmount(section);
             eqThumbnail_.setAlpha(open);
-            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0) : area);
+            // A part gap above and below keeps the curve off the two dividers around its section.
+            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0)
+                                                          : area.withTrimmedTop(MixerSectionLayout::kPartGap)
+                                                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
             continue;
         }
         auto& viewport = section == MixerSection::Inserts ? insertViewport_ : sendViewport_;

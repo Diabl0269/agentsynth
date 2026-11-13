@@ -207,7 +207,7 @@ TEST_F(MixerSectionPanelTest, EqToggleHidesTheCurveEverywhereAndTheStripBringsIt
     panel().rebuild();
     column = strips()[0];
     ASSERT_TRUE(column->getEqThumbnailForTest().isVisible());
-    ASSERT_EQ(column->getEqThumbnailForTest().getHeight(), Layout::kEqHeight);
+    ASSERT_EQ(column->getEqThumbnailForTest().getHeight(), Layout::kEqHeight - 2 * Layout::kPartGap);
 
     click(panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Eq));
     ASSERT_TRUE(layout().isHidden(MixerSection::Eq));
@@ -223,7 +223,7 @@ TEST_F(MixerSectionPanelTest, EqToggleHidesTheCurveEverywhereAndTheStripBringsIt
     ASSERT_TRUE(otherStrip.isVisible());
     click(otherStrip);
     EXPECT_FALSE(layout().isHidden(MixerSection::Eq)) << "a strip click in ANY column shows it again";
-    EXPECT_EQ(column->getEqThumbnailForTest().getHeight(), Layout::kEqHeight);
+    EXPECT_EQ(column->getEqThumbnailForTest().getHeight(), Layout::kEqHeight - 2 * Layout::kPartGap);
 }
 
 TEST_F(MixerSectionPanelTest, DividerDragResizesEveryColumnInWholeRowsAndPersistsOnRelease) {

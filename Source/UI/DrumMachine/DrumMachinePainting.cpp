@@ -59,20 +59,42 @@ void DrumMachineComponent::layoutToolbar() {
     header.removeFromLeft(kToolbarPad);
     showAllButton_.setBounds(header.removeFromLeft(showAllWidth));
     header.removeFromLeft(kToolbarPad);
-    stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
-    stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
-    header.removeFromLeft(kToolbarPad);
-    swingCaptionBounds_ = header.removeFromLeft(kSwingCaptionWidth);
-    swingField_.setBounds(
-        header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
-    header.removeFromLeft(kToolbarPad);
-    humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
-    humaniseKnob_->setBounds(
-        header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
-    header.removeFromLeft(kToolbarPad);
-    humaniseValueBounds_ = header.removeFromLeft(kSwingValueWidth);
-    header.removeFromLeft(kToolbarPad);
-    ideasButton_.setBounds(header.removeFromLeft(kIdeasWidth));
+    // The groups after the name's own share each go in whole or not at all: a toolbar too narrow for one leaves that
+    // group (and the ones after it) with no bounds, so its parts never overlap the next group's.
+    bool room = true;
+    const auto takes = [&](int width) {
+        room = room && header.getWidth() >= width;
+        return room;
+    };
+    const juce::Rectangle<int> none;
+    stepsCaptionBounds_ = swingCaptionBounds_ = humaniseCaptionBounds_ = humaniseValueBounds_ = none;
+    if (takes(kStepsCaptionWidth + kStepsComboWidth)) {
+        stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
+        stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
+        header.removeFromLeft(kToolbarPad);
+    } else {
+        stepsCombo_.setBounds(none);
+    }
+    if (takes(kSwingCaptionWidth + swingFieldWidth())) {
+        swingCaptionBounds_ = header.removeFromLeft(kSwingCaptionWidth);
+        swingField_.setBounds(
+            header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
+        header.removeFromLeft(kToolbarPad);
+    } else {
+        swingField_.setBounds(none);
+    }
+    if (takes(kHumaniseCaptionWidth + kSwingKnobSize + kToolbarPad + kSwingValueWidth)) {
+        humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
+        humaniseKnob_->setBounds(
+            header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
+        header.removeFromLeft(kToolbarPad);
+        humaniseValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+        header.removeFromLeft(kToolbarPad);
+    } else {
+        humaniseKnob_->setBounds(none);
+    }
+    // The last button may be squeezed to a square before it gives way.
+    ideasButton_.setBounds(takes(kSwingKnobSize) ? header.removeFromLeft(kIdeasWidth) : none);
 }
 
 void DrumMachineComponent::resized() {
