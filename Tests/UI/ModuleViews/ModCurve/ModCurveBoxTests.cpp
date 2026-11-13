@@ -454,7 +454,7 @@ TEST_F(ModuleComponentTest, WindowBendHandlesStayOnEverySlopingSegmentAfterPoint
 
 TEST_F(ModuleComponentTest, WindowSnapRoundsNewAndMovedPointsToTheGridAndShiftPlacesFreely) {
     WindowEditRig r;
-    r.content.gridBox().setSelectedId(2, juce::sendNotificationSync); // Grid 1/4
+    r.content.gridBox().setSelectedId(2, juce::sendNotificationSync); // 1/4
     r.content.snapButton().setToggleState(true, juce::sendNotificationSync);
 
     const auto p = r.onLine(0.3);
@@ -487,7 +487,7 @@ TEST_F(ModuleComponentTest, WindowEveryHintSentenceNamesAThingTheWindowHas) {
           "Snap rounds points to the grid; hold Shift to place them freely."})
         EXPECT_TRUE(hint.contains(sentence)) << sentence << " is proved by a test of this file";
     WindowEditRig r;
-    EXPECT_EQ(r.content.snapButton().getTitle(), "Snap to grid");
+    EXPECT_EQ(r.content.snapButton().getTitle(), "Snap");
     EXPECT_EQ(r.content.gridBox().getTitle(), "Curve grid");
     EXPECT_TRUE(r.content.snapButton().getWantsKeyboardFocus());
     EXPECT_TRUE(r.content.gridBox().getWantsKeyboardFocus());
@@ -496,11 +496,60 @@ TEST_F(ModuleComponentTest, WindowEveryHintSentenceNamesAThingTheWindowHas) {
 }
 
 TEST_F(ModuleComponentTest, WindowGridBoxNamesAreCellsAcrossTheRange) {
-    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/8"), 8);
-    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/2"), 2);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("1/8"), 8);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("1/2"), 2);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/16"), 16) << "an old saved name still reads";
     WindowEditRig r;
-    EXPECT_EQ(r.content.gridBox().getText(), "Grid 1/8");
+    EXPECT_EQ(r.content.gridBox().getText(), "1/8");
+    for (const auto& name : r.content.gridBox().getChoices())
+        EXPECT_FALSE(name.containsIgnoreCase("grid")) << "the word Grid is the label's, once";
     EXPECT_FALSE(r.content.snapButton().getToggleState()) << "Snap starts off: nothing moves until it is asked to";
+}
+
+TEST_F(ModuleComponentTest, WindowSnapButtonFlipsOnAClickAndOnReturnAndShowsItsWord) {
+    WindowEditRig r;
+    auto& snap = r.content.snapButton();
+    EXPECT_EQ(snap.getButtonText(), "Snap") << "icon and word, like the timeline's";
+    EXPECT_EQ(snap.getComponentID(), "modCurveSnap");
+    EXPECT_EQ(snap.getIcon(), synth::theme::Icon::ToolbarSnap) << "the one shared Snap button";
+    snap.triggerClick();
+    r.settle();
+    EXPECT_TRUE(snap.getToggleState());
+    EXPECT_TRUE(static_cast<juce::Component&>(snap).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    r.settle();
+    EXPECT_FALSE(snap.getToggleState());
+}
+
+namespace {
+void expectBottomRowClear(synth::ui::ModCurveWindowContent& content, int w, int h) {
+    content.setSize(w, h);
+    auto& reset = content.resetButton();
+    auto& done = content.doneButton();
+    auto& snap = content.snapButton();
+    auto& label = content.gridLabel();
+    auto& box = content.gridBox();
+    const std::vector<std::pair<const char*, juce::Component*>> row{
+        {"Snap", &snap}, {"Grid label", &label}, {"Grid box", &box}, {"Reset", &reset}, {"Done", &done}};
+    for (size_t i = 0; i < row.size(); ++i) {
+        EXPECT_GT(row[i].second->getWidth(), 0) << row[i].first << " at " << w << "x" << h;
+        EXPECT_TRUE(content.getLocalBounds().contains(row[i].second->getBounds())) << row[i].first;
+        for (size_t j = i + 1; j < row.size(); ++j)
+            EXPECT_FALSE(row[i].second->getBounds().intersects(row[j].second->getBounds()))
+                << row[i].first << " overlaps " << row[j].first << " at " << w << "x" << h;
+    }
+    EXPECT_LE(label.getRight(), box.getX()) << "the label sits left of its box";
+    EXPECT_GE(label.getX(), snap.getRight());
+}
+} // namespace
+
+TEST_F(ModuleComponentTest, WindowGridLabelSitsLeftOfItsBoxAndNothingInTheBottomRowOverlaps) {
+    WindowEditRig r;
+    EXPECT_EQ(r.content.gridLabel().getText(), "Grid");
+    EXPECT_TRUE(r.content.gridLabel().isShowing() || r.content.gridLabel().isVisible());
+    EXPECT_FALSE(r.content.gridLabel().getWantsKeyboardFocus()) << "the label is not a Tab stop";
+    expectBottomRowClear(r.content, 520, 440);
+    expectBottomRowClear(r.content, synth::ui::ModCurveWindowContent::kMinWidth,
+                         synth::ui::ModCurveWindowContent::kMinHeight);
 }
 
 // Regression test for FRO1449: a click on the anchor of an open panel closes it, and never re-opens it. A press on its

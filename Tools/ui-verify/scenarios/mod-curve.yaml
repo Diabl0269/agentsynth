@@ -16,6 +16,7 @@ steps:
   - wait: {}
   - expect: {id: modCurveBox, showing: true, within_ms: 1500}
   - screenshot: {id: modCurveBox, name: curve-box-linear}
+  - mark: {check: 1, name: box-shows-load-save-enlarge}
   - click: {id: "Exp curve"}
   - wait: {}
   - screenshot: {id: modCurveBox, name: curve-box-exp}
