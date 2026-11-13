@@ -298,7 +298,7 @@ seeds from the time); every result is ONE undo step, and the cells it changed ke
 - **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
   snare (38, 40) notes stay exactly as they are and only the other drums are generated.
 
-Escape closes the popover and the focus returns to the Ideas button; each result is announced ("Filled with House
+Up and Down step between the popover's controls (stopping at the ends) and Escape closes it, returning focus to the Ideas button; each result is announced ("Filled with House
 starter").
 
 ## Keyboard and accessibility

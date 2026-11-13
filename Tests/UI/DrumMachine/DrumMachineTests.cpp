@@ -210,6 +210,13 @@ struct HeaderWalk {
                            forward ? juce::ModifierKeys::noModifiers : juce::ModifierKeys::shiftModifier, 0),
             &f.grid);
     }
+    // An arrow that reached the grid's listener because the focused stop did not use it (or, with Alt, a stop that
+    // does).
+    bool arrow(bool right, int mods = juce::ModifierKeys::noModifiers) {
+        return f.grid.getTabWalk().keyPressed(
+            juce::KeyPress(right ? juce::KeyPress::rightKey : juce::KeyPress::leftKey, juce::ModifierKeys(mods), 0),
+            &f.grid);
+    }
 };
 const juce::StringArray kHeaderOrder{"drumViewSwitch", "drumPlayClip", "drumShowAll", "drumStepsPerBar",
                                      "drumSwing",      "drumHumanise", "drumIdeas",   "drumMachineGrid"};
@@ -226,6 +233,39 @@ TEST(DrumMachineGridTest, TabFromTheGridWalksTheHeaderInScreenOrderThenLeaves) {
     EXPECT_EQ(walk.focused, &f.grid);
     EXPECT_FALSE(walk.press(true)) << "the Tab after a full walk goes on to the next region";
     EXPECT_TRUE(walk.press(true)) << "and the walk is ready again for the next visit";
+}
+
+// Regression test for FRO1549: the header is a bar of controls, so Left and Right step along it like the Timeline's and
+// the Mixer's top bars.
+TEST(DrumMachineGridTest, RightAndLeftOnAHeaderStopStepAlongTheHeaderAndTheEndsReturnToTheGrid) {
+    DrumFixture f;
+    f.grid.setComponentID("drumMachineGrid");
+    HeaderWalk walk(f);
+    EXPECT_FALSE(walk.arrow(true)) << "on the grid the arrows keep moving the focus cell";
+    ASSERT_TRUE(walk.press(true)); // the view switch, the first stop
+    for (int i = 1; i < kHeaderOrder.size() - 1; ++i) {
+        ASSERT_TRUE(walk.arrow(true, i % 2 == 0 ? juce::ModifierKeys::noModifiers : juce::ModifierKeys::altModifier));
+        EXPECT_EQ(walk.visited.strings.getLast(), kHeaderOrder[i]) << "Right (or Alt+Right) steps to the next stop";
+    }
+    ASSERT_TRUE(walk.arrow(true));
+    EXPECT_EQ(walk.focused, &f.grid) << "Right past Ideas hands focus back to the grid";
+    EXPECT_TRUE(walk.press(true)) << "and the next Tab enters the header again, as after a fresh visit";
+    EXPECT_EQ(walk.visited.strings.getLast(), "drumViewSwitch");
+    ASSERT_TRUE(walk.arrow(false));
+    EXPECT_EQ(walk.focused, &f.grid) << "Left before the first stop hands focus back to the grid";
+}
+
+TEST(DrumMachineGridTest, LeftFromAHeaderStopStepsBackAndShiftedArrowsAreNotTheHeadersKeys) {
+    DrumFixture f;
+    f.grid.setComponentID("drumMachineGrid");
+    HeaderWalk walk(f);
+    for (int i = 0; i < 3; ++i)
+        ASSERT_TRUE(walk.press(true)); // view switch, Play clip, Show all (skipped when greyed: then Steps per bar)
+    const auto at = walk.visited.strings.getLast();
+    ASSERT_TRUE(walk.arrow(false));
+    EXPECT_NE(walk.visited.strings.getLast(), at);
+    EXPECT_EQ(walk.visited.strings.getLast(), kHeaderOrder[kHeaderOrder.indexOf(at) - 1]);
+    EXPECT_FALSE(walk.arrow(true, juce::ModifierKeys::shiftModifier)) << "Shift+arrow is another action's chord";
 }
 
 TEST(DrumMachineGridTest, ShiftTabAfterAFullWalkGoesBackIntoTheHeader) {

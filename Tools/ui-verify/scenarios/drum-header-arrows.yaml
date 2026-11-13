@@ -1,0 +1,52 @@
+# The drum clip header is a bar of controls, so Left and Right step along it like the Timeline's and the Mixer's top
+# bars (the rule: a bar takes Left/Right, a panel takes Up/Down, Tab stays the walk). A control that keeps the plain
+# arrows for itself (the View switch, Steps per bar, Swing, Humanise) takes Alt+Left/Right.
+#
+# What a user does, keys only:
+#   1. Opens the project with a Drum Kit track and its clip, opens the clip (Cmd+Shift+T, Tab, Tab, Return).
+#   2. Tab from the grid: the View switch. Alt+Right: Play clip. Right: Steps per bar.
+#   3. Alt+Right: Swing, then Humanise. Alt+Right again: Ideas. Right from Ideas: back to the grid.
+#   4. Left from the grid side: Left on Play clip goes back to View.
+record: true
+save_project: drum-header-arrows
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+shift+t}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - expect: {id: timelineDrumMachine, hasFocus: true}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: View}
+  - key: {keys: alt+right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Play clip}
+  - key: {keys: right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Steps per bar}
+  - key: {keys: alt+right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Swing}
+  - mark: {check: 1, name: swing-by-arrow}
+  - key: {keys: alt+right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Humanise}
+  - key: {keys: alt+right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Ideas}
+  - screenshot: {name: ideas-by-arrow}
+  - key: {keys: right}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, hasFocus: true}
+  - key: {keys: tab}
+  - key: {keys: alt+right}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Play clip}
+  - key: {keys: left}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: View}
+  - mark: {check: 1, name: left-back-to-view}

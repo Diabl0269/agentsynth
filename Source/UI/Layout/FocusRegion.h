@@ -194,6 +194,10 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
 // testable as FocusRegionRegistry's own pure helpers above (see docs/mixer/panel.md).
 std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key, const ShortcutManager& shortcutManager);
 
+/** resolveFocusCycleKeyPress for a widget that may have no manager (a headless embedding): with none, the default keys,
+ *  Tab forward and Shift+Tab backward. For a widget that walks its own stops with the region cycle's keys. */
+std::optional<bool> focusCycleDirection(const juce::KeyPress& key, const ShortcutManager* shortcutManager);
+
 /** Whether a ring waiting for a panel slide may still be placed when the slide lands. Not if the dock closed again
  *  while it slid, nor if the keys moved on since the command ran (focus is neither where the command left it nor
  *  inside the panel, which takes focus itself once it shows): a late ring must not steal focus from a later scene. */
