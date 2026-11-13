@@ -11,6 +11,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

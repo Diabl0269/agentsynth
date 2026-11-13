@@ -9,6 +9,7 @@
 #include "Modules/CardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "SnippetManagerTestHelpers.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <chrono>
 
 using synth::HostedPluginModule;

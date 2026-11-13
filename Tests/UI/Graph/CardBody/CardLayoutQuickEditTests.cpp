@@ -10,6 +10,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"

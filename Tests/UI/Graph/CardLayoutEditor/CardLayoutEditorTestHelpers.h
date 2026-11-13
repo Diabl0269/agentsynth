@@ -8,6 +8,7 @@
 
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.h"

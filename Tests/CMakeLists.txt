@@ -339,6 +339,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
+    UI/Graph/ModuleComponent/SamplerMapAuditionTests.cpp
     UI/Graph/ModuleComponent/DrumKitCardTests.cpp
     UI/Graph/ModuleComponent/DrumKitPadsCardTests.cpp
     UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
@@ -825,6 +826,7 @@ add_executable(Tests
     UI/Layout/SearchMatchTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
+    UI/Graph/CardBody/CardCanvas.cpp
     UI/Graph/CardBody/CardBodyFreeformTests.cpp
     UI/Graph/CardBody/CardBodyAdsrLooksTests.cpp
     UI/Graph/CardBody/CardBodyConditionsTests.cpp

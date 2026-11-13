@@ -1,0 +1,2 @@
+<region> sample=tone.wav lokey=36 hikey=59 pitch_keycenter=48
+<region> sample=tone.wav lokey=60 hikey=84 pitch_keycenter=72

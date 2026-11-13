@@ -215,6 +215,8 @@ juce::String canvasCardActionName(const juce::String& actionId) {
 // The actions on the focused track header row, split out of getActionDescription to keep that
 // function under the function-size cap.
 juce::String focusedTrackActionName(const juce::String& actionId) {
+    if (actionId == "samplerMapPlaySelected")
+        return "Play the selected recording";
     if (actionId == "trackHeaderTogglePoly")
         return "Poly On or Off for Focused Track";
     // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,

@@ -12,6 +12,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/ModDot/ModDotButton.h"

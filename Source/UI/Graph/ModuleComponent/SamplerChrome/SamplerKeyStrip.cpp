@@ -1,7 +1,9 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 #include <set>
+#include <utility>
 
 namespace synth::ui {
 
@@ -14,6 +16,8 @@ constexpr float kSoftAccentDarken = 0.55f;
 constexpr float kBlackKeyHeightShare = 0.62f;
 constexpr int kWideVelocityRange = 100;
 constexpr int kLoudFromVelocity = 64;
+constexpr int kSoftestKeyVelocity = 64; // at the top of the strip; the bottom plays 127
+constexpr int kLoudestKeyVelocity = 127;
 
 bool isBlackKey(int note) {
     const int pitchClass = note % 12;
@@ -35,7 +39,7 @@ SamplerKeyStrip::SamplerKeyStrip(SamplerModule& sampler)
     : sampler_(sampler) {
     setWantsKeyboardFocus(false);
     setTooltip("Key strip: the keys each recording covers, the loud layer above and the soft layer below. Playing "
-               "notes light up. Double-click to edit the map.");
+               "notes light up. Double-click to edit the map. Click a key to play it.");
     refresh();
 }
 
@@ -87,15 +91,76 @@ void SamplerKeyStrip::refresh() {
                                         (softAndLoud_ ? ", soft and loud" : ", one layer"));
         repaint();
     }
-    setLit(sampler_.getSoundingNotes());
+    setLit(soundingWithHeld());
 }
 
 void SamplerKeyStrip::poll() {
     if (const int generation = sampler_.getInstrumentGeneration(); generation != generation_)
         refresh();
     else if (lit_.any() || sampler_.isPlaying())
-        setLit(sampler_.getSoundingNotes());
+        setLit(soundingWithHeld());
 }
+
+// The held key lights at once, without waiting for the processor to report it as sounding.
+std::bitset<128> SamplerKeyStrip::soundingWithHeld() const {
+    auto notes = sampler_.getSoundingNotes();
+    if (heldKey_ >= 0)
+        notes.set((size_t)heldKey_);
+    return notes;
+}
+
+// Same geometry as paint: the keys span the strip's inner width, and the whole strip is the click target.
+int SamplerKeyStrip::keyAt(int x) const {
+    if (bands_.empty())
+        return -1;
+    const auto inner = getLocalBounds().toFloat().reduced(2.0f);
+    const float keyWidth = inner.getWidth() / (float)(span_.getEnd() - span_.getStart() + 1);
+    if (keyWidth <= 0.0f)
+        return -1;
+    const int note = span_.getStart() + (int)std::floor(((float)x - inner.getX()) / keyWidth);
+    return juce::jlimit(span_.getStart(), span_.getEnd(), note);
+}
+
+// Louder toward the bottom of the strip, as the map's keyboard answers.
+int SamplerKeyStrip::velocityAt(int y) const {
+    const float height = std::max(1.0f, (float)getHeight());
+    const float down = juce::jlimit(0.0f, 1.0f, (float)y / height);
+    return kSoftestKeyVelocity + juce::roundToInt(down * (float)(kLoudestKeyVelocity - kSoftestKeyVelocity));
+}
+
+void SamplerKeyStrip::playHeld(int note, int velocity) {
+    heldKey_ = note;
+    sampler_.noteInbox().push(note, velocity, 0);
+    setLit(soundingWithHeld());
+}
+
+// No push from the destructor: the processor can be freed before the card.
+void SamplerKeyStrip::releaseHeld() {
+    if (heldKey_ < 0)
+        return;
+    const int note = std::exchange(heldKey_, -1);
+    sampler_.noteInbox().push(note, 0, 0);
+    setLit(soundingWithHeld());
+}
+
+void SamplerKeyStrip::mouseDown(const juce::MouseEvent& e) {
+    if (!e.mods.isLeftButtonDown() || e.mods.isPopupMenu() || bands_.empty())
+        return;
+    if (const int note = keyAt(e.x); note >= 0)
+        playHeld(note, velocityAt(e.y));
+}
+
+void SamplerKeyStrip::mouseDrag(const juce::MouseEvent& e) {
+    if (heldKey_ < 0)
+        return;
+    const int next = keyAt(e.x);
+    if (next < 0 || next == heldKey_)
+        return;
+    releaseHeld();
+    playHeld(next, velocityAt(e.y));
+}
+
+void SamplerKeyStrip::mouseUp(const juce::MouseEvent&) { releaseHeld(); }
 
 void SamplerKeyStrip::setLit(const std::bitset<128>& notes) {
     if (notes == lit_)
