@@ -59,6 +59,9 @@ public:
 
     /** The container the lane editors live in; the panel sizes it to its lanes region. */
     juce::Component& getBodies() noexcept;
+    /** False while the piano roll covers the lanes region. The container also stays hidden while it holds no editor,
+     *  so an empty one never sits against the ruler and the track column as a bare rectangle. */
+    void setBodiesOpen(bool open);
     /** The chips every lane header and modulator row shows, and the lane in edit mode (see LaneControlSet). */
     LaneControlSet& getLaneControls() noexcept { return laneControls_; }
     /** Where the chip sets are saved (the user settings); null keeps them in memory. Must outlive this. */
@@ -298,6 +301,11 @@ private:
     AutomationLaneEditor* laneRangeEditor() const;
     struct Bodies : juce::Component {
         Bodies();
+        void setOpen(bool open);
+        void childrenChanged() override;
+
+    private:
+        bool open_ = true;
     };
 
     // One lane's modulator rows: the routings they were built from, a row in the header column and a

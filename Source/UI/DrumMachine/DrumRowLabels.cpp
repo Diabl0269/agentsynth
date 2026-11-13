@@ -17,6 +17,7 @@ constexpr int kToggleGap = 2;
 constexpr int kRightPad = 4;
 constexpr float kDimmedAlpha = 0.45f;
 constexpr int kNameLeft = kDotLeft + kDotDiameter + 6;
+constexpr int kNameRowGap = 1; // the name buttons of two rows never touch
 
 // The drum's name as a button: it draws the text itself (accent colour while selected) and the focus ring.
 class NameButton : public juce::Button {
@@ -150,7 +151,8 @@ void DrumRowLabels::layoutControls() {
         controls.solo->setVisible(whole);
         const auto nameArea = juce::Rectangle<int>(0, row.top, getWidth(), row.height)
                                   .withTrimmedLeft(kNameLeft)
-                                  .withTrimmedRight(2 * kToggleWidth + kToggleGap + kRightPad + 2);
+                                  .withTrimmedRight(2 * kToggleWidth + kToggleGap + kRightPad + 2)
+                                  .withTrimmedBottom(kNameRowGap);
         controls.name->setBounds(nameArea);
         controls.name->setVisible(row.height > 0);
     }

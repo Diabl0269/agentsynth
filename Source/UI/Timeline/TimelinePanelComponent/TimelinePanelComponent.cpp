@@ -301,9 +301,9 @@ TimelinePanelComponent::TimelinePanelComponent()
     // inset from its strip, so with an editor open it would be visited after the editor beside it; every focusable
     // sibling is named here (one that is missing sorts after all of these).
     synth::ui::setReadingFocusOrder({&sidePaneButton_, &transportBar_, clipSizingButton_.get(), &followPlayheadButton_,
-                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(),
-                                     &trackHeaderWidthHandle_, &addTrackButton_, &trackHeaderViewport_, &clipLaneArea_,
-                                     &pianoRoll_, &drum_->grid});
+                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(), &addTrackButton_,
+                                     &trackHeaderWidthHandle_, &trackHeaderViewport_, &clipLaneArea_, &pianoRoll_,
+                                     &drum_->grid});
 }
 
 // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component --
