@@ -7,6 +7,7 @@
 #      Sampler sounds it; letting go ends it.
 #   3. Presses "Make my own copy", selects the upper recording, lowers its High key by one, then presses Cmd+Z: the
 #      High key is back to C5.
+#   4. Closes the map (Done) and presses a key on the card's own key strip: that key lights and sounds too.
 # The Mode switch has three segments (Sample, Granular, Instrument); the click lands in the third. Key 60 sits at the
 # left edge of the second block, so the press lands at its x and in the keyboard row (y 30 of the map).
 # Needs the app to be the active application (the library search field must have keyboard focus).
@@ -68,3 +69,14 @@ steps:
   - wait: {settleMs: 600}
   - expect: {id: High key, value: 84}
   - mark: {check: 2, name: undo-in-map}
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapBlocks, exists: false, within_ms: 3000}
+  - list: {root: "card:Sampler", depth: 2}
+  - audioPump: {run: true}
+  - mouseDown: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: card-strip-plays}
+  - mouseUp: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
+  - wait: {settleMs: 600}
+  - audioPump: {run: false}

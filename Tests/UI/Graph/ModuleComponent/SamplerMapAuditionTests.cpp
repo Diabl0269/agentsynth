@@ -7,11 +7,13 @@
 #include "../CardBody/CardCanvas.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
 
 using namespace cardbody_test;
 using namespace sampler_test;
 using synth::ui::SamplerChrome;
+using synth::ui::SamplerKeyStrip;
 using synth::ui::SamplerMapFields;
 using synth::ui::SamplerMapView;
 
@@ -272,4 +274,64 @@ TEST(SamplerMapAudition, AFieldEditIsOneUndoStepAndTheOpenMapFollowsTheUndo) {
     EXPECT_EQ((int)field.getValue(), oldHigh) << "the fields follow the undo";
     EXPECT_EQ(scene.blocks().getBlock(c3)->getRight(), oldRight) << "and so do the blocks";
     EXPECT_FALSE(scene.canvas.undo.undo()) << "the edit was one step, no more";
+}
+
+namespace {
+
+constexpr int kStripWidth = 300;
+constexpr int kStripHeight = 40;
+
+// The strip's x for the middle of `note`, on the same geometry the strip paints with (2 px inset).
+float stripX(const SamplerKeyStrip& strip, int note) {
+    const float keyWidth = (float)(kStripWidth - 4) / (float)(strip.getKeySpan().getLength() + 1);
+    return 2.0f + (float)(note - strip.getKeySpan().getStart() + 0.5f) * keyWidth;
+}
+
+juce::MouseEvent stripMouse(SamplerKeyStrip& strip, float x, bool down) {
+    return mouseAt(strip, {x, 20.0f},
+                   down ? juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier) : juce::ModifierKeys());
+}
+
+} // namespace
+
+TEST(SamplerKeyStripAudition, PressingAKeySoundsItAndLettingGoEndsIt) {
+    Scene scene;
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    EXPECT_EQ(scene.run(2), 0.0f);
+    strip.mouseDown(stripMouse(strip, stripX(strip, 48), true));
+    EXPECT_EQ(strip.getHeldKey(), 48);
+    EXPECT_TRUE(strip.getLitNotes().test(48)) << "lit at once, without waiting for the tick";
+    EXPECT_GT(scene.run(4), 0.01f);
+    strip.mouseUp(stripMouse(strip, stripX(strip, 48), false));
+    EXPECT_EQ(strip.getHeldKey(), -1);
+    EXPECT_EQ(scene.run(40), 0.0f);
+}
+
+TEST(SamplerKeyStripAudition, DraggingToAnotherKeyReleasesTheOldAndPlaysTheNew) {
+    Scene scene;
+    SamplerKeyStrip strip(scene.sampler());
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    strip.mouseDown(stripMouse(strip, stripX(strip, 48), true));
+    scene.run(4);
+    strip.mouseDrag(stripMouse(strip, stripX(strip, 50), true));
+    EXPECT_EQ(strip.getHeldKey(), 50);
+    scene.run(40);
+    EXPECT_FALSE(scene.sampler().getSoundingNotes().test(48));
+    EXPECT_TRUE(scene.sampler().getSoundingNotes().test(50));
+    strip.mouseUp(stripMouse(strip, stripX(strip, 50), false));
+    EXPECT_EQ(scene.run(40), 0.0f);
+}
+
+TEST(SamplerKeyStripAudition, APressWithNoInstrumentDoesNothing) {
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<SamplerModule>(), 0, 0);
+    auto& sampler = *dynamic_cast<SamplerModule*>(canvas.processor(id));
+    sampler.prepareToPlay(kRate, kBlock);
+    SamplerKeyStrip strip(sampler);
+    strip.setBounds(0, 0, kStripWidth, kStripHeight);
+    strip.mouseDown(stripMouse(strip, 150.0f, true));
+    EXPECT_EQ(strip.getHeldKey(), -1);
+    strip.mouseUp(stripMouse(strip, 150.0f, false));
+    EXPECT_EQ(strip.getHeldKey(), -1);
 }
