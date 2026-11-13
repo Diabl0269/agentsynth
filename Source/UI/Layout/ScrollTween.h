@@ -1,7 +1,7 @@
 #pragma once
 
-// ScrollTween.h -- eases a mouse-wheel NOTCH (a big one-frame jump) over ~120 ms. Trackpad and
-// inertial events never come here. Two axes so a diagonal notch shares one driver.
+// ScrollTween.h -- eases a mouse-wheel NOTCH (a big one-frame jump) over ~120 ms. A trackpad's vertical events go to
+// ScrollFrameSmoother at the end of this file instead. Two axes so a diagonal notch shares one driver.
 
 #include "UI/Layout/UIAnimation.h"
 #include <algorithm>
@@ -158,6 +158,115 @@ private:
     ScrollTween tween_;
     bool animateOffScreenForTest_ = false;
     std::array<double, ScrollTween::kAxes> last_{};
+    synth::ui::AnimationDriver anim_;
+    std::optional<juce::VBlankAnimatorUpdater> updater_;
+};
+
+// Paces a TRACKPAD vertical scroll at the display rate. A trackpad sends wheel events at its own rate (about 60 to 125
+// a second, unevenly), not the screen's: applying each one at once moves the view several times in one frame and not at
+// all in the next. Here the deltas only pile up in a backlog; once per VBlank frame a fraction of the backlog is
+// applied (one view move, one repaint), so the step per frame stays even while the finger or the fling moves at a
+// steady speed.
+class ScrollFrameSmoother {
+public:
+    // How fast the backlog drains: it loses 1 - e^(-dt / kTauMs) of itself a frame (about 34 percent at 60 Hz, 19 at
+    // 120 Hz), so a lone event lands in about 4 frames and a steady stream adds no lag beyond that.
+    static constexpr double kTauMs = 40.0;
+    // A backlog below this is applied in full: the tail ends instead of creeping for ever.
+    static constexpr double kRestPx = 0.5;
+    static constexpr double kRunMs = 400.0;      // one bounded run; a backlog left at its end starts the next
+    using Apply = std::function<double(double)>; // moves the view by the delta, returns how far it really moved
+
+    ~ScrollFrameSmoother() { cancel(); }
+
+    // False means "not paced, apply it yourself" (host not showing: headless tests, unless the test opts in).
+    bool push(juce::Component& host, double deltaPx, Apply apply) {
+        if (!host.isShowing() && !offScreenForTest_) {
+            cancel();
+            return false;
+        }
+        apply_ = std::move(apply);
+        // A reversal drops what is left of the old direction, so the view turns at once instead of coasting on.
+        if (backlogPx_ != 0.0 && (deltaPx < 0.0) != (backlogPx_ < 0.0))
+            backlogPx_ = 0.0;
+        backlogPx_ += deltaPx;
+        if (offScreenForTest_ || anim_.isRunning())
+            return true;
+        lastFrameMs_ = 0.0;
+        startRun(host);
+        return true;
+    }
+
+    // Applies the whole backlog now (a zoom, a notch, a programmatic move must see the view where the finger left it).
+    void flush() {
+        if (backlogPx_ != 0.0)
+            applyStep(backlogPx_);
+        cancel();
+    }
+
+    // Drops the backlog and stops the run, applying nothing.
+    void cancel() {
+        backlogPx_ = 0.0;
+        anim_.stop();
+    }
+
+    bool hasBacklog() const noexcept { return backlogPx_ != 0.0; }
+    double backlogPx() const noexcept { return backlogPx_; }
+
+    /** Test seams: no VBlank reaches an off-screen host, so a test runs the frames by hand with the gap it wants. */
+    void setOffScreenForTest(bool on) noexcept { offScreenForTest_ = on; }
+    void frameForTest(double dtMs) { frame(dtMs); }
+
+    /** What the owner did, for the tests: frames that moved the view, and its syncs (one per frame is the aim). */
+    int movedFrames = 0;
+    int syncCalls = 0;
+    double repaintedPx = 0.0; // area the syncs asked to repaint, summed
+
+private:
+    void startRun(juce::Component& host) {
+        if (!updater_.has_value())
+            updater_.emplace(&host);
+        anim_.start(
+            *updater_, kRunMs, [](float t) { return t; }, [this](float) { onVBlank(); },
+            [this, &host] {
+                onVBlank();
+                if (backlogPx_ != 0.0)
+                    startRun(host);
+            });
+    }
+
+    void onVBlank() {
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        const double dt = lastFrameMs_ > 0.0 ? now - lastFrameMs_ : 1000.0 / 60.0;
+        lastFrameMs_ = now;
+        frame(dt);
+    }
+
+    void frame(double dtMs) {
+        if (backlogPx_ == 0.0)
+            return;
+        const double keep = std::exp(-std::clamp(dtMs, 1.0, 50.0) / kTauMs);
+        double step = backlogPx_ * (1.0 - keep);
+        if (std::abs(backlogPx_) < kRestPx || std::abs(backlogPx_ - step) < kRestPx)
+            step = backlogPx_;
+        applyStep(step);
+    }
+
+    void applyStep(double step) {
+        const double want = step;
+        backlogPx_ -= step;
+        if (std::abs(backlogPx_) < 1.0e-9)
+            backlogPx_ = 0.0;
+        const double got = apply_ ? apply_(want) : want;
+        ++movedFrames;
+        if (std::abs(got - want) > 1.0e-2) // the view hit an end: nothing further to travel, so no creep back
+            backlogPx_ = 0.0;
+    }
+
+    double backlogPx_ = 0.0;
+    double lastFrameMs_ = 0.0;
+    bool offScreenForTest_ = false;
+    Apply apply_;
     synth::ui::AnimationDriver anim_;
     std::optional<juce::VBlankAnimatorUpdater> updater_;
 };

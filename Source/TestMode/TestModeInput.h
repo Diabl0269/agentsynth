@@ -34,9 +34,10 @@ struct MouseStep {
 bool sendMouse(const MouseStep& step, juce::String& error);
 
 /** One mouse-wheel event at `local` in the peer of `target` (the pointer moves there first). `dx`/`dy` are JUCE wheel
- *  units: a notch of a mouse wheel is about 0.1 to 0.25, and positive `dy` scrolls the content up. */
+ *  units: a notch of a mouse wheel is about 0.1 to 0.25, and positive `dy` scrolls the content up.
+ *  `smooth` and `inertial` mark the event as a trackpad's (a swipe, then its fling). */
 bool wheel(juce::Component& target, juce::Point<int> local, float dx, float dy, juce::ModifierKeys keys,
-           juce::String& error);
+           juce::String& error, bool smooth = false, bool inertial = false);
 
 /** A press and release at `local` (clicks 1 or 2, the second quickly enough to count as a double click). */
 bool click(juce::Component& target, juce::Point<int> local, Button button, int clicks, juce::ModifierKeys keys,

@@ -511,8 +511,8 @@ public:
      *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
-    // The Viewport's content component: a pixel-level test seam for what a track-reorder drag paints.
-    juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
+    juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; } // what a reorder drag paints
+    synth::ui::ScrollFrameSmoother& getTrackpadScrollForTest() noexcept { return trackpadScroll_; }
     /** Lets the undo/redo row glide run on an off-screen panel (no peer, so isShowing() is false). */
     void forceTrackGlideForTest(bool on) noexcept { trackGlideForcedForTest_ = on; }
     /** One frame of the row glide, as the VBlank pump would run it; the setter below swaps its clock (empty: real). */
@@ -914,10 +914,10 @@ private:
     double heightDragScale_ = 1.0;
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
-    // Mouse-wheel notch easing (axis 0 = beats, 1 = px); see UI/Layout/ScrollTween.h.
     void scrollByWheel(int axis, double amount, bool eased);
     void applyWheelScroll(int axis, double amount);
-    synth::ui::ScrollTweenRunner wheelTween_;
+    synth::ui::ScrollTweenRunner wheelTween_;       // a mouse notch (axis 0 = beats, 1 = px), ScrollTween.h
+    synth::ui::ScrollFrameSmoother trackpadScroll_; // a trackpad's vertical deltas, once per VBlank frame
     void zoomTrackRows(double factor, double anchorLaneY);
     // Resets every track's own height (one undo step); false when none had one.
     bool clearTrackHeightOverrides();
