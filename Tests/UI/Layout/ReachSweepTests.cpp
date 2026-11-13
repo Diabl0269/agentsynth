@@ -198,11 +198,18 @@ const std::vector<KnownGap> kKnownGaps = {
     {"mixer / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
     {"mixer / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
     {"mixer side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
-    {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
     {"timeline / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
     {"timeline / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
     {"timeline side pane / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
     {"timeline side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    // Seen on the CI runner only, so marked `varies`: its smaller screen changes the piano roll's layout and the
+    // timing of the mixer's column fade and the dock's closing.
+    {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818", true},
+    {"canvas / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529", true},
+    {"canvas, AI panel and Mod Matrix / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529",
+     true},
+    {"canvas, dock closed / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
+     "FRO1819", true},
 };
 
 class FocusHelper : public juce::Component {

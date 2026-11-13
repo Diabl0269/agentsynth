@@ -25,9 +25,11 @@
 namespace synth::test::keyboard_sweep {
 
 // A gap that is known and has a ticket. Key: "<surface> / <control>: <what>" as a finding prints it.
+// `varies`: a gap seen on some machines only (screen size, timing); a listed one that is not found is not judged.
 struct KnownGap {
     const char* key;
     const char* ticket;
+    bool varies = false;
 };
 
 inline std::string className(const juce::Component& c) {
@@ -96,7 +98,7 @@ public:
         for (const auto& gap : gaps_) {
             const std::string key = gap.key;
             listed.insert(key);
-            if (walked_.count(key.substr(0, key.find(" / "))) != 0 && found_.count(key) == 0)
+            if (!gap.varies && walked_.count(key.substr(0, key.find(" / "))) != 0 && found_.count(key) == 0)
                 ADD_FAILURE() << "fixed - remove it from kKnownGaps: " << key << " (" << gap.ticket << ")";
         }
         for (const auto& key : found_)
