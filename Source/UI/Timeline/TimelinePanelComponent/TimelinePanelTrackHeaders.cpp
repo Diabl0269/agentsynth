@@ -7,6 +7,7 @@
 // rest of the class.
 
 #include "AddTrackPicker.h"
+#include "ClipEditorReach.h"
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 
@@ -514,6 +515,7 @@ void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) 
     header->onToggleSelectionRequested = [this] { toggleFocusedTrackSelection(); };
     header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
     header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
+    header->onTabRequested = [this] { return focusOpenClipEditor(*this); };
     // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
     // own comment for the division of labour (the row detects the gesture, this panel resolves
     // screen Y against the ordered header list). The row hands us raw screen Y rather than

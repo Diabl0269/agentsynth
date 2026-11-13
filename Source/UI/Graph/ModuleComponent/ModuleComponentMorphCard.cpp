@@ -13,6 +13,7 @@
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Transport/TransportService.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -166,6 +167,7 @@ void ModuleComponent::createMorphShapesCard() {
         return button != nullptr ? button->getTooltip() : juce::String();
     };
     host.appProperties = [this] { return owner.getModDot().host.appProperties; };
+    host.shortcuts = [this] { return owner.getCardKeyboard().getShortcutManager(); };
     auto& graph = owner.getAudioEngine().getGraph();
     // The constructor styles the footer toggles before this card exists, so its pill is styled here.
     const auto stylePill = [this] {

@@ -37,6 +37,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         lastGeneration_ = adapter_->getGeneration();
         sync(); // the count may have crossed the map's default
     };
+    map_.setShortcuts(host_.shortcuts);
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
     map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); };
     map_.setShowLabels(false);

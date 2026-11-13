@@ -3,8 +3,11 @@
 
 #include "../PianoRoll/PianoRollTestHelpers.h"
 #include "DrumDocFollower.h"
+#include "UI/DrumMachine/DrumIdeasPanel.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FocusStepWithin.h"
+#include <algorithm>
 
 using synth::ui::DrumIdeasPanel;
 using synth::ui::DrumMachineComponent;
@@ -415,4 +418,47 @@ TEST(DrumIdeasPanelTest, UndoingAPickThatLiftedTheGridStillShrinksTheHitsItAdded
     f.grid.finishMotionsForTest();
     EXPECT_EQ(f.grid.getLeavingHitCount(), 0);
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+//==============================================================================
+// Keys: a panel of controls takes Up and Down
+
+// Regression test for FRO1549: the Randomize panel took Escape only, so its controls were reached by Tab alone and the
+// arrows did nothing, unlike every other panel; keyboard-reach.
+TEST(DrumIdeasPanelTest, UpAndDownStepBetweenTheControlsInOrderAndStopAtTheEnds) {
+    IdeasFixture f;
+    f.panel->setSize(synth::ui::DrumIdeasPanel::kWidth, synth::ui::DrumIdeasPanel::kHeight);
+    f.panel->resized();
+    const auto stops = synth::ui::shownFocusableDescendants(*f.panel);
+    ASSERT_GE(stops.size(), 20u) << "starters, fills, the sliders, takes, picks and Randomize";
+    const juce::KeyPress down(juce::KeyPress::downKey, juce::ModifierKeys(), 0);
+    const juce::KeyPress up(juce::KeyPress::upKey, juce::ModifierKeys(), 0);
+    for (size_t i = 0; i + 1 < stops.size(); ++i) {
+        SCOPED_TRACE(stops[i]->getTitle().toStdString());
+        ASSERT_TRUE(f.panel->pressKeyForTest(down, stops[i]));
+        EXPECT_EQ(f.panel->getLastKeyStepForTest(), stops[i + 1]) << "Down goes to the next control";
+    }
+    EXPECT_TRUE(f.panel->pressKeyForTest(down, stops.back()));
+    EXPECT_EQ(f.panel->getLastKeyStepForTest(), nullptr) << "Down on the last control stays there";
+    for (size_t i = stops.size() - 1; i > 0; --i) {
+        ASSERT_TRUE(f.panel->pressKeyForTest(up, stops[i]));
+        EXPECT_EQ(f.panel->getLastKeyStepForTest(), stops[i - 1]) << "Up goes to the previous control";
+    }
+    EXPECT_TRUE(f.panel->pressKeyForTest(up, stops.front()));
+    EXPECT_EQ(f.panel->getLastKeyStepForTest(), nullptr) << "Up on the first control stays there";
+}
+
+TEST(DrumIdeasPanelTest, TheRandomizeControlsAreOnTheUpDownWalkAndEscapeIsLeftToThePopover) {
+    IdeasFixture f;
+    f.panel->resized();
+    const auto stops = synth::ui::shownFocusableDescendants(*f.panel);
+    for (auto* control : {static_cast<juce::Component*>(&f.panel->getDensitySlider()),
+                          static_cast<juce::Component*>(&f.panel->getKeepToggle()),
+                          static_cast<juce::Component*>(&f.panel->getRandomizeButton())})
+        EXPECT_NE(std::find(stops.begin(), stops.end(), control), stops.end()) << control->getTitle();
+    EXPECT_FALSE(f.panel->pressKeyForTest(juce::KeyPress(juce::KeyPress::escapeKey), &f.panel->getRandomizeButton()))
+        << "Escape bubbles up to the popover, which closes it";
+    EXPECT_FALSE(f.panel->pressKeyForTest(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0),
+                                          &f.panel->getRandomizeButton()))
+        << "a shifted arrow is another action's chord";
 }

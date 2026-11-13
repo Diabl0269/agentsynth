@@ -17,6 +17,7 @@
 #include "KeyboardSweepShell.h"
 #include "ReachSweepWalk.h"
 #include "UI/Library/LibrarySidebarViews.h"
+#include "UI/Timeline/TimelinePanelComponent/ClipEditorReach.h"
 #include <gtest/gtest.h>
 
 using namespace synth::test::keyboard_sweep;
@@ -50,9 +51,8 @@ const std::vector<KnownGap> kKnownGaps = {
     {"timeline / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
     {"timeline side pane / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
     {"timeline side pane / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
-    // Drum machine header controls: no key steps to them.
+    // Drum machine header controls the sweep's walker does not reach yet (Tab and Left/Right walk them in the editor).
     {"drum machine open / timeline / CardKnobSlider 'Humanise': not reached by keys", "FRO1549"},
-    {"drum machine open / timeline / CardSegmentedSwitch 'View': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / CardStepper 'Swing': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / ComboBox 'Steps per bar': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / LaneChipRow 'Lanes': not reached by keys", "FRO1549"},
@@ -64,7 +64,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"drum machine open / timeline / NameButton 'Open hat row': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / NameButton 'Snare row': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / NameButton 'Tom row': not reached by keys", "FRO1549"},
-    {"drum machine open / timeline / TextButton 'Ideas': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / TextButton 'Mute Clap': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / TextButton 'Mute Closed hat': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / TextButton 'Mute Cowbell': not reached by keys", "FRO1549"},
@@ -83,19 +82,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"drum machine open / timeline / TextButton 'Solo Snare': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / TextButton 'Solo Tom': not reached by keys", "FRO1549"},
     {"drum machine open / timeline / ToggleButton 'Show all drums': not reached by keys", "FRO1549"},
-    // Drum machine grid, piano roll and velocity editor: the open clip editor takes no region key.
-    {"drum machine open / timeline / DrumMachineComponent 'Drum machine grid': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollComponent 'Piano roll': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Back to clips': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Fit notes to key': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Humanize velocities': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Quantize note lengths': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Quantize note starts': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Scale assist': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Show only scale notes': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollHeaderChip 'Show velocity strip': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / PianoRollVelocityLane 'Velocity strip': not reached by keys", "FRO1550"},
-    {"piano roll open / timeline / TextEditor 'Velocity of selected notes': not reached by keys", "FRO1550"},
     // AIChatComponent is a plain-container region with no Up/Down stepping, so none of its controls is reachable.
     {"canvas, AI panel and Mod Matrix / aiPanel / ComboBox 'AI model': not reached by keys", "FRO1816"},
     {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'History': not reached by keys", "FRO1816"},
@@ -423,6 +409,53 @@ TEST_F(ReachSweepShell, TabFromThePreviewStripLeavesForTheRegionBesideTheSidebar
 #endif
     for (const auto& scene : scenes())
         checkPreviewStripTab(scene);
+}
+
+// Each clip editor's header answers the arrow keys on real key delivery: Tab from the grid lands on the first stop,
+// Right (Alt+Right on a stop that keeps the plain arrows) moves to the next stop and Left comes back, and Left past
+// the first stop returns to the grid.
+TEST_F(ReachSweepShell, TheHeaderOfEachOpenClipEditorStepsAlongItsStopsWithLeftAndRightOnRealKeys) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "real key delivery is measured on macOS with the other sweeps";
+#endif
+    const auto plain = [](int code) { return juce::KeyPress(code, juce::ModifierKeys(), 0); };
+    const auto alt = [](int code) {
+        return juce::KeyPress(code, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0);
+    };
+    const auto focused = [] { return juce::Component::getCurrentlyFocusedComponent(); };
+    // A button takes the plain arrow; any other stop may keep the plain arrows for itself (the View switch would change
+    // its mode), so it takes the Alt chord.
+    const auto step = [&](int code) {
+        auto* before = focused();
+        if (before == nullptr)
+            return false;
+        deliver(*before, dynamic_cast<juce::Button*>(before) != nullptr ? plain(code) : alt(code));
+        return focused() != before;
+    };
+    for (const auto& scene : scenes()) {
+        const juce::String name(scene.name);
+        if (name != "piano roll open" && name != "drum machine open")
+            continue;
+        scene.setup();
+        auto* grid = synth::ui::openClipEditorGrid(mc_->getTimelinePanel());
+        ASSERT_NE(grid, nullptr) << scene.name;
+        ASSERT_EQ(name == "piano roll open", grid == &mc_->getTimelinePanel().getPianoRoll())
+            << scene.name << ": the open editor is " << describe(*grid);
+        ASSERT_TRUE(takeFocus(*grid)) << scene.name;
+        deliver(*grid, kTabKey());
+        auto* first = focused();
+        ASSERT_TRUE(first != nullptr && first != grid) << scene.name << ": Tab from the grid stays on the grid";
+        ASSERT_TRUE(step(juce::KeyPress::rightKey))
+            << scene.name << ": Right does not leave " << describe(*first) << " (grid " << describe(*grid) << ")";
+        auto* second = focused();
+        EXPECT_TRUE(second != grid && second != first) << scene.name << ": Right does not reach the next stop";
+        ASSERT_TRUE(step(juce::KeyPress::leftKey))
+            << scene.name << ": Left does not leave " << describe(*second) << " (first " << describe(*first)
+            << ", grid " << describe(*grid) << ")";
+        EXPECT_EQ(focused(), first) << scene.name << ": Left does not come back to the first stop";
+        ASSERT_TRUE(step(juce::KeyPress::leftKey)) << scene.name << ": Left from the first stop does not leave it";
+        EXPECT_EQ(focused(), grid) << scene.name << ": Left past the first stop does not return to the grid";
+    }
 }
 
 // Regression test for FRO1530: a strip clicked, then Cmd+1 (the timeline tab, which takes the keys onto the tab strip)

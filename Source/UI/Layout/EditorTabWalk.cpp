@@ -11,17 +11,25 @@ EditorTabWalk::EditorTabWalk(juce::Component& home)
     home_.addKeyListener(this);
 }
 
-EditorTabWalk::~EditorTabWalk() { home_.removeKeyListener(this); }
+EditorTabWalk::~EditorTabWalk() {
+    home_.removeKeyListener(this);
+    for (auto& stop : watched_)
+        if (stop != nullptr)
+            stop->removeKeyListener(this);
+}
+
+void EditorTabWalk::watch(juce::Component& stop) {
+    stop.addKeyListener(this);
+    watched_.emplace_back(&stop);
+}
+
+bool EditorTabWalk::isWatching(const juce::Component& stop) const {
+    return std::any_of(watched_.begin(), watched_.end(), [&stop](const auto& w) { return w.getComponent() == &stop; });
+}
 
 // The region cycle's own keys, so a rebind of Focus Next Region moves this walk too.
 std::optional<bool> EditorTabWalk::cycleDirection(const juce::KeyPress& key) const {
-    if (const auto* manager = shortcuts_ ? shortcuts_() : nullptr)
-        return resolveFocusCycleKeyPress(key, *manager);
-    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))
-        return true;
-    if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0))
-        return false;
-    return std::nullopt;
+    return focusCycleDirection(key, shortcuts_ ? shortcuts_() : nullptr);
 }
 
 juce::Component* EditorTabWalk::focused() const {
@@ -58,9 +66,39 @@ void EditorTabWalk::land(juce::Component& target, bool forward) {
         walkedRound_.reset();
 }
 
+// Left/Right on a focused stop: the neighbour on that side, and past either end the grid. A plain arrow reaches here
+// only when the stop did not use it; Alt+arrow is the chord for a stop that does. Nothing happens off the stops, so the
+// grid keeps its own arrows. The Shift, Command and Control chords are other actions'.
+bool EditorTabWalk::stepAlongStops(const juce::KeyPress& key, juce::Component* originatingComponent) {
+    const bool left = key.isKeyCode(juce::KeyPress::leftKey);
+    if (!left && !key.isKeyCode(juce::KeyPress::rightKey))
+        return false;
+    const auto mods = key.getModifiers();
+    if (mods.isShiftDown() || mods.isCommandDown() || mods.isCtrlDown())
+        return false;
+    if (originatingComponent != &home_ && !mods.isAltDown())
+        return false;
+    const auto stops = getStops();
+    const auto at = std::find(stops.begin(), stops.end(), focused());
+    if (at == stops.end())
+        return false;
+    const int next = (int)(at - stops.begin()) + (left ? -1 : 1);
+    if (next < 0 || next >= (int)stops.size()) {
+        land(home_, !left);
+        walkedRound_.reset(); // an arrow back to the grid is not a finished walk: the next Tab enters the header again
+    } else {
+        land(*stops[(size_t)next], !left);
+    }
+    return true;
+}
+
 // The listener sits on the grid, so a key reaches it from the grid and from every child the key bubbles through; the
 // focused component says which one sent it. A child that is not a stop (a row name, a lane) keeps the region cycle.
-bool EditorTabWalk::keyPressed(const juce::KeyPress& key, juce::Component*) {
+bool EditorTabWalk::keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) {
+    if (stepAlongStops(key, originatingComponent))
+        return true;
+    if (originatingComponent != &home_)
+        return false; // a watched stop's own listener claims only its Alt+arrows
     const auto direction = cycleDirection(key);
     if (!direction.has_value())
         return false;

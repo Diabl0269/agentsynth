@@ -156,6 +156,8 @@ entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 
 ## Key rings
 
+**Which key walks what** (FRO1549): a bar of controls takes Left/Right, a panel of controls takes Up/Down, and Tab stays the region cycle or the editor's walk. The drum clip header and the piano roll header are bars: Left/Right (`EditorTabWalk`) step along the same stops Tab walks, and past either end go back to the grid. A stop that owns the plain arrows (a slider, the Swing field, the velocity box) keeps them and takes Alt+Left/Right instead, so every stop is reachable and leavable by arrows. The Drum Ideas popover is a panel: Up/Down step its controls and Escape closes it.
+
 A panel that keeps real focus on its root while a ring moves across its top bar uses `synth::ui::KeyRing`
 (`Source/UI/Layout/KeyRing.h`): the Timeline's and the Mixer's top bars. The ring is a painted box (`paintFocusRingAlways`,
 drawn in `paintOverChildren`), so it tells a screen reader nothing by itself: the owner returns
@@ -253,7 +255,7 @@ mouse.
 The Filter card (Custom type), the LFO card (Custom shape) and the shape editor window use `MorphMap`; the audit covers
 them as the `MorphShapesCard` (both cards) and `ShapeEditorWindow` surfaces (no baseline gaps). The map is a Tab stop with the soft region
 outline, and each dot, the cursor and the two edge sliders is a transparent, mouse-inert stop over the painted thing
-(the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. Names carry
+(the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. From a focused dot, the cursor or a strip, Tab and Shift+Tab (the region-cycle bindings, `focusCycleDirection`) walk that same list by index and, past either end, leave through the normal region cycle, so a dot is never a trap and the arrows stay free to move it. Names carry
 values and are re-set on every change, including a move, an insert and a removal: a dot reads its place in the list, its
 shape and its position ("Dot 2 of 4, shape ah, position X 20%, Y 25%"), the rest "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"; tooltips
 read "<name> - drag to move, double-click to delete, Return for its menu", "Morph cursor - drag to blend shapes". Keys, all inside the

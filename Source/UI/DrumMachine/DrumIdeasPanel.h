@@ -64,11 +64,14 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumTakeAudition)
 };
 
+class DrumIdeasKeys;
+
 /**
  * The Ideas popover of the drum machine: starters by style, a Vary amount with three takes to hear and pick, and a
  * Randomize with a density and "Keep kick and snare", and Fills (a snare roll or tom fill at the end of the last bar,
  * or of every 4th bar). It lives in a juce::CallOutBox grown out of the Ideas button and stays open between results. It
- * holds no clip: the owner applies each result as one undo step. Esc closes it. docs/timeline/drum-machine.md#ideas.
+ * holds no clip: the owner applies each result as one undo step. Esc closes it; Up/Down step between its controls
+ * (a slider keeps Left/Right). docs/timeline/drum-machine.md#ideas.
  */
 class DrumIdeasPanel
     : public juce::Component
@@ -112,6 +115,11 @@ public:
     juce::ToggleButton& getKeepToggle() noexcept { return keep_; }
     juce::TextButton& getRandomizeButton() noexcept { return randomize_; }
     DrumTakeAudition& getAudition() noexcept { return audition_; }
+    /** Where the last Up or Down asked focus to go (null: an end of the panel); focus calls do nothing without a
+     * window. */
+    juce::Component* getLastKeyStepForTest() const noexcept;
+    /** Delivers a key to the panel's Up/Down listener as if `origin` had it focused; true when it was used. */
+    bool pressKeyForTest(const juce::KeyPress& key, juce::Component* origin);
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -153,6 +161,7 @@ private:
     bool closedNotified_ = false;
     int playingTake_ = -1;
     std::array<int, 3> dividerY_{0, 0, 0};
+    std::unique_ptr<DrumIdeasKeys> keys_; // Up/Down step between the controls; last, so it goes first
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumIdeasPanel)
 };

@@ -4,9 +4,11 @@
 #include "MorphMapInternal.h"
 #include "MorphMapPalette.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -48,6 +50,9 @@ void MorphMap::refreshStopNames() {
         dotStops_[(size_t)i]->setDescription("Shape on the morph map");
         dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return for its menu");
     }
+    cursorStop_->setComponentID("morphCursor"); // test mode finds the cursor and the strips by id
+    stripStops_[0]->setComponentID("morphStripX");
+    stripStops_[1]->setComponentID("morphStripY");
     cursorStop_->setTitle("Morph cursor, " + coordinateText(cursor_.x, cursor_.y));
     cursorStop_->setDescription("Where the shapes are blended");
     cursorStop_->setTooltip("Morph cursor - drag to blend shapes");
@@ -151,7 +156,40 @@ bool MorphMap::duplicateDotAndFocus(int index) {
     return true;
 }
 
+/** The stops Tab walks: dots by index, the cursor, then the X and Y sliders. One that shows nothing (the cursor and
+    sliders while the cursor is hidden) is skipped, as a focus grab would refuse it. */
+std::vector<juce::Component*> MorphMap::getWalkStops() const {
+    std::vector<juce::Component*> stops;
+    const auto add = [&stops](juce::Component* stop) {
+        if (stop != nullptr && stop->isVisible() && !stop->getBounds().isEmpty())
+            stops.push_back(stop);
+    };
+    for (const auto& stop : dotStops_)
+        add(stop.get());
+    add(cursorStop_.get());
+    add(stripStops_[0].get());
+    add(stripStops_[1].get());
+    return stops;
+}
+
+/** Tab (`forward`) or Shift+Tab from `stop` to its neighbour. False past either end, so the key goes on to the region
+    cycle and focus leaves the map as it always did. */
+bool MorphMap::walkFrom(Stop& stop, bool forward) {
+    const auto stops = getWalkStops();
+    const auto at = std::find(stops.begin(), stops.end(), &stop);
+    if (at == stops.end())
+        return false;
+    const auto next = at - stops.begin() + (forward ? 1 : -1);
+    if (next < 0 || next >= (std::ptrdiff_t)stops.size())
+        return false;
+    lastWalkTarget_ = stops[(size_t)next];
+    takeFocus(*lastWalkTarget_);
+    return true;
+}
+
 bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
+    if (const auto forward = focusCycleDirection(key, shortcuts_ ? shortcuts_() : nullptr))
+        return walkFrom(stop, *forward);
     if (isInsertPointKey(key) && onInsertAfterDot && !stop.isCursor() && !stop.isStrip())
         return insertAfterDot(stop.getIndex());
     if (pointKeyAction(key).kind == PointKeyAction::Kind::duplicate && onDuplicateDot && !stop.isCursor() &&
