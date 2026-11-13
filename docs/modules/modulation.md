@@ -555,7 +555,10 @@ knob's own sources panel is open the stack is not drawn: the panel lists the sam
 from under it (`synth::ui::modHoverChipShows`). A left click on the dot (or Return on its button) opens the panel, and
 the chip fades out on that click through the same fade, stays gone while the panel is open and fades back in when it
 closes (Esc, a click away) with the pointer still on the knob: the dot's controller repaints the card whenever the
-panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. Tests:
+panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. The panel's window
+takes the knob's mouse-exit while it is open and no mouse-enter follows until the pointer moves, so on close
+`ModDotController::popoverClosed` restores the hovered knob when the pointer rests on the dot (the popover pointer seam,
+`PopoverPointer.h`). Tests:
 `ModChipClickHideTests.cpp` (per-frame alpha under Full, Reduce Motion and Animations Off); scenario
 `mod-chip-hides-on-dot-click`.
 
