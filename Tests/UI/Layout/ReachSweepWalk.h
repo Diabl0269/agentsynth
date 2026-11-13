@@ -18,6 +18,7 @@
 #include "../../TestWait.h"
 #include "KeyboardSweepShell.h"
 #include "MainComponent/MainComponent.h"
+#include "ReachSweepRings.h"
 #include "RealKeyDelivery.h"
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ToolbarComponent.h"
@@ -27,10 +28,6 @@
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/Mixer/MixerColumnComponent.h"
-#include "UI/Mixer/MixerDirectColumn.h"
-#include "UI/Mixer/MixerMasterColumn.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <cstdlib>
@@ -49,15 +46,6 @@ using synth::test::keyboard_sweep::closeMenus;
 using synth::test::keyboard_sweep::describe;
 using synth::test::keyboard_sweep::SweepFindings;
 using namespace synth::test::real_keys;
-
-// One thing that paints a ring over the stops of a region.
-struct RingSource {
-    std::string name;
-    juce::Component* owner = nullptr; // focus must be inside it while the ring shows
-    std::function<bool()> active;
-    std::function<std::vector<juce::Component*>()> stops;
-    std::function<juce::Component*()> ringed; // the stop the ring is on, null when it is on none
-};
 
 namespace detail {
 
@@ -99,24 +87,6 @@ RingSource buttonStrip(Strip& strip, bool buttonsAreSiblings) {
     return s;
 }
 
-inline RingSource keyRingSource(const char* name, synth::ui::KeyRing& ring, juce::Component& owner) {
-    RingSource s;
-    s.name = name;
-    s.owner = &owner;
-    s.active = [&ring] { return ring.isActive(); };
-    s.stops = [&ring] { return ring.getStops(); };
-    s.ringed = [&ring]() -> juce::Component* { return ring.isActive() ? ring.getRingedStop() : nullptr; };
-    return s;
-}
-
-inline auto* cursorRow(synth::ui::MixerZonesPane& pane) {
-    using Row = std::remove_pointer_t<decltype(pane.getRowForTest(0))>;
-    for (int i = 0; i < pane.getRowCountForTest(); ++i)
-        if (auto* row = pane.getRowForTest(i); row != nullptr && row->hasKeyboardCursor())
-            return row;
-    return static_cast<Row*>(nullptr);
-}
-
 } // namespace detail
 
 inline std::vector<RingSource> ringSourcesOf(const synth::ui::FocusRegion& region) {
@@ -131,29 +101,8 @@ inline std::vector<RingSource> ringSourcesOf(const synth::ui::FocusRegion& regio
         auto& panel = static_cast<synth::ui::TimelinePanelComponent&>(*region.root);
         sources.push_back(detail::keyRingSource("top bar", panel.getTopBarKeysForTest(), panel));
     } else if (region.id == "mixer") {
-        auto& panel = static_cast<synth::ui::MixerPanelComponent&>(*region.root);
-        sources.push_back(detail::keyRingSource("top bar", panel.getTopBarRingForTest(), panel));
-        RingSource column;
-        column.name = "focused column";
-        column.owner = &panel;
-        column.active = [&panel] { return panel.isFocusedColumnOutlineShownForTest(); };
-        column.stops = [] { return std::vector<juce::Component*>{}; };
-        column.ringed = [] { return nullptr; };
-        sources.push_back(column);
-        auto& zones = panel.getZonesPaneForTest();
-        RingSource cursor;
-        cursor.name = "zones cursor";
-        cursor.owner = &zones;
-        cursor.active = [&zones] { return detail::cursorRow(zones) != nullptr; };
-        cursor.stops = [&zones] {
-            std::vector<juce::Component*> rows;
-            for (int i = 0; i < zones.getRowCountForTest(); ++i)
-                if (auto* row = zones.getRowForTest(i); row != nullptr && row->isShowing())
-                    rows.push_back(row);
-            return rows;
-        };
-        cursor.ringed = [&zones]() -> juce::Component* { return detail::cursorRow(zones); };
-        sources.push_back(cursor);
+        for (auto& source : mixerRingSources(*region.root))
+            sources.push_back(std::move(source));
     }
     return sources;
 }
@@ -568,12 +517,9 @@ private:
     // keys): the controls inside one are reached by those, as KeyboardReachTests.cpp's adapters say.
     static bool takesItsOwnKeys(juce::Component& c) {
         for (auto* p = c.getParentComponent(); p != nullptr; p = p->getParentComponent())
-            if (dynamic_cast<synth::ui::TimelineTrackHeaderComponent*>(p) != nullptr ||
-                dynamic_cast<synth::ui::MixerColumnComponent*>(p) != nullptr ||
-                dynamic_cast<synth::ui::MixerDirectColumn*>(p) != nullptr ||
-                dynamic_cast<synth::ui::MixerMasterColumn*>(p) != nullptr)
+            if (dynamic_cast<synth::ui::TimelineTrackHeaderComponent*>(p) != nullptr)
                 return true;
-        return false;
+        return insideMixerColumn(c);
     }
 
     void checkReached(Walk& w, size_t& stopCount) {

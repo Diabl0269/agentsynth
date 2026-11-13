@@ -301,9 +301,7 @@ protected:
             mc_->showBottomDockTab(l.view == Tab::Timeline ? Tab::Canvas : Tab::Timeline);
         if (timeline.getSidePane().isOpen() != l.timelineSidePane)
             timeline.toggleSidePane(l.timelineSidePane);
-        auto& mixer = mc_->getBottomDock().getMixerPanel();
-        if (mixer.getSidePane().isOpen() != l.mixerSidePane)
-            mixer.toggleSidePane(l.mixerSidePane);
+        synth::test::reach::setMixerSidePaneOpen(*mc_, l.mixerSidePane);
         showSounds(l.library == SidebarView::Sounds);
         mc_->resized();
     }

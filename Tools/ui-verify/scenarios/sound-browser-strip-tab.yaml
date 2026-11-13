@@ -1,0 +1,37 @@
+# FRO1743: after the Sounds preview strip (Play/Stop, Match key, Auto-play, volume) Tab jumped somewhere that felt
+# unexplained, and the strip was called "the footer", a word the app does not use.
+#
+# What a keyboard user does, on the Canvas view with the Sounds view open:
+#   1. Selects a sound and presses Tab: focus is on the strip's Play button, with its ring.
+#   2. Presses Tab again: focus leaves the sidebar for the region beside it in the app's region cycle, the canvas's
+#      own toolbar (its ring on the first button), never the window's top toolbar.
+#   3. Presses Shift+Tab: back in the Sounds view.
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: sound-browser-strip-tab
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}
+  - expect: {id: "Preview strip", showing: true}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: soundPreviewPlay, hasFocus: true}
+  - mark: {check: 1, name: tab-onto-strip}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: soundPreviewPlay, hasFocus: false}
+  - expect: {id: "Canvas toolbar", hasFocus: true}
+  - mark: {check: 2, name: tab-past-strip}
+  - key: {keys: shift+tab}
+  - wait: {}
+  - expect: {id: "Canvas toolbar", hasFocus: false}
+  - screenshot: {id: window, name: shift-tab-back}
