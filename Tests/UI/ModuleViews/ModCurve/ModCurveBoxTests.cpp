@@ -25,6 +25,17 @@ TEST_F(ModuleComponentTest, CurveBoxPresetChipsSetTheCurve) {
     }
 }
 
+TEST_F(ModuleComponentTest, CurveBoxButtonsSayLoadSaveAndEnlargeAndEveryOneIsNamed) {
+    BoxRig r;
+    EXPECT_EQ(r.box->savedButton().getButtonText(), "Load");
+    EXPECT_EQ(r.box->saveButton().getButtonText(), "Save...");
+    EXPECT_EQ(r.box->enlargeButton().getButtonText(), "Enlarge");
+    for (auto* b : {&r.box->savedButton(), &r.box->saveButton(), &r.box->enlargeButton()}) {
+        EXPECT_FALSE(b->getTitle().isEmpty()) << b->getButtonText();
+        EXPECT_FALSE(b->getTooltip().isEmpty()) << b->getButtonText();
+    }
+}
+
 TEST_F(ModuleComponentTest, CurveBoxChipThatChangesNothingAddsNoUndoStep) {
     BoxRig r;
     ASSERT_FALSE(r.f.undo.canUndo());
