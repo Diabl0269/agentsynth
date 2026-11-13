@@ -20,10 +20,13 @@ juce::String AudioOutputsSection::summary() const {
 }
 
 void AudioOutputsSection::refresh() {
-    ticks_.clear();
     auto* device = deviceManager_.getCurrentAudioDevice();
-    const auto names = device != nullptr ? device->getOutputChannelNames() : juce::StringArray();
-    const auto active = device != nullptr ? device->getActiveOutputChannels() : juce::BigInteger();
+    rebuild(device != nullptr ? device->getOutputChannelNames() : juce::StringArray(),
+            device != nullptr ? device->getActiveOutputChannels() : juce::BigInteger());
+}
+
+void AudioOutputsSection::rebuild(const juce::StringArray& names, const juce::BigInteger& active) {
+    ticks_.clear();
     for (int channel = 0; channel < names.size(); ++channel) {
         auto tick = std::make_unique<juce::ToggleButton>(names[channel]);
         tick->setToggleState(active[channel], juce::dontSendNotification);
@@ -54,7 +57,10 @@ void AudioOutputsSection::setChannel(int channel, bool on) {
 
 void AudioOutputsSection::resized() {
     auto area = getLocalBounds().reduced(kPad);
-    none_.setBounds(area.removeFromTop(kRowHeight));
+    // The empty note takes a slot only while shown; preferredHeight() counts ticks alone, so a hidden note's slot
+    // would push the first tick down and the last one past the bottom edge (same rule as AudioInterfacesList).
+    if (ticks_.empty())
+        none_.setBounds(area.removeFromTop(kRowHeight));
     for (auto& tick : ticks_)
         tick->setBounds(area.removeFromTop(kRowHeight));
 }

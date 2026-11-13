@@ -1,0 +1,14 @@
+# Settings > Audio: the Outputs section lists its outputs right under the header, with no blank band above the
+# first one (a hidden "No output device is open." note used to keep its row).
+#
+# What a user does: opens Settings (Cmd+,), its Audio tab, then unfolds Outputs.
+record: true
+save_project: "fro1628 outputs"
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Audio"}
+  - wait: {}
+  - click: {id: "audioSection:outputs"}
+  - wait: {}
+  - mark: {check: 1, name: outputs-open}
