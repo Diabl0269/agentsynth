@@ -154,6 +154,12 @@ public:
     juce::Point<float> toPixels(float x, float y) const;
     juce::Point<float> toMap(juce::Point<float> pixels) const;
     juce::Point<float> getDotCentre(int index) const;
+    /** The painted radius of a dot at rest, and the gap its selected ring keeps from it. */
+    static constexpr float kDotRadius = 6.0f;
+    static constexpr float kDotRingGap = 3.0f;
+    /** The screen area a menu or the colour picker of dot `index` points at: the dot with its selected ring and a small
+     *  gap, so the arrow lands beside the dot and never on it. */
+    juce::Rectangle<int> dotAnchorArea(int index) const;
     /** The dot a press at `point` (this component's coordinates) would take, or -1 for none. */
     int dotAt(juce::Point<float> point) const;
     juce::Point<float> getCursorCentre() const;
@@ -258,7 +264,7 @@ private:
     void paintStrips(juce::Graphics& g) const;
     void paintStripModulation(juce::Graphics& g, Axis axis) const;
     float stripReach() const;
-    juce::Rectangle<int> menuAreaAt(juce::Point<float> localCentre) const;
+    juce::Rectangle<int> menuAreaAt(juce::Point<float> localCentre, float reach) const;
     void setHoveredAxis(Axis axis);
     void endRename(bool commit);
     void select(int index);

@@ -1,6 +1,8 @@
 # Bug: a morph dot could not be given its own colour, and none of the app's "Colour..." menu items had a key.
 # Now a dot's menu has "Colour..." and Alt+C (Recolour Focused Item) opens the same shared picker beside the focused dot.
 #
+# FRO1661: the picker opens beside the dot with a small gap, never over it (mark 1 shows the dot fully visible next to it).
+#
 # What a user does:
 #   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
 #   2. Focuses the first dot and presses Alt+C: the colour picker opens beside the dot.

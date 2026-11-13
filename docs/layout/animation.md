@@ -629,7 +629,7 @@ shortcut.
 
 ## Fading things in and out
 
-`synth::ui::ShownFade` (`Source/UI/Layout/UIAnimation.h`) is the one fade for a floating label that is a component's alpha (the mod dot tooltip, and the mod hover chip under a knob through `synth::ui::ModChipFade`, which keeps the last rows through the fade-out and repaints only the card; it also falls when the dot's sources panel opens and rises when it closes, `ModDotController::repaintCard` making the card repaint at each): `fadeTo(shown)` runs 160 ms in and 110 ms out, 80 ms under Reduce Motion, and lands at once when its host is not showing or Animations are Off.
+`synth::ui::ShownFade` (`Source/UI/Layout/UIAnimation.h`) is the one fade for a floating label that is a component's alpha (the mod dot tooltip, and the mod hover chip under a knob through `synth::ui::ModChipFade`, which keeps the last rows through the fade-out and repaints only the card; it also falls when the dot's sources panel opens and rises when it closes, `ModDotController::repaintCard` making the card repaint at each): `fadeTo(shown)` runs 160 ms in and 110 ms out (the mod hover chip runs a gentler 220 ms in and 160 ms out: it shows the instant the pointer rests on a knob, with no ~500 ms hover delay, so the fade is its whole entrance), 80 ms under Reduce Motion, and lands at once when its host is not showing or Animations are Off.
 
 Anything that appears or disappears in place (not a popup window, which is [PopupMotion](#popup-windows)) uses one
 helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never a bare `setVisible()`:
@@ -771,7 +771,7 @@ does not show anywhere else and keeps showing: mark its component with `synth::u
 preference's own toggle, so it can always say how to bring tips back. The window reads the setting each time it is
 asked for a tip (`AppTooltipWindow::getTipFor`), so a toggle applies at once in every window with no push. The mod-dot
 readout is painted on the canvas, not a hover tooltip; while it shows it blocks hover tips (`blockHoverTips`), as juce shows a
-changed tip at once within 500 ms of the last. The mod hover chip under a hovered knob uses the same box (`synth::theme::paintTooltipBox`) and the same 160/110 ms `ShownFade`. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`, `ModDot/ModChipClickHideTests.cpp`. A hover label painted straight onto a card (no window) must name its fade owner in `hoverLabelPainters()` (`Tests/UI/Layout/PopoverRegistry.h`); `PopupOwnPathTests` fails any file that draws the tooltip box without being listed.
+changed tip at once within 500 ms of the last. The mod hover chip under a hovered knob uses the same box (`synth::theme::paintTooltipBox`) and a `ShownFade` of its own, 220 ms in and 160 ms out (`ModChipFade`): it has no hover delay, so it eases in more gently than a tooltip's 160/110 ms. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`, `ModDot/ModChipClickHideTests.cpp`. A hover label painted straight onto a card (no window) must name its fade owner in `hoverLabelPainters()` (`Tests/UI/Layout/PopoverRegistry.h`); `PopupOwnPathTests` fails any file that draws the tooltip box without being listed.
 
 A window can opt into a different look by passing a `popup_motion::Style` to `PopupMotion::attach`:
 the slide distances, `overshoot` (the arrival eases with `easeOutBackSoft`, peaking 3% past rest

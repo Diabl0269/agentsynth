@@ -10,7 +10,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kDotRadius = 6.0f;
 constexpr float kCursorRadius = 6.5f;
 constexpr float kCornerRadius = 6.0f;
 } // namespace
@@ -41,8 +40,8 @@ void MorphMap::paint(juce::Graphics& g) {
         const float r = kDotRadius * scale;
         if (i == selected_) {
             g.setColour(colors.textPrimary.withAlpha(0.9f * alpha));
-            g.drawEllipse(c.x - (kDotRadius + 3.0f) * scale, c.y - (kDotRadius + 3.0f) * scale,
-                          (kDotRadius + 3.0f) * 2.0f * scale, (kDotRadius + 3.0f) * 2.0f * scale, 1.5f);
+            g.drawEllipse(c.x - (kDotRadius + kDotRingGap) * scale, c.y - (kDotRadius + kDotRingGap) * scale,
+                          (kDotRadius + kDotRingGap) * 2.0f * scale, (kDotRadius + kDotRingGap) * 2.0f * scale, 1.5f);
         }
         g.setColour(colour.withMultipliedAlpha(alpha));
         g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
