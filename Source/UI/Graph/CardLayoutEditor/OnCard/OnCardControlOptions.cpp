@@ -76,6 +76,8 @@ WidgetKind widgetKindOf(CardWidget widget) {
         return WidgetKind::Stepper;
     case CardWidget::XYPad:
         return WidgetKind::XYPad;
+    case CardWidget::Button:
+        return WidgetKind::Button;
     }
     return WidgetKind::Auto;
 }
@@ -98,6 +100,8 @@ juce::String widgetKindName(WidgetKind kind) {
         return "Stepper";
     case WidgetKind::XYPad:
         return "XY pad";
+    case WidgetKind::Button:
+        return "Button";
     }
     return "Automatic";
 }
@@ -200,6 +204,7 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
         options.widget = options.widgetChoices.front();
     options.range = item->range;
     options.yParamId = item->yParamId;
+    options.momentary = item->momentary;
     if (planned.param != nullptr && dynamic_cast<const juce::AudioParameterFloat*>(planned.param) != nullptr &&
         isContinuousKind(planned.kind)) {
         const auto& full = planned.param->getNormalisableRange();
@@ -309,10 +314,19 @@ CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget
         return withXYPartner(std::move(layout), paramId, partner, layoutSection);
     }
     item->widget = widget;
+    if (widget != CardWidget::Button)
+        item->momentary = false;
     if (widget != CardWidget::XYPad && previous.has_value()) {
         item->yParamId.reset();
         restorePartner(layout, paramId, *previous);
     }
+    return layout;
+}
+
+CardLayout withButtonMomentary(CardLayout layout, const juce::String& paramId, bool momentary,
+                               std::optional<int> layoutSection) {
+    if (auto* item = findItem(layout, paramId, layoutSection); item != nullptr && item->widget == CardWidget::Button)
+        item->momentary = momentary;
     return layout;
 }
 

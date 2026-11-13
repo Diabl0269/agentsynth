@@ -83,6 +83,12 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
                 return withXYPartner(std::move(l), paramId, yParamId, section);
             });
     };
+    panel->onButtonMode = [self, paramId](bool momentary) {
+        if (auto* e = self.getComponent())
+            e->editControl(paramId, [paramId, momentary](CardLayout l, std::optional<int> section) {
+                return withButtonMomentary(std::move(l), paramId, momentary, section);
+            });
+    };
     panel->onRange = [self, paramId](std::optional<juce::Range<double>> range) {
         if (auto* e = self.getComponent())
             e->editControl(paramId, [paramId, range](CardLayout l, std::optional<int> section) {

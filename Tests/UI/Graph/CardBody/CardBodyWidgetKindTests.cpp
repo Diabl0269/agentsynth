@@ -17,7 +17,10 @@
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/CardBody/DefaultCardLayouts.h"
+#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
+#include "UI/Graph/CardWidgets/CardButton.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
@@ -27,6 +30,7 @@
 using namespace cardbody_test;
 using synth::CardBodyItem;
 using synth::CardWidget;
+using synth::ui::CardButton;
 
 namespace {
 
@@ -375,4 +379,328 @@ TEST(CardXYPad, RightClickOffersEachMacrosAutomateAndMidiLearnWithoutStartingADr
             ++submenus;
     EXPECT_EQ(submenus, 2) << "one submenu per macro";
     EXPECT_NEAR(c.value("macro1"), before, 1e-4f) << "a right-click moves nothing";
+}
+
+// ---- The Macros button (docs/layout/module-card-layout.md#the-button): its layout through JSON and a saved project,
+// the real mouse and key paths in both modes, one undo step, the bipolar mapping, MIDI Learn and the Mode row ----
+
+namespace button_test {
+
+const synth::CardParamItem* itemFor(const synth::CardLayout& layout, const juce::String& id) {
+    for (const auto& section : layout.sections)
+        for (const auto& item : section.items)
+            if (const auto* p = std::get_if<synth::CardParamItem>(&item); p != nullptr && p->paramId == id)
+                return p;
+    return nullptr;
+}
+
+// Macro 1 a Toggle button, macro 2 a Momentary button, the rest knobs.
+synth::CardLayout buttonLayout() {
+    MacroControlModule module;
+    auto layout =
+        automaticLayoutWith(module, {{"macro1", synth::CardWidget::Button}, {"macro2", synth::CardWidget::Button}});
+    return synth::ui::withButtonMomentary(std::move(layout), "macro2", true);
+}
+
+struct GestureCounter final : juce::AudioProcessorParameter::Listener {
+    int begins = 0;
+    int ends = 0;
+    void parameterValueChanged(int, float) override {}
+    void parameterGestureChanged(int, bool starting) override { (starting ? begins : ends)++; }
+};
+
+struct ButtonCard {
+    CardCanvas canvas;
+    NodeID id;
+    MacroControlModule* module = nullptr;
+
+    explicit ButtonCard(std::optional<synth::CardLayout> layout = buttonLayout()) {
+        auto macros = std::make_unique<MacroControlModule>();
+        module = macros.get();
+        id = canvas.add(std::move(macros), 400, 300, std::move(layout));
+        canvas.editor.updateComponents();
+    }
+
+    ModuleComponent& card() { return *canvas.card(id); }
+    CardButton* button(const juce::String& name) {
+        for (auto* child : card().getChildren())
+            if (auto* b = dynamic_cast<CardButton*>(child); b != nullptr && b->getComponentID() == name)
+                return b;
+        return nullptr;
+    }
+    juce::RangedAudioParameter* param(const juce::String& paramId) {
+        for (auto* p : module->getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(p); r != nullptr && r->paramID == paramId)
+                return r;
+        return nullptr;
+    }
+    float value(const juce::String& paramId) { return param(paramId)->getValue(); }
+
+    static juce::ModifierKeys left() { return juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier); }
+    void press(CardButton& b) { b.mouseDown(mouseAt(b, b.getLocalBounds().getCentre().toFloat(), left())); }
+    void release(CardButton& b, juce::Point<float> at) { b.mouseUp(mouseAt(b, at, left())); }
+    void click(CardButton& b) {
+        press(b);
+        release(b, b.getLocalBounds().getCentre().toFloat());
+    }
+};
+
+const juce::KeyPress kSpace(juce::KeyPress::spaceKey);
+const juce::KeyPress kReturn(juce::KeyPress::returnKey);
+
+} // namespace button_test
+
+using namespace button_test;
+
+TEST(CardButton, TheLayoutKeepsItsModeThroughJson) {
+    const auto layout = buttonLayout();
+    const auto parsed = synth::CardLayout::fromVar(layout.toVar());
+    ASSERT_EQ(parsed.status, synth::CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(itemFor(parsed.layout, "macro1")->widget, synth::CardWidget::Button);
+    EXPECT_FALSE(itemFor(parsed.layout, "macro1")->momentary);
+    EXPECT_TRUE(itemFor(parsed.layout, "macro2")->momentary);
+    EXPECT_EQ(parsed.layout, layout);
+}
+
+TEST(CardButton, OnlyAMacrosKnobDrawsAsAButton) {
+    OscillatorModule osc;
+    const auto plan =
+        synth::CardBodyPlan::forModule(osc, automaticLayoutWith(osc, {{"detune", synth::CardWidget::Button}}));
+    const int index = plan.findParam("detune");
+    if (index >= 0)
+        EXPECT_NE(plan.items[(size_t)index].kind, synth::CardBodyItem::Kind::Button);
+
+    MacroControlModule macros;
+    const auto macroPlan = synth::CardBodyPlan::forModule(macros, buttonLayout());
+    EXPECT_EQ(macroPlan.items[(size_t)macroPlan.findParam("macro1")].kind, synth::CardBodyItem::Kind::Button);
+    EXPECT_FALSE(macroPlan.items[(size_t)macroPlan.findParam("macro1")].momentary);
+    EXPECT_TRUE(macroPlan.items[(size_t)macroPlan.findParam("macro2")].momentary);
+}
+
+TEST(CardButton, AClickFlipsTheMacroBetweenZeroAndOneAndEachClickIsOneUndoStep) {
+    ButtonCard c;
+    auto* b = c.button("M1");
+    ASSERT_NE(b, nullptr);
+    EXPECT_FALSE(b->isMomentary());
+    EXPECT_FALSE(b->isLit());
+
+    c.canvas.undo.getUndoManager().beginNewTransaction();
+    c.click(*b);
+    EXPECT_FLOAT_EQ(c.value("macro1"), 1.0f);
+    EXPECT_TRUE(b->isLit());
+
+    c.canvas.undo.getUndoManager().beginNewTransaction();
+    c.click(*b);
+    EXPECT_FLOAT_EQ(c.value("macro1"), 0.0f);
+    EXPECT_FALSE(b->isLit());
+
+    ASSERT_TRUE(c.canvas.undo.undo());
+    EXPECT_FLOAT_EQ(c.value("macro1"), 1.0f) << "undo takes back the second click only";
+    ASSERT_TRUE(c.canvas.undo.undo());
+    EXPECT_FLOAT_EQ(c.value("macro1"), 0.0f);
+}
+
+TEST(CardButton, AToggleWritesOneGesturePerClick) {
+    ButtonCard c;
+    GestureCounter counter;
+    c.param("macro1")->addListener(&counter);
+    c.click(*c.button("M1"));
+    c.param("macro1")->removeListener(&counter);
+    EXPECT_EQ(counter.begins, 1);
+    EXPECT_EQ(counter.ends, 1);
+}
+
+TEST(CardButton, MomentaryIsOnWhilePressedAndOffAgainOnRelease) {
+    ButtonCard c;
+    auto* b = c.button("M2");
+    ASSERT_NE(b, nullptr);
+    EXPECT_TRUE(b->isMomentary());
+    GestureCounter counter;
+    c.param("macro2")->addListener(&counter);
+
+    c.press(*b);
+    EXPECT_FLOAT_EQ(c.value("macro2"), 1.0f);
+    EXPECT_TRUE(b->isLit());
+    EXPECT_TRUE(b->isHeld());
+    c.release(*b, b->getLocalBounds().getCentre().toFloat());
+    EXPECT_FLOAT_EQ(c.value("macro2"), 0.0f);
+    EXPECT_FALSE(b->isLit());
+    EXPECT_FALSE(b->isHeld());
+
+    c.param("macro2")->removeListener(&counter);
+    EXPECT_EQ(counter.begins, 1) << "the whole hold is one gesture, so automation and undo see one";
+    EXPECT_EQ(counter.ends, 1);
+}
+
+TEST(CardButton, MomentaryLetsGoWhenReleasedOutsideTheButton) {
+    ButtonCard c;
+    auto* b = c.button("M2");
+    c.press(*b);
+    ASSERT_FLOAT_EQ(c.value("macro2"), 1.0f);
+    c.release(*b, {-80.0f, -80.0f});
+    EXPECT_FLOAT_EQ(c.value("macro2"), 0.0f);
+    EXPECT_FALSE(b->isLit());
+}
+
+TEST(CardButton, MomentaryLetsGoWhenFocusIsLostOrTheButtonIsHidden) {
+    ButtonCard c;
+    auto* b = c.button("M2");
+    c.press(*b);
+    b->focusLost(juce::Component::focusChangedDirectly);
+    EXPECT_FLOAT_EQ(c.value("macro2"), 0.0f);
+
+    c.press(*b);
+    ASSERT_FLOAT_EQ(c.value("macro2"), 1.0f);
+    b->setVisible(false);
+    EXPECT_FLOAT_EQ(c.value("macro2"), 0.0f);
+}
+
+TEST(CardButton, SpaceAndEnterToggleAndAHeldKeyActsOnce) {
+    ButtonCard c;
+    auto* b = c.button("M1");
+    EXPECT_TRUE(b->keyPressed(kSpace));
+    EXPECT_FLOAT_EQ(c.value("macro1"), 1.0f);
+    EXPECT_TRUE(b->keyPressed(kSpace)) << "auto-repeat while the key is down";
+    EXPECT_FLOAT_EQ(c.value("macro1"), 1.0f);
+    b->keyStateChanged(false); // no key is down in a test: the release
+    EXPECT_TRUE(b->keyPressed(kReturn));
+    EXPECT_FLOAT_EQ(c.value("macro1"), 0.0f);
+    EXPECT_TRUE(b->getWantsKeyboardFocus());
+}
+
+TEST(CardButton, MomentaryIsHeldWhileTheKeyIsDown) {
+    ButtonCard c;
+    auto* b = c.button("M2");
+    EXPECT_TRUE(b->keyPressed(kSpace));
+    EXPECT_FLOAT_EQ(c.value("macro2"), 1.0f);
+    EXPECT_TRUE(b->isLit());
+    b->keyStateChanged(false);
+    EXPECT_FLOAT_EQ(c.value("macro2"), 0.0f);
+    EXPECT_FALSE(b->isLit());
+}
+
+TEST(CardButton, ABipolarMacroSwitchesBetweenMinusOneAndPlusOne) {
+    ButtonCard c;
+    c.param(MacroControlModule::bipolarParamId(0))->setValueNotifyingHost(1.0f);
+    EXPECT_NEAR(c.module->getMacroOutput(0), -1.0f, 1e-4f);
+    c.click(*c.button("M1"));
+    EXPECT_NEAR(c.module->getMacroOutput(0), 1.0f, 1e-4f);
+    c.click(*c.button("M1"));
+    EXPECT_NEAR(c.module->getMacroOutput(0), -1.0f, 1e-4f);
+}
+
+TEST(CardButton, AValueChangedFromOutsideLightsTheButton) {
+    ButtonCard c;
+    c.param("macro1")->setValueNotifyingHost(1.0f);
+    EXPECT_TRUE(c.button("M1")->isLit());
+    c.param("macro1")->setValueNotifyingHost(0.0f);
+    EXPECT_FALSE(c.button("M1")->isLit());
+}
+
+TEST(CardButton, ItHasANameAndAStateForAScreenReaderAndATooltip) {
+    ButtonCard c;
+    auto* b = c.button("M1");
+    EXPECT_TRUE(b->getTitle().contains("M1"));
+    EXPECT_TRUE(b->getTitle().contains("off"));
+    c.click(*b);
+    EXPECT_TRUE(b->getTitle().contains("on")) << b->getTitle().toStdString();
+    EXPECT_FALSE(b->getTooltip().isEmpty());
+    c.module->setMacroName(0, "Mute");
+    c.card().getCardBody()->pollMacros();
+    EXPECT_TRUE(b->getTitle().contains("Mute")) << b->getTitle().toStdString();
+}
+
+TEST(CardButton, EachButtonIsMidiLearnableForItsOwnMacro) {
+    ButtonCard c;
+    EXPECT_EQ(c.card().findMidiLearnableParamForTest(c.button("M1")), c.param("macro1"));
+    EXPECT_EQ(c.card().findMidiLearnableParamForTest(c.button("M2")), c.param("macro2"));
+}
+
+TEST(CardButton, RightClickOffersAutomateAndLearnWithoutPressing) {
+    ButtonCard c;
+    auto* b = c.button("M1");
+    const auto menu = rightClickOnCard(c.card(), *b);
+    EXPECT_GT(menu.getNumItems(), 0);
+    EXPECT_FLOAT_EQ(c.value("macro1"), 0.0f);
+    EXPECT_FALSE(b->isLit());
+}
+
+TEST(CardButton, TheLayoutAndTheModesSurviveASavedProject) {
+    ButtonCard c;
+    c.click(*c.button("M1"));
+    const auto saved = synth::AIStateMapper::graphToJSON(c.canvas.engine.getGraph());
+
+    CardCanvas reopened;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(saved, reopened.engine.getGraph(), true, true, false));
+    reopened.editor.updateComponents();
+    CardButton* one = nullptr;
+    CardButton* two = nullptr;
+    for (auto* card : reopened.editor.getModuleComponents())
+        if (card != nullptr && dynamic_cast<MacroControlModule*>(card->getModule()) != nullptr)
+            for (auto* child : card->getChildren())
+                if (auto* b = dynamic_cast<CardButton*>(child)) {
+                    (b->getComponentID() == "M1" ? one : two) = b;
+                }
+    ASSERT_NE(one, nullptr);
+    ASSERT_NE(two, nullptr);
+    EXPECT_FALSE(one->isMomentary());
+    EXPECT_TRUE(two->isMomentary());
+    EXPECT_TRUE(one->isLit()) << "the saved On state shows lit";
+}
+
+TEST(CardButton, ShowAsButtonAndModeArePureLayoutEditsAndLeavingButtonResetsTheMode) {
+    MacroControlModule module;
+    auto layout = automaticLayoutWith(module, {});
+    auto asButton = synth::ui::withShowAs(layout, "macro3", synth::CardWidget::Button);
+    EXPECT_EQ(itemFor(asButton, "macro3")->widget, synth::CardWidget::Button);
+    EXPECT_FALSE(itemFor(asButton, "macro3")->momentary);
+    auto momentary = synth::ui::withButtonMomentary(asButton, "macro3", true);
+    EXPECT_TRUE(itemFor(momentary, "macro3")->momentary);
+    EXPECT_FALSE(itemFor(synth::ui::withButtonMomentary(layout, "macro3", true), "macro3")->momentary)
+        << "a knob has no mode";
+    auto back = synth::ui::withShowAs(momentary, "macro3", synth::CardWidget::Knob);
+    EXPECT_FALSE(itemFor(back, "macro3")->momentary);
+}
+
+TEST(CardButton, EveryMacroKnobOffersButtonInShowAsAndNoOtherParameterDoes) {
+    ButtonCard c;
+    synth::ui::BuiltInCardLayoutSource source(c.canvas.editor, &c.canvas.undo, c.id);
+    const auto has = [](const std::vector<synth::CardWidget>& choices) {
+        return std::find(choices.begin(), choices.end(), synth::CardWidget::Button) != choices.end();
+    };
+    int macros = 0;
+    for (const auto& param : source.parameters()) {
+        if (synth::macroIndexOf(param.paramId) >= 0)
+            ++macros;
+        EXPECT_EQ(has(param.widgetChoices), synth::macroIndexOf(param.paramId) >= 0) << param.paramId.toStdString();
+    }
+    EXPECT_EQ(macros, MacroControlModule::kMaxMacros);
+
+    CardCanvas other;
+    const auto oscId = other.add(std::make_unique<OscillatorModule>(), 400, 300);
+    other.editor.updateComponents();
+    synth::ui::BuiltInCardLayoutSource oscSource(other.editor, &other.undo, oscId);
+    for (const auto& param : oscSource.parameters())
+        EXPECT_FALSE(has(param.widgetChoices)) << param.paramId.toStdString();
+}
+
+TEST(CardButton, ThePanelShowsModeOnlyForAButtonAndReportsAPick) {
+    synth::ui::CardLayoutControlPanel panel;
+    synth::ui::ControlOptions options;
+    options.paramId = "macro1";
+    options.displayName = "M1";
+    options.caption = "M1";
+    options.widgetChoices = {synth::CardWidget::Knob, synth::CardWidget::Button};
+    options.widget = synth::CardWidget::Knob;
+    panel.setOptions(options);
+    EXPECT_FALSE(panel.isModeRowShownForTest());
+
+    options.widget = synth::CardWidget::Button;
+    panel.setOptions(options);
+    EXPECT_TRUE(panel.isModeRowShownForTest());
+    std::optional<bool> picked;
+    panel.onButtonMode = [&](bool momentary) { picked = momentary; };
+    panel.getModeForTest()->setSelectedIndex(1, juce::sendNotification);
+    ASSERT_TRUE(picked.has_value());
+    EXPECT_TRUE(*picked);
 }

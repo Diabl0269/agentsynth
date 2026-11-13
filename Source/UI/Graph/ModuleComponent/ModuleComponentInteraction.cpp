@@ -487,10 +487,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // first, by identity against `sliders` (index-parallel to `sliderParams`, exactly like
     // reflectParameterValue()'s lookup).
     if (e.eventComponent != this) {
-        if (e.mods.isPopupMenu() && e.eventComponent->getComponentID() == "XY pad") {
-            showXYPadMenu(*e.eventComponent);
+        if (e.mods.isPopupMenu() && showMacroWidgetMenu(*e.eventComponent))
             return;
-        }
         for (int i = 0; i < sliders.size(); ++i) {
             if (sliders[i] == e.eventComponent) {
                 if (e.mods.isPopupMenu()) {

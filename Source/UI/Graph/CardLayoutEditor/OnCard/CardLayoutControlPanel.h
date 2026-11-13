@@ -42,6 +42,8 @@ public:
     std::function<void(bool bipolar)> onMacroPolarity;
     /** An XY pad's Y macro was picked: the macro's parameter id. */
     std::function<void(const juce::String& paramId)> onXYPartner;
+    /** A Button's Mode switch was picked: true = Momentary. */
+    std::function<void(bool momentary)> onButtonMode;
     /** A valid range was typed; nullopt = the full range. */
     std::function<void(std::optional<juce::Range<double>>)> onRange;
     std::function<void()> onHide;
@@ -65,6 +67,8 @@ public:
     juce::TextEditor& getNameEditorForTest() noexcept { return name_; }
     CardSegmentedSwitch* getPolarityForTest() const noexcept { return polarity_.get(); }
     juce::ComboBox& getYMacroForTest() noexcept { return yMacro_; }
+    CardSegmentedSwitch* getModeForTest() const noexcept { return mode_.get(); }
+    bool isModeRowShownForTest() const { return modeFade_ != nullptr && modeFade_->isShown(); }
     bool isYMacroRowShownForTest() const { return yMacroFade_.isShown(); }
     bool isMacroRowsShownForTest() const {
         return nameFade_.isShown() && polarityFade_ != nullptr && polarityFade_->isShown();
@@ -114,6 +118,7 @@ private:
     juce::Label nameCaption_{{}, "Name"};
     juce::Label polarityCaption_{{}, "Polarity"};
     juce::Label yMacroCaption_{{}, "Y macro"};
+    juce::Label modeCaption_{{}, "Mode"};
     juce::Label rangeCaption_{{}, "Range"};
     juce::Label rangeTo_{{}, "to"};
     juce::Label hint_;
@@ -121,6 +126,7 @@ private:
     juce::ComboBox yMacro_;                         ///< An XY pad's Y macro.
     juce::TextEditor name_;                         ///< A Macros knob's name (in place of Label).
     std::unique_ptr<CardSegmentedSwitch> polarity_; ///< A Macros knob's Uni | Bi.
+    std::unique_ptr<CardSegmentedSwitch> mode_;     ///< A Button's Toggle | Momentary.
     juce::TextEditor minimum_;
     juce::TextEditor maximum_;
     juce::TextButton hide_{"Hide from card"};
@@ -130,6 +136,7 @@ private:
     std::unique_ptr<synth::ui::FadeVisibility> directionFade_;
     std::unique_ptr<synth::ui::FadeVisibility> faderSizeFade_;
     std::unique_ptr<synth::ui::FadeVisibility> polarityFade_; ///< Caption and switch, made with the switch.
+    std::unique_ptr<synth::ui::FadeVisibility> modeFade_;     ///< Caption and switch, made with the switch.
     synth::ui::FadeVisibility labelFade_{&labelCaption_, &label_};
     synth::ui::FadeVisibility nameFade_{&nameCaption_, &name_};
     synth::ui::FadeVisibility yMacroFade_{&yMacroCaption_, &yMacro_};

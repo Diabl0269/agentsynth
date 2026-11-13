@@ -6,6 +6,7 @@
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.h"
+#include "UI/Graph/CardWidgets/CardButton.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PopupHost.h"
 
@@ -57,13 +58,22 @@ void ModuleComponent::launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Com
     synth::ui::launchPopover(std::move(editor), anchor, nullptr);
 }
 
-// Right-click on an XY pad: it drives two macros, so each gets its own submenu with Automate and the MIDI Learn block.
-void ModuleComponent::showXYPadMenu(const juce::Component& pad) {
+// Right-click on a Macros card's XY pad or button. A button offers Automate and MIDI Learn, as its knob did; an XY pad
+// drives two macros, so each gets its own submenu with Automate and the MIDI Learn block. False for any other control.
+bool ModuleComponent::showMacroWidgetMenu(juce::Component& pad) {
+    if (dynamic_cast<synth::ui::CardButton*>(&pad) != nullptr) {
+        if (const auto* entry = midiLearnableRegistry_.find(&pad); entry != nullptr)
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(entry->param))
+                showAutomateMenuForSlider(ranged);
+        return true;
+    }
+    if (pad.getComponentID() != "XY pad")
+        return false;
     if (cardBody_ == nullptr)
-        return;
+        return true;
     const auto params = cardBody_->xyPadParams(pad);
     if (!params.has_value())
-        return;
+        return true;
     auto* const xParam = params->first;
     auto* const yParam = params->second;
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
@@ -86,4 +96,5 @@ void ModuleComponent::showXYPadMenu(const juce::Component& pad) {
         synth::appendCardLayoutMenuItems(menu, owner, undoManager, nodeId, cardBody_.get(), xParam->paramID);
     if (menu.getNumItems() > 0)
         showContextMenuHook_(menu);
+    return true;
 }

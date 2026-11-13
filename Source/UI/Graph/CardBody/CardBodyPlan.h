@@ -12,7 +12,20 @@ namespace synth {
 /** One thing a card body shows: a parameter's widget or a view. */
 struct CardBodyItem {
     /** The widget drawn; each kind lays out as its own run (CardBodyLayout.cpp). */
-    enum class Kind { Choice, Knob, Toggle, View, KnobLarge, FaderV, FaderH, Segmented, Stepper, FaderVLong, XYPad };
+    enum class Kind {
+        Choice,
+        Knob,
+        Toggle,
+        View,
+        KnobLarge,
+        FaderV,
+        FaderH,
+        Segmented,
+        Stepper,
+        FaderVLong,
+        XYPad,
+        Button
+    };
     /** A vertical fader, short or long. */
     static constexpr bool isVerticalFader(Kind kind) { return kind == Kind::FaderV || kind == Kind::FaderVLong; }
 
@@ -21,6 +34,8 @@ struct CardBodyItem {
     CardView view = CardView::Scope;             ///< Meaningful for a view only.
     /** An XY pad only: the parameter its vertical axis drives (`param` drives the horizontal one). */
     juce::RangedAudioParameter* partner = nullptr;
+    /** A Button only: held (on while pressed) instead of toggling. */
+    bool momentary = false;
     /** Stands in an XY pad as its vertical axis: no widget, no cell and no More-row entry of its own. */
     bool consumed = false;
     juce::Component* widget = nullptr;        ///< Null until built, and always in a measure-only plan.

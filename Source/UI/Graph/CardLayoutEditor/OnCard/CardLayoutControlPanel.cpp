@@ -44,8 +44,9 @@ ModCurveBox* CardLayoutControlPanel::getCurveBoxForTest() const noexcept { retur
 
 CardLayoutControlPanel::CardLayoutControlPanel() {
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
-    for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
-                          &nameCaption_, &polarityCaption_, &yMacroCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
+    for (auto* caption :
+         {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_, &nameCaption_,
+          &polarityCaption_, &yMacroCaption_, &modeCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
         styleCaption(*caption);
         addAndMakeVisible(*caption);
     }
@@ -70,6 +71,18 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     };
     yMacroFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
     yMacroFade_.setShown(false);
+    mode_ = std::make_unique<CardSegmentedSwitch>("Mode", juce::StringArray{"Toggle", "Momentary"});
+    mode_->setTooltip("Toggle: each click switches it on or off. Momentary: on while held, off when let go");
+    mode_->setExplicitFocusOrder(4);
+    mode_->onChange = [this](int index) {
+        if ((index == 0 || index == 1) && onButtonMode)
+            onButtonMode(index == 1);
+    };
+    addChildComponent(*mode_);
+    modeFade_ = std::make_unique<synth::ui::FadeVisibility>(
+        std::initializer_list<juce::Component*>{&modeCaption_, mode_.get()});
+    modeFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+    modeFade_->setShown(false);
     polarity_ = std::make_unique<CardSegmentedSwitch>("Polarity", juce::StringArray{"Uni", "Bi"});
     polarity_->setTooltip("Uni sends 0 to 1; Bi sends -1 to 1, so a centred knob means no change");
     polarity_->setExplicitFocusOrder(5);
@@ -204,6 +217,8 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
         yMacro_.setSelectedId(options_.xyPartner->selected + 1, juce::dontSendNotification);
     }
     yMacroFade_.setShown(options_.xyPartner.has_value());
+    modeFade_->setShown(options_.widget == CardWidget::Button);
+    mode_->setSelectedIndex(options_.momentary ? 1 : 0, juce::dontSendNotification);
     labelFade_.setShown(!isMacro);
     nameFade_.setShown(isMacro);
     polarityFade_->setShown(isMacro);
@@ -295,6 +310,14 @@ int CardLayoutControlPanel::arrange() {
         squeeze(yMacroCaption_, kPad, y, width, 0, kCaptionH, ySlot);
         squeeze(yMacro_, kPad, y, width, kCaptionH, kFieldH, ySlot);
         y += ySlot + scaled(kGap, yShown);
+    }
+    {
+        // A Button's Mode sits in the same place, under Show as, and fades in and out on its own.
+        const float modeShown = modeFade_->progress();
+        const int modeSlot = scaled(kCaptionH + kSwitchH, modeShown);
+        squeeze(modeCaption_, kPad, y, width, 0, kCaptionH, modeSlot);
+        squeeze(*mode_, kPad, y, width, kCaptionH, kSwitchH, modeSlot);
+        y += modeSlot + scaled(kGap, modeShown);
     }
     {
         // Label (any other control) and Name then Polarity (a Macros knob) fade in each other's place.
@@ -398,7 +421,7 @@ bool CardLayoutControlPanel::keyPressed(const juce::KeyPress& key) {
 void CardLayoutControlPanel::applyColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
     for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
-                          &nameCaption_, &polarityCaption_, &yMacroCaption_, &rangeCaption_, &rangeTo_})
+                          &nameCaption_, &polarityCaption_, &yMacroCaption_, &modeCaption_, &rangeCaption_, &rangeTo_})
         caption->setColour(juce::Label::textColourId, colours.textMuted);
     hint_.setColour(juce::Label::textColourId, colours.warning);
 }

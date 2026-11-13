@@ -23,7 +23,20 @@ struct CardSlot {
 };
 
 /** How a v2 item is drawn. The first four map onto the v1 kinds; the rest need version 2. */
-enum class CardWidget { Auto, Knob, KnobLarge, FaderV, FaderH, Toggle, Choice, Segmented, Stepper, FaderVLong, XYPad };
+enum class CardWidget {
+    Auto,
+    Knob,
+    KnobLarge,
+    FaderV,
+    FaderH,
+    Toggle,
+    Choice,
+    Segmented,
+    Stepper,
+    FaderVLong,
+    XYPad,
+    Button
+};
 
 /** A read-only visual a v2 section can hold. */
 enum class CardView {
@@ -74,11 +87,13 @@ struct CardParamItem {
     /** An `XYPad` item only: the parameter the pad's vertical axis drives (`paramId` drives the horizontal one). The
      *  card draws that parameter's own item nowhere (the pad stands in for it), so a layout lists it hidden. */
     std::optional<juce::String> yParamId;
+    /** A `Button` item only: the button is held (on while pressed, back off on release) instead of toggling. */
+    bool momentary = false;
 
     bool operator==(const CardParamItem& other) const noexcept {
         return paramId == other.paramId && indexHint == other.indexHint && node == other.node &&
                widget == other.widget && label == other.label && span == other.span && when == other.when &&
-               at == other.at && range == other.range && yParamId == other.yParamId;
+               at == other.at && range == other.range && yParamId == other.yParamId && momentary == other.momentary;
     }
 };
 

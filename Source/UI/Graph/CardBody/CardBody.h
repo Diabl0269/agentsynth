@@ -195,6 +195,7 @@ private:
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
     void createXYPad(CardBodyItem& item, juce::RangedAudioParameter& xParam, juce::RangedAudioParameter& yParam);
     void refreshXYPad(CardBodyItem& item);
+    void createButton(CardBodyItem& item, juce::RangedAudioParameter& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();
     void createTabStrips();

@@ -811,7 +811,7 @@ private:
     void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
     /** Hosted-card counterpart for a toggle/choice control (no RangedAudioParameter to key on). */
     void showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName);
-    void showXYPadMenu(const juce::Component& pad); ///< Right-click on an XY pad: a submenu per macro, then layout.
+    bool showMacroWidgetMenu(juce::Component& widget); ///< Right-click on an XY pad or button; false for others.
     /** Right-click on a hosted-card KNOB: "Automate..." plus the shared MIDI Learn block. */
     void showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName);
 

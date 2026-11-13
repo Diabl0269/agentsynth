@@ -8,6 +8,7 @@
 #include "MacroCurveGlyph.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardWidgets/CardButton.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -316,6 +317,8 @@ void CardBody::refreshMacroNames() {
             label->setText(item.captionText(), juce::dontSendNotification);
         if (item.kind == CardBodyItem::Kind::XYPad)
             refreshXYPad(item);
+        else if (auto* button = dynamic_cast<synth::ui::CardButton*>(item.widget))
+            button->setDisplayName(item.captionText());
         else if (item.widget != nullptr)
             item.widget->setTitle(item.captionText());
     }

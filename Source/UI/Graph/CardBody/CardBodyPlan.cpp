@@ -164,6 +164,8 @@ int cellHeight(CardBodyItem::Kind kind) {
         return cardbody::kLabelHeight + cardbody::kFaderVLongHeight;
     case Kind::XYPad:
         return cardbody::kLabelHeight + cardbody::kXYPadHeight;
+    case Kind::Button:
+        return cardbody::kLabelHeight + cardbody::kButtonHeight;
     case Kind::KnobLarge:
         return cardbody::kLabelHeight + cardbody::kKnobLargeHeight;
     case Kind::Knob:
@@ -216,6 +218,7 @@ struct SectionPlacer {
         planned.when = source.when;
         planned.at = source.at;
         planned.range = source.range;
+        planned.momentary = source.momentary;
         if (source.at && !section.footer)
             section.freeform = true;
         if (section.footer)
@@ -551,6 +554,8 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
         return continuous ? Kind::FaderH : automatic;
     case CardWidget::XYPad:
         return continuous ? Kind::XYPad : automatic;
+    case CardWidget::Button:
+        return continuous && macroIndexOf(param.paramID) >= 0 ? Kind::Button : automatic;
     case CardWidget::Segmented:
         return (choice != nullptr || isBool(param)) && suitsSegmented(param) ? Kind::Segmented : automatic;
     case CardWidget::Stepper:

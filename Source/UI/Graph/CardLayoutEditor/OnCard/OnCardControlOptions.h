@@ -22,6 +22,7 @@ struct ControlOptions {
     CardWidget widget = CardWidget::Auto;     ///< The choice now in force (never Auto when there are choices).
     std::optional<juce::Range<double>> range; ///< The layout's narrowed range.
     std::optional<juce::String> yParamId;     ///< An XY pad item's Y axis.
+    bool momentary = false;                   ///< A Button item's mode: held instead of toggling.
     std::optional<juce::Range<double>>
         fullRange; ///< Set only when the Range row applies (a float shown as a knob or fader).
     /** A Macros knob: its own name and polarity. Set, the panel shows Name and Polarity in place of Label. */
@@ -45,10 +46,10 @@ struct ControlOptions {
 
 /** What a control is drawn as, apart from its size or direction: the panel's Show as lists these, and a knob's
  *  Size and a fader's Direction are separate rows. */
-enum class WidgetKind { Auto, Knob, Fader, Toggle, Menu, Segmented, Stepper, XYPad };
+enum class WidgetKind { Auto, Knob, Fader, Toggle, Menu, Segmented, Stepper, XYPad, Button };
 
 WidgetKind widgetKindOf(CardWidget widget);
-/** "Knob", "Fader", "Toggle", "Menu", "Segmented", "Stepper", "XY pad". */
+/** "Knob", "Fader", "Toggle", "Menu", "Segmented", "Stepper", "XY pad", "Button". */
 juce::String widgetKindName(WidgetKind kind);
 /** The kinds `widgetChoices` offer, once each, in the order they first appear. */
 std::vector<WidgetKind> widgetKinds(const std::vector<CardWidget>& widgetChoices);
@@ -90,6 +91,9 @@ CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget
  *  new one leaves the layout (hidden). Unchanged when `paramId` is no pad item or `yParamId` is not another macro. */
 CardLayout withXYPartner(CardLayout layout, const juce::String& paramId, const juce::String& yParamId,
                          std::optional<int> layoutSection = std::nullopt);
+/** `layout` with the Button item `paramId` set to Momentary (held) or Toggle; unchanged for any other item. */
+CardLayout withButtonMomentary(CardLayout layout, const juce::String& paramId, bool momentary,
+                               std::optional<int> layoutSection = std::nullopt);
 /** `layout` with `paramId`'s caption override set from `text` (labelOverrideFor's rule). */
 CardLayout withControlLabel(CardLayout layout, const juce::String& paramId, const juce::String& displayName,
                             const juce::String& text, std::optional<int> layoutSection = std::nullopt);

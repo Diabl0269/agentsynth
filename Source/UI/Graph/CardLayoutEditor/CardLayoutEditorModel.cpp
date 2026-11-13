@@ -76,6 +76,8 @@ juce::String cardLayoutWidgetName(CardWidget widget) {
         return "Stepper";
     case CardWidget::XYPad:
         return "XY pad";
+    case CardWidget::Button:
+        return "Button";
     }
     return "Automatic";
 }

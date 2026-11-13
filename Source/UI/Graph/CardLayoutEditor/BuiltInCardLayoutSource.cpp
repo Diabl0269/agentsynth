@@ -39,6 +39,8 @@ CardWidget widgetFor(CardBodyItem::Kind kind) {
         return CardWidget::Stepper;
     case Kind::XYPad:
         return CardWidget::XYPad;
+    case Kind::Button:
+        return CardWidget::Button;
     case Kind::Knob:
     case Kind::View:
         break;
@@ -56,7 +58,7 @@ std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param
     choices.push_back(widgetFor(*automatic));
     for (auto widget :
          {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH,
-          CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper, CardWidget::XYPad}) {
+          CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper, CardWidget::XYPad, CardWidget::Button}) {
         if (widget == CardWidget::XYPad && macroIndexOf(param.paramID) < 0)
             continue; // a pad pairs two Macros knobs
         const auto kind = cardBodyKindFor(param, widget);

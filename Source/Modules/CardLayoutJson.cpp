@@ -24,8 +24,8 @@ struct NameTable {
     }
 };
 
-constexpr NameTable<CardWidget, 11> kWidgets{{"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice",
-                                              "segmented", "stepper", "faderVLong", "xyPad"}};
+constexpr NameTable<CardWidget, 12> kWidgets{{"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice",
+                                              "segmented", "stepper", "faderVLong", "xyPad", "button"}};
 constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
                                           "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
                                           "stepGrid"}};
@@ -159,6 +159,8 @@ juce::var itemToVar(const CardItem& item) {
     }
     if (param.yParamId)
         object->setProperty("yParam", *param.yParamId);
+    if (param.widget == CardWidget::Button && param.momentary)
+        object->setProperty("mode", "momentary");
     if (param.range) {
         object->setProperty("min", param.range->getStart());
         object->setProperty("max", param.range->getEnd());
@@ -183,6 +185,7 @@ bool readParamItem(const juce::DynamicObject& object, CardParamItem& out) {
             return false;
         out.widget = *widget;
     }
+    out.momentary = out.widget == CardWidget::Button && object.getProperty("mode").toString() == "momentary";
     return readBoundedInt(object, "span", kMinSpan, kMaxSpan, 1, out.span) && readCondition(object, "when", out.when) &&
            readPosition(object, out.at) && readRange(object, out.range);
 }
@@ -274,6 +277,7 @@ CardSlotKind slotKindFromWidget(CardWidget widget) {
     case CardWidget::FaderVLong:
     case CardWidget::FaderH:
     case CardWidget::XYPad:
+    case CardWidget::Button:
         return CardSlotKind::Knob;
     }
     return CardSlotKind::Auto;

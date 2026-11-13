@@ -78,6 +78,8 @@ int naturalHeight(Kind kind) {
         return cardbody::kFaderHHeight;
     case Kind::XYPad:
         return cardbody::kXYPadHeight;
+    case Kind::Button:
+        return cardbody::kButtonHeight;
     case Kind::Choice:
     case Kind::Segmented:
     case Kind::Stepper:
@@ -149,6 +151,9 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
                                        synth::ui::CardFader::kVerticalWidth, y, g, apply);
     case Kind::XYPad:
         return cardbody::layoutGridRun(captioned, columns, cardbody::kXYPadHeight, cardbody::kXYPadWidth, y, g, apply);
+    case Kind::Button:
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kButtonHeight, cardbody::kButtonWidth, y, g,
+                                       apply);
     case Kind::FaderH:
         return cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
     case Kind::Segmented:
@@ -377,6 +382,8 @@ int rowCellWidth(Kind kind) {
         return 40;
     case Kind::XYPad:
         return cardbody::kXYPadWidth;
+    case Kind::Button:
+        return cardbody::kButtonWidth;
     case Kind::View:
         break;
     }
@@ -501,6 +508,8 @@ juce::Point<int> cardBodyCellSize(CardBodyItem::Kind kind, int columns, const ca
         return {gridW, kLabelHeight + kFaderVLongHeight};
     case Kind::XYPad:
         return {gridW, kLabelHeight + kXYPadHeight};
+    case Kind::Button:
+        return {gridW, kLabelHeight + kButtonHeight};
     case Kind::FaderH:
         return {g.contentW, kLabelHeight + kFaderHHeight};
     case Kind::Segmented:

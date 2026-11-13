@@ -14,6 +14,7 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardWidgets/CardButton.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
@@ -231,6 +232,8 @@ void CardBody::createParameterWidgets() {
             continue; // stands in an XY pad
         if (item.kind == CardBodyItem::Kind::XYPad)
             createXYPad(item, *item.param, *item.partner);
+        else if (item.kind == CardBodyItem::Kind::Button)
+            createButton(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Choice)
             createChoice(item, *static_cast<juce::AudioParameterChoice*>(item.param));
         else if (item.kind == CardBodyItem::Kind::Knob || item.kind == CardBodyItem::Kind::KnobLarge)
@@ -694,6 +697,49 @@ void CardBody::createXYPad(CardBodyItem& item, juce::RangedAudioParameter& xPara
     label->setTooltip(xParam.getName(100) + " and " + yParam.getName(100));
     item.widget = pad;
     refreshXYPad(item);
+}
+
+// ---- Button: a Macros knob as a switch ----
+// Toggle: a click (or Space or Enter) flips the value between 0 and 1 as one complete gesture, one undo step.
+// Momentary: the press opens a gesture and writes 1, the release writes 0 and closes it, so automation records the hold
+// and undo sees one step (none when nothing changed). A bipolar macro's 0 and 1 are its -1 and +1. The value reaches
+// the lit state through the attachment's callback, which a write of its own never calls.
+void CardBody::createButton(CardBodyItem& item, juce::RangedAudioParameter& param) {
+    auto* button = new synth::ui::CardButton();
+    widgets_.add(button);
+    button->setComponentID(param.getName(100));
+    card_.addAndMakeVisible(button);
+    button->addMouseListener(&card_, false);
+    card_.registerMidiLearnable(*button, &param);
+    button->setMomentary(item.momentary);
+    button->setDisplayName(item.captionText());
+    button->refusesEdit = [this] { return card_.owner.getLoadReveal().refuseEdit(); };
+
+    juce::Component::SafePointer<synth::ui::CardButton> safeButton(button);
+    const auto alive = widgetsAlive_;
+    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(param, [safeButton, alive](float value) {
+        if (*alive && safeButton != nullptr)
+            safeButton->setLit(value >= 0.5f);
+    }));
+    attachment->sendInitialUpdate();
+    if (item.momentary) {
+        button->onPress = [attachment, &param] {
+            attachment->beginGesture();
+            attachment->setValueAsPartOfGesture(param.convertFrom0to1(1.0f));
+        };
+        button->onRelease = [attachment, &param] {
+            attachment->setValueAsPartOfGesture(param.convertFrom0to1(0.0f));
+            attachment->endGesture();
+        };
+    } else {
+        button->onClick = [attachment, &param, safeButton] {
+            if (safeButton != nullptr)
+                attachment->setValueAsCompleteGesture(
+                    param.convertFrom0to1(safeButton->getToggleState() ? 1.0f : 0.0f));
+        };
+    }
+    addCaption(item, param, juce::Justification::centred);
+    item.widget = button;
 }
 
 std::optional<std::pair<juce::RangedAudioParameter*, juce::RangedAudioParameter*>>

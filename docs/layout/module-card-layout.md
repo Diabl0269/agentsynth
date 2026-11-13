@@ -351,6 +351,10 @@ toggles, and an effect's output Level as a small horizontal fader. The **More** 
 
 ---
 
+### The button
+
+Show as `Button` in a macro knob's Edit Layout panel draws that macro as a small switch under its name, reading On or Off and lit with the accent while on (`CardButton`, the app's own text button). A `Mode` switch under Show as picks `Toggle` (a click, Space or Enter flips the macro between 0 and 1) or `Momentary` (on while pressed, back to 0 the moment it is let go: the mouse released anywhere, the key released, keyboard focus lost, or the button hidden). A macro set to Bi reads -1 when off and +1 when on. The mode is stored per knob in the layout (`"widget": "button"`, and `"mode": "momentary"` only for Momentary), so it is saved with the project and reloaded with the card. A click is one undo step; a Momentary hold is one gesture (automation records it, and undo has nothing to take back because the value ends where it began). Tab reaches it; its screen-reader title is the macro's name and its state, and its tooltip says how it behaves. Each button keeps its own macro's MIDI Learn (so MIDI Remote can map a controller button to it), Automate and cables; a right-click offers Automate and MIDI Learn without pressing it. Only a Macros knob offers Button; showing it as anything else drops the mode.
+
 ## Default layouts
 
 The hand-designed default per type. "New" marks a parameter that does not exist yet; a default
@@ -802,6 +806,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 
 ## Tests
 
+- `Tests/UI/Graph/CardBody/CardBodyWidgetKindTests.cpp` (its `CardButton` tests): the button layout through JSON and a saved project, the plan (Macros only), real mouse presses and releases (inside and outside) and key presses in both modes, one gesture and one undo step per click, the bipolar -1/+1 mapping, an outside change lighting it, the title and tooltip, MIDI Learn registration, right-click, the pure Show as / Mode edits and the panel's Mode row.
 - `Tests/UI/Graph/CardBody/CardBodyWidgetKindTests.cpp` (its XY pad tests): the XY layout through JSON, the plan (pad item, consumed partner), a real mouse drag and key steps moving both macros as one undo step, outside changes moving the dot, the bipolar readout, the pure Show as / Y macro edits and the XY preset in the menu.
 - `Tests/Modules/CardLayoutTests.cpp`: v2 round trip; v1 read → v2 with the absent-means-hidden rule
   applied once; unknown keys ignored; newer version refused; conditions match value strings;
