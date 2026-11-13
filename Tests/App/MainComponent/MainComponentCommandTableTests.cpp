@@ -6,6 +6,7 @@
 #include "Branding.h"
 #include "MainComponentTestFixture.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Layout/MainMenuTooltips.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
@@ -212,6 +213,47 @@ TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
 }
+
+#if JUCE_MAC
+// macOS menus can show a hover hint (NSMenuItem.toolTip) where JUCE's PopupMenu cannot. The hint is the command's
+// description, it reaches every Help item that has one, and it is still there after macOS re-opens (rebuilds) the
+// menu. The hover itself is drawn by macOS; this reads the property it draws from.
+TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto& commands = mc.getCommandManager();
+
+    struct HelpOnly : juce::MenuBarModel {
+        explicit HelpOnly(juce::ApplicationCommandManager& c)
+            : cm(c) {}
+        juce::StringArray getMenuBarNames() override { return {"Help"}; }
+        juce::PopupMenu getMenuForIndex(int, const juce::String&) override {
+            juce::PopupMenu menu;
+            menu.addCommandItem(&cm, AppCommands::contribute);
+            menu.addCommandItem(&cm, AppCommands::joinDiscord);
+            menu.addCommandItem(&cm, AppCommands::checkForUpdates);
+            return menu;
+        }
+        void menuItemSelected(int, int) override {}
+        juce::ApplicationCommandManager& cm;
+    } model(commands);
+
+    juce::MenuBarModel::setMacMainMenu(&model);
+    synth::ui::installMainMenuTooltips(synth::ui::collectCommandTooltips(commands));
+
+    for (int open = 0; open < 2; ++open) { // 0: as installed, 1: after macOS refills the menu on opening it
+        for (const auto id : {AppCommands::contribute, AppCommands::joinDiscord, AppCommands::checkForUpdates}) {
+            const auto* info = commands.getCommandForID(id);
+            ASSERT_NE(info, nullptr);
+            ASSERT_TRUE(info->description.isNotEmpty()) << info->shortName;
+            EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", info->shortName), info->description)
+                << info->shortName << " (open " << open << ")";
+        }
+    }
+    EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", "Help build Agent Synth..."),
+              commands.getCommandForID(AppCommands::contribute)->description);
+    juce::MenuBarModel::setMacMainMenu(nullptr);
+}
+#endif
 
 // The Help > Join the Discord item: same shape as contribute, opening kDiscordUrl.
 TEST_F(MainComponentTest, JoinDiscordCommandOpensTheDiscordPageExactlyOnce) {
