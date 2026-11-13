@@ -206,7 +206,12 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
             ? layout.sections[(size_t)*layoutSection].visibleWhen.has_value()
             : planned.section >= 0 && planned.section < (int)plan.sections.size() &&
                   plan.sections[(size_t)planned.section].visibleWhen.has_value();
-    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, *item, lookCondition))
+    // The plan knows a swap pair even when the layout the editor reads has no item for it (a default layout is
+    // rebuilt from the plan without the items' tests), so the pair's membership comes from both.
+    CardParamItem asked = *item;
+    if (planned.swapGroup >= 0 && !asked.when.has_value())
+        asked.when = CardCondition{"", {}, CardConditionEffect::Show};
+    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, asked, lookCondition))
         for (auto widget : {CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH})
             if (std::find(options.widgetChoices.begin(), options.widgetChoices.end(), widget) ==
                 options.widgetChoices.end())
