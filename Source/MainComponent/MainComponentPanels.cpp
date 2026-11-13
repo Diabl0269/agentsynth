@@ -672,7 +672,7 @@ void MainComponent::beginPanelSlide() {
     // so restarting it must carry any slide already in flight to its own target instead of
     // stranding it half-open. Each retarget starts from the fraction's CURRENT value — a
     // mid-flight reversal, not a jump to an extreme.
-    const bool canAnimate = isShowing();
+    const bool canAnimate = isShowing() || synth::ui::FadeVisibility::animatesOffScreenForTest();
     const bool libTweening = librarySlide_.retarget(isLibraryVisible ? 1.0f : 0.0f, canAnimate);
     const bool aiTweening = aiPanelSlide_.retarget(isAiPanelVisible ? 1.0f : 0.0f, canAnimate);
     // The dock opening is a "mixer shown" moment when Mixer is its active tab; the fit waits for the

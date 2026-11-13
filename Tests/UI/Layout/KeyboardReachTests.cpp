@@ -526,6 +526,41 @@ TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedI
     }
 }
 
+// A ring that waits for the dock to slide open lands only if the keys have not moved on: a later scene or the user
+// focusing something else while the slide is in flight must not have it stolen back.
+TEST_F(KeyboardReachShell, TheDeferredTransportBarRingDoesNotStealFocusThatMovedOnDuringTheSlide) {
+    auto& panel = mc_->getTimelinePanel();
+    mc_->setMainViewForTest(Tab::Canvas);
+    if (mc_->isBottomDockConfiguredVisible())
+        mc_->simulateToggleBottomPanelClick();
+    synth::test::waitUntil([&] { return !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+    mc_->resized();
+    ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
+    panel.getTopBarKeysForTest().leave();
+
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Off screen no vblank reaches the slide: let it start anyway, and nothing steps it until we land it below.
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    for (juce::Component* at = mc_.get(); at != nullptr; at = at->getParentComponent())
+        if (at->keyPressed(key))
+            break;
+    // The command runs on the message loop: wait for it to open the dock, whose slide then holds.
+    synth::test::waitUntil([&] { return mc_->isBottomDockConfiguredVisible(); }, 2000);
+    ASSERT_TRUE(mc_->isPanelSlideAnimatingForTest()) << "the slide must be in flight for the ring to be deferred";
+
+    // The keys move on before the slide lands.
+    auto& elsewhere = mc_->getMainViewHolderForTest(); // outside the timeline panel
+    mc_->setFocusedComponentOverrideForTest(&elsewhere);
+    auto& slide = mc_->panelSlideForTest(MainComponent::SlidingPanel::Timeline);
+    slide.finish(); // the slide lands, and runs what waited for it
+    slide.runSettled();
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+    EXPECT_FALSE(panel.getTopBarKeysForTest().isActive()) << "the late ring stole the keys";
+    EXPECT_EQ(mc_->getFocusedComponentForMenu(), &elsewhere);
+    mc_->setFocusedComponentOverrideForTest(nullptr);
+}
+
 // Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the
 // piano roll; only from inside the timeline, with Up from its track column.
 TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRegion) {

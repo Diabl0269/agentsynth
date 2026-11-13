@@ -40,7 +40,7 @@ below for the Mixer region's own keyboard behaviour.
 - **Cmd+Shift+Up (`focusTransportBar`) reaches the transport bar from every region** — it does what
   Cmd+Shift+T does, then puts the Timeline top bar's key ring on Play
   (`TimelinePanelComponent::focusTransportBar`, `KeyRing::enterAt`). From the mixer docked as a tab the
-  Timeline tab comes forward. With the bottom panel closed it opens, and the ring goes on once the slide lands
+  Timeline tab comes forward. With the bottom panel closed it opens, and the ring goes on once the slide lands, and only if the keys have not moved on
   (`timelineSlide_.whenSettled`, no timer): the bar has no bounds before, and a ring only sits on a control that
   shows. A surface's own arrow keys ignore Cmd, Ctrl and Alt arrows (the mixer's
   column and fader keys, a track row's Up/Down), so the chord bubbles to the app. Guarded by

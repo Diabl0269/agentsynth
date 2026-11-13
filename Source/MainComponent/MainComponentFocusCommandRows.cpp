@@ -45,11 +45,18 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              m.focusRegions_.focusRegionById("timeline");
              // A closed dock slides open first and the transport bar has no bounds until the slide lands; the ring
-             // can only sit on a control that shows.
+             // can only sit on a control that shows, and only if the keys have not moved on in the meantime (a late
+             // ring must not steal focus from whatever the user, or a later scene, focused since).
              m.timelineSlide_.whenSettled(
-                 [safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving()] {
+                 [safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving(),
+                  focusAtPress = juce::Component::SafePointer<juce::Component>(m.getFocusedComponentForMenu())] {
                      // A slide closed again before it landed leaves nothing to ring.
-                     if (safe != nullptr && (!sliding || safe->isBottomDockVisible))
+                     if (safe == nullptr || (sliding && !safe->isBottomDockVisible))
+                         return;
+                     const auto* focused = safe->getFocusedComponentForMenu();
+                     const bool inTimeline = focused != nullptr && (focused == &safe->timelinePanel ||
+                                                                    safe->timelinePanel.isParentOf(focused));
+                     if (!sliding || focused == focusAtPress.getComponent() || inTimeline)
                          safe->timelinePanel.focusTransportBar();
                  });
              return true;
