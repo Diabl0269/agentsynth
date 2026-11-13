@@ -11,6 +11,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 #include <algorithm>
 #include <limits>
@@ -136,8 +137,8 @@ std::unique_ptr<juce::AccessibilityHandler> ModuleComponent::createAccessibility
 // bound to one, else from the control's own text or name. A tooltip is only added where the
 // control has none, and the MIDI Learn registry is told, since it composes a mapped control's
 // tooltip from the one the control had when it registered. A control whose name is already drawn
-// beside it (a knob or stepper caption) keeps that tooltip for the screen reader and the coverage
-// rules but is marked `nameDrawnBeside`, so the hover tip leaves the name out (AppTooltipWindow).
+// beside it (a knob or stepper caption, or a button that shows those words) keeps that tooltip for the screen reader
+// and the coverage rules but is marked `nameDrawnBeside`, so the hover tip leaves the name out (AppTooltipWindow).
 void ModuleComponent::applyControlAccessibility() {
     std::map<juce::Component*, juce::String> preferred;
     for (int i = 0; i < sliders.size(); ++i)
@@ -191,6 +192,10 @@ void ModuleComponent::applyControlAccessibility() {
             if (captioned.count(c) > 0)
                 c->getProperties().set(synth::ui::AppTooltipWindow::kNameDrawnBeside, name);
         }
+        // A button whose tooltip is only the words it shows: the hover tip leaves them out too.
+        auto* button = dynamic_cast<juce::Button*>(c);
+        if (button != nullptr && synth::ui::buttonShowsText(*button) && button->getTooltip() == button->getButtonText())
+            c->getProperties().set(synth::ui::AppTooltipWindow::kNameDrawnBeside, button->getButtonText());
     }
 }
 

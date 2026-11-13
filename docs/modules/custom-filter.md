@@ -314,7 +314,7 @@ untrusted path reads only `mode` and `smoothness`, never the key map ([patch for
 ## Shape library
 
 Named curves outside any one Filter: the user's saved shapes and a factory set, listed in the Sounds view's
-[Shapes place](../layout/sound-browser.md#shapes) and in each shape window's Start from menu. `synth::shapes::ShapeLibrary`
+[Shapes place](../layout/sound-browser.md#shapes) and in each shape window's Pick shape menu. `synth::shapes::ShapeLibrary`
 (`Source/Modules/Shapes/`, Core) owns it; the Filter and the LFO share it and tell their shapes apart by kind.
 
 - **Storage**: one JSON file per saved shape, `<settings folder>/Shapes/Filter/<name>.json` or `.../LFO/<name>.json`:
@@ -341,7 +341,7 @@ One picker for every place a module holds shapes (`ShapePicker.h`, `makeShapePic
 52 x 20 thumbnail of the curve (`paintShapeThumbnail`, the same drawing as the Sounds view's Shapes rows), the name and
 a Badge, under **Your shapes** then **Factory shapes**. It opens from the **Pick shape** button beside Edit shapes in the
 Custom section of the Filter and LFO cards (`MorphShapesCard`; the selected dot, else the shape nearest the morph cursor, takes the pick as ONE
-undo step and the pick joins Used recently) and from the shape window's **Start from**. Enter or Space on the button
+undo step and the pick joins Used recently) and from the shape window's **Pick shape** (the same name and tooltip, `synth::ui::actiontext`). Enter or Space on the button
 opens it, arrows move, Enter picks, Escape closes; each row is named "<name>, <badge>" and the button has a title, a
 tooltip and the shared focus ring.
 
@@ -361,7 +361,7 @@ transport and panel shortcuts) is handed to the main window, which performs it a
 commands (copy, paste, select all, ...) are never handed over. Left a large
 [morph map](#morph-map); right a row of shape chips (colour dot and name; pressing one selects the shape), the curve
 editor (`CurveEditorComponent`, Free mode) for the selected shape and a row of buttons: **Add shape** (a copy of the
-blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Rename**, **Start from** and **Draw**,
+blend at the cursor, in the free spot furthest from the other shapes), **Duplicate**, **Rename**, **Pick shape** and **Draw**,
 and, alone at the right end of the row and in the theme's error red, **Delete** (one shape always stays). The bottom bar holds the [per-note settings](#per-note-cursors)
 beside **Done** (`PerNoteBar`, shown when the adapter has them): **Notes move the cursor** (a segmented switch: Off,
 By hand, By pitch, Random), **Smoothness** (a slider from Hard to Smooth; its value reads "Hard" or "125 ms
@@ -420,7 +420,8 @@ slider drag is one undo step (the settings are part of the module's extra state)
   (the default), Notes (every semitone) or By key (the song key's notes). Snapped, the knob drags to notes, Up/Down
   step one note, and it reads "A3 220" (the note and the whole hertz, no unit, to fit the knob's value box). The choice is the card's view state (`"cardView"`), saved with the project
   (`CutoffNoteSnap.h`).
-- **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
+- **Show Spectrum.** A toggle at the right end of the same row (off by default, remembered), with the card's own name
+  and tooltip (`synth::ui::actiontext`, one text for both), draws the filter's live
   spectrum faintly behind the grid and the curve, on the curve's own log-frequency axis (level -80 to 0 dB over the
   full height). It is the reading the card's response view shows ([the card](#card)): the module's 4096-sample
   spectrum buffer, transformed by `FilterSpectrumAnalyser`, one class shared by both views. Each point takes the
@@ -431,7 +432,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   curve paints exactly as before (the LFO's window has no such toggle). The spectrum is the filter's output before any
   volume stage, so a source still running into the filter keeps it moving after the notes stop; muting or bypassing the
   filter shows what then leaves it (silence, or the dry signal). Tab order: the map, the chips, Grid, its Snap, Level,
-  its Snap, the second row (Steps, Key or Root), Guides, Show spectrum, the curve, the buttons (Ring helpers after Draw).
+  its Snap, the second row (Steps, Key or Root), Guides, Show Spectrum, the curve, the buttons (Ring helpers after Draw).
 - **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and
@@ -442,7 +443,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   hides it. It sits in the same backdrop painter as the spectrum, so both can show at once. A screen reader hears
   "Showing the filter's current response" when it appears. The map keeps this selection (`MorphMap::isCursorSelected`,
   `onCursorSelected`); the LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
-- **Start from** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
+- **Pick shape** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves. After the built-ins the menu lists **Your shapes** (the Filter shapes saved with
   Save shape) and **Factory shapes** (the [factory set](#shape-library) that is not already a built-in's curve:
@@ -475,7 +476,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   extra state. The window follows changes made elsewhere (undo, the card's map, gliding the curve's points when an undo or redo moved them) by polling
   `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
 - **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
-  the Start from entries, the draw range, the grid it offers and whether it has a spectrum), not the Filter: `FilterShapesAdapter` is the Filter's and
+  the Pick shape entries, the draw range, the grid it offers and whether it has a spectrum), not the Filter: `FilterShapesAdapter` is the Filter's and
   `LfoShapesAdapter` the LFO's. Both share `ModuleShapesAdapter` (the undo bracket and the morph cursor's parameters). The window and the card's map edit the adapter through `ShapeMapController`, so every edit is one undo step.
 
 ## Morph map

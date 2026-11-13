@@ -1,4 +1,4 @@
-// ShapeListEditorLibrary.cpp -- how the shape window meets the shape library: the Start from menu that lists it, a
+// ShapeListEditorLibrary.cpp -- how the shape window meets the shape library: the Pick shape menu that lists it, a
 // library shape dropped on a chip, and Save shape.
 #include "ShapeListEditor.h"
 #include "ShapePicker.h"
@@ -42,7 +42,7 @@ std::vector<ShapeStartFrom> ShapeListEditor::startFromEntries(int* builtInCount,
 
 // Each row carries its curve, so a library that changes while the menu is open cannot shift what a row stamps. The
 // rows are the shared shape picker's: a thumbnail, the name and a badge (Yours for a saved shape, Factory otherwise).
-void ShapeListEditor::openStartFromMenu() {
+void ShapeListEditor::openPickShapeMenu() {
     juce::PopupMenu menu;
     juce::Component::SafePointer<ShapeListEditor> safe(this);
     int builtIn = 0;
@@ -66,10 +66,10 @@ void ShapeListEditor::openStartFromMenu() {
             safe->noteStartFromUsed(picked.name, picked.curve, isSaved);
         });
     }
-    showMenuNow(menu, startFromButton_);
+    showMenuNow(menu, pickShapeButton_);
 }
 
-// The library entry a Start from item came from (a saved shape by name; a built-in or factory one by name and curve),
+// The library entry a Pick shape item came from (a saved shape by name; a built-in or factory one by name and curve),
 // so Used recently lists it. A built-in curve with no library twin is not a library shape and notes nothing.
 void ShapeListEditor::noteStartFromUsed(const juce::String& name, const LfoCustomWave& curve, bool saved) {
     const auto kind = libraryKind();

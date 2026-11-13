@@ -5,6 +5,7 @@
 #include "EQBandTypePill.h"
 #include "EQCurveComponent.h"
 #include "EQSoloButton.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -53,8 +54,8 @@ public:
         soloButton->setComponentID("eqWindowSolo");
         addAndMakeVisible(*soloButton);
 
-        spectrumToggle.setButtonText("Show Spectrum");
-        spectrumToggle.setTooltip("Draw the live spectrum of the signal behind the curve");
+        spectrumToggle.setButtonText(synth::ui::actiontext::kShowSpectrum);
+        spectrumToggle.setTooltip(synth::ui::actiontext::kShowSpectrumEqTip);
         spectrumToggle.setToggleState(curve->getShowSpectrum(), juce::dontSendNotification);
         spectrumToggle.onClick = [this] { curve->setShowSpectrum(spectrumToggle.getToggleState()); };
         addAndMakeVisible(spectrumToggle);

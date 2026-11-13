@@ -25,7 +25,7 @@ StepGridPageStrip::StepGridPageStrip() {
     setTooltip("Pages of 16 steps. Click a page to view it; Left and Right move, Enter views the page");
     setWantsKeyboardFocus(true);
     follow_.setTitle("Follow");
-    follow_.setTooltip("Follow: turn pages with the playhead");
+    follow_.setTooltip("Turn pages with the playhead");
     follow_.setClickingTogglesState(true);
     follow_.setWantsKeyboardFocus(true);
     setTogglePillStyle(follow_, true);

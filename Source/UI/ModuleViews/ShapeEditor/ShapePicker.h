@@ -2,7 +2,7 @@
 
 // ShapePicker.h -- the one shape picker: a menu whose entries each show a small picture of the curve, the name and a
 // badge saying where it came from (Yours or Factory). The Filter and LFO cards' Pick shape button and the shape
-// window's Start from button build their menus from it. Keyboard and screen reader come from the menu: arrows move,
+// window's Pick shape button build their menus from it. Keyboard and screen reader come from the menu: arrows move,
 // Return picks, Escape closes, and each entry is announced as "<name>, <badge>".
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "UI/Chrome/Badge/Badge.h"

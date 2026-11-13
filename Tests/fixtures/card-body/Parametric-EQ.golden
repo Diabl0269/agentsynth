@@ -9,7 +9,7 @@ type Parametric EQ size 560x432
   child 7 label id="" at 192,246 86x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 toggle id="1 Low Shelf" at 292,254 110x26 visible=1 title="Band 1 on" tip="Switch band 1 on or off" focusOrder=0 wantsFocus=1
   child 9 button id="" at 292,286 110x22 visible=1 title="Band type" tip="Band type: press to change it (t), or right-click a point" focusOrder=0 wantsFocus=0
-  child 10 toggle id="" at 12,356 140x28 visible=1 title="Show Spectrum" tip="Show spectrum: draw the EQ's output behind the curve" focusOrder=0 wantsFocus=1
+  child 10 toggle id="" at 12,356 140x28 visible=1 title="Show Spectrum" tip="Draw the EQ's live output behind the curve" focusOrder=0 wantsFocus=1
   child 11 textButton id="eqPopOut" at 162,356 150x28 visible=1 title="Open EQ Window" tip="Edit this EQ in a larger resizable window" focusOrder=0 wantsFocus=1
   child 12 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 13 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1

@@ -3,6 +3,7 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
+#include "UI/Layout/ButtonTooltip.h"
 
 namespace synth::ui {
 
@@ -34,7 +35,7 @@ SamplerChrome::SamplerChrome(Host host, SamplerModule& sampler)
         return strip_.getCaptionText();
     };
     editMapButton_.setTitle("Edit map");
-    editMapButton_.setTooltip("Edit map: see every recording on the keys and velocity layers, and change them");
+    synth::ui::setButtonTooltip(editMapButton_, "See every recording on the keys and velocity layers, and change them");
     editMapButton_.onClick = [this] { openMap(); };
     strip_.onDoubleClick = [this] { openMap(); };
 

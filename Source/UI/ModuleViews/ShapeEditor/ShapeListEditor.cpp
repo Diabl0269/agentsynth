@@ -5,6 +5,8 @@
 #include "ShapeDrawing.h"
 #include "ShapeListEditorInternal.h"
 #include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/ActionTexts.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/FilterSpectrumAnalyser.h"
@@ -30,9 +32,9 @@ constexpr int kPollHz = 10;
 constexpr int kStatusHeight = 36;
 constexpr juce::uint32 kStatusShowMs = 4000;
 
-void styleButton(juce::TextButton& button, const juce::String& tooltip) {
-    button.setTooltip(tooltip);
+void styleButton(juce::TextButton& button, const juce::String& explanation) {
     button.setTitle(button.getButtonText());
+    setButtonTooltip(button, explanation);
 }
 } // namespace
 
@@ -100,24 +102,20 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         curveGestureOpen_ = false;
     };
 
-    styleButton(addButton_, "Add shape: a new shape in a free spot on the map");
-    styleButton(duplicateButton_, "Duplicate: a copy of the selected shape");
-    styleButton(deleteButton_, "Delete: remove the selected shape (one always stays)");
-    styleButton(renameButton_, "Rename: name the selected shape");
-    styleButton(
-        startFromButton_,
-        "Start from: pick a built-in, a saved shape or a factory shape from a list with a small picture of each, to "
-        "replace the selected shape's curve");
-    styleButton(drawButton_, "Draw");
-    styleButton(saveShapeButton_,
-                "Save shape: keep the selected shape's curve under a name, in the Sounds tab's Shapes");
-    styleButton(ringButton_, "Ring helpers: one click places dots at the harmonic ratios of a note, so a resonant "
+    styleButton(addButton_, "A new shape in a free spot on the map");
+    styleButton(duplicateButton_, "A copy of the selected shape");
+    styleButton(deleteButton_, "Remove the selected shape (one always stays)");
+    styleButton(renameButton_, "Name the selected shape");
+    styleButton(pickShapeButton_, actiontext::kPickShapeTip); // the card's Pick shape: one action, one text
+    styleButton(drawButton_, {});                             // updatePenButton gives it the tooltip of the pen state
+    styleButton(saveShapeButton_, "Keep the selected shape's curve under a name, in the Sounds tab's Shapes");
+    styleButton(ringButton_, "One click places dots at the harmonic ratios of a note, so a resonant "
                              "filter rings at those pitches");
-    styleButton(doneButton_, "Done: close this window (Esc)");
+    styleButton(doneButton_, actiontext::kDoneCloseWindowTip);
     int order = 3;
     buildToolbar(order);
     curve_.setExplicitFocusOrder(order++);
-    std::vector<juce::TextButton*> buttons{&addButton_, &duplicateButton_, &renameButton_, &startFromButton_,
+    std::vector<juce::TextButton*> buttons{&addButton_, &duplicateButton_, &renameButton_, &pickShapeButton_,
                                            &drawButton_};
     if (pitchRows_ != nullptr)
         buttons.push_back(&ringButton_);
@@ -132,7 +130,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     duplicateButton_.onClick = [this] { controller_.duplicateShape(selected_); };
     deleteButton_.onClick = [this] { controller_.deleteShape(selected_); };
     renameButton_.onClick = [this] { map_.beginRename(selected_); };
-    startFromButton_.onClick = [this] { openStartFromMenu(); };
+    pickShapeButton_.onClick = [this] { openPickShapeMenu(); };
     drawButton_.onClick = [this] {
         if (pen_.has_value())
             setPen(std::nullopt); // pressing it again leaves draw mode
@@ -389,7 +387,7 @@ void ShapeListEditor::resized() {
     // fit; with Ring helpers the row holds one more button, so the padding and the gaps are smaller.
     const bool ring = pitchRows_ != nullptr;
     deleteButton_.setBounds(buttons.removeFromRight(ring ? 56 : 64));
-    juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &startFromButton_,
+    juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &pickShapeButton_,
                                  &drawButton_, &ringButton_,      &saveShapeButton_};
     const int gap = ring ? kGap / 2 : kGap;
     std::vector<juce::TextButton*> shown;

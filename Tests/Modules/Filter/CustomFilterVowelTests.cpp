@@ -1,7 +1,7 @@
 // CustomFilterVowelTests.cpp -- the Custom filter's vowel shapes measured through the real engine: the kernel's
 // magnitude response has each vowel's formants at the Csound tenor table's frequencies and filter-style bandwidths
 // (wider than the table's, which are for pitch-independent synthesis), with deep valleys between them, and the five
-// vowels are about equally loud. Eh and ih are in the Start from list.
+// vowels are about equally loud. Eh and ih are in the shape window's Pick shape list.
 #include "../../UI/ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "CustomFilterTestHelpers.h"
 #include "Modules/FilterModule.h"
@@ -192,7 +192,7 @@ TEST(CustomFilterVowels, AllFiveVowelsAreWithinThreeDecibelsOfEachOtherOnABandLi
     EXPECT_LE(hi - lo, 3.0) << "swapping or morphing vowels does not jump in level";
 }
 
-TEST(CustomFilterVowels, EhAndIhAreInTheStartFromList) {
+TEST(CustomFilterVowels, EhAndIhAreInThePickShapeList) {
     synth::ui::test::ShapeRig rig;
     std::vector<std::string> names;
     for (const auto& item : rig.adapter->getStartFrom())

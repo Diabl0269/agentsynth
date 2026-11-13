@@ -36,7 +36,7 @@ public:
         virtual ~Listener() = default;
         /** A shape was saved or removed. */
         virtual void shapeLibraryChanged() = 0;
-        /** A shape was stamped onto a chip or a card (by drag, Start from or Return). */
+        /** A shape was stamped onto a chip or a card (by drag, Pick shape or Return). */
         virtual void shapeLibraryUsed(const LibraryShape&) {}
     };
 
