@@ -3,9 +3,3 @@
 # Shrink-only: fix the animation and delete the line; never add one without a ticket. A listed step that does not pop
 # on a run prints a note, not a failure: which frames a busy machine catches varies, so one quiet run proves nothing.
 mod-dot-right-click-one-menu 8 FRO1709 [mod] the sources panel closes in one frame
-mod-row-cross-track-drag 8 FRO1708 [timeline] an automation lane appears in one frame
-mod-row-cross-track-drag 9 FRO1708 [timeline] an automation lane appears in one frame
-mod-row-cross-track-drag 37 FRO1708 [timeline] the timeline toggle icon swaps in one frame
-lane-change-parameter-rows-still 35 FRO1708 [timeline] the lane rows change in one frame
-mod-row-drag-follows-pointer 8 FRO1708 [timeline] an automation lane appears in one frame
-mod-row-drag-follows-pointer 9 FRO1708 [timeline] an automation lane appears in one frame
