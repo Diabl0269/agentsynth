@@ -161,7 +161,7 @@ A panel that keeps real focus on its root while a ring moves across its top bar 
 drawn in `paintOverChildren`), so it tells a screen reader nothing by itself: the owner returns
 `KeyRing::createAccessibilityHandler()` from its own `createAccessibilityHandler()` (role group, value = the ringed
 control's name, empty when off) and the ring notifies `valueChanged` on every enter, move and leave. The owner's
-`focusLost` calls `leave()`. The Timeline sorts stops by on-screen X; the Mixer passes `Order::given` because its
+`focusLost` calls `leave()`. Down leaves the ring and then runs the owner's optional `KeyRing::onDown`, which puts focus on the first control below the bar (the Timeline's Add Track, the Mixer's strip), so the key never ends on a panel root that draws no ring; Escape only leaves. The Timeline sorts stops by on-screen X; the Mixer passes `Order::given` because its
 reading order is not left to right. A stop is skipped unless it is enabled, visible up to the owner and laid out to a
 non-empty rectangle, and the step helper's Up/Down (`neighbourStop` over `shownFocusableDescendants`, `FocusStepWithin.h`) skips zero-size
 controls the same way, so a key

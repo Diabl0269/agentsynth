@@ -113,6 +113,27 @@ TEST(TimelineTopBarRingTest, DownAndEscapeLeaveTheBarAndOtherKeysStillReachThePa
     EXPECT_FALSE(f.keys().handleKey(key(juce::KeyPress::rightKey))) << "nothing is ringed once it has left";
 }
 
+// Regression test for FRO1524: Down from the bar left focus on the panel root, which draws no ring, and only a second
+// Down reached Add Track.
+TEST(TimelineTopBarRingTest, DownFromTheBarLandsOnAddTrackInOnePress) {
+    TopBarFixture f;
+    f.panel.setRecordFocusForTest(true);
+    ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
+    ASSERT_TRUE(f.keys().isActive());
+    EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+
+    EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.keys().isActive()) << "the bar's ring is off";
+    EXPECT_TRUE(f.keys().getValueText().isEmpty());
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "and the next stop shows the focus";
+
+    // Escape keeps going back to the root, where no control is focused.
+    f.panel.setRecordFocusForTest(true);
+    ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
+    EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(f.keys().isActive());
+}
+
 TEST(TimelineTopBarRingTest, ReturnAndSpacePressTheRingedControl) {
     TopBarFixture f;
     ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
