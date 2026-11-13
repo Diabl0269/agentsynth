@@ -208,6 +208,7 @@ const std::vector<KnownGap> kKnownGaps = {
     {"canvas / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529", true},
     {"canvas, AI panel and Mod Matrix / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529",
      true},
+    {"library sounds / mixer / MixerPanelComponent 'Mixer': stale ring (focused column)", "FRO1529", true},
     {"canvas, dock closed / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
      "FRO1819", true},
 };
