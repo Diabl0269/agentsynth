@@ -235,7 +235,7 @@ std::vector<int> ModuleLibraryComponent::navigableEntryIndices() const {
 bool ModuleLibraryComponent::moveKeyboardFocus(int delta) {
     const auto navigable = navigableEntryIndices();
     if (navigable.empty())
-        return false;
+        return delta < 0 && onUpFromTop && onUpFromTop();
 
     int pos = -1;
     for (size_t i = 0; i < navigable.size(); ++i) {
@@ -244,6 +244,9 @@ bool ModuleLibraryComponent::moveKeyboardFocus(int delta) {
             break;
         }
     }
+    // Nothing above the search field and the first row but the Modules / Sounds switch: Up goes there.
+    if (delta < 0 && pos <= 0 && onUpFromTop && onUpFromTop())
+        return true;
 
     const int next = (pos < 0) ? (delta > 0 ? 0 : (int)navigable.size() - 1)
                                : juce::jlimit(0, (int)navigable.size() - 1, pos + delta);

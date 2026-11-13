@@ -258,6 +258,9 @@ public:
         return listensForStepKeysForTest(origin) && keyPressed(key, &origin);
     }
 
+    /** Up in the search field: the owner takes focus to the control above the view. Returns true when it did. */
+    std::function<bool()> onUpFromSearch;
+
     void focusSearchField();
     void focusList();
     bool isSearchActive() const { return query_.trim().isNotEmpty(); }

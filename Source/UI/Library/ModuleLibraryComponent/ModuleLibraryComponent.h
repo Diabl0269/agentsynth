@@ -10,6 +10,7 @@
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -100,6 +101,12 @@ public:
 
     /** Focuses the search field itself (Cmd+F, `AppCommands::focusLibrarySearch`), not the region root. */
     void focusSearchField() { searchEditor.grabKeyboardFocus(); }
+
+    /** Up with no row above the cursor (the search field, or the first row): the owner takes focus to the control above
+     *  the library. Returns true when it did, so the key is consumed; unset, Up keeps its row stepping. */
+    std::function<bool()> onUpFromTop;
+    /** Escape in an empty search field: the owner takes focus back to the library's root. */
+    std::function<void()> onEscapeFromSearch;
 
     // -------------------------------------------------------------------------
     // Plugins
@@ -314,11 +321,7 @@ public:
 
     void paint(juce::Graphics& g) override;
 
-    // Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children like GraphEditor's
-    // own outline -- paint() alone isn't enough here: the scrollable row content and the top strip
-    // tile right up to the panel's own edge, so an outline drawn at the end of paint() would sit
-    // UNDER whatever gets painted next and never actually show.
-    void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }
+    // The focus-region outline is the sidebar column's (LibrarySidebarViews), drawn around the switch and this view.
 
     // -------------------------------------------------------------------------
     // Mouse events
