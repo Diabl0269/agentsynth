@@ -88,6 +88,11 @@ public:
     /** Canvas point the user asked to centre the view on (click or drag on the map). */
     std::function<void(juce::Point<float>)> onNavigate;
 
+    /** The same, for the press that starts a click or a drag: when set it takes the press (the owner eases the view
+     *  there), and the drag that follows goes through onNavigate, which stays instant so the view follows the pointer.
+     */
+    std::function<void(juce::Point<float>)> onNavigateEased;
+
     /** Wheel on the map zooms the main editor. Argument is a wheel deltaY (same sign/scale as
      *  juce::MouseWheelDetails::deltaY) so the owner can apply its own zoom curve. */
     std::function<void(float)> onZoom;
@@ -128,7 +133,7 @@ private:
 
     /** Shared by mouseDown/mouseDrag: converts the event position to a canvas point and fires
      *  onNavigate. */
-    void navigateTo(juce::Point<float> localPos);
+    void navigateTo(juce::Point<float> localPos, bool press);
 
     /** Rebuilds the tooltip from the fixed description plus the current shortcut display. */
     void updateTooltip();

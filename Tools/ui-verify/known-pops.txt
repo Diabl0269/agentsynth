@@ -2,10 +2,7 @@
 # One per line: <scenario> <step>[u|r] <ticket> <reason...>. `u` is the undo and `r` the redo of that step.
 # Shrink-only: fix the animation and delete the line; never add one without a ticket. A listed step that does not pop
 # on a run prints a note, not a failure: which frames a busy machine catches varies, so one quiet run proves nothing.
-minimap-click-large-project 4 FRO1705 [canvas] a minimap click moves the canvas view in one frame
 timeline-hotkey-toasts 23 FRO1706 [toast] the toast appears in one frame
-cable-end-glide-jack-row 21 FRO1705 [canvas] adding a module moves the canvas view in one frame
-cable-end-glide-jack-row 30 FRO1705 [graph] a jack row appears on the card in one frame
 sequencer-outline-undo 27 FRO1707 [sequencer] undo rewrites the pattern notes in one frame
 sequencer-outline-undo 31 FRO1707 [sequencer] redo rewrites the pattern notes in one frame
 sequencer-outline-undo 22u FRO1707 [sequencer] undoing a key change rewrites the pattern notes in one frame
@@ -24,4 +21,3 @@ sequencer-outline-undo 31u FRO1707 [sequencer] undo rewrites the pattern notes i
 sequencer-outline-undo 31r FRO1707 [sequencer] redo rewrites the pattern notes in one frame
 toast-severity-icons 19 FRO1706 [toast] the toast appears in one frame
 toast-severity-icons 20 FRO1706 [toast] the toast appears in one frame
-pluck-tab-mod-dots 50 FRO1705 [canvas] adding a module moves the canvas view in one frame

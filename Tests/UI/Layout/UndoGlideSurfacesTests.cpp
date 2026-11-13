@@ -288,6 +288,8 @@ const std::vector<StructuralEdit>& structuralEdits() {
          [](StructuralRig& r) { r.editor.getPolyChain().trackPolyClicked(r.source, true); }},
         {"Track header Poly switch off", true,
          [](StructuralRig& r) { r.editor.getPolyChain().trackPolyClicked(r.source, false); }},
+        // Return on a library row or a double click: no drag brought the card, so it grows in at its slot.
+        {"Library add", false, [](StructuralRig& r) { r.editor.addModuleAtCanvasPosition("Filter", {320, 700}, {}); }},
     };
     return edits;
 }

@@ -261,12 +261,16 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             animateDropLanding(newComp, initialPlaced, toPos);
 
             // A drop that snapped into a connection settles from where the cursor aimed to its slot (the Scope in
-            // placeNode glides it; geometry stays final). Without a suggestion the card just appears, as before.
+            // placeNode glides it; geometry stays final).
             const auto aim = dragDropController_.getDragPreviewAim();
             if (!joining && !inGap && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
                 aim.getPosition() != toPos)
                 cardGlide_.noteStartRect(newComp, newNodeId.uid,
                                          {aim.getX(), aim.getY(), newComp->getWidth(), newComp->getHeight()});
+            // A card that lands where it was placed, with nothing to travel (Return on a library row, a double click),
+            // grows in at its slot like one an insert makes; a drop that travels keeps its landing glide.
+            else if (!joining && !inGap && initialPlaced == toPos)
+                cardGlide_.noteEnter(newComp, newNodeId.uid);
 
             // The nearest free spot can be well away from the pointer (a crowded macro hull has none beside it), and
             // a card that landed below the window would look like the drop did nothing: bring it into view.

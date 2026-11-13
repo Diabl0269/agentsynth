@@ -313,7 +313,8 @@ another gap or away turns every card back from where it is drawn, never from whe
 is already in place moves again: the module grows in at its slot with the 8% bounce (`easeOutBackGrow` over 180 ms,
 `CardGlideAnimator::noteEnter`, `ExitEnterTimeline::bounce`) and no outline (the outline marks what an undo brought
 back), after any glide still running; a card dragged from the canvas settles into the gap with the usual 160 ms glide.
-A keyboard insert glides the cards aside, then grows the module in. Cmd+Z glides the cards back and shrinks the module
+A keyboard insert glides the cards aside, then grows the module in. A module added without a drag that travels (Return
+on a library row, a double click) and landing where it was placed grows in the same way, with no gap to open. Cmd+Z glides the cards back and shrinks the module
 away; redo is the reverse. A drop, a second drag or an undo while cards still move carries on from the drawn rects.
 Under Reduce Motion the cards move at once and the module fades in (plain fade, no growing); with Animations Off, or
 off screen, everything lands at once. Ghost slide, cable split and join, outline corners: [insert-motion.md](insert-motion.md).
@@ -568,8 +569,8 @@ shortcut.
 - **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the
   checklist in `Tests/UI/Layout/UndoGlideSurfaces.h` ([undo-glide.md](undo-glide.md)).
 - **View jumps animate.** Showing something on the canvas (a mixer insert or column, Go to Output, a card the arrow
-  keys step to, a dropped card that landed off screen) flies the view with `GraphEditor::flyViewTo` (200 ms
-  `easeOutCubic`, the wheel pan's `ScrollTweenRunner`), never `centreViewOn`, which stays for the minimap's drag. At
+  keys step to, a dropped card that landed off screen, a click on the mini map) flies the view with `GraphEditor::flyViewTo` (200 ms
+  `easeOutCubic`, the wheel pan's `ScrollTweenRunner`), never `centreViewOn`, which stays for the minimap's drag (its press flies). At
   once under Reduce Motion, Animations Off or off screen; any user pan, drag or zoom cancels it. A target in a collapsed
   macro flies while the macro unfolds. Guard: `ViewFlyRegistry.*` (`GraphEditorViewFlyTests.cpp`).
 - **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,

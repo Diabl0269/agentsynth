@@ -8,7 +8,7 @@ motion: true
 record: true
 save_project: fro1675 pluck lfo tabs
 steps:
-  - click: {id: New empty project}
+  - click: {id: New empty project, instant: "the status bar text changes (New patch, plugin scan progress)"}
   - wait: {}
   - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
   - wait: {}
