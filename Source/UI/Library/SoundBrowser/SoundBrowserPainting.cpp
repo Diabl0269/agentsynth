@@ -307,7 +307,7 @@ juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::S
     if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
         line = keyMeta + "  -  " + line;
     const auto match = entry.kind == synth::soundbrowser::SoundKind::Loop ? matchKeyText(loopTargetFor(entry))
-                       : footer_.isMatchKey()                             ? matchKeyNotLoopText(entry.kind)
+                       : footer_.isMatchKey()                             ? matchKeyNotLoopFooterText(entry.kind)
                                                                           : juce::String();
     if (match.isNotEmpty())
         line = match + "  -  " + line;

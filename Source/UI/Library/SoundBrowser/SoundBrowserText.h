@@ -44,6 +44,8 @@ juce::String soundDetailTextFitting(const synth::soundbrowser::SoundEntry& entry
 juce::String matchKeyText(const synth::soundbrowser::LoopTarget& target);
 // Why Match key does nothing for a sound that is not a loop (empty for a loop); shown while the switch is on.
 juce::String matchKeyNotLoopText(synth::soundbrowser::SoundKind kind);
+// The same reason cut short to fit the footer's second line, where the long text would be ellipsised.
+juce::String matchKeyNotLoopFooterText(synth::soundbrowser::SoundKind kind);
 
 /** "acoustic-snare-center, one-shot, 0.8 seconds, 2 of 23"; a loop reads "dusty, loop, 120 BPM, 2 bars, 4.0 seconds,
  *  Am, 3 of 9" (the same fields as the row, in words). */

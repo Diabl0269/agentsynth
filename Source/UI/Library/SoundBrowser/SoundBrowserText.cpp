@@ -136,6 +136,19 @@ juce::String matchKeyNotLoopText(synth::soundbrowser::SoundKind kind) {
     return "Match key applies to loops; this is a one-shot and plays as recorded";
 }
 
+juce::String matchKeyNotLoopFooterText(synth::soundbrowser::SoundKind kind) {
+    using synth::soundbrowser::SoundKind;
+    switch (kind) {
+    case SoundKind::Loop:
+        return {};
+    case SoundKind::Instrument:
+        return "Not a loop, plays from the keyboard";
+    case SoundKind::OneShot:
+        break;
+    }
+    return "Not a loop, plays as recorded";
+}
+
 juce::String describeSoundForAccessibility(const SoundEntry& entry, int position, int count) {
     juce::String text = displayName(entry.name) + ", ";
     if (entry.kind == SoundKind::Instrument) {

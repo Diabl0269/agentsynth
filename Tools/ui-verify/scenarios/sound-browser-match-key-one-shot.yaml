@@ -1,6 +1,6 @@
 # Match key said nothing for a sound that is not a loop, so a switch that was on looked broken. With the switch on, a
-# selected one-shot now says "Match key applies to loops; this is a one-shot and plays as recorded" in the footer line
-# and in the switch's tooltip; with it off the footer stays quiet.
+# selected one-shot now says "Not a loop, plays as recorded" in the footer line and
+# "Match key applies to loops; this is a one-shot and plays as recorded" in the switch's tooltip; with it off the footer stays quiet.
 #
 # What a user does: opens the Sounds view, searches for a one-shot, selects it, turns Match key on.
 record: true
@@ -25,4 +25,4 @@ steps:
   - wait: {}
   - expect: {id: "Match key", toggleState: true}
   - expect: {id: "Match key", tooltip: "Match key applies to loops; this is a one-shot and plays as recorded"}
-  - expect: {id: soundBrowser, contains: {footerLine: "Match key applies to loops; this is a one-shot and plays as recorded"}}
+  - expect: {id: soundBrowser, contains: {footerLine: "Not a loop, plays as recorded"}}

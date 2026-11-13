@@ -197,6 +197,9 @@ TEST(SoundPreviewFooterMatchKeyTest, MatchKeyNotLoopTextExplainsOneShotsAndInstr
               "Match key applies to loops; this is a one-shot and plays as recorded");
     EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::Instrument),
               "Match key applies to loops; instruments play from the keyboard");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::Loop), "");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::OneShot), "Not a loop, plays as recorded");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::Instrument), "Not a loop, plays from the keyboard");
 }
 
 TEST(SoundPreviewFooterMatchKeyTest, ASelectedOneShotSaysMatchKeyDoesNothingOnlyWhileTheSwitchIsOn) {
@@ -232,7 +235,7 @@ TEST(SoundPreviewFooterMatchKeyTest, ASelectedOneShotSaysMatchKeyDoesNothingOnly
     toggle.setToggleState(true, juce::sendNotificationSync);
     EXPECT_EQ(toggle.getTooltip(), why);
     EXPECT_EQ(toggle.getDescription(), why);
-    EXPECT_TRUE(footerLine().startsWith(why)) << footerLine();
+    EXPECT_TRUE(footerLine().startsWith("Not a loop, plays as recorded")) << footerLine();
 
     toggle.setToggleState(false, juce::sendNotificationSync);
     EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key");
