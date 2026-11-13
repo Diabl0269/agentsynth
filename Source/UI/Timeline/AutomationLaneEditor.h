@@ -469,6 +469,14 @@ private:
     // Edge scroll (AutomationLaneEditorEdgeScroll.cpp).
     bool dragFollowsView() const noexcept;
     void previewDragAt(juce::Point<int> pos);
+    // `pos` with x held inside the lane; a drag keeps arriving from beyond its edges.
+    juce::Point<int> insideLane(juce::Point<int> pos) const noexcept;
+    // `rawBeat` snapped, then kept inside [low, high] on the grid (the last line inside, not the nearest one).
+    double snappedBeatWithin(double rawBeat, double low, double high) const;
+    // How many dots are drawn outside the lane's width now (a dot being dragged counts at its preview place).
+    int dotsOutsideView() const;
+    // The beats a dot's centre may take while its whole dot is drawn inside the lane.
+    std::pair<double, double> visibleDotBeats() const;
     void updateEdgeScrollArming();
     void edgeScrollTick();
     void stopEdgeScroll();
