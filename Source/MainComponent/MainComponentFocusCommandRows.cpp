@@ -44,7 +44,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          {},
          [](MainComponent& m) {
              m.focusRegions_.focusRegionById("timeline");
-             m.timelinePanel.focusTransportBar();
+             // A closed dock slides open first and the transport bar has no bounds until the slide lands; the ring
+             // can only sit on a control that shows.
+             m.timelineSlide_.whenSettled(
+                 [safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving()] {
+                     // A slide closed again before it landed leaves nothing to ring.
+                     if (safe != nullptr && (!sliding || safe->isBottomDockVisible))
+                         safe->timelinePanel.focusTransportBar();
+                 });
              return true;
          }},
         {AppCommands::focusLibrary,
