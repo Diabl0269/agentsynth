@@ -697,15 +697,15 @@ tool and pushes it to every lane editor the same way (`TimelinePanelComponent::s
 amount too and creates its lane like a first pen stroke. The Range tool works there as well (see the lane range below).
 
 **The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
-always shows what the tool will draw, and a small chevron (the app's combo chevron, in the glyph's ink) in its bottom-right corner says it opens more. When the
+always shows what the tool will draw, and it is a split button: the icon half picks Draw, and a chevron half on the right (`DrawPenButton::kChevronWidth`, 14 px, the full height, behind a faint divider; the app's combo chevron in the glyph's ink) opens more. The chevron half washes on hover (`FadeAmount`) and has a tooltip of its own, "More shapes  (Shift + 8)", so the two halves are told apart; the pen's cell in the tool strip is one chevron wider than its neighbours. When the
 shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
-Animations: Off and when the panel is not on screen). A click on the corner (the bottom-right 10 x 10 px), pressing
+Animations: Off and when the panel is not on screen). A click on the chevron half, pressing
 and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
 also pick the tool), a right-click on the button (it never picks the tool), or the shape-menu key opens the flyout; a
-click anywhere else on the button just picks Draw. The transport row has the same layout whatever the tool.
+click on the icon half just picks Draw. The transport row has the same layout whatever the tool.
 
-The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button with six rows: the shape's icon, its name and
-its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit. It
+The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button on an opaque themed panel of its own (the theme's window colour, `border` outline and corner radius, painted by the content: the call-out's own bubble is JUCE's translucent dark scheme and would show through) with six rows: the shape's icon, its name and
+its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit, and its shortcut takes the primary ink so it holds 4.5:1 on the lit tint. It
 opens through `launchPopover` (the plain `PopupMotion` fade under Reduce Motion; at once under Animations: Off) and
 closes only through `PopupMotion::dismissCallOut`. Picking a row (click, Enter or Space) closes it and calls
 `TimelinePanelComponent::pickDrawShape`, which sets the shape, switches to Draw and stamps it over a lane range if
