@@ -6,6 +6,7 @@
 #include "../../../UniqueTempDir.h"
 #include "../../Graph/ModDot/ModDotTestFixture.h"
 #include "../CurveEditor/CurveEditorTestHelpers.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/ModCurve/ModCurveBox.h"
 #include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 

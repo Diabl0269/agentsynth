@@ -14,6 +14,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorCableMenu.h"
 #include "UI/Graph/ModMatrixCurveColumn.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"

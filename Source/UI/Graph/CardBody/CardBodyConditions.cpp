@@ -5,6 +5,8 @@
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
 #include "CardBodyPlan.h"
+#include "MacroCurveGlyph.h"
+#include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -315,6 +317,37 @@ void CardBody::refreshMacroNames() {
         if (item.widget != nullptr)
             item.widget->setTitle(item.captionText());
     }
+}
+
+void CardBody::refreshMacroCurves() {
+    const auto* macros = dynamic_cast<const MacroControlModule*>(&module_);
+    if (macros == nullptr)
+        return;
+    for (auto& item : plan_.items) {
+        const int index = item.param != nullptr ? macroIndexOf(item.param->paramID) : -1;
+        if (index < 0 || item.widget == nullptr)
+            continue;
+        if (auto* glyph = MacroCurveGlyph::of(*item.widget))
+            glyph->setCurve(macros->getMacroCurve(index));
+    }
+}
+
+bool CardBody::pollMacros() {
+    const auto* macros = dynamic_cast<const MacroControlModule*>(&module_);
+    if (macros == nullptr)
+        return false;
+    bool changed = false;
+    if (macros->getNamesRevision() != macroNamesSeen_) {
+        macroNamesSeen_ = macros->getNamesRevision();
+        refreshMacroNames();
+        changed = true;
+    }
+    if (macros->getCurvesRevision() != macroCurvesSeen_) {
+        macroCurvesSeen_ = macros->getCurvesRevision();
+        refreshMacroCurves();
+        changed = true;
+    }
+    return changed;
 }
 
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card

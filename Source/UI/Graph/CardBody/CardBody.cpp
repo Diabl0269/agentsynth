@@ -9,7 +9,9 @@
 #include "CardBodySwapMotion.h"
 #include "CardBodyViews.h"
 #include "CardLayoutOverride.h"
+#include "MacroCurveGlyph.h"
 #include "ModuleCardLayoutResolver.h"
+#include "Modules/MacroControlModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -404,6 +406,13 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
     card_.addAndMakeVisible(label);
     item.widget = knob;
     item.label = label;
+    // A Macros knob carries its response curve as a tiny glyph beside its value.
+    if (const auto* macros = dynamic_cast<const MacroControlModule*>(&module_); macros != nullptr) {
+        if (const int index = macroIndexOf(param.paramID); index >= 0) {
+            auto* glyph = new MacroCurveGlyph(*knob);
+            glyph->setCurve(macros->getMacroCurve(index));
+        }
+    }
 }
 
 // A plain juce::ToggleButton toggles on a right click too, so a learnable toggle is right-click safe.

@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <juce_core/juce_core.h>
+#include <memory>
 
 /**
  * Macro Control — a bank of assignable CV knobs.
@@ -20,9 +21,17 @@
  * every existing graph connection — so the visible bank size is a *parameter* (`macroCount`).
  * Channels at or above it are cleared every block and hidden by getVisibleOutputPortCount().
  *
+ * Each knob also has its own response curve (`setMacroCurve`): the knob's 0..1 position goes through the curve first,
+ * and a Bi knob then maps that to -1..1, so the curve shapes what reaches the cables. Linear costs the audio thread
+ * nothing; a bent one is one table lookup per block per knob (published by SpinLock try-lock, no allocation).
+ *
  * Every macro knob takes a cable too (kModTargets, no jack on the card): input channel i moves knob i, read at the
  * block's first sample before that channel is overwritten with the macro's own output.
  */
+namespace synth {
+struct ModCurve;
+}
+
 class MacroControlModule : public ModuleBase {
 public:
     static constexpr int kMaxMacros = 16;
@@ -48,24 +57,8 @@ public:
         {"macro16", synth::ModRead::Live},
     }};
 
-    MacroControlModule()
-        : ModuleBase("Macros", kMaxMacros, kMaxMacros) // one knob cable in and one CV out per macro
-    {
-        addParameter(countParam =
-                         new juce::AudioParameterInt("macroCount", "Knobs", kMinMacros, kMaxMacros, kDefaultMacros));
-
-        for (int i = 0; i < kMaxMacros; ++i)
-            addParameter(macroParams[(size_t)i] = new juce::AudioParameterFloat(
-                             "macro" + juce::String(i + 1), macroName(i), juce::NormalisableRange<float>(0.0f, 1.0f),
-                             0.0f, synth::fractionPercentAttributes()));
-        // Polarity is per knob (macro1Bipolar .. macro16Bipolar); Edit Layout's per-control panel sets it.
-        for (int i = 0; i < kMaxMacros; ++i)
-            addParameter(bipolarParams[(size_t)i] =
-                             new juce::AudioParameterBool(bipolarParamId(i), macroName(i) + " Bipolar", false));
-
-        addMuteParameter();
-        mods_.bind(*this);
-    }
+    MacroControlModule();
+    ~MacroControlModule() override;
 
     void prepareToPlay(double sampleRate, int /*samplesPerBlock*/) override {
         currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
@@ -159,9 +152,19 @@ public:
     }
 
     /** The CV this macro emits — 0..1 unipolar, -1..1 when this knob is bipolar. */
-    float getMacroOutput(int index) const { return (index >= 0 && index < kMaxMacros) ? outputFor(index) : 0.0f; }
+    float getMacroOutput(int index) const {
+        return (index >= 0 && index < kMaxMacros) ? outputFor(index, 0.0f, false) : 0.0f;
+    }
 
     bool isBipolar(int index) const { return index >= 0 && index < kMaxMacros && bipolarParams[(size_t)index]->get(); }
+
+    /** Knob `index`'s response curve (linear until set). Message thread only. */
+    synth::ModCurve getMacroCurve(int index) const;
+    /** Sets knob `index`'s response curve and publishes its table to the audio thread (no allocation there). Message
+     *  thread only. */
+    void setMacroCurve(int index, const synth::ModCurve& curve);
+    /** Bumped whenever a curve changes (a set, an undo, a load); the card polls it to redraw its glyphs. */
+    int getCurvesRevision() const noexcept { return curvesRevision_.load(); }
 
     /** Parameter id of macro `index`'s polarity ("macro1Bipolar" ...). */
     static juce::String bipolarParamId(int index) { return "macro" + juce::String(index + 1) + "Bipolar"; }
@@ -205,35 +208,13 @@ public:
     int getNamesRevision() const noexcept { return namesRevision_.load(); }
     static constexpr int kMaxNameLength = 24;
 
-    /** The names as saved: an object keyed "1".."16" holding only the names that differ from the default;
-     *  void when none do, so a bank nobody renamed adds nothing to a project. */
-    juce::var getExtraState() const override {
-        auto* object = new juce::DynamicObject();
-        bool any = false;
-        for (int i = 0; i < kMaxMacros; ++i)
-            if (customNames_[(size_t)i].isNotEmpty()) {
-                object->setProperty(juce::String(i + 1), customNames_[(size_t)i]);
-                any = true;
-            }
-        if (!any) {
-            delete object;
-            return {};
-        }
-        return juce::var(object);
-    }
-    void setExtraState(const juce::var& state) override {
-        std::array<juce::String, kMaxMacros> next{};
-        if (const auto* object = state.getDynamicObject())
-            for (int i = 0; i < kMaxMacros; ++i) {
-                auto cleaned = cleanName(object->getProperty(juce::String(i + 1)).toString());
-                next[(size_t)i] = cleaned == macroName(i) ? juce::String() : cleaned;
-            }
-        if (next != customNames_) {
-            customNames_ = next;
-            ++namesRevision_;
-        }
-    }
-    /** The names are short plain text, cleaned the same way, so a model-authored patch may name the knobs. */
+    /** The names as saved: an object keyed "1".."16" holding only the names that differ from the default, and
+     *  "curves" (the same keys) holding only the curves that are not linear; void when there are neither, so a bank
+     *  nobody renamed or bent adds nothing to a project. */
+    juce::var getExtraState() const override;
+    void setExtraState(const juce::var& state) override;
+    /** The names are short plain text, cleaned the same way, and a curve is pure data that `ModCurve::fromVar` clamps
+     *  (anything unusable becomes linear), so a model-authored patch may name and bend the knobs. */
     void setUntrustedExtraState(const juce::var& state) override { setExtraState(state); }
 
     /** Projects saved before per-knob polarity had one Bipolar switch for the whole bank: on means every knob is. */
@@ -267,15 +248,23 @@ private:
         return kept.trim().substring(0, kMaxNameLength).trim();
     }
 
-    float outputFor(int index, float cv = 0.0f) const {
+    /** The knob position after its curve: the audio thread adopts a published table (a failed try-lock keeps the old
+     * one until the next block); the UI's read uses the newest table. */
+    float shaped(int index, float knob, bool audio) const;
+
+    float outputFor(int index, float cv = 0.0f, bool audio = true) const {
         const float knob = modulateNormalised(*macroParams[(size_t)index], macroParams[(size_t)index]->get(), cv);
-        return bipolarParams[(size_t)index]->get() ? (knob * 2.0f - 1.0f) : knob;
+        const float curved = shaped(index, juce::jlimit(0.0f, 1.0f, knob), audio);
+        return bipolarParams[(size_t)index]->get() ? (curved * 2.0f - 1.0f) : curved;
     }
 
     juce::AudioParameterInt* countParam = nullptr;
     std::array<juce::AudioParameterBool*, kMaxMacros> bipolarParams{};
     std::array<juce::String, kMaxMacros> customNames_{};
     std::atomic<int> namesRevision_{0};
+    std::atomic<int> curvesRevision_{0};
+    struct CurveBank;
+    std::unique_ptr<CurveBank> curveBank_;
     std::array<juce::AudioParameterFloat*, kMaxMacros> macroParams{};
     synth::ModTargetList mods_{kModTargets};
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, kMaxMacros> smoothed{};

@@ -14,11 +14,21 @@
 
 namespace synth::ui {
 
+class ModCurveBox;
+class ModCurveEditTarget;
+
 class CardLayoutControlPanel final
     : public juce::Component
     , private juce::Timer {
 public:
     CardLayoutControlPanel();
+    ~CardLayoutControlPanel() override;
+
+    /** A Macros knob: shows the small curve box for `target` (null removes it). Its Enlarge runs `onEnlargeCurve`, Esc
+     *  inside it closes the panel. */
+    void setCurveTarget(std::shared_ptr<ModCurveEditTarget> target);
+    ModCurveBox* getCurveBoxForTest() const noexcept;
+    std::function<void()> onEnlargeCurve;
 
     /** Shows `options`: rows appear or go as they apply, fields take their values, the panel resizes. */
     void setOptions(const ControlOptions& options);
@@ -78,6 +88,7 @@ private:
     void commitRange();
     void fillFields();
     int arrange();
+    int preferredWidth() const;
     static int scaled(int value, float progress);
     static void squeeze(juce::Component& c, int x, int top, int w, int offset, int height, int slotHeight);
     void applyColours();
@@ -117,6 +128,8 @@ private:
     synth::ui::FadeVisibility nameFade_{&nameCaption_, &name_};
     synth::ui::FadeVisibility rangeFade_{&rangeCaption_, &rangeTo_, &minimum_, &maximum_};
     synth::ui::FadeVisibility hintFade_{&hint_};
+    std::unique_ptr<ModCurveBox> curveBox_; ///< A Macros knob's response curve.
+    std::unique_ptr<synth::ui::FadeVisibility> curveFade_;
     int focusTries_ = 0;
     int showAsWidth_ = 0; ///< The switch's width for its segment texts.
 

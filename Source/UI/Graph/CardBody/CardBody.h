@@ -68,6 +68,10 @@ public:
     /** The Macros card: puts each knob's own name on its caption and screen-reader title (a rename, an undo, a load).
      */
     void refreshMacroNames();
+    /** The Macros card: each knob's curve glyph takes its module's curve (a bend, an undo, a load). */
+    void refreshMacroCurves();
+    /** The Macros card, each poll: refreshes names and glyphs when the module's revisions moved. True if it did. */
+    bool pollMacros();
     /** Adds the dimmed hint to dimmed controls' tooltip and description; call once the card has named
      *  its controls (their tooltips are set after the body is built). */
     void applyDimHints();
@@ -228,6 +232,8 @@ private:
     ModuleComponent& card_;
     juce::AudioProcessor& module_;
     CardBodyPlan plan_;
+    int macroNamesSeen_ = 0;  ///< The Macros card: the names revision its captions were set from.
+    int macroCurvesSeen_ = 0; ///< The curves revision its glyphs were set from.
     std::optional<CardLayout> layout_;
     juce::String builtFromOverride_;
     juce::WeakReference<ModuleCardLayoutStore> store_;

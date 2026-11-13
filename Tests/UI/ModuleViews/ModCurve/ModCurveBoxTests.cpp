@@ -7,6 +7,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorCableCurveChips.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 

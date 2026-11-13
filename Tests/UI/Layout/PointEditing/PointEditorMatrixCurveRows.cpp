@@ -3,6 +3,7 @@
 // edit target into a real graph with an undo manager).
 #include "../../ModuleViews/ModCurve/ModCurveTestRig.h"
 #include "PointEditorMatrixCurveDriver.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/ModCurve/ModCurveEditorView.h"
 
 namespace point_matrix {

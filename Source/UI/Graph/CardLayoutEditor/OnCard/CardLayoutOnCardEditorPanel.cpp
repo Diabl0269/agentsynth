@@ -12,6 +12,8 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/ModCurve/ModCurveEditTarget.h"
+#include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 #include <utility>
 
 namespace synth::ui {
@@ -90,6 +92,20 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
             e->closePanel();
     };
     panel->setOptions(*options);
+    // A Macros knob's response curve: the small box inside the panel; Enlarge closes the panel and opens the window.
+    if (options->macroKnob.has_value())
+        if (auto* graph = graphEditor_.getComponent()) {
+            panel->setCurveTarget(ModCurveEditTarget::forMacroKnob(*graph, nodeId_, options->macroKnob->index));
+            panel->onEnlargeCurve = [self, index = options->macroKnob->index] {
+                auto* e = self.getComponent();
+                auto* g = e != nullptr ? e->graphEditor_.getComponent() : nullptr;
+                if (g == nullptr)
+                    return;
+                const auto bank = e->nodeId_;
+                e->closePanel();
+                openModCurveWindow(ModCurveEditTarget::forMacroKnob(*g, bank, index), g);
+            };
+        }
     panel_ = panel.get();
     panelParamId_ = paramId;
     launchPanel(std::move(panel), screenAreaOf(*outline));

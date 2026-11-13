@@ -6,6 +6,7 @@
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 

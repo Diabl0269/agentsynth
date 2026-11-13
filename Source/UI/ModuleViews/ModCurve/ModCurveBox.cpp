@@ -137,6 +137,10 @@ void ModCurveBox::saveCurrentAsPreset() {
         promptForPresetName(std::move(onName));
 }
 
+// The traverser orders a container's direct children, then walks inside each one, so the box as a whole takes the
+// place.
+void ModCurveBox::setTabOrder(int order) { setExplicitFocusOrder(order); }
+
 void ModCurveBox::focusFirstControl() { chips_.front()->grabKeyboardFocus(); }
 
 void ModCurveBox::paint(juce::Graphics& g) {

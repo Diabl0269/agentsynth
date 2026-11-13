@@ -3,6 +3,8 @@
 #include "CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/ModuleViews/ModCurve/ModCurveBox.h"
+#include "UI/ModuleViews/ModCurve/ModCurveEditTarget.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -35,6 +37,10 @@ void styleCaption(juce::Label& label) {
 }
 
 } // namespace
+
+CardLayoutControlPanel::~CardLayoutControlPanel() = default;
+
+ModCurveBox* CardLayoutControlPanel::getCurveBoxForTest() const noexcept { return curveBox_.get(); }
 
 CardLayoutControlPanel::CardLayoutControlPanel() {
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
@@ -84,7 +90,7 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     };
     hide_.setTitle("Hide from card");
     hide_.setTooltip("Hide this control from the card. It goes to the More row");
-    hide_.setExplicitFocusOrder(8);
+    hide_.setExplicitFocusOrder(9);
     hide_.onClick = [this] {
         if (onHide)
             onHide();
@@ -187,7 +193,38 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
     rangeFade_.setShown(hasRange);
     hintFade_.setShown(false);
     fillFields();
-    const int width = juce::jlimit(kMinWidth, kMaxWidth, std::max(kMinWidth, showAsWidth_ + 2 * kPad));
+    const int width = preferredWidth();
+    setSize(width, 0);
+    setSize(width, arrange());
+}
+
+int CardLayoutControlPanel::preferredWidth() const {
+    const int box = curveBox_ != nullptr ? ModCurveBox::kWidth + 2 * kPad : 0;
+    return juce::jlimit(kMinWidth, kMaxWidth, std::max({kMinWidth, showAsWidth_ + 2 * kPad, box}));
+}
+
+// The Macros knob's curve: the shared small box, in a row of its own between Range and Hide.
+void CardLayoutControlPanel::setCurveTarget(std::shared_ptr<ModCurveEditTarget> target) {
+    curveFade_.reset();
+    curveBox_.reset();
+    if (target != nullptr) {
+        curveBox_ = std::make_unique<ModCurveBox>(std::move(target), ModCurvePresetStore::app());
+        curveBox_->setTabOrder(8); // after Range, before Hide
+        curveBox_->onEnlarge = [this] {
+            if (onEnlargeCurve)
+                onEnlargeCurve();
+        };
+        curveBox_->onClose = [this] {
+            if (onRequestClose)
+                onRequestClose();
+        };
+        addAndMakeVisible(*curveBox_);
+        curveFade_ =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{curveBox_.get()});
+        curveFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+        curveFade_->setShown(true);
+    }
+    const int width = preferredWidth();
     setSize(width, 0);
     setSize(width, arrange());
 }
@@ -263,6 +300,13 @@ int CardLayoutControlPanel::arrange() {
         const int hintSlot = scaled(kCaptionH + 2, hintFade_.progress());
         squeeze(hint_, kPad, y, width, 2, kCaptionH, hintSlot);
         y += hintSlot + scaled(kGap, shown);
+    }
+    if (curveBox_ != nullptr) {
+        const float curveShown = curveFade_ != nullptr ? curveFade_->progress() : 1.0f;
+        const int slot = scaled(ModCurveBox::kHeight, curveShown);
+        squeeze(*curveBox_, kPad + (width - ModCurveBox::kWidth) / 2, y, ModCurveBox::kWidth, 0, ModCurveBox::kHeight,
+                slot);
+        y += slot + scaled(kGap, curveShown);
     }
     hide_.setBounds(kPad, y, width, kSwitchH);
     return y + kSwitchH + kPad;
