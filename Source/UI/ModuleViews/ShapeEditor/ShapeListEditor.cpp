@@ -4,11 +4,14 @@
 #include "PitchGridRows.h"
 #include "ShapeDrawing.h"
 #include "ShapeListEditorInternal.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/FilterSpectrumAnalyser.h"
 #include "UI/Settings/AccountButtonStyle.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -33,9 +36,33 @@ void styleButton(juce::TextButton& button, const juce::String& tooltip) {
 }
 } // namespace
 
+/** A 1x1 child that tells test mode what the spectrum behind the curve shows. */
+class ShapeListEditor::SpectrumStateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit SpectrumStateProbe(const ShapeListEditor& owner)
+        : owner_(owner) {
+        setComponentID("shapeSpectrumState");
+        setInterceptsMouseClicks(false, false);
+        setSize(1, 1);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        const float peak = owner_.spectrumPeakDbForTest();
+        into.setProperty("spectrumShown",
+                         owner_.spectrumToggle_ != nullptr && owner_.spectrumToggle_->getToggleState());
+        into.setProperty("spectrumPeakDb", (double)peak);
+        into.setProperty("spectrumAtFloor", peak <= FilterSpectrumAnalyser::kMinDb + 0.01f);
+    }
+
+private:
+    const ShapeListEditor& owner_;
+};
+
 ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int selected)
     : adapter_(std::move(adapter))
     , controller_(map_, *adapter_) {
+    setComponentID("shapeListEditor");
     setTitle(adapter_->getWindowTitle());
     setWantsKeyboardFocus(false);
     setOpaque(true); // paint() fills every pixel
@@ -163,7 +190,16 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     curveWatch_ = RestoreWatch(adapter_->restoreSerial());
     setSize(kWidth, perNote_ != nullptr ? kPerNoteHeight : kHeight);
     syncAll();
+    if (spectrumToggle_ != nullptr) {
+        spectrumProbe_ = std::make_unique<SpectrumStateProbe>(*this);
+        addAndMakeVisible(*spectrumProbe_);
+    }
     startTimerHz(kPollHz);
+}
+
+float ShapeListEditor::spectrumPeakDbForTest() const {
+    return spectrumDb_.empty() ? FilterSpectrumAnalyser::kMinDb
+                               : *std::max_element(spectrumDb_.begin(), spectrumDb_.end());
 }
 
 ShapeListEditor::~ShapeListEditor() { stopTimer(); }
