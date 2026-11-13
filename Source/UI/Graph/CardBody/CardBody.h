@@ -170,8 +170,9 @@ public:
     int cableFoldGraceMsForTest() const noexcept { return foldGrace_.getTimerInterval(); }
 
     // ---- Teardown (the card's detachFromProcessor) -------------------------------------------------
-    /** Destroys the views; they time against the module. */
-    void releaseViews();
+    /** Destroys the views; they time against the module. With `processorAlive` false their parameter
+        bindings are given up instead of detached (the parameters are freed). */
+    void releaseViews(bool processorAlive = true);
     /** Destroys the attachments, or leaks them when `processorAlive` is false. */
     void releaseBindings(bool processorAlive);
 

@@ -572,9 +572,16 @@ ThresholdControlComponent* CardBody::getThresholdView() const {
     return nullptr;
 }
 
-void CardBody::releaseViews() {
+void CardBody::releaseViews(bool processorAlive) {
     for (auto& fade : viewFades_)
         fade.reset();
+    // A view that holds a parameter attachment must not detach it from a parameter the graph already
+    // freed (an undo or a teardown after the engine): it gives the binding up instead.
+    if (!processorAlive)
+        for (auto& item : plan_.items)
+            if (item.kind == CardBodyItem::Kind::View)
+                if (auto* threshold = dynamic_cast<ThresholdControlComponent*>(item.widget))
+                    threshold->releaseParameterBinding();
     for (auto& item : plan_.items)
         if (item.kind == CardBodyItem::Kind::View)
             item.widget = nullptr;

@@ -411,7 +411,7 @@ void ModuleComponent::detachFromProcessor() {
     envelopeCurveEditor = nullptr;
     envelopeGraphToggle.reset();
     if (cardBody_ != nullptr)
-        cardBody_->releaseViews();
+        cardBody_->releaseViews(processorAlive);
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped. A processor that is already gone has its parameters freed: the chrome gives up
