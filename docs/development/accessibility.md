@@ -269,7 +269,7 @@ keyboard there and a click back in the window returns it; the window opens with 
 sense there (Space, undo, redo) still work from it (`AppShortcutRelay`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), its Snap
-pill ("Snap across"), Level ("Level"), its Snap pill ("Snap level"), then the second row's one visible control: Steps,
+button ("Snap across"), Level ("Level"), its Snap button ("Snap level"), then the second row's one visible control: Steps,
 the shared Key field (its picker opens on Return or Down) or the Root box ("Root"), and Guides. Each has a tooltip
 saying what it does; the Root's says when the Played note needs a Pitch cable. Grid lines never rely on hue: a
 landmark is brighter and wider than a snap line, and an out-of-key note is dotted; the kind hue (accent for notes,

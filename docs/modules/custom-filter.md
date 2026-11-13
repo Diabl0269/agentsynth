@@ -393,7 +393,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
     (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
     on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
     root** (in octave 2). The powers of two are landmarks; x1 to x16 are labelled.
-  A Snap pill off draws the lines but leaves that axis free; Level Off draws no level lines and leaves levels free.
+  A Snap button off draws the lines but leaves that axis free; Level Off draws no level lines and leaves levels free.
   Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
   skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
   at that step with 6 dB levels.

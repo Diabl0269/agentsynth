@@ -1,5 +1,6 @@
 #include "ModCurveEditorView.h"
 
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 
 namespace synth::ui {
@@ -7,7 +8,6 @@ namespace synth::ui {
 ModCurveEditorView::ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> target)
     : target_(std::move(target)) {
     editor_.setTitle("Curve editor");
-    editor_.setLineClickEditing(true);
     // The wave spans the whole width, with no headroom to the right of its last point.
     editor_.setVisibleRangeOverride(1.0);
     // The x axis is the source's level, not time.
@@ -30,13 +30,28 @@ ModCurveEditorView::ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> targe
     editor_.onNodeChanged = [this](int) { pushToTarget(); };
     editor_.onBendChanged = [this](int) { pushToTarget(); };
     editor_.onPointsChanged = [this] { pushToTarget(); };
-    editor_.onContextMenu = [this](const juce::MouseEvent&, CurveHitResult hit) {
-        if (hit.kind == CurveHitKind::Node)
-            editor_.removeNode(hit.index);
-    };
+    editor_.onContextMenu = [this](const juce::MouseEvent& e, CurveHitResult hit) { showPointMenu(e, hit); };
 
     restoreHandle_ = target_->watchRestore([this] { refreshFromTarget(true); });
     changeHandle_ = target_->watchChanges([this] { refreshFromTarget(); });
+}
+
+void ModCurveEditorView::showPointMenu(const juce::MouseEvent& e, CurveHitResult hit) {
+    if (hit.kind != CurveHitKind::Node)
+        return;
+    const int index = hit.index;
+    juce::Component::SafePointer<ModCurveEditorView> safeThis(this);
+    juce::PopupMenu menu;
+    menu.addItem("Delete Point", editor_.getModel().canRemovePoint(index), false, [safeThis, index] {
+        if (safeThis != nullptr)
+            safeThis->editor_.removeNode(index);
+    });
+    const auto at = e.getScreenPosition();
+    const juce::Rectangle<int> area(at.x, at.y, 1, 1);
+    if (showMenu)
+        showMenu(menu, area);
+    else
+        menu.showMenuAsync(contextMenuOptionsAtPoint(at));
 }
 
 void ModCurveEditorView::pushToTarget() {

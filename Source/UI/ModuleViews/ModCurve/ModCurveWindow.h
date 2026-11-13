@@ -1,10 +1,13 @@
 #pragma once
 
 // The enlarged curve editor: a resizable window titled "Curve: <source> to <destination>" with the big editor, the
-// preset chips, a hint, a Snap switch and Grid box, Reset and Done. It edits the same curve as the small box.
+// preset chips, a hint, a Snap button, a Grid label with its box, Reset and Done. It edits the same curve as the small
+// box.
 
 #include "ModCurveEditorView.h"
 #include "ModCurvePresetStore.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include <functional>
 #include <memory>
 
@@ -12,14 +15,19 @@ namespace synth::ui {
 
 class ModCurveWindowContent final : public juce::Component {
 public:
+    /** The smallest size the window can be dragged to: every row of the bottom strip still fits. */
+    static constexpr int kMinWidth = 440;
+    static constexpr int kMinHeight = 300;
+
     explicit ModCurveWindowContent(std::shared_ptr<ModCurveEditTarget> target);
 
     ModCurveEditorView& view() noexcept { return view_; }
     juce::TextButton& presetChip(int index) { return *chips_.at((size_t)index); }
     juce::TextButton& resetButton() noexcept { return resetButton_; }
     juce::TextButton& doneButton() noexcept { return doneButton_; }
-    juce::ToggleButton& snapButton() noexcept { return snapButton_; }
-    juce::ComboBox& gridBox() noexcept { return gridBox_; }
+    SnapToggleButton& snapButton() noexcept { return snapButton_; }
+    NoteLengthBox& gridBox() noexcept { return gridBox_; }
+    juce::Label& gridLabel() noexcept { return gridLabel_; }
     /** The cells across the input and output range a Grid box item stands for ("1/8" is 8). */
     static int gridDivisions(const juce::String& itemText);
     juce::String windowTitle() const { return target_->title(); }
@@ -33,6 +41,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void lookAndFeelChanged() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
@@ -45,8 +54,9 @@ private:
     std::vector<std::unique_ptr<juce::TextButton>> chips_;
     juce::TextButton resetButton_{"Reset"};
     juce::TextButton doneButton_{"Done"};
-    juce::ToggleButton snapButton_{"Snap"};
-    juce::ComboBox gridBox_;
+    SnapToggleButton snapButton_;
+    juce::Label gridLabel_;
+    NoteLengthBox gridBox_;
     std::shared_ptr<void> changeHandle_;
     std::shared_ptr<void> restoreHandle_;
 };

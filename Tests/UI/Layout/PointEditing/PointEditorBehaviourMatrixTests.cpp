@@ -52,10 +52,6 @@ const std::vector<Cell> kNotApplicable = {
 
 // Behaviours an editor has not got yet. May only shrink.
 const std::vector<MissingCell> kMissingBehaviours = {
-    {"Mod curve editor", "double-click-add",
-     "a double-click on empty space does not leave a new point in the module's curve", "FRO1716"},
-    {"Mod curve editor", "right-click-menu", "a right-click on a point removes it at once; there is no menu",
-     "FRO1716"},
     {"EQ curve", "box-select", "a drag on empty space does not select bands in a box; the selection is one band",
      "FRO1717"},
     {"EQ curve", "shift-extend", "Shift+Left/Right moves the one selected band instead of extending", "FRO1717"},

@@ -392,7 +392,7 @@ public:
     void refreshSectionsStripSetting();
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     NoteLengthBox& getSnapCombo() noexcept { return snapCombo_; }
-    ToolbarButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
+    SnapToggleButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
@@ -829,7 +829,7 @@ private:
     NoteLengthBox snapCombo_;
     // Toggles TimelineViewState::snapEnabled; its state mirrors the shared flag via setSnapEnabled(), never owns it.
     // Named "Snap", not by its key (stale on a rebind): the live key is in the tooltip (synth::shortcutHintFor).
-    ToolbarButton snapToggleButton_{"Snap"};
+    SnapToggleButton snapToggleButton_;
     std::unique_ptr<ClipSizingButton> clipSizingButton_;
     // The one writer for the snap switch: flips the flag, persists, lights the button, repaints every grid painter.
     void setSnapEnabled(bool enabled);

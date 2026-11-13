@@ -2,7 +2,9 @@
 // frequencies, steps down to a semitone, the separate Level row, the snap switches, the key's out-of-key notes, the
 // played-note root, the remembered (and migrated) choice, and the Ring helpers' peaks in the filter's own response.
 #include "../../../TestSettingsHelpers.h"
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
+#include "../../Layout/SnapButtonExpect.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/Lfo/LfoCustomWave.h"
@@ -490,4 +492,25 @@ TEST(ShapeWindowPitchGrid, TabGoesThroughTheRowsInVisualOrderAndRingHelpersSitsA
     }
     EXPECT_EQ(at(rows.getStepsSwitch()), -1) << "a hidden kind's control is not a stop";
     EXPECT_EQ(editor.getRingButton().getTitle(), "Ring helpers");
+}
+
+TEST(ShapeWindowPitchGrid, SnapTheShapeEditorSwitchesAreTheSharedButtonAndFlipTheirAxis) {
+    static_assert(
+        std::is_same_v<decltype(std::declval<synth::ui::PitchGridRows&>().getSnapAcross()), SnapToggleButton&>);
+    static_assert(
+        std::is_same_v<decltype(std::declval<synth::ui::PitchGridRows&>().getSnapLevel()), SnapToggleButton&>);
+    ShapeRig rig;
+    synth::ui::ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    synth::ui::pitchgrid::Choice choice;
+    choice.kind = synth::ui::pitchgrid::Kind::notes;
+    choice.levelDb = 6.0f; // a Snap button is disabled while its axis is Off
+    rows.setChoice(choice);
+    for (auto* button : {&rows.getSnapAcross(), &rows.getSnapLevel()}) {
+        expectSharedSnapButton(*button, button == &rows.getSnapAcross() ? "snap across" : "snap level");
+        const bool before = button->getToggleState();
+        button->triggerClick();
+        synth::test::flushMessageQueue();
+        EXPECT_NE(button->getToggleState(), before) << button->getTitle();
+    }
 }

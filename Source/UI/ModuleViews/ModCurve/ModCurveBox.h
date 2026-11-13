@@ -63,7 +63,7 @@ private:
     ModCurveRangeHandle maxHandle_{"Curve maximum"};
     std::vector<ModCurvePresetStore::Entry> builtIns_;
     std::vector<std::unique_ptr<juce::TextButton>> chips_;
-    juce::TextButton savedButton_{"Mine"};
+    juce::TextButton savedButton_{"Load"};
     juce::TextButton saveButton_{"Save..."};
     juce::TextButton enlargeButton_{"Enlarge"};
     juce::String title_;
