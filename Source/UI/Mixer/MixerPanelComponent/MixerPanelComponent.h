@@ -321,7 +321,7 @@ public:
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
     /** The focused column's outline shows (a column has the keys and the keyboard is still in the panel). */
     bool isFocusedColumnOutlineShownForTest() const noexcept {
-        return !keyboardAway_ && focusedColumnIndex_ >= 0 && focusedColumnIndex_ < (int)columnEntries_.size();
+        return !isKeyboardAwayNow() && focusedColumnIndex_ >= 0 && focusedColumnIndex_ < (int)columnEntries_.size();
     }
 
     /** The component setFocusedColumnIndex() would call grabAccessibilityFocus()
@@ -515,9 +515,10 @@ private:
     int columnIndexOf(const juce::Component* c) const; // the column holding `c`, or -1
     /** A press anywhere in a column (a control, the header or empty space) focuses that column. */
     void focusColumnFromClick(const juce::MouseEvent& e);
-    bool duplicateFocusedTrack(); // the Duplicate key: the focused strip's one feeding track
-    void noteKeyboardMoved();     // shows or hides the focused column's ring as the keyboard leaves or returns
-    bool renameFocusedColumn();   // the Rename key: the focused column's header name editor
+    bool duplicateFocusedTrack();   // the Duplicate key: the focused strip's one feeding track
+    void noteKeyboardMoved();       // shows or hides the focused column's ring as the keyboard leaves or returns
+    bool isKeyboardAwayNow() const; // the keyboard is not on the panel, read from real focus and visibility now
+    bool renameFocusedColumn();     // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */

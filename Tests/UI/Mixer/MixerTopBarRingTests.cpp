@@ -67,6 +67,7 @@ struct RingFixture {
         mc.simulateAddAudioTrackClick();
         panel = &mc.getBottomDock().getMixerPanel();
         panel->setSize(1400, 300);
+        panel->setVisible(true); // a hidden panel has no keyboard
         panel->toggleSidePane(true);
         panel->rebuild();
         panel->resized();

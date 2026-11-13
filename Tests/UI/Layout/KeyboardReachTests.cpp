@@ -422,6 +422,19 @@ bool insideMixerColumn(juce::Component& c) {
     return false;
 }
 
+MixerFocusView mixerFocusView(MainComponent& mc) {
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    MixerFocusView view;
+    view.panel = &panel;
+    for (int i = 0; auto* column = panel.getStripColumnForTest(i); ++i)
+        view.stripsRinging += column->isKeyboardFocusedForTest() ? 1 : 0;
+    view.outlineShown = panel.isFocusedColumnOutlineShownForTest();
+    view.holdsKeys = panel.hasKeyboardFocus(true);
+    view.visible = panel.isVisible();
+    view.focusedColumn = panel.getFocusedColumnIndexForTest();
+    return view;
+}
+
 void setMixerSidePaneOpen(MainComponent& mc, bool open) {
     auto& panel = mc.getBottomDock().getMixerPanel();
     if (panel.getSidePane().isOpen() != open)
