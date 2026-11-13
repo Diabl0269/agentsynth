@@ -25,11 +25,11 @@ inline void leaveToColumn(synth::ui::MixerPanelComponent& panel, const KeyPresse
         press(walkKey(juce::KeyPress::escapeKey));
 }
 
-/** Left until the first column (clamped), so a walk starts from one known place. */
+/** Left until the first column, so a walk starts from one known place (one more Left would enter the side pane). */
 inline void homeColumn(synth::ui::MixerPanelComponent& panel, const KeyPresser& press) {
     leaveToColumn(panel, press);
     press(walkKey(juce::KeyPress::rightKey)); // from no focus this seeds column 0
-    for (int i = 0; i < panel.getColumnCount(); ++i)
+    for (int i = 0; i < panel.getColumnCount() && panel.getFocusedColumnIndexForTest() > 0; ++i)
         press(walkKey(juce::KeyPress::leftKey));
 }
 
