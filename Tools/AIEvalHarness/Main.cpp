@@ -59,7 +59,7 @@
     (with --save-projects) makes no model calls: it does the same for each record of an earlier --json
     file. --check-project BUNDLE prints what a saved bundle holds. --timeout-ms N sets the provider's
     request timeout; the harness's own waits become N + 30 s. --render-peaks BUNDLE_OR_DIR (with
-    optional --json FILE) renders each bundle offline and prints its master and per-track peak in dBFS;
+    optional --json FILE) renders each bundle offline and prints its master peak and per-track peak and RMS in dBFS;
     --keep-audio DIR also saves each master as DIR/<bundle name>.wav (16-bit) to listen to.
     See Tools/AIEvalHarness/README.md.
 
