@@ -31,6 +31,10 @@ steps:
   - expect: {id: soundPreviewPlay, hasFocus: false}
   - expect: {id: "Canvas toolbar", hasFocus: true}
   - mark: {check: 2, name: tab-past-strip}
+  # The pointer then points at where the ring landed, so the clip shows the step (a key press alone is one held frame).
+  - hover: {id: "Canvas toolbar", x: 120, y: 40}
+  - hover: {id: "Canvas toolbar", x: 60, y: 24}
+  - hover: {id: "Canvas toolbar", x: 20, y: 14}
   - key: {keys: shift+tab}
   - wait: {}
   - expect: {id: "Canvas toolbar", hasFocus: false}
