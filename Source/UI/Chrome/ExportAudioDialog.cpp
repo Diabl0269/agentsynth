@@ -14,6 +14,17 @@ constexpr int kBitDepths[] = {16, 24, 32};
 constexpr double kBeatsPerBar = 4.0;
 } // namespace
 
+namespace {
+// A folder path is often longer than its label: the label shows it cut off and the tooltip shows it whole.
+void showPath(juce::Label& label, const juce::String& path) {
+    label.setText(path, juce::dontSendNotification);
+    label.setTooltip(path);
+}
+
+constexpr int kCaptionWidth = 110;
+constexpr int kCaptionGap = 6; // one spacing unit between a caption and its control
+} // namespace
+
 ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRange, double loopStartBeat,
                                      double loopEndBeat, double bpm, bool projectIsSaved,
                                      const juce::File& initialDestinationDirectory,
@@ -119,7 +130,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     fileNameEditor_.onEscapeKey = [this] { handleEscapeRequested(); };
     fileNameEditor_.onReturnKey = [this] { handleReturnRequested(); };
     removeHiddenTabStops(fileNameEditor_);
-    destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);
+    showPath(destinationLabel_, destination_.getParentDirectory().getFullPathName());
     chooseDestinationButton_.onClick = [this] { chooseDestinationFolder(); };
 
     if (!projectIsSaved) {
@@ -148,7 +159,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
             onCancelRender();
     };
 
-    setSize(440, 380);
+    setSize(440, 392);
 }
 
 ExportAudioDialog::~ExportAudioDialog() = default;
@@ -205,6 +216,8 @@ void ExportAudioDialog::handleEscapeRequested() {
             progressCancelButton_.onClick();
     } else if (onRequestClose) {
         onRequestClose();
+    } else {
+        closeHostingWindow(*this); // a dialog nobody wired still closes on Escape
     }
 }
 
@@ -266,7 +279,7 @@ void ExportAudioDialog::chooseDestinationFolder() {
         const auto dir = fc.getResult();
         if (dir != juce::File()) {
             destination_ = dir.getChildFile(destination_.getFileName());
-            destinationLabel_.setText(dir.getFullPathName(), juce::dontSendNotification);
+            showPath(destinationLabel_, dir.getFullPathName());
         }
     });
 }
@@ -360,7 +373,7 @@ void ExportAudioDialog::setUseSelectionForTest(bool useSelection) {
 
 void ExportAudioDialog::setDestinationForTest(const juce::File& file) {
     destination_ = file;
-    destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);
+    showPath(destinationLabel_, destination_.getParentDirectory().getFullPathName());
     fileNameEditor_.setText(destination_.getFileNameWithoutExtension(), juce::dontSendNotification);
 }
 
@@ -467,7 +480,8 @@ void ExportAudioDialog::resized() {
         auto area = optionsPage_.getLocalBounds().reduced(12);
         auto row = [&](juce::Component& label, juce::Component& control) {
             auto r = area.removeFromTop(28);
-            label.setBounds(r.removeFromLeft(110));
+            label.setBounds(r.removeFromLeft(kCaptionWidth - kCaptionGap));
+            r.removeFromLeft(kCaptionGap);
             control.setBounds(r);
             area.removeFromTop(6);
         };
@@ -482,7 +496,8 @@ void ExportAudioDialog::resized() {
         area = below;
 
         auto tailRow = area.removeFromTop(28);
-        tailLabel_.setBounds(tailRow.removeFromLeft(110));
+        tailLabel_.setBounds(tailRow.removeFromLeft(kCaptionWidth - kCaptionGap));
+        tailRow.removeFromLeft(kCaptionGap);
         tailUnitBox_.setBounds(tailRow.removeFromRight(80));
         tailRow.removeFromRight(6);
         tailSlider_.setBounds(tailRow);
@@ -490,7 +505,9 @@ void ExportAudioDialog::resized() {
 
         area.removeFromTop(6);
         rangeLabel_.setBounds(area.removeFromTop(20));
+        area.removeFromTop(kCaptionGap);
         wholeArrangementButton_.setBounds(area.removeFromTop(24));
+        area.removeFromTop(kCaptionGap);
         selectionButton_.setBounds(area.removeFromTop(24));
 
         area.removeFromTop(10);

@@ -10,20 +10,21 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kRowsGridLabelWidth = 34;
+constexpr int kCaptionGap = 6; // between a caption and the control it names; label widths include it
+constexpr int kRowsGridLabelWidth = 34 + kCaptionGap;
 constexpr int kKindWidth = 232;
 constexpr int kPillGap = 4;
 constexpr int kGroupGap = 14;
-constexpr int kLevelLabelWidth = 38;
+constexpr int kLevelLabelWidth = 38 + kCaptionGap;
 constexpr int kLevelWidth = 150;
 // The first row without its two Snap buttons.
 constexpr int kRow1WithoutSnaps =
     kRowsGridLabelWidth + kKindWidth + kPillGap + kGroupGap + kLevelLabelWidth + kLevelWidth + kPillGap;
-constexpr int kStepsLabelWidth = 42;
+constexpr int kStepsLabelWidth = 42 + kCaptionGap;
 constexpr int kStepsWidth = 286;
-constexpr int kKeyLabelWidth = 34;
+constexpr int kKeyLabelWidth = 34 + kCaptionGap;
 constexpr int kKeyWidth = 240;
-constexpr int kRootLabelWidth = 38;
+constexpr int kRootLabelWidth = 38 + kCaptionGap;
 constexpr int kRootWidth = 170;
 // The Root box lists C1 to B6; the default root is A2 (110 Hz), the board's example.
 constexpr int kFirstRootNote = 24;
@@ -322,24 +323,24 @@ void PitchGridRows::resized() {
         for (auto* snap : {&snapAcross_, &snapLevel_})
             snap->setButtonText("Snap");
     const int snapWidth = snapAcross_.getPreferredWidth();
-    gridLabel_.setBounds(row1.removeFromLeft(kRowsGridLabelWidth));
+    gridLabel_.setBounds(row1.removeFromLeft(kRowsGridLabelWidth).withTrimmedRight(kCaptionGap));
     kind_.setBounds(row1.removeFromLeft(kKindWidth));
     row1.removeFromLeft(kPillGap);
     snapAcross_.setBounds(row1.removeFromLeft(snapWidth));
     row1.removeFromLeft(kGroupGap);
-    levelLabel_.setBounds(row1.removeFromLeft(kLevelLabelWidth));
+    levelLabel_.setBounds(row1.removeFromLeft(kLevelLabelWidth).withTrimmedRight(kCaptionGap));
     level_.setBounds(row1.removeFromLeft(kLevelWidth));
     row1.removeFromLeft(kPillGap);
     snapLevel_.setBounds(row1.removeFromLeft(snapWidth));
 
     auto steps = row2;
-    stepsLabel_.setBounds(steps.removeFromLeft(kStepsLabelWidth));
+    stepsLabel_.setBounds(steps.removeFromLeft(kStepsLabelWidth).withTrimmedRight(kCaptionGap));
     steps_.setBounds(steps.removeFromLeft(kStepsWidth));
     auto key = row2;
-    keyLabel_.setBounds(key.removeFromLeft(kKeyLabelWidth));
+    keyLabel_.setBounds(key.removeFromLeft(kKeyLabelWidth).withTrimmedRight(kCaptionGap));
     key_.setBounds(key.removeFromLeft(kKeyWidth));
     auto root = row2;
-    rootLabel_.setBounds(root.removeFromLeft(kRootLabelWidth));
+    rootLabel_.setBounds(root.removeFromLeft(kRootLabelWidth).withTrimmedRight(kCaptionGap));
     root_.setBounds(root.removeFromLeft(kRootWidth));
 }
 

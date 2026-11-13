@@ -26,4 +26,5 @@ public:
     static constexpr int kRowHeight = 28;
     static constexpr int kPad = 8;
     static constexpr int kLabelWidth = 150;
+    static constexpr int kCaptionGap = 6; // between a caption label and the control it names
 };

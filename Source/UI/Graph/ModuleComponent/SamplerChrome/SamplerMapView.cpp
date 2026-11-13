@@ -12,6 +12,7 @@ namespace {
 
 constexpr int kMargin = 14;
 constexpr int kGap = 10;
+constexpr int kCaptionGap = 6; // the fields' hint caption to the button row under it: one spacing unit
 constexpr int kNoticeHeight = 30;
 constexpr int kHintHeight = 20;
 constexpr int kFieldsHeight = 124; // the file row, a gap and two rows of captioned fields
@@ -256,7 +257,7 @@ void SamplerMapView::resized() {
     doneButton_.setBounds(bottom.removeFromRight(kDoneWidth));
     bottom.removeFromRight(kGap);
     addButton_.setBounds(bottom.removeFromRight(kButtonWidth));
-    area.removeFromBottom(kGap);
+    area.removeFromBottom(kCaptionGap);
     fields_.setBounds(area.removeFromBottom(kFieldsHeight));
     area.removeFromBottom(kGap);
     auto notice = area.removeFromTop(kNoticeHeight);

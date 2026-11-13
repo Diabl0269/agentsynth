@@ -1,4 +1,5 @@
 #include "MacroPortConfigDialog.h"
+#include "UI/Layout/DialogKeyboard.h"
 
 namespace synth::ui {
 
@@ -8,6 +9,7 @@ namespace synth::ui {
 MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
     titleLabel_.setText("Macro has boundary cables", juce::dontSendNotification);
     titleLabel_.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
+    titleLabel_.setTooltip("Macro has boundary cables"); // the full title when a narrow window clips it
     addAndMakeVisible(titleLabel_);
 
     const juce::String plural = crossingPortCount == 1 ? juce::String() : juce::String("s");
@@ -45,6 +47,8 @@ bool MacroAutoPortPromptDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
         if (onChoice)
             onChoice(/*createPorts=*/false, /*remember=*/false);
+        else
+            closeHostingWindow(*this); // a dialog nobody wired still closes on Escape
         return true;
     }
     return false;
@@ -59,7 +63,7 @@ void MacroAutoPortPromptDialog::resized() {
     titleLabel_.setBounds(area.removeFromTop(24));
     area.removeFromTop(6);
     messageLabel_.setBounds(area.removeFromTop(64));
-    area.removeFromTop(10);
+    area.removeFromTop(6); // one spacing unit from the message to the toggle that answers it
     rememberToggle_.setBounds(area.removeFromTop(22));
     area.removeFromTop(14);
 
