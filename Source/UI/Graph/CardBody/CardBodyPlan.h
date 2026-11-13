@@ -196,10 +196,10 @@ bool isContinuousKind(CardBodyItem::Kind kind);
 std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget);
 
 /** True when a Choice parameter may draw as a stepped fader (FaderV, FaderVLong or FaderH) in this place:
- *  today, when its item sits in a look of an alternative group (`inAlternativeLook`, a section with
- *  `visibleWhen`). The plan's kind choice and the editor's widget choices both ask this one rule, so the panel
- *  offers Show as, Direction and Fader size exactly where the card draws a fader. */
-bool steppedFaderAllowed(const juce::RangedAudioParameter& param, bool inAlternativeLook);
+ *  when its item sits in a look of an alternative group (`sectionIsLook`, a section with `visibleWhen`) or is
+ *  one of a swap pair (the item has a Show condition). The plan's kind choice and the editor's widget choices both ask
+ * this one rule, so the panel offers Show as, Direction and Fader size exactly where the card draws a fader. */
+bool steppedFaderAllowed(const juce::RangedAudioParameter& param, const CardParamItem& item, bool sectionIsLook);
 
 /** The Macros knob a parameter id names ("macro3" is 2), or -1 for any other id. */
 int macroIndexOf(const juce::String& paramId);
