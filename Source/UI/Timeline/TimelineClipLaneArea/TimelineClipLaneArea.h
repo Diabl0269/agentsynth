@@ -795,9 +795,8 @@ private:
     void paintLinkMark(juce::Graphics& g, juce::Rectangle<int> clipRect, bool dimmed) const;
 
     // ---- Waveform + live-recording-strip painting ----
-    // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
-    // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
-    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
+    // Paints a committed audio clip's waveform in `rect`, inked for the clip colour `onLane`; no-op if unresolved.
+    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect, juce::Colour onLane);
     // Shared by paintWaveform() and the live strip: filled outline and RMS body paths (one outline without `rms`).
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                      const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,

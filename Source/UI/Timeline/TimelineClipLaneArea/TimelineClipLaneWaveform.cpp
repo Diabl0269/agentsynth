@@ -1,13 +1,15 @@
 // TimelineClipLaneWaveform.cpp
 //
-// How a clip's waveform is drawn: from the peaks sidecar (outline plus a darker RMS body), and, when a committed
-// clip is zoomed in past one peak bucket per pixel, from the real samples on disk (exact columns, or the sample
-// line itself). Also the live-recording strip's columns. TimelineClipLaneArea is declared in
+// How a clip's waveform is drawn: from the peaks sidecar (a peak shape in a deep shade of the clip with a denser RMS
+// core), and, when a committed clip is zoomed in past one peak bucket per pixel, from the real samples on disk (exact
+// columns, or the sample line itself). Also the live-recording strip's columns. TimelineClipLaneArea is declared in
 // TimelineClipLaneArea.h; sibling TimelineClipLane*.cpp files in this directory hold the rest of the class.
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
 #include "WaveformSampleCache.h"
+
+#include "UI/Timeline/TrackColour.h"
 
 #include "Transport/TransportService.h"
 #include <algorithm>
@@ -23,8 +25,28 @@ constexpr float kSampleLineWidth = 1.2f;
 
 using namespace detail;
 
+// The peak envelope is THE waveform, one solid shape in a deep shade of the clip's own colour (the way most DAWs draw
+// a clip by default; docs/timeline/clips.md has the comparison); the RMS body is a denser core inside it, a step
+// further along the same shade, so it reads as the loudness of one waveform rather than a second grey shape. The shade
+// is the clip colour pushed toward black, or toward white on a very dark clip, until it reaches kWaveformMinContrast
+// against the clip, so the wave reads on every track colour in every theme. Opaque, so the lane behind never changes
+// it.
+WaveformInk waveformInkFor(juce::Colour clipOnLane) {
+    const juce::Colour clip = clipOnLane.withAlpha(1.0f);
+    const juce::Colour target = colourLuminance(clip) > 0.12f ? juce::Colours::black : juce::Colours::white;
+    // The lightest shade that reads, so the core still has room to go a step further on a saturated clip.
+    juce::Colour peak = clip.interpolatedWith(target, 0.3f);
+    for (float t = 0.35f; t <= 1.0f && colourContrast(peak, clip) < kWaveformMinContrast; t += 0.05f)
+        peak = clip.interpolatedWith(target, t);
+    juce::Colour body = peak.interpolatedWith(target, 0.45f);
+    for (float t = 0.55f; t <= 1.0f && colourContrast(body, peak) < kWaveformCoreStep; t += 0.1f)
+        body = peak.interpolatedWith(target, t);
+    return {peak, body, peak};
+}
+
 // "Nothing resolves" covers no resolver set, an unresolvable ref, or an unreadable/absent peaks file.
-void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
+void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect,
+                                         juce::Colour onLane) {
     lastWaveformSource_ = WaveformSource::None;
     const auto* data = findPeaksData(clip.assetRef);
     if (data == nullptr)
@@ -40,11 +62,7 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
             sampleRate = snap.sampleRate;
     }
 
-    // Black at low alpha, not a theme token: a shadow-style darkening of whatever `fill` already is (the module
-    // cards' drop shadows are composed the same way), not a colour of its own. The peak outline is the lighter wash
-    // and the RMS body the darker one; a file without RMS keeps the single 0.4 wash.
-    const WaveformInk ink{juce::Colours::black.withAlpha(0.22f), juce::Colours::black.withAlpha(0.55f),
-                          juce::Colours::black.withAlpha(0.4f)};
+    const WaveformInk ink = waveformInkFor(onLane);
     g.setColour(ink.flat);
     if (rect.getWidth() <= kMinWidthForWaveform) {
         lastWaveformSource_ = WaveformSource::Peaks;
@@ -110,9 +128,9 @@ void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectang
     fillWaveformColumns(g, bounds, 0, columns, bodies, ink);
 }
 
-// Two filled anti-aliased paths, so the wave is smooth on a 2x display: the outline (top edge = max, bottom edge = min)
-// in `ink.outline` and, inside it, the RMS body (+-rms clamped to the outline) in `ink.body`. Without `bodies` one
-// outline path in `ink.flat`. An outline thinner than a pixel is widened to one so silence still shows a hairline.
+// Two filled anti-aliased paths, so the wave is smooth on a 2x display: the peak shape (top edge = max, bottom edge =
+// min) in `ink.outline` and, inside it, the RMS core (+-rms clamped to the peak shape) in `ink.body`. Without `bodies`
+// one outline path in `ink.flat`. An outline thinner than a pixel is widened to one so silence still shows a hairline.
 void fillWaveformColumns(juce::Graphics& g, juce::Rectangle<int> bounds, int firstColumn,
                          const std::vector<std::pair<float, float>>& columns, const std::vector<float>& bodies,
                          const WaveformInk& ink) {
@@ -239,7 +257,7 @@ bool TimelineClipLaneArea::paintWaveformFromSamples(juce::Graphics& g, const syn
     }
     juce::Graphics::ScopedSaveState guard(g);
     g.reduceClipRegion(bounds);
-    g.setColour(ink.body.withAlpha(0.8f));
+    g.setColour(ink.outline);
     g.strokePath(line,
                  juce::PathStrokeType(kSampleLineWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     lastWaveformSource_ = WaveformSource::SampleLine;
