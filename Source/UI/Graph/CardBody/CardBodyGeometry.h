@@ -14,7 +14,9 @@ namespace synth::cardbody {
 inline constexpr int kKnobColumns = 3;
 inline constexpr int kContentMargin = 12;       // left/right gutter for body content
 inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
-inline constexpr int kLabelHeight = 18;
+inline constexpr int kLabelHeight = 18;         // a caption's slot: its box plus kCaptionGap above the widget
+inline constexpr int kCaptionGap = 6;           // between a caption's box and the widget it names (one spacing unit)
+inline constexpr int kCaptionBoxHeight = kLabelHeight - kCaptionGap;
 inline constexpr int kRowHeight = 24;         // combo box / toggle / button
 inline constexpr int kKnobHeight = 58;        // rotary + its text box
 inline constexpr int kKnobLargeHeight = 80;   // a 60 px dial + its text box

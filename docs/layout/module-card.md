@@ -57,6 +57,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kContentMargin` | 12 | left/right gutter for body content |
 | `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
 | `kLabelHeight` | 18 | label above a knob or combo |
+| `kCaptionGap` | 6 | between a caption's box (`kCaptionBoxHeight`, 12) and the knob or combo it names; the caption slot stays `kLabelHeight` |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |

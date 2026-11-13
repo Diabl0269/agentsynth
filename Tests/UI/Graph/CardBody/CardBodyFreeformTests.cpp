@@ -61,7 +61,7 @@ TEST(CardBodyFreeform, PositionedItemsSitAtTheirPositionAndTheCardGrowsToFitThem
     EXPECT_EQ(cutoff.label->getX(), g.contentX + 100);
     EXPECT_EQ(resonance.label->getX(), g.contentX);
     EXPECT_EQ(cutoff.label->getY(), resonance.label->getY() + 40) << "y is from the section's top";
-    EXPECT_EQ(cutoff.widget->getY(), cutoff.label->getBottom());
+    EXPECT_EQ(cutoff.widget->getY(), cutoff.label->getBottom() + synth::cardbody::kCaptionGap);
     EXPECT_LE(cutoff.widget->getBottom(), built.card->getHeight());
     EXPECT_TRUE(built.card->getLocalBounds().contains(cutoff.widget->getBounds()));
 }

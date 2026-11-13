@@ -329,13 +329,16 @@ private:
     static constexpr int kRowGap = 4;
     static constexpr int kSectionHeaderHeight = 18;
     static constexpr int kSectionGap = 10;
+    // Rows sit 3 px inside their slot, so this tops the header-to-name-field distance up to one 6 px spacing unit.
+    static constexpr int kSectionHeaderGap = 3;
+    static constexpr int kCaptionGap = 6; // spacing unit between a caption and the control it names
     static constexpr int kEmptyHintHeight = 18;
     static constexpr int kAddRowHeight = 26;
-    // The "Add a port" panel's total content height: section label + newRow1 + a 6px gap +
+    // The "Add a port" panel's total content height: section label + a caption gap + newRow1 + a 6px gap +
     // newRow2, plus 8px of top/bottom inner padding each — computed ONCE so resized() (which lays
     // out) and idealDialogHeight() (which measures) can never drift apart (budgeting only 2 of the 3
     // rows would squeeze newRow2 — the name field and Add button — to zero height).
-    static constexpr int kAddBlockHeight = 8 + kAddRowHeight + kAddRowHeight + 6 + kAddRowHeight + 8;
+    static constexpr int kAddBlockHeight = 8 + kAddRowHeight + kCaptionGap + kAddRowHeight + 6 + kAddRowHeight + 8;
     static constexpr int kMargin = 14;
     static constexpr int kDialogWidth = 580;
     static constexpr int kMinDialogHeight = 300;

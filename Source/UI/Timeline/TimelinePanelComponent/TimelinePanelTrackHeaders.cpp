@@ -729,12 +729,11 @@ bool TimelinePanelComponent::isAddTrackButtonFocused() const {
 
 // Entered from the top, Up goes to the panel root and Down to the first row. Entered from the last row,
 // Up goes back to it (to the panel root when there are no tracks) and Down is consumed (the button is
-// the last stop). Return/Space press it. Space is claimed here because juce::Button only
-// presses on Return and a bare Space would otherwise bubble up and toggle playback.
+// the last stop). Return presses it; Space is left alone and bubbles up to toggle playback.
 bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) {
     if (!isAddTrackButtonFocused() || key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;
-    if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
+    if (key.isKeyCode(juce::KeyPress::returnKey)) {
         addTrackButton_.triggerClick();
         return true;
     }

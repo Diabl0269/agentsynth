@@ -119,7 +119,7 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
         item.widget->setBounds(bounds);
         if (item.label != nullptr)
             item.label->setBounds(bounds.getX(), captionY - cardbody::kLabelHeight, bounds.getWidth(),
-                                  cardbody::kLabelHeight);
+                                  cardbody::kCaptionBoxHeight);
     }
 }
 

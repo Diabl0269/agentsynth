@@ -12,7 +12,7 @@ juce::String dot() { return juce::String::fromUTF8(" \xC2\xB7 "); }
 void name(juce::ComboBox& box, juce::Label& label, const juce::String& title) {
     label.setText(title, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centredLeft);
-    label.attachToComponent(&box, true);
+    label.attachToComponent(&box, true); // pairs the caption with its box; resized() sets its final bounds
     box.setTitle(title);
     box.setTooltip(title);
     box.setWantsKeyboardFocus(true);
@@ -326,4 +326,13 @@ void AudioDeviceSection::resized() {
     }
     if (advancedHint_.isVisible())
         advancedHint_.setBounds(inner.removeFromTop(kRowHeight).withTrimmedLeft(kLabelWidth));
+    // After the boxes: moving a box drags its attached caption beside it with no gap, so the captions are set last, as
+    // tall as their box and one spacing unit short of it.
+    const std::pair<juce::ComboBox*, juce::Label*> captioned[] = {{&output_, &outputLabel_},
+                                                                  {&input_, &inputLabel_},
+                                                                  {&type_, &typeLabel_},
+                                                                  {&rate_, &rateLabel_},
+                                                                  {&buffer_, &bufferLabel_}};
+    for (const auto& [box, label] : captioned)
+        label->setBounds(box->getX() - kLabelWidth, box->getY(), kLabelWidth - kCaptionGap, box->getHeight());
 }

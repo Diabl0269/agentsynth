@@ -48,7 +48,11 @@ AudioInterfacesList::AudioInterfacesList(AudioSettingsSource& source)
     refresh();
 }
 
-int AudioInterfacesList::preferredHeight(int) const { return kPad * 2 + juce::jmax(1, (int)rows_.size()) * kRowHeight; }
+// The empty note is the last thing in its section, so it has no bottom padding: it sits one section gap above the next
+// header.
+int AudioInterfacesList::preferredHeight(int) const {
+    return rows_.empty() ? kPad + kRowHeight : kPad * 2 + (int)rows_.size() * kRowHeight;
+}
 
 juce::String AudioInterfacesList::summary() const {
     return juce::String((int)rows_.size()) + (rows_.size() == 1 ? " interface" : " interfaces");
@@ -121,7 +125,7 @@ void AudioInterfacesList::resized() {
     // The empty note takes a slot only while shown; preferredHeight() counts rows alone, so a hidden note's slot
     // would push the last row past the bottom edge.
     if (rows_.empty())
-        empty_.setBounds(area.removeFromTop(kRowHeight));
+        empty_.setBounds(area.getX(), area.getY(), area.getWidth(), kRowHeight); // runs into the unpadded bottom
     for (auto& row : rows_)
         row->setBounds(area.removeFromTop(kRowHeight));
 }

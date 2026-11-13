@@ -64,72 +64,7 @@ struct KnownGap {
     const char* ticket;
 };
 
-const std::vector<KnownGap> kKnownGaps = {
-    // Export audio
-    {"Export audio / Label '<folder path>': its text does not fit and it has no tooltip", "FRO1712"},
-    {"Export audio / Label 'Bit depth': is not 6 px from its control ComboBox 'Bit depth'", "FRO1712"},
-    {"Export audio / Label 'File name': is not 6 px from its control TextEditor 'File name'", "FRO1712"},
-    {"Export audio / Label 'Format': is not 6 px from its control ComboBox 'Format'", "FRO1712"},
-    {"Export audio / Label 'Range': is not 6 px from its control ToggleButton 'Whole arrangement'", "FRO1712"},
-    {"Export audio / Label 'Sample rate': is not 6 px from its control ComboBox 'Sample rate'", "FRO1712"},
-    {"Export audio / Label 'Tail': is not 6 px from its control ExpandingRangeSlider 'Tail length'", "FRO1712"},
-    {"Export audio / ToggleButton 'Whole arrangement': touches ToggleButton 'Current loop range'", "FRO1712"},
-    // Export stems
-    {"Export stems / Label '<folder path>': its text does not fit and it has no tooltip", "FRO1712"},
-    {"Export stems / Label 'Bit depth': is not 6 px from its control ComboBox 'Bit depth'", "FRO1712"},
-    {"Export stems / Label 'Folder name': is not 6 px from its control TextEditor 'Folder name'", "FRO1712"},
-    {"Export stems / Label 'Format': is not 6 px from its control ComboBox 'Format'", "FRO1712"},
-    {"Export stems / Label 'Range': is not 6 px from its control ToggleButton 'Whole arrangement'", "FRO1712"},
-    {"Export stems / Label 'Sample rate': is not 6 px from its control ComboBox 'Sample rate'", "FRO1712"},
-    {"Export stems / Label 'Tail': is not 6 px from its control ExpandingRangeSlider 'Tail length'", "FRO1712"},
-    {"Export stems / ToggleButton 'Whole arrangement': touches ToggleButton 'Current loop range'", "FRO1712"},
-    // Macro configure I/O
-    {"Macro configure I/O / Label 'Add a port': is not 6 px from its control ComboBox 'New port direction'", "FRO1713"},
-    {"Macro configure I/O / Label 'Add a port': touches ComboBox 'New port kind'", "FRO1713"},
-    {"Macro configure I/O / Label 'Add a port': touches ComboBox 'New port shape'", "FRO1713"},
-    {"Macro configure I/O / Label 'Inputs': is not 6 px from its control TextEditor 'Port name'", "FRO1713"},
-    {"Macro configure I/O / Label 'Outputs': is not 6 px from its control TextEditor 'Port name'", "FRO1713"},
-    {"Macro configure I/O [min] / Label 'Add a port': is not 6 px from its control ComboBox 'New port direction'",
-     "FRO1713"},
-    // Macro ports prompt
-    {"Macro ports prompt / Label 'This macro will need # ports': is not 6 px from its control ToggleButton 'Remember "
-     "my choice'",
-     "FRO1713"},
-    {"Macro ports prompt [min] / Label 'Macro has boundary cables': its text does not fit and it has no tooltip",
-     "FRO1713"},
-    // Render progress
-    {"Render progress / Label 'Render status': touches ProgressBar 'Render progress'", "FRO1712"},
-    {"Render progress [min] / Label 'Render status': its text does not fit and it has no tooltip", "FRO1712"},
-    {"Render progress [min] / Label 'Render status': touches ProgressBar 'Render progress'", "FRO1712"},
-    // Sampler map
-    {"Sampler map / Label 'Select a recording above to ': is not 6 px from its control TextButton 'Add recording...'",
-     "FRO1713"},
-    {"Sampler map [min] / Label 'Select a recording above to ': is not 6 px from its control TextButton 'Add "
-     "recording...'",
-     "FRO1713"},
-    // Settings
-    {"Settings / Label 'Input': is not 6 px from its control ComboBox 'Input'", "FRO1713"},
-    {"Settings / Label 'Jacks come in neighbouring p': is not 6 px from its control FoldSectionHeader 'Remembered "
-     "interfaces, expan'",
-     "FRO1713"},
-    {"Settings / Label 'No audio interface has been ': is not 6 px from its control FoldSectionHeader 'Outputs, "
-     "collapsed'",
-     "FRO1713"},
-    {"Settings / Label 'Output': is not 6 px from its control ComboBox 'Output'", "FRO1713"},
-    {"Settings [min] / Label 'Input': is not 6 px from its control ComboBox 'Input'", "FRO1713"},
-    {"Settings [min] / Label 'Output': is not 6 px from its control ComboBox 'Output'", "FRO1713"},
-    // Shape editor
-    {"Shape editor / Label 'Grid': is not 6 px from its control TextButton 'Off'", "FRO1713"},
-    {"Shape editor / Label 'Level': is not 6 px from its control TextButton 'Off'", "FRO1713"},
-    // Sign in
-    {"Sign in / Label 'Starting...': is not 6 px from its control TextButton 'Open in Browser'", "FRO1713"},
-    {"Sign in / Label: is not 6 px from its control TextButton 'Cancel'", "FRO1713"},
-    {"Sign in [min] / Label 'Starting...': is not 6 px from its control TextButton 'Open in Browser'", "FRO1713"},
-    {"Sign in [min] / Label 'Starting...': its text does not fit and it has no tooltip", "FRO1713"},
-    {"Sign in [min] / TextButton 'Open in Browser': overlaps TextButton 'Cancel'", "FRO1713"},
-    // canvas
-    {"canvas / Label 'Gain': is not 6 px from its control CardKnobSlider 'Gain'", "FRO1713"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 constexpr int kPairReach = 24;       // how far below or to the right of a caption its control may be
 constexpr int kMinWindowWidth = 480; // the main window's enforced minimum (Main.cpp setResizeLimits)
