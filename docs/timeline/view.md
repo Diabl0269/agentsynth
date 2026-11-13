@@ -131,11 +131,46 @@ dominant one there would be wrong.
 `isInertial` (a notched wheel: one big jump per click) is not applied at once but fed to a
 `synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`), which eases the view origin toward
 the accumulated target over ~120 ms (`easeOutCubic`, VBlank-driven). A notch that lands mid-ease adds
-to the remaining distance and continues from the current position. Zoom and trackpad/inertial events
-keep the direct path and end the ease first, and anything else that moves the view (a drag's
+to the remaining distance and continues from the current position. Zoom events end the ease first, a vertical trackpad scroll takes the paced path below, and anything else that moves the view (a drag's
 edge-scroll, follow-playhead) ends it too, as does hitting a clamp. A panel that is not showing
 (headless tests) applies the amount immediately. Horizontal scroll repaints only the ruler and the
 lanes region, never the track headers.
+
+## Vertical scroll
+
+A trackpad sends wheel events at its own rate (about 60 to 125 a second, unevenly), not the screen's. Each one used to move
+the view, re-place the lane bodies and repaint at once, so one display frame could take three moves and the next none. Now a
+trackpad's (`isSmooth` or `isInertial`) vertical deltas only pile up in a backlog in `synth::ui::ScrollFrameSmoother`
+(`Source/UI/Layout/ScrollTween.h`, owned by the panel, code in `TimelinePanelWheelScroll.cpp`). Once per VBlank frame
+a share of the backlog (`1 - e^(-dt / 40 ms)`, about a third at 60 Hz) goes through `scrollTrackRows()` as one move, one
+`syncTrackScroll()`, one repaint of the lanes rectangle. The step per frame stays even while the finger or the fling moves at a
+steady speed; a clamp at an end drops the backlog, so a fling stops there without backing off; a reversal drops what is left of
+the old direction. A zoom flushes the backlog first. A mouse notch keeps its 120 ms ease; a panel that is not showing applies at
+once (tests drive the frames with `ScrollFrameSmoother::frameForTest`).
+
+The header column and the content read one value: `trackScrollY` rounded to a whole logical pixel (`llround`) by the header
+viewport and by every painter, so the two cannot shear. A move that does not change that rounding changes nothing on screen,
+so it neither syncs nor repaints. Sub-logical-pixel (device-pixel) steps would need every painter to take the fractional
+value; the measurement below shows no shear to fix, so they were left alone.
+
+Measured on a 30-track panel with 4 clips per track (`TimelinePanelTrackpadScrollTests.cpp`, `FRO1778_PRINT=1` prints it; one
+frame run by hand per display frame; the repaint figure is the area `syncTrackScroll()` asks for, headers and lanes):
+
+| | Before | After |
+|---|---|---|
+| 60 Hz display, 125 Hz pad: view syncs in a frame | up to 3 | 1 |
+| 60 Hz display, 125 Hz pad: repainted area in a frame | 1.73 million px | 0.58 million px |
+| 60 Hz display, 125 Hz pad: step per frame | 8 to 12 px | 7.6 to 9.4 px |
+| 120 Hz display, 60 Hz pad: step per frame | 0 to 4 px, 24 frames of 90 not moving | 1.3 to 2.3 px, none stopped |
+| Header offset against content offset (device px at 2x) | equal in every frame | equal in every frame |
+| Full paint of the panel (software image) | 2.1 ms | 2.2 ms |
+
+So the stutter was the unpaced events and the repeated sync and repaint; the header snap was not a cause (both sides already
+shared one rounding) and a paint of 2.1 ms is far inside a frame, so no cached image of the scrolling content was added.
+
+Research: Cubase, Logic and Ableton apply a trackpad scroll once per display frame, pixel-aligned, with the header column and
+the track list in one view (no separate header scroll). Measuring Cubase on this machine needs a run with the screen and was
+not done here.
 
 ## Natural scrolling
 

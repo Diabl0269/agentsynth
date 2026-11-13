@@ -130,6 +130,21 @@ StepResult cmdClick(const juce::var& args, Scratch&, int) {
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
 
+// The rest of a wheel series: one more event every `everyMs`, each `decay` times the last, so a swipe or a fling is on
+// the screen over time while the command has already answered. Stops when the target is gone.
+void sendWheelSeries(juce::Component::SafePointer<juce::Component> target, juce::Point<int> point, float dx, float dy,
+                     juce::ModifierKeys keys, bool smooth, bool inertial, int remaining, int everyMs, float decay) {
+    if (target == nullptr || remaining <= 0)
+        return;
+    juce::String error;
+    wheel(*target, point, dx, dy, keys, error, smooth, inertial);
+    if (remaining > 1)
+        juce::Timer::callAfterDelay(everyMs, [=] {
+            sendWheelSeries(target, point, dx * decay, dy * decay, keys, smooth, inertial, remaining - 1, everyMs,
+                            decay);
+        });
+}
+
 StepResult cmdWheel(const juce::var& args, Scratch&, int) {
     const auto found = lookupArg(args, "id");
     if (found.component == nullptr)
@@ -141,8 +156,19 @@ StepResult cmdWheel(const juce::var& args, Scratch&, int) {
     const auto point = localPointArg(args, *found.component, "x", "y");
     const float dx = args.hasProperty("dx") ? static_cast<float>(static_cast<double>(args["dx"])) : 0.0f;
     const float dy = args.hasProperty("dy") ? static_cast<float>(static_cast<double>(args["dy"])) : 0.0f;
-    if (!wheel(*found.component, point, dx, dy, keys, error))
+    const bool inertial = static_cast<bool>(args.getProperty("inertial", false));
+    const bool smooth = static_cast<bool>(args.getProperty("smooth", false));
+    const int count = juce::jlimit(1, 400, static_cast<int>(args.getProperty("count", 1)));
+    if (!wheel(*found.component, point, dx, dy, keys, error, smooth, inertial))
         return StepResult::failed(error);
+    if (count > 1) {
+        const int everyMs = juce::jlimit(1, 1000, static_cast<int>(args.getProperty("everyMs", 8)));
+        const float decay = static_cast<float>(static_cast<double>(args.getProperty("decay", 1.0)));
+        juce::Timer::callAfterDelay(everyMs, [=,
+                                              target = juce::Component::SafePointer<juce::Component>(found.component)] {
+            sendWheelSeries(target, point, dx * decay, dy * decay, keys, smooth, inertial, count - 1, everyMs, decay);
+        });
+    }
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
 

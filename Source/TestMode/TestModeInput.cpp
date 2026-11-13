@@ -141,15 +141,15 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
 }
 
 bool wheel(juce::Component& target, juce::Point<int> local, float dx, float dy, juce::ModifierKeys keys,
-           juce::String& error) {
+           juce::String& error, bool smooth, bool inertial) {
     if (!sendMouse({&target, local, keys, false, Button::left}, error))
         return false; // also puts the pointer over `local`, which is where the wheel event lands
     juce::MouseWheelDetails details;
     details.deltaX = dx;
     details.deltaY = dy;
     details.isReversed = false;
-    details.isSmooth = false;
-    details.isInertial = false;
+    details.isSmooth = smooth || inertial;
+    details.isInertial = inertial;
     const auto previous = juce::ModifierKeys::currentModifiers;
     juce::ModifierKeys::currentModifiers = keys.withoutMouseButtons();
     target.getPeer()->handleMouseWheel(juce::MouseInputSource::InputSourceType::mouse,
