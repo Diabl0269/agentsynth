@@ -3,7 +3,7 @@
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
 `ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **138 actions** across eight categories —
 **General** (56, app-wide or routed per focused editor), **Graph** (15), **Timeline** (35), **Piano Roll** (14),
-**Mixer** (5), **Layout Editor** (12), **EQ** (13, [shortcuts-eq.md](shortcuts-eq.md)) and **Track Header** (1) — every one rebindable, including keys that used to be hardcoded: nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
+**Mixer** (5), **Layout Editor** (12), **EQ** (13, [shortcuts-eq.md](shortcuts-eq.md)) and **Track Header** (1), **Sampler Map** (1, `samplerMapPlaySelected`: P plays the selected recording while the Sampler's map window has focus) — every one rebindable, including keys that used to be hardcoded: nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"

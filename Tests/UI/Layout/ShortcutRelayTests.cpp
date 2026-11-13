@@ -34,11 +34,7 @@ struct KnownGap {
 };
 
 // Tool windows that do not relay yet.
-const std::vector<KnownGap> kKnownGaps = {
-    {"Sampler map / Cmd+Z", "FRO1036"},
-    {"Sampler map / Cmd+Shift+Z", "FRO1036"},
-    {"Sampler map / Space", "FRO1036"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 struct Sample {
     // The same on every platform (JUCE describes the command modifier as "ctrl" off macOS), so kKnownGaps holds.

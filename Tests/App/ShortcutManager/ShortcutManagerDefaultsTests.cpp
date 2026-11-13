@@ -35,6 +35,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
         "pianoRollToggleVelocityLane",
+        // SamplerMapBlocks::keyPressed
+        "samplerMapPlaySelected",
         // DrumMachineComponent::keyPressed
         "drumMachineToggleHit",
         "drumMachineToggleAccent",

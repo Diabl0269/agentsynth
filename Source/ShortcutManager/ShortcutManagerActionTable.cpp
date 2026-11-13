@@ -120,6 +120,12 @@ void spliceTrackHeaderRow(std::vector<Entry>& rows) {
     rows.push_back(Entry{"trackHeaderTogglePoly", ShortcutCategory::TrackHeader});
 }
 
+// Sampler Map -- keys read only while the Sampler's instrument map window holds focus (SamplerMapBlocks).
+template <class Entry>
+void spliceSamplerMapRow(std::vector<Entry>& rows) {
+    rows.push_back(Entry{"samplerMapPlaySelected", ShortcutCategory::SamplerMap});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
     spliceCommandPaletteRow(rows);
@@ -130,6 +136,7 @@ void spliceRows(std::vector<Entry>& rows) {
     spliceSongKeyRow(rows);
     appendEqRows(rows);
     spliceTrackHeaderRow(rows);
+    spliceSamplerMapRow(rows);
 }
 
 } // namespace

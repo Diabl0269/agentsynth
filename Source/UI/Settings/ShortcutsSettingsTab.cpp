@@ -52,6 +52,8 @@ const char* persistedName(ShortcutCategory category) {
         return "EQ";
     case ShortcutCategory::TrackHeader:
         return "TrackHeader";
+    case ShortcutCategory::SamplerMap:
+        return "SamplerMap";
     }
     return "";
 }

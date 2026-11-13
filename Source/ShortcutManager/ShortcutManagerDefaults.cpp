@@ -618,6 +618,12 @@ void ShortcutManager::addTrackHeaderDefaultBindings() {
     bindings["trackHeaderTogglePoly"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
 }
 
+// Bare P plays the selected recording while the Sampler's map window has focus. Its own category: the map window
+// holds the keyboard alone, and no other P is read there.
+void ShortcutManager::addSamplerMapDefaultBindings() {
+    bindings["samplerMapPlaySelected"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+}
+
 void ShortcutManager::addLayoutEditorDefaultBindings() {
     bindings["layoutEditorToggleShown"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
     bindings["layoutEditorMoveUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);

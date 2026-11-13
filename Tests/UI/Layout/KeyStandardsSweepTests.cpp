@@ -94,13 +94,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"Macro ports prompt / ToggleButton 'Remember my choice': Escape does not close the dialog", "FRO1714"},
     // Render progress
     {"Render progress / TextButton 'Cancel render': Escape does not close the dialog", "FRO1714"},
-    // Sampler map
-    {"Sampler map / SamplerMapBlocks 'Instrument map': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / SamplerMapBlocks 'Instrument map': Space does not reach the transport", "FRO1036"},
-    {"Sampler map / TextButton 'Add recording...': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / TextButton 'Add recording...': Space does not reach the transport", "FRO1036"},
-    {"Sampler map / TextButton 'Done': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / TextButton 'Done': Space does not reach the transport", "FRO1036"},
     // timeline
     {"timeline / ToolbarButton 'Add': Space does not reach the transport", "FRO1715"},
     {"timeline / ToolbarButton 'Add': Space opened a menu or popup", "FRO1715"},

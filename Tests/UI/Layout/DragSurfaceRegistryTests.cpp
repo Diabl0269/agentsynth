@@ -96,6 +96,7 @@ const std::vector<Registered> kRegistered = {
     // No preview/commit split.
     {"SaturationBrightnessField",
      {"exempt: the colour is written live through one selector change, the release only ends the drag"}},
+    {"SamplerMapBlocks", {"exempt: the drag only moves which key sounds, there is no preview to commit"}},
     {"HueBar", {"exempt: the hue is written live through one selector change, the release only ends the drag"}},
     {"RangeSlider", {"exempt: a slider that writes its value live while it drags"}},
     {"CardFader", {"exempt: a fader that writes its value live while it drags"}},
@@ -151,6 +152,7 @@ const char* const kCanvasCards =
     "follow:CanvasEdgeScroll.ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUnderThePointer";
 
 const std::vector<Follows> kFollow = {
+    {"SamplerMapBlocks", "follow-exempt: the keyboard is a fixed strip, the drag never scrolls or zooms the view"},
     {"TimelineClipLaneArea", "follow:TimelineClipLaneAutoScrollTimerTest.GatedOnDragAndEdgeZoneOnly"},
     {"PianoRollComponent",
      "follow:PianoRollAutoScrollTest.EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer"},

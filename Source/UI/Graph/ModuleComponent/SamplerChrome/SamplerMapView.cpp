@@ -3,6 +3,7 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -57,6 +58,8 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
         if (!readOnly_)
             removeSelected();
     };
+    blocks_.onPlayKey = [this](int note, int velocity) { playNote(note, velocity); };
+    blocks_.onReleaseKey = [this](int note) { releaseNote(note); };
     blocks_.onDrop = [this](const MapDrop& drop) {
         if (drop.replaceRegion >= 0)
             replaceFile(drop.replaceRegion, drop.paths[0]);
@@ -75,9 +78,33 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     noticeFade_.snapTo(readOnly_);
 }
 
-SamplerMapView::~SamplerMapView() = default;
+SamplerMapView::~SamplerMapView() { releaseAll(); }
+
+void SamplerMapView::playNote(int note, int velocity) {
+    if (sampler_ == nullptr)
+        return;
+    heldNotes_.push_back(note);
+    sampler_->noteInbox().push(note, velocity, 0);
+}
+
+void SamplerMapView::releaseNote(int note) {
+    const auto it = std::find(heldNotes_.begin(), heldNotes_.end(), note);
+    if (it == heldNotes_.end())
+        return;
+    heldNotes_.erase(it);
+    if (sampler_ != nullptr)
+        sampler_->noteInbox().push(note, 0, 0);
+}
+
+void SamplerMapView::releaseAll() {
+    if (sampler_ != nullptr)
+        for (const int note : heldNotes_)
+            sampler_->noteInbox().push(note, 0, 0);
+    heldNotes_.clear();
+}
 
 void SamplerMapView::detach() {
+    releaseAll();
     sampler_ = nullptr;
     applyEdit_ = nullptr;
     blocks_.setRegions({}, -1);
@@ -124,6 +151,12 @@ void SamplerMapView::refresh(int selected) {
 }
 
 void SamplerMapView::poll() {
+    if (sampler_ != nullptr) {
+        auto lit = sampler_->getSoundingNotes();
+        for (const int note : heldNotes_)
+            lit.set((size_t)note);
+        blocks_.setLitKeys(lit);
+    }
     if (sampler_ != nullptr && !committing_ && sampler_->getInstrumentGeneration() != shownGeneration_)
         refresh(blocks_.getSelected());
 }
@@ -237,7 +270,9 @@ void SamplerMapView::resized() {
 }
 
 bool SamplerMapView::keyPressed(const juce::KeyPress& key) {
-    return key == juce::KeyPress::escapeKey && closeHostingWindow(*this);
+    if (key != juce::KeyPress::escapeKey)
+        return onAppShortcut && onAppShortcut(key);
+    return closeHostingWindow(*this);
 }
 
 } // namespace synth::ui
