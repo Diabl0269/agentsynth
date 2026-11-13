@@ -285,8 +285,10 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
     const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
-    if (e.mods.isCommandDown() || optionVertical)
+    if (e.mods.isCommandDown() || optionVertical) {
         wheelTween_.stop();
+        trackpadScroll_.flush(); // a zoom reads the view where the finger left it
+    }
     if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
@@ -317,36 +319,6 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double deltaY = (double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit;
     if (deltaY != 0.0)
         scrollByWheel(1, deltaY, eased);
-}
-
-// Direct events, and a host that isn't showing (headless tests), apply at once after ending any
-// tween; a notch eases in via ScrollTweenRunner instead.
-void TimelinePanelComponent::scrollByWheel(int axis, double amount, bool eased) {
-    const auto read = [this](int a) { return a == 0 ? viewState_.firstVisibleBeat : viewState_.trackScrollY; };
-    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
-    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
-        return;
-    wheelTween_.stop();
-    applyWheelScroll(axis, amount);
-}
-
-// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lanes,
-// marker stems, playhead) -- never the track headers, which scroll only vertically.
-void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
-    if (axis == 1) {
-        scrollTrackRows(amount);
-        return;
-    }
-    // Only a USER's sideways scroll reaches here (the wheel, a trackpad swipe, the eased wheel
-    // tween); follow's own page-flip goes through pageViewToShowBeat and never this method. Taking
-    // the view away from the playhead by hand means "stop following", so the flag, the button and
-    // the roll's mirror all switch off together rather than the next poll snapping the view back.
-    if (follow_.enabled)
-        setFollowPlayheadEnabled(false);
-    viewState_.scrollBeats(amount);
-    ruler_.repaint();
-    sectionStrip_->repaint();
-    repaint(gridLanesBounds_);
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
@@ -410,14 +382,6 @@ double TimelinePanelComponent::maxTrackScrollPx() const {
     return std::max(0.0, (double)(rowLayout().totalHeight() - gridLanesBounds_.getHeight()));
 }
 
-void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
-    const double before = viewState_.trackScrollY;
-    viewState_.scrollTracksPx(deltaPx, maxTrackScrollPx());
-    if (viewState_.trackScrollY == before)
-        return;
-    syncTrackScroll();
-}
-
 // Keeps the row under the pointer put: the content y under the anchor is mapped from the old row
 // layout to the new one (clip rows and lane rows rescale, the section row does not), and the
 // scroll moves by whatever keeps that y at the same visible position. Read from the actual
@@ -438,16 +402,6 @@ void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
     viewState_.scrollTracksPx(0.0, maxTrackScrollPx()); // clamp into the new range
     layoutTrackHeaders();
     syncTrackScroll();
-}
-
-void TimelinePanelComponent::syncTrackScroll() {
-    // One writer, two readers: the header viewport mirrors trackScrollY, the lanes/roll repaint.
-    // setViewPosition fires visibleAreaChanged, whose handler sees an unchanged value and stops —
-    // no feedback loop.
-    trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
-    clipLaneArea_.repaint();
-    placeLaneBodies();
-    repaint(gridLanesBounds_);
 }
 
 //==============================================================================
