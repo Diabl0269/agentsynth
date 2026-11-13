@@ -206,7 +206,7 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
             ? layout.sections[(size_t)*layoutSection].visibleWhen.has_value()
             : planned.section >= 0 && planned.section < (int)plan.sections.size() &&
                   plan.sections[(size_t)planned.section].visibleWhen.has_value();
-    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, lookCondition))
+    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, *item, lookCondition))
         for (auto widget : {CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH})
             if (std::find(options.widgetChoices.begin(), options.widgetChoices.end(), widget) ==
                 options.widgetChoices.end())

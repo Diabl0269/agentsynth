@@ -531,6 +531,7 @@ TEST(OnCardFaderSize, ATempoLooksDivisionFaderOffersShowAsDirectionAndSizeAndLon
 TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize) {
     int checked = 0;
     int divisions = 0;
+    int sharedDivisions = 0;
     for (const auto& entry : synth::detail::moduleFactory()) {
         for (const bool separate : {false, true}) {
             for (const bool tempo : {false, true}) {
@@ -548,14 +549,21 @@ TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize
                 }
                 if (synth::hasAdsrTimeTempo(entry.first))
                     fsFlipSync(rig, *editor, id, tempo);
-                for (const auto& paramId : fsDrawnFaders(rig, id)) {
-                    if (editor->getOutlineForTest(paramId) == nullptr)
-                        continue;
+                for (const auto& drawn : fsDrawnFaders(rig, id)) {
+                    // A Shared look's swap pair draws the division where the time was: its cell is the division's.
+                    const auto paramId = editor->getOutlineForTest(drawn) != nullptr ? drawn : drawn + "Div";
+                    ASSERT_NE(editor->getOutlineForTest(paramId), nullptr) << entry.first << " " << drawn;
                     auto* panel = openControlPanel(rig, *editor, paramId);
                     ASSERT_NE(panel, nullptr) << entry.first << " " << paramId;
                     const auto where = entry.first + " " + paramId + (separate ? " separate" : " shared") +
                                        (tempo ? " tempo" : " time");
                     EXPECT_NE(panel->getShowAsForTest(), nullptr) << where;
+                    // A Shared division draws as a menu until it is set to a fader, so only the Show as row is
+                    // owed there; every other fader offers all three rows.
+                    if (!separate && paramId != drawn) {
+                        ++sharedDivisions;
+                        continue;
+                    }
                     EXPECT_TRUE(panel->isDirectionRowShownForTest()) << where;
                     EXPECT_TRUE(panel->isFaderSizeRowShownForTest()) << where;
                     ++checked;
@@ -567,6 +575,7 @@ TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize
     }
     EXPECT_GT(checked, 10) << "the enumeration found the default faders";
     EXPECT_GE(divisions, 4) << "and the Tempo look's division faders among them";
+    EXPECT_GE(sharedDivisions, 4) << "and a Shared look's divisions, which offer Show as";
 }
 
 namespace {

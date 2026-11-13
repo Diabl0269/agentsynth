@@ -261,10 +261,12 @@ bool areAlternatives(const CardBodyPlan::Section& a, const CardBodyPlan::Section
 
 // The one rule for "a Choice may draw as a stepped fader" (vertical, long or horizontal). The plan (kindOf) and the
 // editor's panel (readControlOptions, which appends the fader widgets to the item's widget choices) both ask it, so
-// the panel never offers what the card cannot draw nor hides what it can. The planned second case, a division in a
-// shared swap pair drawn as a fader like the Tempo look's, extends this one function; do not add a parallel check.
-bool steppedFaderAllowed(const juce::RangedAudioParameter& param, bool inAlternativeLook) {
-    return inAlternativeLook && dynamic_cast<const juce::AudioParameterChoice*>(&param) != nullptr;
+// the panel never offers what the card cannot draw nor hides what it can. A Choice qualifies in a section that is
+// one look of an alternative group, and as a member of a swap pair (its item shows only under a test of another
+// parameter, like a Shared ADSR's division). A further case extends this one function; do not add a parallel check.
+bool steppedFaderAllowed(const juce::RangedAudioParameter& param, const CardParamItem& item, bool sectionIsLook) {
+    const bool swapMember = item.when.has_value() && item.when->effect == CardConditionEffect::Show;
+    return (sectionIsLook || swapMember) && dynamic_cast<const juce::AudioParameterChoice*>(&param) != nullptr;
 }
 
 namespace {
@@ -274,7 +276,7 @@ namespace {
 CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, const CardBodyPlan::Section& section) {
     auto kind = cardBodyKindFor(*planned.param, p.widget).value_or(planned.kind);
     if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong || p.widget == CardWidget::FaderH) &&
-        kind == CardBodyItem::Kind::Choice && steppedFaderAllowed(*planned.param, section.visibleWhen.has_value()))
+        kind == CardBodyItem::Kind::Choice && steppedFaderAllowed(*planned.param, p, section.visibleWhen.has_value()))
         kind = p.widget == CardWidget::FaderV       ? CardBodyItem::Kind::FaderV
                : p.widget == CardWidget::FaderVLong ? CardBodyItem::Kind::FaderVLong
                                                     : CardBodyItem::Kind::FaderH;
