@@ -556,6 +556,13 @@ Between the Recent Projects list and the footer the card carries a low-key contr
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
 
+Help menu hints: on macOS each Help item with a command description (Help build Agent Synth..., Join the
+Discord..., Check for Updates...) shows it as the system menu's hover hint after about a second. JUCE's
+`PopupMenu::Item` has no tooltip and its macOS menu never sets `NSMenuItem.toolTip`, so `UI/Layout/MainMenuTooltips.h`
+(`MainMenuTooltipsMac.mm`) sets it from `collectCommandTooltips()` after `setMacMainMenu`, and again each time macOS
+opens a menu, because JUCE refills the menu then. The Windows menu is a JUCE popup and cannot carry a hint: there the
+text stays on the Welcome button and the Cmd+K row. Test: `MainComponentTest.HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint`.
+
 The footer row carries five social icon buttons between the version label and What's New (28 px, 4 px apart,
 right-aligned against What's New): Discord, YouTube, GitHub, TikTok, Instagram, in that visual and Tab order. They are
 `synth::ui::IconButton`s (Bare) drawn with the `Glyph::Social*` glyphs, the same drawings as the website, each with a
