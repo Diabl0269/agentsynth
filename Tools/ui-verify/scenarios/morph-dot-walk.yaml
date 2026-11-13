@@ -1,0 +1,63 @@
+# A morph map dot was a Tab dead end: Tab left the map for the next region, so the dots, the cursor and the Morph X
+# and Y strips were reached only by arrows in the wrong order. Tab and Shift+Tab on a focused morph stop now walk the
+# dots by index, then the cursor, then the X strip, then the Y strip, and leave through the normal cycle past the ends.
+#
+# What a user does:
+#   1. Starts a new project, adds a Filter, sets its type to Custom and focuses the first dot.
+#   2. Tab: the second dot, then the third, the cursor, Morph X and Morph Y.
+#   3. Shift+Tab walks back to the cursor.
+record: true
+save_project: morph-dot-walk
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: morphDot0, exists: true, within_ms: 5000}
+  - expect: {id: morphDot0, contains: {title: "Dot 1 of 3, shape "}}
+  - expect: {id: morphDot0, contains: {title: "position X "}}
+  - click: {id: morphDot0}
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 1-first-dot-focused}
+  - key: {keys: tab}
+  - expect: {id: morphDot1, hasFocus: true, within_ms: 2000}
+  - mark: {check: 1, name: tab-to-second-dot}
+  - key: {keys: tab}
+  - expect: {id: morphDot2, hasFocus: true, within_ms: 2000}
+  - key: {keys: tab}
+  - expect: {id: morphCursor, hasFocus: true, within_ms: 2000}
+  - key: {keys: tab}
+  - expect: {id: morphStripX, hasFocus: true, within_ms: 2000}
+  - key: {keys: tab}
+  - expect: {id: morphStripY, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: strip-y}
+  - key: {keys: shift+tab}
+  - expect: {id: morphStripX, hasFocus: true, within_ms: 2000}
+  - key: {keys: shift+tab}
+  - expect: {id: morphCursor, hasFocus: true, within_ms: 2000}
+  - mark: {check: 1, name: shift-tab-back-to-cursor}

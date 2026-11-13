@@ -11,6 +11,8 @@
 #include <optional>
 #include <vector>
 
+class ShortcutManager;
+
 namespace synth::ui {
 
 class ReorderFramePump;
@@ -34,6 +36,8 @@ class ReorderFramePump;
  *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same
  *  callbacks, one coordinate at a time) and the landing widgets of the card's Morph X / Morph Y cables
  *  (`stripAt`, `stripAnchor`, `setDropHighlight`). Their Tab stops follow the cursor's; the arrows move them.
+ *  Tab and Shift+Tab (the region cycle's keys) on a stop walk the stops in order: the dots by index, the cursor, the
+ *  Morph X and Morph Y sliders; past either end they leave through the normal region cycle.
  *  Beside each slider runs a thin modulation bar, like a card fader's, that shows the modulation a cable
  *  brings (`setStripModulation`); the cable's landing dot sits just past it. A press on the bar or the dot is
  *  offered to `pressGesture` first, so the owner can turn it into the modulation gestures of a fader.
@@ -175,6 +179,14 @@ public:
     juce::Rectangle<float> getModBarTrack(Axis axis) const;
     /** The bar from `fromNorm` to `toNorm` (0..1 along the slider) inside `getModBarTrack`. */
     juce::Rectangle<float> getModBarBetween(Axis axis, float fromNorm, float toNorm) const;
+    /** The user's bindings for the region cycle keys, which walk the stops; none (or a null answer) means Tab and
+     *  Shift+Tab. */
+    void setShortcuts(std::function<const ShortcutManager*()> shortcuts) { shortcuts_ = std::move(shortcuts); }
+    /** The stops Tab walks now, in order: the dots, then the cursor and the sliders while they show. */
+    std::vector<juce::Component*> getWalkStops() const;
+    /** Where the last Tab step asked focus to go (null: nowhere yet). Focus calls do nothing without a native window,
+     *  so a test reads this. */
+    juce::Component* getLastWalkTargetForTest() const noexcept { return lastWalkTarget_; }
     /** Whether the dot menu offers Edit; on by default. */
     void setEditItemShown(bool shown) noexcept { editItemShown_ = shown; }
     /** The slider whose modulation bar is under `point` (this component's coordinates). */
@@ -250,6 +262,7 @@ private:
     void layoutStops();
     void refreshStopNames();
     bool handleStopKey(Stop& stop, const juce::KeyPress& key);
+    bool walkFrom(Stop& stop, bool forward);
     bool stepStop(Stop& stop, float dx, float dy);
     bool pressArrow(Stop& stop, int keyCode, bool shift);
     void glideTick();
@@ -312,6 +325,8 @@ private:
     std::unique_ptr<Stop> stripStops_[2]; // X, Y
     std::unique_ptr<juce::TextEditor> renameEditor_;
     int renameIndex_ = -1;
+    std::function<const ShortcutManager*()> shortcuts_;
+    juce::Component* lastWalkTarget_ = nullptr;
 
     KeyedPointTween moveTween_{*this}; // dots by index, the cursor by kCursorKey
     static constexpr KeyedPointTween::Key kCursorKey = -1;
