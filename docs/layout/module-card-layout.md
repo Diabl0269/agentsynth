@@ -531,7 +531,7 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     A flowing group re-flows by itself and needs no repack.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
-    dashes. With the pointer below the card's bottom edge the area gets a stronger wash, the control stays
+    dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no group is washed (a group lit on the way down goes out), the control stays
     where it last was inside the card, and releasing hides it exactly as Hide from card or Backspace does
     (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
