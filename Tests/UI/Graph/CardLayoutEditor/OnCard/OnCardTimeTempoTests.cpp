@@ -13,6 +13,7 @@
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
+#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 
@@ -524,6 +525,45 @@ TEST(OnCardFaderSize, ATempoLooksDivisionFaderOffersShowAsDirectionAndSizeAndLon
 
     panel->getFaderSizeForTest()->setSelectedIndex(0, juce::sendNotificationSync);
     EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVHeight);
+}
+
+// A Shared look on Tempo draws each division as a menu in the time's place; its panel still offers Show as (Menu or
+// Fader), as the real editor's click on it opens (it once showed only Label and Hide).
+TEST(OnCardFaderSize, ASharedLooksDivisionOnTempoOffersShowAs) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    fsFlipSync(rig, *editor, id, true);
+    int found = 0;
+    for (const juce::String stage : {"attack", "hold", "decay", "release"}) {
+        const auto key = stage + "Div";
+        if (editor->getOutlineForTest(key) == nullptr)
+            continue;
+        ++found;
+        auto* panel = openControlPanel(rig, *editor, key);
+        ASSERT_NE(panel, nullptr) << key;
+        EXPECT_NE(panel->getShowAsForTest(), nullptr) << key;
+    }
+    EXPECT_EQ(found, 4) << "each division has its own cell on the Shared look's Tempo side";
+}
+
+// A card with no stored layout hands the editor a layout rebuilt from its plan, whose items carry no tests. A
+// division is still a member of the Shared look's swap pair, so its panel still offers the fader widgets.
+TEST(OnCardFaderSize, ADivisionOfASwapPairOffersFadersEvenWhenTheLayoutItemsCarryNoTests) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* body = rig.card(id)->getCardBody();
+    auto layout = body->explicitLayout();
+    for (auto& section : layout.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<synth::CardParamItem>(&item))
+                param->when.reset();
+    synth::ui::BuiltInCardLayoutSource source(rig.canvas.editor, nullptr, id);
+    const auto options = synth::ui::readControlOptions(*body, source.parameters(), layout, "holdDiv", std::nullopt);
+    ASSERT_TRUE(options.has_value());
+    const auto& choices = options->widgetChoices;
+    EXPECT_NE(std::find(choices.begin(), choices.end(), CardWidget::FaderV), choices.end());
 }
 
 // The enumerating guard (sibling-gap): every vertical fader a default layout draws, in every look, offers the
