@@ -17,9 +17,15 @@ public:
     void resized() override;
 
     int getNumChannelsForTest() const { return (int)ticks_.size(); }
+    // Lays out the section for the given channels without a device, so a test can use 0, 1 and 2 outputs.
+    void setChannelsForTest(const juce::StringArray& names, const juce::BigInteger& active) { rebuild(names, active); }
+    juce::Rectangle<int> getTickBoundsForTest(int index) const { return ticks_[(size_t)index]->getBounds(); }
+    juce::Rectangle<int> getNoneBoundsForTest() const { return none_.getBounds(); }
+    bool isNoneVisibleForTest() const { return none_.isVisible(); }
 
 private:
     void setChannel(int channel, bool on);
+    void rebuild(const juce::StringArray& names, const juce::BigInteger& active);
 
     juce::AudioDeviceManager& deviceManager_;
     std::vector<std::unique_ptr<juce::ToggleButton>> ticks_;

@@ -350,6 +350,43 @@ TEST_F(AudioSettingsTabTest, EveryRememberedInterfaceRowSitsInsideTheList) {
     }
 }
 
+// The Outputs note ("No output device is open.") is hidden while there are ticks, yet it kept its 28 px slot: the
+// first tick sat under a blank band and the last fell past the section's bottom edge. Every section's visible
+// children must sit inside it at its preferredHeight, whatever it holds.
+TEST_F(AudioSettingsTabTest, EverySectionsVisibleRowsSitInsideItAtItsPreferredHeightWithNoGapAbove) {
+    auto tab = makeTab();
+    auto& outputs = static_cast<AudioOutputsSection&>(tab->getSectionForTest(Section::Outputs));
+    for (int count = 0; count <= 2; ++count) {
+        juce::StringArray names;
+        juce::BigInteger active;
+        for (int channel = 0; channel < count; ++channel) {
+            names.add("Out " + juce::String(channel + 1));
+            active.setBit(channel, true);
+        }
+        outputs.setChannelsForTest(names, active);
+        outputs.setSize(400, outputs.preferredHeight(400));
+        ASSERT_EQ(outputs.getNumChannelsForTest(), count);
+        if (count == 0) {
+            EXPECT_TRUE(outputs.isNoneVisibleForTest());
+            EXPECT_TRUE(outputs.getLocalBounds().contains(outputs.getNoneBoundsForTest()));
+            continue;
+        }
+        EXPECT_EQ(outputs.getTickBoundsForTest(0).getY(), 8) << "the first output sits right under the header";
+        for (int i = 0; i < count; ++i)
+            EXPECT_TRUE(outputs.getLocalBounds().contains(outputs.getTickBoundsForTest(i)))
+                << count << " outputs, tick " << i << " at " << outputs.getTickBoundsForTest(i).toString();
+    }
+    for (int i = 0; i < AudioSettingsTab::kNumSections; ++i) {
+        auto& section = tab->getSectionForTest(static_cast<Section>(i));
+        section.setSize(400, section.preferredHeight(400));
+        for (auto* child : section.getChildren())
+            if (child->isVisible() && child->getWidth() > 0)
+                EXPECT_TRUE(section.getLocalBounds().contains(child->getBounds()))
+                    << "section " << i << ": " << synth::test::tabStopName(*child) << " at "
+                    << child->getBounds().toString();
+    }
+}
+
 TEST_F(AudioSettingsTabTest, TheInUseStatusCountsNamedInputsSingularAndPlural) {
     source.store.setName(kType, source.info.deviceName, 0, "Vocal mic");
     auto tab = makeTab();
