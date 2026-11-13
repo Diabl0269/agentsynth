@@ -3,7 +3,8 @@
 #
 # What a keyboard user does:
 #   1. Starts a new project, opens the bottom panel and adds an Oscillator track.
-#   2. On the canvas, presses Cmd+Shift+Up: the timeline's ring lands on Play.
+#   2. Closes the bottom panel (Cmd+J), then on the canvas presses Cmd+Shift+Up: the panel slides open and the timeline's
+#      ring lands on Play (it used to open the panel and leave no ring when the panel was closed).
 #   3. Presses Right: Record. Return presses it (here only the ring is checked, nothing records).
 #   4. Opens the Mixer tab, presses Cmd+Shift+Up there: the Timeline tab comes back with the ring on Play.
 record: true
@@ -17,9 +18,12 @@ steps:
   - click: {id: "modMatrixPicker > Oscillator, Track"}
   - wait: {}
   - key: {keys: escape}
+  - key: {keys: cmd+j}                                       # close the bottom panel again
+  - wait: {}
   - expect: {id: timelineTopBarRing, topBarRing: ""}
-  - key: {keys: cmd+shift+up}                                # from the canvas
-  - expect: {id: timelineTopBarRing, topBarRing: "Play / Stop", within_ms: 1000}
+  - key: {keys: cmd+shift+up}                                # from the canvas, panel closed
+  - expect: {id: timelineTopBarRing, topBarRing: "Play / Stop", within_ms: 2000}
+  - mark: {check: 1, name: transport-ring-panel-closed}
   - screenshot: {name: transport-from-canvas}
   - key: {keys: right}
   - expect: {id: timelineTopBarRing, topBarRing: "Record"}

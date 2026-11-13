@@ -498,6 +498,34 @@ TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRe
         missing.insert(found.begin(), found.end());
     }
     mc_->setMainViewForTest(Tab::Timeline); // false when it is already there
+// Regression test for FRO1525: with the bottom panel closed the key opened it but put no ring on the transport bar,
+// since the bar has no bounds until the slide lands.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedInEveryMainView) {
+    auto& panel = mc_->getTimelinePanel();
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    for (const Tab view : {Tab::Canvas, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (mc_->isBottomDockConfiguredVisible())
+            mc_->simulateToggleBottomPanelClick();
+        synth::test::waitUntil([&] { return !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        mc_->resized();
+        ASSERT_FALSE(mc_->isBottomDockConfiguredVisible()) << "view " << (int)view;
+        panel.getTopBarKeysForTest().leave();
+
+        // The key reaches the window's own handler (nothing in the timeline holds focus).
+        for (juce::Component* at = mc_.get(); at != nullptr; at = at->getParentComponent())
+            if (at->keyPressed(key))
+                break;
+        synth::test::waitUntil(
+            [&] { return panel.getTopBarKeysForTest().isActive() && !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        const auto* ringed = panel.getTopBarKeysForTest().getRingedStop();
+        EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "view " << (int)view;
+        EXPECT_EQ(ringed, &panel.getTransportBar().getPlayStopButton()) << "view " << (int)view;
+        EXPECT_TRUE(mc_->isBottomDockConfiguredVisible()) << "the key opened the panel, view " << (int)view;
+    }
+}
+
     auto& panel = mc_->getTimelinePanel();
     const auto clip = mc_->getTimelineDoc().addClip(mc_->getTimelineDoc().getTracks().front().id, 0.0, 8.0, "Clip");
     panel.openPianoRoll(clip);
