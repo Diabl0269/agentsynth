@@ -133,10 +133,12 @@ void SoundBrowserComponent::addTestModeState(juce::DynamicObject& into) const {
 }
 
 juce::String SoundBrowserComponent::selectedMatchKeyText() const {
-    if (selected_ < 0 || selected_ >= (int)rows_.size() || rows_[(size_t)selected_].kind != RowKind::Sound ||
-        rows_[(size_t)selected_].entry->kind != SoundKind::Loop)
+    if (selected_ < 0 || selected_ >= (int)rows_.size() || rows_[(size_t)selected_].kind != RowKind::Sound)
         return {};
-    return matchKeyText(loopTargetFor(*rows_[(size_t)selected_].entry));
+    const auto& entry = *rows_[(size_t)selected_].entry;
+    if (entry.kind != SoundKind::Loop)
+        return footer_.isMatchKey() ? matchKeyNotLoopText(entry.kind) : juce::String();
+    return matchKeyText(loopTargetFor(entry));
 }
 
 // The footer line, the switch's tooltip and its screen-reader description all read this one text.

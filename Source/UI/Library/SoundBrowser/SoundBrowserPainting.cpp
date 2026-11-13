@@ -306,9 +306,11 @@ juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::S
         line += " > " + displayName(part);
     if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
         line = keyMeta + "  -  " + line;
-    if (entry.kind == synth::soundbrowser::SoundKind::Loop)
-        if (const auto match = matchKeyText(loopTargetFor(entry)); match.isNotEmpty())
-            line = match + "  -  " + line;
+    const auto match = entry.kind == synth::soundbrowser::SoundKind::Loop ? matchKeyText(loopTargetFor(entry))
+                       : footer_.isMatchKey()                             ? matchKeyNotLoopText(entry.kind)
+                                                                          : juce::String();
+    if (match.isNotEmpty())
+        line = match + "  -  " + line;
     return line;
 }
 

@@ -189,3 +189,52 @@ TEST(SoundPreviewFooterMatchKeyTest, TheFooterLineShowsTheLoopsKeyNextToTheSongs
     oneShot.kind = SoundKind::OneShot;
     EXPECT_EQ(synth::ui::soundKeyMetaText(oneShot, "Dm"), "");
 }
+
+// Match key says why it does nothing for a sound that is not a loop.
+TEST(SoundPreviewFooterMatchKeyTest, MatchKeyNotLoopTextExplainsOneShotsAndInstrumentsAndIsEmptyForLoops) {
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::Loop), "");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::OneShot),
+              "Match key applies to loops; this is a one-shot and plays as recorded");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::Instrument),
+              "Match key applies to loops; instruments play from the keyboard");
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, ASelectedOneShotSaysMatchKeyDoesNothingOnlyWhileTheSwitchIsOn) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    index->setUserFolders({tree.user});
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    view.setSongKey("D minor");
+    view.setQuery("kick");
+    view.completeListAnimationForTest();
+    int row = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].kind == SoundBrowserComponent::RowKind::Sound)
+            row = (int)i;
+    ASSERT_GE(row, 0);
+    ASSERT_EQ(view.getRows()[(size_t)row].entry->kind, SoundKind::OneShot);
+    view.selectRow(row);
+    auto& toggle = view.getPreviewFooter().getMatchKey();
+    const juce::String why = "Match key applies to loops; this is a one-shot and plays as recorded";
+    const auto footerLine = [&] {
+        juce::DynamicObject state;
+        view.addTestModeState(state);
+        return state.getProperty("footerLine").toString();
+    };
+
+    EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key") << "switch off: nothing to explain";
+    EXPECT_FALSE(footerLine().contains("Match key"));
+
+    toggle.setToggleState(true, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), why);
+    EXPECT_EQ(toggle.getDescription(), why);
+    EXPECT_TRUE(footerLine().startsWith(why)) << footerLine();
+
+    toggle.setToggleState(false, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key");
+    EXPECT_FALSE(footerLine().contains("Match key"));
+}
