@@ -115,3 +115,17 @@ TEST(UnisonRandLoudness, TheFirstTwoHundredMsAreAsLoudAtEveryRand) {
         }
     }
 }
+
+// Regression test for FRO1425: Unison 7 at Detune 35, Rand 0 sounded brighter than the reference. The level at
+// 5 kHz and up in the first 200 ms must match Rand 100 within 1 dB.
+TEST(UnisonRandLoudness, TheTopOfTheSpectrumIsTheSameAtRandZeroAndRandOneHundred) {
+    for (const int note : {36, 57, 84}) {
+        for (const int unison : {3, 7}) {
+            const double r0 = db(oscillatorStart(unison, 0.0f, note).bandPower);
+            const double r100 = db(oscillatorStart(unison, 1.0f, note).bandPower);
+            std::printf("[measurement] Oscillator note %d unison %d >=5 kHz: Rand 0 %.2f dB, Rand 100 %.2f dB\n", note,
+                        unison, r0, r100);
+            EXPECT_NEAR(r0, r100, 1.0) << "note " << note << " unison " << unison;
+        }
+    }
+}
