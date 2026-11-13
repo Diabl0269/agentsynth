@@ -257,13 +257,27 @@ bool areAlternatives(const CardBodyPlan::Section& a, const CardBodyPlan::Section
     return true;
 }
 
+} // namespace
+
+// The one rule for "a Choice may draw as a stepped fader" (vertical, long or horizontal). The plan (kindOf) and the
+// editor's panel (readControlOptions, which appends the fader widgets to the item's widget choices) both ask it, so
+// the panel never offers what the card cannot draw nor hides what it can. The planned second case, a division in a
+// shared swap pair drawn as a fader like the Tempo look's, extends this one function; do not add a parallel check.
+bool steppedFaderAllowed(const juce::RangedAudioParameter& param, bool inAlternativeLook) {
+    return inAlternativeLook && dynamic_cast<const juce::AudioParameterChoice*>(&param) != nullptr;
+}
+
+namespace {
+
 // The kind a layout item asks for: its widget, with a choice in a look of an alternative group allowed to be a
 // stepped fader (a fader on a choice anywhere else falls back).
 CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, const CardBodyPlan::Section& section) {
     auto kind = cardBodyKindFor(*planned.param, p.widget).value_or(planned.kind);
-    if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong) && kind == CardBodyItem::Kind::Choice &&
-        section.visibleWhen.has_value() && dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
-        kind = p.widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
+    if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong || p.widget == CardWidget::FaderH) &&
+        kind == CardBodyItem::Kind::Choice && steppedFaderAllowed(*planned.param, section.visibleWhen.has_value()))
+        kind = p.widget == CardWidget::FaderV       ? CardBodyItem::Kind::FaderV
+               : p.widget == CardWidget::FaderVLong ? CardBodyItem::Kind::FaderVLong
+                                                    : CardBodyItem::Kind::FaderH;
     // A pad needs its partner, which only placeItem binds; any other path draws the knob.
     return kind == CardBodyItem::Kind::XYPad ? CardBodyItem::Kind::Knob : kind;
 }
