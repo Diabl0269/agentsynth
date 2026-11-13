@@ -88,6 +88,14 @@ MixerPanelComponent::MixerPanelComponent() {
     setTitle("Mixer");
     setComponentID("mixerPanel");
     topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
+    // Down from the bar lands on the strip the keys were last on, else the first one: never on an unringed panel.
+    topBarRing_.onDown = [this] {
+        if (focusedColumnIndex_ < 0 && !columnEntries_.empty())
+            setFocusedColumnIndex(0);
+        keyboardAway_ = false;
+        syncFocusVisuals();
+        repaint();
+    };
     addChildComponent(*topBarRingProbe_);
     focusedColumnProbe_ =
         makeLaneStateProbe("mixerFocusedColumn", [this](juce::DynamicObject& into) { fillFocusedColumnState(into); });

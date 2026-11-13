@@ -153,6 +153,20 @@ TEST(MixerTopBarRingTest, DownLeavesAndShiftUpNudgesTheFaderAgain) {
     EXPECT_NEAR(gainOf(f.mc, nodeId), before + 1.0f, 1.0e-3f);
 }
 
+// Regression test for FRO1524: with no strip focused, Down from the bar left an unringed panel.
+TEST(MixerTopBarRingTest, DownFromTheBarLandsOnTheFirstStripInOnePress) {
+    RingFixture f;
+    ASSERT_EQ(f.panel->getFocusedColumnIndexForTest(), -1);
+    ASSERT_TRUE(f.panel->keyPressed(cmdUp()));
+    EXPECT_FALSE(f.panel->isFocusedColumnOutlineShownForTest());
+
+    EXPECT_TRUE(f.panel->keyPressed(plain(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.ring().isActive());
+    EXPECT_EQ(f.panel->getFocusedColumnIndexForTest(), 0);
+    EXPECT_TRUE(f.panel->isFocusedColumnOutlineShownForTest());
+    EXPECT_TRUE(f.panel->getStripColumnForTest(0)->isKeyboardFocusedForTest());
+}
+
 TEST(MixerTopBarRingTest, EscapeAndLosingFocusLeaveTheRing) {
     RingFixture f;
     ASSERT_TRUE(f.panel->keyPressed(cmdUp()));

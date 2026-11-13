@@ -25,7 +25,8 @@ closed, no dock-back button) is skipped. The toolbar travels with the panel, so 
 |-----|------|
 | Left / Right / Home / End | Move the ring (no wrap) |
 | Return / Space | Press the ringed control. A menu opens; the filter field takes keyboard focus and the ring is done |
-| Down / Escape | Leave the ring; the arrows are the fader's again |
+| Down | Leave the ring and land on the strip the keys were last on (the first strip when none was), with its ring showing; the arrows are the fader's again |
+| Escape | Leave the ring, back to the panel |
 | Up | Swallowed, so a second Up never nudges the fader |
 | Any chord | Not the ring's |
 
