@@ -26,8 +26,8 @@ a filled accent dot; unselected points keep the curve's colour.
 | Alt + Left / Right | Move the keyboard cursor to the previous or next point and select only it |
 
 "On empty space" means away from every point, from the flat line of an empty lane and from the curve itself:
-a press within a handle's reach of the curve still scrubs that segment's tension, so tension scrub and box select
-do not overlap. A move, nudge, delete or paste is one `TimelineDoc::editBreakpoints` call under one
+a press within a handle's reach of the curve still bends that segment (below), so bending and box select do not
+overlap. A move, nudge, delete or paste is one `TimelineDoc::editBreakpoints` call under one
 `recordTimelineChange` (`LanePointEdits.cpp`); the notification it fires prunes the selection to the points that
 still exist, so the editor selects the moved or pasted beats after the edit returns. Paste lands at the transport
 position, snapped, with the earliest copied point there and each value clamped to the lane's range; the pasted
@@ -42,6 +42,26 @@ brings points back (an undo, a paste, an added point) they fade in over 160 ms `
 is both a removal and an addition, so it lands at once, as does everything under Reduce Motion or off screen. The
 editor follows the doc through `laneDocChanged()` (from `TimelineAutomationLanes::refreshPooled`) and lazily from
 paint and the input entry points by `TimelineDoc::getRevision()`.
+
+### Bending a segment
+
+Press the line between two points and drag: the curve follows the pointer, so its half-way point sits under it and
+dragging up bulges it up on a rising and on a falling segment alike (`SegmentBendDrag.h`, shared with the curve
+editor's bend handle). The bend stops at its limit when you go toward the end value. Drag all the way toward the START
+value (a rising segment: down; a falling one: up) and about 12 px further and the segment becomes a **Hold**, a step
+that keeps the start value: the value bubble says "Hold" and the curve cross-fades into the step over 120 ms (shown
+at once under Reduce Motion). Back out past the threshold and it is a curve again; a segment that already is a Hold
+needs about 12 px toward the end value to become the steepest curve. The release writes the tension and the curve
+kind in ONE undo step, Escape cancels, and Shift counts a tenth of the pointer's travel. Keyboard: no new key, Alt+arrows
+already move the point and the curve kind's key path is the segment menu's Hold and Linear (right-click or the menu key),
+which stay.
+
+Research: Cubase (drag the segment between two points; the curve follows the pointer; steps come from Jump or hold
+drawing, not from dragging), Ableton (Alt/Option-drag a segment to curve it; it clamps at the limit), Bitwig (drag the
+segment's curve handle; it clamps; hold is the point's interpolation), Reaper (Alt-drag the tension on a bezier shape,
+clamps; Square shape from the point's shape menu), FL Studio (drag the tension handle, clamps; Hold and Stairs from the
+point's mode menu), Logic (curve drag, clamps). None turns a bend dragged past its limit into a step, so drag-to-hold is
+our own addition on top of the standard direction.
 
 ### Keyboard moves
 

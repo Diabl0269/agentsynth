@@ -3,6 +3,7 @@
 #include "../../Timeline/AutomationLanes/AutomationLanesTestFixture.h"
 #include "PointEditorMatrixDriver.h"
 #include "PointEditorMatrixHoldHost.h"
+#include "Timeline/AutomationKernel.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 
@@ -44,6 +45,21 @@ public:
     juce::Point<float> dot(int point) override {
         const auto& p = pts()[(size_t)point];
         return {(float)panel.getViewState().beatToX(p.beat), (float)editor_->valueToY(p.value)};
+    }
+    // Points 0-1 rise and 1-2 fall; the press lands on the curve at the segment's half-way beat.
+    std::optional<SegmentProbe> segment(bool rising) override {
+        const int left = rising ? 0 : 1;
+        const double beat = (pts()[(size_t)left].beat + pts()[(size_t)left + 1].beat) * 0.5;
+        const double chord = (pts()[(size_t)left].value + pts()[(size_t)left + 1].value) * 0.5;
+        const auto valueAt = [this, beat] {
+            std::vector<synth::TimelineSnapshot::Point> shape;
+            for (const auto& bp : pts())
+                shape.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+            synth::AutomationCursor cursor{};
+            return synth::AutomationKernel::evaluate(shape.data(), (int)shape.size(), beat, 50.0, cursor);
+        };
+        return SegmentProbe{
+            {(float)panel.getViewState().beatToX(beat), (float)editor_->valueToY(valueAt())}, valueAt, chord};
     }
     // A spot that snaps to a beat with no point on it, between the second point and the third.
     juce::Point<float> emptySpot() override {

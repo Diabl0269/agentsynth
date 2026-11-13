@@ -105,6 +105,7 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 | Drag a box on empty space (lanes and curve editor) | Select the dots inside it, replacing the selection; the box is drawn in the accent colour while you drag |
 | Shift-, Cmd- or Ctrl-drag a box | Add the dots inside it to the selection |
 | Click empty space without dragging | Clear the selection |
+| Drag the line between two dots (lane; the curve editor's bend handle) | Bend the segment so the curve follows the pointer; a lane segment dragged all the way toward its start value and 12 px more becomes a Hold ([`timeline/automation-points.md`](../timeline/automation-points.md#bending-a-segment)) |
 
 Alt+arrows then move the boxed dots together and Cmd+Z undoes that move in one step. The box is a mouse shortcut for
 what Shift+Left/Right already do from the keyboard (extend the selection one dot at a time), so nothing needs a
@@ -147,8 +148,9 @@ the pen to the selected stretch.
 `PointEditorBehaviourMatrixTests.cpp` (`Tests/UI/Layout/PointEditing/`) drives every point editor through the same
 script with real key and mouse events: box select, Shift+Left/Right extend, Alt+arrows move (one undo step) and
 Up/Down value, held-key glide, two held arrows moving diagonally, Cmd+D duplicate, Delete moving the selection to the
-next point, double-click on empty space adding a point, right-click on a point opening a menu at it, and edge scroll
-(editors that scroll). A cell is a pass, listed `NotApplicable` with its reason, or listed in `kMissingBehaviours`
+next point, double-click on empty space adding a point, right-click on a point opening a menu at it, dragging the middle of a rising and of a falling segment so the curve
+follows the pointer (`segment-drag-follows`, `SegmentBendDrag.h`; the EQ curve and the morph map have no segment),
+and edge scroll (editors that scroll). A cell is a pass, listed `NotApplicable` with its reason, or listed in `kMissingBehaviours`
 with its ticket; that list only shrinks (a listed cell that now passes fails the test until it is removed). The
 grid is printed on every run.
 
