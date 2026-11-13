@@ -6,5 +6,7 @@ target_sources(Core PRIVATE
     Source/UI/Chrome/ToolbarButton/ToolbarButtonArt.cpp
     Source/UI/Chrome/ToolbarButton/ToolbarAiSpark.h
     Source/UI/Chrome/ToolbarButton/ToolbarAiSpark.cpp
+    Source/UI/Layout/SnapToggleButton.h
+    Source/UI/Layout/SnapToggleButton.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelToolbarButton.cpp
 )

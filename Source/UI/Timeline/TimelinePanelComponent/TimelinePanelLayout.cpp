@@ -558,7 +558,7 @@ void TimelinePanelComponent::resized() {
 // The Add Track, Snap and clip sizing buttons share the "Show button labels" preference with the top bar. The names
 // stay their screen-reader titles either way; icon-only, the tooltips carry them.
 void TimelinePanelComponent::setToolbarLabelsShown(bool shown) {
-    for (auto* button : {&addTrackButton_, &snapToggleButton_}) {
+    for (ToolbarButton* button : std::initializer_list<ToolbarButton*>{&addTrackButton_, &snapToggleButton_}) {
         button->setLayout(ToolbarButtonLayout::Inline);
         button->setContentCentred(button == &addTrackButton_);
         button->setLabel(button->getName(), shown);

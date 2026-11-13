@@ -1,13 +1,14 @@
 #pragma once
 
 // PitchGridRows.h -- the Filter shape window's grid control in two rows: the kind (Off, Octaves, Notes, Harmonics)
-// with its Snap pill and the Level step with its own, then under them what the kind needs: Steps for Octaves, the
+// with its Snap button and the Level step with its own, then under them what the kind needs: Steps for Octaves, the
 // shared Key field for Notes, the Root box for Harmonics. Every choice is remembered in the user's settings.
 #include "PitchGrid.h"
 #include "ShapeListAdapter.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FollowKeyField.h"
+#include "UI/Layout/SnapToggleButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -60,8 +61,8 @@ public:
     CardSegmentedSwitch& getKindSwitch() noexcept { return kind_; }
     CardSegmentedSwitch& getStepsSwitch() noexcept { return steps_; }
     CardSegmentedSwitch& getLevelSwitch() noexcept { return level_; }
-    juce::ToggleButton& getSnapAcross() noexcept { return snapAcross_; }
-    juce::ToggleButton& getSnapLevel() noexcept { return snapLevel_; }
+    SnapToggleButton& getSnapAcross() noexcept { return snapAcross_; }
+    SnapToggleButton& getSnapLevel() noexcept { return snapLevel_; }
     FollowKeyField& getKeyField() noexcept { return key_; }
     juce::ComboBox& getRootBox() noexcept { return root_; }
 
@@ -90,9 +91,9 @@ private:
 
     juce::Label gridLabel_, levelLabel_, stepsLabel_, keyLabel_, rootLabel_;
     CardSegmentedSwitch kind_;
-    juce::ToggleButton snapAcross_{"Snap"};
+    SnapToggleButton snapAcross_;
     CardSegmentedSwitch level_;
-    juce::ToggleButton snapLevel_{"Snap"};
+    SnapToggleButton snapLevel_;
     CardSegmentedSwitch steps_;
     FollowKeyField key_;
     juce::ComboBox root_;

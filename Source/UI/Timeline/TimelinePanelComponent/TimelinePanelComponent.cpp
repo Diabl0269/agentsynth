@@ -177,7 +177,6 @@ TimelinePanelComponent::TimelinePanelComponent()
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
     snapToggleButton_.setComponentID("timelineSnapToggle");
-    snapToggleButton_.setIcon(synth::theme::Icon::ToolbarSnap, ToolbarGroup::Edit);
     setToolbarLabelsShown(true);
     // Tooltip text is set by refreshShortcutTooltips() below.
     snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
