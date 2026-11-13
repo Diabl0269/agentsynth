@@ -209,8 +209,9 @@ void ModuleComponent::applyMacroCountChange() {
     if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
         return;
 
-    updateLayout();
-    owner.handleModuleResized(this);
+    // A glide that began (or runs) already made room and dropped the routings left on vanished jacks.
+    if (!updateLayoutGliding())
+        owner.handleModuleResized(this);
     repaint();
 }
 

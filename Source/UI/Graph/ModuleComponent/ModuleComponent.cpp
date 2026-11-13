@@ -23,6 +23,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"

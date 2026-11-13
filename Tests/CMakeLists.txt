@@ -868,6 +868,7 @@ add_executable(Tests
     UI/Theme/KnobStyleLookTests.cpp
     UI/Layout/BottomDockTabFadeTests.cpp
     UI/Graph/CardBody/CardBodyFadeTests.cpp
+    UI/Graph/CardBody/MacroCountGlideTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFadeTests.cpp
     UI/Mixer/MixerFadeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardFadeTests.cpp

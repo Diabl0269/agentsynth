@@ -349,9 +349,9 @@ void CardBody::refreshConditions() {
     for (int s : std::exchange(startingSections_, {}))
         sectionFades_[(size_t)s].get()->setShown(plan_.sections[(size_t)s].visible);
     const int height = card_.getHeight();
-    if (!onlyLeaving)
-        card_.updateLayout();
-    const bool resized = card_.getHeight() != height;
+    // A Macros bank's new height glides and makes room itself; its knobs then swap like any control (below).
+    const bool glided = !onlyLeaving && card_.updateLayoutGliding();
+    const bool resized = !glided && card_.getHeight() != height;
     if (resized)
         card_.owner.handleModuleResized(&card_);
     card_.repaint();
