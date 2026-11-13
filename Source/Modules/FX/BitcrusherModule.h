@@ -1,18 +1,26 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 
 class BitcrusherModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 6;
+    static constexpr int kPanCvChannel = 7;
+
     BitcrusherModule()
-        : ModuleBase("Bitcrusher", 6, 2) // 2 Audio + 4 CV (Rate, Depth, Mix, Dither)
+        : ModuleBase("Bitcrusher", 8, 2) // 2 Audio + 6 CV (Rate, Depth, Mix, Dither, Level, Pan)
     {
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction", 1.0f, 50.0f, 1.0f));
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
-        addOutputLevelParameter();
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
+        addParameter(ditherParam =
+                         new juce::AudioParameterFloat("dither", "Dither", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
         enableVisualBuffer(true);
     }
 
@@ -38,7 +46,7 @@ public:
         prepareOutputLevel(currentSampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow Left into Right's raw channel, sample-exact, while Dual I/O is
         // split and only Left is patched. Must run before the bypass/mute branches below so
         // both see a filled Right leg exactly as if the user had cabled it.
@@ -53,12 +61,16 @@ public:
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
         if (isBypassed()) {
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             return;
         }
 
@@ -131,9 +143,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(outL[i]);
-            }
+            vb->pushBlock(outL, numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)
@@ -141,20 +151,25 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Rate", "Depth", "Mix", "Dither"};
-        return stereoInputLabel(i, 4, cv);
+        const juce::String cv[] = {"Rate", "Depth", "Mix", "Dither", "Level", "Pan"};
+        return stereoInputLabel(i, 6, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2, "rate"}, {"Depth", 3, "depth"}, {"Mix", 4, "mix"}, {"Dither", 5, "dither"}};
+        return {{"Rate", 2, "rate"},
+                {"Depth", 3, "depth"},
+                {"Mix", 4, "mix"},
+                {"Dither", 5, "dither"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.
@@ -165,15 +180,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Bitcrusher; }
 
 private:
-    static bool isChannelActive(const float* channel, int numSamples) {
-        if (!channel)
-            return false;
-        for (int i = 0; i < numSamples; ++i) {
-            if (channel[i] != 0.0f)
-                return true;
-        }
-        return false;
-    }
+    static bool isChannelActive(const float* channel, int numSamples) { return hasAnyNonZero(channel, numSamples); }
 
     double currentSampleRate = 44100.0;
     juce::AudioBuffer<float> dryBuffer;

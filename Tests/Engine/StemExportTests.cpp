@@ -16,11 +16,13 @@
 // Headless/deterministic house rules apply: HostMode::Hosted only, no audio device, no sleeps.
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
+#include "../Mixer/MasterSafetyOff.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/MasterModule.h"
 #include "Transport/BounceExporter.h"
+#include "Transport/LameLocator.h"
 #include "Transport/OfflineTransportDriver.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemSession.h"
@@ -166,6 +168,7 @@ struct StemRig {
         setParam(*b, "gain", kGainBDb);
         setParam(*b, "pan", kPanB);
         setParam(*m, "gain", kMasterGainDb);
+        testutil::turnOffMasterSafetyLimiter(*m);
 
         driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
         return true;
@@ -278,6 +281,53 @@ TEST(StemExportTest, NStripsProduceNFilesWithExpectedNamesAndEqualLength) {
     EXPECT_EQ(wavA.lengthInSamples, wavB.lengthInSamples);
     EXPECT_EQ(wavA.lengthInSamples, result.samplesWritten);
     EXPECT_GT(wavA.lengthInSamples, (juce::int64)0);
+}
+
+TEST(StemExportTest, FlacFormatWritesReadableFlacStemsWithTheFlacExtension) {
+    StemRig rig;
+    ASSERT_TRUE(rig.build());
+
+    ScopedTempDir out("agentsynth_stems_flac");
+    auto options = oneBeatOptions(24);
+    options.format = synth::BounceFormat::Flac;
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    ASSERT_EQ(result.stemFiles.size(), 2);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.flac");
+    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.flac");
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    for (auto& f : result.stemFiles) {
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(f));
+        ASSERT_NE(reader, nullptr) << f.getFullPathName();
+        EXPECT_EQ(reader->getFormatName(), "FLAC file");
+        EXPECT_EQ(reader->lengthInSamples, result.samplesWritten);
+    }
+}
+
+TEST(StemExportTest, Mp3FormatWritesNonEmptyMp3StemsWithTheMp3Extension) {
+    const auto lame = synth::findLameExecutable();
+    if (!lame.existsAsFile())
+        GTEST_SKIP() << "lame is not installed; MP3 export cannot be exercised here";
+
+    StemRig rig;
+    ASSERT_TRUE(rig.build());
+
+    ScopedTempDir out("agentsynth_stems_mp3");
+    auto options = oneBeatOptions(24);
+    options.format = synth::BounceFormat::Mp3;
+    options.lameExecutable = lame;
+    options.mp3BitrateKbps = 192;
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    ASSERT_EQ(result.stemFiles.size(), 2);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.mp3");
+    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.mp3");
+    for (auto& f : result.stemFiles)
+        EXPECT_GT(f.getSize(), 0) << f.getFullPathName();
 }
 
 TEST(StemExportTest, NoStripsShowsAClearMessageInsteadOfRenderingNothing) {
@@ -729,6 +779,7 @@ struct SendStemRig {
         setParam(*sourceStrip, "gain", kGainADb);
         setParam(*sourceStrip, "pan", kPanA);
         setParam(*masterAt(graph, master), "gain", kMasterGainDb);
+        testutil::turnOffMasterSafetyLimiter(*masterAt(graph, master));
 
         driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
         return true;

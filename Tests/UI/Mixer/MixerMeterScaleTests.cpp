@@ -103,3 +103,19 @@ TEST(MixerMeterScaleTest, FractionToDbThenBackRoundTripsAcrossTheWholeScale) {
     for (float f = 0.0f; f <= 1.0f; f += 0.02f)
         EXPECT_NEAR(meterDbToFraction(meterFractionToDb(f)), f, 1.0e-3f) << "fraction=" << f;
 }
+
+TEST(MixerMeterScaleTest, HeadroomTickLabelCarriesItsPlusSign) {
+    EXPECT_EQ(meterTickLabel(3.0f), "+3");
+    EXPECT_EQ(meterTickLabel(0.0f), "0");
+    EXPECT_EQ(meterTickLabel(-6.0f), "-6");
+    EXPECT_EQ(meterTickLabel(-60.0f), "-60");
+}
+
+TEST(MixerMeterScaleTest, TickLabelBoxStaysInsideTheMeter) {
+    // The +3 tick sits on the meter's top edge and -60 on its bottom edge; a box centred on either
+    // would be half outside the component and its glyphs clipped.
+    EXPECT_EQ(meterTickLabelTop(0, 10, 0, 200), 0);
+    EXPECT_EQ(meterTickLabelTop(200, 10, 0, 200), 190);
+    EXPECT_EQ(meterTickLabelTop(100, 10, 0, 200), 95) << "an interior tick stays centred on its line";
+    EXPECT_EQ(meterTickLabelTop(3, 10, 0, 6), 0) << "a meter shorter than a label pins to the top";
+}

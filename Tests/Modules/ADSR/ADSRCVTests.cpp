@@ -18,6 +18,7 @@ TEST_F(ADSRTest, InputPortLabelsForNewCvJacks) {
     EXPECT_EQ(adsr.getInputPortLabel(4), "Decay");
     EXPECT_EQ(adsr.getInputPortLabel(5), "Sustain");
     EXPECT_EQ(adsr.getInputPortLabel(6), "Release");
+    EXPECT_EQ(adsr.getInputPortLabel(7), "Velocity");
 }
 
 TEST_F(ADSRTest, StageTimeCvJacksMapToModCv) {
@@ -27,7 +28,8 @@ TEST_F(ADSRTest, StageTimeCvJacksMapToModCv) {
         const char* label;
     };
     const Case cases[] = {
-        {9, 2, "Attack"}, {10, 3, "Hold"}, {11, 4, "Decay"}, {12, 5, "Sustain"}, {13, 6, "Release"},
+        {9, 2, "Attack"},   {10, 3, "Hold"},    {11, 4, "Decay"},
+        {12, 5, "Sustain"}, {13, 6, "Release"}, {14, 7, "Velocity"},
     };
     for (const auto& c : cases) {
         SCOPED_TRACE(c.label);
@@ -153,10 +155,10 @@ TEST_F(ADSRTest, SustainCVRaisesSustainLevel) {
 
 TEST_F(ADSRTest, DecayCVIgnoredWhileTempoSynced) {
     setBoolParam(adsr, "tempoSync", true);
-    setChoiceIndex(adsr, "attackDiv", 5); // fastest ("1/32")
-    setChoiceIndex(adsr, "holdDiv", 5);
-    setChoiceIndex(adsr, "decayDiv", 2); // "1/4" -- 1 beat @ 120 BPM
-    setChoiceIndex(adsr, "releaseDiv", 5);
+    setChoiceIndex(adsr, "attackDiv", 2); // fastest used here ("1/32")
+    setChoiceIndex(adsr, "holdDiv", 2);
+    setChoiceIndex(adsr, "decayDiv", 5); // "1/4" -- 1 beat @ 120 BPM
+    setChoiceIndex(adsr, "releaseDiv", 2);
     setFloat(adsr, "sustain", 0.0f); // stays in Sustain (silent) once Decay lands, never Idle
 
     synth::TransportService transport;

@@ -11,10 +11,14 @@
 //   * showWhatsNewDialog()/AppCommands::whatsNew are never invoked from a test — they open a real
 //     modal juce::AlertWindow.
 
+#include "../../TestWait.h"
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Branding.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -106,7 +110,7 @@ void writeShowWelcomeAtLaunchPref(const char* value) {
 class WelcomeScreenTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Every test in this file shares the real settings file with every other test process-wide
+        // Every test in this file shares the run's settings file with every other test in the run
         // (see MainComponentTests.cpp's resetPanelKeys() for the same concern) — force the default
         // (shown) before AND after each test so run order can't leak a false-hidden welcome screen
         // into an unrelated test.
@@ -115,9 +119,8 @@ protected:
         // directory name -- fine for a single process, but GTest shard sharding can and does split
         // individual tests of the SAME suite across different shard processes, so 3 concurrent
         // shards deleteRecursively()-ing and recreating the identical real temp path would race
-        // each other. synth::userSettingsRootDirectory() is already per-shard-isolated when
-        // AGENTSYNTH_SETTINGS_DIR is set (Source/UserSettings.h) and falls back to the ORIGINAL
-        // system temp location otherwise, so this only changes behaviour for the sharded case.
+        // each other. synth::userSettingsRootDirectory() is private to each run and shard
+        // (Tests/TestMain.cpp), so nesting under it keeps shards apart.
         tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-welcome-screen-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
@@ -204,39 +207,26 @@ TEST_F(WelcomeScreenTest, ShutdownWhileMainComponentAliveDetachesLiveParameterAt
 TEST_F(WelcomeScreenTest, ExistsOnTheStandaloneAppPath) {
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible()) << "shown by default (showWelcomeScreenAtLaunch=true)";
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible()) << "shown by default (always shown at launch)";
 }
 
 // ---------------------------------------------------------------------------
-// The persisted "show at launch" preference.
+// Always shown at launch: no opt-out, and a legacy saved preference is ignored.
 // ---------------------------------------------------------------------------
 
-TEST_F(WelcomeScreenTest, HiddenByDefault_WhenShowAtLaunchPreferenceIsFalse) {
+TEST_F(WelcomeScreenTest, ShownAtLaunchEvenWhenOldPreferenceSaidHide) {
     writeShowWelcomeAtLaunchPref("0");
 
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
-    EXPECT_FALSE(mc.getWelcomeScreenForTest()->getShowAtLaunchToggleForTest().getToggleState());
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 }
 
-TEST_F(WelcomeScreenTest, ShowAtLaunchToggle_PersistsSetting) {
-    MainComponent mc(std::make_unique<MockProvider>());
-    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    auto& toggle = mc.getWelcomeScreenForTest()->getShowAtLaunchToggleForTest();
-    ASSERT_TRUE(toggle.getToggleState()) << "default preference is true";
-
-    // juce::Button::triggerClick() posts an async command message (postCommandMessage) rather
-    // than flipping state inline — same reasoning as every dirty-flag assertion elsewhere in this
-    // codebase needing a pump before it can be observed.
-    toggle.triggerClick();
-    pumpMessageLoop();
-
-    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", true));
-
-    toggle.triggerClick(); // flip back
-    pumpMessageLoop();
-    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", false));
+TEST_F(WelcomeScreenTest, HasNoShowAtLaunchToggle) {
+    synth::ui::WelcomeScreenComponent ws;
+    for (auto* child : ws.getChildren())
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
+            EXPECT_FALSE(toggle->getButtonText().containsIgnoreCase("launch"));
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +241,8 @@ TEST_F(WelcomeScreenTest, NewProjectButton_ClearsCanvasAndHidesWelcomeScreen) {
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil(
+        [&] { return mc.getCurrentPatchName() == "Untitled" && !mc.getWelcomeScreenForTest()->isVisible(); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Untitled");
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -265,7 +256,8 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil(
+        [&] { return mc.getCurrentPatchName() == "Default" && !mc.getWelcomeScreenForTest()->isVisible(); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Default"); // PresetManager::getPresetList()[0].name
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -306,7 +298,7 @@ TEST_F(WelcomeScreenTest, NewProjectButton_SetsTheMixerPanLawToCompensated) {
     mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
 
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 }
@@ -318,7 +310,7 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_SetsTheMixerPanLawToCompensated) {
     mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 }
@@ -332,8 +324,11 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // The startup document is already Compensated, so start from Balance: otherwise the wait below passes before New
+    // has run, and New's own reset lands after the switch to Balance (a flaky failure on slow runners).
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
     ASSERT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 
     // The user then deliberately switches this already-open project to Balance...
@@ -342,7 +337,8 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     // ...and loads a factory preset the same way the Load menu's "result > 0" branch does
     // (MainComponentSetupToolbar.cpp), i.e. isNewDocument left at its default false.
     mc.loadPresetGuardedForTest(0);
-    pumpMessageLoop();
+    // Balance already holds, so waiting for it proves nothing: run whatever the load posted, then check the law.
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
 }
@@ -360,7 +356,7 @@ TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenProj
     makeDirty(mc);
 
     mc.getWelcomeScreenForTest()->getOpenExistingButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (prompt.calls) == (1); });
 
     EXPECT_EQ(prompt.calls, 1);
     EXPECT_EQ(prompt.lastLabel, "Opening a project") << "the same label openProjectFromFile() uses";
@@ -388,11 +384,190 @@ TEST_F(WelcomeScreenTest, RecentProjectRow_OpensThatFileAndHidesWelcomeScreen) {
     ASSERT_EQ(mc.getWelcomeScreenForTest()->getRecentProjectCountForTest(), 1);
 
     mc.getWelcomeScreenForTest()->triggerRecentProjectForTest(0);
-    pumpMessageLoop();
+    synth::test::waitUntil([&] {
+        return mc.getCurrentPatchName() == bundleDir.getFileNameWithoutExtension() &&
+               !mc.getWelcomeScreenForTest()->isVisible();
+    });
 
     EXPECT_EQ(mc.getCurrentPatchName(), bundleDir.getFileNameWithoutExtension());
     EXPECT_FALSE(mc.wouldPromptOnSaveForTest()) << "the recent project is now the open bundle";
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, ContributeButton_FiresCallbackExactlyOnce) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    int fired = 0;
+    ws.onContributeRequested = [&fired] { ++fired; };
+    auto& button = ws.getContributeButtonForTest();
+    EXPECT_TRUE(button.isVisible());
+    EXPECT_TRUE(button.getTooltip().isNotEmpty());
+    button.triggerClick();
+    synth::test::waitUntil([&] { return (fired) == (1); });
+    EXPECT_EQ(fired, 1);
+}
+
+TEST_F(WelcomeScreenTest, ContributeButton_OpensContributePageAndKeepsOverlayVisible) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
+    ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+
+    mc.getWelcomeScreenForTest()->getContributeButtonForTest().triggerClick();
+    synth::test::waitUntil([&] { return (opened.size()) == (1u); });
+
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbours) {
+    synth::ui::WelcomeScreenComponent ws;
+    std::vector<juce::File> recents;
+    for (int i = 0; i < 5; ++i)
+        recents.push_back(tempRoot.getChildFile("P" + juce::String(i) + ".agsproj"));
+    ws.setRecentProjects(recents);
+    ws.setBounds(0, 0, 1600, 900);
+    ASSERT_EQ(ws.getRecentProjectCountForTest(), 5);
+
+    const auto button = ws.getContributeButtonForTest().getBounds();
+    const auto label = ws.getContributeLabelForTest().getBounds();
+    const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
+    // The card is centred and at most 600 wide / well under 900 tall; the What's New button
+    // (footer, last row) bounds it from below.
+    const auto footer = whatsNew;
+    EXPECT_TRUE(ws.getLocalBounds().contains(button));
+    EXPECT_TRUE(ws.getLocalBounds().contains(label));
+    EXPECT_LE(button.getWidth() + label.getWidth(), 600 - 2 * 28) << "row must fit the card's padded width";
+    EXPECT_GE(label.getHeight(), 30) << "room for two wrapped lines";
+    EXPECT_FALSE(button.intersects(label));
+    EXPECT_FALSE(button.intersects(footer));
+    EXPECT_FALSE(label.intersects(footer));
+    EXPECT_LT(label.getBottom(), footer.getY());
+    EXPECT_LT(button.getBottom(), footer.getY());
+    // Last recent row is the component just above the contribute row.
+    juce::Rectangle<int> lastRecent;
+    for (auto* child : ws.getChildren())
+        if (auto* tb = dynamic_cast<juce::TextButton*>(child); tb != nullptr && tb->getButtonText() == "P4")
+            lastRecent = tb->getBounds();
+    ASSERT_FALSE(lastRecent.isEmpty());
+    EXPECT_LE(lastRecent.getBottom(), label.getY());
+    EXPECT_LE(lastRecent.getBottom(), button.getY());
+    // Card horizontal extent: centred 600-wide card.
+    const auto card = juce::Rectangle<int>(0, 0, 600, 100).withCentre(ws.getLocalBounds().getCentre());
+    EXPECT_GE(label.getX(), card.getX());
+    EXPECT_LE(button.getRight(), card.getRight());
+}
+
+namespace {
+const char* const kExpectedSocialUrls[] = {synth::branding::kDiscordUrl, synth::branding::kYouTubeUrl,
+                                           synth::branding::kGitHubUrl, synth::branding::kTikTokUrl,
+                                           synth::branding::kInstagramUrl};
+} // namespace
+
+TEST_F(WelcomeScreenTest, SocialButtons_EachReportsItsExactUrlOnce) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    std::vector<juce::String> urls;
+    ws.onSocialLinkRequested = [&urls](const juce::String& url) { urls.push_back(url); };
+    ASSERT_EQ(ws.getSocialButtonCountForTest(), 5);
+    for (int i = 0; i < 5; ++i) {
+        urls.clear();
+        ws.getSocialButtonForTest(i).triggerClick();
+        synth::test::waitUntil([&] { return urls.size() == 1u; });
+        ASSERT_EQ(urls.size(), 1u) << "button " << i;
+        EXPECT_EQ(urls[0], juce::String(kExpectedSocialUrls[i])) << "button " << i;
+    }
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_OpenThroughTheOwnerAndKeepOverlayVisible) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
+
+    mc.getWelcomeScreenForTest()->getSocialButtonForTest(0).triggerClick();
+    synth::test::waitUntil([&] { return opened.size() == 1u; });
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kDiscordUrl));
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_AreNamedFocusableAndInOrder) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    const synth::theme::Glyph expected[] = {synth::theme::Glyph::SocialDiscord, synth::theme::Glyph::SocialYouTube,
+                                            synth::theme::Glyph::SocialGitHub, synth::theme::Glyph::SocialTikTok,
+                                            synth::theme::Glyph::SocialInstagram};
+    int previousRight = -1;
+    for (int i = 0; i < 5; ++i) {
+        auto& b = ws.getSocialButtonForTest(i);
+        EXPECT_EQ(b.getGlyph(), expected[i]);
+        EXPECT_EQ(b.getStyle(), synth::ui::IconButton::Style::Bare);
+        EXPECT_TRUE(b.getTitle().isNotEmpty());
+        EXPECT_TRUE(b.getTooltip().isNotEmpty());
+        EXPECT_TRUE(b.getDescription().isNotEmpty());
+        EXPECT_TRUE(b.getWantsKeyboardFocus());
+        EXPECT_TRUE(b.isVisible());
+        EXPECT_EQ(b.getWidth(), 28);
+        EXPECT_EQ(b.getHeight(), 28);
+        if (previousRight >= 0)
+            EXPECT_EQ(b.getX() - previousRight, 4) << "4 px gap";
+        previousRight = b.getRight();
+    }
+    EXPECT_EQ(ws.getWhatsNewButtonForTest().getX() - previousRight, 10) << "right-aligned against What's New";
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_DoNotChangeTheCardHeight) {
+    // The card height before this row existed: 20 + 96 + 12 + 34 + 4 + 22 + 20 + 3 * 36 + 2 * 10 + 24 + 20 + 6 + 28
+    // (no recents) + 16 + 36 + 20 + 28 + 20.
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    EXPECT_EQ(ws.getCardHeightForTest(),
+              20 + 96 + 12 + 34 + 4 + 22 + 20 + 108 + 20 + 24 + 20 + 6 + 28 + 16 + 36 + 20 + 28 + 20);
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_SitInsideTheCardWithoutOverlapAtTheNarrowestCard) {
+    for (const int width : {1600, 640, 400}) {
+        synth::ui::WelcomeScreenComponent ws;
+        ws.setLatestVersionLabel("Agent Synth v0.309.0");
+        ws.setBounds(0, 0, width, 900);
+        const auto card = ws.getCardBoundsForTest();
+        const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
+        const auto version = ws.getVersionLabelForTest().getBounds();
+        for (int i = 0; i < 5; ++i) {
+            const auto b = ws.getSocialButtonForTest(i).getBounds();
+            EXPECT_TRUE(card.contains(b)) << "width " << width << " button " << i;
+            EXPECT_FALSE(b.intersects(whatsNew));
+            EXPECT_FALSE(b.intersects(version));
+            for (int j = i + 1; j < 5; ++j)
+                EXPECT_FALSE(b.intersects(ws.getSocialButtonForTest(j).getBounds()));
+        }
+        EXPECT_FALSE(version.intersects(whatsNew));
+    }
+}
+
+// Regression test for the footer squeezing "What's New..." to ~40px ("What'..."): the version label
+// used to take half the row before the button was placed.
+TEST_F(WelcomeScreenTest, FooterGivesWhatsNewItsFullWidth) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setLatestVersionLabel("Agent Synth v0.309.0");
+    ws.setBounds(0, 0, 1600, 900);
+
+    auto& whatsNew = ws.getWhatsNewButtonForTest();
+    const auto font =
+        ws.getLookAndFeel().getTextButtonFont(dynamic_cast<juce::TextButton&>(whatsNew), whatsNew.getHeight());
+    const int textWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, whatsNew.getButtonText()));
+    EXPECT_GE(whatsNew.getWidth(), textWidth + 8);
+    for (auto* child : ws.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child);
+            label != nullptr && label->getText().startsWith("Agent Synth v"))
+            EXPECT_LE(label->getRight(), whatsNew.getX());
 }
 
 // THE headline test: the guard must run BEFORE the welcome screen is ever hidden. hideWelcomeScreen()
@@ -411,7 +586,7 @@ TEST_F(WelcomeScreenTest, DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt) {
     ASSERT_TRUE(mc.isProjectDirty());
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (prompt.calls) == (1); });
 
     EXPECT_EQ(prompt.calls, 1);
     EXPECT_EQ(prompt.lastLabel, "Loading a preset");
@@ -471,4 +646,49 @@ TEST_F(WelcomeScreenTest, ShowWelcomeScreenCommand_IsRegisteredAndActiveOnTheApp
     juce::ApplicationCommandInfo info(AppCommands::showWelcomeScreen);
     mc.getCommandInfo(AppCommands::showWelcomeScreen, info);
     EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0);
+}
+
+// The welcome screen fades out and back in: it is hidden only after the fade, ignores clicks while it
+// leaves, and lands at once headless.
+TEST_F(WelcomeScreenTest, FadesOutAndInAndHidesOnlyAfterTheFade) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto* welcome = mc.getWelcomeScreenForTest();
+    ASSERT_NE(welcome, nullptr);
+    ASSERT_TRUE(welcome->isVisible());
+
+    FadeAnimateGuard guard;
+    mc.hideWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible()) << "stays on screen while it fades out";
+    EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest()) << "but the app already treats it as gone";
+    EXPECT_FALSE(interceptsClicks(*welcome)) << "a second click cannot reach it";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(welcome->getAlpha(), 0.5f, 0.01f);
+    EXPECT_TRUE(welcome->isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(welcome->isVisible());
+
+    mc.showWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible());
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 0.0f) << "fades in from transparent";
+    EXPECT_FALSE(mc.isWelcomeScreenHiddenForTest());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 1.0f);
+    EXPECT_TRUE(interceptsClicks(*welcome));
+}
+
+TEST_F(WelcomeScreenTest, HidesAndShowsAtOnceWhenAnimationsAreOff) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto* welcome = mc.getWelcomeScreenForTest();
+    ASSERT_NE(welcome, nullptr);
+
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    mc.hideWelcomeScreenForTest();
+    EXPECT_FALSE(welcome->isVisible());
+    mc.showWelcomeScreenForTest();
+    EXPECT_TRUE(welcome->isVisible());
+    EXPECT_FLOAT_EQ(welcome->getAlpha(), 1.0f);
 }

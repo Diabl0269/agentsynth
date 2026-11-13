@@ -1,11 +1,15 @@
 #pragma once
 
 #include "DetachedPanelWindow.h"
-#include "ShortcutManager/ShortcutManager.h"
+#include "DockBackButton.h"
+#include "DockBackSlot.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+
+class ShortcutManager;
 
 namespace synth::ui {
 
@@ -21,9 +25,9 @@ namespace synth::ui {
 // the slot where `panel` lives -- UNLESS setEmbeddedHeader(true) is set, in which case this host
 // draws NO header of its own while docked (its owner has embedded its own equivalent control into
 // its own chrome instead -- see BottomDockComponent's tab strip in Tab placement). Detached, `panel`
-// (and the header's button + title) are reparented into a DetachedPanelWindow, which carries its
-// own copy of the header strip with the button now in "Dock back" state; closing that window (or
-// clicking the button again) redocks everything here.
+// is reparented into a DetachedPanelWindow that has no header of its own: the panel fills it, and the
+// host hands its "Dock back" button to the panel (DockBackSlot) for its toolbar's right end. Closing that
+// window (or clicking the button) redocks the panel here.
 class DetachablePanelHost : public juce::Component {
 public:
     // `boundsKey` is the ApplicationProperties key a detached window's position/size persists
@@ -39,11 +43,11 @@ public:
      *  DetachedPanelWindow. Idempotent -- calling with the current state is a no-op. */
     void setDetached(bool detached);
     bool isDetached() const noexcept { return window_ != nullptr; }
-    /** Brings an already-detached panel's window forward (Cmd+number/the tab strip's own
+    /** Brings an already-detached panel's window forward and moves keyboard focus into its panel (Cmd+number, the
      *  "show tab" action on a detached tab) instead of redocking it. No-op while docked. */
     void bringDetachedWindowToFront() {
         if (window_ != nullptr)
-            window_->toFront(true);
+            window_->raiseAndFocusPanel();
     }
 
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }
@@ -57,10 +61,14 @@ public:
             window_->sendLookAndFeelChange();
     }
 
+    /** While a project is still loading, a detached panel's window holds edits like the canvas does (see
+     *  DetachedPanelWindow::setEditsBlocked). Remembered, so a panel detached mid-load starts out blocked. */
+    void setEditsBlocked(bool blocked, std::function<void()> onRefused);
+    bool areEditsBlocked() const noexcept { return editsBlocked_; }
+
     /** When true, this host draws no header strip of its own while DOCKED -- its owner has
      *  embedded getDetachButton() into its own chrome (BottomDockComponent's tab strip in Tab
-     *  placement). Has no effect on the DETACHED window's header, which always shows one
-     *  regardless. Safe to flip at runtime (a live Preferences placement change). */
+     *  placement). Safe to flip at runtime (a live Preferences placement change). */
     void setEmbeddedHeader(bool embedded);
     bool isEmbeddedHeader() const noexcept { return embeddedHeader_; }
 
@@ -97,14 +105,20 @@ public:
     void paint(juce::Graphics&) override;
     void lookAndFeelChanged() override;
 
-    static constexpr int kHeaderStripHeight = 22; // == BottomDockComponent::kTabStripHeight
+    static constexpr int kHeaderStripHeight = 24; // == BottomDockComponent::kTabStripHeight
 
     // ---- Testing hooks (DetachablePanelHostTests.cpp) ----
     DetachedPanelWindow* getDetachedWindowForTest() const { return window_.get(); }
     // Not const: juce::SettableTooltipClient::getTooltip() isn't const either.
     juce::String getButtonTooltipForTest() { return detachButton_.getTooltip(); }
+    /** The "Dock back" button handed to the panel's toolbar while detached. */
+    DockBackButton& getDockBackButtonForTest() noexcept { return dockBackButton_; }
     juce::String getButtonTextForTest() const { return detachButton_.getButtonText(); }
     bool isDetachButtonVisibleForTest() const noexcept { return detachButton_.isVisible(); }
+    /** Where the panel starts, i.e. the header strip's current height (0 when hidden, kHeaderStripHeight when shown;
+     * between mid-fade). */
+    int getHeaderHeightForTest() const noexcept { return panel_.getY(); }
+    bool isHeaderShownForTest() const noexcept { return headerFade_.isShown(); }
     juce::Component& getPanelForTest() noexcept { return panel_; }
 
 protected:
@@ -142,8 +156,14 @@ private:
 
     juce::Label titleLabel_;
     juce::DrawableButton detachButton_{"detachPanel", juce::DrawableButton::ImageFitted};
+    DockBackButton dockBackButton_; // lives on the panel's toolbar while detached, owned here
+    /// The docked header strip (title and detach button) fades when a host's header goes in or out of the tab strip;
+    /// the panel's room follows its progress.
+    FadeVisibility headerFade_{&titleLabel_, &detachButton_};
     bool embeddedHeader_ = false;
     bool createsNativeWindows_ = false;
+    bool editsBlocked_ = false;
+    std::function<void()> onEditRefused_;
     juce::String focusRegionId_;
     juce::Component* focusRegionRoot_ = nullptr;
     std::unique_ptr<DetachedPanelWindow> window_;

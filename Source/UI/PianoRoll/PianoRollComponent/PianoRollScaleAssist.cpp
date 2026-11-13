@@ -7,7 +7,12 @@
 #include "PianoRollComponent.h"
 
 #include "AppUndoManager.h"
+#include "Music/SongKey.h"
+#include "PianoRollInternal.h"
+#include "Timeline/FitToKey.h"
+#include "Timeline/ScaleNoteGenerator.h"
 #include "Transport/TransportService.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -29,12 +34,21 @@ void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
     const bool visible = props != nullptr && props->getBoolValue(kScalePanelVisiblePropertyKey, false);
     // A restore must never itself look like the panel sliding open.
     setScalePanelVisible(visible, /*animate=*/false);
+    // The velocity strip's remembered visibility (absent = shown). Without a properties file the
+    // current, session-only state is kept.
+    if (props != nullptr) {
+        setVelocityLaneHeight(
+            props->getIntValue(detail::velocityLaneHeightKey(), PianoRollVelocityLane::kDefaultHeight));
+        // Like the scale panel, a restore lands at once.
+        setVelocityLaneVisible(props->getBoolValue(detail::velocityLaneVisibleKey(), true), /*animate=*/false);
+    }
 }
 
 void PianoRollComponent::setScalePanelVisible(bool visible, bool animate) {
     if (scalePanelVisible_ == visible)
         return; // restoring the same state (a fresh PropertiesFile's default, or a repeat toggle) costs nothing
     scalePanelVisible_ = visible;
+    syncHeaderChipStates();
     if (propertiesFile_ != nullptr) {
         propertiesFile_->setValue(kScalePanelVisiblePropertyKey, visible);
         propertiesFile_->saveIfNeeded();
@@ -90,48 +104,76 @@ void PianoRollComponent::finishScalePanelAnimation() {
 
 void PianoRollComponent::toggleScalePanel() { setScalePanelVisible(!scalePanelVisible_); }
 
+// The clip's own key, or the song key it follows (a clip with no scale of its own follows). The transport is read
+// at every call rather than cached, so a transport wired after the clip opened is still seen.
+synth::ResolvedClipKey PianoRollComponent::resolvedKeyForOpenClip() const {
+    const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+    const auto* clip = clipId_.isValid() && doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    return clip != nullptr ? synth::resolveClipKey(*clip, songKey) : synth::ResolvedClipKey{};
+}
+
+// The key in force: what highlighting, snapping, Generate, quantise and the range picker use. Never a write
+// source: writes take the clip's OWN scale, or a following clip would silently freeze the song key as its own.
 std::optional<synth::MusicalScale> PianoRollComponent::activeScaleForOpenClip() const {
-    if (!clipId_.isValid())
-        return std::nullopt;
-    const auto it = clipScaleMemory_.find(clipId_);
-    if (it == clipScaleMemory_.end())
-        return std::nullopt; // a clip never opened before starts at "No scale" without inserting
-    return it->second.scale;
+    return resolvedKeyForOpenClip().key;
 }
 
-void PianoRollComponent::pushScaleContextFromMemory() {
-    std::optional<synth::MusicalScale> scale;
-    bool pitchVisibilityOn = false;
-    if (clipId_.isValid()) {
-        if (const auto it = clipScaleMemory_.find(clipId_); it != clipScaleMemory_.end()) {
-            scale = it->second.scale;
-            pitchVisibilityOn = it->second.pitchVisibilityOn;
-        }
-    }
+// The transport poll's hook: only a following clip whose shown key is stale is re-shown, so a steady song key costs
+// one comparison and never closes the custom-scale editor.
+void PianoRollComponent::refreshSongKey() {
+    const auto resolved = resolvedKeyForOpenClip();
+    if (!clipId_.isValid() || !resolved.following)
+        return;
+    if (synth::sameKey(scalePanel_.getSelectedScale(), resolved.key) && scalePanel_.isFollowingSongKey())
+        return;
+    restoreScaleForOpenClip();
+    repaint();
+}
+
+void PianoRollComponent::pushScaleContextFromClip() {
+    const auto scale = activeScaleForOpenClip();
     if (scale.has_value()) {
         const synth::MusicalScale resolved = *scale;
-        setScaleContext([resolved](int pitch) { return resolved.contains(pitch); }, pitchVisibilityOn);
+        setScaleContext([resolved](int pitch) { return resolved.contains(pitch); }, isScaleFilterOn());
     } else {
         setScaleContext({}, false);
     }
 }
 
-void PianoRollComponent::restoreScaleMemoryForOpenClip() {
-    std::optional<synth::MusicalScale> scale;
-    bool pitchVisibilityOn = false;
-    if (const auto it = clipScaleMemory_.find(clipId_); it != clipScaleMemory_.end()) {
-        scale = it->second.scale;
-        pitchVisibilityOn = it->second.pitchVisibilityOn;
-    }
-    // A clip never opened before has no entry yet, and reads back exactly as "No scale" /
-    // visibility off without ever inserting one — see clipScaleMemory_'s class comment.
-    scalePanel_.setSelection(scale, pitchVisibilityOn);
-    if (scale.has_value()) {
-        const synth::MusicalScale resolved = *scale;
-        setScaleContext([resolved](int pitch) { return resolved.contains(pitch); }, pitchVisibilityOn);
-    } else {
-        setScaleContext({}, false);
-    }
+void PianoRollComponent::restoreScaleForOpenClip() {
+    // setSelection fires no callback: this reflects what the doc holds, it is not a user edit.
+    const auto resolved = resolvedKeyForOpenClip();
+    scalePanel_.setSongKey(transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt);
+    scalePanel_.setSelection(resolved.key, isScaleFilterOn(), resolved.following);
+    // The saved range wins over the band's shift for a root change, so a song-key change never rewrites it.
+    const auto* clip = clipId_.isValid() && doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    scalePanel_.showClipRange(clip != nullptr ? clip->noteRange : std::nullopt);
+    pushScaleContextFromClip();
+}
+
+// The one write path for the clip's scale: through the doc (so it is saved, marks the project
+// changed and survives a restart) and as an undo step. It must be an undo step: every timeline undo
+// restores a whole-document snapshot, so a scale change made outside the undo stack would be
+// silently reverted by undoing an earlier note edit.
+// `carryRange` (an own key was picked): a clip with a saved range gets the band as the panel shifted it for the new
+// root, inside this same step, so one undo restores key and range together. A clip with none stays without one.
+void PianoRollComponent::commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn,
+                                         bool carryRange) {
+    if (doc_ == nullptr || !clipId_.isValid())
+        return;
+    const auto id = clipId_;
+    const std::pair<int, int> shown{scalePanel_.getMinPitchSelection(), scalePanel_.getMaxPitchSelection()};
+    auto mutate = [this, id, scale = std::move(scale), pitchVisibilityOn, carryRange, shown] {
+        doc_->setClipScale(id, scale, pitchVisibilityOn);
+        const auto* clip = doc_->getClip(id);
+        if (carryRange && clip != nullptr && clip->noteRange.has_value())
+            doc_->setClipNoteRange(id, shown);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    pushScaleContextFromClip();
 }
 
 void PianoRollComponent::quantisePitchesToScale(const synth::MusicalScale& scale) {
@@ -143,25 +185,11 @@ void PianoRollComponent::quantisePitchesToScale(const synth::MusicalScale& scale
 
     // Selected notes if any; every note in the clip otherwise — the same "or all notes when
     // nothing is selected" contract the Q button's Shift+click quantise follows.
-    std::vector<synth::NoteId> ids = selection_.getSelected();
-    if (ids.empty()) {
-        ids.reserve(clip->notes.size());
-        for (const auto& note : clip->notes)
-            ids.push_back(note.id);
-    }
+    const auto ids = synth::fitToKeyTargets(*clip, selection_.getSelected());
     if (ids.empty())
         return;
 
-    auto mutate = [this, ids, scale] {
-        for (auto id : ids) {
-            const auto* note = doc_->getNote(id);
-            if (note == nullptr)
-                continue;
-            const int snapped = scale.snapPitch(note->pitch);
-            if (snapped != note->pitch)
-                doc_->moveNote(id, note->startBeat, snapped);
-        }
-    };
+    auto mutate = [this, ids, scale] { synth::fitNotesToKey(*doc_, ids, scale); };
     // recordTimelineChange itself pushes no undo step when the mutation changed nothing (every
     // note already in scale) — the "no-op pushes nothing" half of the contract needs no extra
     // code here.
@@ -181,7 +209,7 @@ bool PianoRollComponent::quantisePitchesToActiveScale() {
     if (!scale.has_value())
         return false;
     // By value (see activeScaleForOpenClip): quantisePitchesToScale mutates the doc, so the scale it
-    // is handed must not be a reference into clipScaleMemory_.
+    // is handed must not be a reference into the clip.
     quantisePitchesToScale(*scale);
     return true;
 }
@@ -286,7 +314,7 @@ juce::String PianoRollComponent::keyLabelFor(int pitch, KeyLabelMode mode, int r
 
 juce::Rectangle<int> PianoRollComponent::gridRegion() const noexcept {
     const int gutter = leftGutterWidth();
-    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, getHeight() - canvasTop())};
+    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, canvasBottom() - canvasTop())};
 }
 
 juce::Rectangle<int> PianoRollComponent::computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const {
@@ -370,7 +398,8 @@ double PianoRollComponent::resizePreviewLengthFor(const NoteOrigin& origin) cons
 }
 
 PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const synth::MidiNote& note) const {
-    if (dragMode_ == DragMode::Move) {
+    // A copy drag leaves the originals exactly where they are; only the ghost (paintCopyGhosts) moves.
+    if (dragMode_ == DragMode::Move && !copyDrag_) {
         for (const auto& origin : dragNotes_)
             if (origin.id == note.id)
                 return {origin.startBeat + previewDeltaBeats_, origin.lengthBeats,
@@ -387,7 +416,11 @@ PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const 
                 return {note.startBeat, note.lengthBeats, note.pitch,
                         juce::jlimit(1, 127, origin.velocity + previewDeltaVelocity_)};
     }
-    return {note.startBeat, note.lengthBeats, note.pitch, note.velocity};
+    // A velocity-strip gesture's live value (see PianoRollVelocity.cpp) — so the note recolours
+    // while its stick is dragged, through the same resolveNoteColourFor every note paints with.
+    const auto preview = velocityPreview_.find(note.id);
+    const int velocity = preview != velocityPreview_.end() ? preview->second : note.velocity;
+    return {note.startBeat, note.lengthBeats, note.pitch, velocity};
 }
 
 //==============================================================================

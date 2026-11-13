@@ -4,50 +4,21 @@
 // order below IS getAllCommands()'s order (menu order).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
-#include "Transport/MarkerJump.h"
+#include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/RenameKey.h"
+#include "UI/Library/LibrarySidebarSwitch.h"
+#include "UI/Timeline/TimelineSnapNames.h"
+#include <algorithm>
+#include <iterator>
 
 namespace {
-
-// The note-value name for a grid division -- the SAME strings TimelinePanelComponent's snap combo
-// shows ("Off", "Bar", "1", "1/2", ...), so the status-bar report after a grid shortcut and the
-// selector the user can see never disagree about what the grid is called.
-juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
-    using Snap = synth::ui::TimelineViewState::Snap;
-    switch (snap) {
-    case Snap::Off:
-        return "Off";
-    case Snap::Bar:
-        return "Bar";
-    case Snap::Whole:
-        return "1";
-    case Snap::Half:
-        return "1/2";
-    case Snap::Quarter:
-        return "1/4";
-    case Snap::Eighth:
-        return "1/8";
-    case Snap::Sixteenth:
-        return "1/16";
-    case Snap::ThirtySecond:
-        return "1/32";
-    case Snap::SixtyFourth:
-        return "1/64";
-    case Snap::HundredTwentyEighth:
-        return "1/128";
-    }
-    return "Off";
-}
-
-// The current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
-// already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
-// rather than trusting the ordering invariant twice.
-std::vector<double> markerBeats(const synth::TimelineDoc& doc) {
-    std::vector<double> beats;
-    beats.reserve(doc.getMarkers().size());
-    for (const auto& marker : doc.getMarkers())
-        beats.push_back(marker.beat);
-    return beats;
+// Option+R types a symbol in a text field, so a focused editor keeps the key.
+bool renameUnlessTyping(CanvasCardKeyboard& cards) {
+    return !synth::ui::isTextEditorFocused() && cards.renameSelectedModule();
 }
 
 // GraphEditor's public zoom entry point (zoomAroundCentre) takes a WHEEL DELTA, because that is
@@ -65,6 +36,7 @@ float graphZoomWheelDeltaFor(double factor) { return (float)((factor - 1.0) / kG
 // ---- Named perform() bodies (moved verbatim from the former MainComponent::perform switch) ----
 
 bool MainComponent::performLocateMaster() {
+    ensureCanvasShowing();
     switch (graphEditor.locateMasterOrOutput()) {
     case GraphEditor::LocateMasterResult::Master:
         statusBar.showMessage("Located Master");
@@ -96,6 +68,14 @@ bool MainComponent::performSelectAllModules() {
         else
             statusBar.showMessage("Nothing to select - the clip has no notes");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->selectAllPoints())
+            statusBar.showMessage("Selected " + juce::String(editor->getPointSelection().size()) + " points");
+        else
+            statusBar.showMessage("Nothing to select - the lane has no points");
+        return true;
+    }
     case EditSurface::Mixer:
         // No "select all" meaning on the mixer -- no-op, rather than falling through to Graph below.
         statusBar.showMessage("Nothing to select - Select All has no effect on the mixer");
@@ -135,6 +115,14 @@ bool MainComponent::performCopySelection() {
         else
             statusBar.showMessage("Nothing to copy - select one or more notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->copySelectedPoints())
+            statusBar.showMessage("Copied the selected points");
+        else
+            statusBar.showMessage("Nothing to copy - select one or more points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // isEditSurfaceCommandActive() reports Mixer inactive -- belt-and-suspenders
     case EditSurface::Graph:
@@ -168,6 +156,14 @@ bool MainComponent::performPasteSelection() {
         else
             statusBar.showMessage("Nothing to paste - copy some notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->pasteAtPlayhead())
+            statusBar.showMessage("Pasted points at the playhead");
+        else
+            statusBar.showMessage("Nothing to paste - copy some points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
@@ -195,6 +191,15 @@ bool MainComponent::performDuplicateSelection() {
             statusBar.showMessage("Duplicated the selected notes");
         else
             statusBar.showMessage("Nothing to duplicate - select one or more notes first");
+        return true;
+    case EditSurface::AutomationLane:
+        if (auto* editor = activeLaneEditor(); editor != nullptr && editor->duplicateSelectedPoints()) {
+            statusBar.showMessage("Duplicated the selected points");
+            return true;
+        }
+        // The lane is copied below itself once a parameter is picked for the copy (Esc leaves nothing behind).
+        if (!timelinePanel.getAutomationLanes().requestDuplicateLane(activeLane()))
+            statusBar.showMessage("Nothing to duplicate - focus an automation lane first");
         return true;
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
@@ -228,6 +233,14 @@ bool MainComponent::performCutSelection() {
         else
             statusBar.showMessage("Nothing to cut - select one or more notes first");
         return true;
+    case EditSurface::AutomationLane: {
+        auto* editor = activeLaneEditor();
+        if (editor != nullptr && editor->cutSelectedPoints())
+            statusBar.showMessage("Cut points");
+        else
+            statusBar.showMessage("Nothing to cut - select one or more points first");
+        return true;
+    }
     case EditSurface::Mixer:
         return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
@@ -235,12 +248,12 @@ bool MainComponent::performCutSelection() {
     }
     // The graph has no cut verb of its own, so it is composed here from the two that exist --
     // copySelection() fills the clipboard WITHOUT touching the graph or the undo stack, and
-    // deleteSelection() then does the whole removal inside its own single
-    // recordStructuralChange (the same transaction Delete and the canvas menu already use). So
-    // a cut is exactly one graph-undo step, and the copy half survives the undo.
+    // requestDeleteSelection() (a whole macro asks about its track first) then does the whole removal inside its own
+    // single recordStructuralChange (the same transaction Delete and the canvas menu already use). So a cut is exactly
+    // one graph-undo step, and the copy half survives the undo.
     const int cutCount = graphEditor.getSelectionCount();
     if (graphEditor.copySelection()) {
-        graphEditor.deleteSelection();
+        graphEditor.getMacroController().requestDeleteSelection();
         statusBar.showMessage("Cut " + juce::String(cutCount) + " modules");
     } else {
         statusBar.showMessage("Nothing to cut - select one or more modules first");
@@ -259,21 +272,33 @@ bool MainComponent::applySnapCommand(juce::CommandID commandID) {
         timelinePanel.cycleSnapValue(direction);
         // Reports where the grid ENDED UP, not which way it was asked to move: the cycle clamps at
         // both ends, so a held key parked on 1/16 says so instead of implying it moved again.
-        statusBar.showMessage("Grid: " + snapDivisionLabel(timelinePanel.getViewState().snap));
+        statusBar.showMessage("Grid: " + synth::ui::snapValueName(timelinePanel.getViewState().snap));
         return true;
     }
 
     using Snap = synth::ui::TimelineViewState::Snap;
-    const Snap value = commandID == AppCommands::snapSetWhole          ? Snap::Whole
-                       : commandID == AppCommands::snapSetHalf         ? Snap::Half
-                       : commandID == AppCommands::snapSetQuarter      ? Snap::Quarter
-                       : commandID == AppCommands::snapSetEighth       ? Snap::Eighth
-                       : commandID == AppCommands::snapSetSixteenth    ? Snap::Sixteenth
-                       : commandID == AppCommands::snapSetThirtySecond ? Snap::ThirtySecond
-                       : commandID == AppCommands::snapSetSixtyFourth  ? Snap::SixtyFourth
-                                                                       : Snap::HundredTwentyEighth;
+    static const std::pair<juce::CommandID, Snap> kSetCommands[] = {
+        {AppCommands::snapSetWhole, Snap::Whole},
+        {AppCommands::snapSetHalf, Snap::Half},
+        {AppCommands::snapSetQuarter, Snap::Quarter},
+        {AppCommands::snapSetEighth, Snap::Eighth},
+        {AppCommands::snapSetSixteenth, Snap::Sixteenth},
+        {AppCommands::snapSetThirtySecond, Snap::ThirtySecond},
+        {AppCommands::snapSetSixtyFourth, Snap::SixtyFourth},
+        {AppCommands::snapSetHundredTwentyEighth, Snap::HundredTwentyEighth},
+    };
+    Snap value = Snap::HundredTwentyEighth;
+    const auto& noteValueActions = snapNoteValueActions();
+    for (size_t i = 0; i < noteValueActions.size(); ++i)
+        if (noteValueActions[i].command == commandID)
+            value = synth::ui::TimelineViewState::noteValue(i < 8 ? synth::ui::TimelineViewState::SnapKind::triplet
+                                                                  : synth::ui::TimelineViewState::SnapKind::dotted,
+                                                            1 << (i % 8));
+    for (const auto& [id, snap] : kSetCommands)
+        if (id == commandID)
+            value = snap;
     timelinePanel.setSnapValue(value);
-    statusBar.showMessage("Grid: " + snapDivisionLabel(value));
+    statusBar.showMessage("Grid: " + synth::ui::snapValueName(value));
     return true;
 }
 
@@ -285,12 +310,18 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 
     switch (resolveEditSurface()) {
     case EditSurface::PianoRoll:
+        if (timelinePanel.getDrumMachine().isOpen()) {
+            timelinePanel.getDrumMachine().zoomHorizontal(vertical ? 1.0 : factor);
+            statusBar.showMessage("Drum machine: zoom");
+            return true;
+        }
         if (vertical)
             timelinePanel.getPianoRoll().zoomVertical(factor);
         else
             timelinePanel.getPianoRoll().zoomHorizontal(factor);
         statusBar.showMessage(vertical ? "Piano roll: vertical zoom" : "Piano roll: zoom");
         return true;
+    case EditSurface::AutomationLane: // the lane rows scale with the timeline
     case EditSurface::TimelineClips:
         if (vertical)
             timelinePanel.zoomTimelineVertical(factor);
@@ -373,7 +404,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
         // Greyed out rather than re-entrant: only one bounce (and one modal progress window) at a
         // time -- see isBounceInProgress_.
         {AppCommands::exportAudio, "Export Audio...",
-         "Bounce the arrangement or the current loop range to a WAV or AIFF file", "General", "exportAudio",
+         "Bounce the arrangement or the current loop range to a WAV, AIFF, FLAC or MP3 file", "General", "exportAudio",
          [](const MainComponent& m) { return m.isExportAvailable(); },
          [](MainComponent& m) {
              m.promptExportAudio();
@@ -385,6 +416,25 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
          "General", nullptr, [](const MainComponent& m) { return m.isExportAvailable(); },
          [](MainComponent& m) {
              m.promptExportStems();
+             return true;
+         }},
+        // Menu-only and never gated: a MIDI export reads the document, not the offline render path.
+        {AppCommands::exportMidi,
+         "Export MIDI...",
+         "Save the arrangement or the current loop range as a Standard MIDI File (.mid)",
+         "General",
+         nullptr,
+         {},
+         [](MainComponent& m) {
+             m.promptExportMidi();
+             return true;
+         }},
+        // Menu-only; greyed out while a collect/zip or a render is running.
+        {AppCommands::collectAndArchive, "Collect & Archive...",
+         "Copy every sample and wavetable the project uses into it, optionally as one zip file", "General", nullptr,
+         [](const MainComponent& m) { return m.isCollectArchiveAvailable(); },
+         [](MainComponent& m) {
+             m.promptCollectAndArchive();
              return true;
          }},
         // The Patch open is menu-only, like checkForUpdates -- no rebindable action-id, so no
@@ -465,6 +515,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "toggleModMatrix",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.toggleModMatrixButton.triggerClick();
              return true;
          }},
@@ -475,6 +526,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "toggleMinimap",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.toggleMinimapButton.triggerClick();
              return true;
          }},
@@ -495,6 +547,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "autoArrange",
          {},
          [](MainComponent& m) {
+             m.ensureCanvasShowing();
              m.graphEditor.autoArrange();
              return true;
          }},
@@ -528,19 +581,46 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
              m.graphEditor.getMacroController().toggleSelectionMacrosCollapsed();
              return true;
          }},
+        // The same "touches ANY macro" gate as collapseMacro: the verb folds every touched macro (or expands them when
+        // all are folded) and, with the "Collapsing also packs macros together" preference, tidies their cards.
+        {AppCommands::foldAndPackMacros, "Fold and Pack Macros",
+         "Fold every selected macro and tidy their cards into a grid (default Cmd+Ctrl+G)", "Edit", "foldAndPackMacros",
+         [](const MainComponent& m) { return m.touchesAnyMacro(); },
+         [](MainComponent& m) {
+             m.graphEditor.getMacroController().foldAndPackSelectionMacros();
+             return true;
+         }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two
         // discoverable surfaces can never disagree about whether there's anything to find.
-        {AppCommands::locateMaster, "Locate Master", "Select Master (or Audio Output) and pan it into view", "View",
-         "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
+        {AppCommands::locateMaster, "Go to Output", "Select Master (or Audio Output) and frame the whole output dock",
+         "View", "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
          [](MainComponent& m) { return m.performLocateMaster(); }},
+        {AppCommands::renameSelectedModule, "Rename", "Rename the focused name, else the selected module card or macro",
+         "Edit", "renameSelectedModule",
+         [](const MainComponent& m) { return m.graphEditor.getCardKeyboard().canRenameSelectedModule(); },
+         [](MainComponent& m) { return renameUnlessTyping(m.graphEditor.getCardKeyboard()); }},
+        {AppCommands::replaceSelectedModule, "Replace Module With...",
+         "Swap the selected module for another type or plugin, or on a lane change its source or parameter", "Edit",
+         "replaceSelectedModule", [](const MainComponent& m) { return m.canReplaceModuleFromShortcut(); },
+         [](MainComponent& m) { return m.replaceModuleFromShortcut(); }},
         {AppCommands::toggleLibrary,
          "Toggle Module Library",
-         "Toggle the module library sidebar",
+         "Show the Modules view of the sidebar, or hide the sidebar when it already shows",
          "View",
          "toggleLibrary",
          {},
          [](MainComponent& m) {
-             m.setLibraryVisible(!m.isLibraryVisible);
+             m.toggleLibraryView(synth::ui::SidebarView::Modules);
+             return true;
+         }},
+        {AppCommands::toggleSoundBrowser,
+         "Toggle Sound Browser",
+         "Show the Sounds view of the sidebar, or hide the sidebar when it already shows",
+         "View",
+         "toggleSoundBrowser",
+         {},
+         [](MainComponent& m) {
+             m.toggleLibraryView(synth::ui::SidebarView::Sounds);
              return true;
          }},
         // Still AppCommands::selectAllModules / actionId "selectAllModules" -- the NAME is frozen so
@@ -602,37 +682,37 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
 }
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelCommandRows() {
-    return {
+    std::vector<CommandSpec> rows{
         // ---- Grid division: registered in every build, inactive whenever the panel is off screen ----
         {AppCommands::snapSetWhole, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetWhole",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetWhole); }},
         {AppCommands::snapSetHalf, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetHalf",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetHalf); }},
         {AppCommands::snapSetQuarter, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetQuarter",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetQuarter); }},
         {AppCommands::snapSetEighth, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetEighth",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetEighth); }},
         {AppCommands::snapSetSixteenth, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetSixteenth",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetSixteenth); }},
         {AppCommands::snapSetThirtySecond, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetThirtySecond",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetThirtySecond); }},
         {AppCommands::snapSetSixtyFourth, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetSixtyFourth",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetSixtyFourth); }},
         {AppCommands::snapSetHundredTwentyEighth, nullptr, "Set the timeline's snap grid", "Timeline",
-         "snapSetHundredTwentyEighth", [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         "snapSetHundredTwentyEighth", [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapSetHundredTwentyEighth); }},
         {AppCommands::snapCyclePrev, nullptr, "Set the timeline's snap grid", "Timeline", "snapCyclePrev",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapCyclePrev); }},
         {AppCommands::snapCycleNext, nullptr, "Set the timeline's snap grid", "Timeline", "snapCycleNext",
-         [](const MainComponent& m) { return m.isBottomDockVisibleForSnap(); },
+         [](const MainComponent& m) { return m.isTimelineReachable(); },
          [](MainComponent& m) { return m.applySnapCommand(AppCommands::snapCycleNext); }},
         // ---- Zoom: routed per focused surface, like the clipboard verbs ----
         {AppCommands::zoomInHorizontal, nullptr, "Zoom the focused editor", "View", "zoomInHorizontal",
@@ -657,7 +737,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleBottomPanel",
          {},
          [](MainComponent& m) {
-             m.toggleBottomPanelButton.triggerClick();
+             m.toggleBottomPanelFromShortcut();
              return true;
          }},
         // No longer a toggle -- opens the dock if needed and switches to this tab; a second
@@ -670,7 +750,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleTimelinePanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Timeline);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Timeline);
              return true;
          }},
         {AppCommands::toggleMixerPanel,
@@ -680,7 +760,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleMixerPanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Mixer);
              return true;
          }},
         {AppCommands::toggleMidiRemotePanel,
@@ -690,262 +770,38 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleMidiRemotePanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::MidiRemote);
+             return true;
+         }},
+        // The fourth view's key: focuses the canvas while it is the main view.
+        {AppCommands::showCanvas,
+         "Show Canvas",
+         "Show the patch canvas and focus it",
+         "View",
+         "showCanvas",
+         {},
+         [](MainComponent& m) {
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Canvas);
+             return true;
+         }},
+        // A no-op (that still consumes the key) when the active tab has no side pane.
+        {AppCommands::toggleSidePane,
+         "Show/Hide Side Pane",
+         "Show or hide the side pane of the active bottom-panel tab",
+         "View",
+         "toggleSidePane",
+         {},
+         [](MainComponent& m) {
+             m.toggleActiveSidePane();
              return true;
          }},
     };
-}
-
-std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandRows() {
-    return {
-        // Suppressed while the launch overlay is up front -- every region it would cycle to
-        // is sitting behind it, so there is nowhere useful for Tab to land.
-        {AppCommands::focusNextRegion, "Focus Next Region",
-         "Move keyboard focus to the next open panel (Library, Canvas, Timeline, AI Panel, Mod Matrix)", "General",
-         "focusNextRegion", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
-         [](MainComponent& m) {
-             m.focusRegions_.cycleFocus(true);
-             return true;
-         }},
-        {AppCommands::focusPrevRegion, "Focus Previous Region", "Move keyboard focus to the previous open panel",
-         "General", "focusPrevRegion", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
-         [](MainComponent& m) {
-             m.focusRegions_.cycleFocus(false);
-             return true;
-         }},
-        {AppCommands::focusTimeline,
-         "Focus Timeline",
-         "Open (if needed) and focus the Timeline panel",
-         "General",
-         "focusTimeline",
-         {},
-         [](MainComponent& m) {
-             m.focusRegions_.focusRegionById("timeline");
-             return true;
-         }},
-        {AppCommands::focusLibrary,
-         "Focus Library",
-         "Open (if needed) and focus the Module Library",
-         "General",
-         "focusLibrary",
-         {},
-         [](MainComponent& m) {
-             m.focusRegions_.focusRegionById("library");
-             return true;
-         }},
-        {AppCommands::focusLibrarySearch,
-         "Focus Library Search",
-         "Open (if needed) and focus the Module Library's search field",
-         "General",
-         "focusLibrarySearch",
-         {},
-         [](MainComponent& m) {
-             // Deliberately NOT focusRegions_.focusRegionById("library") -- that grabs the region
-             // ROOT (moduleLibrary itself, per FocusRegion.h's contract), and this shortcut's whole
-             // point is to land on the search field specifically. Same "open if closed" behaviour
-             // as focusLibrary.
-             if (!m.isLibraryVisible)
-                 m.setLibraryVisible(true);
-             m.moduleLibrary.focusSearchField();
-             return true;
-         }},
-        // Registered unconditionally (unlike checkForUpdates below) -- neither command needs OS
-        // integration, only ownedAudioEngine != nullptr, which is fixed for this instance's whole
-        // lifetime.
-        {AppCommands::showWelcomeScreen, "Show Welcome Screen", "Reopen the welcome screen", "Help", nullptr,
-         [](const MainComponent& m) { return m.ownedAudioEngine != nullptr; },
-         [](MainComponent& m) {
-             m.showWelcomeScreen();
-             return true;
-         }},
-        {AppCommands::whatsNew,
-         "What's New...",
-         "See what's changed recently",
-         "Help",
-         nullptr,
-         {},
-         [](MainComponent& m) {
-             m.showWhatsNewDialog();
-             return true;
-         }},
-#if JUCE_MAC || JUCE_WINDOWS
-        {AppCommands::checkForUpdates, "Check for Updates...", "Check for a newer version of the app", "Help", nullptr,
-         [](const MainComponent& m) { return m.updateManager.isAvailable(); },
-         [](MainComponent& m) {
-             m.updateManager.checkForUpdates();
-             return true;
-         }},
-#endif
-        // Menu-only, always active, no chord. Opens the contribute page in the browser.
-        {AppCommands::contribute,
-         "Contribute to Agent Synth...",
-         "Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.",
-         "Help",
-         nullptr,
-         {},
-         [](MainComponent& m) {
-             m.openContributePage();
-             return true;
-         }},
-    };
-}
-
-// ---- Transport: promoted to command-dispatched actions (docs/control/midi-remote.md#action-targets's
-// prerequisite) so a MIDI Remote action target can invokeDirectly() them. Every row below reuses
-// the transport bar's OWN choke point -- triggerClick() on its buttons for play/stop TOGGLE, loop,
-// metronome and record, exactly the idiom togglePlayback already established above -- so a
-// command invocation and a mouse click on the bar can never disagree, and record still reaches
-// MainComponent::handleRecordToggle's armed-track gate rather than bypassing it. Play/Stop as
-// SEPARATE, direction-committing actions (rather than toggles) go straight to TransportService,
-// guarded on the current snapshot so invoking "Play" while already playing is a no-op.
-// Appended LAST in commandTable() (never interleaved -- see the snapSet id comment in
-// AppCommands.h for why that is always safe) so MainComponentCommandTableTests.cpp's
-// kExpectedOrder only gains a suffix.
-std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows() {
-    return {
-        {AppCommands::transportPlay,
-         "Play",
-         "Start the timeline transport",
-         "Transport",
-         "transportPlay",
-         {},
-         [](MainComponent& m) {
-             auto& transport = m.audioEngine.getTransport();
-             if (!transport.getPositionSnapshot().playing)
-                 transport.play();
-             return true;
-         }},
-        {AppCommands::transportStop,
-         "Stop",
-         "Stop the timeline transport",
-         "Transport",
-         "transportStop",
-         {},
-         [](MainComponent& m) {
-             auto& transport = m.audioEngine.getTransport();
-             if (transport.getPositionSnapshot().playing)
-                 transport.stop();
-             return true;
-         }},
-        {AppCommands::transportToggleLoop,
-         "Toggle Looping",
-         "Toggle looping using the current loop locators",
-         "Transport",
-         "transportToggleLoop",
-         {},
-         [](MainComponent& m) {
-             m.timelinePanel.getTransportBar().getLoopButton().triggerClick();
-             return true;
-         }},
-        {AppCommands::transportRecord,
-         "Record",
-         "Toggle recording (armed-track gated, same as the transport bar's Record button)",
-         "Transport",
-         "transportRecord",
-         {},
-         [](MainComponent& m) {
-             m.timelinePanel.getTransportBar().getRecordButton().triggerClick();
-             return true;
-         }},
-        {AppCommands::transportToggleMetronome,
-         "Toggle Metronome",
-         "Toggle the metronome click",
-         "Transport",
-         "transportToggleMetronome",
-         {},
-         [](MainComponent& m) {
-             m.timelinePanel.getTransportBar().getMetronomeButton().triggerClick();
-             return true;
-         }},
-        {AppCommands::transportReturnToStart,
-         "Return to Start",
-         "Locate the transport to beat 0",
-         "Transport",
-         "transportReturnToStart",
-         {},
-         [](MainComponent& m) {
-             return synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0);
-         }},
-        // Cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
-        // several firing inside one audio block (a jog wheel) don't lose steps; see TransportNudge.h.
-        {AppCommands::transportNudgeBackBeat,
-         "Move Cursor Back (Beat)",
-         "Move the transport cursor back one beat",
-         "Transport",
-         "transportNudgeBackBeat",
-         {},
-         [](MainComponent& m) {
-             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
-         }},
-        {AppCommands::transportNudgeForwardBeat,
-         "Move Cursor Forward (Beat)",
-         "Move the transport cursor forward one beat",
-         "Transport",
-         "transportNudgeForwardBeat",
-         {},
-         [](MainComponent& m) {
-             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
-         }},
-        {AppCommands::transportNudgeBackBar,
-         "Move Cursor Back (Bar)",
-         "Move the transport cursor back one bar",
-         "Transport",
-         "transportNudgeBackBar",
-         {},
-         [](MainComponent& m) {
-             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
-         }},
-        {AppCommands::transportNudgeForwardBar,
-         "Move Cursor Forward (Bar)",
-         "Move the transport cursor forward one bar",
-         "Transport",
-         "transportNudgeForwardBar",
-         {},
-         [](MainComponent& m) {
-             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
-         }},
-        {AppCommands::transportJumpToLoopStart,
-         "Jump to Loop Start",
-         "Locate the transport to the loop start (no-op without a loop range)",
-         "Transport",
-         "transportJumpToLoopStart",
-         {},
-         [](MainComponent& m) {
-             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, false);
-         }},
-        {AppCommands::transportJumpToLoopEnd,
-         "Jump to Loop End",
-         "Locate the transport to the loop end (no-op without a loop range)",
-         "Transport",
-         "transportJumpToLoopEnd",
-         {},
-         [](MainComponent& m) {
-             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
-         }},
-        // Jump to the next/previous timeline marker relative to the current position, using
-        // the same transportNudge_ accumulate state as the cursor moves above (see MarkerJump.h) so
-        // repeated presses step marker-by-marker even before the audio thread applies the first jump.
-        {AppCommands::transportJumpToNextMarker,
-         "Jump to Next Marker",
-         "Locate the transport to the next timeline marker (no-op past the last one)",
-         "Transport",
-         "transportJumpToNextMarker",
-         {},
-         [](MainComponent& m) {
-             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
-                                                markerBeats(m.getTimelineDoc()), true);
-         }},
-        {AppCommands::transportJumpToPreviousMarker,
-         "Jump to Previous Marker",
-         "Locate the transport to the previous timeline marker (no-op before the first one)",
-         "Transport",
-         "transportJumpToPreviousMarker",
-         {},
-         [](MainComponent& m) {
-             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
-                                                markerBeats(m.getTimelineDoc()), false);
-         }},
-    };
+    // The triplet and dotted Set Grid rows sit just before the grid cycle.
+    const auto cycle = std::find_if(rows.begin(), rows.end(),
+                                    [](const CommandSpec& row) { return row.id == AppCommands::snapCyclePrev; });
+    auto snapRows = buildSnapNoteValueCommandRows();
+    rows.insert(cycle, std::make_move_iterator(snapRows.begin()), std::make_move_iterator(snapRows.end()));
+    return rows;
 }
 
 const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() const {
@@ -961,6 +817,7 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
         append(buildFocusAndHelpCommandRows());
         append(buildTransportCommandRows());
         append(buildSelectionStepCommandRows());
+        append(buildViewSwapCommandRows());
         return t;
     }();
     return table;

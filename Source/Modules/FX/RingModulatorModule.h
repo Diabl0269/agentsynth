@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -20,20 +21,27 @@ class RingModulatorModule
     : public ModuleBase
     , public juce::AudioProcessorParameter::Listener {
 public:
+    static constexpr int kLevelCvChannel = 5;
+    static constexpr int kPanCvChannel = 6;
+
     RingModulatorModule()
-        : ModuleBase("Ring Modulator", 5, 2) // Carrier, Modulator, Mix CV, Drive CV, Character CV
+        : ModuleBase("Ring Modulator", 7, 2) // Carrier, Modulator, Mix, Drive, Character, Level and Pan CV
     {
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 0.5f, 8.0f, 1.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addParameter(characterParam = new juce::AudioParameterFloat("character", "Character", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
+        addParameter(characterParam = new juce::AudioParameterFloat("character", "Character",
+                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                    synth::fractionPercentAttributes()));
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"}, 1));
         // NOTE: no Dual I/O registration here, on purpose. `ModuleBase(name, 5, 2)` matches
         // StereoAudio::Auto's shape (>= 2 in, exactly 2 out), so the base adds the toggle and the
         // collapsing output jack itself — this module is the regression test for that inheritance
         // (it shipped stereo with no toggle back when the opt-in was per-module).
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
     }
@@ -79,7 +87,7 @@ public:
         prepareOutputLevel(sampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
         int numSamples = buffer.getNumSamples();
         int numChannels = buffer.getNumChannels();
@@ -205,9 +213,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            const float* ch0 = buffer.getReadPointer(0);
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(ch0[i]);
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
 
         for (int ch = 2; ch < numChannels; ++ch)
@@ -215,8 +221,8 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive", "Character"};
-        return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive", "Character", "Level", "Pan"};
+        return (i >= 0 && i < 7) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     // Output-only Dual I/O — and NOTHING here implements it. "Left"/"Right" when split, one "Audio"
     // jack owning raw ch0+ch1 when collapsed (both legs carry the same wet signal, so collapsing
@@ -225,11 +231,15 @@ public:
     // The INPUT side is deliberately NOT mapped through mapStereoPairInput: ch1 is the Modulator
     // jack, and calling it PortRole::Audio would make ModuleBase::rightAudioLegChannel()'s ch1 look
     // like an input right leg — GraphEditor's Dual I/O toggle would then wire a neighbour's Audio R
-    // into this module's Modulator input. The inherited input map leaves those five jacks as they
+    // into this module's Modulator input. The inherited input map leaves those jacks as they
     // were, which is exactly why the base infers the output pair only.
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Mix", 2, "mix"}, {"Drive", 3, "drive"}, {"Character", 4, "character"}};
+        return {{"Mix", 2, "mix"},
+                {"Drive", 3, "drive"},
+                {"Character", 4, "character"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.
@@ -237,6 +247,8 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
+    // Bypassed, both legs carry the carrier (ch0): ch1 is the Modulator input, not a right-hand dry leg.
+    int bypassDryChannel(int /*outputChannel*/) const override { return 0; }
     ModuleType getModuleType() const override { return ModuleType::RingModulator; }
 
     double getLatencyInSamples() const {
@@ -290,14 +302,7 @@ private:
         vl = juce::jmap(character, 0.05f, 1.0f);
     }
 
-    static bool isChannelActive(const float* cv, int numSamples) {
-        if (cv == nullptr)
-            return false;
-        float rms = 0.0f;
-        for (int i = 0; i < numSamples; ++i)
-            rms += cv[i] * cv[i];
-        return (rms / static_cast<float>(numSamples)) > 1.0e-3f;
-    }
+    static bool isChannelActive(const float* cv, int numSamples) { return hasAnyNonZero(cv, numSamples); }
 
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplers[2]; // [0]=2x, [1]=4x
     juce::AudioBuffer<float> dryBuffer;

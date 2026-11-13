@@ -6,8 +6,14 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
+#include "ShortcutManager/AppCommands.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/Layout/PopupMotion.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "WhatsNewData.h"
 #include <algorithm>
 
@@ -171,6 +177,7 @@ void MainComponent::promptSaveSnippet() {
     // the desktop in its constructor, so it is visible without any extra call).
     juce::Component::SafePointer<MainComponent> safeThis(this);
 
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)
@@ -222,6 +229,7 @@ bool MainComponent::performRepeatSelection(int count) {
     case EditSurface::PianoRoll:
         return timelinePanel.getPianoRoll().repeatSelectedNotes(repeats);
     case EditSurface::Mixer:
+    case EditSurface::AutomationLane:
     case EditSurface::Graph:
         break;
     }
@@ -248,6 +256,7 @@ void MainComponent::promptRepeatSelection() {
             subject = "selected notes";
         break;
     case EditSurface::Mixer:
+    case EditSurface::AutomationLane:
     case EditSurface::Graph:
         break;
     }
@@ -267,6 +276,7 @@ void MainComponent::promptRepeatSelection() {
     // exactly; see its comment for why the dialog can outlive this component.
     juce::Component::SafePointer<MainComponent> safeThis(this);
 
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)
@@ -290,6 +300,12 @@ void MainComponent::promptRepeatSelection() {
                             false);
 }
 
+juce::Component* MainComponent::getFocusedComponentForMenu() const {
+    if (focusedComponentOverrideForTest_ != nullptr)
+        return focusedComponentOverrideForTest_.getComponent();
+    return juce::Component::getCurrentlyFocusedComponent();
+}
+
 // ---- Keyboard/focus arbitration ----
 // ---- Keyboard/focus arbitration ----
 // Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
@@ -307,27 +323,31 @@ void MainComponent::promptRepeatSelection() {
 // docked on the tab strip, an "Own panel" strip, or detached into its own window — so its
 // showing check is the same OR MainComponent::timerCallback already uses to gate meter ticks
 // (bottomDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
-// isOwnPanelShowing() covers Own panel), not the plain isBottomDockVisible gate the two timeline
-// surfaces use. MixerPanelComponent is the mixer's single focusable leaf (every column's
-// own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls
-// too, not just the panel root itself. Public: both perform()/getCommandInfo() and
-// FocusArbitrationTests.cpp call it directly.
+// isOwnPanelShowing() covers Own panel); the timeline surfaces ask bottomDock.isTimelineShowing() (the
+// active tab of a showing dock, its own window, or the main area). MixerPanelComponent is the mixer's single focusable
+// leaf (every column's own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls too,
+// not just the panel root itself. Public: both perform()/getCommandInfo() and FocusArbitrationTests.cpp call it
+// directly.
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
 
     // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
-    // check visibility BEFORE even asking what's focused.
-    if (isBottomDockVisible) {
-        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
-            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
-                return EditSurface::PianoRoll;
+    // check visibility BEFORE even asking what's focused (the real focus, or a test's stand-in).
+    if (bottomDock.isTimelineShowing()) {
+        if (auto* focused = getFocusedComponentForMenu()) {
+            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()) ||
+                isOrIsChildOf(focused, timelinePanel.getDrumMachine()))
+                return EditSurface::PianoRoll; // the drum machine shares the roll's verbs and zoom
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
                 return EditSurface::TimelineClips;
+            if (timelinePanel.getAutomationLanes().laneOwning(focused).isValid() ||
+                timelinePanel.getAutomationLanes().modulatorSourceOwning(focused).isNotEmpty())
+                return EditSurface::AutomationLane;
         }
     }
     if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
-        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+        if (auto* focused = getFocusedComponentForMenu()) {
             if (isOrIsChildOf(focused, bottomDock.getMixerPanel()))
                 return EditSurface::Mixer;
         }
@@ -376,12 +396,14 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // TimelinePanelComponent::keyPressed never saw the locator-jump keystroke at all: it died here,
     // silently, because a surface action has no command to dispatch.
     //
-    // Deliberately a WHITELIST of two ids rather than a blanket forward. Forwarding everything the
+    // Deliberately a WHITELIST of ids rather than a blanket forward. Forwarding everything the
     // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while
     // the graph canvas has focus, which is a different feature with its own design question. These
-    // two act on the transport, are chorded, and mean nothing on any other surface.
-    if (isBottomDockVisible) {
-        static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2"};
+    // act on the transport or the timeline's own sections (Make Section from the loop), are chorded,
+    // and mean nothing on any other surface.
+    if (isTimelineReachable()) {
+        static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2",
+                                                               "timelineMakeSection"};
         for (const auto& action : shortcutManager.getActionsForKeyPress(key))
             if (forwardsToTimelinePanel.contains(action))
                 return timelinePanel.keyPressed(key);
@@ -390,6 +412,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void MainComponent::resized() {
+    mainViewSwapMotion_.finishNow(); // the layers' rectangles belong to the layout they were pictured in
     // CANONICAL LAYOUT (docs/layout/chrome.md#application-chrome). Carve top→bottom: toolbar strip, status bar,
     // timeline panel (bottom), AI panel (right), library sidebar (left), canvas (remainder). Dimensions come from the
     // themed Metrics tokens, with literal fallbacks for the headless test path.
@@ -410,6 +433,7 @@ void MainComponent::resized() {
         libOpenW = m.librarySidebarWidth;
         aiOpenW = m.aiPanelWidth;
     }
+    libOpenW = librarySidebar_->openWidth(libOpenW); // wider while Sounds shows, eased between the two views
     const int libW = librarySlide_.sizeBetween(libClosedW, libOpenW);
     const int aiW = aiPanelSlide_.sizeBetween(0, aiOpenW);
 
@@ -466,10 +490,12 @@ void MainComponent::resized() {
 
     if (aiW > 0 || aiChatComponent.isVisible())
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
-    if (libW > 0 || moduleLibrary.isVisible())
-        moduleLibrary.setBounds(bounds.removeFromLeft(libW));
+    if (libW > 0 || librarySidebar_->isVisible())
+        librarySidebar_->setBounds(bounds.removeFromLeft(libW));
 
-    graphEditor.setBounds(bounds);
+    layoutMainView(bounds);
+    if (toast_)
+        toast_->placeIn(bounds);
 
     // Full window bounds on EVERY layout pass, whether or not it's currently visible —
     // it must always cover the toolbar/canvas the moment it's shown, and a stale rect from before
@@ -479,11 +505,13 @@ void MainComponent::resized() {
 }
 
 // ---- Toolbar icon + text application ----
-// Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
-// status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
-// dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
+// Give every toolbar button its glyph and colour group (the button rebuilds its art from the active
+// theme, so this also re-colours the bar on a theme switch), push the status-bar master-mute glyph,
+// and manage icon-only vs icon+text text per narrow mode. Headless (no AppLookAndFeel) the buttons
+// simply have no art.
 void MainComponent::applyToolbarIcons() {
     using synth::theme::Icon;
+    using Group = synth::ui::ToolbarGroup;
 
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
@@ -491,57 +519,29 @@ void MainComponent::applyToolbarIcons() {
     // toggle buttons carry stateful text; the rest carry a static label.
     const bool iconOnly = toolbarNarrowMode_;
 
-    // Uniform edge indent so every toolbar icon renders at the SAME optical size (~18 px)
-    // regardless of the button's width — DrawableButton::getImageBounds() is height-bound here
-    // (button height is fixed at Theme::Metrics::toolbarHeight for every slot), so one indent
-    // value is all that's needed for icon-size consistency across the whole strip.
-    static constexpr int kToolbarIconEdgeIndent = 8;
-
-    // setImages no-ops (leaves the button blank) when the icon is absent (headless LnF null).
-    // Builds three tinted clones from the SAME cached (muted) base — see retintIcons() — so the
-    // icon glyph steps through the identical rest -> hover -> toggled-on ladder as the label text
-    // AppLookAndFeel::drawDrawableButton draws (muted -> textPrimary -> accent). DrawableButton's
-    // own over/down/on state resolution (getCurrentImage() et al.) picks the right clone per state.
-    auto setIcon = [&](juce::DrawableButton& b, Icon id) {
-        if (lf == nullptr)
-            return;
-        auto base = lf->getIcon(id); // fresh clone at its cached rest (muted) tint
-        if (base == nullptr)
-            return;
-
-        const auto& colors = lf->getTheme().colors;
-        auto hoverIcon = base->createCopy();
-        hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
-        auto onIcon = base->createCopy();
-        onIcon->replaceColour(colors.textMuted, colors.accent);
-
-        b.setEdgeIndent(kToolbarIconEdgeIndent);
-        b.setImages(base.get(), hoverIcon.get(), hoverIcon.get(), nullptr, onIcon.get(), onIcon.get(), onIcon.get());
-    };
-
-    setIcon(toggleLibraryButton, Icon::ToggleLibrary);
-    setIcon(newButton, Icon::ActionNew);
-    setIcon(saveButton, Icon::ActionSave);
-    setIcon(loadButton, Icon::ActionLoad);
-    setIcon(settingsButton, Icon::ActionSettings);
-    setIcon(feedbackButton, Icon::ActionFeedback);
-    setIcon(undoButton, Icon::ActionUndo);
-    setIcon(redoButton, Icon::ActionRedo);
-    setIcon(autoArrangeButton, Icon::ActionAutoArrange);
-    setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
-    setIcon(toggleMinimapButton, Icon::ToggleMinimap);
-    setIcon(toggleAiPanelButton, Icon::ToggleAI);
-    // No dedicated bottom-panel glyph exists yet — reuse TransportPlay, otherwise unused this
-    // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
-    setIcon(toggleBottomPanelButton, Icon::TransportPlay);
-    setIcon(themeToggleButton, Icon::ThemeToggle);
+    toggleLibraryButton.setIcon(Icon::ToggleLibrary, Group::View);
+    newButton.setIcon(Icon::ActionNew, Group::File);
+    saveButton.setIcon(Icon::ActionSave, Group::File);
+    loadButton.setIcon(Icon::ActionLoad, Group::File);
+    settingsButton.setIcon(Icon::ActionSettings, Group::Housekeeping);
+    feedbackButton.setIcon(Icon::ActionFeedback, Group::Feedback);
+    undoButton.setIcon(Icon::ActionUndo, Group::Edit);
+    redoButton.setIcon(Icon::ActionRedo, Group::Edit);
+    searchButton.setIcon(Icon::ToolbarSearch, Group::View);
+    canvasToolbar_.addButton().setIcon(Icon::ToolbarAddTrack, Group::Edit);
+    autoArrangeButton.setIcon(Icon::ActionAutoArrange, Group::Edit);
+    toggleModMatrixButton.setIcon(Icon::ToggleMatrix, Group::View);
+    toggleMinimapButton.setIcon(Icon::ToggleMinimap, Group::View);
+    toggleAiPanelButton.setIcon(Icon::ToggleAI, Group::AI);
+    toggleBottomPanelButton.setIcon(Icon::TogglePanel, Group::View);
+    themeToggleButton.setIcon(Icon::ThemeToggle, Group::Housekeeping);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
     if (lf != nullptr)
         if (auto d = lf->getIcon(Icon::TransportStop))
             statusBar.getMasterMuteButton().setImages(d.get());
 
-    // Toggle-pill state for AppLookAndFeel::drawDrawableButton (hover/press/toggled-on fill).
+    // The lit (solid chip) state AppLookAndFeel::drawToolbarButton paints.
     // dontSendNotification: onClick already flips the visibility flag by hand; sendNotification
     // would re-fire the button's own listener and double-toggle.
     toggleLibraryButton.setToggleState(isLibraryVisible, juce::dontSendNotification);
@@ -550,24 +550,7 @@ void MainComponent::applyToolbarIcons() {
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
     toggleBottomPanelButton.setToggleState(isBottomDockVisible, juce::dontSendNotification);
 
-    // Text: cleared in narrow mode; stateful for the toggles in wide mode.
-    newButton.setButtonText(iconOnly ? "" : "New");
-    saveButton.setButtonText(iconOnly ? "" : "Save");
-    loadButton.setButtonText(iconOnly ? "" : "Load");
-    settingsButton.setButtonText(iconOnly ? "" : "Settings");
-    undoButton.setButtonText(iconOnly ? "" : "Undo");
-    redoButton.setButtonText(iconOnly ? "" : "Redo");
-    autoArrangeButton.setButtonText(iconOnly ? "" : "Auto Arrange");
-    toggleModMatrixButton.setButtonText(iconOnly ? ""
-                                                 : (graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"));
-    toggleMinimapButton.setButtonText(iconOnly ? ""
-                                               : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
-    toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
-    toggleBottomPanelButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Panel" : "Show Panel"));
-    toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
-    themeToggleButton.setButtonText(
-        iconOnly ? ""
-                 : (themeManager != nullptr && themeManager->getActiveTheme().isDark ? "Light Mode" : "Dark Mode"));
+    applyToolbarLabels(iconOnly);
 
     // Tooltips remain available even in icon-only mode; include shortcut hints where applicable.
     auto hint = [&](const juce::String& base, const juce::String& action) {
@@ -579,17 +562,18 @@ void MainComponent::applyToolbarIcons() {
     saveButton.setTooltip(hint("Save project", "savePreset"));
     loadButton.setTooltip(hint("Load a patch or project", "openProject"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
-    feedbackButton.setTooltip("Send feedback");
+    feedbackButton.setTooltip(hint("Send feedback", "openFeedback"));
     undoButton.setTooltip(hint("Undo", "undo"));
     redoButton.setTooltip(hint("Redo", "redo"));
+    searchButton.setTooltip(hint("Search everything (type + to add)", "openCommandPalette"));
+    canvasToolbar_.addButton().setTooltip(hint("Add a track, module, preset or marker", "openAddTrackMenu"));
     autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));
     themeToggleButton.setTooltip("Toggle light/dark mode");
 
     const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
     toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));
 
-    const juce::String minimapBase = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
-    toggleMinimapButton.setTooltip(hint(minimapBase, "toggleMinimap"));
+    refreshMinimapButton();
     // The map itself advertises the same binding on hover. MinimapComponent has no ShortcutManager
     // dependency, so the display string is resolved here and pushed down.
     graphEditor.getMinimap().setShortcutHint(
@@ -600,9 +584,17 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String bottomPanelBase = isBottomDockVisible ? "Hide Panel" : "Show Panel";
     toggleBottomPanelButton.setTooltip(hint(bottomPanelBase, "toggleBottomPanel"));
+    const auto sidePaneKey = ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleSidePane"));
+    bottomDock.getMixerPanel().getSidePaneButton().setShortcutText(sidePaneKey);
+    bottomDock.getMixerPanel().refreshShortcutHints();
+    timelinePanel.getSidePaneButton().setShortcutText(sidePaneKey);
+    // The swap icons' keys are positional (they follow the tab order), so the dock asks for each binding itself.
+    bottomDock.setShortcutTextSource([this](const juce::String& actionId) {
+        return ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId));
+    });
+    bottomDock.refreshShortcutTexts();
 
-    const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
-    toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
+    refreshLibraryToggleTooltip();
 }
 
 // ---- Timeline panel height (user-resizable, persisted) ----
@@ -668,7 +660,7 @@ void MainComponent::beginPanelSlide() {
     // stays visible for the whole slide and disappears only in finishPanelSlide(). Hiding it here
     // instead is what used to make "close" not an animation at all — it just vanished.
     if (isLibraryVisible)
-        moduleLibrary.setVisible(true);
+        librarySidebar_->setVisible(true);
     if (isAiPanelVisible)
         aiChatComponent.setVisible(true);
     if (isBottomDockVisible)
@@ -683,6 +675,10 @@ void MainComponent::beginPanelSlide() {
     const bool canAnimate = isShowing();
     const bool libTweening = librarySlide_.retarget(isLibraryVisible ? 1.0f : 0.0f, canAnimate);
     const bool aiTweening = aiPanelSlide_.retarget(isAiPanelVisible ? 1.0f : 0.0f, canAnimate);
+    // The dock opening is a "mixer shown" moment when Mixer is its active tab; the fit waits for the
+    // slide to land, so it measures the panel at its real height.
+    if (isBottomDockVisible && timelineSlide_.getProgress() < 1.0f)
+        fitMixerAfterDockSlide_ = true;
     const bool timelineTweening = timelineSlide_.retarget(isBottomDockVisible ? 1.0f : 0.0f, canAnimate);
 
     if (!(libTweening || aiTweening || timelineTweening)) {
@@ -724,32 +720,67 @@ void MainComponent::finishPanelSlide() {
     // Closed at rest: hidden only once the slide is actually done, and BEFORE the final layout so
     // a fully-closed panel keeps its bounds out of the canvas carve entirely.
     if (!isLibraryVisible)
-        moduleLibrary.setVisible(false);
+        librarySidebar_->setVisible(false);
     if (!isAiPanelVisible)
         aiChatComponent.setVisible(false);
     if (!isBottomDockVisible)
         bottomDock.setVisible(false);
 
     resized();
+
+    if (fitMixerAfterDockSlide_) {
+        fitMixerAfterDockSlide_ = false;
+        fitMixerHostToSections();
+    }
+    // Last, so what waited for the timeline (a call-out under one of its buttons) sees the final bounds.
+    timelineSlide_.runSettled();
+}
+
+// Runs once per "the mixer was just shown" (the dock opened or switched to the Mixer tab, the Own
+// panel opened, app start), never on an ordinary resize: a user who then drags the dock shorter
+// keeps that height, and the sections squeeze instead (MixerSectionLayout::resolve). Only ever
+// grows, through the panel's growHost -- the same clamped path a divider drag uses -- so the canvas
+// keeps the minimum the dock's own resize handle leaves it.
+void MainComponent::fitMixerHostToSections() {
+    if (bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer))
+        return; // fills the main area; growing would resize the shared panel height
+    using Placement = synth::ui::MixerPlacementController::Placement;
+    const bool ownPanelOpen =
+        mixerPlacement_.isOwnPanelShowing() && mixerPlacement_.getCarveHeight() == mixerPlacement_.getOwnPanelHeight();
+    const bool dockedTabShowing = mixerPlacement_.getPlacement() == Placement::Tab && isBottomDockVisible &&
+                                  bottomDock.isMixerTabActive() && timelineSlide_.getProgress() >= 1.0f;
+    if (ownPanelOpen || dockedTabShowing)
+        bottomDock.getMixerPanel().growHostToFitSections();
 }
 
 // No longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
-// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing.
+// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing or
+// `tab` is the view in the main area (it has no tab then).
 // mixerPlacement_.revealOrToggle() is Mixer's OWN Own-panel/Window placement detour, unrelated to
 // the tab strip: it returns true and handles everything itself when Mixer isn't in Tab placement.
 void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
-    if (tab == Tab::Mixer && mixerPlacement_.revealOrToggle())
+    if (bottomDock.getMainView() == tab || (tab == Tab::Mixer && mixerPlacement_.revealOrToggle()))
         return;
-    auto& host = tab == Tab::Timeline ? bottomDock.getTimelineHost()
-                 : tab == Tab::Mixer  ? bottomDock.getMixerHost()
-                                      : bottomDock.getMidiRemoteHost();
-    if (host.isDetached()) {
-        host.bringDetachedWindowToFront();
+    // The canvas has no host: its tab is never detached.
+    auto* host = bottomDock.hostForTab(tab);
+    if (host != nullptr && host->isDetached()) {
+        host->bringDetachedWindowToFront();
         return;
     }
     ensureBottomDockOpen();
     bottomDock.setActiveTab(tab);
+}
+
+// The Cmd+Shift+B action. With the dock hidden the press means "let me see the pane", so the dock opens and
+// the pane is forced open rather than toggled (a remembered-open pane would otherwise close as it appears).
+bool MainComponent::toggleActiveSidePane() {
+    if (!bottomDock.hasActiveSidePane())
+        return false;
+    if (isBottomDockVisible)
+        return bottomDock.toggleActiveSidePane();
+    ensureBottomDockOpen();
+    return bottomDock.toggleActiveSidePane(/*forceOpen=*/true);
 }
 
 // The "open if closed" half other reveal sites (a channel-chip click, "Edit MIDI
@@ -772,12 +803,9 @@ void MainComponent::setLibraryVisible(bool v) {
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
     // Refresh the toggle button's wide-mode label, toggled-pill state and tooltip.
-    if (!toolbarNarrowMode_)
-        toggleLibraryButton.setButtonText(v ? "Hide Library" : "Show Library");
+    applyToolbarLabels(toolbarNarrowMode_);
     toggleLibraryButton.setToggleState(v, juce::dontSendNotification);
-    toggleLibraryButton.setTooltip(synth::ui::formatShortcutHint(
-        v ? "Hide Library" : "Show Library",
-        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
+    refreshLibraryToggleTooltip();
 
     beginPanelSlide();
 }
@@ -790,9 +818,11 @@ void MainComponent::hideWelcomeScreen() {
     // A no-op is deliberately safe here: null in Hosted mode, and every guarded action's `proceed`
     // continuation (loadPresetGuarded, newPatch) calls this unconditionally as its last step even
     // when the welcome screen was never showing in the first place (e.g. the toolbar's own Load
-    // button, not the welcome screen, triggered the load).
-    if (welcomeScreen_)
-        welcomeScreen_->setVisible(false);
+    // button, not the welcome screen, triggered the load). Every load path ends here, so a freshly loaded
+    // patch is revealed on the canvas even when it sits in the bottom panel.
+    ensureCanvasShowing();
+    if (welcomeFade_)
+        welcomeFade_->setShown(false); // fades out, then hides
 }
 
 // Reopens the overlay (AppCommands::showWelcomeScreen, wired to the macOS Help menu in
@@ -807,8 +837,13 @@ void MainComponent::showWelcomeScreen() {
     if (recentProjects.pruneMissing() > 0)
         saveRecentProjects();
     welcomeScreen_->setRecentProjects(recentProjects.getEntries());
+    // Reopened while hidden means a project is open underneath: show it over that project, closable. The launch
+    // screen (still on show) has nothing to return to and stays as it is.
+    if (isWelcomeScreenHidden())
+        welcomeScreen_->setDismissible(true);
     welcomeScreen_->toFront(false);
-    welcomeScreen_->setVisible(true);
+    welcomeFade_->setShown(true);
+    welcomeScreen_->focusFirstControl();
 }
 
 // A small, synchronous, no-network dialog listing recent commit subjects
@@ -865,6 +900,18 @@ void MainComponent::applyZoomScrollPreference() {
     const bool upZoomsIn = appProperties.getUserSettings() == nullptr ||
                            appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true);
     timelinePanel.setZoomScrollInverted(!upZoomsIn);
+}
+
+void MainComponent::applyTimelineTransportPreferences() {
+    if (auto* settings = appProperties.getUserSettings()) {
+        timelinePanel.setFollowPointPercent(
+            settings->getIntValue(synth::ui::kFollowPointPercentKey, timelinePanel.getFollowPointPercent()));
+        timelinePanel.refreshTransportTooltips();
+        timelinePanel.refreshSectionsStripSetting(); // the Sections strip toggle (Preferences > Timeline)
+        // Where Cmd+D puts copies of points (Preferences > Timeline), applied at launch and on every change.
+        synth::ui::setDuplicatePlacement(synth::ui::duplicatePlacementFromString(
+            settings->getValue(synth::ui::kDuplicatePlacementKey, "afterLast")));
+    }
 }
 
 void MainComponent::applyMidiRemotePreferences() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <cmath>
 
 /**
@@ -33,8 +34,11 @@
 */
 class PitchShifterModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 8;
+    static constexpr int kPanCvChannel = 9;
+
     PitchShifterModule()
-        : ModuleBase("Pitch Shifter", 8, 2) // 2 audio + 6 CV (Pitch, Shift, Mix, Feedback, Fine, Window)
+        : ModuleBase("Pitch Shifter", 10, 2) // 2 audio + 8 CV (Pitch, Shift, Mix, Feedback, Fine, Window, Level, Pan)
     {
         addParameter(modeParam = new juce::AudioParameterChoice("shiftMode", "Mode", {"Pitch", "Frequency"}, 0));
         addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch (semi)", -24.0f, 24.0f, 0.0f));
@@ -43,9 +47,11 @@ public:
         addParameter(windowParam =
                          new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addOutputLevelParameter();
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
         enableVisualBuffer(true);
     }
 
@@ -87,7 +93,7 @@ public:
         }
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow Left into Right's raw channel, sample-exact, while Dual I/O is
         // split and only Left is patched. Must run before the bypass/mute branches below so
         // both see a filled Right leg exactly as if the user had cabled it.
@@ -104,6 +110,8 @@ public:
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
@@ -111,6 +119,8 @@ public:
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             return;
         }
 
@@ -250,8 +260,7 @@ public:
         applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(outL[i]);
+            vb->pushBlock(outL, numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules
@@ -260,24 +269,30 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window"};
-        return stereoInputLabel(i, 6, cv);
+        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window", "Level", "Pan"};
+        return stereoInputLabel(i, 8, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(8); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 8); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Pitch" is
+    // Level and Pan are appended last and reached through their knobs; paramId binds each jack to its knob ("Pitch" is
     // the jack label, "Pitch (semi)" the knob) so the card rings it and accepts a drop on it.
     // Fine/Window sit after the original four so every saved patch keeps its channel numbers.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Pitch", 2, "pitch"},       {"Shift", 3, "shiftHz"}, {"Mix", 4, "mix"},
-                {"Feedback", 5, "feedback"}, {"Fine", 6, "fine"},     {"Window", 7, "window"}};
+        return {{"Pitch", 2, "pitch"},
+                {"Shift", 3, "shiftHz"},
+                {"Mix", 4, "mix"},
+                {"Feedback", 5, "feedback"},
+                {"Fine", 6, "fine"},
+                {"Window", 7, "window"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.
@@ -306,15 +321,7 @@ private:
     // than two samples behind the write head (both taps are windowed to ~0 gain there anyway).
     static constexpr float kMinReadDelay = 2.0f;
 
-    static bool isChannelActive(const float* channel, int numSamples) {
-        if (!channel)
-            return false;
-        for (int i = 0; i < numSamples; ++i) {
-            if (channel[i] != 0.0f)
-                return true;
-        }
-        return false;
-    }
+    static bool isChannelActive(const float* channel, int numSamples) { return hasAnyNonZero(channel, numSamples); }
 
     /** Reads the delay line `delaySamples` behind the write head with cubic Hermite
         interpolation — linear interpolation would audibly dull a transposed signal. */

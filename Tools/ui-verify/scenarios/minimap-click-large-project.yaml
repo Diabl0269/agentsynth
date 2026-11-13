@@ -1,0 +1,16 @@
+# Bug: after a click on the minimap in a saved project with folded macros, the canvas showed no cards. The map counted the
+# hidden member modules of a folded macro and left its card out, so the click centred on empty space.
+#
+# What a user does: opens a saved project with a folded macro and clicks the minimap's middle; the canvas shows cards.
+motion: true
+record: true
+save_project: minimap-click-large-project
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: 1-before-click}
+  - click: {id: minimap, x: 110, y: 75}
+  - wait: {}
+  - screenshot: {name: 2-after-click}
+  - expect: {count: {prefix: "card:", atLeast: 2}, within_ms: 2000}   # cards are in the canvas view after the click
+  - expect: {id: "card:Oscillator 2", showing: true}                  # the card under the view box in the minimap

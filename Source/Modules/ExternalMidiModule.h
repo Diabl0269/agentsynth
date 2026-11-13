@@ -25,7 +25,7 @@ public:
         collector.reset(sampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         const int numSamples = buffer.getNumSamples() > 0 ? buffer.getNumSamples() : 512;
 
         if (isBypassed()) {
@@ -76,9 +76,7 @@ public:
                     activity = 1.0f;
                 }
             }
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(activity);
-            }
+            vb->pushConstant(activity, numSamples);
         }
     }
 

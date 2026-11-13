@@ -5,8 +5,8 @@
 // Channel Strip to every track source that feeds it. Both are pure graph reads -- no mutation, no undo, no TimelineDoc
 // -- so they live in Core next to the rest of ChannelFlows.
 //
-// findTrackSourcesFeedingStrip() is StemSession.cpp's former private upstreamTrackSources() (FRO55,
-// stem file naming) promoted verbatim to a shared Core query: "which track feeds this strip" is the
+// findTrackSourcesFeedingStrip() is StemSession.cpp's former private upstreamTrackSources()
+// (stem file naming) promoted verbatim to a shared Core query: "which track feeds this strip" is the
 // same question the stem namer and the link rule both ask, so there is one BFS for both rather than
 // two copies that could drift.
 
@@ -34,7 +34,7 @@ namespace {
 // auto-ported Mono jack is a rare enough patch shape that treating it as signal here is an
 // acceptable simplification for a display/naming decision, not a routing one.
 //
-// Moved here from StemSession.cpp's isStemNamingSignalEdge (FRO55) - see the file comment - and
+// Moved here from StemSession.cpp's isStemNamingSignalEdge - see the file comment - and
 // expressed through ChannelFlowsInternal.h's shared node predicates rather than its own casts.
 bool isLinkSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
     auto* srcProcessor = processorFor(graph, conn.source.nodeID);
@@ -139,6 +139,110 @@ std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce
         }
     }
     return tracks;
+}
+
+// Fans out on purpose (a Track In feeds several instruments), so this is a plain reachability walk over
+// edges rather than resolveThroughPorts' single-edge follow. Only port nodes are expanded: a real module
+// that happens to forward MIDI is a destination in its own right, not a pass-through.
+std::vector<MidiReachLeg> findMidiNodesReachedFrom(juce::AudioProcessorGraph& graph,
+                                                   juce::AudioProcessorGraph::NodeID sourceId) {
+    std::vector<MidiReachLeg> reached;
+    if (graph.getNodeForId(sourceId) == nullptr)
+        return reached;
+
+    const auto connections = graph.getConnections();
+    std::vector<juce::AudioProcessorGraph::NodeID> expanded{sourceId};
+    std::vector<juce::AudioProcessorGraph::NodeID> queue{sourceId};
+    while (!queue.empty()) {
+        const auto nodeId = queue.back();
+        queue.pop_back();
+        for (const auto& conn : connections) {
+            if (conn.source.nodeID != nodeId || conn.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex)
+                continue;
+            const auto destId = conn.destination.nodeID;
+            if (destId == sourceId)
+                continue;
+            if (!isMacroPortNode(processorFor(graph, destId))) {
+                reached.push_back({destId, conn});
+                continue;
+            }
+            if (!contains(expanded, destId)) {
+                expanded.push_back(destId);
+                queue.push_back(destId);
+            }
+        }
+    }
+    return reached;
+}
+
+TrackChannelReachMap::TrackChannelReachMap(juce::AudioProcessorGraph& graph)
+    : graph_(graph) {
+    for (const auto& conn : graph.getConnections()) {
+        if (!isLinkSignalEdge(graph, conn))
+            continue;
+        out_[conn.source.nodeID].push_back(conn.destination.nodeID);
+        in_[conn.destination.nodeID].push_back(conn.source.nodeID);
+    }
+}
+
+juce::AudioProcessorGraph::NodeID TrackChannelReachMap::stripFedByTrackSource(NodeID trackSourceId) const {
+    if (const auto cached = stripBySource_.find(trackSourceId); cached != stripBySource_.end())
+        return cached->second;
+
+    NodeID found{};
+    if (graph_.getNodeForId(trackSourceId) != nullptr) {
+        std::vector<NodeID> visited{trackSourceId};
+        std::vector<NodeID> queue{trackSourceId};
+        for (size_t head = 0; head < queue.size() && found == NodeID{}; ++head) {
+            const auto edges = out_.find(queue[head]);
+            if (edges == out_.end())
+                continue;
+            for (const auto destId : edges->second) {
+                if (contains(visited, destId))
+                    continue;
+                visited.push_back(destId);
+                auto* destProcessor = processorFor(graph_, destId);
+                if (isStrip(destProcessor)) {
+                    found = destId;
+                    break;
+                }
+                if (!isReachTerminal(destProcessor))
+                    queue.push_back(destId);
+            }
+        }
+    }
+    stripBySource_[trackSourceId] = found;
+    return found;
+}
+
+const std::vector<juce::AudioProcessorGraph::NodeID>&
+TrackChannelReachMap::trackSourcesFeedingStrip(NodeID stripId) const {
+    if (const auto cached = feedersByStrip_.find(stripId); cached != feedersByStrip_.end())
+        return cached->second;
+
+    std::vector<NodeID> tracks;
+    if (graph_.getNodeForId(stripId) != nullptr) {
+        std::vector<NodeID> visited{stripId};
+        std::vector<NodeID> queue{stripId};
+        for (size_t head = 0; head < queue.size(); ++head) {
+            const auto edges = in_.find(queue[head]);
+            if (edges == in_.end())
+                continue;
+            for (const auto sourceId : edges->second) {
+                if (contains(visited, sourceId))
+                    continue;
+                visited.push_back(sourceId);
+                auto* sourceProcessor = processorFor(graph_, sourceId);
+                if (isTrackSourceNode(sourceProcessor)) {
+                    if (!contains(tracks, sourceId))
+                        tracks.push_back(sourceId);
+                } else if (!isStrip(sourceProcessor)) {
+                    queue.push_back(sourceId);
+                }
+            }
+        }
+    }
+    return feedersByStrip_.emplace(stripId, std::move(tracks)).first->second;
 }
 
 } // namespace synth

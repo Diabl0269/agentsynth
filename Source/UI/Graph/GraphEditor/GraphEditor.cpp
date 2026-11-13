@@ -7,42 +7,149 @@
 
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
+#include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , content(*this)
-    , modMatrix(engine, undoMgr)
-    , undoManager(undoMgr) {
+    , modMatrix(engine, undoMgr, this)
+    , undoManager(undoMgr)
+    , cardKeyboard_(std::make_unique<CanvasCardKeyboard>(*this, undoMgr)) {
+    canvasMemo_ = std::make_unique<graph_editor_paint::CanvasMemo>(*this);
+    onDropRefused = [this](const juce::String& reason) { reportStatusMessage(reason); };
+    if (undoMgr != nullptr)
+        undoMgr->setGraphEditor(this); // so an undo detaches the cards of the nodes it frees, whoever built this
     addAndMakeVisible(content);
-    addAndMakeVisible(modMatrix);
+    addChildComponent(modMatrix); // closed until toggled (isMatrixVisible); a closed matrix does no work
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
+    macroController_.arrangeCanvasHook = [this] { autoArrange(/*record=*/false); };
+    macroController_.setPaintedHullProvider([this](const juce::String& id) { return paintedMacroHullBounds(id); });
+    macroController_.setBorderGlideHook([this](const std::set<juce::String>& skip) -> std::function<void()> {
+        auto before = std::make_shared<MacroHullGlide::Hulls>(snapshotPaintedHulls());
+        for (const auto& id : skip)
+            before->erase(id);
+        return [safe = juce::Component::SafePointer<GraphEditor>(this), before] {
+            if (safe != nullptr)
+                safe->glideHullsFrom(*before);
+        };
+    });
 
     // Minimap (issue #159): visibility is driven by setMinimapVisible(), called by the owner once
     // it has restored the persisted preference — NOT addAndMakeVisible, which would show it before
     // that preference is known.
     addChildComponent(minimap);
+    minimapSlide_.snapTo(minimapVisible ? 1.0f : 0.0f);
     minimap.setVisible(minimapVisible);
-    minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };
+    minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };   // a drag: the view follows the pointer
+    minimap.onNavigateEased = [this](juce::Point<float> p) { flyViewTo(p); }; // a click flies there
     minimap.onZoom = [this](float d) { zoomAroundCentre(d); };
 
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
-    setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
-                                             "Scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod "
-                                             "knob to remove"));
+    setTooltip(synth::ui::formatShortcutHint(
+        "Patch canvas - drag modules here to build your patch",
+        "Swipe or scroll to pan | Pinch or " + platformCommandKeyName() +
+            "+scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod knob to remove"));
 
     // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
     setWantsKeyboardFocus(true);
 
+    modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
+    portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
+    edgeScroll_ = std::make_unique<synth::ui::CanvasEdgeScrollDriver>(*this);
+    polyChain_ = std::make_unique<synth::ui::PolyChainController>(*this);
+    configureCardGlide();
+    configureCanvasFrame();
+    // A module dragged between cards opens a gap: its borders glide with the cards, the frame grows to hold the cards
+    // it pushed, and Esc closes it wherever the keyboard focus is.
+    InsertGap::Hooks gapHooks;
+    gapHooks.beginBorderGlide = [this]() -> std::function<void()> {
+        auto before = std::make_shared<MacroHullGlide::Hulls>(snapshotPaintedHulls());
+        return [safe = juce::Component::SafePointer<GraphEditor>(this), before] {
+            if (safe != nullptr)
+                safe->glideHullsFrom(*before);
+        };
+    };
+    gapHooks.afterMove = [this] { refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); };
+    gapHooks.keyHost = this;
+    macroController_.insertGap().setHooks(std::move(gapHooks));
+    emptyCanvasHint.repaintArea = [this] { return getLocalBounds().withSizeKeepingCentre(getWidth(), 64); };
+    emptyCanvasHint.snapTo(true); // an empty canvas starts with its hint; updateComponents() fades it from here
     startTimerHz(30);
 }
 
-GraphEditor::~GraphEditor() { stopTimer(); }
+GraphEditor::~GraphEditor() {
+    stopTimer();
+    dragDropController_.getGhostSlide().reset(vblankUpdater); // its driver outlives the updater otherwise
+    loadReveal_.reset();                                      // before the cards it may still be scaling
+    edgeScroll_.reset();                                      // stops its timer
+    polyChain_.reset();
+    portPanel_.reset();
+    modDot_.reset(); // before `content`, which its tooltip animator is attached to
+}
+
+// Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
+// repaint that also drops the cable memo, a partial one that keeps it, and the VBlank updater that drives it.
+void GraphEditor::configureCardGlide() {
+    CardGlideAnimator::Hooks hooks;
+    hooks.cards = [this] {
+        std::vector<CardGlideAnimator::Entry> out;
+        for (auto* m : content.getModules())
+            if (m != nullptr)
+                out.push_back({m, m->getNodeId().uid});
+        for (auto* card : content.getMacroCards())
+            if (card != nullptr)
+                out.push_back({card, CardGlideAnimator::macroKey(card->getMacroId())});
+        return out;
+    };
+    hooks.borders = [this] {
+        const graph_editor_paint::CardMapScope oneCardMap(*this); // every border reads one map of the cards
+        return detail::captureMacroBorders(*this, zoomLevel);
+    };
+    hooks.snapshotScale = [this] {
+        const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+        return zoomLevel * (display != nullptr ? static_cast<float>(display->scale) : 1.0f);
+    };
+    hooks.repaint = [this] { repaintCanvas(); };
+    // A glide frame repaints only what it moves and moves the cables in the memo instead of rebuilding it
+    // (CardGlideAnimator::requestFrameRepaint); a memo already dropped means a full repaint is pending anyway.
+    hooks.repaintArea = [this](juce::Rectangle<int> area) { content.repaint(area); };
+    hooks.liveCables = [this]() -> std::vector<VisibleCable>* { return cablesCacheValid ? &cablesCache : nullptr; };
+    hooks.updater = &vblankUpdater;
+    hooks.canAnimate = [this] { return isShowing(); };
+    hooks.accent = [this] { return synth::theme::themeOf(*this).colors.accent; };
+    hooks.cornerRadius = [this] { return synth::theme::themeOf(*this).metrics.cornerRadius; };
+    // The macro fold (MacroFoldAnimator.h) draws the cables of the modules it flies itself, with the canvas' wire look.
+    hooks.visibleCables = [this] { return buildVisibleCables(); };
+    hooks.categoryColour = [this](synth::ui::ModuleCategory category) { return categoryPreviewColour(category); };
+    hooks.paintCable = [this](juce::Graphics& g, const VisibleCable& cable, float alpha) {
+        const auto wire = buildCablePath(cable.p1, cable.p2);
+        const auto colour = colourForCable(cable).withMultipliedAlpha(alpha);
+        const bool isModulation = cable.kind != VisibleCable::Kind::Direct;
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+            lf->drawConnectionWire(g, cable.p1, cable.p2, wire, colour, isModulation, cable.activity, false);
+            return;
+        }
+        g.setColour(colour);
+        g.strokePath(wire, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    };
+    cardGlide_.setHooks(std::move(hooks));
+}
 
 GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     : editor(ed) {
@@ -51,7 +158,7 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     setOpaque(true);
 }
 
-// ---- GraphCanvasHost (see GraphEditor.h's private section for the rest, defined inline there) ----
+// ---- GraphCanvasHost overrides (the one-line ones -- accessors of owned members -- stay inline in GraphEditor.h) ----
 // Out-of-line only because it needs ModuleComponent's full definition (getNodeId()), which
 // GraphEditor.h deliberately keeps forward-declared.
 juce::AudioProcessorGraph& GraphEditor::graph() { return audioEngine.getGraph(); }
@@ -84,4 +191,34 @@ void GraphEditor::clearMidiLearnArmed() {
     for (auto* c : content.getModules())
         if (c != nullptr)
             c->setMidiLearnArmedParam({});
+}
+
+void GraphEditor::reportStatusMessage(const juce::String& message) {
+    if (onStatusMessage)
+        onStatusMessage(message);
+}
+
+juce::Point<int> GraphEditor::canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const {
+    return content.getLocalPoint(this, pointOnHost).roundToInt();
+}
+
+juce::Point<int> GraphEditor::estimateModuleSizeForType(const juce::String& typeName) const {
+    return estimateModuleSize(typeName);
+}
+
+juce::var GraphEditor::resolveSnippetPayload(const juce::String& name) const {
+    return snippetProvider ? snippetProvider(name) : juce::var();
+}
+
+void GraphEditor::holdStructureNotify(bool begin) {
+    if (begin) {
+        ++structureNotify_.first;
+        return;
+    }
+    jassert(structureNotify_.first > 0);
+    if (--structureNotify_.first == 0 && structureNotify_.second) {
+        structureNotify_.second = false;
+        if (onGraphStructureChanged)
+            onGraphStructureChanged();
+    }
 }

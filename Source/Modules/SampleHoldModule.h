@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
 #include <atomic>
@@ -48,8 +49,12 @@ public:
         addParameter(
             rateParam = new juce::AudioParameterFloat(
                 "rate", "Rate (Hz)", juce::NormalisableRange<float>(kMinRateHz, kMaxRateHz, 0.01f, 0.5f), 8.0f));
-        addParameter(slewParam = new juce::AudioParameterFloat("slew", "Slew", 0.0f, 1.0f, 0.0f));
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(slewParam =
+                         new juce::AudioParameterFloat("slew", "Slew", juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f,
+                                                       synth::fractionPercentAttributes()));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
         addParameter(offsetParam = new juce::AudioParameterFloat("offset", "Offset", -1.0f, 1.0f, 0.0f));
         addMuteParameter();
         enableVisualBuffer(true);
@@ -78,7 +83,7 @@ public:
         smoothedOffset.setCurrentAndTargetValue(offsetParam->get());
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
 
         const int numSamples = buffer.getNumSamples();
@@ -90,12 +95,16 @@ public:
             // Dry pass-through on ch0; clear trigger + CV channels so they don't leak downstream.
             for (int ch = 1; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             resetMeters();
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             resetMeters();
             return;
         }
@@ -215,8 +224,7 @@ public:
             triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer()) {
-            for (int s = 0; s < numSamples; ++s)
-                vb->pushSample(out[s]);
+            vb->pushBlock(out, numSamples);
         }
     }
 

@@ -1,0 +1,29 @@
+# Dropping a dragged bottom-dock tab glides it from where the mouse let go to its slot. The old tabs used to flash
+# back into the old order for about 170 ms right after the drop and only then settle (same for the Mixer tab).
+#
+# What a user does: opens a project, shows the bottom panel (Timeline, Mixer, Controllers), presses on the Timeline
+# tab and drags it past the last tab, lets go. The tabs settle into Mixer, Controllers, Timeline; no frame after the
+# release shows the old order. The state is read from the tab bounds; the proof still is taken right after release.
+record: true
+motion: true
+save_project: tab-drop-glide
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: "dockTab:Timeline", showing: true, within_ms: 2000}
+  - screenshot: {name: 0-before}
+  - mouseDown: {id: "dockTab:Timeline", x: 10, y: 8}
+  - mouseMoveHeld: {id: "Panel tabs", x: 450, y: 14}
+  - mouseMoveHeld: {id: "Panel tabs", x: 900, y: 14}
+  - mouseMoveHeld: {id: "Panel tabs", x: 1350, y: 14}
+  - mouseUp: {id: "Panel tabs", x: 1350, y: 14}
+  - mark: {check: 1, name: tab-drop-settles}
+  - screenshot: {name: 1-just-after-release}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: 2-settled}
+  - expect: {id: "dockTab:Mixer", bounds: {x: 0, y: 661, w: 533, h: 19}, within_ms: 2000}
+  - expect: {id: "dockTab:Controllers", bounds: {x: 533, y: 661, w: 533, h: 19}, within_ms: 2000}
+  - expect: {id: "dockTab:Timeline", bounds: {x: 1066, y: 661, w: 534, h: 19}, within_ms: 2000}

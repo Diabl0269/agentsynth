@@ -194,6 +194,11 @@ BASELINE_FILE="${HEADER_COMMENT_BASELINE:-$ROOT/scripts/header-comment-baseline.
 # isn't under ROOT this expansion is a no-op (no path will ever equal it).
 BASELINE_REL="${BASELINE_FILE#"$ROOT"/}"
 
+# Per-file comment/code counts are cached by content (scripts/lib/guard-cache.sh); the floor, the
+# sibling-.cpp test and the baseline are applied fresh every run.
+# shellcheck source=scripts/lib/guard-cache.sh
+source "$SCRIPT_DIR/lib/guard-cache.sh"
+
 # list_scanned_paths -- every git-tracked Source/**/*.h or Source/**/*.hpp path under $ROOT, one
 # per line, minus the guard's own baseline file (belt-and-braces; a .txt baseline never matches
 # these extensions anyway, but this keeps the exclusion explicit per the guard's own contract).
@@ -250,13 +255,15 @@ has_sibling_cpp() {
     ' "$cpp_list"
 }
 
-# count_comment_code <file> -- prints "<comment-lines> <code-lines>" for <file>, per the counting
-# heuristic in this script's header comment (leading whitespace stripped; blank counts as neither;
-# `//`-led lines and `/* ... */` block spans, including their closing line, count as comment;
-# everything else -- including a code line with a trailing `// note` -- counts as code).
-count_comment_code() {
-    awk '
-        BEGIN { c = 0; code = 0; inblk = 0 }
+# scan_comment_counts -- "<comment-lines> <code-lines> <path>" for each repo-relative path on stdin, per
+# the counting heuristic in this script's header comment (leading whitespace stripped; blank counts as
+# neither; `//`-led lines and `/* ... */` block spans, including their closing line, count as comment;
+# everything else -- including a code line with a trailing `// note` -- counts as code). An empty file
+# prints nothing, which the caller reads as 0 0.
+scan_comment_counts() {
+    (cd "$ROOT" && tr '\n' '\0' | xargs -0 awk '
+        function flush() { if (cur != "") printf "%d %d %s\n", c, code, cur }
+        FNR == 1 { flush(); cur = FILENAME; c = 0; code = 0; inblk = 0 }
         {
             line = $0
             gsub(/^[ \t]+/, "", line)
@@ -266,8 +273,8 @@ count_comment_code() {
             if (line ~ /^\/\*/) { c++; if (line !~ /\*\//) inblk = 1; next }
             code++
         }
-        END { printf "%d %d\n", c, code }
-    ' "$1"
+        END { flush() }
+    ')
 }
 
 # baseline_data -- the baseline file's data lines ("<excess> <path>"), comments and blanks
@@ -285,19 +292,28 @@ write_step_summary() {
 # unsorted. excess = comment - code (may be negative). <flagged> is 1/0, precomputed here so
 # downstream awk never needs FLOOR/sibling-.cpp logic.
 build_current_data() {
-    local cpp_list
+    local cpp_list headers existing counts joined
     cpp_list="$(mktemp)"
+    headers="$(mktemp)"
+    existing="$(mktemp)"
+    counts="$(mktemp)"
+    joined="$(mktemp)"
     list_cpp_files >"$cpp_list"
+    list_scanned_paths >"$headers"
+    while IFS= read -r path; do
+        [ -f "$ROOT/$path" ] && printf '%s\n' "$path"
+    done <"$headers" >"$existing"
+    if [ -s "$existing" ]; then
+        gc_init header-comments "" "${BASH_SOURCE[0]}"
+        gc_scan_files 'p = $0; sub(/^[0-9]+ [0-9]+ /, "", p)' "$existing" scan_comment_counts >"$counts"
+    fi
+    # One line per scanned header: "<comment> <code> <path>", 0 0 for a header that is missing or empty.
+    awk -v counts="$counts" '
+        FILENAME == counts { p = $0; sub(/^[0-9]+ [0-9]+ /, "", p); cc[p] = $1 " " $2; next }
+        { print (($0 in cc) ? cc[$0] : "0 0") " " $0 }
+    ' "$counts" "$headers" >"$joined"
 
-    list_scanned_paths | while IFS= read -r path; do
-        full="$ROOT/$path"
-        if [ -f "$full" ]; then
-            counts="$(count_comment_code "$full")"
-        else
-            counts="0 0"
-        fi
-        comment="${counts%% *}"
-        code="${counts##* }"
+    while read -r comment code path; do
         excess=$((comment - code))
 
         flagged=0
@@ -306,9 +322,9 @@ build_current_data() {
         fi
 
         printf '%s %s %s %s %s\n' "$comment" "$code" "$excess" "$flagged" "$path"
-    done
+    done <"$joined"
 
-    rm -f "$cpp_list"
+    rm -f "$cpp_list" "$headers" "$existing" "$counts" "$joined"
 }
 
 run_check() {

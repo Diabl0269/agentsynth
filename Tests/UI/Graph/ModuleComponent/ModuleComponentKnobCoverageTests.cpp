@@ -17,12 +17,16 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -34,12 +38,6 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // A/B are signal inputs, not parameter-CV mod targets -- MathModule.h's own comment on
     // getModulationTargets documents the convention this test would otherwise contradict.
     "Math",
-    // Paged tab card: a knob on an inactive Wavetable tab page is legitimately invisible
-    // (getModRingSliderIndex() == -1 by design -- docs/modules/modulation.md#modulation-rings-on-knobs),
-    // so a single-page sweep here would false-positive on every tab but whichever is default.
-    // Covered instead by the dedicated per-tab suites (Tests/UI/.../ModuleComponentWavetableTests.cpp,
-    // Tests/Modules/WavetableOscillatorModule/*).
-    "Wavetable",
     // Port widgets / graph plumbing with no ModuleComponent knobs at all.
     "Macros",
     "Macro In",
@@ -59,15 +57,15 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // dedicated "Add lane..." UI, never a ModuleComponent knob -- docs/modules/modulation.md's
     // "Hosted plugin parameters as automation lanes" section.
     "Hosted Plugin",
-    // Per-step pattern data, not a continuous mod target.
+    // The pattern lives in the step grid, and the knobs on the card (Transpose, Gate, Velocity, Chance) are read per
+    // step by the sequencer's own clock: no continuous input for a modulation cable to reach.
     "Sequencer",
     "Poly Sequencer",
-    // Mixer-panel gain stages (Master/bus/channel gain, VoiceMixer per-voice level). Adding CV
+    // Mixer-panel gain stages (Master/bus/channel gain). Adding CV
     // jacks to these is out of scope for this sweep: ChannelStripModule's channel layout is
     // frozen-once-set with fixed send legs on raw ch8-15 (Source/Modules/CLAUDE.md), so a CV jack
     // there needs its own careful channel-map change, not a drive-by fix here.
     "Master",
-    "Voice Mixer",
     "Channel Strip",
 };
 
@@ -76,23 +74,13 @@ bool isContinuousParam(const juce::RangedAudioParameter* param) {
            dynamic_cast<const juce::AudioParameterInt*>(param) != nullptr;
 }
 
-// The module's own "outputLevel" parameter, when it has opted into the shared stage
-// (ModuleBase::addOutputLevelParameter). docs/modules/modulation.md is explicit that this one
-// never gets a CV jack ("nor does the shared output Level stage") -- see
-// docs/modules/fx-modules.md#output-level-shared-stage for why: a level control almost every
-// audio module carries by composition, not a hand-authored per-module knob.
-bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParameter& param) {
-    for (auto* p : mb.getParameters())
-        if (auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p))
-            if (ranged == &param)
-                return ranged->paramID == "outputLevel";
-    return false;
-}
+// Oscillator knobs with no CV input: Phase and Rand are read once, when a note starts, so a continuous input would
+// have nothing to modulate.
+const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand"};
 
-// Every visible rotary knob's componentID, when it is bound to a Float/Int parameter that ISN'T
-// the shared output Level stage. Choice/Bool knobs (waveform pickers, on/off toggles) are excluded
-// by TYPE, not by an allow-list guess. No module has a known gap (Sampler "rootNote" is covered),
-// so there is no per-module deferred-gap escape hatch left to check against.
+// Every visible rotary knob's componentID, when it is bound to a Float/Int parameter. Choice/Bool knobs (waveform
+// pickers, on/off toggles) are excluded by TYPE, not by an allow-list guess. No module has a known gap (Sampler
+// "rootNote" is covered), so there is no per-module deferred-gap escape hatch left to check against.
 std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComponent& card) {
     std::set<juce::String> names;
     for (auto* child : card.getChildren()) {
@@ -102,8 +90,7 @@ std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComp
         const auto id = slider->getComponentID();
         for (auto* p : mb.getParameters()) {
             auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p);
-            if (ranged != nullptr && ranged->getName(100) == id && isContinuousParam(ranged) &&
-                !isSharedOutputLevelParam(mb, *ranged)) {
+            if (ranged != nullptr && ranged->getName(100) == id && isContinuousParam(ranged)) {
                 names.insert(id);
                 break;
             }
@@ -135,7 +122,7 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 //     re-litigates.
 //   - The bound parameter is a `ThresholdMeterSource`'s own threshold id (ADSR "gateThreshold",
 //     Comparator/Sample & Hold "trigThreshold") EXCEPT Sample & Hold's, which alone keeps its
-//     generic slider -- ModuleComponent.cpp's shouldSkipGenericFloatSlider skips building one for
+//     generic slider -- CardBodyPlan.cpp's isEditedElsewhere skips building one for
 //     the rest, because the value lives inside ThresholdControlComponent instead; that widget's
 //     own drop anchor is what getModTargetPortForPoint special-cases already.
 //
@@ -144,17 +131,79 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 // no knob to land on is exactly the visible-truncated-gutter-jack shape knob-binding removes --
 // see docs/modules/modulation.md), and so are never declared as ModulationTargets in the first
 // place -- check (a) below never iterates them. Check (b) also can't false-positive on them:
-// shouldSkipGenericFloatSlider means they never get a rotary Slider component either, so
+// isEditedElsewhere (CardBodyPlan.cpp) means they never get a rotary Slider component either, so
 // continuousKnobParamNames() never picks them up.
 bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget& target) {
     const auto* param = mb.parameterForModTarget(target);
     if (param == nullptr)
+        return true;
+    // The Drum Kit's group knobs (kickTune, closedDecay ...) are edited by the AI and by automation: the card shows the
+    // pads' knobs instead, so a group cable has no knob on the card to ring. Its Level is the card's one generic knob.
+    if (mb.getModuleType() == ModuleType::DrumKit && param->paramID != "level")
+        return true;
+    // The Parametric EQ card has one selected-band row, not a knob per band: its cables to the other bands anchor to
+    // their strip chips (ModuleComponentEqBandRowTests).
+    if (mb.getModuleType() == ModuleType::ParametricEQ && param->paramID.startsWith("band"))
         return true;
     if (!isContinuousParam(param))
         return true;
     if (auto* threshold = dynamic_cast<const ThresholdMeterSource*>(&mb))
         if (mb.getModuleType() != ModuleType::SampleHold && param->paramID == threshold->getThresholdParamID())
             return true;
+    return false;
+}
+
+// Card sections a choice shows only in one mode (the Filter's Custom knobs, shown while filterType is
+// "Custom"; the LFO's Morph knobs, shown while shape is "Custom"): the sweep runs once per listed choice as well as at
+// the default, and a knob that exists but is hidden in the current mode is checked in the pass where its mode is on
+// instead.
+const std::map<juce::String, std::pair<juce::String, juce::String>> kModeChoices = {
+    {"Filter", {"filterType", "Custom"}},
+    {"LFO", {"shape", "Custom"}},
+    {"Sampler", {"playMode", "Instrument"}},
+};
+
+// Types whose modes each hide knobs the other modes show: the sweep skips a hidden knob in every pass, since the
+// pass where its mode is on checks it.
+const std::set<juce::String> kModesHideKnobs = {"Sampler"};
+
+void setChoiceByName(ModuleBase& mb, const juce::String& paramId, const juce::String& choiceName) {
+    for (auto* p : mb.getParameters())
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p); c != nullptr && c->paramID == paramId)
+            *c = c->choices.indexOf(choiceName);
+}
+
+bool knobHiddenInThisMode(const ModuleBase& mb, ModuleComponent& card, const ModulationTarget& target) {
+    const auto* param = mb.parameterForModTarget(target);
+    if (param == nullptr)
+        return false;
+    for (auto* child : card.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            if (slider->getComponentID() == param->getName(100))
+                return !slider->isVisible();
+    return false;
+}
+
+// Whether a cable dropped on `target` finds a knob to ring: a bound knob, or a slider strip of the Filter's morph map
+// (it stands in place of the Morph X / Y knobs). A knob on a tab that is not shown has no ring, so each tab is shown in
+// turn.
+bool landsOnAKnob(ModuleComponent& card, const ModulationTarget& target) {
+    const auto lands = [&] {
+        return card.sliderIndexForModTarget(target) >= 0 ||
+               (card.getMorphCard() != nullptr && card.getMorphCard()->anchorFor(target.channelIndex).has_value());
+    };
+    if (lands())
+        return true;
+    auto* body = card.getCardBody();
+    if (body == nullptr)
+        return false;
+    const auto& groups = body->getPlan().tabGroups;
+    for (int g = 0; g < (int)groups.size(); ++g)
+        for (int tab = 0; tab < (int)groups[(size_t)g].sections.size(); ++tab) {
+            body->selectTab(g, tab);
+            if (lands())
+                return true;
+        }
     return false;
 }
 
@@ -190,34 +239,49 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
         AudioEngine engine;
         GraphEditor editor(engine);
 
-        for (const bool poly : voiceModes) {
-            SCOPED_TRACE((typeName + (poly ? " (poly)" : " (mono)")).toStdString());
-            setPolyIfPresent(*mb, poly);
+        std::vector<juce::String> choiceModes = {{}};
+        if (const auto mode = kModeChoices.find(typeName); mode != kModeChoices.end())
+            choiceModes.push_back(mode->second.second);
 
-            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        for (const auto& choiceMode : choiceModes)
+            for (const bool poly : voiceModes) {
+                SCOPED_TRACE((typeName + (poly ? " (poly)" : " (mono)") + choiceMode).toStdString());
+                setPolyIfPresent(*mb, poly);
+                if (choiceMode.isNotEmpty())
+                    setChoiceByName(*mb, kModeChoices.at(typeName).first, choiceMode);
 
-            // (a) every declared target must resolve to a bound, visible knob -- except the
-            // documented no-generic-knob-by-design exceptions above.
-            for (const auto& target : mb->getModulationTargets()) {
-                if (targetHasNoGenericKnobByDesign(*mb, target))
-                    continue;
-                SCOPED_TRACE(target.name.toStdString());
-                EXPECT_GE(card.sliderIndexForModTarget(target), 0)
-                    << "jack \"" << target.name << "\" (channel " << target.channelIndex
-                    << ") has no bound knob -- a dropped cable would find nothing to ring";
+                ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+                // A cable dragged over the folded More row unfolds it, so a knob in there is reachable.
+                if (auto* body = card.getCardBody(); body != nullptr && body->hasMoreRow())
+                    body->setMoreUnfolded(true);
+
+                // (a) every declared target must resolve to a bound, visible knob -- except the
+                // documented no-generic-knob-by-design exceptions above.
+                for (const auto& target : mb->getModulationTargets()) {
+                    if (targetHasNoGenericKnobByDesign(*mb, target))
+                        continue;
+                    if ((choiceMode.isEmpty() || kModesHideKnobs.count(typeName) > 0) &&
+                        kModeChoices.count(typeName) > 0 && knobHiddenInThisMode(*mb, card, target))
+                        continue;
+                    SCOPED_TRACE(target.name.toStdString());
+                    EXPECT_TRUE(landsOnAKnob(card, target))
+                        << "jack \"" << target.name << "\" (channel " << target.channelIndex
+                        << ") has no bound knob -- a dropped cable would find nothing to ring";
+                }
+
+                // (b) every continuous-parameter knob must be reachable from SOME target.
+                std::set<juce::String> targetedParamNames;
+                for (const auto& target : mb->getModulationTargets())
+                    if (const auto* param = mb->parameterForModTarget(target))
+                        targetedParamNames.insert(param->getName(100));
+
+                for (const auto& knobParamName : continuousKnobParamNames(*mb, card)) {
+                    if (typeName == "Oscillator" && kOscillatorKnobsWithoutJack.count(knobParamName) > 0)
+                        continue;
+                    EXPECT_TRUE(targetedParamNames.count(knobParamName) > 0)
+                        << "knob \"" << knobParamName << "\" has a continuous parameter but no CV jack "
+                        << "targets it -- it refuses a dropped modulation cable";
+                }
             }
-
-            // (b) every continuous-parameter knob must be reachable from SOME target.
-            std::set<juce::String> targetedParamNames;
-            for (const auto& target : mb->getModulationTargets())
-                if (const auto* param = mb->parameterForModTarget(target))
-                    targetedParamNames.insert(param->getName(100));
-
-            for (const auto& knobParamName : continuousKnobParamNames(*mb, card)) {
-                EXPECT_TRUE(targetedParamNames.count(knobParamName) > 0)
-                    << "knob \"" << knobParamName << "\" has a continuous parameter but no CV jack "
-                    << "targets it -- it refuses a dropped modulation cable";
-            }
-        }
     }
 }

@@ -1,10 +1,46 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManagerSnapshotSize.h"
 #include "MacroSet.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+
+using undo_size::sizedOnce;
+using NodeIDs = std::vector<juce::AudioProcessorGraph::NodeID>;
+
+namespace {
+/**
+ * Restores the graph half of a step, keeping every node the target state still contains.
+ *
+ * The node-preserving apply is tried first: it reaches the same state by diffing, so modules that survive the edit keep
+ * their processor instance and all its runtime state (sequencer position, envelope stage, sounding voices) and an undo
+ * of a parameter-only change performs no topology operation at all. It refuses -- without touching the graph -- any
+ * snapshot whose node identities it cannot establish, and then the original destroy-and-rebuild apply runs, which is
+ * always correct.
+ *
+ * Detaching UI from processors about to be freed is lazy. On the preserving path it happens only when a node is
+ * actually removed, and then only for those nodes: `preRemove` gets exactly them, so an undo of a duplicate tears down
+ * the copy's cards and keeps every other card (rebuilding all of them was most of that undo's cost). A step with no
+ * `preRemove` (an AI patch, whose hook is the AI listeners') and the fallback, which frees everything, run
+ * `preRestore`, which detaches all of it.
+ */
+void restoreGraph(const juce::var& state, juce::AudioProcessorGraph& graph, const std::function<void()>& preRestore,
+                  const std::function<void(const NodeIDs&)>& preRemove) {
+    auto beforeRemoval = [&preRestore, &preRemove](const NodeIDs& doomed) {
+        if (preRemove)
+            preRemove(doomed);
+        else if (preRestore)
+            preRestore();
+    };
+    if (!synth::AIStateMapper::applySnapshotPreservingNodes(state, graph, beforeRemoval)) {
+        if (preRestore)
+            preRestore();
+        synth::AIStateMapper::applyJSONToGraph(state, graph, true, true);
+    }
+}
+} // namespace
 
 /**
  * @class SnapshotAction
@@ -14,14 +50,16 @@ class SnapshotAction : public juce::UndoableAction {
 public:
     SnapshotAction(const juce::var& beforeState, const juce::var& afterState, juce::AudioProcessorGraph& graph,
                    std::function<void()> preRestore, std::function<void()> postRestore,
-                   std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
+                   std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {},
+                   std::function<void(const NodeIDs&)> preRemove = {})
         : beforeState(beforeState)
         , afterState(afterState)
         , graph(graph)
         , preRestore(preRestore)
         , postRestore(postRestore)
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , preRemove(std::move(preRemove)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -34,47 +72,18 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
-    /**
-     * Restores one snapshot, keeping every node the target state still contains.
-     *
-     * The node-preserving apply is tried first: it reaches the same state by diffing, so modules
-     * that survive the edit keep their processor instance and all its runtime state (sequencer
-     * position, envelope stage, sounding voices) and an undo of a parameter-only change performs
-     * no topology operation at all. It refuses — without touching the graph — any snapshot whose
-     * node identities it cannot establish, and then the original destroy-and-rebuild apply runs,
-     * which is always correct.
-     *
-     * preRestore is what detaches graph-referencing UI before processors are freed, so it fires
-     * lazily: on the fallback (which frees everything) and, on the preserving path, only if a node
-     * is actually being removed. When nothing is freed there is nothing to detach from, and
-     * GraphEditor::updateComponents reconciles the rest — so a parameter-only undo no longer
-     * destroys and re-creates every ModuleComponent either.
-     */
+    // One snapshot back into the graph through restoreGraph (above); GraphEditor::updateComponents (postRestore)
+    // reconciles the cards afterwards.
     bool restore(const juce::var& state) {
-        // Unconditional, unlike preRestore below — see AppUndoManager::setRestoreHooks for why the
-        // lazy hook is the wrong place for a programmatic-write guard.
+        // Unconditional, unlike preRestore/preRemove -- see AppUndoManager::setRestoreHooks for why the lazy hook is
+        // the wrong place for a programmatic-write guard.
         if (beforeRestore)
             beforeRestore();
 
-        bool preRestoreFired = false;
-        auto firePreRestore = [this, &preRestoreFired] {
-            if (preRestoreFired)
-                return;
-            preRestoreFired = true;
-            if (preRestore)
-                preRestore();
-        };
-
-        if (!synth::AIStateMapper::applySnapshotPreservingNodes(state, graph, firePreRestore)) {
-            firePreRestore();
-            synth::AIStateMapper::applyJSONToGraph(state, graph, true, true);
-        }
+        restoreGraph(state, graph, preRestore, preRemove);
 
         if (postRestore)
             postRestore();
@@ -85,11 +94,13 @@ private:
 
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     juce::AudioProcessorGraph& graph;
     std::function<void()> preRestore;
     std::function<void()> postRestore;
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void(const NodeIDs&)> preRemove;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SnapshotAction)
@@ -115,12 +126,14 @@ private:
 class TimelineSnapshotAction : public juce::UndoableAction {
 public:
     TimelineSnapshotAction(synth::TimelineDoc& doc, const juce::var& beforeState, const juce::var& afterState,
-                           std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
+                           std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {},
+                           std::function<void()> tracksLeaving = {})
         : doc(doc)
         , beforeState(beforeState)
         , afterState(afterState)
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , tracksLeaving(std::move(tracksLeaving)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -133,15 +146,14 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
         if (beforeRestore)
             beforeRestore();
+        if (tracksLeaving && timelineRestoreDropsTrack(doc, state))
+            tracksLeaving(); // the track list pictures its rows while they are still there
         const bool ok = doc.fromVar(state);
         jassert(ok); // a var this class produced must always be accepted by fromVar
         // Fired even on a failed restore: the owner's pass re-derives orphan flags and republishes,
@@ -154,8 +166,10 @@ private:
     synth::TimelineDoc& doc;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void()> tracksLeaving;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineSnapshotAction)
@@ -198,10 +212,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
@@ -215,6 +226,7 @@ private:
     synth::MidiRemoteProjectDoc& doc;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> postRestore;
     bool firstPerform = true;
 
@@ -249,10 +261,7 @@ public:
 
     bool undo() override { return restore(beforeState); }
 
-    int getSizeInUnits() override {
-        return static_cast<int>(
-            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
-    }
+    int getSizeInUnits() override { return sizedOnce(sizeInUnits, {&beforeState, &afterState}); }
 
 private:
     bool restore(const juce::var& state) {
@@ -271,6 +280,7 @@ private:
     synth::MacroSet& macros;
     juce::var beforeState;
     juce::var afterState;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> postRestore;
     bool firstPerform = true;
 
@@ -307,7 +317,7 @@ public:
                                 const juce::var& graphAfter, const juce::var& macrosBefore,
                                 const juce::var& macrosAfter, std::function<void()> preRestore,
                                 std::function<void()> postRestore, std::function<void()> beforeRestore,
-                                std::function<void()> afterRestore)
+                                std::function<void()> afterRestore, std::function<void(const NodeIDs&)> preRemove)
         : graph(graph)
         , macros(macros)
         , graphBefore(graphBefore)
@@ -317,7 +327,8 @@ public:
         , preRestore(std::move(preRestore))
         , postRestore(std::move(postRestore))
         , beforeRestore(std::move(beforeRestore))
-        , afterRestore(std::move(afterRestore)) {}
+        , afterRestore(std::move(afterRestore))
+        , preRemove(std::move(preRemove)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -330,9 +341,7 @@ public:
     bool undo() override { return restore(graphBefore, macrosBefore); }
 
     int getSizeInUnits() override {
-        return static_cast<int>(juce::JSON::toString(graphBefore).length() + juce::JSON::toString(graphAfter).length() +
-                                juce::JSON::toString(macrosBefore).length() +
-                                juce::JSON::toString(macrosAfter).length());
+        return sizedOnce(sizeInUnits, {&graphBefore, &graphAfter, &macrosBefore, &macrosAfter});
     }
 
 private:
@@ -340,21 +349,8 @@ private:
         if (beforeRestore)
             beforeRestore();
 
-        bool preRestoreFired = false;
-        auto firePreRestore = [this, &preRestoreFired] {
-            if (preRestoreFired)
-                return;
-            preRestoreFired = true;
-            if (preRestore)
-                preRestore();
-        };
-
-        // Graph FIRST — see the class comment. Same node-preserving-then-fallback strategy
-        // SnapshotAction::restore uses.
-        if (!synth::AIStateMapper::applySnapshotPreservingNodes(graphState, graph, firePreRestore)) {
-            firePreRestore();
-            synth::AIStateMapper::applyJSONToGraph(graphState, graph, true, true);
-        }
+        // Graph FIRST — see the class comment. Same restore SnapshotAction uses.
+        restoreGraph(graphState, graph, preRestore, preRemove);
 
         // Macros SECOND, now that the graph this snapshot pairs with is the live state — the one
         // ordering guarantee the whole class exists to provide.
@@ -374,10 +370,12 @@ private:
     juce::var graphAfter;
     juce::var macrosBefore;
     juce::var macrosAfter;
+    int sizeInUnits = -1; // sizedOnce
     std::function<void()> preRestore;
     std::function<void()> postRestore;
     std::function<void()> beforeRestore;
     std::function<void()> afterRestore;
+    std::function<void(const NodeIDs&)> preRemove;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphAndMacroSnapshotAction)
@@ -492,57 +490,6 @@ private:
 };
 
 /**
- * @class NodeExtraStateAction
- * @brief Undoable action that replays a module's extra state (ModuleBase::setExtraState) before/after.
- *
- * Like ParameterChangeAction, the edit is already applied when this is pushed (firstPerform skips
- * it). The payload is whatever the module's setExtraState accepts as a PARTIAL update -- for a
- * HostedPluginModule that is HostedPluginModule::makeCardLayoutPatch(), never a full getExtraState(),
- * which would carry the plugin's state blob and make undo re-load the plugin. A node that no longer
- * exists is skipped and still reports success, as a structural undo can remove it first.
- */
-class NodeExtraStateAction : public juce::UndoableAction {
-public:
-    NodeExtraStateAction(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
-                         const juce::var& before, const juce::var& after)
-        : graph(graph)
-        , nodeId(nodeId)
-        , before(before)
-        , after(after) {}
-
-    bool perform() override {
-        if (firstPerform) {
-            firstPerform = false;
-            return true;
-        }
-        apply(after);
-        return true;
-    }
-
-    bool undo() override {
-        apply(before);
-        return true;
-    }
-
-    int getSizeInUnits() override { return 1; }
-
-private:
-    void apply(const juce::var& state) {
-        if (auto* node = graph.getNodeForId(nodeId))
-            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
-                module->setExtraState(state);
-    }
-
-    juce::AudioProcessorGraph& graph;
-    juce::AudioProcessorGraph::NodeID nodeId;
-    juce::var before;
-    juce::var after;
-    bool firstPerform = true;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NodeExtraStateAction)
-};
-
-/**
  * @class PositionChangeAction
  * @brief Undoable action for module position changes on the canvas.
  */
@@ -601,7 +548,35 @@ private:
 
 // =============================================================================
 
+namespace {
+// Every restore that replaces graph or macro state lands here: the module cards' make-room records describe the
+// arrangement that was just replaced (the macro ones are lost with the MacroSet), so they go before the rebuild.
+void refreshCanvasAfterRestore(GraphEditor& ge) {
+    ge.getMacroController().clearModuleDisplacements();
+    ge.updateComponents();
+}
+} // namespace
+
 AppUndoManager::AppUndoManager() {}
+
+// The canvas an undo or redo keeps in step: it detaches the cards of the nodes a restore frees and reconciles the rest
+// afterwards. A GraphEditor built with this manager registers itself, so a restore can never free a module under a
+// live card. Held weakly: the editor may go first.
+void AppUndoManager::setGraphEditor(GraphEditor* ge) { graphEditor = ge; }
+
+// The serial counts here so it can never drift from what the undo stack actually holds. The step is sized inside
+// perform(), against the graph snapshot cache's counts, so a graph step costs only the nodes its edit changed.
+// A card's row open state rides in the transaction its gesture's edits opened, so one Cmd+Z undoes it with them. Make
+// the action's perform() a no-op when the change is already made.
+bool AppUndoManager::recordUiAction(std::unique_ptr<juce::UndoableAction> action) {
+    return performAction(action.release());
+}
+
+bool AppUndoManager::performAction(juce::UndoableAction* action) {
+    ++editSerial_;
+    const undo_size::KnownSizes known([this](const void* id) { return graphSnapshots_.knownSize(id); });
+    return undoManager.perform(action);
+}
 
 juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
                                                                 const juce::var& beforeState,
@@ -615,24 +590,23 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
         },
         [ge] {
             if (ge)
-                ge->updateComponents();
+                refreshCanvasAfterRestore(*ge);
         },
-        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
-}
-
-void AppUndoManager::setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore) {
-    beforeRestore_ = std::move(beforeRestore);
-    afterRestore_ = std::move(afterRestore);
+        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+        [ge](const NodeIDs& doomed) {
+            if (ge)
+                ge->detachModuleComponentsFor(doomed);
+        });
 }
 
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
-    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
+    auto beforeState = captureGraph(graph);
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     mutation();
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
     performAction(createGraphSnapshotAction(graph, beforeState, afterState));
 }
@@ -653,20 +627,9 @@ void AppUndoManager::recordMixerPanLawChange(std::function<void(synth::MixerPanL
     performAction(new MixerPanLawAction(std::move(apply), before, after));
 }
 
-void AppUndoManager::recordNodeExtraStateChange(juce::AudioProcessorGraph& graph,
-                                                juce::AudioProcessorGraph::NodeID nodeId,
-                                                const juce::var& beforeExtraState, const juce::var& afterExtraState) {
-    // Same no-op rule as recordTimelineChange: an edit that left the state as it was is not an undo step.
-    if (juce::JSON::toString(beforeExtraState) == juce::JSON::toString(afterExtraState))
-        return;
-
-    undoManager.beginNewTransaction();
-    performAction(new NodeExtraStateAction(graph, nodeId, beforeExtraState, afterExtraState));
-}
-
 void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                           int oldX, int oldY, int newX, int newY, std::function<void()> postRestore) {
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     // The firstPerform flag will skip the first perform() since the position
     // was already changed by the user dragging on the canvas.
@@ -679,38 +642,50 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     if (!mutation)
         return false;
 
-    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
+    auto beforeState = captureGraph(graph);
 
     // The mutation performs the apply itself (including its own listener notifications). If the patch is
     // rejected the graph is untouched — return without pushing so the undo stack keeps no no-op entry.
     if (!mutation())
         return false;
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
-    undoManager.beginNewTransaction(actionName);
+    beginTransaction(actionName);
     performAction(new SnapshotAction(
         beforeState, afterState, graph, preRestore, postRestore, [this] { fireBeforeRestore(); },
         [this] { fireAfterRestore(); }));
     return true;
 }
 
-void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
-    capturedBeforeState = synth::AIStateMapper::graphToJSON(graph);
-}
+void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) { capturedBeforeState = captureGraph(graph); }
 
 void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     if (capturedBeforeState.isVoid())
         return;
 
-    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    auto afterState = captureGraph(graph);
 
-    if (juce::JSON::toString(capturedBeforeState) != juce::JSON::toString(afterState)) {
-        undoManager.beginNewTransaction();
+    if (!synth::sameJson(capturedBeforeState, afterState)) {
+        beginTransaction();
         performAction(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
     }
 
     capturedBeforeState = juce::var();
+}
+
+// For an edit session that applies live and records once when it ends (the card layout editor):
+// the shared captureBeforeState() slot cannot be held that long, since any gesture in between would
+// overwrite it, so the session keeps its own "before" and hands it in here.
+bool AppUndoManager::recordGraphChangeSince(juce::AudioProcessorGraph& graph, const juce::var& beforeState) {
+    if (beforeState.isVoid())
+        return false;
+    auto afterState = captureGraph(graph);
+    if (synth::sameJson(beforeState, afterState))
+        return false;
+    beginTransaction();
+    performAction(createGraphSnapshotAction(graph, beforeState, afterState));
+    return true;
 }
 
 // Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism.
@@ -741,12 +716,13 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
 
     const juce::var afterState = doc.toVar();
 
-    if (juce::JSON::toString(beforeState) == juce::JSON::toString(afterState))
+    if (synth::sameJson(beforeState, afterState))
         return false; // no-op mutation: don't create an undo step
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new TimelineSnapshotAction(
-        doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+        doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+        [this] { fireTracksLeaving(); }));
     return true;
 }
 
@@ -756,10 +732,10 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
 // `doc` must outlive this AppUndoManager, or clearUndoHistory() must run before it is destroyed.
 bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
                                             const juce::var& afterJson, std::function<void()> postRestore) {
-    if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
+    if (synth::sameJson(beforeJson, afterJson))
         return false; // no-op edit: don't create an undo step
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
     performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson, std::move(postRestore)));
     return true;
 }
@@ -769,18 +745,18 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var timelineAfter = doc.toVar();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool timelineChanged = !synth::sameJson(timelineBefore, timelineAfter);
 
     if (!graphChanged && !timelineChanged)
         return false; // neither domain changed: no transaction pushed
@@ -791,7 +767,8 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
-            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [this] { fireTracksLeaving(); }));
 
     return true;
 }
@@ -807,29 +784,35 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
 // (see docs/control/midi-remote.md#replace-and-duplicate).
 bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
                                                     const std::function<void()>& mutation,
-                                                    std::function<void()> postRestore) {
+                                                    std::function<void()> postRestore, synth::MacroSet* macros) {
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var midiRemoteBefore = doc.toVar();
+    const juce::var macrosBefore = macros != nullptr ? macros->toVar() : juce::var();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var midiRemoteAfter = doc.toVar();
+    const juce::var macrosAfter = macros != nullptr ? macros->toVar() : juce::var();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool midiRemoteChanged = juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool midiRemoteChanged = !synth::sameJson(midiRemoteBefore, midiRemoteAfter);
+    const bool macrosChanged = macros != nullptr && !synth::sameJson(macrosBefore, macrosAfter);
 
-    if (!graphChanged && !midiRemoteChanged)
-        return false; // neither domain changed: no transaction pushed
+    if (!graphChanged && !midiRemoteChanged && !macrosChanged)
+        return false; // no domain changed: no transaction pushed
 
-    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
-    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
-    if (graphChanged)
+    // Every perform() call lands in the same transaction (no beginNewTransaction between them), so a
+    // single undo()/redo() reverts or re-applies whichever domains actually changed, together.
+    if (macrosChanged)
+        pushGraphAndMacroActions(graph, *macros, graphBefore, graphAfter, macrosBefore, macrosAfter, graphChanged,
+                                 macrosChanged);
+    else if (graphChanged)
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     if (midiRemoteChanged)
         performAction(new MidiRemoteSnapshotAction(doc, midiRemoteBefore, midiRemoteAfter, postRestore));
@@ -857,43 +840,47 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
             },
             [ge] {
                 if (ge)
-                    ge->updateComponents();
+                    refreshCanvasAfterRestore(*ge);
             },
-            [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [ge](const NodeIDs& doomed) {
+                if (ge)
+                    ge->detachModuleComponentsFor(doomed);
+            }));
     } else if (graphChanged) {
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     } else if (macrosChanged) {
         performAction(new MacroSnapshotAction(macros, macrosBefore, macrosAfter, [ge] {
             if (ge)
-                ge->updateComponents();
+                refreshCanvasAfterRestore(*ge);
         }));
     }
 }
 
 bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
                                                const std::function<void()>& mutation,
-                                               const juce::var& graphBeforeOverride) {
+                                               const juce::var& graphBeforeOverride,
+                                               const juce::var& macrosBeforeOverride) {
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
     // graphBeforeOverride wins when supplied, INSTEAD of a fresh graphToJSON(graph)
     // capture — for a caller whose live gesture already wrote intermediate state into the graph
     // before this ever runs (typically ModuleComponent's own captureBeforeState(), handed back via
     // takeCapturedGraphBeforeState() just above — see its own comment for why a fresh capture here
     // would be too late). Every other caller passes the default and keeps today's behaviour exactly.
-    const juce::var graphBefore =
-        graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
-    const juce::var macrosBefore = macros.toVar();
+    const juce::var graphBefore = graphBeforeOverride.isVoid() ? captureGraph(graph) : graphBeforeOverride;
+    const juce::var macrosBefore = macrosBeforeOverride.isVoid() ? macros.toVar() : macrosBeforeOverride;
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var macrosAfter = macros.toVar();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool macrosChanged = !synth::sameJson(macrosBefore, macrosAfter);
 
     if (!graphChanged && !macrosChanged)
         return false; // neither domain changed: no transaction pushed
@@ -914,25 +901,24 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
     if (!mutation)
         return false;
 
-    undoManager.beginNewTransaction();
+    beginTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphBefore = captureGraph(graph);
     const juce::var timelineBefore = doc.toVar();
     const juce::var macrosBefore = macros.toVar();
     const juce::var midiRemoteBefore = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
     mutation();
 
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var graphAfter = captureGraph(graph);
     const juce::var timelineAfter = doc.toVar();
     const juce::var macrosAfter = macros.toVar();
     const juce::var midiRemoteAfter = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
-    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
-    const bool midiRemoteChanged =
-        midiRemoteDoc != nullptr && juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
+    const bool graphChanged = !synth::sameJson(graphBefore, graphAfter);
+    const bool timelineChanged = !synth::sameJson(timelineBefore, timelineAfter);
+    const bool macrosChanged = !synth::sameJson(macrosBefore, macrosAfter);
+    const bool midiRemoteChanged = midiRemoteDoc != nullptr && !synth::sameJson(midiRemoteBefore, midiRemoteAfter);
 
     if (!graphChanged && !timelineChanged && !macrosChanged && !midiRemoteChanged)
         return false; // no domain changed: no transaction pushed
@@ -944,7 +930,8 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
                                  macrosChanged);
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
-            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); },
+            [this] { fireTracksLeaving(); }));
     if (midiRemoteChanged)
         performAction(
             new MidiRemoteSnapshotAction(*midiRemoteDoc, midiRemoteBefore, midiRemoteAfter, midiRemotePostRestore));

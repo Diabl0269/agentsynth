@@ -2,6 +2,7 @@
 // (audioDeviceAboutToStart/Stopped), and the scratch/format-change hooks they call.
 
 #include "AudioEngine.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "DeviceStateInputs.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AudioInputModule.h"
@@ -27,12 +28,17 @@ AudioEngine::AudioEngine(HostMode mode)
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
+    auditionMonitor_ = std::make_unique<synth::AuditionMonitor>(
+        mainProcessorGraph, [this] { return transport.getPositionSnapshot().playing; });
     // Every node/connection change broadcasts (asynchronously, coalesced); the key-input
     // publication hangs off it so it holds in the app AND the plugin (changeListenerCallback).
     mainProcessorGraph.addChangeListener(this);
+    startTimerHz(10);
 }
 
 AudioEngine::~AudioEngine() {
+    stopTimer();
+    auditionMonitor_.reset();
     mainProcessorGraph.removeChangeListener(this);
     shutdown();
 }
@@ -113,6 +119,13 @@ bool AudioEngine::savedDeviceStateEnablesInput() const {
 // initialise() from calling initialiseDevices() at all -- opening a device and then immediately
 // closing it would still have shown the prompt. Message-thread only, and must be called before
 // initialise(); flipping it afterward has no effect on an already-initialised engine.
+// Off, a test engine never receives messages from other processes' virtual sources or the machine's real devices.
+// openMidiInput() and ensureMidiDeviceOpen() are unaffected, so a test opens its own source by name.
+namespace {
+std::atomic<bool> openAllMidiInputs{true};
+}
+void AudioEngine::setOpenAllMidiInputsForTest(bool open) noexcept { openAllMidiInputs.store(open); }
+bool AudioEngine::openAllMidiInputsEnabled() noexcept { return openAllMidiInputs.load(); }
 void AudioEngine::setAudioDeviceDisabled(bool disabled) noexcept { audioDeviceDisabled_ = disabled; }
 bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDisabled_; }
 
@@ -154,8 +167,9 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     midiMessageCollector.reset(collectorRate > 0.0 ? collectorRate : 44100.0);
 
     // Enable all available MIDI inputs by default
-    for (auto& info : availableMidiInputs())
-        openMidiInput(info);
+    if (openAllMidiInputsEnabled())
+        for (auto& info : availableMidiInputs())
+            openMidiInput(info);
 }
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
@@ -169,6 +183,9 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source == &mainProcessorGraph) {
         refreshSidechainKeys();
         refreshNormalling();
+        refreshMidiWiring();
+        refreshExternalMidiNodes();
+        refreshAudioInputGate();
         return;
     }
 
@@ -219,6 +236,15 @@ void AudioEngine::shutdown() {
         midiInputs.clear();
 #endif
     }
+    // The callback is gone, so no push can race the finalise: every input take's WAV and peaks are written.
+    inputRecorder_.stopAll();
+    // Hosted mode keeps its inputs closed, so this only matters where a driver thread was delivering; the list holds
+    // the nodes alive, so it goes before the graph is cleared.
+    {
+        std::vector<juce::AudioProcessorGraph::Node::Ptr> released;
+        const std::lock_guard<std::mutex> lock(externalMidiNodesLock_);
+        released.swap(externalMidiNodes_);
+    }
     mainProcessorGraph.clear();
 
     // Last, after the device callback is gone and the graph is empty: nothing can call
@@ -268,7 +294,7 @@ void AudioEngine::createDefaultPatch() {
     filterAdsrNode->properties.set("x", 830.0f);
     filterAdsrNode->properties.set("y", 450.0f);
     lfoNode->properties.set("x", 10.0f);
-    lfoNode->properties.set("y", 500.0f);
+    lfoNode->properties.set("y", 560.0f); // clear of the Sequencer card (80 + 454 = 534)
     distortionNode->properties.set("x", 1410.0f);
     distortionNode->properties.set("y", 50.0f);
     delayNode->properties.set("x", 1690.0f);
@@ -324,18 +350,21 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     //    beat (not the sample) canonical, so the musical position survives untouched; only
     //    the sample-domain mirror of it moves.
     transport.prepare(newRate, newBlockSize);
+    midiInputSources_.setSampleRate(newRate);
     onFormatChangeStepForTest(1);
 
     // 2. METRONOME: a voice ringing across the boundary was computed for the OLD rate (see
     //    Metronome::startClick) and would otherwise continue at the wrong pitch and the wrong
     //    length. See Metronome::resetVoices().
     metronome_.resetVoices();
+    soundPreview_.prepare(newRate, newBlockSize);
     onFormatChangeStepForTest(2);
 
-    // 3. STREAMER: force every Track Audio ring to miss until the prefetch thread has refilled it at
-    //    the NEW mapping, rather than risk a coincidental hit on content filled under the OLD one.
-    //    See AudioClipStreamer::invalidateAllStreams().
-    clipStreamer_.invalidateAllStreams();
+    // 3. STREAMER: hand it the new rate (its rings are in engine-rate frames and each file's
+    //    resampling ratio depends on it), which also forces every Track Audio ring to miss until the
+    //    prefetch thread has refilled it at the NEW mapping, rather than risk a coincidental hit on
+    //    content filled under the OLD one. See AudioClipStreamer::setEngineSampleRate().
+    clipStreamer_.setEngineSampleRate(newRate);
     onFormatChangeStepForTest(3);
 
     // 4. IN-FLIGHT TAKES: neither an audio take's WAV (fixed header rate, written at whatever rate
@@ -345,7 +374,9 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     //    flag it here (at the exact moment of the change) so MainComponent's 10 Hz poll finalizes it
     //    through the SAME commit choke points a manual Record-off or a transport stop already use —
     //    see consumeFormatChangedDuringCapture().
-    bool anyCapturing = false;
+    // Input takes are not graph nodes, so they never see a prepareToPlay: they are halted here instead.
+    inputRecorder_.latchHaltIfRateDiffers(newRate);
+    bool anyCapturing = inputRecorder_.isAnyCapturing();
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (node == nullptr)
             continue;
@@ -384,6 +415,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         prepareDeviceScratch(numInputChannels, numOutputChannels, blockSize);
         prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
         prepareDeviceInputSnapshot(numInputChannels, blockSize);
+        mapActiveInputs(device->getActiveInputChannels());
+        inputDeviceHash_.store(deviceManager.getAudioDeviceSetup().inputDeviceName.hashCode(),
+                               std::memory_order_relaxed);
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
         deviceOutputLatencySamples_.store(device->getOutputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
@@ -416,6 +450,12 @@ void AudioEngine::prepareDeviceInputSnapshot(int numInputChannels, int blockSize
     deviceInputChannelsThisBlock_ = 0;
     deviceInputPointers_.fill(nullptr);
     deviceInputChannelCount_.store(std::max(0, numInputChannels), std::memory_order_relaxed);
+    // The host (and any caller without a device) delivers its inputs in order; a device overrides this with its
+    // own active-channel mask right after.
+    juce::BigInteger inOrder;
+    if (numInputChannels > 0)
+        inOrder.setRange(0, numInputChannels, true);
+    mapActiveInputs(inOrder);
 }
 
 void AudioEngine::audioDeviceStopped() {

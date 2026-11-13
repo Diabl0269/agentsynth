@@ -1,0 +1,16 @@
+# AI sources added to Core outside the main list in CMakeLists.txt, which sits at the repository's
+# file-size cap. SoundShapeChecks reads only a parsed response (no graph, no provider), so it is
+# also what Tools/AIEvalHarness and the tests score a model's answer with.
+target_sources(Core PRIVATE
+    Source/AI/AIStateMapper/AIStateMapperMidiWiring.cpp
+    Source/AI/AIStateMapper/AIStateMapperModuleTable.cpp
+    Source/AI/SoundShapeChecks.h
+    Source/AI/SoundShapeChecks.cpp
+    Source/AI/ChatTranscript.h
+    Source/AI/ChatTranscript.cpp
+    Source/AI/SongSteps/SongSteps.h
+    Source/AI/SongSteps/SongSteps.cpp
+    Source/AI/SongSteps/SongDetailsText.h
+    Source/AI/SongSteps/SongDetailsText.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceSongSteps.cpp
+)

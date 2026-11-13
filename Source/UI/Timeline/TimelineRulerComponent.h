@@ -3,6 +3,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -13,6 +14,11 @@ class TransportService;
 }
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+
+namespace synth::ui {
+class EdgeScrollTimer;
+class ReorderCancelKey;
+} // namespace synth::ui
 
 // The bar/beat ruler strip at the top of the timeline panel's lanes region. Owns nothing: it
 // references a shared synth::ui::TimelineViewState (the beat<->pixel mapping — zoom/scroll/snap),
@@ -26,14 +32,14 @@ class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 // flags sit in the bottom band and are hit-tested BEFORE the zone split, so a click on a flag
 // drags/renames the marker instead of scrubbing; anything outside a flag rect is unchanged.
 //
-// No timer, no animation of its own — repaint() is called after an interaction changes something
-// this component paints (view-state zoom/scroll, the hovered zone, the hovered marker, or after
-// posting a transport command), by TimelinePanelComponent::updateFromTransport's 10 Hz diff when
-// the time signature / loop range changed from somewhere else, and by the panel's
-// TimelineDoc::Listener callback when a marker was added, moved, renamed, recoloured or removed.
-// There is deliberately NO polling of the doc: a marker only changes as the result of a mutation,
-// and that mutation already notifies. The moving position line is a separate topmost overlay drawn
-// over this strip and the lanes below it — see TimelinePlayheadOverlay.
+// No animation of its own; its one timer runs only while a drag is held at an edge (a marker, loop
+// or scrub drag follows the view, TimelineRulerEdgeScroll.cpp). repaint() is called after an interaction changes
+// something this component paints (view-state zoom/scroll, the hovered zone, the hovered marker, or after posting a
+// transport command), by TimelinePanelComponent::updateFromTransport's 10 Hz diff when the time signature / loop range
+// changed from somewhere else, and by the panel's TimelineDoc::Listener callback when a marker was added, moved,
+// renamed, recoloured or removed. There is deliberately NO polling of the doc: a marker only changes as the result of a
+// mutation, and that mutation already notifies. The moving position line is a separate topmost overlay drawn over this
+// strip and the lanes below it — see TimelinePlayheadOverlay.
 namespace synth::ui {
 
 // ---- Adaptive ruler density (pure; paint() and the tests below share it) ----
@@ -147,6 +153,14 @@ public:
     enum class BraceState { None, Inactive, Active };
 
     explicit TimelineRulerComponent(TimelineViewState& viewState);
+    ~TimelineRulerComponent() override;
+
+    /** A drag held at an edge scrolled the shared view: the owner repaints what shows it. */
+    std::function<void()> onViewScrolledByDrag;
+    bool isEdgeScrollRunningForTest() const noexcept;
+    void tickEdgeScrollForTest();
+    /** The Esc a real drag receives from the window (cancels a marker or loop drag); false when idle. */
+    bool sendEscapeForTest();
 
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     synth::TransportService* getTransport() const noexcept { return transport_; }
@@ -336,8 +350,16 @@ private:
     double mapFirstVisibleBeat() const noexcept;
     double snappedBeatAtX(double x) const noexcept;
     double currentBeatsPerBar() const noexcept;
-    void postLoopIfChanged(const juce::MouseEvent& e);
-    void postSeekIfChanged(const juce::MouseEvent& e);
+    void postLoopIfChanged(double x);
+    void postSeekIfChanged(double x);
+    void previewMarkerAt(double x);
+
+    // Edge scroll and Esc (TimelineRulerEdgeScroll.cpp).
+    bool dragFollowsView() const noexcept;
+    void trackDrag(juce::Point<int> pointer);
+    void edgeScrollTick();
+    void endDrag();
+    void cancelDrag();
     // Re-arms an existing-but-disabled loop when a no-drag loop-zone click lands inside its span.
     // Inert in every other case (looping already on, no range, click outside the brace).
     void reArmLoopIfClickOnInactiveBrace(const juce::MouseEvent& e);
@@ -361,6 +383,14 @@ private:
     double lastPostedLoopEnd_ = -1.0;
     double lastPostedSeekBeat_ = -1.0;
     int seekPostCount_ = 0;
+    bool zoneDragging_ = false; // a loop or scrub gesture is live (press to release)
+    struct LoopBefore {
+        double start = 0.0, end = 0.0;
+        bool looping = false;
+    };
+    LoopBefore loopBefore_; // what Esc puts back on a loop drag
+    std::unique_ptr<EdgeScrollTimer> edgeScroll_;
+    std::unique_ptr<ReorderCancelKey> cancelKey_;
 
     std::optional<Zone> hoveredZone_;
 

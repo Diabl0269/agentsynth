@@ -1,0 +1,27 @@
+# Hover tooltips showed nowhere in Settings (or any other dialog): a dialog is its own native window and the main
+# window's tooltip window draws under it. Every dialog launchDialog opens now hosts its own tooltip window.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab, narrow enough that a pack's detail line ends in "...".
+#   2. Rests the pointer on that line: a tooltip lists the full line. Rests it on a tab button: "Show the Audio settings
+#      (Cmd+1)" appears.
+# The tooltip window is a child of the dialog (id dialogTooltip), so the checks read the popup itself (showing, and
+# its picture), not the accessibility text of the control.
+record: true
+save_project: dialog-hover-tooltips
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {}
+  - expect: {id: "dialogTooltip", showing: false}
+  - hover: {id: "settingsTab:Audio"}
+  - expect: {id: "dialogTooltip", showing: true, within_ms: 3000}
+  - screenshot: {id: "dialogTooltip", name: tab-tooltip}
+  - screenshot: {id: "Settings", name: settings-tab-hover}
+  - getState: {id: "packDetail:core"}
+  - hover: {id: "packDetail:core"}
+  - wait: {settleMs: 1500}
+  - expect: {id: "dialogTooltip", showing: true, within_ms: 3000}
+  - screenshot: {id: "dialogTooltip", name: pack-tooltip}
+  - screenshot: {id: "Settings", name: settings-pack-hover}

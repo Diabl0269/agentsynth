@@ -9,14 +9,14 @@ link target moves — and nothing catches it until a reader clicks a dead link, 
 pointer in a `Source/**` comment sends them to the wrong place, or nowhere.
 
 ```bash
-bash scripts/check-docs.sh                          # check the tree (A against baseline; B-G hard)
+bash scripts/check-docs.sh                          # check the tree (A against baseline; B-I hard)
 bash scripts/check-docs.sh --update                  # rewrite the naming baseline from the current tree
 bash scripts/check-docs.sh --update --allow-growth   # ...and let a new naming entry through
 bash scripts/check-docs.sh --list                    # summarize current violations in every check
 bash scripts/check-docs.sh --root <dir>              # scan a different repo root (for tests)
 ```
 
-## The seven checks
+## The nine checks
 
 Every check scans the same file set: every git-tracked-**or-untracked** `*.md`, `*.cpp`, `*.h`,
 `*.sh`, `*.yml`, `*.txt`, `*.json`, `*.cmake` and `*.py` anywhere under the repo root — so
@@ -71,7 +71,8 @@ literal path.
 ### D. `§`-section references resolve
 
 `docs/<path>.md` followed by up to 12 characters then `§<N>`/`§<N.M>`/`§<N.M.K>` must name a
-section that actually exists in that doc — a heading `## 5.3 Foo` satisfies both `§5.3` and the
+section that actually exists in that doc, and so must every further marker chained after it within
+12 characters (`docs/<path>.md §1, §2, §3`), not only the first — a heading `## 5.3 Foo` satisfies both `§5.3` and the
 coarser `§5`. **Not baselined — zero tolerance.** Unlike check A, there is no grandfathering here:
 a stale section reference is actively misleading (it sends a reader to the wrong place, or
 nowhere), so it is fixed at the point it goes stale, not parked for later cleanup. The 38 stale
@@ -158,6 +159,27 @@ Check G does not reimplement anything check B, C, or D already got right:
   `` [`name.md`](target) ``, link text and target both) is check B's business, not check G's; the
   whole link span is masked out of the line before check G ever looks at it.
 
+### H. Reversed-order references resolve
+
+A marker written *before* the path — `§8 of docs/<path>.md`, joined to it only by `of`, `in` or
+`from` (optionally followed by `the`) — must name a section that exists in that doc, exactly as in
+check D. The marker is bound to the *later* path first, so it is never misattributed to an earlier
+path on the same line (`docs/<a>.md, §8 of docs/<b>.md` — the `§8` is `<b>`'s). **Not baselined —
+zero tolerance.**
+
+### I. Bare section markers are refused
+
+A `§N` marker that no docs path claims — none before it on the line, or none within check D's
+12-character window — fails. A marker with no path cannot be resolved by a script or a reader; write
+the full `docs/<path>.md#<anchor>` form (or plain words). **Not baselined — zero tolerance.** The
+checker's own files and this page, which document the pattern, are exempt. Checks D, H and I are
+one classifier (`marker_scan`), and D, H and G resolve sections through one shared `section_in_doc`
+rule, so they cannot disagree.
+
+Check C's boundary rule has one exception, shared by C/D/F/H/I: a `/` that directly follows a
+source or doc *filename* (`Widget.h/docs/<x>.md`, a glued typo) still starts our path. No sibling-repo
+directory name ends in a file extension, so the sibling-path rule needs no list of repo names.
+
 ## Naming ratchet
 
 Check A works exactly like the [file-size](file-size-guard.md#strict-ratchet-baseline) and
@@ -175,7 +197,7 @@ Check A works exactly like the [file-size](file-size-guard.md#strict-ratchet-bas
 - A first-ever `--update` (no baseline file present yet) bootstraps without needing
   `--allow-growth` — there's nothing to compare against yet, so nothing can be a growth.
 
-Checks B, C, D, E, F, and G have no baseline at all — they're always a hard failure. A broken link,
+Checks B, C, D, E, F, G, H, and I have no baseline at all — they're always a hard failure. A broken link,
 a stale `docs/...` mention, a stale `§`-section reference, a `docs/README.md` map gap, a stale
 `#anchor` mention, or an unresolvable bare basename reference is never something to grandfather;
 each is wrong the moment it exists; the ratchet exists only to migrate the legacy filename
@@ -256,10 +278,10 @@ required would have left the guard advisory.
 
 ## Zero tolerance for stale references
 
-Checks B, C, D, E, F, and G exist specifically because [check A's grandfathering](#naming-ratchet)
+Checks B, C, D, E, F, G, H, and I exist specifically because [check A's grandfathering](#naming-ratchet)
 doesn't generalize: a stale link, section reference, anchor mention, or unresolvable bare basename
 is never "legacy debt to migrate later" the way an old filename is — it actively misdirects the
 next reader the moment it goes stale. That's why only the naming convention gets a ratchet at all,
-and why fixing a check-B/C/D/E/F/G violation means finding the CORRECT destination (via git history
+and why fixing a check-B/C/D/E/F/G/H/I violation means finding the CORRECT destination (via git history
 for a moved/renumbered/renamed section, never a guess) and pointing at that, not adding an
 exception anywhere.

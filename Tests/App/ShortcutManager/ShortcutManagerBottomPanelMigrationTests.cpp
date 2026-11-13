@@ -8,14 +8,17 @@
 namespace {
 
 const juce::KeyPress kCmdT('t', juce::ModifierKeys::commandModifier, 0);
+const juce::KeyPress kCmdJ('j', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kCmd1('1', juce::ModifierKeys::commandModifier, 0);
 const juce::KeyPress kCmd9('9', juce::ModifierKeys::commandModifier, 0);
 
 // Every key this test's seeded/migrated settings could touch, restored exactly on scope exit --
 // same PersistedKeysGuard idiom TestSettingsHelpers.h documents for any test that reaches the real
 // on-disk settings file.
-const juce::StringArray kTouchedKeys{"shortcutMigration_bottomPanelCmdT", "shortcut_toggleTimelinePanel",
-                                     "shortcut_toggleBottomPanel", "shortcut_toggleMixerPanel"};
+const juce::StringArray kTouchedKeys{"shortcutMigration_bottomPanelCmdT", "shortcutMigration_bottomPanelCmdJ",
+                                     "shortcut_toggleTimelinePanel",      "shortcut_toggleBottomPanel",
+                                     "shortcut_toggleMixerPanel",         "shortcutMigration_dockDigitKeys",
+                                     "shortcut_swapMixerToMain",          "shortcut_toggleMidiRemotePanel"};
 
 } // namespace
 
@@ -27,6 +30,8 @@ TEST(ShortcutManagerBottomPanelMigrationTests, AnOldCmdTOnTimelineMovesToTheNewB
         auto* settings = props.getUserSettings();
         ASSERT_NE(settings, nullptr);
         settings->removeValue("shortcutMigration_bottomPanelCmdT");
+        settings->removeValue("shortcutMigration_bottomPanelCmdJ");
+        settings->removeValue("shortcutMigration_dockDigitKeys");
         settings->setValue("shortcut_toggleTimelinePanel", ShortcutManager::encodeKeyPress(kCmdT));
         settings->removeValue("shortcut_toggleBottomPanel"); // absent, like every legacy install
         settings->saveIfNeeded();
@@ -37,8 +42,38 @@ TEST(ShortcutManagerBottomPanelMigrationTests, AnOldCmdTOnTimelineMovesToTheNewB
     props.setStorageParameters(synth::test::userSettingsTestOptions());
     manager.loadFromProperties(props);
 
-    EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdT) << "claims the old Cmd+T";
-    EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), kCmd1) << "moved off Cmd+T onto its own new default";
+    EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdJ) << "claims the old Cmd+T, then moves on to Cmd+J";
+    EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), juce::KeyPress())
+        << "moved off Cmd+T onto Cmd+1, which the positional Show Tab 1 owns, so the view action is unbound";
+    EXPECT_EQ(manager.getBinding("showDockTab1"), kCmd1);
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, TheOldPerViewDigitsMoveToThePositionalActionsAndARebindStays) {
+    synth::test::PersistedKeysGuard guard(kTouchedKeys);
+    const juce::KeyPress cmdAlt2('2', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+    {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        ASSERT_NE(settings, nullptr);
+        settings->removeValue("shortcutMigration_dockDigitKeys");
+        settings->setValue("shortcut_toggleMixerPanel", ShortcutManager::encodeKeyPress(juce::KeyPress(
+                                                            '2', juce::ModifierKeys::commandModifier, 0)));
+        settings->setValue("shortcut_swapMixerToMain", ShortcutManager::encodeKeyPress(cmdAlt2));
+        settings->setValue("shortcut_toggleMidiRemotePanel", ShortcutManager::encodeKeyPress(kCmd9));
+        settings->saveIfNeeded();
+    }
+
+    ShortcutManager manager;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    manager.loadFromProperties(props);
+
+    EXPECT_FALSE(manager.getBinding("toggleMixerPanel").isValid());
+    EXPECT_FALSE(manager.getBinding("swapMixerToMain").isValid());
+    EXPECT_EQ(manager.getBinding("toggleMidiRemotePanel"), kCmd9) << "the user's own rebind survives";
+    EXPECT_EQ(manager.getBinding("showDockTab2"), juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_TRUE(manager.getConflictingAction("showDockTab2", manager.getBinding("showDockTab2")).isEmpty());
 }
 
 TEST(ShortcutManagerBottomPanelMigrationTests, ARebindAwayFromCmdTIsLeftAlone) {
@@ -49,6 +84,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, ARebindAwayFromCmdTIsLeftAlone) {
         auto* settings = props.getUserSettings();
         ASSERT_NE(settings, nullptr);
         settings->removeValue("shortcutMigration_bottomPanelCmdT");
+        settings->removeValue("shortcutMigration_bottomPanelCmdJ");
         // A user who rebound "Show Timeline Tab" away from Cmd+T before ever upgrading.
         settings->setValue("shortcut_toggleTimelinePanel", ShortcutManager::encodeKeyPress(kCmd9));
         settings->removeValue("shortcut_toggleBottomPanel");
@@ -61,7 +97,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, ARebindAwayFromCmdTIsLeftAlone) {
     manager.loadFromProperties(props);
 
     EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), kCmd9) << "the user's own rebind must survive";
-    EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdT) << "still gets its own fresh Cmd+T default";
+    EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdJ) << "still gets its own fresh Cmd+J default";
 }
 
 TEST(ShortcutManagerBottomPanelMigrationTests, RunsOnlyOnce) {
@@ -72,6 +108,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, RunsOnlyOnce) {
         auto* settings = props.getUserSettings();
         ASSERT_NE(settings, nullptr);
         settings->setValue("shortcutMigration_bottomPanelCmdT", true); // already migrated once
+        settings->removeValue("shortcutMigration_bottomPanelCmdJ");
         settings->setValue("shortcut_toggleTimelinePanel", ShortcutManager::encodeKeyPress(kCmdT));
         settings->removeValue("shortcut_toggleBottomPanel");
         settings->saveIfNeeded();
@@ -82,8 +119,116 @@ TEST(ShortcutManagerBottomPanelMigrationTests, RunsOnlyOnce) {
     props.setStorageParameters(synth::test::userSettingsTestOptions());
     manager.loadFromProperties(props);
 
-    // The flag says this already ran (or was never needed) -- a fresh Cmd+T default for
-    // toggleBottomPanel, still colliding with toggleTimelinePanel's own leftover Cmd+T, is exactly
+    // The flag says this already ran (or was never needed) -- toggleTimelinePanel's leftover Cmd+T is exactly
     // what "don't re-run" means here; this pins that the migration does not fire a second time.
     EXPECT_EQ(manager.getBinding("toggleTimelinePanel"), kCmdT);
 }
+
+namespace {
+void seedPanelKey(const juce::KeyPress& saved, bool cmdJFlag, bool cmdTFlag = true) {
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    auto* settings = props.getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->setValue("shortcutMigration_bottomPanelCmdT", cmdTFlag);
+    if (cmdJFlag)
+        settings->setValue("shortcutMigration_bottomPanelCmdJ", true);
+    else
+        settings->removeValue("shortcutMigration_bottomPanelCmdJ");
+    settings->setValue("shortcut_toggleBottomPanel", ShortcutManager::encodeKeyPress(saved));
+    settings->saveIfNeeded();
+}
+
+juce::KeyPress loadSavedPanelKey() {
+    ShortcutManager manager;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    manager.loadFromProperties(props);
+    return manager.getBinding("toggleBottomPanel");
+}
+} // namespace
+
+TEST(ShortcutManagerBottomPanelMigrationTests, ASavedCmdTPanelKeyMovesToCmdJOnceAndPersists) {
+    synth::test::PersistedKeysGuard guard(kTouchedKeys);
+    seedPanelKey(kCmdT, false);
+    EXPECT_EQ(loadSavedPanelKey(), kCmdJ);
+    EXPECT_EQ(loadSavedPanelKey(), kCmdJ) << "the second launch reads the persisted Cmd+J, no change";
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, ACustomPanelKeyIsLeftAlone) {
+    synth::test::PersistedKeysGuard guard(kTouchedKeys);
+    seedPanelKey(kCmd9, false);
+    EXPECT_EQ(loadSavedPanelKey(), kCmd9);
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, ACmdTBoundOnPurposeAfterTheMigrationStays) {
+    synth::test::PersistedKeysGuard guard(kTouchedKeys);
+    seedPanelKey(kCmdT, true);
+    EXPECT_EQ(loadSavedPanelKey(), kCmdT);
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, NoPanelKeyHoldsCmdTAndCmdJIsThePanelKey) {
+    ShortcutManager manager;
+    EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdJ);
+    for (const auto& id : manager.getActionIds())
+        if (id != "openAddTrackMenu") // Add Track took Cmd+T on the Mac
+            EXPECT_NE(manager.getBinding(id), kCmdT) << id;
+}
+
+// ---------------------------------------------------------------------------
+// Ctrl+R / Ctrl+M for Record / Metronome (macOS only): an install that persisted the old unbound
+// default adopts the new chords once, and a user's own binding is never touched.
+// ---------------------------------------------------------------------------
+#if JUCE_MAC
+namespace {
+const juce::KeyPress kCtrlR('r', juce::ModifierKeys::ctrlModifier, 0);
+const juce::KeyPress kCtrlM('m', juce::ModifierKeys::ctrlModifier, 0);
+const juce::StringArray kTransportKeys{"shortcutMigration_transportCtrlChords2", "shortcut_transportRecord",
+                                       "shortcut_transportToggleMetronome"};
+
+void seedTransportKeys(const juce::KeyPress& record, const juce::KeyPress& metronome, bool alreadyMigrated) {
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    auto* settings = props.getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->setValue("shortcutMigration_transportCtrlChords2", alreadyMigrated);
+    settings->setValue("shortcut_transportRecord", ShortcutManager::encodeKeyPress(record));
+    settings->setValue("shortcut_transportToggleMetronome", ShortcutManager::encodeKeyPress(metronome));
+    settings->saveIfNeeded();
+}
+} // namespace
+
+TEST(ShortcutManagerBottomPanelMigrationTests, PersistedUnboundRecordAndMetronomeAdoptTheCtrlChords) {
+    synth::test::PersistedKeysGuard guard(kTransportKeys);
+    seedTransportKeys(juce::KeyPress(), juce::KeyPress(), false);
+
+    ShortcutManager manager;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    manager.loadFromProperties(props);
+
+    EXPECT_EQ(manager.getBinding("transportRecord"), kCtrlR);
+    EXPECT_EQ(manager.getBinding("transportToggleMetronome"), kCtrlM);
+}
+
+TEST(ShortcutManagerBottomPanelMigrationTests, ARecordRebindIsKeptAndAnAlreadyMigratedInstallIsNotTouched) {
+    synth::test::PersistedKeysGuard guard(kTransportKeys);
+    seedTransportKeys(kCmd9, juce::KeyPress(), false);
+    {
+        ShortcutManager manager;
+        juce::ApplicationProperties props;
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
+        manager.loadFromProperties(props);
+        EXPECT_EQ(manager.getBinding("transportRecord"), kCmd9) << "the user's own chord survives";
+        EXPECT_EQ(manager.getBinding("transportToggleMetronome"), kCtrlM);
+    }
+
+    seedTransportKeys(juce::KeyPress(), juce::KeyPress(), true); // unbound on purpose after migrating
+    ShortcutManager manager;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::test::userSettingsTestOptions());
+    manager.loadFromProperties(props);
+    EXPECT_FALSE(manager.getBinding("transportRecord").isValid());
+    EXPECT_FALSE(manager.getBinding("transportToggleMetronome").isValid());
+}
+#endif

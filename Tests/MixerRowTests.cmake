@@ -1,0 +1,20 @@
+# Mixer insert and send rows (docs/mixer/mixer.md#reordering-inserts, docs/mixer/sends-and-buses.md) and the keys a focused mixer
+# control takes, kept in their own list so Tests/CMakeLists.txt stays under the file-size cap.
+target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerSpaceKeyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mixer/MixerModel/MixerModelDanglingBranchTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mixer/MixerModel/MixerModelNotConnectedTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerInsertListNotConnectedTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerInsertListDryPathTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerInsertListReorderTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerRowMoveAndRevealTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerTopBarRingTests.cpp
+    # reorder drags: the order the last drag event showed is the order the drop commits (FRO1316)
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReorderDragPreviewCommitTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/CardLayoutEditorGripPreviewCommitTests.cpp
+    # reorder drags inside a scrolling frame follow the pointer to its edge
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerListDragFollowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/DialogListDragFollowTests.cpp
+    # canvas card moves: the spot the last drag event showed is where the card lands (FRO1319)
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/CardMoveDragPreviewCommitTests.cpp
+)

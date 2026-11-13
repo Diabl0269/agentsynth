@@ -97,6 +97,16 @@ can reach, or sums into the SAME mono jack the peer already exposes when it does
 raw channel, matching how a collapsed FX jack's own dual-raw-leg pair carries one cable. The whole
 thing — delete, create, replay, auto-wire — is still the ONE undo step the modal promises.
 
+### Switching a stereo port between one jack and two
+
+A stereo port can be switched without losing a cable. The port's right-click menu offers **Split into
+Left/Right Jacks** (`StereoCollapsed` to `Stereo`) or **Join into One Stereo Jack** (`Stereo` to
+`StereoCollapsed`); the menu is reachable from the keyboard like every port menu, and the port's tooltip
+says so ("Right-click to split or join the left/right jacks"). It calls `changeMacroPortShape`, which
+swaps the node as above and, for this one pair of shapes, remaps the PORT-side raw channel of every cable
+on both sides of the port (`Stereo`'s right leg is raw `kRightBase`, `StereoCollapsed`'s is raw 1), so
+both legs stay wired; the other end of each cable is unchanged. One undo step.
+
 There is deliberately **no shape inheritance**. Inheritance is the right rule for Dual I/O on a real
 DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channel counts, never from a
 per-module registration) and the wrong frame for a node constructed on demand: a port is created
@@ -119,6 +129,15 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
   path never wires anything on the macro's INTERIOR side: the macro is collapsed, so there is no
   visible member to pick a target from. Only the dialog, or a manual cable drawn after expanding the
   macro, connects a port to a specific member.
+  **It works the same for every module type, in both directions.** The drop looks only at the dragged card's
+  jack (visible index) and kind, never at the module's type, so a Channel Strip (stereo or mono, Dual I/O on or
+  off, sends, a member of an open channel macro) behaves like an Oscillator. `Tests/Macros/MacroPortFlow/MacroPortFlowCableDropTests.cpp`
+  (the `EveryModuleType*` and `ATracksChannelStrip*` tests) drops a cable from every output jack, and onto every input
+  jack, of every factory module type, bare, inside an open macro and with the other Dual I/O layout, and from a real
+  track's strip, asserting a port was minted and a cable path exists. A new module type needs
+  no entry: the sweep picks it up from the factory. A cable is never *started* from a collapsed card's port jack
+  (that press opens the port connections panel), so the reverse direction is a drag from the other module's
+  jack onto the card (or onto the existing port's jack, which reuses that port).
 - **From a cable dragged across an expanded macro's hull** — same inference (Mono/`StereoCollapsed`/
   `Poly`, never the two-jack `Stereo`), and it wires both sides. See
   [`docs/macros/auto-ports.md`](auto-ports.md#ports-on-a-cable-drag).
@@ -191,44 +210,97 @@ sides. This is what makes splicing a port out signal-preserving.
 
 A port node is a real `ModuleComponent` — selection, hit-testing, cable drag and drop, undo and
 serialisation all key off that, unchanged — but it does not PAINT or SIZE like an ordinary module
-card, expanded or collapsed. It draws as a compact docked widget: no header chrome and no body, just
-a small row tinted with the owning macro's colour, its jack or jacks, and the port's own
-`MacroPort::name`.
+card. A macro's ports live in two **sidebar strips**, one down the left border (inputs) and one down
+the right border (outputs), on the collapsed card and on the open macro alike. Each strip holds one
+16 px row per port (a Stereo port takes two), each row carrying the port's jack, its
+`MacroPort::name`, and — at the strip's foot — a '+' and a '-'.
 
-**Why a widget rather than a card.** A port is a boundary jack, not a module the user put in the box,
-and drawing it as a full 280-wide card made a macro of two FX modules read as a macro of four
-modules.
+**Why strips rather than cards or free-floating widgets.** A port is a boundary jack, not a module
+the user put in the box, and drawing it as a full 280-wide card made a macro of two FX modules read
+as a macro of four modules. The earlier hanging widgets outside the outline overlapped when a side had
+several ports and pushed the '+' under a jack; a strip gives every port its own row.
 
-- **Sizing.** `ModuleComponent::layoutMacroPortWidget()` sizes the widget purely from the shape's own
-  visible jack count: **one** row (`kMacroPortWidgetHeaderY` + `kMacroPortWidgetBottomPad`) for Mono,
-  Poly-N, `StereoCollapsed` (deliberately one row despite carrying two raw channels) or a MIDI port —
-  all of which have exactly one visible jack a side, a MIDI port's fanned Poly-N bus included — and a
-  second row (`+ kMacroPortWidgetRowStep`) only for the two-jack `Stereo` shape. The constants
-  (`ModuleComponent.h`) give a 92x21 Mono widget, with a 7 px jack dot, a 4 px corner radius and a
-  9.5 pt name font.
+- **Width is fixed, not content or zoom.** Both strips are the same width and it is reserved even
+  with no ports: 18 px jack inset + a 62 px name column (`kMacroPortNameRoom`) + 8 px padding = 88 px on
+  the card (`kMacroCardStripWidth`), 96 px on the open macro (`kMacroHullStripWidth`, 8 px more for the
+  inner jack). A longer name is shortened with an ellipsis, never squeezed, and its tooltip carries the
+  full name. Adding a port, renaming one or zooming never moves a strip or the hull, so paint,
+  hit-testing and cable anchoring agree without measuring anything.
+- **Zoom fades what is painted.** `macroPortNameAlphaAtZoom` is `easeInOutCubic` over zoom 0.5 to 0.7
+  (0 at or below 0.5, 1 at or above 0.7): the port names, the '-' and '+' glyphs and each strip's inner
+  divider are painted at that alpha, and the strip fill recedes from 0.55 to 0.25. The '-' and '+' are
+  clickable only at alpha >= 0.5. While a name is faded a hovered jack shows it in the tooltip. The alpha is
+  a pure function of the zoom read at paint time from the parent component's transform, with no timer;
+  docked port widgets are exempt from the zoom raster freeze so their names repaint live.
+- **Zoomed out, the two jacks merge.** The same alpha `t` also slides an OPEN macro's interior jack onto
+  its boundary jack (`macroPortInteriorJackX`, in `ModuleComponent::macroPortJackX`, which
+  `getPortCenter`, the MIDI jack and the hit-test all read) and narrows each strip's painted width from
+  its full width to the `kMacroStripRailWidth` rail along the outline (`macroStripPaintedWidth`), so the
+  port reads as ONE dot on the outline. The interior dot fades with `t`. A cable anchored on the interior
+  jack follows it, so `updateTransform` drops the memoized visible-cable list on every zoom while a macro
+  exists. A press on the merged dot picks the boundary jack. The hull, the widget bounds and the strip
+  widths above never change: only what is painted and where the interior jack answers moves.
+- **Collapsed card.** `MacroGroupController::macroCardPortLayout` puts jack `i` of a side at
+  `y = 30 + 16 i + 8`, x = 10 (inputs) / width - 10 (outputs). A two-jack `Stereo` port takes two rows,
+  named "name L" and "name R" (`MacroCardPort::visibleJack` 0 and 1); every other shape, including a
+  one-jack `StereoCollapsed` port, is one row. The card grows to
+  `30 + rows * 16 + 22` px when that exceeds its 90 px floor (`macroCardHeightFor`); the height is
+  derived when the card is synced, never written into `Macro::bounds`, so an old save shows at the new
+  height. `MacroCardComponent::paintPortStrips` fills each strip `surfaceHi` at 55 percent following
+  the card's corner radius, with a 1 px `border` line on the inner edge; the title, member preview and
+  count keep the middle column between the strips.
+- **Open macro.** The hull widens by each strip so members keep their margin and do not move when a
+  port is added, and grows down when the rows outrun the members
+  (`computeMacroHullBounds`). `MacroGroupController::macroHullPortLayout` is the one layout: it gives
+  each port's docked widget bounds, its **outer jack** (on the hull's dashed border, where cables from
+  outside land) and its **inner jack** (5 px inside the strip's inner edge, where cables to members
+  start). An input widget overhangs the hull's left border by `LayoutUtil::kMacroPortOverhang` (5 px), so the
+  hull's left edge must stay at least that far inside the canvas: adding a port slides a macro that would
+  poke past the top-left back into view in the same undo step
+  ([layout.md](../layout/layout.md#making-room-when-something-grows)). `dockMacroPortWidgets` sets each widget to those bounds. A widget is a bare
+  `ModuleComponent` that draws only its jacks (10 px on the boundary side, 7 px on the interior side)
+  and its name; the strips (fill and divider from the hull's top edge, under the name chip; the rows still
+start below the chip row) are painted under it by `paintMacroPortStrips` from
+  `GraphContentComponent::paint`, before the dashed outline. A widget's jacks are where cable drags start, so
+  removal is the strip's '-', the port's right-click Delete Port, or the "Delete port" button in its connections panel.
+- **Clicking a card's port.** A plain click on a port dot of the collapsed card opens the
+  [port connections panel](../layout/cables.md#port-connections-panel) for that port (`MacroCardComponent::portReleased`).
+  Hovering a dot draws a ring round it (no delete on the press). The '+', '-' and chevron take the press first; a drag
+  still moves the card. The panel of a macro port (on the card or an expanded macro's boundary port node) ends with a
+  **Delete port** button: `deleteMacroPortManually`, one undo step, the cables retract, then the panel closes.
+- **The '+' and '-'.** '+' opens the kind/shape menu (`MacroGroupController::buildAddPortMenu`, one
+  menu for the card and the hull). '-' removes the **bottom** port on that side
+  (`deleteBottomMacroPort`, through `deleteMacroPortManually`, so undo is identical to the panel's
+  Delete port).
 - **The drawn dot and the clickable target are two different knobs.** `getPortForPoint()`'s hit test
-  keeps the same generous radius every module's jack uses; shrinking both together would be a worse
-  regression than the oversized widget it fixes. The name's text inset is 16 px each side, derived
-  against the jack dot's own outer edge (7 px dot centred 10 px in reaches 13.5 px) so the text can
-  never collide with the dot — a realistic port name ("Delay 1 Audio") still fits at full, unscaled
-  size in the resulting 60 px budget, with `drawFittedText`'s compress-then-ellipsise as the fallback
-  for a longer name rather than the expected path.
-- **The name resolves live.** `GraphEditor::macroPortOwnerFor(nodeId)` walks the node's uuid to its
+  keeps the same generous radius every module's jack uses (10 px). Rows are 16 px apart, so on the
+  card `macroCardPortForPoint` picks the nearest jack within that radius.
+
+- **The name resolves live.** `MacroGroupController::macroPortOwnerFor(nodeId)` walks the node's uuid to its
   macro and then to the `MacroPort` fronting it, on every paint, rather than caching the name on the
   node — so a rename is reflected on the very next repaint with nothing to invalidate. The same name
-  is drawn next to the matching jack on the COLLAPSED card too (`MacroCardComponent::paint`, reading
-  the identical field off `GraphEditor::macroCardPortLayout`), elided if the card is too narrow, so an
-  expanded and a collapsed macro read a port's name the same way.
-- **Placement is derived, never dragged.** `GraphEditor::dockMacroPortWidgets()` runs at the end of
+  is drawn next to the matching jack on the COLLAPSED card too (`MacroCardComponent::paintPortStrips`,
+  reading the identical field off `MacroGroupController::macroCardPortLayout`), so an expanded and a
+  collapsed macro read a port's name the same way.
+- **Placement is derived, never dragged.** `MacroGroupController::dockMacroPortWidgets()` runs at the end of
   every `updateComponents()` pass, after a single-module drag settles (`finalizeModuleDrag`) and
-  unconditionally at the end of `finalizeSelectionDrag()`; it positions each EXPANDED macro's port
-  widgets against `macroHullBounds()` — inputs down the LEFT edge, outputs down the RIGHT, both
-  starting near the top, ordered by `MacroPort::order`, the same order `macroCardPortLayout()` uses
-  for the collapsed card, so a port's expanded position and its row in the dialog never disagree.
+  unconditionally at the end of `finalizeSelectionDrag()`; it sets each EXPANDED macro's port
+  widgets to the bounds `macroHullPortLayout()` derives from `macroHullBounds()` — inputs down the
+  LEFT sidebar, outputs down the RIGHT, one row each from the top, ordered by `MacroPort::order`, the
+  same order `macroCardPortLayout()` uses for the collapsed card, so a port's expanded position and its
+  row in the dialog never disagree.
   `ModuleComponent::mouseDown` refuses to arm a body drag or a selection click for a macro-port node
   (mirroring the Attenuverter's own "no header, nothing to click" early return), so nothing on the
   canvas can desync a widget from its hull. A right click is the one exception — see
   [`docs/macros/auto-ports.md`](auto-ports.md#ungroup-and-direct-deletion-of-a-port).
+- **A port module no macro lists is adopted on load, or kept out of sight.** A saved project can hold a MacroInlet/Outlet
+  (or MIDI) node that no macro lists as one of its `ports`, saved at whatever position it last had (often x=0). On load
+  `synth::adoptStrayMacroPorts` (`MacroPortRepair.h`) makes such a node a port of its macro again when its cables meet
+  members of exactly one macro (or it is already a member of one), and the dock then places it on the hull edge. One that
+  meets no macro member or several is left alone: `syncMacroCards()` keeps its card hidden (only the dock places port
+  widgets, so it would sit at its saved position) and `reanchorCablesAroundCollapsedMacros` drops its cables from view; the
+  node and its cables stay in the graph. Pinned by `MacroPortRepair.*`, `MacroProjectLoadReveal.*PortWidgets*` /
+  `*HiddenStrayPort*` (every reveal stage) and the saved-project fixture's `withPortWidgets` option.
 - **The hull-feedback trap.** `macroHullBounds()` unions only NON-PORT members. A port's own fronting
   node is excluded because if it counted toward the bounds that DEFINE the hull, docking it against
   that hull would grow the hull, which would push it out again, every layout pass. A macro made
@@ -244,9 +316,63 @@ modules.
   then the hull does not move by the delta the port just moved by. `finalizeSelectionDrag()`
   therefore calls `dockMacroPortWidgets()` unconditionally — a no-op for the whole-macro case, a real
   correction for the partial one.
-- **Size estimation matches the widget, not a card.** `estimateModuleSize` has an entry for all four
-  types sized to the docked-widget geometry above, pinned by
-  `MacroPortWidget.MonoPortWidgetSizeMatchesEstimateModuleSize`.
+- **Size estimation is nominal.** A widget's width is its strip's, set by the dock, so
+  `estimateModuleSize` returns a nominal one-row size (`kMacroCardStripWidth`
+  by `kMacroPortRowHeight`) for all four types — the same first-layout default
+  `ModuleComponent::layoutMacroPortWidget` uses before the first dock, pinned by
+  `MacroPortWidgetG4.EstimateModuleSizeMatchesTheRealWidgetForEveryPortTypeName`.
+
+### A cable hovering a folded card
+
+While a cable is dragged over a folded macro's card, the card shows where the drop would land, the way a knob rings
+when a mod cable would land on it. Leave it, let go or press Esc and the hint goes.
+
+- **What it shows.** The card is outlined in the accent colour with a soft glow, and its port row is marked: a ring
+  round the jack of the port that takes the cable, or a hollow dot in the next free row of the side the new port goes
+  on (a ring round that side's '+' when the row would fall on it).
+- **One answer for the hint and the drop.** `MacroGroupController::cardCableDropAt` says which card, which port and
+  whether a new port is made. The drag tick (`GraphEditor::dragConnection`) shows its answer on the card
+  (`MacroCardComponent::setCableDropHint`); the release (`endConnectionDrag`) commits through the same call, so the
+  two cannot disagree. A jack whose direction or kind does not match the drag is refused, so it shows no hint and the
+  drop does nothing. A cable a port already carries rings that port, and the drop makes nothing new
+  (`portAlreadyCarryingDrop`, shared with `createMacroPortFromDroppedCable`). A module's jack or knob under the cursor
+  takes the cable first, so the card shows no hint then.
+- **Motion.** The hint fades in over 120 ms `easeOutCubic` and out over 90 ms `easeInCubic` (`synth::ui::ShownFade`):
+  a plain 80 ms fade under Reduce Motion, at once under Animations Off. A drop that lands clears it at once.
+- **Test mode.** The `macroCard` state carries `cableDropHint` (`port`, `newPort` or empty) and `cableDropHintPort`
+  (the port's name). Scenario: `Tools/ui-verify/scenarios/macro-cable-drop-hint.yaml`.
+
+An open macro's border and its ports are their own drop targets and show no card hint.
+
+### A cable dropped on a folded card
+
+A cable let go on a folded macro's card does not appear on the port at once: its port end slides from where it was
+released to the port's jack (220 ms `easeOutCubic`), the same slide a drag across a macro's border gives a cable that
+ends on a new port (`MacroCrossingAnimator::armSlideFrom`, through `GraphEditor::armMacroPortSlide`). It holds for both
+kinds of drop: onto an existing port's jack, and onto the card's body where a new port is made. A new port's row
+grows in as the cable arrives (`MacroCardComponent::growInPort`, a `ShownFade`): its dot grows from nothing and the
+dot and name fade in over 170 ms `easeOutCubic`. A card that grows a row for it glides to its new height
+(`CardGlideAnimator::Scope`).
+
+- **Motion.** Under Reduce Motion nothing slides or grows: the new cable fades in over 80 ms where it lands
+  (`retractCablesGoneSince` with `growAdded`) and the new row fades in over 80 ms at full size. Under Animations Off
+  both are there at once.
+- **Undo and redo.** Cmd+Z pulls the cable back into its source jack and the card glides back to its old height, as
+  every undone cable does ([cables](../layout/cables.md#retracting-removed-cables)); redo grows it out of its source
+  jack again, not from the drop point, since the drop point is not part of the undo record. The card paints rows from
+  the live macro, so a removed row would have nothing left to fade: `MacroCardComponent::refreshPortRows` (called by
+  `GraphEditor::syncMacroCards` on every pass) keeps a picture of it and draws that ghost fading out and shrinking
+  (170 ms `easeInCubic`, a `ShownFade`) while the cable retracts; redo grows the row back in through `growInPort`. The
+  same goes for every row that comes or goes on a shown card: the '+' button, the '-' button and Delete port.
+- **Ghost rows.** Only a row at the bottom of its side is kept: with rows below it they would move up through the
+  ghost, so that row pops. A second change lands the ghosts still fading and starts the new ones; a port that comes back
+  mid-fade drops its ghost; a card that folds away, expands or is destroyed drops them at once (no frames run for a
+  card that is not shown). Under Reduce Motion the ghost fades over 80 ms at full size; under Animations Off it is gone
+  at once. A card whose height shrinks with the row (three or more rows on a side) clips the ghost to the new height.
+  Test mode: the `macroCard` state's `leavingPortRows` counts the ghosts still fading.
+- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames and
+  `MacroCardPortExit.*` the ghost row; `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films the drop and
+  `macro-port-row-undo-fade.yaml` the undo and redo.
 
 ## Member counts report modules, not ports
 
@@ -268,11 +394,8 @@ test pins that a port's uuid is still a member, guarding against a future "fix" 
 the count line up by removing ports from membership instead. An all-ports macro reads
 "0 modules, N ports" and draws no preview glyphs; that is the honest answer, not a bug.
 
-This is presentation only and does not change the collapsed card's fixed layout — the count line
-stays in the same bottom 14 px row `kMacroCardHeight` already reserves, and
-`kMacroCardJackBandBottom` sits only 4 px above that row's top, so a macro with enough ports on one
-side to push its bottom-most jack label down near the count row was already at the limit of that
-layout budget.
+This is presentation only. The count line sits in the card's middle column between the two port strips;
+the card grows taller as ports are added (`macroCardHeightFor`), so the count row is never crowded by a jack.
 
 ## Cable rendering across the boundary
 
@@ -284,7 +407,7 @@ layout budget.
 | Crosses a collapsed boundary through a port | anchored to the **card jack** of the inlet or outlet it passes through |
 | Crosses a collapsed boundary straight to an interior member | anchored to the card's **left** edge if entering the macro, **right** edge if leaving it |
 | Both endpoints outside | untouched |
-| Expanded macro | untouched; inlets and outlets draw as the docked port widget rather than an ordinary card |
+| Expanded macro | untouched; a cable through an inlet or outlet ends on that port's **outer jack** on the hull border (`ModuleComponent::getPortCenter` at the docked widget), and a cable to a member starts on the port's **inner jack** on the strip's inner edge |
 
 A cable that crosses a collapsed boundary **without** going through an inlet or outlet — wired
 straight to an interior member — still lands on the card's edge, and that case must not be treated as
@@ -305,25 +428,42 @@ left and outputs on the right:
 
 The Y coordinate is still derived from the facing projection (`projectToRectEdge` is still called,
 just to read off a Y rather than a full point) so several crossing cables on the same side keep
-spreading vertically instead of collapsing onto one pixel; that Y is then clamped into the same
-vertical jack band a real port's jack lays out in (`kMacroCardJackBandTop`/`Bottom`). X lands exactly
+spreading vertically instead of collapsing onto one pixel; that Y is then clamped into the card's
+port-row span, from the first row's top (`kMacroPortRowsTop`) down to the strip footer
+(`kMacroPortStripFooter` above the card's real bottom edge). X lands exactly
 on the card's boundary (`cardBounds.getX()`/`getRight()`), not inset the way a real port jack is
 (`kMacroCardJackInsetX`), so a no-port edge anchor never sits under a port dot occupying the same
 side.
 
 **The collapsed card's jacks are one definition read by three places.**
-`GraphEditor::macroCardPortLayout` draws one jack per configured `MacroPort` — inputs evenly spaced
-down the left edge, outputs down the right, in `order` — and that layout is what
+`MacroGroupController::macroCardPortLayout` draws one jack per configured `MacroPort` (two rows, L and R,
+for a two-jack `Stereo` port) — inputs on 16 px rows down the left edge, outputs down the right, in `order` — and that layout is what
 `MacroCardComponent::paint` draws, what `GraphEditor::endConnectionDrag` hit-tests a drop against
 (`macroCardPortForPoint`), and what `rebuildVisibleCables()` anchors a boundary cable through a port
-at. A cable straight to an interior member instead gets the directional edge anchor above; the two
+at. Every jack position is zoom-independent. A cable straight to an interior member instead gets the directional edge anchor above; the two
 treatments coexist and are told apart by which endpoint node the cable resolves to, a port's fronting
 node or an ordinary member.
 
-Dropping a cable exactly on an existing port's jack wires straight into that port's node instead of
-minting a fresh one; a jack whose direction or kind does not match the drag is refused, the same as a
-mismatched drop on an ordinary module jack. Missing that jack falls through to the whole-card
-shape-from-a-dropped-cable convenience above.
+A cable anchors on the row of the jack it uses (raw 0 for Left, `kRightBase` for Right); a drop on the R row wires the Right leg.
+
+Dropping a cable exactly on an existing port's jack feeds that port instead of minting a fresh one; a jack whose
+direction or kind does not match the drag is refused, the same as a mismatched drop on an ordinary module jack. The
+drop follows the same rules as a drop on a module's own jack (`PortConnector::connectJacks`): a source inside another
+macro leaves it through that macro's own ports, never by a plain cable across its border. The row dropped on picks the
+port's jack (Left 0, Right 1 of a two-jack Stereo port). The port's own inner cable carries the signal on; a port with
+nothing behind it yet (one made from a dropped cable has no inner cable) is joined to the module it was made for, the
+first ordinary member with a free matching jack (`connectEmptyPortInterior`), both legs for a Stereo port, in the same
+undo step. Missing the jack falls through to the whole-card shape-from-a-dropped-cable convenience above.
+
+The same jack dropped on the card again finds its port (and the ports on the macros it leaves), so nothing is minted or
+cabled twice; a cable from one of several jacks (a Channel Strip's Left and Right) names its port after that jack.
+
+## Nested macros
+
+A child macro's ports are direct members of the child, and a parent's are direct members of the parent
+(`nodeIsMacroPort` keeps reading the direct owner). A cable from outside the parent to a node inside the child is a
+chain: external -> parent inlet -> child inlet -> member, and the mirror for outlets. Each boundary carries its own
+port; the creation rules are in [`auto-ports`](auto-ports.md#nested-macros).
 
 ## Latency
 

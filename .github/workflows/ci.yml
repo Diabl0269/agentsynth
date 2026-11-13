@@ -147,7 +147,12 @@ jobs:
       # juce::String decodes a `const char*` as Latin-1, so a non-ASCII literal ships as mojibake
       # ("Rename…" rendered "Renameâ€¦"). A compiler cannot catch it and no test asserted on it.
       # Same deal as the two above: ~1s, no compiler.
-      run: bash scripts/tests/check-nonascii-literals.test.sh
+      run: bash scripts/tests/check-nonascii-literals.test.sh && bash scripts/tests/no-bare-array-expansion.test.sh
+    - name: Check UI text is not all caps
+      # UI text is never written in ALL CAPS: no toUpperCase() and no capitals-only word in a string
+      # literal under Source/UI (abbreviations such as MIDI excepted; `// not-ui-text: <reason>` opts a
+      # line out) or the default accent/text colour as a literal outside Source/UI/Theme. ~1s, no compiler.
+      run: bash scripts/tests/check-ui-caps.test.sh
     - name: Test AI eval ratchet
       # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
       # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.
@@ -160,16 +165,12 @@ jobs:
       # is still worth testing -- via fake uname/security/codesign shims -- on every platform.
       run: bash scripts/tests/dev-sign-app.test.sh
     - name: Test ci-local worktree dependency-source reuse
-      # FRO92: scripts/ci-local.sh's first-configure-in-a-worktree FetchContent reuse
-      # (scripts/lib/deps-reuse.sh) is only ever exercised locally otherwise -- this runs the
-      # reuse/no-reuse decision against fixture directory trees, no cmake or compiler involved.
-      run: bash scripts/tests/ci-local-deps-reuse.test.sh
-    - name: Test ci-local shared test lock
-      # FRO192: scripts/ci-local.sh serialises its test run behind a lock shared by every worktree
-      # (scripts/lib/test-lock.sh) so two local suites cannot collide through the shared settings
-      # file. Only ever exercised locally otherwise -- this checks the lock path, serialisation,
-      # timeout status and exit-code passthrough with shell stand-ins, no compiler. A few seconds.
-      run: bash scripts/tests/ci-local-test-lock.test.sh
+      # FRO92: ci-local's worktree FetchContent reuse (scripts/lib/deps-reuse.sh) runs against fixture
+      # trees here, no compiler involved; then the JUCE patch script (cmake/ApplyJucePatch.cmake).
+      run: bash scripts/tests/ci-local-deps-reuse.test.sh && bash scripts/tests/juce-patch.test.sh
+    - name: Test ci-local test shards
+      # Only ever exercised locally otherwise: the slot limit, per-shard state, and red-shard handling.
+      run: bash scripts/tests/ci-local-test-shards.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
@@ -184,6 +185,10 @@ jobs:
       # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
       # docs/development/file-size-guard.md for the full mechanism.
       run: bash scripts/check-file-sizes.sh
+    - name: Check unity clashes
+      # A name declared in an anonymous namespace in two sources of one Windows unity group fails
+      # only the Windows build (no clashes today; a new one is renamed, never baselined); the self-test runs first.
+      run: bash scripts/tests/check-unity-clashes.test.sh && bash scripts/check-unity-clashes.sh
     - name: Check docs integrity
       # FRO169: runs scripts/check-docs.sh against the REAL tree, not just its unit test -- a PR
       # that only edits a Source/*.h comment (in scope for check C/D, but never under docs/**)
@@ -217,18 +222,21 @@ jobs:
       # scripts/check-header-comments.sh's own doc comment and docs/development/header-comment-guard.md "Header comment
       # placement" for the full mechanism.
       run: bash scripts/check-header-comments.sh
-    - name: Test comment-provenance guard
+    - name: Test comment-provenance and fixed-wait guards
       # A hole in the scanner that decides what counts as comment text (a string literal counted,
       # a block-comment line missed, an exemption leaking into Source/) or in the ratchet makes the
       # provenance rule decorative. ~2s, no compiler, no network.
-      run: bash scripts/tests/check-comment-provenance.test.sh
-    - name: Check comment provenance
+      run: bash scripts/tests/check-comment-provenance.test.sh && bash scripts/tests/check-fixed-waits.test.sh
+    - name: Check comment provenance and fixed-time waits
       # Comments in Source/ and Tests/ state behaviour and reasons, never provenance (ticket ids,
       # dates) -- that history lives in git. Per-file count of matching comment lines + strict
       # ratchet baseline (scripts/comment-provenance-baseline.txt) for files not yet rewritten. See
       # scripts/check-comment-provenance.sh's own doc comment and
       # docs/development/comment-provenance-guard.md for the full mechanism.
-      run: bash scripts/check-comment-provenance.sh
+      run: bash scripts/check-comment-provenance.sh && bash scripts/check-fixed-waits.sh
+    - name: Check header reach
+      # Caps how many .cpp files include each header (strict ratchet, scripts/header-reach-baseline.txt); the self-test runs first.
+      run: bash scripts/tests/check-header-reach.test.sh && bash scripts/check-header-reach.sh
     - name: Test docs checker
       # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
       # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map
@@ -276,9 +284,9 @@ jobs:
         # this did until Aug 2026) minted a fresh ~350 MB entry per platform per workflow on every
         # module PR — 10 CMakeLists edits in nine days, ~2.1 GB apiece, which blew past GitHub's
         # 10 GB per-repo budget and LRU-evicted every ccache entry with it.
-        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps4-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -324,6 +332,7 @@ jobs:
           -DENABLE_COVERAGE=ON \
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
+          -DAGENTSYNTH_PCH=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
@@ -425,7 +434,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): scripts/ci-cache-budget.sh's static sum bounds what the
         # workflows COMMIT to writing for one generation; this catches what that can't -- a
@@ -452,29 +461,10 @@ jobs:
     # to seed the cache (see the note above the `lint` job).
     - name: Run Tests
       if: github.event_name == 'pull_request'
-      timeout-minutes: 10
+      timeout-minutes: 24
       run: |
-        export LLVM_PROFILE_FILE="default.profraw"
-        # Run without xvfb — tests are headless and xvfb's X11 event loop
-        # adds ~44s overhead per pumpMessages() call on slow CI runners
-        #
-        # Watchdog: a hung test must die with thread stacks, not a silent step timeout. SIGABRT
-        # after 8 minutes, then print every thread's backtrace from the core.
-        sudo apt-get install -y --no-install-recommends gdb > /dev/null 2>&1 || true
-        ulimit -c unlimited
-        echo 'core.%p' | sudo tee /proc/sys/kernel/core_pattern > /dev/null
-        set +e
-        timeout -s ABRT 480 ./build/Tests/Tests
-        status=$?
-        set -e
-        if [ "$status" -ne 0 ]; then
-          core=$(ls core.* 2>/dev/null | head -1)
-          if [ -n "$core" ]; then
-            echo "=== hang/crash backtraces ==="
-            gdb -batch -ex 'thread apply all bt' ./build/Tests/Tests "$core" 2>/dev/null | tail -300
-          fi
-        fi
-        exit $status
+        # Without xvfb: tests are headless, and its event loop adds ~44s per pumpMessages() on slow runners.
+        bash scripts/ci-linux-run-tests.sh
 
     - name: Check Coverage
       if: github.event_name == 'pull_request'
@@ -487,12 +477,15 @@ jobs:
         name: coverage-report
         path: |
           default.profdata
-          default.profraw
+          default-*.profraw
 
   build-and-test-asan:
     name: Build and Test (ASAN)
     if: contains(github.event.pull_request.labels.*.name, 'run-asan')
     runs-on: ubuntu-latest
+    # Job-wide so gtest_discover_tests (Build step) gets it too; libstdc++14+clang stable_sort false positive, see ci-pipeline.md.
+    env:
+      ASAN_OPTIONS: detect_leaks=0:alloc_dealloc_mismatch=0
     # actions: write only for the Prune step below (gh cache delete), same as build-and-test.
     permissions:
       contents: read
@@ -519,9 +512,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps4-
+          ${{ runner.os }}-deps6-
 
     # The ONE exception to rule 6 of docs/development/ci-caching.md ("PR runs restore only"). This
     # job never runs on push:main, so nothing can seed a main-scoped cache for it, and until
@@ -612,9 +605,7 @@ jobs:
           done
 
     - name: Run Tests
-      run: xvfb-run ./build/Tests/Tests
-      env:
-        ASAN_OPTIONS: detect_leaks=0
+      run: bash scripts/ci-asan-run-tests.sh # sequential shards, no xvfb (bare Xvfb: JUCE peers die on BadAtom)
 
   build-and-test-macos:
     name: Build and Test (macOS)
@@ -640,9 +631,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps4-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -657,12 +648,11 @@ jobs:
 
     - name: Configure ccache
       run: |
-        # Right-sized, not the Linux job's 2G: a seeded macOS-ccache-main entry measured 117 MB on
-        # 2026-09-15 (this Release build has no coverage instrumentation and is the smallest of the
-        # three), so 2G was headroom this job will never use — and every byte configured here is a
-        # byte a single `Save ccache` run (main-only, see that step below) could write toward the
-        # repo's 10 GB cache budget. 512M leaves >4x headroom over the measured size.
-        ccache --set-config=max_size=512M
+        # Right-sized, not the Linux job's 2G: one build measured 238 MB with the precompiled
+        # headers this job turns on below (156 MB without), and the entry fills to its cap as
+        # merges add objects. Every byte configured here is a byte a `Save ccache` run (main-only,
+        # see that step below) could write toward the repo's 10 GB cache budget.
+        ccache --set-config=max_size=1G
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -679,9 +669,11 @@ jobs:
         # instruments that CI never runs (they gate no tests and need a live Ollama). One platform
         # is enough to catch a harness that stops compiling, and the Linux job builds them, so a
         # harness that stops compiling is still caught on every PR.
+        # AGENTSYNTH_PCH: precompiled JUCE headers (cmake/Pch.cmake), on in all three build jobs.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
+          -DAGENTSYNTH_PCH=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \
@@ -751,7 +743,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
@@ -815,8 +807,7 @@ jobs:
           # GoogleTest's own summary line, e.g. "[==========] 1843 tests from 210 test suites
           # ran. (12345 ms total)" -- its absence, or a "0 tests" count, means the binary crashed
           # or the shard's slice of the split was empty, either of which a nonzero process exit
-          # code alone would not always catch (a segfault does; a hung/killed runner step might
-          # not surface as this shard's own exit code).
+          # code alone would not always catch (a segfault does; a hung/killed runner step might not).
           ran_count="$(grep -oE '^\[==========\] [0-9]+ tests? from' "$log" | grep -oE '[0-9]+' | head -1 || true)"
 
           if [ "$shard_rc" -ne 0 ]; then
@@ -829,6 +820,7 @@ jobs:
           fi
         done
 
+        [ "$overall_rc" -eq 0 ] || bash "$GITHUB_WORKSPACE/scripts/print-crash-report.sh"
         exit "$overall_rc"
 
   build-and-test-windows:
@@ -855,9 +847,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps4-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -877,10 +869,10 @@ jobs:
       shell: bash
       run: |
         mkdir -p "$CCACHE_DIR"
-        # Right-sized, not the Linux job's 2G: a seeded Windows-ccache-main entry measured 160 MB
-        # on 2026-09-15, so 512M leaves >3x headroom while bounding what a single main-only save
-        # (see the Save ccache step below) can add to the repo's 10 GB cache budget.
-        ccache --set-config=max_size=512M
+        # Unity batches: fewer, larger objects. At 512M the separate-file build evicted its own entries,
+        # 72-84% hits on a PR against 96-99% on the other jobs. 1500M since the objects carry /Z7 debug info (see
+        # Configure CMake), which makes them larger.
+        ccache --set-config=max_size=1500M
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -890,14 +882,30 @@ jobs:
       run: |
         # No -DENABLE_AI_HARNESS here — same reasoning as the macOS job above. The Linux job keeps
         # building the harnesses for compile coverage.
+        # Symbols for Tests/WindowsCrashReport.h: /Z7 (Embedded, needs CMP0141 NEW since the project asks
+        # for CMake 3.22) puts debug info in the objects, the only form ccache caches for MSVC; the Tests
+        # link then writes Tests.pdb (AGENTSYNTH_TEST_PDB). Release objects are bigger, hence max_size above.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
+          -DAGENTSYNTH_PCH=ON \
+          -DAGENTSYNTH_UNITY=ON \
+          -DAGENTSYNTH_TEST_PDB=ON \
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW \
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
       run: cmake --build build --config Release
+
+    # The crash reporter can only name frames if the Tests link wrote its PDB (AGENTSYNTH_TEST_PDB above).
+    - name: Check test symbols
+      shell: bash
+      run: |
+        pdb=$(find build -name Tests.pdb -print -quit)
+        test -n "$pdb" || { echo "::error::Tests.pdb not found: Windows crash stacks would print no names"; exit 1; }
+        echo "symbols: $pdb"
 
     - name: Check Cache Health
       if: always()
@@ -960,7 +968,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

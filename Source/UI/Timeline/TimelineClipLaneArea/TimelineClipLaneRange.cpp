@@ -17,10 +17,13 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/SectionColours.h"
 #include <algorithm>
 #include <cmath>
 
@@ -51,12 +54,15 @@ juce::Rectangle<int> unionOf(juce::Rectangle<int> a, juce::Rectangle<int> b) {
 std::optional<std::pair<synth::TrackId, double>> TimelineClipLaneArea::rangePointAt(juce::Point<int> pos) const {
     if (doc_ == nullptr || doc_->getTracks().empty())
         return std::nullopt;
-    const int rowHeight = getRowHeight();
-    if (rowHeight <= 0)
+    const auto layout = getRowLayout();
+    if (layout.trackRowHeight() <= 0)
         return std::nullopt;
     const int contentY = pos.y + (int)std::llround(viewState_.trackScrollY);
+    // A y below the last row (index -1 from the layout) clamps onto the last row; one in a track's
+    // sub-lane area counts as that track.
     const int lastRow = (int)doc_->getTracks().size() - 1;
-    const int row = contentY < 0 ? 0 : std::min(contentY / rowHeight, lastRow);
+    const int hitRow = layout.trackIndexAtY(contentY);
+    const int row = contentY < 0 ? 0 : (hitRow < 0 ? lastRow : hitRow);
     const double beat = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
     return std::make_pair(doc_->getTracks()[(std::size_t)row].id, beat);
 }
@@ -67,9 +73,9 @@ juce::Rectangle<int> TimelineClipLaneArea::rangeRect() const {
     const auto rows = range_.coveredRows(*doc_);
     if (!rows)
         return {};
-    const int rowHeight = getRowHeight();
-    const int top = rowBounds(rows->first, rowHeight).getY();
-    const int bottom = rowBounds(rows->second, rowHeight).getBottom();
+    const auto layout = getRowLayout();
+    const int top = rowBounds(layout, rows->first).getY();
+    const int bottom = rowBounds(layout, rows->second).getBottom();
     const int left = (int)std::llround(viewState_.beatToX(range_.getStartBeat()));
     const int right = (int)std::llround(viewState_.beatToX(range_.getEndBeat()));
     return {left, top, std::max(1, right - left), bottom - top};
@@ -134,6 +140,7 @@ void TimelineClipLaneArea::beginRangeGesture(const juce::MouseEvent& e) {
     const auto point = rangePointAt(e.getPosition());
     if (!point)
         return;
+    rangeBeforeGesture_ = range_;
     if (e.mods.isShiftDown() && range_.isActive())
         setRange(range_.getAnchorTrack(), range_.getAnchorBeat(), point->first, point->second);
     else
@@ -151,6 +158,14 @@ void TimelineClipLaneArea::updateRangeGesture(juce::Point<int> pos) {
         return;
     const auto before = rangeRect();
     range_.extendTo(point->first, point->second);
+    requestToolPreviewRepaint(unionOf(before, rangeRect()).expanded(kRangeRepaintMarginPx, 0));
+}
+
+// Esc: the range goes back to what it was before the press (a Shift-extension returns to its old extent, a fresh
+// range disappears). The clip selection the press cleared stays cleared: a range and a clip selection never coexist.
+void TimelineClipLaneArea::cancelRangeGesture() {
+    const auto before = rangeRect();
+    range_ = rangeBeforeGesture_;
     requestToolPreviewRepaint(unionOf(before, rangeRect()).expanded(kRangeRepaintMarginPx, 0));
 }
 
@@ -175,7 +190,7 @@ void TimelineClipLaneArea::paintRange(juce::Graphics& g) {
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour wash = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    const juce::Colour edge = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour edge = synth::theme::themeOf(*this).colors.accent;
 
     const auto rectF = rect.toFloat();
     g.setColour(wash.withAlpha(0.16f));
@@ -211,6 +226,10 @@ bool TimelineClipLaneArea::applyRangeChoice(RangeChoice choice) {
         case RangeChoice::DeleteCloseGap:
             doc_->deleteRange(span->tracks, span->startBeat, span->endBeat, true, spb);
             break;
+        case RangeChoice::MakeSection:
+            doc_->makeSection(span->startBeat, span->endBeat, "Section " + juce::String(doc_->getSections().size() + 1),
+                              sectionColourFor((int)doc_->getSections().size()), spb);
+            break;
         }
     };
     if (undoManager_)
@@ -219,20 +238,36 @@ bool TimelineClipLaneArea::applyRangeChoice(RangeChoice choice) {
         mutate();
 
     repaint();
-    return doc_->getRevision() != revisionBefore;
+    const bool changed = doc_->getRevision() != revisionBefore;
+    if (changed && choice == RangeChoice::MakeSection && onSectionMade)
+        onSectionMade(span->startBeat);
+    return changed;
+}
+
+// The menu itself, apart from showing it, so a test can walk the real items without the display a shown menu needs.
+juce::PopupMenu TimelineClipLaneArea::buildRangeContextMenu() {
+    juce::PopupMenu menu;
+    if (!getRangeSpan())
+        return menu;
+    menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
+    menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
+    menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
+    juce::PopupMenu::Item makeSection("Make section");
+    makeSection.setAction([this] { applyRangeChoice(RangeChoice::MakeSection); });
+    makeSection.shortcutKeyDescription = shortcutHintFor(shortcuts_, "timelineMakeSection", sectionKey());
+    menu.addItem(makeSection);
+    addRenderToAudioItem(menu, renderSpansForRange());
+    return menu;
 }
 
 // Protected virtual for the display-less-runner reason spelled out on showClipContextMenu: a real
 // menu must never be reached from a test. Every outcome is driven through applyRangeChoice.
 void TimelineClipLaneArea::showRangeContextMenu(juce::Point<int> localPos) {
     juce::ignoreUnused(localPos);
-    if (!getRangeSpan())
+    auto menu = buildRangeContextMenu();
+    if (menu.getNumItems() == 0)
         return;
-    juce::PopupMenu menu;
-    menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
-    menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
-    menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 } // namespace synth::ui

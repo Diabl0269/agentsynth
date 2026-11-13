@@ -1,0 +1,578 @@
+// AIChatComponentEditPlanTests.cpp
+// One input, one answer, one card: no Patch/Arrange selector; with a timeline a send asks for an
+// edit plan through sendProjectMessage (hosted project.generate, local with the combined schema);
+// a plan renders one card with one Apply that runs applyProjectEdit; a refused plan shows its reason
+// and no Apply; a patch-only answer is the same card; a local conversational answer stays text; and
+// the Apply button's name, tooltip and Tab position. Shared mocks live in AIChatComponentTestFixture.h.
+
+#include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../Accessibility/TabOrderHelpers.h"
+#include "../../Layout/FadeVisibilityTestGuard.h"
+#include "AIChatComponentTestFixture.h"
+#include "TestPaths.h"
+#include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
+
+namespace {
+
+// Answers both transports with `answer` and records which one each request used and what it carried.
+class PlanProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "PlanProvider"; }
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({}, true);
+    }
+    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback, const juce::var& schema,
+                         std::function<void(const juce::String&)> = {}) override {
+        ++sendPromptCalls;
+        lastConversation = conversation;
+        lastSchema = schema;
+        respond(callback);
+        return {};
+    }
+    RequestId sendCapabilityRequest(const juce::String& capability, const juce::var&,
+                                    CompletionCallback callback) override {
+        ++capabilityCalls;
+        lastCapability = capability;
+        respond(callback);
+        return {};
+    }
+    void cancel(RequestId) override {}
+    void setModel(const juce::String&) override {}
+    juce::String getCurrentModel() const override { return {}; }
+    void setRequestTimeoutMs(int) override {}
+    int getRequestTimeoutMs() const override { return 240000; }
+    bool isHosted() const override { return hosted; }
+
+    bool hosted = true;
+    juce::String answer = "plain answer";
+    int sendPromptCalls = 0, capabilityCalls = 0;
+    juce::String lastCapability;
+    juce::var lastSchema;
+    std::vector<Message> lastConversation;
+
+private:
+    void respond(const CompletionCallback& callback) const {
+        AIResponse response;
+        response.success = true;
+        response.content = answer;
+        callback(response);
+    }
+};
+
+// A patch (an LFO modulating the new track's Filter insert by name) plus two timeline ops: an
+// instrument track with that insert, and a lane on it - the engine's own small plan.
+constexpr const char* kPlan = R"({"mode": "merge",
+    "nodes": [{"id": 7003, "type": "LFO"}], "connections": [],
+    "modulations": [{"source": 7003, "dest": 7002, "destParam": "cutoff", "amount": 0.5}],
+    "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator", "instrumentId": 7001,
+         "inserts": [{"type": "Filter", "id": 7002, "params": {"cutoff": 600}}]},
+        {"op": "writeLane", "nodeId": 7002, "paramId": "cutoff",
+         "points": [{"beat": 0, "value": 400, "curve": 1}, {"beat": 8, "value": 3000, "curve": 1}]}]})";
+
+constexpr const char* kPatchOnly = R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Audio Output"}],)"
+                                   R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0}]})";
+
+// The chat over a service with a live timeline and an app-shaped host, as MainComponent wires it.
+struct PlanRig {
+    explicit PlanRig(bool hosted = true, bool withTimeline = true) {
+        auto owned = std::make_unique<PlanProvider>();
+        provider = owned.get();
+        provider->hosted = hosted;
+        service.setProvider(std::move(owned));
+        if (withTimeline) {
+            service.setTimelineContext(&doc, &transport);
+            service.setTimelineToolsEnabled(true);
+            service.setTimelineOpsHost(&host);
+        }
+        juce::PropertiesFile::Options options;
+        options.applicationName = "AIChatEditPlanTest";
+        options.filenameSuffix = "test";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        props.setStorageParameters(options);
+        chat = std::make_unique<synth::AIChatComponent>(service, props);
+        historyDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                         .getChildFile("chat-plan-" + juce::Uuid().toString());
+        chat->setLocalHistoryDirectoryForTesting(historyDir);
+        chat->setSize(400, 700);
+        chat->refreshModels();
+    }
+
+    void send(const juce::String& text) {
+        for (auto* child : chat->getChildren())
+            if (auto* editor = dynamic_cast<juce::TextEditor*>(child); editor != nullptr && editor->isVisible())
+                editor->setText(text);
+        chat->triggerSend();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    }
+
+    std::vector<juce::Component*> findTitled(const juce::String& title) {
+        std::vector<juce::Component*> found;
+        std::function<void(juce::Component*)> walk = [&](juce::Component* c) {
+            for (auto* child : c->getChildren()) {
+                if (child->getTitle() == title)
+                    found.push_back(child);
+                walk(child);
+            }
+        };
+        if (auto* list = findMessageList(*chat))
+            walk(list);
+        return found;
+    }
+
+    juce::Button* applyButton() {
+        const auto buttons = findTitled("Apply edit plan");
+        return buttons.empty() ? nullptr : dynamic_cast<juce::Button*>(buttons.front());
+    }
+
+    AudioEngine engine;
+    synth::AIIntegrationService service{engine.getGraph()};
+    synth::TimelineDoc doc;
+    synth::TransportService transport;
+    synth::PlanFakeHost host{doc, engine.getGraph()};
+    juce::ApplicationProperties props;
+    juce::File historyDir;
+    PlanProvider* provider = nullptr;
+    std::unique_ptr<synth::AIChatComponent> chat;
+};
+
+bool hasTrackNamed(const synth::TimelineDoc& doc, const juce::String& name) {
+    for (const auto& track : doc.getTracks())
+        if (track.name == name)
+            return true;
+    return false;
+}
+
+int countNodesOfType(juce::AudioProcessorGraph& graph, const juce::String& type) {
+    int count = 0;
+    const juce::var patch = synth::AIStateMapper::graphToJSON(graph); // keep alive: getArray() points into it
+    if (auto* nodes = patch.getProperty("nodes", {}).getArray())
+        for (const auto& node : *nodes)
+            count += node.getProperty("type", {}).toString() == type ? 1 : 0;
+    return count;
+}
+
+} // namespace
+
+TEST_F(AIChatComponentTest, ThereIsNoRequestModeSelector) {
+    PlanRig rig;
+    int combos = 0;
+    for (auto* child : rig.chat->getChildren())
+        if (dynamic_cast<juce::ComboBox*>(child) != nullptr) {
+            ++combos;
+            EXPECT_EQ(child->getTitle(), "AI model") << "the model picker is the only combo box left";
+        }
+    EXPECT_EQ(combos, 1);
+}
+
+TEST_F(AIChatComponentTest, HostedSendWithATimelineAsksProjectGenerate) {
+    PlanRig rig(/*hosted=*/true);
+    rig.send("write a bass line with a filter sweep");
+    EXPECT_EQ(rig.provider->capabilityCalls, 1);
+    EXPECT_EQ(rig.provider->lastCapability, juce::String("project.generate"));
+    EXPECT_EQ(rig.provider->sendPromptCalls, 0);
+}
+
+TEST_F(AIChatComponentTest, LocalSendWithATimelineCarriesTheCombinedSchema) {
+    PlanRig rig(/*hosted=*/false);
+    rig.send("add a bass track and automate its cutoff");
+    ASSERT_EQ(rig.provider->sendPromptCalls, 1);
+    EXPECT_EQ(rig.provider->capabilityCalls, 0);
+    auto* properties = rig.provider->lastSchema.getProperty("properties", {}).getDynamicObject();
+    ASSERT_NE(properties, nullptr) << "a structured request carries a schema";
+    EXPECT_TRUE(properties->hasProperty("timelineOps"));
+    EXPECT_TRUE(properties->hasProperty("nodes"));
+    ASSERT_FALSE(rig.provider->lastConversation.empty());
+    EXPECT_TRUE(rig.provider->lastConversation.back().content.contains("Project tracks:"))
+        << "the local message is composed from the project.generate fields";
+}
+
+TEST_F(AIChatComponentTest, APatchWithTimelineOpsRendersOneCardWithOneApply) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+
+    EXPECT_EQ(rig.findTitled("Edit plan").size(), 1u);
+    EXPECT_EQ(rig.findTitled("Apply edit plan").size(), 1u);
+    const auto preview = juce::StringArray::fromLines(rig.chat->getLastPlanPreviewForTesting());
+    ASSERT_EQ(preview.size(), 2) << rig.chat->getLastPlanPreviewForTesting();
+    EXPECT_TRUE(preview[0].startsWith("Merges a patch")) << preview[0];
+    EXPECT_TRUE(preview[1].contains("Bass")) << preview[1];
+    EXPECT_EQ(rig.host.builds, 0) << "rendering the card previews; it builds nothing";
+}
+
+// The card's preview is sized from the text at the label's full width; a label border would wrap
+// it narrower than measured and clip the last line under the buttons.
+TEST_F(AIChatComponentTest, ThePlanPreviewIsNeverClipped) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const auto found = rig.findTitled("What this plan changes");
+    ASSERT_EQ(found.size(), 1u);
+    auto* label = dynamic_cast<juce::Label*>(found.front());
+    ASSERT_NE(label, nullptr);
+    EXPECT_EQ(label->getBorderSize().getLeftAndRight(), 0);
+    EXPECT_EQ(label->getBorderSize().getTopAndBottom(), 0);
+    juce::GlyphArrangement ga;
+    ga.addJustifiedText(label->getFont(), label->getText(), 0.0f, 0.0f, (float)label->getWidth(),
+                        juce::Justification::left);
+    EXPECT_GE(label->getHeight(), (int)std::floor(ga.getBoundingBox(0, -1, true).getHeight()));
+}
+
+// A plan with one bad detail still gets its card; the card says so in one short line, with every note in the
+// tooltip and the accessible description, and a clean plan shows no such line.
+TEST_F(AIChatComponentTest, APlanThatWasRepairedShowsOneShortLineWithATooltip) {
+    PlanRig rig;
+    rig.provider->answer = R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+         "inserts": [{"type": "Filter", "id": 7002}]},
+        {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]},
+        {"op": "writeLane", "nodeId": 7002, "paramId": "wobble", "points": [{"beat": 0, "value": 1}]}]})";
+    rig.send("a bass track");
+
+    const auto found = rig.findTitled("Parts of this plan that were left out or adjusted");
+    ASSERT_EQ(found.size(), 1u);
+    auto* label = dynamic_cast<juce::Label*>(found.front());
+    ASSERT_NE(label, nullptr);
+    EXPECT_EQ(label->getText(), "1 detail skipped: an automation lane on a setting the Filter doesn't have");
+    EXPECT_NE(label->getText(), label->getText().toUpperCase()) << "no ALL-CAPS text";
+    EXPECT_TRUE(label->getTooltip().contains("setting the Filter doesn't have")) << label->getTooltip();
+    EXPECT_TRUE(label->getDescription().contains("setting the Filter doesn't have"));
+    EXPECT_NE(rig.applyButton(), nullptr) << "a repaired plan can still be applied";
+}
+
+TEST_F(AIChatComponentTest, ACleanPlanShowsNoRepairLine) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    EXPECT_TRUE(rig.findTitled("Parts of this plan that were left out or adjusted").empty());
+}
+
+TEST_F(AIChatComponentTest, ApplyRunsTheWholePlanOnceAsOneUndoStep) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const int nodesBefore = rig.engine.getGraph().getNumNodes();
+
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    apply->onClick();
+
+    EXPECT_EQ(rig.host.batches, 1) << "one applyProjectEdit, one recorded batch";
+    EXPECT_EQ(rig.host.builds, 1);
+    EXPECT_TRUE(hasTrackNamed(rig.doc, "Bass"));
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "LFO"), 1);
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "Filter"), 1);
+    ASSERT_TRUE(rig.host.undo.undo());
+    EXPECT_FALSE(hasTrackNamed(rig.doc, "Bass"));
+    EXPECT_EQ(rig.engine.getGraph().getNumNodes(), nodesBefore);
+}
+
+TEST_F(AIChatComponentTest, ARefusedPlanShowsTheReasonAndNoApply) {
+    PlanRig rig;
+    // A replace that would delete the instrument the same plan builds: the engine refuses it.
+    rig.provider->answer = R"({"mode": "replace", "nodes": [], "connections": [],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"}]})";
+    rig.send("replace everything with a bass track");
+
+    EXPECT_EQ(rig.findTitled("Edit plan").size(), 1u);
+    EXPECT_EQ(rig.applyButton(), nullptr);
+    EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().startsWith("This plan was rejected and was not applied: "))
+        << rig.chat->getLastPlanPreviewForTesting();
+    EXPECT_TRUE(rig.chat->getLastPlanPreviewForTesting().contains("merge"));
+}
+
+TEST_F(AIChatComponentTest, APatchOnlyAnswerIsTheSameCardAndApplies) {
+    PlanRig rig;
+    rig.provider->answer = juce::String("Here you go:\n```json\n") + kPatchOnly + "\n```";
+    rig.send("make me a simple oscillator patch");
+
+    EXPECT_EQ(rig.findTitled("Edit plan").size(), 1u);
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    apply->onClick();
+    EXPECT_EQ(rig.host.batches, 1);
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "Oscillator"), 1);
+}
+
+TEST_F(AIChatComponentTest, APatchOnlyAnswerAppliesWithoutATimeline) {
+    PlanRig rig(/*hosted=*/false, /*withTimeline=*/false);
+    rig.provider->answer = juce::String("```json\n") + kPatchOnly + "\n```";
+    rig.send("make me a simple oscillator patch");
+
+    EXPECT_EQ(rig.provider->sendPromptCalls, 1) << "no timeline: the patch request it always was";
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    apply->onClick();
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "Oscillator"), 1);
+    EXPECT_EQ(rig.host.batches, 0);
+}
+
+TEST_F(AIChatComponentTest, ALocalConversationalAnswerStaysText) {
+    PlanRig rig(/*hosted=*/false);
+    rig.provider->answer = "Subtractive starts bright and filters; FM builds overtones.";
+    rig.send("How does subtractive synthesis differ from FM synthesis?");
+
+    EXPECT_EQ(rig.provider->sendPromptCalls, 1);
+    EXPECT_FALSE(rig.provider->lastSchema.isObject()) << "a conversational question asks for free text";
+    EXPECT_TRUE(rig.findTitled("Edit plan").empty());
+    EXPECT_NE(findDescendantWithText<juce::Label>(findMessageList(*rig.chat),
+                                                  "Subtractive starts bright and filters; FM builds overtones."),
+              nullptr);
+}
+
+TEST_F(AIChatComponentTest, ApplyIsNamedTippedAndReachedByTabAfterTheInputRow) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    EXPECT_EQ(apply->getTooltip(), "Apply this answer to the project (one undo step)");
+    EXPECT_TRUE(apply->getWantsKeyboardFocus());
+
+    const auto names = synth::test::walkTabOrder(*rig.chat).names();
+    ASSERT_GE(names.size(), 4) << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[0], "Message to the AI assistant") << names.joinIntoString(" | ").toStdString();
+    EXPECT_EQ(names[1], "Send");
+    EXPECT_EQ(names[2], "Chat messages");
+    const int applyIndex = names.indexOf("Apply edit plan");
+    EXPECT_GT(applyIndex, 2) << names.joinIntoString(" | ").toStdString();
+    EXPECT_GT(applyIndex, names.indexOf("Show details")) << "inside the card, in reading order";
+}
+
+TEST_F(AIChatComponentTest, ApplyOnceThenTheCardReadsAppliedAndSecondClickDoesNothing) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+
+    auto* apply = rig.applyButton();
+    ASSERT_NE(apply, nullptr);
+    apply->onClick();
+    EXPECT_EQ(rig.host.batches, 1);
+
+    EXPECT_FALSE(apply->isEnabled());
+    EXPECT_EQ(apply->getButtonText(), "Applied");
+    EXPECT_EQ(apply->getTitle(), "Edit plan applied");
+    EXPECT_EQ(apply->getTooltip(), "This plan was applied; undo with Cmd+Z");
+    EXPECT_TRUE(rig.findTitled("Apply edit plan").empty());
+
+    apply->onClick();
+    EXPECT_EQ(rig.host.batches, 1) << "an applied plan is never applied twice";
+    EXPECT_EQ(countNodesOfType(rig.engine.getGraph(), "LFO"), 1);
+
+    // A redraw rebuilds every bubble; the card must come back applied.
+    rig.provider->answer = "plain answer";
+    rig.send("thanks");
+    const auto rebuilt = rig.findTitled("Edit plan applied");
+    ASSERT_EQ(rebuilt.size(), 1u);
+    EXPECT_FALSE(rebuilt.front()->isEnabled());
+    EXPECT_TRUE(rig.findTitled("Apply edit plan").empty());
+}
+
+TEST_F(AIChatComponentTest, AppliedStateSurvivesTheSavedHistoryRoundTrip) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    ASSERT_NE(rig.applyButton(), nullptr);
+    rig.applyButton()->onClick();
+
+    const auto saved = synth::LocalHistoryStore::list(rig.historyDir);
+    ASSERT_EQ(saved.size(), 1u);
+    synth::LocalConversation conversation;
+    ASSERT_TRUE(synth::LocalHistoryStore::get(rig.historyDir, saved[0].id, conversation));
+    ASSERT_EQ(conversation.messages.size(), 2u);
+    EXPECT_TRUE(conversation.messages[1].content.contains("edit-plan-applied"));
+
+    // A fresh chat restoring that conversation shows the card applied, not offering Apply again.
+    PlanRig restored;
+    restored.chat->setLocalHistoryDirectoryForTesting(rig.historyDir);
+    restored.chat->simulateRestoreConversationForTesting(saved[0].id, /*isCloud=*/false);
+    for (int i = 0; i < 40 && restored.findTitled("Edit plan").empty(); ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    EXPECT_EQ(restored.findTitled("Edit plan").size(), 1u);
+    EXPECT_TRUE(restored.findTitled("Apply edit plan").empty());
+    const auto appliedButtons = restored.findTitled("Edit plan applied");
+    ASSERT_EQ(appliedButtons.size(), 1u);
+    EXPECT_FALSE(appliedButtons.front()->isEnabled());
+    EXPECT_TRUE(restored.chat->getLastPlanJsonForTesting().isNotEmpty());
+    EXPECT_EQ(restored.host.batches, 0) << "restoring applies nothing";
+}
+
+namespace {
+juce::Label* findHostedNotice(synth::AIChatComponent& chat) {
+    for (auto* child : chat.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText().startsWith("Hosted"))
+            return label;
+    return nullptr;
+}
+} // namespace
+
+// The hosted-mode notice strip fades and its height follows; it is hidden only after the fade.
+TEST_F(AIChatComponentTest, HostedNoticeFadesWithItsStripHeight) {
+    PlanRig rig(/*hosted=*/true);
+    auto* notice = findHostedNotice(*rig.chat);
+    ASSERT_NE(notice, nullptr);
+    ASSERT_TRUE(notice->isVisible());
+    const int fullHeight = notice->getHeight();
+    ASSERT_GT(fullHeight, 1);
+
+    FadeAnimateGuard guard;
+    rig.provider->hosted = false;
+    rig.chat->refreshModels();
+    EXPECT_TRUE(notice->isVisible()) << "still on screen while it fades out";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_TRUE(notice->isVisible());
+    EXPECT_LT(notice->getHeight(), fullHeight) << "the strip closes over the fade";
+    EXPECT_NEAR(notice->getAlpha(), 0.5f, 0.01f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(notice->isVisible());
+
+    rig.provider->hosted = true;
+    rig.chat->refreshModels();
+    EXPECT_TRUE(notice->isVisible());
+    EXPECT_FLOAT_EQ(notice->getAlpha(), 0.0f);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(notice->getHeight(), fullHeight);
+    EXPECT_FLOAT_EQ(notice->getAlpha(), 1.0f);
+}
+
+// A rating opens the comment row and Show details opens the panel, each by growing the card while it fades;
+// both land at once headless.
+TEST_F(AIChatComponentTest, EditPlanCardCommentRowAndDetailsFadeAndGrow) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    const auto cards = rig.findTitled("Edit plan");
+    ASSERT_EQ(cards.size(), 1u);
+    auto* card = cards.front();
+    auto* thumbsUp = dynamic_cast<juce::Button*>(rig.findTitled("This answer was helpful").front());
+    ASSERT_NE(thumbsUp, nullptr);
+    auto* comment = rig.findTitled("Feedback comment").front();
+    auto* details = rig.findTitled("Edit plan details").front();
+    juce::Button* detailsButton = nullptr;
+    for (auto* child : card->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
+            detailsButton = b;
+    ASSERT_NE(detailsButton, nullptr);
+    ASSERT_FALSE(comment->isVisible());
+    ASSERT_FALSE(details->isVisible());
+    const int base = card->getHeight();
+    // The thumbs row is the card's last row here, so what sits below it is the card's bottom padding.
+    // Widths and fonts change how the preview wraps (and so every y above), never this margin.
+    const int bottomPadding = base - (thumbsUp->getBottom() + 2);
+    ASSERT_GT(bottomPadding, 0);
+
+    FadeAnimateGuard guard;
+    thumbsUp->onClick();
+    EXPECT_TRUE(comment->isVisible());
+    EXPECT_FLOAT_EQ(comment->getAlpha(), 0.0f);
+    EXPECT_EQ(card->getHeight(), base) << "frame 0 adds no height";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(card->getHeight(), base);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    const int withComment = card->getHeight();
+    EXPECT_EQ(withComment, base + 8 + 24);
+    EXPECT_FLOAT_EQ(comment->getAlpha(), 1.0f);
+
+    detailsButton->onClick();
+    EXPECT_TRUE(details->isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    const int midFade = card->getHeight();
+    EXPECT_GT(midFade, withComment);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    // Fully open, the card ends exactly one gap and the panel below the comment row and one bottom
+    // padding under the panel, wherever the preview text wrapped.
+    EXPECT_LT(midFade, card->getHeight());
+    EXPECT_GT(details->getHeight(), 0);
+    EXPECT_EQ(details->getY(), comment->getBottom() + 2 + 8);
+    EXPECT_EQ(card->getHeight(), details->getBottom() + bottomPadding);
+
+    detailsButton->onClick();
+    EXPECT_TRUE(details->isVisible()) << "hidden only after the fade";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(details->isVisible());
+    EXPECT_EQ(card->getHeight(), withComment);
+}
+
+TEST_F(AIChatComponentTest, EditPlanCardRatingAndDetailsLandAtOnceOffScreen) {
+    PlanRig rig;
+    rig.provider->answer = kPlan;
+    rig.send("a bass track with a wobbling filter");
+    auto* card = rig.findTitled("Edit plan").front();
+    const int base = card->getHeight();
+    dynamic_cast<juce::Button*>(rig.findTitled("This answer was helpful").front())->onClick();
+    EXPECT_TRUE(rig.findTitled("Feedback comment").front()->isVisible());
+    EXPECT_EQ(card->getHeight(), base + 8 + 24);
+}
+
+// A full song's plan is megabytes of JSON. The card used to lay all of it out in the details panel
+// when it was built (and so again on every reopen of the conversation), freezing the app. Built from
+// a real recorded full-song answer, repeated up to ~2 MB.
+TEST_F(AIChatComponentTest, EditPlanCardOfAFullSongBuildsFastAndCapsItsDetails) {
+    const juce::File fixture = juce::File(TESTS_ROOT_DIR).getChildFile("fixtures/ai-plans/full-song-answer.json");
+    ASSERT_TRUE(fixture.existsAsFile());
+    juce::var plan = juce::JSON::parse(fixture.loadFileAsString());
+    ASSERT_TRUE(plan.getProperty("timelineOps", {}).isArray());
+    auto* ops = plan.getProperty("timelineOps", {}).getArray();
+    const juce::Array<juce::var> original = *ops;
+    juce::String json = juce::JSON::toString(plan);
+    while (json.length() < 2'000'000) {
+        for (const auto& op : original)
+            ops->add(op);
+        json = juce::JSON::toString(plan);
+    }
+
+    PlanRig rig;
+    synth::LocalConversation conversation;
+    conversation.id = "full-song";
+    conversation.title = "Full song";
+    conversation.createdAt = conversation.updatedAt = "2026-10-10T00:00:00.000Z";
+    conversation.messages = {{"user", "write a full song", conversation.createdAt},
+                             {"assistant", json, conversation.createdAt}};
+    ASSERT_TRUE(synth::LocalHistoryStore::save(rig.historyDir, conversation, synth::LocalHistoryStore::kRetainForever));
+
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    rig.chat->simulateRestoreConversationForTesting("full-song", /*isCloud=*/false);
+    while (rig.findTitled("Edit plan").empty() && juce::Time::getMillisecondCounterHiRes() - start < 10000.0)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+    const auto restoreMs = juce::Time::getMillisecondCounterHiRes() - start;
+    EXPECT_LT(restoreMs, 1500.0) << "restore of a 2 MB plan took " << restoreMs << " ms";
+
+    const auto cards = rig.findTitled("Edit plan");
+    ASSERT_EQ(cards.size(), 1u);
+    auto* details = dynamic_cast<juce::TextEditor*>(rig.findTitled("Edit plan details").front());
+    ASSERT_NE(details, nullptr);
+    EXPECT_TRUE(details->isEmpty()) << "nothing is laid out until the panel opens";
+
+    juce::Button* detailsButton = nullptr;
+    for (auto* child : cards.front()->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*>(child); b != nullptr && b->getButtonText() == "Show details")
+            detailsButton = b;
+    ASSERT_NE(detailsButton, nullptr);
+    const auto openStart = juce::Time::getMillisecondCounterHiRes();
+    detailsButton->onClick();
+    const auto openMs = juce::Time::getMillisecondCounterHiRes() - openStart;
+    EXPECT_LT(openMs, 1500.0) << "opening the details took " << openMs << " ms";
+
+    const juce::String shown = details->getText();
+    EXPECT_LE(shown.length(), 20100);
+    EXPECT_FALSE(shown.contains("timelineOps")) << "the raw plan JSON is not shown";
+    EXPECT_FALSE(shown.contains("\"pitch\""));
+}
+
+// The summary itself is bounded too, and no run of characters without whitespace is long enough for
+// TextEditor to chunk glyph by glyph.
+TEST_F(AIChatComponentTest, EditPlanCardCapsAHugeSummaryAndBreaksLongTokens) {
+    juce::String huge;
+    for (int i = 0; i < 4000; ++i)
+        huge << "+ Note " << i << " on a track with a longish description\n";
+    huge << juce::String::repeatedString("x", 50000);
+    const juce::String shown = synth::buildEditPlanDetailsText(huge);
+    EXPECT_LE(shown.length(), 20100);
+    EXPECT_TRUE(shown.contains("KB more not shown"));
+    for (const auto& token : juce::StringArray::fromTokens(shown, " \t\r\n", ""))
+        EXPECT_LE(token.length(), 120);
+}

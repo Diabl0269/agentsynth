@@ -18,13 +18,6 @@
 namespace synth::ui {
 
 namespace {
-// content_'s fixed size (content-local units, i.e. before the view transform) -- generous enough
-// that panning never runs out of room for any controller template shipped or user-authored, same
-// "just make it big" choice GraphEditor's own content makes (10000x10000) rather than sizing to
-// the current profile's actual bounding box, which would have to be recomputed on every
-// setControls() and every group move.
-constexpr int kContentExtent = 6000;
-
 // Wheel-to-pixels and wheel-to-zoom tuning, the same shape (a plain multiplier on the raw wheel
 // delta, no exponential curve) TimelinePanelComponent::mouseWheelMove uses for its own two
 // branches -- there is no existing shared helper for this (that file's constants are private to
@@ -71,8 +64,7 @@ void ControllerSurfaceComponent::Content::paint(juce::Graphics& g) {
 void ControllerSurfaceComponent::Content::paintOverChildren(juce::Graphics& g) {
     if (!owner_.marqueeActive_)
         return;
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.12f));
     g.fillRect(owner_.marqueeRect_);
     g.setColour(accent);
@@ -81,6 +73,9 @@ void ControllerSurfaceComponent::Content::paintOverChildren(juce::Graphics& g) {
 
 // The one place content_'s transform is written -- called after every panOffset_/zoomLevel_ change
 // (a drag-to-pan step, a wheel/pinch zoom, a profile-switch view restore/reset).
+// kContentExtent is a fixed "just make it big" size rather than the profile's bounding box (the patch canvas grows
+// instead, docs/layout/layout.md#canvas-frame, but a controller surface is small), so it is never recomputed on a
+// setControls() or a group move.
 void ControllerSurfaceComponent::updateTransform() {
     content_.setBounds(0, 0, kContentExtent, kContentExtent);
     content_.setTransform(juce::AffineTransform::scale(zoomLevel_).translated(panOffset_));
@@ -135,7 +130,7 @@ juce::Rectangle<float> ControllerSurfaceComponent::getVisibleContentRect() const
 }
 
 // Trivial, in-memory, session-only view-per-controller memory. Persisting it to disk
-// (ControllerProfile/the project file) is deliberately out of scope for this ticket -- the surface
+// (ControllerProfile/the project file) is deliberately out of scope -- the surface
 // otherwise has no per-profile UI state at all today, so there is no existing read/write path to
 // extend, and adding one is a real schema/migration decision, not a "while we're here" addition.
 void ControllerSurfaceComponent::restoreOrResetView(const juce::String& newProfileId) {

@@ -9,10 +9,10 @@
 #include <cmath>
 
 namespace {
-// Matches envelopeNoteDivisions() in EnvelopeTempoSync.h: index 5 is the fastest division
-// ("1/32"), index 1 is "1/2".
-constexpr int kDivQuarter = 2; // "1/4" -- 1 beat
-constexpr int kDivFast = 5;    // "1/32" -- 0.125 beat, the fastest available division
+// Matches envelopeNoteDivisions() in EnvelopeTempoSync.h (shortest first): index 0 is "1/128", index 2
+// is "1/32", index 5 is "1/4", index 7 is "1/1".
+constexpr int kDivQuarter = 5; // "1/4" -- 1 beat
+constexpr int kDivFast = 2;    // "1/32" -- 0.125 beat, the fastest division these tests use
 
 // Advances `transport` by `numSamples` in the given block size and returns the sample count
 // actually ticked (never more than requested).
@@ -183,7 +183,7 @@ TEST_F(ADSRTest, TempoSyncedOfflineRenderIsReproducible) {
 
 TEST_F(ADSRTest, StateRoundTripRestoresTempoSyncParameters) {
     setBoolParam(adsr, "tempoSync", true);
-    setChoiceIndex(adsr, "attackDiv", 0); // non-default (default is kDivFast == 5)
+    setChoiceIndex(adsr, "attackDiv", 0); // non-default (default is kDivFast == 2)
     setChoiceIndex(adsr, "holdDiv", 3);
     setChoiceIndex(adsr, "decayDiv", 4);
     setChoiceIndex(adsr, "releaseDiv", 0);

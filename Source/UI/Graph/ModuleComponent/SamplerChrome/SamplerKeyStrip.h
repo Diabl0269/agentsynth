@@ -1,0 +1,82 @@
+#pragma once
+
+// The Sampler card's picture of the loaded instrument: a keyboard across its key span, one band above it per
+// recording (the loud layer on the upper half, the soft layer on the lower), and the sounding notes lit on the keys.
+// A click or drag on the keys plays the Sampler through its note inbox.
+
+#include "Modules/SamplerModule.h"
+#include "UI/Theme/Theme.h"
+#include <bitset>
+#include <functional>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
+
+namespace synth::ui {
+
+class SamplerKeyStrip
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    /** The keys one recording covers and the layer it plays on. `single` = the recording covers the whole velocity
+     *  range, so it is drawn at full height. */
+    struct Band {
+        int lowKey = 0, highKey = 0;
+        bool loud = false;
+        bool single = false;
+    };
+
+    explicit SamplerKeyStrip(SamplerModule& sampler);
+
+    /** Re-reads the instrument when it changed, and the sounding notes. */
+    void refresh();
+    /** The gated tick: re-reads the sounding notes only while one is lit or the module is playing. */
+    void poll();
+
+    int getRecordingCount() const noexcept { return recordings_; }
+    bool hasSoftAndLoud() const noexcept { return softAndLoud_; }
+    const std::vector<Band>& getBands() const noexcept { return bands_; }
+    const std::bitset<128>& getLitNotes() const noexcept { return lit_; }
+    /** The first and last key drawn. */
+    juce::Range<int> getKeySpan() const noexcept { return span_; }
+    /** "<N> recordings · soft and loud" (or "· one layer"); empty with no instrument. */
+    juce::String getCaptionText() const;
+
+    /** The note being held by the pointer, or -1. */
+    int getHeldKey() const noexcept { return heldKey_; }
+
+    /** Called on a double-click on the strip. */
+    std::function<void()> onDoubleClick;
+
+    void paint(juce::Graphics& g) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override {
+        if (onDoubleClick)
+            onDoubleClick();
+    }
+
+private:
+    void readInstrument();
+    void setLit(const std::bitset<128>& notes);
+    void paintKeys(juce::Graphics& g, juce::Rectangle<float> area, const synth::theme::Theme& theme) const;
+    float keyX(int note, juce::Rectangle<float> area) const;
+    int keyAt(int x) const;
+    int velocityAt(int y) const;
+    void playHeld(int note, int velocity);
+    void releaseHeld();
+    std::bitset<128> soundingWithHeld() const;
+
+    SamplerModule& sampler_;
+    int generation_ = -1;
+    std::vector<Band> bands_;
+    juce::Range<int> span_{36, 96};
+    int recordings_ = 0;
+    bool softAndLoud_ = false;
+    std::bitset<128> lit_;
+    int heldKey_ = -1;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerKeyStrip)
+};
+
+} // namespace synth::ui

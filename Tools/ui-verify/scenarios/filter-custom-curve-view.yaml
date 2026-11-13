@@ -1,0 +1,38 @@
+# Feature: the Custom filter card shows the shape under the morph cursor in a small curve editor, with a Show Curve pill.
+#
+# What a user does: sets a Filter to Custom (the curve view is on by default with several shapes), sees the blend at
+# the default cursor (between the dots, read-only), moves the cursor onto the "ah" dot with the arrow keys (the view
+# then shows and edits that shape), and hides the view with the Show Curve pill (the card closes up).
+record: true
+save_project: filter-curve-view
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}   # a Filter card at a known place; its Type combo sits at x 1019, y 411
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo (its label shares the title, so no id)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: Filter shape curve, exists: true, within_ms: 3000}
+  - expect: {id: Show Curve, toggleState: true}
+  - screenshot: {id: "card:Filter", name: curve-between-dots}
+  # Move the cursor onto the "ah" dot (X 0.20, Y 0.25) with the arrow keys; shift moves it by 0.1.
+  - key: {keys: shift+left, target: "Morph cursor, X 0.50, Y 0.50"}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+up}
+  - key: {keys: shift+up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {}
+  - screenshot: {id: "card:Filter", name: curve-on-dot}
+  - key: {keys: return, target: Show Curve}
+  - wait: {}
+  - expect: {id: Show Curve, toggleState: false}
+  - screenshot: {id: "card:Filter", name: curve-hidden}

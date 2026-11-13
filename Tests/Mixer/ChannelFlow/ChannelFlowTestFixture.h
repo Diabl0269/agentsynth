@@ -11,7 +11,7 @@
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UserSettings.h"
 
 class ChannelFlowTest : public ::testing::Test {
@@ -30,6 +30,8 @@ protected:
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
             s->setValue("bottomDockVisible", "0");
+            // A detach test leaves the dock on another tab here, and a later Timeline test would start there.
+            s->removeValue("bottomDockActiveTab");
             // Pinned ON (the default) so an earlier PreferencesSettingsTabTests run that
             // persisted "0" to this same shared on-disk settings file can't silently flip these
             // tests' trigger condition off.

@@ -1,0 +1,39 @@
+# Feature: a shape saved from the Filter's Edit shapes window shows in the Sounds view's Shapes list at once, badged
+# Yours, without reopening the list. Factory shapes carry the Factory badge.
+#
+# What a user does: opens the Sounds view on Places, sets a Filter to Custom, opens Edit shapes, presses Save shape,
+# names it, then opens Places > Shapes.
+settings:
+  librarySidebarView: sounds
+record: true
+save_project: shape-save-badge
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - screenshot: {id: window, name: before-opening}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - key: {keys: return, target: Save shape}
+  - wait: {settleMs: 600}
+  - key: {keys: cmd+a}
+  - type: {text: my wobble}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {id: window, name: shapes-list-after-save}
+  - key: {keys: escape}
+  - wait: {settleMs: 400}
+  - click: {id: soundBrowser, x: 54, y: 126}                       # Places > Shapes
+  - wait: {settleMs: 800}
+  - screenshot: {id: window, name: shapes-list-yours-badge}

@@ -9,7 +9,11 @@ with every other module are in [`modules.md`](modules.md).
 
 The module outgrew one file and is split by concern:
 
-- `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, render path.
+- `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, mode processing.
+- `WavetableOscillatorModuleRender.cpp` — the per-voice render loop and one sample of a stack.
+- `WavetableOscillatorModuleNotes.cpp` — MIDI note-ons, Gate edges and the restart hand-over.
+- `WavetableOscillatorModuleLiveDisplay.cpp` — the Position and Warp the display draws ([The display](#the-display)).
+- `WavetableOscillatorModuleVoicing.cpp` — the per-block unison ratios and gain mix.
 - `WavetableTableBuilder.h`/`.cpp` — table geometry (mip constants, `Wavetable`) and `TableBuilder`,
   the FFT-based mip-pyramid synthesiser (see [Table synthesis](#table-synthesis)), in a `wavetable`
   namespace. `WavetableOscillatorModule` aliases these names back onto itself
@@ -31,10 +35,11 @@ The module outgrew one file and is split by concern:
   Sub (0–1), Sub Oct (−1/−2), Sub Wave (Sine/Square), Pan (±1), Sync In (choice), Import (choice),
   Interp (choice).
 - **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), then ch1…ch15 = Position, Octave,
-  Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync. **16 visible
-  jacks.**
+  Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync, and ch16 =
+  Gate, shown as **Restart** (see [Phase control](#phase-control)). **17 visible jacks.**
 - **Outputs**: two audio jacks, `Audio L` and `Audio R`. See [Stereo output](#stereo-output).
-- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8.
+- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8, and a per-voice
+  Gate fan on ch23-30 (`kGateBase`).
 - **Octave / Coarse / Fine apply in poly mode too** — they transpose the incoming pitch CV. (This
   differs from `OscillatorModule`, where the tuning parameters only affect the MIDI fallback voice.)
 - **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with
@@ -44,6 +49,26 @@ The module outgrew one file and is split by concern:
 > channel numbers they have always had (mono ch1-5, poly ch8-12), because saved patches route by raw
 > index — inserting a new jack among them would silently repoint every existing modulation. New jacks
 > go on the end. `WavetableOscillatorModuleTest.LegacyModCVChannelsKeepTheirIndices` pins this.
+
+## The display
+
+The card's frame view (`WavetableDisplayComponent`, [visualizers](../layout/visualizers.md#wavetabledisplaycomponent))
+draws the Position and Warp the oscillator plays, not the knobs. Once per block the audio thread
+stores the block's last `positionRamp + Position CV` and `warpRamp + Warp CV` (clamped to 0..1) in two
+relaxed atomics (`WavetableOscillatorModuleLiveDisplay.cpp`); `getModulatedScanPosition()` and
+`getModulatedWarpAmount()` read them, or the knob when the module is at rest:
+
+- **No cable** on the jack (its channel silent this block): the knob, so a knob turn shows at once.
+- **No note held**: the knob, not the last position that sounded. A note is held while a MIDI note
+  is down (note-ons minus note-offs, cleared by All Notes Off) or any voice's Gate is high (above
+  `GateEdges::kThreshold` at the block's end). Before any note has started since `prepareToPlay` (a
+  drone with no keyboard or gate), the oscillator itself is the sound, so the display follows it.
+- **Bypassed, muted or no table**: the knob.
+
+Position and Warp CV are shared by every poly voice, so poly needs no voice choice: the shared value
+shows while any voice's Gate is held. A poly patch played by a pitch cable with no Gate fan counts a
+note only when it starts, so it shows the knob after its first note. Unison spreads pitch, not
+position, so it does not change what is drawn.
 
 ## Warp
 
@@ -69,7 +94,7 @@ Two defences keep the anti-aliasing guarantee intact, and **both** are needed:
    a mode reaches — the factor by which it can outrun a plain 1× read. `selectMip()` is fed
    `dt × factor`, so the stored frame is already band-limited for the fastest read the warp will
    perform.
-2. **Oversampling.** Modes whose output has a *step* or an *amplitude nonlinearity* generate harmonics
+2. **Oversampling** (the `warpNeedsOversampling` flag). Modes whose output has a *step* or an *amplitude nonlinearity* generate harmonics
    no amount of input band-limiting can prevent. Those render at 4× and come back through a 33-tap
    Blackman-windowed sinc decimator (~−74 dB stopband). The whole voice — every unison sub-oscillator
    plus the sub — is summed at the oversampled rate and decimated once per stereo leg, which is valid
@@ -95,29 +120,65 @@ musical pitches the clamp never binds — 8× `Sync` only starts costing amount 
 Every mode is swept at full warp on MIDI 108 by
 `WavetableWarpAliasTest.EveryWarpModeStaysCleanBelowTheFundamental` (parameterised over all 11) and
 held to bounded output by `WavetableWarpBoundsTest`. **A warp mode that aliases is a regression, not a
-feature** — extend both suites when adding one.
+feature** — a new mode needs one of the two defences (a `warpRateFactor` entry or the `warpNeedsOversampling` flag) **and** an entry in both suites; they iterate `Warp::Count`, so an unhandled mode fails the test run instead of shipping.
 
 ## Phase control
 
-Every sub-oscillator restarts on note-on (a MIDI note-on in mono; a voice going from silent to
-sounding in poly):
+Every sub-oscillator restarts on note-on: a MIDI note-on in mono (and on poly voice 0), a rising edge on the
+**Restart** input (the Gate jack, label and hover text as on the Oscillator) in either mode, and, in poly, a
+voice going from silent to sounding. Each lands on **its own sample**: `scanMidi` records the note-on's offset
+and `renderVoice` restarts the phases when it reaches it. Poly MIDI holds a voice's pitch after release, so in
+poly only the gate shows a later note on a voice that already played; the Poly switch and new poly instrument
+tracks wire Poly MIDI's Gate fan (ch8-15) to it. The edge detector (`GateEdges`, a Schmitt trigger at 0.1, edges
+at least 16 samples apart, up to 256 per block) is shared with the Oscillator
+([oscillator-voice.md](oscillator-voice.md#phase-and-rand)). The poly Gate fan (ch23-30) aliases the
+Audio R block, so it is read before anything is written; `kRightBase` stays 23 and the 31 outputs
+cover every input. An unpatched gate changes nothing.
+
+**Hand-over.** A restart while the previous note still sounds would jump the waveform, so the stack as it stood
+(phases, sub phase and decimator history, `StackState`) keeps running as a "ghost" and fades out over 64 samples
+along the raised cosine in `Source/Modules/RestartFade.h`, while the restarted stack comes in; the sample of the
+restart itself is the old sound and the new one is at its exact phase 64 samples later. A restart inside a
+hand-over turns what it interrupts into one more ghost with the share it holds (`RestartGhosts.h`, up to five),
+so even an audio-rate gate cannot step the output. A voice that goes from silent to sounding has nothing to fade
+from and starts at once. Guarded by `SourceClickGuard` (the Wavetable is measured like the Oscillator) and
+`WavetableRestartFade`. The restart point:
 
 - **Phase** (0–360°) — where in the cycle the wave restarts.
-- **Rand Phase** (0–1) — per-note jitter added on top.
+- **Rand Phase** (0–1, default 1 on a new module; a stored module with no key keeps 0) — per-note jitter added on top.
 - **Spread** (0–1) — walks the unison voices' start phases around the cycle.
 
-Without `Spread` or `Rand Phase`, a unison stack and a poly chord attack perfectly phase-correlated
+At Rand Phase 0 with no `Spread`, a unison stack and a poly chord attack perfectly phase-correlated
 and comb-filter themselves. All three are sampled **at the note-on instant** — they shape the attack,
 not the sustain — so their CV is read at the block's first sample rather than per-sample.
 
+**Oscillator sync.** An oscillator cabled into Restart syncs the same way as on the Oscillator
+([oscillator-voice.md](oscillator-voice.md#oscillator-sync-an-oscillator-into-restart)): after three restarts in a row
+under 25 ms apart (`synth::SyncRestartRun`), `restartVoice` reuses the note's per-voice random draws (`restartDraws`;
+a new draw per cycle is noise at any Rand Phase above 0), places the phases and the hand-over at the gate's real
+crossing (`GateEdges::firedLead`, applied by `advanceSyncLead`) and hands over in `kSyncFadeSamples` (8) instead of 64.
+Measured with a Fixed-rate Oscillator master, Sine/Square/Saw/Triangle at 100, 440, 2000 and 301 Hz, Unison 1 and 5, Rand
+Phase 0, 0.5 and 1, mono and poly: before, 0 to -4 dB off the master's harmonics at Rand Phase above 0 and as bad as -23
+dB at 0; after, -34 dB or better (to -86 dB). A mono oscillator's audio on a poly Restart fans to all eight voices
+(`resolvePolyLink`, role Gate, as for the Oscillator). Level at Rand Phase 0 is checked against what the table's saw can
+reach: it starts at zero, so a master above twice the note only lets it climb part of the way. Tests:
+`WavetableOscillatorSync.RestartFromARealOscillator`,
+`GraphEditorTest.ResolvePolyLinkFansMonoAudioOntoAPolyWavetableRestart`.
+
 ## Unison, stacking and the sub
 
-- **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.
+- **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root. Unison takes a cable on raw channel 31 (knob-only, the same in mono and poly), read at each note start and rounded to a whole voice count; the count applies when the voices restart and the voice gains glide, so it never clicks. A cable that changes mid-note waits for the next note; with no cable patched the knob stays live.
 - **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`,
-  `Major`, `Minor`. Voice 0 always stays at the root so `Blend` has an unshifted centre to fade
-  against.
-- **Blend** (0–1) fades the detuned/stacked voices against that always-present centre voice, so
-  thinning the chorus does not change the fundamental's level.
+  `Major`, `Minor`. Voice 0 always stays at the root pitch. The stack is constant power: it is divided by the
+  root of the summed mean leg power of the voices, so its loudness stays that of one voice (the sub is added
+  after this).
+- **Detune** (default 35 cents) is a skewed knob (centre at 25 cents) that stores cents. A new Wavetable starts at Detune 35 cents, Blend 75 %, Width 100 %, Rand Phase 100 % like the Oscillator, so raising Unison is heard at once; a stored (trusted) module with none of those keys keeps Detune 0, Blend 100 %, Width 0, Rand Phase 0 (`applyStoredParamDefaults`); a model-authored node takes the current defaults. The stacking, Blend gain (`unisonBlendGain`), pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
+- **Blend** (0–1, default 0.75) fades the voices away from the centre (the middle voice, or the middle two for an
+  even count, stay at full level; in a Stack mode it is voice 0, the root pitch) and runs to outer voices louder than the
+  centre at 100 % (curve and Width pan in [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune)). Every voice
+  gain moves no faster than 1.0 per 10 ms (`UnisonMix.h`, ramped inside the block): Blend, Width and the voice
+  count glide, a voice that leaves keeps rendering at the outermost detune and stack interval that stays while it
+  fades out, and the divisor follows, so changing Unison in a held note does not step.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square
   (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated
   naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias
@@ -125,7 +186,7 @@ not the sustain — so their CV is read at the block's first sample rather than 
 
 ## Stereo output
 
-The module has two output jacks. `Width` pans the unison voices across the stereo field; `Pan` places
+The module has two output jacks. `Width` (default 1; a single voice stays centred) pans the unison voices across the stereo field; `Pan` places
 the whole voice.
 
 - **Mono**: `Audio L` on ch0, `Audio R` on `kRightBase` (ch23).
@@ -137,7 +198,7 @@ and putting the right leg there would have made the module's flagship parameter 
 
 The pan law is **balance, not equal-power**: centre leaves both legs at unity and panning only
 attenuates the leg you move away from. An equal-power centre sits at 1/√2, which would have quietened
-every existing mono patch by 3 dB the moment the module grew a second jack. At `Width` 0 / `Pan` 0,
+every existing mono patch by 3 dB the moment the module grew a second jack. At `Width` 0 / `Pan` 0 (or at any Width with Unison 1),
 `Audio L` carries bit-for-bit what a mono build carried (`DefaultsKeepAudioLIdenticalToAudioR`).
 
 ## Sync input

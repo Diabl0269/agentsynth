@@ -10,11 +10,15 @@
 // arbitration, deferred click-vs-drag classification, the live highlight, the single undo step) actually works end to
 // end.
 
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
+#include "Modules/VCAModule.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <map>
 
 namespace {
 
@@ -104,41 +108,111 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2b. Bug fix (in-app report): the PAINTED hull for the macro a member is being dragged OUT OF
-//    must shrink away from it immediately, using macroHullBoundsExcluding — not the live union
-//    macroHullBounds(), which keeps inflating around the dragged member and visually chases it,
-//    making "remove from macro" look impossible. Only the macro being LEFT is affected; a macro
-//    the drag might JOIN instead keeps its ordinary live hull (nothing to exclude — the dragged
-//    module isn't yet a member of it).
+// 2b. While a member is dragged, its macro keeps the border it had at press and still counts the
+//    member as inside until the member's centre leaves that border; only then does the painted
+//    hull let go of it (macroHullBoundsExcluding). A macro the drag might JOIN instead keeps its
+//    ordinary live hull (the dragged module isn't yet a member of it).
 // ---------------------------------------------------------------------------------------------
 
-TEST(MacroDragMembership, PaintedHullOfOwnMacroExcludesDraggedMemberFromTheFirstTick) {
+// A is the macro's top member, so it defines the hull's top edge: the live union moves the moment A does.
+TEST(MacroDragMembership, SmallDragOfAnEdgeMemberKeepsThePressTimeBorderAndMembership) {
+    for (const auto mods : {kPlainClick, kCmdClick}) {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        auto* compA = findComponent(editor, a);
+        ASSERT_NE(compA, nullptr);
+
+        const auto hullAtPress = editor.getMacroController().macroHullBounds(macroId);
+        ASSERT_FALSE(hullAtPress.isEmpty());
+        ASSERT_NE(hullAtPress, editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a)))
+            << "sanity: A shapes the hull, so excluding it would change the border";
+
+        editor.setSelectedNodes({a}); // a plain press on a selected module would drag the whole selection
+        dragBodyBy(*compA, {20, 15}, mods, [&] {
+            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), hullAtPress)
+                << "the border stays where it was at press while A is still inside it";
+            EXPECT_TRUE(editor.getMacroDragLeaveId().isEmpty()) << "A has not left the border, so no LEAVE is armed";
+            EXPECT_EQ(editor.getMacroController().macroChipBounds(macroId).getX(), hullAtPress.getX() + 8)
+                << "the chip follows the painted border too";
+        });
+
+        EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr) << "dropped inside: still a member";
+    }
+}
+
+TEST(MacroDragMembership, DraggingAnEdgeMemberPastTheFrozenBorderReleasesIt) {
+    for (const auto mods : {kPlainClick, kCmdClick}) {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(2400, 1200);
+
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        auto* compA = findComponent(editor, a);
+        ASSERT_NE(compA, nullptr);
+        const auto excludingA = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
+
+        editor.setSelectedNodes({a});
+        dragBodyBy(*compA, {900, 0}, mods, [&] {
+            EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr)
+                << "A leaves as soon as its centre is past the frozen border, before the drop";
+            EXPECT_TRUE(editor.isHullGlideLiveForTest()) << "the border glides in rather than snapping";
+            editor.finishHullGlideForTest();
+            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), excludingA) << "and settles without A";
+        });
+
+        EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "dropped outside: A left the macro";
+    }
+}
+
+// The input/output side strips are painted from the painted border, so they stay with the macro instead of
+// stretching to follow the member being pulled out.
+TEST(MacroDragMembership, SideStripsDoNotFollowAMemberDraggedOutOfTheMacro) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    editor.setSize(1600, 1200);
+    editor.setSize(2400, 1200);
 
     NodeID a, b;
     const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
-
     auto* compA = findComponent(editor, a);
     ASSERT_NE(compA, nullptr);
+    auto& content = *compA->getParentComponent();
+    const auto outW = editor.getMacroController().macroHullStripWidths(macroId).second;
+    const auto excluding = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
 
-    // B is the macro's only OTHER member, so excluding A leaves exactly B's own padded hull — a
-    // fixed rectangle that does not move as A is dragged, which is what makes this assertable
-    // without duplicating the union math here.
-    const auto expectedExcludingA = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
-    ASSERT_FALSE(expectedExcludingA.isEmpty());
+    // Dots of the drag grid sit every 40px; step off them so a pixel read is the strip or the bare canvas.
+    const auto clearOfGrid = [](juce::Point<int> p) {
+        return juce::Point<int>(p.x - p.x % 40 + 20, p.y - p.y % 40 + 20);
+    };
 
-    // A small drag, nowhere near leaving the excluding hull — proves the shrink happens on the
-    // FIRST tick of the gesture, not only once a LEAVE candidate actually arms (the bug the user
-    // hit: the live union kept including A for the whole first stretch of the pull-out).
-    dragBodyBy(*compA, {20, 15}, kCmdClick, [&] {
-        EXPECT_FALSE(editor.hasMacroDragCandidate())
-            << "sanity: this small a drag must not arm any LEAVE/JOIN candidate yet";
-        EXPECT_EQ(editor.paintedMacroHullBounds(macroId), expectedExcludingA)
-            << "the macro A is being dragged OUT of must already paint as the excluding hull, "
-               "before any candidate is armed";
+    editor.setSelectedNodes({a});
+    dragBodyBy(*compA, {900, 0}, kPlainClick, [&] {
+        // Where a border chasing A would reach: A's own card plus the hull margin.
+        const auto live = excluding.getUnion(compA->getBounds()).expanded(20);
+        ASSERT_GT(live.getRight(), excluding.getRight() + 400) << "sanity: A is far outside the macro";
+        editor.finishHullGlideForTest();
+        // Software image: a native-backed image reads back zeros on a headless Windows runner.
+        juce::Image img(juce::Image::ARGB, live.getRight() + 60, live.getBottom() + 60, true,
+                        juce::SoftwareImageType());
+        {
+            juce::Graphics g(img);
+            content.paintEntireComponent(g, false);
+        }
+        const auto canvas = img.getPixelAt(clearOfGrid({live.getRight() + 20, live.getY() + 12}).x,
+                                           clearOfGrid({live.getRight() + 20, live.getY() + 12}).y);
+        const auto stripOfExcluding = clearOfGrid({excluding.getRight() - outW + 12, excluding.getY() + 12});
+        const auto stripOfLive = clearOfGrid({live.getRight() - outW + 12, live.getY() + 12});
+        EXPECT_NE(img.getPixelAt(stripOfExcluding.x, stripOfExcluding.y), canvas)
+            << "the strip is still painted along the macro's own border";
+        EXPECT_EQ(img.getPixelAt(stripOfLive.x, stripOfLive.y), canvas)
+            << "no strip is painted out where the dragged member is";
     });
 }
 
@@ -184,7 +258,7 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
     editor.setSize(2000, 1200);
 
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
-    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 500, 100);
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     editor.setSelectedNodes({a, b, c});
     const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
@@ -536,8 +610,8 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
     // zero further delta), NOT the same `dragPos` as tick one -- reusing `dragPos` would double
     // the move instead of holding it still.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId)
-        << "pressing Cmd mid-drag, after the press already happened, must still arm the candidate";
+    EXPECT_EQ(editor.getMacroController().macroForNode(nodeIdForUuid(engine, uuidA)), nullptr)
+        << "pressing Cmd mid-drag, after the press already happened, must still take A out";
 
     const int serialBeforeUp = undo.getEditSerial();
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
@@ -583,13 +657,14 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
     compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, kCmdClick));
 
     compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId) << "sanity: LEAVE must arm first, same as test 2";
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A leaves first, same as test 2";
 
     // Cmd goes UP mid-drag, cursor otherwise held at the SAME screen point (see the sibling test
     // above for why that means `pressPos` again here, not `dragPos`) -- this must disarm the
     // candidate immediately, not wait for mouseUp to notice.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
     EXPECT_FALSE(editor.hasMacroDragCandidate()) << "releasing Cmd mid-drag must disarm the candidate immediately";
+    EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr) << "and put A back in its macro at once";
 
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
 
@@ -713,4 +788,136 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
 
     EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr)
         << "a plain macOS Ctrl-drag across a hull must stay insert-between only and must NOT join the macro";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Perf regression: one Cmd-drag membership change re-routes several cables through macro ports, but pays for ONE
+// audio-graph render-sequence rebuild (every topology op is deferred inside a synth::GraphRebuildScope), not one
+// per added/removed node and cable.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroDragMembership, CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExactlyOncePerGesture) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // A has three cables to modules outside the macro: two out of it, one into it.
+    const auto outA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    const auto outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 600);
+    const auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 1000);
+    auto& graph = engine.getGraph();
+    ASSERT_TRUE(graph.addConnection({{a, 0}, {outA, 0}}));
+    ASSERT_TRUE(graph.addConnection({{a, 0}, {outB, 0}}));
+    ASSERT_TRUE(graph.addConnection({{src, 0}, {a, 2}}));
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+
+    const int beforeOut = synth::GraphRebuildBatch::rebuildCountForTest();
+    dragBodyBy(*compA, {2400, 0}, kCmdClick);
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A left the macro";
+    EXPECT_EQ(synth::GraphRebuildBatch::rebuildCountForTest() - beforeOut, 1)
+        << "leaving a macro with three crossing cables must rebuild the render sequence exactly once";
+
+    auto* compAOut = findComponent(editor, a);
+    ASSERT_NE(compAOut, nullptr);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+    const auto delta = hull.getCentre() - compAOut->getBounds().getCentre();
+
+    const int beforeIn = synth::GraphRebuildBatch::rebuildCountForTest();
+    dragBodyBy(*compAOut, delta, kCmdClick);
+    const auto* macro = editor.getMacroController().macroForNode(a);
+    ASSERT_NE(macro, nullptr) << "sanity: A rejoined the macro";
+    EXPECT_EQ(macro->id, macroId);
+    EXPECT_EQ(synth::GraphRebuildBatch::rebuildCountForTest() - beforeIn, 1)
+        << "joining a macro with three crossing cables must rebuild the render sequence exactly once";
+}
+
+namespace {
+struct CrossingWork {
+    int reconciles = 0;    // GraphEditor::updateComponents runs, over every tick
+    int graphRebuilds = 0; // render-sequence rebuilds, over every tick
+    int existingCardsRebuilt = 0;
+    int dropReconciles = 0;
+    int dropGraphRebuilds = 0;
+};
+
+// A Cmd-drag of `comp` by `delta` in 24 real mouse ticks, counting the canvas work each tick does. A synthetic event's
+// position is relative to where the card is now, as a real one's is.
+CrossingWork countedCmdDrag(GraphEditor& editor, ModuleComponent& comp, juce::Point<int> delta) {
+    CrossingWork work;
+    const juce::Point<int> pressPos(comp.getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    comp.mouseDown(realMouseEvent(comp, pressPos, pressPos, kCmdClick));
+    const auto start = comp.getPosition();
+    auto& counters = graph_editor_paint::workCounters();
+    for (int i = 1; i <= 24; ++i) {
+        std::map<juce::uint32, ModuleComponent*> before;
+        for (auto* card : editor.getModuleComponents())
+            before[card->getNodeId().uid] = card;
+        counters = {};
+        const int rebuilds = synth::GraphRebuildBatch::rebuildCountForTest();
+        comp.mouseDrag(
+            realMouseEvent(comp, pressPos + delta * i / 24 - (comp.getPosition() - start), pressPos, kCmdClick, true));
+        work.reconciles += counters.componentUpdates;
+        work.graphRebuilds += synth::GraphRebuildBatch::rebuildCountForTest() - rebuilds;
+        for (auto* card : editor.getModuleComponents())
+            if (const auto it = before.find(card->getNodeId().uid); it != before.end() && it->second != card)
+                ++work.existingCardsRebuilt;
+    }
+    counters = {};
+    const int rebuilds = synth::GraphRebuildBatch::rebuildCountForTest();
+    comp.mouseUp(realMouseEvent(comp, pressPos + delta - (comp.getPosition() - start), pressPos, kCmdClick, true));
+    work.dropReconciles = counters.componentUpdates;
+    work.dropGraphRebuilds = synth::GraphRebuildBatch::rebuildCountForTest() - rebuilds;
+    return work;
+}
+} // namespace
+
+// A drag across a macro border changes the membership on the tick that crosses it: that tick reconciles the canvas
+// once and rebuilds the render sequence once, and every other tick and the drop do neither. Only the macro's new port
+// cards are built; no card that was already on the canvas is rebuilt. The same at 5 and at 20 other modules.
+TEST(MacroDragMembership, ACrossingReconcilesOnceAndRebuildsNoCardHoweverBigTheCanvas) {
+    for (const int others : {5, 20}) {
+        SCOPED_TRACE(others);
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+        NodeID a, b;
+        const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+        ASSERT_FALSE(macroId.isEmpty());
+        const auto outA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+        const auto src = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 1000);
+        for (int i = 0; i < others; ++i)
+            addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1400 + 300 * (i % 5), 300 * (i / 5));
+        auto& graph = engine.getGraph();
+        ASSERT_TRUE(graph.addConnection({{a, 0}, {outA, 0}}));
+        ASSERT_TRUE(graph.addConnection({{src, 0}, {a, 2}}));
+        editor.updateComponents();
+
+        auto* comp = findComponent(editor, a);
+        ASSERT_NE(comp, nullptr);
+        const auto out = countedCmdDrag(editor, *comp, {2400, 0});
+        ASSERT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A left the macro";
+        EXPECT_EQ(out.reconciles, 1);
+        EXPECT_EQ(out.graphRebuilds, 1);
+        EXPECT_EQ(out.existingCardsRebuilt, 0);
+        EXPECT_EQ(out.dropReconciles, 0);
+        EXPECT_EQ(out.dropGraphRebuilds, 0);
+
+        comp = findComponent(editor, a);
+        ASSERT_NE(comp, nullptr);
+        const auto hull = editor.getMacroController().macroHullBounds(macroId);
+        const auto in = countedCmdDrag(editor, *comp, hull.getCentre() - comp->getBounds().getCentre());
+        ASSERT_NE(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A rejoined the macro";
+        EXPECT_EQ(in.reconciles, 1);
+        EXPECT_EQ(in.graphRebuilds, 1);
+        EXPECT_EQ(in.existingCardsRebuilt, 0);
+        EXPECT_EQ(in.dropReconciles, 0);
+        EXPECT_EQ(in.dropGraphRebuilds, 0);
+    }
 }

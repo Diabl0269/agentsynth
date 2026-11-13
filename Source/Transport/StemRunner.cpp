@@ -5,9 +5,10 @@
 namespace synth {
 
 StemRunner::StemRunner(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-                       CompletionCallback onComplete, int chunkBlocks, int tickMs, const TimelineDoc* timelineDoc)
+                       CompletionCallback onComplete, int chunkBlocks, int tickMs, const TimelineDoc* timelineDoc,
+                       const StemSessionOptions& sessionOptions)
     : session_(std::make_unique<StemSession>(engine, destinationFolder, options, BounceExporter::ProgressCallback{},
-                                             timelineDoc))
+                                             timelineDoc, sessionOptions))
     , onComplete_(std::move(onComplete))
     , chunkBlocks_(juce::jmax(1, chunkBlocks)) {
     startTimer(juce::jmax(1, tickMs));

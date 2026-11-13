@@ -1,0 +1,22 @@
+# A recorded clip's waveform is one solid shape in a deep shade of the clip's own colour with a denser core (RMS),
+# on a linear scale, in the dark theme. Checks 1 (whole clip) and 2 (zoomed in, the core still reads inside the shape).
+#
+# What a user does: opens a project with one 4 s clip of four decaying notes, shows the timeline, looks at the clip,
+# then zooms in with Cmd + the wheel and back out.
+record: true
+save_project: waveform-look
+steps:
+  - copyFixture: {name: waveform-sweep.agsproj}
+  - openProject: {path: "${SCRATCH}/waveform-sweep.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Sweep:columns", within_ms: 10000}
+  - mark: {check: 1, name: whole-clip-dark}
+  - glide: {name: zoom-in, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: 0.9, mods: cmd}}}
+  - wait: {}
+  - mark: {check: 2, name: zoomed-in-dark}
+  - glide: {name: zoom-back-out, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: -0.9, mods: cmd}}}
+  - wait: {}

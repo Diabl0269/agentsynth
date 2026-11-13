@@ -2,16 +2,29 @@
 //
 // GraphEditor's cable geometry, colour and paint: buildVisibleCables()/rebuildVisibleCables(),
 // hit-testing (getCableAt/distanceToCable), colour resolution, and GraphContentComponent's
-// paint/paintOverChildren/resized. GraphEditor itself is declared in GraphEditor.h; sibling
+// paint/paintOverChildren/resized. The collapsed-macro cable post-pass lives in
+// GraphEditorMacroCableAnchors.cpp. GraphEditor itself is declared in GraphEditor.h; sibling
 // GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
+#include "CableEndGlide.h"
 #include "GraphEditor.h"
+#include "GraphEditorCableCurveChips.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CardOutline.h"
+#include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
+#include "UI/Graph/GraphEditor/CableEndName.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/MacroGroupController/MacroNesting.h"
+#include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/Layout/CableCurve.h"
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
@@ -24,14 +37,11 @@ using namespace detail;
 // first time either was tweaked, and clicks would silently miss the wire.
 // ============================================================================
 
-// The cubic bezier a cable is drawn along. Must stay identical to
-// AppLookAndFeel::drawConnectionWire's default curve or hit-testing drifts off the wire.
+// The cubic bezier a cable is drawn along, hit-tested against and previewed with: one shared
+// function (UI/Layout/CableCurve.h), also used by AppLookAndFeel::drawConnectionWire's fallback.
+// p1 is the source (output) end, p2 the destination (input) end.
 juce::Path GraphEditor::buildCablePath(juce::Point<float> p1, juce::Point<float> p2) {
-    juce::Path wp;
-    const float dx = p2.x - p1.x;
-    wp.startNewSubPath(p1);
-    wp.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
-    return wp;
+    return synth::ui::makeCablePath(p1, p2);
 }
 
 // Perpendicular distance from a canvas point to a cable's curve, in pixels.
@@ -61,25 +71,6 @@ std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<flo
 }
 
 namespace {
-// Where a boundary cable lands on a collapsed macro card: the point where the ray from the
-// card's centre toward the cable's other endpoint exits the card's rectangle. Reads as the cable
-// touching the card's edge (closest to whatever it's connecting to) rather than floating at a
-// fixed point with no relation to the rest of the wire.
-juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<float> toward) {
-    const auto centre = rect.getCentre().toFloat();
-    const float dx = toward.x - centre.x;
-    const float dy = toward.y - centre.y;
-    if (dx == 0.0f && dy == 0.0f)
-        return centre;
-
-    const float halfW = rect.getWidth() * 0.5f;
-    const float halfH = rect.getHeight() * 0.5f;
-    const float tx = dx != 0.0f ? halfW / std::abs(dx) : std::numeric_limits<float>::infinity();
-    const float ty = dy != 0.0f ? halfH / std::abs(dy) : std::numeric_limits<float>::infinity();
-    const float t = std::min(tx, ty);
-    return centre + juce::Point<float>(dx * t, dy * t);
-}
-
 // ---- Expanded-macro grouping hull ----------------------
 // A collapsed macro reads as a card; an expanded one left no on-canvas trace that its members
 // were still grouped — Cmd+G on them again just refused with "already in a macro", with nothing
@@ -88,13 +79,25 @@ juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<floa
 // GraphContentComponent::paint (rather than inlined there) to keep that function under the
 // check-function-sizes.sh ratchet — this is its own named step, not a collaborator with state of
 // its own, so a free function beside paint() rather than a new class earns its keep here.
+// Whether a repaint of `clip` touches anything paintExpandedMacroHulls draws for the macro: everything sits inside its
+// border except a name chip wider than the border, which only the chip row can reach. A glide frame repaints a small
+// area, and dashing every border and measuring every chip's name for it cost as much as the rest of that paint.
+bool intersectsHullOrChip(juce::Rectangle<int> clip, juce::Rectangle<int> hull, GraphEditor& editor,
+                          const juce::String& macroId) {
+    if (clip.intersects(hull.expanded(4)))
+        return true;
+    const bool inChipRow = clip.getBottom() >= hull.getY() && clip.getY() <= hull.getY() + 24;
+    return inChipRow && clip.intersects(editor.getMacroController().macroChipBounds(macroId).expanded(2));
+}
+
 void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
     if (editor.getMacros().empty())
         return;
 
-    for (const auto& macro : editor.getMacros().getAll()) {
-        if (macro.collapsed)
-            continue;
+    // Parents first, so a nested child's outline and chip draw over its parent's. A macro that is
+    // collapsed, or hidden inside a collapsed ancestor, gets an empty hull and is skipped below.
+    for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
+        const auto& macro = *macroPtr;
 
         // macroHullBounds is the ONE definition of this rectangle for hit-testing
         // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and the
@@ -104,27 +107,27 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // only in that one case (a member being pulled out must visibly shrink the hull away from
         // it, which the live union alone can never do).
         const auto hull = editor.paintedMacroHullBounds(macro.id);
-        if (hull.isEmpty())
+        if (hull.isEmpty() || editor.getCardGlide().isBorderHeld(macro.id) ||
+            !intersectsHullOrChip(g.getClipBounds(), hull, editor, macro.id))
             continue;
+        const float revealAlpha = editor.getLoadReveal().hullAlpha(macro.id); // fades in as a project opens
+        if (revealAlpha <= 0.0f)
+            continue;
+        const LoadRevealAnimator::ScopedFade revealFade(g, revealAlpha);
+        ++graph_editor_paint::workCounters().hullsPainted;
 
         // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
         // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
         // fully opaque, and topped with a solid stroke — rather than a second visual language for
-        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both.
+        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both, and a macro
+        // the drag has already moved its module into stays emphasised until the drop. A whole macro's drag names the
+        // parent it would leave on MacroGroupController (its join goes through the same join id).
         const bool isDragCandidate =
-            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroDragJoinId();
+            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroController().macroLeaveCandidate() ||
+            editor.getMacroController().isGroupDropLeaving(macro.id) || macro.id == editor.getMacroDragJoinId() ||
+            macro.id == editor.getMacroDragLiveOwnerId();
 
-        juce::Path outline;
-        outline.addRoundedRectangle(hull.toFloat(), 10.0f);
-        juce::Path dashedOutline;
-        const float dashLengths[] = {6.0f, 4.0f};
-        juce::PathStrokeType(isDragCandidate ? 2.5f : 1.5f).createDashedStroke(dashedOutline, outline, dashLengths, 2);
-        g.setColour(macro.colour.withAlpha(isDragCandidate ? 0.9f : 0.6f));
-        g.fillPath(dashedOutline);
-        if (isDragCandidate) {
-            g.setColour(macro.colour);
-            g.strokePath(outline, juce::PathStrokeType(2.5f));
-        }
+        MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
 
         // A tab overlapping the hull's own top edge, not floating above it — a macro whose
         // members sit near the top of the canvas would otherwise clip the label off-canvas with
@@ -164,15 +167,14 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(collapseBounds, 4.0f);
 
-        // A filled triangle, not a text glyph, for the same reason the card's expand chevron is a
-        // Path (check-nonascii-literals.test.sh rejects a chevron character outright). Points UP
-        // — the expand chevron points down — so the pair reads as opposite ends of one toggle.
-        juce::Path collapseChevron;
-        collapseChevron.addTriangle(collapseBounds.getX() + 2.5f, collapseBounds.getBottom() - 3.5f,
-                                    collapseBounds.getRight() - 2.5f, collapseBounds.getBottom() - 3.5f,
-                                    collapseBounds.getCentreX(), collapseBounds.getY() + 2.5f);
-        g.setColour(juce::Colours::white.withAlpha(0.85f));
-        g.fillPath(collapseChevron);
+        // The hull is the open macro, so this is the shared fold arrow open (points down), the pair of
+        // the folded card's closed one. White on the macro's own colour, not a theme token: the chip
+        // fill is user-chosen, so only a fixed contrast colour reads on every macro colour.
+        constexpr float kCollapseChevronSize = 8.0f;
+        synth::theme::paintDisclosureChevron(
+            g,
+            juce::Rectangle<float>(kCollapseChevronSize, kCollapseChevronSize).withCentre(collapseBounds.getCentre()),
+            1.0f, juce::Colours::white.withAlpha(0.85f));
     }
 }
 } // namespace
@@ -180,43 +182,52 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 // Enumerates every cable currently drawn on the canvas, in paint order.
 // Memoized: the list is rebuilt when the canvas is asked to repaint (repaintCanvas()) and on
 // every 30 Hz tick, never per-paint. Cable geometry is CANVAS-space, so zoom and pan cannot
-// move a cable — a zoom gesture reuses the same list. Do not store the returned reference
+// move a cable — except an open macro's port interior jack, which slides with the zoom, so updateTransform()
+// drops the memo whenever a macro exists. Do not store the returned reference
 // across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
-        cablesCache = rebuildVisibleCables();
-        macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
+        {
+            const ModuleComponent::JackLayoutPass jackLayoutPass; // each card's jack column is worked out once
+            cablesCache = rebuildVisibleCables();
+        }
+        macroCrossingAnim_.applyTo(cablesCache);           // cable-slide overlay, see MacroCrossingAnimator.h
+        canvasMemo_->cableEndGlide().applyTo(cablesCache); // ends gliding on a More toggle, see CableEndGlide.h
+        cardGlide_.applyTo(cablesCache);                   // endpoints follow gliding cards, see CardGlideAnimator.h
+        cardGlide_.fold().applyTo(cablesCache);            // an unfolding macro draws its modules' cables itself
         cablesCacheValid = true;
         ++cableRebuildCount;
     }
     return cablesCache;
 }
 
-// The single "the canvas changed" seam: drops the cable memo, then repaints. Every former
-// `content.repaint()` in this file goes through here. Also GraphCanvasHost::repaintCanvas().
+// The single "the canvas changed" seam: drops the cable memo and the macro borders measured since the last change
+// (CanvasMemo::layoutChanged), then repaints. Every former `content.repaint()` in this file goes through here. Also
+// GraphCanvasHost::repaintCanvas(). Null-checked: cards laid out while the editor is built and torn down land here.
 void GraphEditor::repaintCanvas() {
     cablesCacheValid = false;
+    if (canvasMemo_ != nullptr)
+        canvasMemo_->layoutChanged();
     content.repaint();
 }
 
 // The actual enumeration; buildVisibleCables() is the memoized public entry point above.
 std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
+    const graph_editor_paint::MacroOwnerScope oneOwnerMap(*this); // every macro port's owner from one map
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
     auto& moduleComponents = content.getModules();
 
-    // nodeID -> component, so both passes resolve port positions in O(1).
+    // nodeID -> component, so both passes resolve port positions in O(1); built through a processor -> node map, not a
+    // scan of every node per card.
+    std::unordered_map<const juce::AudioProcessor*, uint32_t> nodeOfProcessor;
+    for (auto* node : graph.getNodes())
+        nodeOfProcessor.emplace(node->getProcessor(), node->nodeID.uid);
     std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
-    for (auto* comp : moduleComponents) {
-        if (comp == nullptr)
-            continue;
-        for (auto* node : graph.getNodes()) {
-            if (node->getProcessor() == comp->getModule()) {
-                nodeCompMap[node->nodeID.uid] = comp;
-                break;
-            }
-        }
-    }
+    for (auto* comp : moduleComponents)
+        if (comp != nullptr)
+            if (const auto it = nodeOfProcessor.find(comp->getModule()); it != nodeOfProcessor.end())
+                nodeCompMap[it->second] = comp;
     auto compFor = [&](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
         auto it = nodeCompMap.find(id.uid);
         return it == nodeCompMap.end() ? nullptr : it->second;
@@ -229,7 +240,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         for (int j = 0; j < visible; ++j)
             for (const auto& t : mb->getJackTargets(j, isInput))
                 for (int v = 0; v < t.voiceSpan; ++v)
-                    if (t.rawHeadChannel + v == rawChannel)
+                    if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                         return true;
         return false;
     };
@@ -418,111 +429,6 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     return cables;
 }
 
-// Post-pass extracted from rebuildVisibleCables() purely to keep that function under
-// its ratchet -- no behavior change. Runs AFTER reanchorCablesToKnobTargets so a cable that is
-// BOTH knob-bound and crosses a collapsed macro's boundary ends up re-anchored to the macro card
-// (this pass wins), matching the rule that a collapsed macro always owns its boundary
-// cables' endpoints.
-void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables) {
-    // ---- Collapsed-macro cable treatment --------------------------------------------------
-    //
-    // A collapsed macro hides its member ModuleComponents (setVisible(false) in syncMacroCards),
-    // but their graph edges — and the cables above computed from them — don't know that. A cable
-    // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
-    // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
-    // re-anchored on the card -- two treatments (docs/macros/ports.md#cable-rendering-across-the-boundary):
-    //   - the hidden endpoint IS one of the macro's own ports (a MacroInlet/Outlet or MIDI
-    //     variant fronting a synth::MacroPort) -> anchor at that port's own jack
-    //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
-    //     passes through;
-    //   - the hidden endpoint is an ordinary interior member wired to past the boundary (no port
-    //     involved) -> DIRECTIONAL edge anchor: the card's RIGHT edge if
-    //     the macro is the cable's SOURCE (signal leaving it), LEFT edge if it's the DESTINATION
-    //     (signal entering it) -- never a facing-the-other-endpoint projection, which is what put
-    //     both legs of a pass-through wire on the card's TOP edge when the other endpoint happened
-    //     to sit above the card. The Y coordinate still comes from that facing projection (so
-    //     several crossing cables keep spreading vertically instead of collapsing onto one pixel)
-    //     but is clamped into the card's jack band, and X lands exactly on the boundary (not
-    //     inset like a real port jack) so this anchor never sits under a case-(a) port dot on the
-    //     same edge; that case is expected (docs/macros/ports.md#cable-rendering-across-the-boundary), not an error.
-    // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
-    // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
-    // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
-    // card's pre-drag position for the whole gesture otherwise.
-    if (!macros.empty()) {
-        // nodeID.uid -> macro id, built once, collapsed macros only.
-        std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
-        // nodeID.uid -> that node's own jack position, CARD-LOCAL, for collapsed macros only, and
-        // only for nodes that are themselves a port (macroCardPortLayout already excludes an
-        // interior member with no MacroPort entry, so absence from this map IS the "ordinary
-        // member" case above).
-        std::unordered_map<uint32_t, juce::Point<int>> portJackLocalForNode;
-        for (const auto& macro : macros.getAll()) {
-            if (!macro.collapsed)
-                continue;
-            for (const auto& uuid : macro.members) {
-                auto nodeId = macroController_.resolveMemberNodeId(uuid);
-                if (nodeId.uid != 0)
-                    collapsedMacroForNode[nodeId.uid] = &macro;
-            }
-            for (const auto& port : macroController_.macroCardPortLayout(macro.id)) {
-                auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
-                if (nodeId.uid != 0)
-                    portJackLocalForNode[nodeId.uid] = port.jackPos;
-            }
-        }
-
-        // Case (b)'s directional edge anchor (see the comment above): the facing projection
-        // still decides the Y (so several crossing cables keep distinct heights instead of
-        // stacking), clamped into the same vertical jack band a real port jack lays out in;
-        // X is forced to the card's actual left/right edge -- not the port jacks' inset -- so an
-        // edge anchor and a port dot on the same side never land on the same pixel.
-        auto directionalEdgeAnchor = [](juce::Rectangle<int> cardBounds, juce::Point<float> facing, bool onLeftEdge) {
-            const float y = juce::jlimit((float)(cardBounds.getY() + kMacroCardJackBandTop),
-                                         (float)(cardBounds.getY() + kMacroCardJackBandBottom), facing.y);
-            const float x = onLeftEdge ? (float)cardBounds.getX() : (float)cardBounds.getRight();
-            return juce::Point<float>(x, y);
-        };
-
-        if (!collapsedMacroForNode.empty()) {
-            std::vector<VisibleCable> filtered;
-            filtered.reserve(cables.size());
-            for (auto& cable : cables) {
-                auto srcIt = collapsedMacroForNode.find(cable.id.srcUid);
-                auto dstIt = collapsedMacroForNode.find(cable.id.dstUid);
-                const bool srcHidden = srcIt != collapsedMacroForNode.end();
-                const bool dstHidden = dstIt != collapsedMacroForNode.end();
-
-                if (srcHidden && dstHidden && srcIt->second == dstIt->second)
-                    continue; // wholly inside one collapsed macro — nothing on screen to draw
-
-                const auto originalP1 = cable.p1;
-                const auto originalP2 = cable.p2;
-                if (srcHidden) {
-                    const auto cardBounds = macroController_.macroCableAnchorBounds(*srcIt->second);
-                    auto jackIt = portJackLocalForNode.find(cable.id.srcUid);
-                    // Macro is the SOURCE -> signal LEAVES it -> anchor on the RIGHT edge.
-                    cable.p1 =
-                        jackIt != portJackLocalForNode.end()
-                            ? (cardBounds.getPosition() + jackIt->second).toFloat()
-                            : directionalEdgeAnchor(cardBounds, projectToRectEdge(cardBounds, originalP2), false);
-                }
-                if (dstHidden) {
-                    const auto cardBounds = macroController_.macroCableAnchorBounds(*dstIt->second);
-                    auto jackIt = portJackLocalForNode.find(cable.id.dstUid);
-                    // Macro is the DESTINATION -> signal ENTERS it -> anchor on the LEFT edge.
-                    cable.p2 = jackIt != portJackLocalForNode.end()
-                                   ? (cardBounds.getPosition() + jackIt->second).toFloat()
-                                   : directionalEdgeAnchor(cardBounds, projectToRectEdge(cardBounds, originalP1), true);
-                }
-
-                filtered.push_back(cable);
-            }
-            cables = std::move(filtered);
-        }
-    }
-}
-
 // Resolved colour for a cable under the current mode + overrides + active theme.
 juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -558,51 +464,34 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
     repaintCanvas();
 }
 
-// Removes every graph edge behind a user-visible cable, as one undoable action.
-void GraphEditor::disconnectCable(const VisibleCable& cable) {
+// Removes every graph edge behind a user-visible cable, as one undoable action. `sameConnection` lists further cables
+// that read as the same connection (a collapsed stereo pair keeps one per leg); they go in the same step.
+void GraphEditor::disconnectCable(const VisibleCable& cable, const std::vector<VisibleCable>& sameConnection) {
     auto& graph = audioEngine.getGraph();
 
     // Both cable kinds populate id.srcUid/dstUid with the REAL logical endpoints — for an
     // AttenuverterChain that's the true mod source/destination the chain proxies, never the hidden
     // attenuverter itself (buildVisibleCables() constructs it that way, and the attenuverter splice
-    // logic already treats them as such). Decide BEFORE mutating whether removing this cable can leave a
-    // macro port with no connections left, so the right undo transaction is chosen up front. Gated
-    // on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false and both
-    // branches below fall through to the plain graph-only recordStructuralChange path
-    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
+    // logic already treats them as such). Decide BEFORE mutating whether removing this cable touches a
+    // macro port, so the right undo transaction is chosen up front: pruneMacroPortsAfterCut may then drop a
+    // port left cableless or one-sided (see docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
     const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
     const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
-    const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
-                                  (macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId));
+    const bool touchesMacroPort = macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId);
 
-    // An attenuverter chain is a hidden node plus its two edges — removing the routing takes all
-    // of it, which is also what double-clicking the knob does.
+    // An attenuverter chain is a hidden node plus its two edges, and the macro ports it crossed go with it --
+    // whatever the auto-delete preference says, since the removal is the request. Double-clicking the knob
+    // takes the same path.
     if (cable.kind == VisibleCable::Kind::AttenuverterChain) {
-        const juce::AudioProcessorGraph::NodeID attenId{cable.id.attenUid};
-        auto removeChain = [this, attenId] { audioEngine.removeModRouting(attenId); };
-        if (touchesMacroPort) {
-            auto doMutation = [this, removeChain, srcId, dstId] {
-                removeChain();
-                macroController_.autoDeleteOrphanedMacroPort(srcId);
-                macroController_.autoDeleteOrphanedMacroPort(dstId);
-                updateComponents();
-            };
-            if (undoManager)
-                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-            else
-                doMutation();
-        } else if (undoManager) {
-            undoManager->recordStructuralChange(graph, removeChain);
-        } else {
-            removeChain();
-        }
-        repaintCanvas();
+        removeModulationChain(juce::AudioProcessorGraph::NodeID{cable.id.attenUid});
         return;
     }
 
+    const auto cablesBefore = snapshotCablesForRetract();
+
     // Expand audio/poly fans via resolvePolyLink so a collapsed stereo (or poly voice) cable that
     // only drew its head edge still removes every raw channel the user-visible wire owns.
-    auto removeEdges = [this, &graph, srcId, dstId, cable] {
+    auto removeCableEdges = [this, &graph, srcId, dstId](const VisibleCable& cable) {
         auto* srcNode = graph.getNodeForId(srcId);
         auto* dstNode = graph.getNodeForId(dstId);
         auto* srcMb = srcNode ? dynamic_cast<ModuleBase*>(srcNode->getProcessor()) : nullptr;
@@ -624,8 +513,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
                 dstMb != nullptr ? dstMb->mapInputChannel(cable.id.dstPort).visibleJackIndex : cable.id.dstPort;
             const auto link = resolvePolyLink(srcMb, srcJack, dstMb, dstJack);
             for (int v = 0; v < link.voiceCount; ++v) {
-                juce::AudioProcessorGraph::Connection c{{srcId, link.sourceRawChannel + v * link.sourceStride},
-                                                        {dstId, link.destRawChannel + v}};
+                juce::AudioProcessorGraph::Connection c{{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}};
                 graph.removeConnection(c);
             }
             return;
@@ -634,12 +522,16 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         juce::AudioProcessorGraph::Connection c{{srcId, cable.id.srcPort}, {dstId, cable.id.dstPort}};
         graph.removeConnection(c);
     };
+    auto removeEdges = [removeCableEdges, cable, sameConnection] {
+        removeCableEdges(cable);
+        for (const auto& other : sameConnection)
+            removeCableEdges(other);
+    };
 
     if (touchesMacroPort) {
         auto doMutation = [this, removeEdges, srcId, dstId] {
             removeEdges();
-            macroController_.autoDeleteOrphanedMacroPort(srcId);
-            macroController_.autoDeleteOrphanedMacroPort(dstId);
+            pruneMacroPortsAfterCut({srcId, dstId}, {});
             updateComponents();
         };
         if (undoManager)
@@ -654,44 +546,143 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 
     hoveredCableId.reset();
     repaintCanvas();
+    retractCablesGoneSince(cablesBefore);
 }
 
+// The frosted previews of the cables a smart connection would make, drawn while a dragged card hovers a spot.
+static void paintSmartConnectionPreviewCables(juce::Graphics& g, GraphEditor& editor, juce::LookAndFeel& lookAndFeel) {
+    if (!editor.getDragDropController().isDragPreviewActive() ||
+        editor.getSmartConnections().getSmartSuggestions().empty())
+        return;
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&lookAndFeel);
+
+    // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
+    // cable-colour mode and any user override keep applying to a preview too.
+    // Every preview alpha is scaled by the fade-in that runs when the suggestion first appears.
+    const float reveal = editor.getSmartPreviewReveal();
+    auto previewColour = [&editor, reveal](synth::ui::CableSignal signal, synth::ui::ModuleCategory category,
+                                           float alpha) {
+        GraphEditor::VisibleCable preview;
+        preview.signal = signal;
+        preview.sourceCategory = category;
+        return editor.colourForCable(preview).withAlpha(alpha * reveal);
+    };
+
+    // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish
+    // edit the user should be able to tell apart from an ordinary suggestion at a glance. Its
+    // new legs are tinted toward the theme's warning colour — INTERPOLATED, not replaced, so the
+    // cable's own resolved identity (signal, category, user override) still reads through, and
+    // taken from a theme token rather than a literal.
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    auto insertTint = [&themeColors](juce::Colour base) {
+        return base.interpolatedWith(themeColors.warning.withAlpha(base.getFloatAlpha()), 0.65f);
+    };
+    auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
+                             synth::ui::CableSignal signal) {
+        auto path = GraphEditor::buildCablePath(p1, p2);
+        if (lf != nullptr)
+            lf->drawConnectionWire(g, p1, p2, path, colour,
+                                   /*isModulation*/ signal == synth::ui::CableSignal::ModCV,
+                                   /*activity*/ 0.0f, /*hovered*/ false);
+        else {
+            g.setColour(colour);
+            g.strokePath(path, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+    };
+
+    // An insert REPLACES cabling, so EVERY doomed cable is struck out underneath the frosted
+    // segments taking their place — otherwise the extra previews read as "and also", and the
+    // user expects the old wires to still be there after the drop. All of them, not just this
+    // leg's: a stereo upstream can have one doomed cable per leg.
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
+        if (!s.isInsert)
+            continue;
+        for (const auto& doomed : s.doomedLinks) {
+            const auto curve = GraphEditor::buildCablePath(doomed.p1, doomed.p2);
+            const float dashes[] = {5.0f, 5.0f};
+            juce::Path dashed;
+            juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
+                .createDashedStroke(dashed, curve, dashes, juce::numElementsInArray(dashes));
+            g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
+            g.fillPath(dashed);
+        }
+    }
+
+    // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
+    // terminal sink is one suggestion but two cables, and a preview that showed a single wire
+    // while the drop fanned both raws was lying about what was about to happen.
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
+        const auto legColour = [&](synth::ui::ModuleCategory category) {
+            const auto base = previewColour(s.signal, category, 0.40f);
+            return s.isInsert ? insertTint(base) : base;
+        };
+
+        // The ghost-side end of a leg rides the ghost while it slides to its spot.
+        const auto slide = editor.getDragDropController().getGhostSlide().offset();
+        for (const auto& leg : s.upstreamPreviewLegs)
+            strokePreview(leg.p1, leg.p2 + slide, legColour(s.upstreamCategory), s.signal);
+
+        const auto ghostSide = [&s, slide](juce::Point<float> p1, juce::Point<float> p2) {
+            return s.ghostIsSource ? std::pair{p1 + slide, p2} : std::pair{p1, p2 + slide};
+        };
+        if (s.mainPreviewLegs.empty()) {
+            const auto [a, b] = ghostSide(s.p1, s.p2);
+            strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+            continue;
+        }
+        for (const auto& leg : s.mainPreviewLegs) {
+            const auto [a, b] = ghostSide(leg.p1, leg.p2);
+            strokePreview(a, b, legColour(s.sourceCategory), s.signal);
+        }
+    }
+}
+
+// Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
+// is already in canvas coordinates, so everything outside it is skipped.
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
+    const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
     // installed, so the cast returns null and we fall back to plain fills/lines.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
+    // Outside colour over the whole content, then the canvas frame (bg1 + dot grid, rounded, hairline border).
     if (lf != nullptr)
-        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
+        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
     else
         g.fillAll(juce::Colours::darkgrey);
 
-    // ---- Drag-preview grid dots (only while a module is being dragged) ----
-    // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.
-    // This stays cheap: we compute the visible clip in canvas coords and skip everything outside.
-    if (editor.getDragDropController().isDragPreviewActive()) {
-        // The content component's transform maps canvas -> screen. The clip rect of g is
-        // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
-        // gives us the visible region for free.
-        auto clip = g.getClipBounds();
-
-        // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
-        const juce::Colour textPrimaryColourForGrid =
-            lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-        g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
-
-        constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
-        int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
-        int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
-
-        for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
-            for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
-                g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
-            }
+    {
+        constexpr float kFrameCorner = 10.0f;
+        const auto frame = editor.getCanvasFrameRect();
+        juce::Path outline;
+        outline.addRoundedRectangle(frame, kFrameCorner);
+        g.saveState();
+        g.reduceClipRegion(outline);
+        if (lf != nullptr) // with no theme installed (headless tests) the frame is the plain fill, no different
+            lf->fillThemedBackground(g, frame, /*isCanvas*/ true);
+        g.restoreState();
+        if (lf != nullptr) {
+            g.setColour(lf->getTheme().colors.border);
+            g.strokePath(outline, juce::PathStrokeType(1.0f / juce::jmax(0.01f, editor.zoomLevel)));
         }
     }
-    // ---- End drag-preview grid dots ----
 
+    if (editor.getDragDropController().isDragPreviewActive())
+        synth::ui::paintDragPreviewGrid( // textPrimary at ~8%: a gentle, non-distracting grid
+            g, (lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white).withAlpha(0.08f));
+
+    if (!editor.cablesOnTop)
+        paintCables(g);
+
+    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
+    // above, for what it draws and why it's a free function rather than inlined here) ----
+    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
+    paintExpandedMacroHulls(g, editor);
+}
+
+void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     // Theme color tokens (fall back to legacy literals when unthemed). Wire colours are NOT
     // read here — they come from GraphEditor::colourForCable so that mode + user overrides are
     // applied in exactly one place.
@@ -722,7 +713,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         for (int d = 0; d < 3; ++d) {
             float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
             auto pt = wire.getPointAlongPath(t * len);
-            g.setColour(colour.withAlpha(0.7f));
+            g.setColour(colour.withMultipliedAlpha(0.7f)); // multiplied: a dimmed cable's dots dim with it
             g.fillEllipse(pt.x - 2.5f, pt.y - 2.5f, 5.0f, 5.0f);
         }
     };
@@ -730,11 +721,42 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // ---- Draw cables ----
     // One list, built by GraphEditor::buildVisibleCables(), drives both what is painted and what
     // the mouse can hit. Colour comes from GraphEditor::colourForCable so the active mode and any
-    // user overrides are applied in exactly one place.
+    // user overrides are applied in exactly one place. A cable wholly outside the area being repainted is skipped
+    // before its path is built: a glide frame repaints a small area, and stroking every cable on a big patch only to
+    // have it clipped away cost more than the rest of that paint.
+    const auto clip = g.getClipBounds().toFloat();
+    auto& reveal = editor.getLoadReveal();
+    // The cable a port connections panel row points at is drawn as hovered and every other one dims.
+    const auto& focusedCable = editor.getPortPanel().highlightedCable();
     for (const auto& cable : editor.buildVisibleCables()) {
-        const bool hovered = editor.isCableHovered(cable);
-        const juce::Colour colour = editor.colourForCable(cable);
+        if (!clip.intersects(synth::ui::cablePaintBounds(cable.p1, cable.p2)))
+            continue;
+        const float drawn = reveal.cableProgress(cable.id.srcUid, cable.id.dstUid); // < 1 while a project opens
+        if (drawn <= 0.0f)
+            continue;
+        const bool dimmed = focusedCable.has_value() && *focusedCable != cable.id;
+        const juce::Colour colour =
+            editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
+        // The cable two halves are still running onto (a deleted module's neighbours rejoining) appears when they
+        // arrive.
+        if (editor.cableRetract_.isHidden(cable.id))
+            continue;
+        // Half of a cable that just split around a new module: drawn running from the old cable's ends to its own.
+        if (editor.cableRetract_.isMorphing(cable.id)) {
+            const auto half = editor.cableRetract_.morphed(cable);
+            strokeWire(half.p1, half.p2, colour, isModulation, 0.0f, 2.0f, false);
+            continue;
+        }
+        // A cable growing back (undo, redo) is real already: this pass skips it and its growing wire is drawn instead.
+        if (editor.cableRetract_.isGrowing(cable.id)) {
+            const auto growing = editor.cableRetract_.grown(cable);
+            strokeWire(growing.p1, growing.p2, colour.withMultipliedAlpha(editor.cableRetract_.growOpacity()),
+                       isModulation, 0.0f, 2.0f, false);
+            continue;
+        }
+        ++graph_editor_paint::workCounters().cablesPainted;
+        const bool hovered = editor.isCableHovered(cable) || (focusedCable.has_value() && *focusedCable == cable.id);
 
         float fallbackWidth = 2.0f;
         if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
@@ -742,6 +764,11 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         else if (cable.kind == GraphEditor::VisibleCable::Kind::ModRouting)
             fallbackWidth = 2.5f + cable.activity * 2.0f;
 
+        if (drawn < 1.0f) { // drawing out from its source jack (LoadRevealAnimator.h), no knob or badge yet
+            strokeWire(cable.p1, cable.p1 + (cable.p2 - cable.p1) * drawn, colour, isModulation, 0.0f, fallbackWidth,
+                       false);
+            continue;
+        }
         auto wirePath = strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
         drawWireDots(wirePath, colour);
 
@@ -759,6 +786,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             float dx = std::sin(angle) * 8.0f;
             float dy = -std::cos(angle) * 8.0f;
             g.drawLine(mid.x, mid.y, mid.x + dx, mid.y + dy, 2.0f);
+            synth::ui::cable_curve_chips::paint(g, editor, cable);
         }
 
         // Poly buses label the midpoint with "xN" so the bundle size is visible.
@@ -766,7 +794,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             auto mid = (cable.p1 + cable.p2) / 2.0f;
             juce::String badge = "x" + juce::String(cable.voiceCount);
             g.setFont(11.0f);
-            int textW = (int)g.getCurrentFont().getStringWidthFloat(badge) + 8;
+            int textW = (int)juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), badge) + 8;
             juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
             g.setColour(surfaceColour);
             const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;
@@ -775,83 +803,120 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
+    // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h); the growing ones above.
+    for (const auto& ghost : editor.cableRetract_.ghosts())
+        strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
+                   ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);
+    for (const auto& half : editor.cableRetract_.joinHalves())
+        strokeWire(half.p1, half.p2, editor.colourForCable(half), half.kind != GraphEditor::VisibleCable::Kind::Direct,
+                   0.0f, 2.0f, false);
     // ---- End cables ----
-
-    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
-    // above, for what it draws and why it's a free function rather than inlined here) ----
-    paintExpandedMacroHulls(g, editor);
-
-    // Draw Line being dragged
-    if (editor.isDraggingConnection) {
-        if (editor.dragSourceModule) {
-            juce::Point<int> p;
-            if (editor.dragSourceIsMidi) {
-                p = editor.dragSourceModule->getMidiPortCenter(!editor.dragSourceIsInput);
-            } else {
-                p = editor.dragSourceModule->getPortCenter(editor.dragSourceChannel, editor.dragSourceIsInput);
-            }
-
-            auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
-            auto mouseInContent = getLocalPoint(&(editor), editor.dragCurrentPos);
-
-            // Since 'content' is transformed, we need to handle coordinates
-            // carefully. But if this 'paint' is called on content, and we use
-            // getLocalPoint(editor, ...) it should be transformed back. Actually,
-            // easier: editor.dragCurrentPos is screen pos.
-            auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
-
-            // In-progress drag wire: resolved through the same colour path as a real cable, so
-            // the preview already looks like the cable it is about to become (in By-source mode
-            // that means the dragged-from module's category colour, not a generic white).
-            GraphEditor::VisibleCable preview;
-            preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
-            if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
-                preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
-            strokeWire(posInContent.toFloat(), mouseLocal.toFloat(), editor.colourForCable(preview),
-                       /*isModulation*/ false,
-                       /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
-        }
-    }
 }
 
 void GraphEditor::GraphContentComponent::resized() {}
 
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
+    // Gliding card snapshots first, so the dots and the drag ghost stay on top of them.
+    editor.cardGlide_.paint(g);
+    editor.getLoadReveal().paintOutlines(g); // cards still waiting for their assets as a project opens
+
+    // Cables over the cards when the preference asks; the same pass paint() runs for the default (behind) layer.
+    if (editor.cablesOnTop)
+        paintCables(g);
+
     // ---- Knob-landing dots -------------
-    // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
+    // Cables are by default drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
     // re-anchored onto a knob (reanchorCablesToKnobTargets) therefore has its final stretch drawn
-    // UNDER the opaque module card. Painting a small dot here, on top of every child, is what
-    // actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
+    // UNDER the opaque module card (unless the cables-on-top preference moved them here). Painting a small dot here, on
+    // top of every child, is what actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
     for (const auto& cable : editor.buildVisibleCables()) {
-        if (!cable.landsOnKnob)
+        if (!cable.landsOnKnob || editor.getLoadReveal().cableProgress(cable.id.srcUid, cable.id.dstUid) < 1.0f)
             continue;
-        g.setColour(editor.colourForCable(cable));
+        const auto& focusedCable = editor.getPortPanel().highlightedCable();
+        const bool dimmed = focusedCable.has_value() && *focusedCable != cable.id; // as the wire itself is
+        g.setColour(editor.colourForCable(cable).withMultipliedAlpha(dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f));
         // Shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the
         // anchor point and the dot drawn on it can never disagree on the dot's own size.
         g.fillEllipse(cable.p2.x - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       ModuleComponent::kKnobLandingDotDiameter, ModuleComponent::kKnobLandingDotDiameter);
+        if (const auto name =
+                synth::ui::cableEndName(editor.getAudioEngine().getGraph(),
+                                        juce::AudioProcessorGraph::NodeID{cable.destNodeId}, cable.destChannel);
+            name.isNotEmpty())
+            synth::ui::paintCableEndName(g, cable.p2, name, synth::theme::themeOf(*this),
+                                         dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
     }
 
-    // ---- Drag-preview landing ghost (on top of module cards) ----
-    // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
-    if (editor.getDragDropController().isDragPreviewActive() &&
-        !editor.getDragDropController().getDragPreviewGhost().isEmpty()) {
+    // The wire being dragged out of a jack is in front of every card, whatever the preference.
+    auto paintDragWire = [&] {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
+                              float activity, float fallbackWidth, bool hovered) {
+            juce::Path wire = GraphEditor::buildCablePath(p1, p2);
+            if (lf != nullptr) {
+                lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, hovered);
+            } else {
+                g.setColour(colour);
+                g.strokePath(wire, juce::PathStrokeType(fallbackWidth, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+            }
+        };
+        if (editor.isDraggingConnection) {
+            if (editor.dragSourceModule) {
+                juce::Point<int> p;
+                if (editor.dragSourceIsMidi) {
+                    p = editor.dragSourceModule->getMidiPortCenter(!editor.dragSourceIsInput);
+                } else {
+                    p = editor.dragSourceModule->getPortCenter(editor.dragSourceChannel, editor.dragSourceIsInput);
+                }
+
+                auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
+                // dragCurrentPos is a screen position; the content component is transformed, so map it from the
+                // screen rather than from the editor.
+                auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
+
+                // In-progress drag wire: resolved through the same colour path as a real cable, so
+                // the preview already looks like the cable it is about to become (in By-source mode
+                // that means the dragged-from module's category colour, not a generic white).
+                GraphEditor::VisibleCable preview;
+                preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+                if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
+                    preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
+                // Cables run source -> destination: dragging from an input, the jack is the destination.
+                const auto jackPt = posInContent.toFloat();
+                const auto mousePt = mouseLocal.toFloat();
+                strokeWire(editor.dragSourceIsInput ? mousePt : jackPt, editor.dragSourceIsInput ? jackPt : mousePt,
+                           editor.colourForCable(preview),
+                           /*isModulation*/ false,
+                           /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
+            }
+        }
+    };
+    paintDragWire();
+
+    // ---- Drag-preview landing ghost (on top of module cards) ----
+    // A translucent rounded rect at the exact snapped+anti-overlapped landing position: one per card for a group drag
+    // (where the whole group lands), else the single card's, which slides to where it is aimed.
+    auto& dragDrop = editor.getDragDropController();
+    std::vector<juce::Rectangle<float>> ghosts;
+    for (const auto& r : dragDrop.getGroupGhosts())
+        ghosts.push_back(r.toFloat());
+    if (ghosts.empty() && dragDrop.isDragPreviewActive() && !dragDrop.getDragPreviewGhost().isEmpty())
+        ghosts.push_back(dragDrop.getGhostSlide().drawn());
+    if (!ghosts.empty()) {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
-        const float cornerRadius = m.cornerRadius;
-
-        auto ghostF = editor.getDragDropController().getDragPreviewGhost().toFloat();
-
-        // Fill: accent colour at ~18% alpha
-        g.setColour(accentColour.withAlpha(0.18f));
-        g.fillRoundedRectangle(ghostF, cornerRadius);
-
-        // Outline: accent colour at ~70% alpha, 1.5px
-        g.setColour(accentColour.withAlpha(0.70f));
-        const float guideLineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
-        g.drawRoundedRectangle(ghostF, cornerRadius, guideLineWidth);
+        const float guideLineWidth = lf != nullptr ? m.guideLineWidth : 1.5f;
+        for (const auto& ghost : ghosts) {
+            // On the card body, with the card's corner radius, so its corners are the corners the card will have.
+            const auto ghostF = synth::ui::cardBodyRect(ghost);
+            g.setColour(accentColour.withAlpha(0.18f));
+            g.fillRoundedRectangle(ghostF, m.cornerRadius);
+            g.setColour(accentColour.withAlpha(0.70f));
+            g.drawRoundedRectangle(ghostF, m.cornerRadius, guideLineWidth);
+        }
     }
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
@@ -881,7 +946,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // view is zoomed. Paint-only — the selection itself is computed in updateMarquee().
     if (editor.marqueeActive && !editor.marqueeRect.isEmpty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
 
         auto bandF = editor.marqueeRect.toFloat();
@@ -891,82 +956,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         g.drawRect(bandF, lineWidth);
     }
 
-    // ---- Smart-connection frosted preview cables ----
-    if (editor.getDragDropController().isDragPreviewActive() &&
-        !editor.getSmartConnections().getSmartSuggestions().empty()) {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    paintSmartConnectionPreviewCables(g, editor, getLookAndFeel());
 
-        // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
-        // cable-colour mode and any user override keep applying to a preview too.
-        auto previewColour = [this](synth::ui::CableSignal signal, synth::ui::ModuleCategory category, float alpha) {
-            GraphEditor::VisibleCable preview;
-            preview.signal = signal;
-            preview.sourceCategory = category;
-            return editor.colourForCable(preview).withAlpha(alpha);
-        };
-
-        // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish
-        // edit the user should be able to tell apart from an ordinary suggestion at a glance. Its
-        // new legs are tinted toward the theme's warning colour — INTERPOLATED, not replaced, so the
-        // cable's own resolved identity (signal, category, user override) still reads through, and
-        // taken from a theme token rather than a literal.
-        static const synth::theme::Colors fallbackColors{};
-        const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-        auto insertTint = [&themeColors](juce::Colour base) {
-            return base.interpolatedWith(themeColors.warning.withAlpha(base.getFloatAlpha()), 0.65f);
-        };
-        auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
-                                 synth::ui::CableSignal signal) {
-            auto path = GraphEditor::buildCablePath(p1, p2);
-            if (lf != nullptr)
-                lf->drawConnectionWire(g, p1, p2, path, colour,
-                                       /*isModulation*/ signal == synth::ui::CableSignal::ModCV,
-                                       /*activity*/ 0.0f, /*hovered*/ false);
-            else {
-                g.setColour(colour);
-                g.strokePath(path,
-                             juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
-        };
-
-        // An insert REPLACES cabling, so EVERY doomed cable is struck out underneath the frosted
-        // segments taking their place — otherwise the extra previews read as "and also", and the
-        // user expects the old wires to still be there after the drop. All of them, not just this
-        // leg's: a stereo upstream can have one doomed cable per leg.
-        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
-            if (!s.isInsert)
-                continue;
-            for (const auto& doomed : s.doomedLinks) {
-                const auto curve = GraphEditor::buildCablePath(doomed.p1, doomed.p2);
-                const float dashes[] = {5.0f, 5.0f};
-                juce::Path dashed;
-                juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
-                    .createDashedStroke(dashed, curve, dashes, juce::numElementsInArray(dashes));
-                g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
-                g.fillPath(dashed);
-            }
-        }
-
-        // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
-        // terminal sink is one suggestion but two cables, and a preview that showed a single wire
-        // while the drop fanned both raws was lying about what was about to happen.
-        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
-            const auto legColour = [&](synth::ui::ModuleCategory category) {
-                const auto base = previewColour(s.signal, category, 0.40f);
-                return s.isInsert ? insertTint(base) : base;
-            };
-
-            for (const auto& leg : s.upstreamPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.upstreamCategory), s.signal);
-
-            if (s.mainPreviewLegs.empty()) {
-                strokePreview(s.p1, s.p2, legColour(s.sourceCategory), s.signal);
-                continue;
-            }
-            for (const auto& leg : s.mainPreviewLegs)
-                strokePreview(leg.p1, leg.p2, legColour(s.sourceCategory), s.signal);
-        }
-    }
+    editor.getPortPanel().paintPreview(g); // the cable a row of the port panel's Add destination page would make
 
     // ---- Macro-crossing module flash ------------
     // A fading ring over the module that just joined/left an expanded macro's hull, on top of its
@@ -974,14 +966,14 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // GraphContentComponent is a nested class, so this direct access is the same "one-line
     // forwarder" relationship every other block above already has with `editor`.
     if (auto flash = editor.macroCrossingAnim_.flashState()) {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto [bounds, t] = *flash;
         // Settles from a slightly oversized ring down onto the card, fading out as it lands —
         // "flash-or-settle" per the ticket, not a static outline held for the tween's whole
         // duration.
-        auto ring = bounds.toFloat().expanded(6.0f * (1.0f - t));
+        const float cardRadius = synth::theme::themeOf(*this).metrics.cornerRadius;
+        auto ring = synth::ui::cardBodyRect(bounds.toFloat()).expanded(6.0f * (1.0f - t));
         g.setColour(accentColour.withAlpha(0.55f * (1.0f - t)));
-        g.drawRoundedRectangle(ring, 10.0f, 2.0f);
+        g.drawRoundedRectangle(ring, cardRadius + 6.0f * (1.0f - t), 2.0f);
     }
 }

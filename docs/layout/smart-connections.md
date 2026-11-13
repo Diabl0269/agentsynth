@@ -17,12 +17,30 @@ auto-wire them on drop. The ghost and the landing rect it scores against come fr
 | **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
 Group multi-select drags never smart-connect, and snippet drops are excluded. "Dest input must be
-free" has two exceptions, both below: the terminal audio sink takes a parallel cable anyway, and
-**Ctrl** turns any occupied destination into an insert.
+free" has exceptions, all below: by default (**Connect side by side: Always**) a module placed beside a
+wired neighbour is **inserted in series** with no key held; with **Only while holding Ctrl** the
+terminal audio sink takes a parallel cable anyway and **Ctrl** turns any occupied destination into an
+insert.
+
+### Connect side by side
+
+`Settings -> Preferences -> Smart connections -> Connect side by side`, persisted as
+`smartConnectionSideBySide` (`Always` / `OnlyWithCtrl`) in `juce::ApplicationProperties`, restored in
+`MainComponent::restorePanelPreferences()` and pushed to the engine by `PreferencesSettingsTab`.
+Default: **Always**. It only decides what an **occupied** destination jack means (below); free jacks
+connect in every setting, and the 96 px proximity and left-to-right rules are unchanged. The combo has
+an accessible title, a tooltip, and the usual focus ring and keyboard reach.
+
+| Setting | No key held, beside a wired neighbour | Ctrl held |
+|---|---|---|
+| **Always** (default) | inserted in series (the sink included: no parallel add) | same insert, and the ghost may also overlap its destination (see below) |
+| **Only while holding Ctrl** | hard stop, except the terminal sink's parallel add | insert in series |
 
 ## How a suggestion is found
 
-1. During `updateDragPreview()`, when the mode allows it, neighbours whose **module** rects are more
+1. Only cards in the dragged module's own container are neighbours, and never a hidden one
+   ([below](#one-container-at-a-time)).
+   During `updateDragPreview()`, when the mode allows it, neighbours whose **module** rects are more
    than **96 px** away edge-to-edge are culled, then **jack-to-jack** distance is scored under the
    same 96 px cap. A pair is rejected when the source jack sits to the right of the dest jack, which
    is what stops wrap-around cables from a neighbour on the right into the dragged module's left
@@ -46,17 +64,55 @@ free" has two exceptions, both below: the terminal audio sink takes a parallel c
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a
 real `ModuleComponent` exists.
 
+## One container at a time
+
+A module wires only to cards in the container it ends up in: the macro it is dropped into, or the open canvas.
+Distance alone is not enough, because two tracks' macros often sit a few pixels apart, and a folded macro keeps its
+cards on the canvas, hidden, at their old places, often right over another track ("ghost modules"). Wiring across
+would join two tracks' sounds, and an insert would reroute the other track's cable.
+
+- **The container.** `SmartConnectionEngine::dropContainer`: a library module joins the open macro under the pointer
+  (the drop candidate, `getMacroDragJoinId`; none over the open canvas); a card being moved joins its pending join
+  target, goes to the top level on a pending leave with no join, and otherwise stays in the macro it is in, which
+  already includes a border crossing applied live.
+- **Its cards.** A card counts when the macro listing it directly is that container (none for the open canvas). A
+  macro port sits on the border, so each side faces a different container: an inlet's input and an outlet's output
+  face the macro's own container, the other side faces the macro. A module inside a macro can therefore feed its
+  outlet or take from its inlet, and one outside can do the same from the outside, but neither reaches through.
+- **Hidden cards** (members of a folded macro) are never neighbours.
+- **Inserts.** The cable an insert reroutes must come from a card facing the same container, so an insert never
+  rewires a cable of another track, even one wired straight across a border.
+
+Ctrl does not widen any of this. `SmartConnectionMacroScope` (`Tests/UI/Graph/SmartConnectionEngine/`) drops a Delay
+between a track's Filter and VCA with another track 40 px away, open or folded over it, and checks that every
+suggestion stays in the track and every other cable is the same one after the drop; `SmartConnectionSavedProject`
+does it in a saved and reopened multi-track project.
+
 ## Occupied destinations
 
-An already-wired destination jack is not one rule but three, depending on the modifier and the node:
+An already-wired destination jack is not one rule but several, depending on the preference, the modifier
+and the node:
 
 | Drag | Occupied destination | Result |
 |---|---|---|
-| no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — the ghost's audio out joins what is already there, existing cables untouched |
-| no modifier | any other module | **nothing** (hard stop) |
-| **Ctrl held** | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
+| **Always** (default), no modifier | **any** module, sink included | **insert in series** — the upstream cabling is rerouted *through* the ghost |
+| **Only while holding Ctrl**, no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — the ghost's audio out joins what is already there, existing cables untouched |
+| **Only while holding Ctrl**, no modifier | any other module | **nothing** (hard stop) |
+| **Ctrl held**, either setting | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
 
-**Why the sink is special without a modifier.** Audio Output is a bare
+Under **Always** the insert is found by the ordinary rule — the dragged module sits to the left of its
+neighbour within 96 px, jack to jack — except when the drag is plainly aimed between two wired cards: that is
+judged like the Ctrl aim below, no key needed. "Plainly aimed between" is either of: the drag has opened an
+insert-between gap in front of that card (or found the gap already wide enough,
+`InsertGap::aimedAnchorKey`; [layout](layout.md#making-room-for-a-module-dropped-between-others)), or the aim sits inside
+the box spanned by that card and a card that feeds it. Without this a dropped module wired itself only when
+its jacks happened to be within 96 px of the next card's, which a gap pushed open to the card's own size and a
+taller or shorter neighbour often missed. Only an actual Ctrl press additionally relaxes that geometry anywhere, so a
+ghost can be aimed *into* the gap or onto the doomed cable (an overlapping ghost fails the jack test).
+`InsertGapConnect` (`Tests/UI/Graph/InsertGap/InsertGapConnectTests.cpp`) drops a module into gaps of 12 to 400 px with the
+real drag calls and checks source, module and target are wired in series and the direct cable is gone.
+
+**Why the sink is special without a modifier (Only while holding Ctrl).** Audio Output is a bare
 `juce::AudioGraphIOProcessor` — never a `ModuleBase`, since the graph's output channel count is tied
 to it — and is wired in essentially every real patch, so a hard stop there meant a module parked
 next to it could never be offered anything at all. Summing into the mix bus is also exactly what
@@ -120,6 +176,18 @@ the suggestion set really changed. It is seeded at `beginDragPreview`, so a drag
 already held is not reported as a change on its first tick. Guarded by
 `SmartConnectionReleasingCtrlMidDragDowngradesTheInsert`, which flips the modifier twice without
 moving the mouse.
+
+**The preview cables fade in, and the card settles.** The frosted cables do not pop: when a suggestion
+first appears (nothing before, something now) they fade in over 160 ms `easeOutCubic` (80 ms plain fade
+under Reduce Motion, at once under Animations Off) — `GraphEditor::refreshSmartSuggestionsWithReveal`
+drives one `AnimationDriver`, and `GraphContentComponent` scales every preview alpha by
+`getSmartPreviewReveal()`. A set that merely changes while the module keeps moving does not restart the
+fade, so nothing flickers. On drop the card glides into its snapped slot through the
+[card glide](animation.md): a card released from a drag settles from where it was held
+(`finalizeModuleDrag` opens a `CardGlideAnimator::Scope`), and a library drop that snapped into a
+connection settles from where the cursor aimed (`CardGlideAnimator::noteStartRect`). Geometry is final
+at once; only a paint overlay slides. Guarded by `SideBySidePreviewFadesInWhenItAppearsAndLandsAtOnceWithAnimationsOff`
+and `SideBySideSnappedLibraryDropSettlesFromWhereTheCursorAimed`.
 
 **Insert previews are tinted.** An insert reroutes existing cabling rather than adding to it, so its
 new legs are drawn tinted toward the theme's `warning` token — interpolated over the colour
@@ -272,7 +340,15 @@ a visible jack owns). An unconnected jack is a no-op. The first click of a doubl
 (and immediately ends) a cable drag; the second click is intercepted in
 `ModuleComponent::mouseDown` (`getNumberOfClicks() >= 2`) so it does not start another drag.
 
+A visible CV jack that drives a knob's modulation is the exception: with one modulation source on that knob the
+double-click removes just that source's chain (one undo step); with several it opens the knob's mod dot menu with the
+remove buttons highlighted instead of disconnecting them all
+([the mod dot](../modules/modulation.md#the-mod-dot-menu)).
+
 `Settings -> Preferences -> Double-click port to disconnect`, persisted as
 `doubleClickPortDisconnect` in `juce::ApplicationProperties`. Default: **on**. Restored in
 `MainComponent::initialiseCommon()`, so the canvas honours it without opening Settings. When off,
 double-clicking a jack behaves like two single clicks, i.e. a cable drag.
+
+The jack and mod-dot hit targets grow with a zoomed-out canvas (up to double the card-local radius, at 50% zoom and
+below), so they keep their zoom-1 size on screen. Where jacks sit closer than that, the nearest one wins.

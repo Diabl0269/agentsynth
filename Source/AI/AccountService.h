@@ -29,6 +29,10 @@ struct AccountSnapshot {
     int monthlyRequestLimit = 0;
     int requestsUsed = 0;
     bool entitlementKnown = false;
+    // ISO-8601 end of the current billing period, empty when the server sent none (a Free account);
+    // cancelAtPeriodEnd is true once a Pro subscription is set to stop at that date.
+    juce::String periodEndIso;
+    bool cancelAtPeriodEnd = false;
 
     // Opt-in flag for hosted-mode prompt collection used for product learning (human review,
     // never training/fine-tuning — see docs/ai/feedback.md#opt-in-prompt-collection). Off by default, matching
@@ -102,8 +106,8 @@ public:
     /** Re-fetches entitlement only (plan/limit/usage), leaving sign-in state untouched. No-op if
         signed out. Fire-and-forget — publishes an updated snapshot via onStateChanged on success,
         silent (logged, non-fatal) on failure, same contract as the entitlement fetch inside
-        completeSignIn(). Intended for "the user may have just paid — check again" moments (P4-4:
-        AIChatComponent calls this right after a Quota error). */
+        completeSignIn(). Intended for "the user may have just paid — check again" moments
+        (AIChatComponent calls this right after a Quota error). */
     void refreshEntitlement();
 
     /** Re-fetches the prompt-learning opt-in preference only, leaving sign-in state and

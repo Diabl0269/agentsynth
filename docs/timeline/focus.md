@@ -15,12 +15,14 @@ to decide *which* surface's selection and clipboard they mean.
 `MainComponent::resolveEditSurface() const` is the single focus-ownership rule:
 
 ```cpp
-enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane };
 ```
 
 It returns `TimelineClips` / `PianoRoll` when the timeline panel is visible AND real keyboard focus
 (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area or piano roll
-respectively; `Mixer` when the mixer panel is actually showing (`BottomDockComponent::
+respectively, and `AutomationLane` when it sits on an automation lane editor
+(`TimelineAutomationLanes::focusedEditor()`; the point commands act on `MainComponent::activeLaneEditor()`, which
+falls back to the lane last shown or focused so a test override has a target); `Mixer` when the mixer panel is actually showing (`BottomDockComponent::
 isMixerShowing()` — covers docked-and-on-the-Mixer-tab and detached-to-a-window — OR
 `MixerPlacementController::isOwnPanelShowing()` for the "Own panel" placement) AND real keyboard
 focus sits inside `MixerPanelComponent` (FRO18: the mixer's single focusable leaf — every column's
@@ -66,8 +68,8 @@ clip selection:
   Audio fields go back through `setClipAsset` / `setClipGainDb` / `setClipFades` rather than a raw
   struct write, **so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's —
   a clipboard is only as trustworthy as whatever filled it.**
-- `duplicateSelectedClips()` calls `TimelineDoc::duplicateClip()` per selected clip, batched the
-  same way.
+- `duplicateSelectedClips()` is `repeatSelectedClips(1)` (below): the copies land as one block
+  starting where the selection ends, so duplicating adjacent clips never overlaps an original.
 - `cutSelectedClips()` is copy then delete the selection, as ONE `recordTimelineChange`, never
   wrapped a second time — that would make Cmd+Z a two-step undo for one gesture.
 - `repeatSelectedClips(count)` makes `count` back-to-back copies of the selection's own span (`max
@@ -141,6 +143,105 @@ one, which is what makes an unmodified `Delete` binding surface-scoped for free.
 `FocusArbitrationPlaybackDeleteTests.cpp`'s `DeletePerSurface` pins that a clips-focused Delete
 never touches the graph, a graph-focused Delete never touches the clips, and an empty selection on
 either falls through rather than eating the key.
+
+## Clip keyboard mode
+
+A keyboard-only user reaches a clip through the track header: **Right** on a focused header (or on the panel root, where Cmd+Shift+T and Tab leave focus: it enters the focused track, else the first track with clips; `handleRootFocusKey`)
+(`timelineClipNext`) calls `TimelinePanelComponent::enterTrackClips`, which picks the first clip
+starting at or after the playhead (else the track's first), makes it the lane area's **keyboard
+clip** and grabs lane focus. A track with no clips ignores the key. Keys, defaults and the verbs
+they run are in [`shortcuts.md`](../control/shortcuts.md#timeline); this section is the model.
+
+**Tab** walks the same path. Tab on the panel root (`handleRootFocusKey`, the `focusNextRegion` key) focuses the
+focused row, else row 0; Tab on a focused header enters that track's clips exactly as Right does; **Shift+Tab** on the
+keyboard clip goes back to its header, as Escape does. A row with no clips, a panel with no tracks and any row while a
+clip editor is open let Tab go on to the next region. Shift+Tab on a header goes to the previous region. Drum Kit
+tracks are reached the same way; their clips open in the drum machine. The timeline tool buttons are not Tab stops
+(the top bar's key ring reaches them with Up from the root).
+
+- **The keyboard clip is the selection.** `TimelineClipLaneArea::setKeyboardClip` replaces the clip
+  selection with that one clip and remembers its id; `getKeyboardClip()` only answers while that
+  id is still the sole selected clip. A marquee, a click elsewhere, Delete or an undo that removes
+  it ends keyboard mode without any extra bookkeeping, and every selection-based verb (copy, split,
+  mute, loop the selection) acts on it unchanged. A clip selected with the pointer is stepped from
+  by the same keys.
+- **Stepping** uses `Source/UI/Timeline/ClipKeyboardNav.h`: Left/Right follow the track's start
+  order; Up/Down pick the clip with the nearest start on the closest track above/below that has
+  clips (ties go to the earlier one). A step with nowhere to go is consumed and changes nothing.
+- **Enter** fires `onClipDoubleClicked`, the hook a double-click uses, so the clip opens in its editor: the drum
+  machine for a clip on a Drum Kit track, else the piano roll. Closing the editor returns focus to the lane with the
+  clip still the keyboard clip.
+- **Alt+Left/Right** run `TimelineDoc::moveClip` inside one `recordTimelineChange` (one undo step)
+  by one grid division: `TimelineViewState::divisionBeatsRaw` (the chosen Snap division even with
+  the snap switch off), one beat when Snap is Off; the start clamps at beat 0.
+- **Escape** is a fixed key: the lane clears keyboard mode and fires `onReturnToTrackHeaderRequested`;
+  the panel moves focus back to that track's header. The clip stays selected.
+- **Staying visible.** Every change fires `onKeyboardClipChanged`; the lane scrolls
+  `firstVisibleBeat` until the clip is on screen (a little in from the edge it came from), and the
+  panel moves `focusedTrackIndex_` to the clip's row and runs `ensureTrackVisible`.
+- **Focus ring.** The keyboard clip is outlined with the theme accent while the lane holds focus.
+- **Screen reader.** The lane area has title "Clips" and a group-role accessibility handler whose
+  text value is the keyboard clip, from `describeClipForAccessibility`
+  (`Source/UI/Timeline/ClipAccessibilityText.h`), e.g. "MIDI clip Bassline, track Bass, bars 5 to
+  9" (bar numbers are 1-based; the end is the boundary where the next bar begins; a clip off the
+  bar lines reads "from bar 2 beat 3.5 to bar 3 beat 1.5"; audio clips say "Audio clip", muted
+  ones append ", muted"). A value-changed event is posted only when the description changes.
+
+Tests: `Tests/UI/Timeline/TimelineClipKeyboardTests.cpp` drives real `KeyPress` events from a
+focused header; `TimelineClipKeyboardNavTests.cpp` covers the pure helpers. Real OS focus needs a
+native peer, so they assert the model the focus calls mirror (keyboard clip, selection,
+`focusedTrackIndex_`, open roll).
+
+## Piano roll focus
+
+Return in clip mode opens the roll and `TimelinePanelComponent::openPianoRoll` hands keyboard focus
+to its grid; **Escape** (nothing selected; with notes selected the first Escape clears the
+selection) closes it and `closePianoRoll` hands focus back to the lane, the clip still the keyboard
+clip. Tab from the grid walks the roll's own stops (`EditorTabWalk`, see
+[Clip editor Tab walk](#clip-editor-tab-walk)): the header chips left to right, the velocity Set box and the velocity
+strip, then back to the grid; the next Tab leaves through the region cycle. The scale-assist panel is its own region.
+The header chips are painted shapes,
+so each has a transparent `PianoRollHeaderChip` button over it: the Tab stop, accent focus ring,
+screen-reader name and role (a toggle chip reports its on state), tooltip, and the **Return**
+target (it runs the chip's one action, the same function a click runs).
+
+- **Focused note.** The one note the selection holds (`PianoRollComponent::getFocusedNote`); the
+  Alt+Left/Right keys (`pianoRollNavNextNote`/`pianoRollNavPrevNote`) move the selection, so they
+  move it. It is outlined with the accent focus ring while the grid holds focus, repainted on
+  focus gained/lost and on every selection change.
+- **Screen reader.** The grid has title "Piano roll" and a group-role handler whose text value is
+  the focused note from `describeNoteForAccessibility` (`Source/UI/PianoRoll/NoteAccessibilityText.h`),
+  e.g. "C4, bar 2 beat 1, length 1/8, velocity 100" (bar and beat are 1-based timeline positions;
+  length is a fraction of a whole note when exact, else "0.3 beats"). With no single note focused it
+  reads the clip name and note count ("Lead, 12 notes", plus ", 3 selected" for a multi-selection). A
+  value-changed event is posted only when the text changes.
+
+Tests: `Tests/UI/PianoRoll/PianoRollFocusedNoteTests.cpp` (real Alt+Arrow `KeyPress`es, the spoken
+value, the ring rendered to a software image), `PianoRollKeyboardReachTests.cpp` (chips, tab order,
+Return-opens/Escape-returns through the panel) and `NoteAccessibilityTextTests.cpp`. Real OS focus
+needs a native peer, so the ring is forced with `setFocusRingForcedForTest`.
+
+## Clip editor Tab walk
+
+The app's Tab is the region cycle (`Source/UI/Layout/FocusRegion.h`), so a control in an editor's header that only
+wants keyboard focus is never reached by Tab. Each clip editor's grid owns a `synth::ui::EditorTabWalk`
+(`Source/UI/Layout/EditorTabWalk.h`), a key listener on the grid that claims Tab before the region cycle does:
+
+- Tab from the grid lands on the first stop; Tab from a stop moves to the next; past the last it comes back to the
+  grid. The next Tab from the grid leaves through the region cycle, while a Shift+Tab there goes back to the last stop.
+  Shift+Tab walks the other way in the same manner. Rebinding Focus Next
+  Region or Focus Previous Region moves the walk too (`resolveFocusCycleKeyPress`).
+- A hidden, disabled or empty stop is skipped (the drum machine's Show all with a kit and nothing hidden).
+- The walk starts again when the editor opens a clip and when the grid loses focus to anything else.
+- **Drum machine** stops, in screen order: View switch, Play clip, Show all drums, Steps per bar, Swing, Humanise,
+  Ideas. Opening the editor focuses the grid. A key bubbling up from a focused stop never edits the grid's focus cell:
+  only Escape (close) and Play clip (Space) still work from there.
+- **Piano roll** stops: the header chips left to right, the velocity Set box, the velocity strip.
+
+Each stop has the accent focus ring, a `setTitle` name and a tooltip naming its shortcut, if any.
+`Tests/UI/Layout/EditorHeaderTabReachTests.cpp` is the guard: for every clip editor the timeline hosts it finds each
+header control from the component tree and walks Tab from the grid through the real key dispatch, so a new header
+control or a new editor is covered without being listed. `DrumMachineTests.cpp` pins the drum machine's exact order.
 
 ## Tests
 

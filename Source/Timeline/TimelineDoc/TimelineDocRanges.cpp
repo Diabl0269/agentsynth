@@ -7,6 +7,7 @@
 // where it starts reading its asset — otherwise the audio slides under the clip instead of the
 // clip being cut out of it. That is the one thing splitClip deliberately does not do, and the
 // reason these edits are not simply compositions of it.
+#include "ClipEdgeSizing.h"
 #include "TimelineDoc.h"
 #include "TimelineDocInternal.h"
 
@@ -64,11 +65,56 @@ bool TimelineDoc::trimClipStart(ClipId id, double newStartBeat, double secondsPe
         moved.startBeat = newStartBeat;
         moved.lengthBeats = end - newStartBeat;
         moved.fadeInBeats = 0.0;
+        moved.linkGroup = 0; // a cut edge is new content: the clip leaves its link group
         if (moved.assetRef.isNotEmpty())
             moved.sourceStartSeconds += trimmed * secondsPerBeat;
         owner->clips.erase(owner->clips.begin() + index);
         const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
         owner->clips.insert(pos, std::move(moved));
+        return true;
+    });
+}
+
+// The Trim case of resizeClipEdge: notes keep their absolute beat, see clipEdgeResult.
+bool TimelineDoc::resizeClipLeft(ClipId id, double newStartBeat) {
+    return resizeClipEdge(id, ClipEdge::Left, ClipSizingMode::Trim, newStartBeat);
+}
+
+// One edge drag of a MIDI clip, committed by the same clipEdgeResult the clip lane previews with. A left Trim
+// re-bases this clip's notes, so it leaves its link group (as every cut edge does); every other mode keeps the
+// notes shared or changes them all alike, so the group follows in the same mutation. Fades are left alone: the
+// edge is a resize, not a cut. An audio clip is refused: its left edge also moves the source offset, which is
+// trimClipStart's job.
+bool TimelineDoc::resizeClipEdge(ClipId id, ClipEdge edge, ClipSizingMode mode, double edgeBeat) {
+    if (!isFiniteAtOrAfterZero(edgeBeat))
+        return false;
+    Track* owner = nullptr;
+    auto* clip = findClip(id, &owner);
+    if (clip == nullptr || clip->assetRef.isNotEmpty())
+        return false;
+    const double end = clip->startBeat + clip->lengthBeats;
+    const double newStart = edge == ClipEdge::Left ? edgeBeat : clip->startBeat;
+    const double newLength = edge == ClipEdge::Left ? end - edgeBeat : edgeBeat - clip->startBeat;
+    if (!(newLength > 0.0))
+        return false;
+    if (newStart == clip->startBeat && newLength == clip->lengthBeats)
+        return true;
+
+    return applyMutation([&] {
+        auto result = clipEdgeResult(*clip, edge, mode, newStart, newLength);
+        // Lift and re-insert, as moveClip does: the start participates in the clip ordering.
+        const auto index = clip - owner->clips.data();
+        Clip moved = std::move(*clip);
+        moved.notes = std::move(result.notes);
+        moved.startBeat = result.startBeat;
+        moved.lengthBeats = result.lengthBeats;
+        if (edge == ClipEdge::Left && mode == ClipSizingMode::Trim)
+            moved.linkGroup = 0;
+        owner->clips.erase(owner->clips.begin() + index);
+        const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
+        const auto inserted = owner->clips.insert(pos, std::move(moved));
+        if (inserted->linkGroup != 0)
+            syncLinkedClips(*inserted);
         return true;
     });
 }
@@ -93,6 +139,7 @@ bool TimelineDoc::trimClipEnd(ClipId id, double newEndBeat) {
         clip->notes = std::move(kept);
         clip->lengthBeats = length; // length doesn't participate in the clip ordering
         clip->fadeOutBeats = 0.0;
+        clip->linkGroup = 0; // a cut is new content, like a split: the clip leaves its link group
         return true;
     });
 }
@@ -206,6 +253,7 @@ std::optional<Clip> TimelineDoc::clipToRange(const Clip& clip, double startBeat,
         return std::nullopt;
 
     Clip fragment = clip;
+    fragment.linkGroup = 0; // a detached copy belongs to no link group
     const double newStart = std::max(clip.startBeat, startBeat);
     const double newEnd = std::min(clipEnd, endBeat);
 

@@ -11,7 +11,7 @@ widgets it is built from, the EQ thumbnail, and keyboard navigation. What a chan
 Strips, buses, Direct and Master. **Nothing else — never an arbitrary module's output.** To put
 something in the mixer, make it a channel. A bus IS a strip
 ([`docs/mixer/sends-and-buses.md`](sends-and-buses.md#a-bus-is-a-channel-strip)), so "buses" here
-names a badge and a source line, not a fourth column widget.
+names a badge and a header badge, not a fourth column widget.
 
 `MixerPanelComponent` renders one `MixerColumnComponent` per strip in track order, then strips with no
 track by node id, then Direct, then Master. Each column holds a `MixerFader`
@@ -24,23 +24,67 @@ sends** — its list is the post-fader chain between Master and the Rec Tap or A
 strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
 kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
+### The sources badge
+
+What plays into a channel is a small **sources badge** in the column header (`MixerIconButton` with
+`Icon::MixerSources`, an arrow running into a bracket), at the right of the name next to the link glyph, BUS tag
+and receives badge. It shows only on a channel with sources (a feeding track's name, or a bus's feeding strips) that
+are not just the channel's own name -- a linked channel named after its one track already says so with the link
+glyph. Hovering it shows the full list, "Plays into this channel: Osc 6, Track 2"; the same words are its
+screen-reader title and description, and the header's own description lists them too. **There is no row under the
+header:** a column without the badge costs nothing, so no column reserves a blank line and every fader stays level on
+the shared section layout alone (`MixerSectionLayout` has no source-line geometry).
+The badge is a Tab stop; Return or Space selects the channel on the canvas, the same as a click anywhere else on the
+header, and its keyboard focus ring is the shared one `AppLookAndFeel::drawDrawableButton` draws.
+
+### The colour dot
+
+The coloured dot at the left of a header is a real button (`MixerColourDot`), not painted swatch. Clicking it, Return
+while it has focus, or **C** on the focused column ([strip focus](strip-focus.md#colour)) opens the picker of its source:
+
+- **A channel one track feeds** opens that track's picker -- the very one its Timeline swatch opens
+  (`buildTrackColourPicker`, `Source/UI/Timeline/TrackColourPicker.h`, shared by both). A live preview writes the track
+  colour with no undo step; the mixer re-tints through the usual `timelineChanged` -> `refreshTrackColours()`
+  path, and the track's channel macro follows through `TrackChannelLinkSurface::buildOwnedMacroColourPicker`. Closing
+  with no net change restores the colour and records nothing; any other close is **one undo step** (Cmd+Z restores the
+  track and the macro together).
+- **A bus, a channel two tracks share, an orphan strip** have no single track, so the dot opens the macro they take
+  their colour from (`GraphEditor::promptRecolourMacro`, the macro card's own picker).
+- **A channel with neither** keeps the dot as a plain swatch: disabled, not a Tab stop, with a tooltip saying so.
+  Direct and Master have no colour and show no dot.
+
+The dot is part of the header's drag handle: a press on it that becomes a drag reorders the column and the release is
+not a click. Its name is "<channel> colour" and its tooltip "Change this channel's colour".
+`MixerPanelComponent::buildTrackColourPicker` is wired by `MainComponent` through
+`BottomDockComponent::setOnBuildTrackColourPicker` and copied to the mirror view by `copyWiringFrom`. The picker opens
+in a `juce::CallOutBox` anchored on the dot and fades in and out ([popup windows](../layout/animation.md#popup-windows), which
+lands at once under the OS's Reduce Motion setting); every colour picker in the app does, the Timeline's included.
+
+**Column colour.** A column's header shows a swatch and a 2px stripe across its top edge in the colour of the
+one track that feeds it (the colour the Timeline shows), so a channel and its track match at a glance. A bus, a
+channel shared by two tracks and an orphan strip have no single track and keep their macro's colour.
+`buildMixerSnapshot` picks the colour; a track colour edit (including the picker's live preview) re-tints the
+existing columns in place through `MixerPanelComponent::refreshTrackColours()`, driven from
+`MainComponent::timelineChanged`, with no rebuild.
+
 Direct only shows once the graph has an Audio Input or MIDI-in tap for it (`snapshot.hasDirect`),
 and Master only shows once a `MasterModule` node exists (`snapshot.hasMaster`) — a brand-new project
 has neither, and no strip either, so the panel would otherwise render nothing at all. **FRO299:**
 `MixerPanelComponent` shows a muted, centred hint instead whenever `columnEntries_` ends up empty
 after a rebuild — a direct child of the panel itself (never `content_`/`viewport_`, so it neither
 scrolls nor takes keyboard focus or mouse clicks), naming the controls that are actually reachable
-from every mixer placement: the Timeline's own "+ Track" button, and "+ Bus" in the bottom panel.
+from every mixer placement: the Timeline's own "Add Track" button, and the mixer toolbar's "Add Bus".
 
-**A strip/bus column's own resized() protects the fader first, everything else second (FRO298).**
-The column's parts have a fixed priority, highest first: the header and source line, the M/S row,
-the meter readout plus the fader/meter row (kept at least `MixerColumnComponent::kMinFaderHeight`
-tall so the slider itself stays draggable), then the pan knob, then the insert list, then the send
-list, then the EQ thumbnail. At the bottom dock's default height the lower-priority parts give way
-first — the insert/send lists clip to fewer rows and the EQ thumbnail can drop to zero height
-(never toggled invisible, since `isVisible()` means "has EQ") — so the fader only ever shrinks
-below the others, never before them. With plenty of room every part still gets exactly what it
-asked for, same as before this guarantee existed.
+**Every column lays out against the panel's shared sections, and the fader is protected first
+(FRO298, FRO351).** The Inserts, Sends and EQ rows have one height across every column (see
+[Shared sections](#shared-sections)), so faders line up whatever each channel holds. When the column
+is too short for every section plus a `MixerColumnComponent::kMinFaderHeight` (56 px) fader --
+showing the mixer grows its host to fit, so this happens only once the user makes it shorter
+again -- `MixerSectionLayout::resolve()` keeps the fader's minimum
+(so the slider itself stays draggable) and takes the shortfall lowest priority first: the EQ row,
+then Sends, then Inserts, then the pan knob, identically in every column. The EQ thumbnail only
+ever gets empty bounds, never toggled invisible, since `isVisible()` means "has EQ". With plenty of
+room every section gets its full shared height and the fader takes the rest.
 
 **Solo always routes through the engine.** The S button calls
 `AudioEngine::setChannelStripSoloed`, never the module directly
@@ -50,13 +94,35 @@ asked for, same as before this guarantee existed.
 the strip's `gain` parameter via `juce::SliderParameterAttachment` and brackets the gesture through
 `parameterGestureChanged` to `AppUndoManager::captureBeforeState`/`pushSnapshotFromCapture`.
 
-`Cmd+2` (`toggleMixerPanel`, FRO333) opens the bottom dock on the Mixer tab if it's hidden and
-switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
+The Mixer's tab key is its place in the tab strip (`Cmd+2` by default, `showDockTab2`): it opens the bottom dock on the
+Mixer tab if it's hidden and switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
 dock-wide toggle/show split, the tab order and detach behaviour.
+
+### Reordering columns
+
+A **track strip** column (a strip some track feeds) is dragged by its header, exactly as drawn (name and colour dot included). The cursor stays the arrow until the press becomes a drag, then the grab hand until release; a plain click on the header selects the column, the same shared
+[reorder drag](../layout/animation.md#reorder-drag) the dock tabs use: the column follows the pointer
+at the spot it was grabbed, lifted (raised wash, 1 px `accent` border, soft shadow), the other track
+columns glide aside, and the columns viewport autoscrolls when the pointer nears its left or right
+edge (`MixerPanelColumnDrag.cpp`). Under 4 px of travel the press is an ordinary header click
+(select on canvas, the view [flying](edit-on-canvas.md) to it; double-click the name to rename); a drag's release is never also a click.
+
+The mixer lists track strips in timeline track order, so a drop **reorders the timeline's tracks
+too**: `MixerPanelComponent::onMoveTrack` moves the dragged strip's *first* feeding track to the
+timeline index of the first track of the strip it takes the place of. `MainComponent` wires it to
+`performTrackEdit(moveTrack)` (one undo step; undo puts both the timeline and the mixer back) and
+rebuilds the mixer. Esc cancels with nothing committed. Buses and orphan strips are **not
+draggable among the track strips: a **bus** or orphan strip (a strip no track feeds) is dragged the
+same way but **only among the other buses**, and a track strip never passes a bus. A bus drop saves the
+new order in the view document (`MixerViewDoc::setBusOrder`, the `"mixerView"` key's `"busOrder"` list
+of uuids) as one undo step, and `rebuild()` applies it to the snapshot before the columns and the
+side pane read it, so both agree; a bus the saved order has not seen yet sorts after the listed ones,
+and a hidden bus keeps its place in the list. Without a saved order the buses fall back to `NodeID`
+order. Direct and Master never move, and a dragged column is held inside its own group.
 
 ### Renaming a channel
 
-Double-click a column's header name to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
+Double-click a column's header name, or press F2 / Option+R on the focused column (`MixerPanelComponent::renameFocusedColumn`, also in a detached window), to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
 the exact `juce::Label(false, true, false)` + `onTextChange` pattern
 `TimelineTrackHeaderComponent::nameLabel_` already established for track renaming, so the app's two
 "double-click a name to rename it" surfaces behave alike. Direct and Master have no name to rename
@@ -85,61 +151,80 @@ track-walk rule, so renaming a channel here renames its stem file too.
 
 ## The tab strip
 
-FRO333: `BottomDockComponent` offers its three tabs (Timeline, Mixer, Controllers) through one
-drag-reorderable strip, backed by a `std::vector<Tab> tabOrder_` — a permutation of all three,
-persisted as `bottomDockTabOrder` (comma-joined tab names, e.g. `"mixer,timeline,midiRemote"`;
-default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
+Four views (Canvas, Timeline, Mixer, Controllers) share two places: one sits in the main area
+(`mainView`, the canvas unless one was swapped up), the others are tabs in one drag-reorderable strip. `BottomDockTabModel`
+holds the order, a permutation of all four persisted as `bottomDockTabOrder` (default
+`"timeline,mixer,midiRemote,canvas"`; a saved three-entry order gains `canvas`), and the main view,
+whose slot stays hidden. `setMainView(B)` swaps B's and the old main view's slots, so the view coming
+down takes B's place; the Timeline, Mixer (Tab placement only) or Controllers host moves into the main area
+([main view](../layout/chrome.md#the-main-view)), where the Mixer never grows the panel height. The swap icon on each tab does this ([below](#the-tab-strip)); the choice is
+remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In Own panel or Window placement the Mixer has no tab or swap icon, and a saved Mixer main view waits (Canvas stands in) until the Tab placement returns.
 
-- **One toggle, three shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
+- **One toggle, four shows.** `Cmd+J`/the toolbar button (`toggleBottomPanel`) is the only thing
   that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
-  active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
-  `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
-  was hidden, otherwise just switching — and never close it.
-- **Drag to reorder.** Dragging a tab button past another swaps their two slots in `tabOrder_` live
-  (`BottomDockComponent::dragTab`), and the swap is persisted, and the three tabs' own Cmd+digit key
-  bindings re-keyed to match (`permuteShortcutKeysForNewOrder`), only on mouse-up after a real drag —
-  a plain click still fires that tab's `onClick` as usual. The re-key only touches the three
-  bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set (see
-  [`docs/control/shortcuts.md`](../control/shortcuts.md)).
-- **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes a tab
-  that's detached to its own window (or, Mixer only, disabled by the Own-panel/Window placement
-  preference) from both the layout and the Cmd-digit count; `applyTabVisibility` picks a fallback —
-  the active tab if it's still offered, else the first offered tab in `tabOrder_` order — every time
+  active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`showDockTab1`..`3`, the tab at that place of the strip;
+  `MainComponent::showBottomDockTab`) each only show their tab — opening the dock first if it
+  was hidden, otherwise just switching — and never close it; Cmd+0 focuses the view in main. `Opt+Cmd+1`-`3` swap a tab in (below).
+- **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
+  tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
+  the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
+  Past a 4 px threshold the dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`):
+  it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row, in the shared
+  `paintReorderLift` look (`surfaceHi` fill, 1 px `accent` outline, soft shadow, 95% opacity, easing in with the
+  lift); the other tabs glide aside (160 ms) and the gap shows a 1 px dashed `border` outline (its swap icon hides). **The order does not change while dragging.** On release
+  it is applied and persisted in one go and the lifted tab settles into its slot (140 ms); the keys
+  follow the places (Cmd+1-3 show, Opt+Cmd+1-3 swap), so the dragged tabs re-key. Esc returns the tab and commits
+  nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
+- **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
+  tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
+  Canvas); the tooltip reads "Shift + Return or <bound key>" (modifiers are the Mac symbols on macOS) (Shift+Return on the focused strip; `Opt+Cmd+1`-`3` by default, `swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
+  ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
+  `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
+  `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
+  its own window, which also takes the tab out of the strip. The icon is a button inside the tab's radio element and
+  not a Tab stop (the strip stays one); Shift+Return on the strip presses the active tab's icon, which shows the
+  focus ring while Shift is held on the focused strip.
+- **The detach icon.** Every tab but Canvas has a `Glyph::Detach` `IconButton` left of the swap icon, named "Detach <Tab>
+  to its own window"; Option+Return on the strip presses it (ring while Option is held; the tooltip names the key). A click
+  runs `toggleTabDetach(tab)` for THAT tab (Mixer in "both" mode toggles its mirror). Esc or Cmd+W in the window docks the
+  panel again (after app shortcuts and the panel's controls; fixed keys), Cmd+1/2/3 raise and focus it (mirror open: raise
+  the mirror, focus the docked copy), and tabs glide in and out ([animation](../layout/animation.md#bottom-dock-tabs)).
+- **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes the main
+  view, a tab detached to its own window (the canvas has no host and never detaches) and a Mixer
+  disabled by the Own-panel/Window placement; `applyTabVisibility` picks a fallback —
+  the active tab if it's still offered, else the first offered tab in strip order — every time
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
-  showing nothing (FRO158). `MainComponent` hides the whole dock only once
-  `BottomDockComponent::hasAnyVisibleTab()` goes false, and reopens it automatically the moment a
-  redock brings it back true — `bottomDockAutoHiddenByEmptyTabs_` tracks that this specific
-  auto-hide (never a deliberate Cmd+T close) is what a later redock should undo.
-- **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is
-  otherwise unreachable from a separate top-level `DetachedPanelWindow` (see
-  [**Per window keyboard focus**](#per-window-keyboard-focus) below); `DetachedPanelWindow::onAppShortcut`
-  is the one retry hook `MainComponent` wires (via `DetachablePanelHost::onAppShortcutFallback`) so
-  Cmd+T/Cmd+1..3 still work with a detached window focused, without a global key monitor that would
-  also steal keys a hosted plugin's own window should get first.
+  showing nothing. `MainComponent` hides the whole dock only once `hasAnyVisibleTab()` goes false and reopens it the
+  moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+J close).
+  The main view's own panel detaching suspends it: the Canvas takes the main area ([main view](../layout/chrome.md#the-main-view)); the **Detach Main View** command (`detachMainView()`) does it from the main area.
+- **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is otherwise
+  unreachable from a separate top-level `DetachedPanelWindow` (see [**Per window keyboard focus**](#per-window-keyboard-focus));
+  `DetachedPanelWindow::onAppShortcut`, wired through `DetachablePanelHost::onAppShortcutFallback`, retries them, with
+  no global key monitor that would steal keys a hosted plugin's own window should get first.
 
 ## Placement and detachable windows
 
 Panel placement is a **Preferences setting** with three options: **Tab beside the Timeline**
 (default), **Own panel**, or **Window**.
 
-**Why a tab as the default.** A tab beside the Timeline puts the mixer where the bottom dock already
-is, with no second dock to learn and no window to manage; the other two stay available as settings for
-users who want them.
+**Why a tab as the default.** It puts the mixer where the bottom dock already is, with no second dock or window
+to manage; the other two stay available as settings.
 
-Whichever is chosen, detaching a panel into its own window uses **one mechanism shared by Timeline
-and Mixer, not two** — detaching the Timeline and detaching the Mixer are the same code path applied
-to different panels, not two separate features. The reference implementation is the existing
-hosted-plugin pattern, `Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}`, including its
-`addToDesktop=false` construction path, which is **the headless-testable seam** that lets a window be
-built and inspected in a test with no real desktop window ever created.
+Whichever is chosen, detaching a panel into its own window is **one mechanism shared by Timeline and Mixer**, the
+same code path for both. The reference is the hosted-plugin pattern, `Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}`,
+including its `addToDesktop=false` path, **the headless-testable seam** that builds a window with no real desktop
+window.
 
-The detach control is **icon-only**, with a tooltip reading "Open in window" when docked and "Dock
-back" when detached.
+The detach control is **icon-only**, tooltip "Open in window". A detached window has **no header strip**: the panel fills it and
+the window title names it. The way back is the **Dock back** button (`DockBackButton`, `Icon::ActionDockBack`, an arrow into a
+window), handed to the panel only while detached through the `DockBackSlot` interface (`DetachablePanelHost::setDetached`) and
+shown at the right end of that panel's own toolbar: the Mixer toolbar, the Timeline transport row, the Controllers (MIDI Remote)
+toolbar. Docked toolbars lay out exactly as before, and no toolbar control overlaps the button at the panel's minimum width.
+Tooltip "Dock back  (Esc)", screen-reader title "Dock back", Tab-reachable with the shared focus ring; Esc and Cmd+W close
+the window the same way.
 
-**In the plugin build a detached window sets its OWN `LookAndFeel` instance; it never calls
-`Desktop::setDefaultLookAndFeel`**, which is process-global inside the host and would repaint
-everything else the host owns (root `CLAUDE.md` / `Source/UI/CLAUDE.md` invariant). Keyboard focus is
-scoped per window.
+**In the plugin build a detached window sets its OWN `LookAndFeel` instance, never `Desktop::setDefaultLookAndFeel`**
+(process-global inside the host; `Source/UI/CLAUDE.md`). Keyboard focus is scoped per window.
 
 ### The three placements
 
@@ -148,8 +233,8 @@ The mechanism is `Source/UI/Layout/DetachablePanelHost/` (`DetachablePanelHost` 
 between its dock and a `DetachedPanelWindow`. `BottomDockComponent` owns three hosts,
 `timelineHost_`/`mixerHost_`/`midiRemoteHost_`, each wrapping the SAME `TimelinePanelComponent`/
 `MixerPanelComponent`/`MidiRemotePanelComponent` instance it already held, so scroll, zoom and
-selection survive a detach untouched. `midiRemoteHost_` (FRO131) is always Tab placement — no
-Own-panel/Window placement variant like Mixer's own, so it has no third row in the table below.
+selection survive a detach untouched. `midiRemoteHost_` is always Tab placement (no Own-panel/Window variant, so no
+row in the table below).
 
 `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h` adds for this) moves
 `mixerHost_` between its three homes:
@@ -165,7 +250,7 @@ Own-panel/Window placement variant like Mixer's own, so it has no third row in t
 FRO336 adds a second, orthogonal Preferences setting: **"When a panel opens in its own window:"
 Move it there** (default) or **Show it in both places** (`detachedPanelBothPlaces`, "move"/"both" —
 `BottomDockComponent::usesMixerMirrorForDetach`). It only changes what the Tab placement's own
-tab-strip detach button (above) does for the **Mixer** tab; Timeline/Controllers, and Mixer's own
+tab's detach icon (above) does for the **Mixer** tab; Timeline/Controllers, and Mixer's own
 Own-panel/Window placements, always move (see `usesMixerMirrorForDetach`'s own guard).
 
 **Why "both" needs a second instance, not a second parent.** A `juce::Component` has exactly one
@@ -207,7 +292,7 @@ rebuilds it (e.g. `MixerMasterColumn::setColumn()`, called on every mixer rebuil
 the engine's current law for exactly this reason — a rebuild must never leave the label stale either).
 
 **Every mixer-view-wide seam reaches the mirror too, when one is open**:
-`BottomDockComponent::unbindAllMixerViews()`/`rebuildIfUnboundMixerViews()` (Source/UI/CLAUDE.md's
+`BottomDockComponent::unbindAllMixerViews()`/`rebuildIfStaleMixerViews()` (Source/UI/CLAUDE.md's
 mixer-unbind invariant — MainComponent wires these, not `getMixerPanel()` directly, to
 `GraphEditor::onBeforeDetachAllModuleComponents`/`onGraphStructureChanged`), `rebuildMixer()`,
 `refreshMeters()`, and the theme re-skin pass (`refreshMixerMirrorWindowTheme()`). A fresh mirror
@@ -228,21 +313,15 @@ Own panel/Window (`setMixerTabEnabled(false)`), since those placements have thei
 detach state.
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
-22 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
-acts on whichever tab is active, and the header — with the real button, now reading "Dock back" —
-appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
-either host's own button through three different parents.
+24 px tab strip (`BottomDockComponent::kTabStripHeight`) carries each tab's own detach icon, and the header
+(a "Dock back" button) is gone: the DETACHED window shows the panel alone, and its toolbar carries "Dock back".
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
-dock's own top edge — not inside the Timeline panel — so the Mixer and Controllers tabs resize the
-dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
-22 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
+dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 24 px; tab buttons are laid out below it, so a grab never lands on one) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
-`onResizeHeightCommitted`. FRO338: `+ Bus`/Reset Meters no longer share the tab strip's carve at
-all (they used to be carved from its right edge, Mixer-tab-only, which meant the strip's own width
-split changed depending on which tab was active) — they now sit in their own slim toolbar row
-directly below the tab strip, inside the Mixer tab's content area, laid out only while Mixer is
-active; every other tab gets the full content height instead. The rules (clamp, persistence, live relayout) are in
+`onResizeHeightCommitted`. The dock carves nothing for the Mixer: `Add Bus`/Reset Meters live in the
+mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the
+active tab and every tab gets the full content height. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
 separate strip with its own handle, below.
 
@@ -284,6 +363,11 @@ which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock).
 
 ### Per window keyboard focus
+
+Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on the
+focused column opens the same menu a right-click on its header does (Pin left / Pin right / Unpin, plus Duplicate Track on a strip fed by exactly one track), placed at
+the column. `MixerPanelComponent` is the provider because it is the single focusable leaf; both paths call
+`showChannelMenu`.
 
 `MainComponent::keyPressed` is the sole Tab dispatch point and is unreachable from a separate
 top-level window, so **`DetachedPanelWindow` resolves Tab and Shift+Tab itself** against its OWN
@@ -386,17 +470,10 @@ the grey has to come from somewhere the pointer it's handed is null or stale:
    the wrong surface colour. Fixed by `DetachablePanelHost::refreshDetachedWindowTheme()`, called on
    all three hosts from the same re-skin pass, right after the existing broadcast.
 
-**FRO228: the header's own redock/close button needs its icon re-applied by THIS window, not just
-by `DetachablePanelHost`.** `DetachablePanelHost::applyIcon()` sets the button's `Drawable` images
-from its OWN `lookAndFeelChanged()` — but that button (borrowed, see the class comment above) is
-reparented into `Content` the moment `setDetached(true)` runs, and nothing thereafter guarantees
-`DetachablePanelHost`'s own callback fires again for it. A `DrawableButton` with no image ever
-assigned to it paints nothing at all, not a placeholder — exactly the second half of the same manual
-pass's finding. `DetachedPanelWindow::applyHeaderButtonIcon()` re-applies the identical
-`Icon::ActionDetachWindow` icon from THIS window's own `lookAndFeelChanged()` instead, so the button
-is correct regardless of whether the host's own callback ran before or after the reparent; `content_`
-is now built before `setLookAndFeel()` so the synchronous `lookAndFeelChanged()` that call fires
-already has a real `content_->button` to apply it to.
+**FRO967: the detached window has no header, so there is no header button to re-tint.** `DockBackButton` re-applies its
+own icon (`Icon::ActionDockBack`, tinted `textMuted`, hover `textPrimary`) from its `lookAndFeelChanged()` and
+`parentHierarchyChanged()`, so it is correct on whichever toolbar adopts it. The Mixer's second window (`MixerMirrorController`)
+owns its own `DockBackButton` and hands it to the mirrored panel the same way.
 
 ## Unbinding before a graph change
 
@@ -407,8 +484,52 @@ top; `MainComponent` wires that to `MixerPanelComponent::unbindAllColumns()`, wh
 strip column's and Master's fader, pan, mute, solo, meter and EQ thumbnail and clears their raw
 pointers **without destroying anything** (`MixerColumnComponent::unbindFromGraph()` /
 `MixerMasterColumn::unbindFromGraph()`, both idempotent and null-safe, like `MixerFader::unbind()`).
+An undo or redo that frees only some nodes goes through `GraphEditor::detachModuleComponentsFor()`
+instead, which fires `onBeforeDetachModuleComponentsFor(doomed)`; `MainComponent` wires that to
+`MixerPanelComponent::unbindColumnsFor()`, which unbinds only the strip columns bound to a doomed node
+(`MixerColumnComponent::bindsAnyOf`: the strip and its inserts) plus Master, so the rest stay bound.
 `~MainComponent()`'s own `detachAllModuleComponents()` call, already ordered before
 `audioEngine.shutdown()`, covers the same teardown hazard for free.
+
+### A rebuild keeps the columns that did not change
+
+A hidden panel (its tab not showing) does no rebuild work: `rebuildIfStale()` and `rebuildWhenShown()` (what
+`BottomDockComponent::rebuildMixer()` calls) only record that a stale check or a rebuild is due, and
+`visibilityChanged()` runs the one that is due when the panel shows again. A detached panel stays visible, so it is never
+held back. `rebuildIfStale()` hands the snapshot it compared to the rebuild instead of building it twice.
+
+`MixerPanelComponent::rebuild()` builds a fresh snapshot but re-creates only the strip columns it has to
+(`MixerPanelColumnReuse.cpp`): a column is **kept** when it is still bound and everything it was built from is equal
+-- its `synth::MixerColumn` and sources line (`MixerColumnComponent::showsColumn`, every field compared) and what the
+panel decided for it (colour dot editable, zone). Re-creating every column made a knob undo, a duplicate and its undo
+grow with the number of channels. Rules that keep a kept column right:
+
+- **Everything `setColumn()` shows comes from the column and the sources line.** A new field drawn from the graph or
+  the doc goes into `MixerColumn` (so a change to it rebuilds the column), never read on the side in `setColumn()`.
+- A kept column's controls follow parameter changes through their own listeners; mute and solo are module state with
+  no listener, so a kept column re-reads them (`refreshMuteSoloVisual()`), and its reveal highlight is cleared as a new
+  column's would be. Meter ballistics, the clip readout and an armed MIDI Learn outline carry on.
+- `refreshTrackColours()` re-tints in place and records the colour as shown, so the next rebuild keeps the column.
+- An unbound column is never kept: `unbindAllColumns()` makes the next rebuild re-create every column.
+
+`MixerPanelIncrementalRebuildTests.cpp` counts the columns built (`getStripColumnsBuiltForTest()`): none for a knob
+undo, one for a duplicate, none for its undo.
+
+**Canvas edits refresh the mixer at once (FRO737).** A cable patched on the canvas rebuilds no components, and a module
+added or deleted reaches only `GraphEditor::onGraphStructureChanged`, whose catch-all never ran a full mixer rebuild, so
+an insert patched between an oscillator and a VCA used to show only after an unrelated mixer action. Both now call
+`rebuildIfStale()` (through `BottomDockComponent::rebuildIfStaleMixerViews()`, so the mirror follows): from
+`onGraphStructureChanged` and from the undo manager's broadcast, which every recorded edit, undo and redo sends. It
+rebuilds when the columns are unbound or a fresh snapshot differs from the one the last `rebuild()` laid out
+(`snapshotShown_`), and otherwise costs one snapshot build and compare.
+
+A column that arrives with an added or duplicated track grows in the same way, forward (`armColumnInsertMotion`, set by
+`MainComponent::TrackGrowInScope`). A column that leaves the scrolling group (the undo of Add Track or Duplicate Track) also shrinks away toward its centre
+and the columns after it close up, and the redo that brings it back makes room, grows it back and fades an outline around
+it: `MixerPanelColumnMotion.cpp` pictures the scrolling group before the change (`noteColumnsLeaving`) and plays the
+picture over the finished rebuild (`finishColumnChange`). A deleted track's own channel leaves the same way, in step
+with its row, and comes back with Cmd+Z; a column that only moves (a pinned one, a drag) lands at once
+([delete and undo](../layout/animation.md#delete-and-undo-animation)).
 
 **FRO133 (right-click MIDI Learn on the mixer, [`docs/control/midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage))
 adds one more thing to this list.** Both `unbindFromGraph()` methods above also clear a small MIDI
@@ -422,7 +543,20 @@ everything else this section covers.
 **FRO292: the same right-click menu leads with "Automate '<Param>'"** on the fader, pan and send
 knobs (Mute and Solo are not automatable lanes). It fires `GraphEditor::onAutomateParameterRequested`
 — the route a canvas knob's own right-click uses — so `MainComponent::automateParameter` creates the
-lane and opens the automation strip on it. It is offered even when no Controllers host is wired.
+lane and shows it under its track in the timeline. **FRO350:** it also switches the bottom dock to the Timeline
+tab (`showBottomDockTab`, so a detached Timeline window is brought forward instead) and selects the new
+lane. It is offered even when no Controllers host is wired.
+
+### Automation markers
+
+A fader, pan or send knob whose parameter has a lane on the timeline shows the same small marker as a module card
+([`layout/module-card.md#automated-marker`](../layout/module-card.md#automated-marker)): a short slanted line with a dot
+at each end, at the control's **top-left**, where the violet MIDI-mapped dot keeps the top-right. A column asks
+`GraphEditor::onQueryAutomatedParamsForNode` (which `MainComponent` answers from the timeline doc) on its existing
+10 Hz meter tick (`MixerColumnAutomationMarker.cpp`, `MixerMasterColumnAutomationMarker.cpp`); the master fader does
+the same. The marker fades in over 160 ms and out over 110 ms, the control's tooltip gains an "Automated: <parameter>"
+line, and its screen-reader description says "Automated" for as long as the lane exists. Tests:
+`MixerAutomationMarkerTests.cpp`.
 
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
@@ -436,7 +570,7 @@ Windows passing only by luck.
 **Every single-node removal path needs the same seam, or a liveness check.**
 `GraphEditor::deleteSelection()` (a canvas Delete, `deleteMacroAndMembers`),
 `requestDeleteModule()` (a card's own delete button and its "Delete Module" item) and
-`replaceModule()` (the "Replace with..." submenu, offered for every module except the singleton Audio
+`replaceModule()` (the "Replace with..." picker, offered for every module except the singleton Audio
 Input and Output — so it reaches a `ChannelStripModule`, and a `MasterModule`, which is deliberately
 kept out of every collapsed macro and is therefore always individually addressable) all fire
 `onBeforeDetachAllModuleComponents` immediately before their `graph.removeNode()`.
@@ -462,12 +596,178 @@ yet.
 graph rebuild or a panel rebuild. It uses a `juce::Component::SafePointer`, this codebase's standing
 convention for the pattern.
 
+## The toolbar
+
+`MixerPanelComponent` owns a 24 px `MixerPanelToolbar` (`MixerPanelComponent/MixerPanelToolbar.{h,cpp}`)
+along its top edge, so the row belongs to the panel and follows it into every placement: the docked
+tab, the Own panel and a detached window (the columns get `panel height - 24`, see
+`requiredPanelHeight()`). It sits outside the horizontally scrolling viewport, so it stays put while
+columns scroll, and it is shown even with no columns -- `Add Bus` is how an empty mixer gets its first
+bus.
+
+- **Far left: the side-pane button.** Shows and hides the panel's [side pane](#side-pane-zones-and-visibility)
+  (a sidebar glyph, accent wash while the pane is open); Cmd+Shift+B does the same.
+- **Left, after it: Inserts / Sends / EQ toggles.** Compact inline `ToolbarButton`s ([inline
+  buttons](../layout/chrome.md#inline-buttons)): an accent icon chip with the name beside it, solid with a faint pill
+  while on. On means the section is shown. A click calls `MixerSectionLayout::toggleHidden` -- the same commit and
+  persist path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
+  from it after every layout change (`MixerPanelToolbar::refresh()`), so clicking a column's
+  collapsed strip flips the toggle back on. Their accessible names are "Inserts", "Sends" and "EQ"
+  with the toggle state; the tooltip says "Hide Sends" / "Show Sends" plus the current binding. With the
+  mixer focused, **Ctrl+I / Ctrl+S / Ctrl+E** (Ctrl+Alt+letter on Windows/Linux) do the same, rebindable
+  in the Mixer shortcut category ([shortcuts](../control/shortcuts.md#mixer)).
+- **Right: Reset Meters and Add Bus.** Inline `ToolbarButton`s too (violet and amber chips). "Reset Meters" calls
+  `resetAllMeterReadouts()`; "Add Bus" calls `createBus()` then `rebuild()`, so the new bus's column is there at once.
+- **Labels.** "Show button labels" applies here: off, each button is its icon chip alone (name in the tooltip, bar
+  still 24 px, accessible names unchanged), live in a detached window too (`setToolbarLabelsShown`).
+- **Tab stops.** The three toggles, Reset Meters and Add Bus are each their own Tab stop, with a name and a tooltip;
+  see [Header controls and names](#header-controls-and-names).
+
+While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
+divider at the left edge of the first column (`paintDragBubble`).
+
+## Side pane: zones and visibility
+
+The Mixer has a left [side pane](../layout/side-pane.md) (200 px, resizable 160-320 px, open the first
+time the Mixer is opened and then remembered per tab) holding one list of the mixer's channels. The
+pane is a child of `MixerPanelComponent`, so it travels with the panel into a detached window and the
+Own-panel strip. Its content is `MixerZonesPane` (`Source/UI/Mixer/MixerZonesPane/`); the panel edits
+the project's `MixerViewDoc` on its behalf (`MixerPanelViewEdits.cpp`).
+
+**Zones.** The list has three groups: "Left zone", "Scrolling" and "Right zone". A channel is pinned by
+dragging its row from one group to another (the shared vertical `ReorderDragAnimator`: the dragged row
+follows the pointer, neighbours and group headings make room, Esc cancels, the drop only assigns the
+group; a row can't be dropped above the "Left zone" heading, which always stays first) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
+ticked; Unpin is offered only for a pinned column). A strip fed by exactly one track also gets **Duplicate Track** there, the same
+action as the timeline row's menu and Cmd+D (the menu opens from the keyboard with the focused column's context-menu key). Order inside a group is always the mixer's own
+(track order). Dropping a **track** row elsewhere in its own group reorders the channel exactly like
+dragging its column header: its track moves in the timeline (`MixerPanelComponent::moveChannelWithinZone`,
+through `onMoveTrack`, one undo step). A **bus** row (or a track-less strip) dropped among the buses
+moves in the saved bus order, like a bus column drag (one view edit). Direct, Master, a hidden track and a
+track dropped among buses keep their order and glide back. Pinned columns render **outside** the
+horizontal scroll area: the left zone at the left, the right zone at the right, each set off from the
+scrolling middle by a 2 px divider. Every zone has its own `juce::Viewport` and the scrolling middle
+keeps `viewport_`, so the horizontal scrollbar covers only the middle. Zones take **at most half of the
+columns' width** between them; when both need more than their share the cap is split evenly (a zone
+that needs less gives the rest to the other) and a capped zone scrolls inside itself. The three
+viewports scroll vertically as one. Column drag-to-reorder ([above](#reordering-columns)) keeps working
+inside the scrolling group only (tracks among tracks, buses among buses); a pinned column has no reorder
+hooks. A new project starts with Master
+pinned right.
+
+**Show/hide.** Every row has an eye toggle. A hidden channel gets no column at all
+(`MixerPanelComponent::rebuild()` skips it) and disappears from the mixer entirely; its Timeline track is
+untouched. The pane shows "N hidden · Show all". **Alt-click** an eye shows only that channel (Master
+stays, it cannot be hidden), and an Alt-click on the same eye again restores the hidden set from before;
+any other visibility edit forgets that memory. **Master's eye is disabled**; Direct can be hidden.
+Hiding a pinned channel keeps its zone, so showing it puts it back where it was. A filter box and the
+All / Tracks / Buses chips narrow the **list**, never the mixer. Keyboard column navigation
+(Left/Right) walks only the columns that exist, so it skips hidden ones; `revealColumn` for a hidden
+channel returns false and the caller falls back to the canvas.
+
+**Where it is saved.** The state (zones, hidden channels, and the bus order `"busOrder"`) is per project, in the project file's `"mixerView"` key
+([project bundle](../architecture/project-bundle.md)), keyed by a stable channel id: a strip's or
+bus's node `uuid` (a `NodeID` is not stable across a load), or the fixed `"master"` / `"direct"`. A
+pin, hide or bus-order edit is one **undo step** (`AppUndoManager::recordMixerViewChange`), following the pan law
+and macro collapse: it is project-saved state, and the undo manager's edit serial is the one thing that
+marks a document unsaved, so an edit that skipped it would be lost on quit without a prompt. The
+docked panel and the "both places" mirror share one `MixerViewDoc` and rebuild together through
+`onMixerViewChanged`. Accessibility: the pane button, the filter, the chips, every row, eye and the
+"Show all" link have titles and descriptions. The group headings are drawn in sentence case, as written.
+
+**Keyboard.** The list is focusable (`MixerZonesPane`, `MixerZonesPaneKeyboard.cpp`): Cmd+Shift+B opening
+the pane puts focus in it, a click on a row does too, and **Left on the first strip** goes on into it when the pane shows (`MixerPanelComponent::moveFocus`; the strip's ring goes while the list has the keys). **Up / Down** move a row cursor over the listed
+rows (clamped, an accent outline, and the screen reader's cursor moves with it), **Space** shows or hides
+the cursor's channel (not Master), **Alt+Up / Alt+Down** move it to the previous or next group (the
+keyboard twin of dragging it across one heading), and **Esc** or **Right** hands focus back to the mixer (to the strip it came from). Tab stays the region cycle: the pane is not a region of its own. Keys the list
+does not use (M/S/R, the section toggles) fall through to the mixer panel, so they still act on the
+focused column. Closing the pane with Cmd+Shift+B while it has focus returns focus to the mixer.
+
+## Shared sections
+
+A column's Inserts, Sends and EQ are **rows that run across the whole mixer at one shared height**,
+so every fader starts on the same line whatever each channel holds. The heights and hidden flags
+live in one `MixerSectionLayout` (`Source/UI/Mixer/MixerSections/`) that `MixerPanelComponent`
+owns; every strip column and Master resolve their geometry from it with
+`MixerSectionLayout::resolve(columnHeight)`, which depends only on the layout and the column height.
+**A column never sizes a section to its own content.** A column with fewer rows leaves the rest of
+the section empty; Master (no sends, EQ or pan) leaves those rows blank so its Inserts
+row and fader still line up; Direct has none of the rows and stays as it was. A standalone column
+(no panel, e.g. a test) falls back to its own private layout.
+
+- **Defaults.** Inserts 4 rows plus "+ Insert" (5 x 18 = 90 px), Sends 2 rows plus "+ Send"
+  (3 x 20 = 60 px), EQ shown (28 px).
+- **Show/hide.** The [toolbar](#the-toolbar)'s Inserts / Sends / EQ toggles hide or show the section
+  in every column.
+- **Hidden section.** Shrinks to a 14 px `MixerCollapsedSection` strip in every column saying what
+  it holds ("2 sends", "no inserts", "EQ" / "no EQ") in 9 px `textDisabled`; clicking the strip in
+  any column, or its toolbar toggle, shows it again. The strip is an accessibility button titled
+  "Show Sends" etc. **The EQ curve's show/hide is this same control** (see
+  [the EQ curve thumbnail](#the-eq-curve-thumbnail)).
+- **Closing and opening slide.** A section's height does not jump. The layout keeps an open amount per
+  section (`getShownAmount`, 1 = its height, 0 = the strip) that `resolve()` reads, and the panel writes it from one
+  `FadeVisibility` per section (an empty probe component, 160 ms in, 110 ms out, plain 80 ms under Reduce Motion), so
+  every column, Master included, slides its rows and fader through the same heights. The section's rows
+  (`MixerSectionSwap`) cross-fade with the strip while it slides; the EQ curve dims with its height. A reversal
+  mid-slide starts from the current height; a divider drag, a load and a standalone column land at once; off
+  screen and under Animations Off the change lands before `setHidden` returns.
+- **Dividers.** A 6 px `MixerSectionDivider` under each section in every column: a 1 px `border` line, or a 2 px `accent` line while hovered or
+  dragged -- the hover state lives on the shared layout, so the whole row lights up together. The
+  Inserts and Sends dividers show the vertical-resize cursor; dragging one resizes that section in
+  every column, snapping to whole rows (18 px inserts, 20 px sends, 1 to 16 rows), with a mono
+  "5 rows" bubble beside the divider while dragging; a double-click resets it to its default. The drag is
+  measured in screen pixels from the press, never as a running delta, because growing the dock
+  moves the whole panel up under the pointer (the same reason `PanelResizeHandle` measures from its
+  owner's fixed bottom edge). Dragging a hidden section's divider down shows it again. The EQ curve
+  has one fixed height, so its divider is a plain line.
+- **Scrolling inside a section.** Each column wraps its insert and send list in a
+  `MixerSectionViewport` (a `juce::Viewport` with no scrollbar components, wheel scrolling only,
+  `ScrollOnDragMode::never` so the send list's row drag-reorder stays the list's own gesture, and
+  **no keyboard focus**: the panel stays the mixer's single focusable leaf). A list longer than its
+  section scrolls with the wheel; a 3 px `textDisabled` thumb on the right and a 10 px fade to
+  `surface` at the bottom mark it. A wheel over a list that fits falls through to the panel's
+  horizontal scroll, as before. The list is never shorter than its section, so a right-click on the
+  empty space below the last insert still reaches the list's "Add...".
+- **Growing past the fader.** Making a section taller takes space from the fader first. Once the
+  fader is at `MixerColumnComponent::kMinFaderHeight` (56 px), the drag keeps going by growing the
+  strip that hosts the mixer through that strip's own resize path: the bottom dock's height
+  (`MainComponent::setTimelinePanelHeight`, clamped to 3/4 of the window) in the Tab placement, or
+  `MixerPlacementController::setOwnPanelHeight` in the Own-panel placement -- wired by
+  `MainComponent` onto the panel's `canGrowHost`/`growHost`, and persisted on release only. In a
+  detached Mixer window (and the "both places" mirror window) the host cannot grow, so the columns
+  take `requiredColumnHeight()` and the panel's viewport scrolls vertically under the toolbar. Shrinking a section never shrinks the host: the space goes back to the fader.
+- **Showing the mixer fits it.** Whenever the mixer is shown -- the dock opens on (or switches to)
+  the Mixer tab, the Own panel opens, or the app starts with either -- and the panel is shorter than
+  `requiredPanelHeight()` (the toolbar, plus the header, every section at its set height or its 14 px
+  strip, the dividers, pan, readout, a 56 px fader and the M/S row), `MainComponent::
+  fitMixerHostToSections()` (or `MixerPlacementController` for the Own panel) calls
+  `MixerPanelComponent::growHostToFitSections()`, which grows the host through the same
+  `growHost` path a divider drag uses, clamped to what the window allows (the dock keeps the
+  canvas the same minimum its own resize handle does). It only grows, never shrinks, and runs
+  once per show, not on every resize: a user who then drags the dock shorter keeps that height and
+  the squeeze rule below applies. Re-showing a hidden section (its toolbar toggle or its strip) fits the
+  host the same way. In the Own-panel placement `BottomDockComponent::resized()` leaves the Mixer
+  host alone (it is parented in `MixerPlacementController`'s strip then), so opening the dock can
+  no longer resize the host to the dock's height and make this fit misread the panel.
+- **Too short for everything.** When the user makes the host shorter than that (or the window
+  cannot give it the room), the sections cannot all fit alongside a 56 px fader. `resolve()` keeps the fader's minimum and takes the shortfall
+  lowest priority first -- the EQ row, then Sends, then Inserts, then the pan knob -- identically
+  in every column (see the paragraph under [What the mixer shows](#what-the-mixer-shows)); a
+  clipped list scrolls inside what is left.
+- **Persistence.** App-wide, next to the dock height, not per project: `mixerSectionInsertsHeight`,
+  `mixerSectionSendsHeight`, `mixerSectionInsertsHidden`, `mixerSectionSendsHidden`,
+  `mixerSectionEqHidden` in the user settings file, written when a gesture ends (drag release,
+  show/hide, reset). `MainComponent` hands the settings file to the docked panel at startup
+  (`setSettingsStore`); the mirror copies it through `copyWiringFrom`, so it opens with the same
+  sections. The two live views do not sync section changes with each other while both are open.
+- **Separation.** Sections are separated by the divider lines only: no card or fill change.
+
 ## The EQ curve thumbnail
 
 When a strip's insert chain contains a Parametric EQ, its column shows a small frequency-response
 curve (Cubase's top-mixer-row idiom) — **computed from the EQ's own parameters, never audio**, and
-cached so a busy graph never pays for an unconditional per-tick repaint (root `CLAUDE.md`). A bypassed
-EQ draws dimmed; a strip with no EQ insert shows no thumbnail; **a strip with two shows the thumbnail
+cached so a busy graph never pays for an unconditional per-tick repaint (`Source/UI/CLAUDE.md`). A bypassed
+EQ draws dimmed; the curve sums every enabled band of the 24 and a rounded badge at its top right counts them (none for 0; tooltip "EQ: N bands. Click to open.", "EQ: 1 band." when singular); a strip with no EQ insert shows no thumbnail; **a strip with two shows the thumbnail
 for only the first one in signal order**, Cubase's own single-slot idiom and a deliberate trim.
 
 - **Curve maths** — `synth::ui::EqResponseCurve::compute` (`Source/UI/Mixer/EqResponseCurve.h`), 48
@@ -482,37 +782,125 @@ for only the first one in signal order**, Cubase's own single-slot idiom and a d
   thread-hop `HostedPluginModule::InstanceListener` uses for `audioProcessorChanged`. `paint()` reads
   only the cached magnitudes and bypass flag, never the module, so "no unconditional per-tick repaint"
   holds by construction: there is no `Timer`.
+- **Undo and redo** glide the curve to the restored bands like the EQ's own curve (`EqBandGlide`,
+  [undo-glide.md](../layout/undo-glide.md#points-dots-and-clips)), re-summing the cached magnitudes on each glide frame.
 - **Destruction and every rebind cancel the pending update and detach every listener** before the
   module pointer can go stale, the same ordering `MixerFader::unbind()` uses.
 - **Finding the EQ** — `MixerColumnComponent::setColumn()` walks `column.inserts` (already signal
   ordered) and binds the first `ParametricEQModule` it finds.
+- **Show/hide (FRO352)** — the EQ row is one of the [shared sections](#shared-sections), so its
+  toolbar toggle hides the curve in every column at once and the choice persists app-wide
+  (`mixerSectionEqHidden`). A hidden EQ row leaves a 14 px strip reading "EQ" (or "no EQ") that
+  shows it again on click, and the fader gets the 14 px difference. The thumbnail's bounds go empty
+  while hidden; its `isVisible()` keeps meaning "this column has an EQ".
 - **Click** — forwarded through the column's existing `onEditOnCanvas` seam with the EQ node's own
   uuid, so `MixerPanelComponent::selectOnCanvas` resolves it exactly like a column header click or the
-  insert list's own "Edit on canvas" link: macro id, then `findByMember`, else the bare node. No new
+  header's "Edit on canvas" button: macro id, then `findByMember`, else the bare node. No new
   canvas plumbing.
 
 ## Keyboard navigation and accessibility
 
 The mixer panel is its own keyboard focus region, registered as the app's seventh region and sharing
 the bottom dock with `"timeline"`. `MixerPanelComponent` is the region's focusable leaf
-(`setWantsKeyboardFocus(true)`) and **every child control inside a column gives focus back up** — the
-same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
-several controls.
+(`setWantsKeyboardFocus(true)`) and **the controls that act on keys the panel owns give focus back up** (the fader,
+pan, M and S) — the same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
+several controls. The deliberate exceptions are small icon buttons that take no key beyond Return and Space, so every
+other key still bubbles to the panel: the toolbar's buttons, the header's colour dot (Return only: Space still plays) and sources badge, and the
+bypass button on every insert and send row (each a Tab stop with a name, a tooltip and the accent focus ring). The one other focusable element is the side pane's channel list, which has keys of its own ([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
 
-- **Left and Right** walk `focusedColumnIndex_` across strips, Direct and Master, clamped, never
-  wrapping.
-- **Up and Down** nudge the focused fader 1.0 dB, or 0.1 dB with Shift, as one undo step via
-  `MixerFader::nudge()` (begin and end change gesture bracketing a single `setValueNotifyingHost`,
-  like a real drag).
+- **Left and Right** walk `focusedColumnIndex_` across the columns in the order they are laid out (left
+  zone, scrolling, right zone), clamped, never wrapping; a hidden channel has no column, so it is skipped.
+- **Shift+Up and Shift+Down** (`mixerNudgeFaderUp` / `mixerNudgeFaderDown`, rebindable; Alt added: 0.1 dB) nudge the focused fader 1.0 dB as one undo step via
+  `MixerFader::nudge()` (a change gesture around one `setValueNotifyingHost`, like a drag); the fader's tooltip names the keys. Plain Up on a column does nothing.
 - **Enter** selects the focused column's macro or node on canvas.
+- **A click in a column** focuses it, and **Cmd+D** copies the focused strip's track: [strip focus](strip-focus.md).
 - **M, S and R** resolve the SAME rebindable `timelineMuteFocusedTrack`,
   `timelineSoloFocusedTrack` and `timelineArmFocusedTrack` action ids the Timeline track-header row
   binds — **deliberately, because a new id would not inherit an existing rebind** — through
   `MixerColumnComponent::toggleMuted()`/`toggleSoloed()`/`MixerMasterColumn::toggleMuted()`,
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
+- **C**, **Shift+Left/Right** and **H** (rebindable) open the colour picker, pan and hide: [strip focus](strip-focus.md#colour).
+- **Down** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
+  [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
+  enter, `keyPressed()` returns false. Tab is never claimed: it stays the app-wide region cycle.
+- **Cmd+Up** (`mixerFocusTopBar`, rebindable) puts a key ring on the top bar: [top bar keys](top-bar-keys.md).
+- **E** (`mixerOpenEq`, rebindable) opens the focused strip's EQ window while the EQ section is shown. It
+  is E rather than Return because Return already selects the focused column on the canvas. The window is the
+  card's own pop-out editor (`ModuleComponent::openEqWindow()`), reached through
+  `MixerPanelComponent::onOpenEqWindow`, which tests replace.
+
+### Keyboard walk through the send and insert rows
+
+Row focus is panel state (`MixerPanelComponent::rowFocus_`, a `MixerRowRef` of kind and index, in
+`MixerRowFocus.h`), not real focus on a child, so the panel stays the single focusable leaf.
+`MixerPanelRowKeyboard.cpp` owns it. Rows walk in layout order -- inserts, sends, then the EQ curve (one `MixerRowKind::Eq` row while the strip has an EQ: its ring is the curve, its text the curve's title, Return selects the EQ on the canvas as a click does, and B, Delete and Alt+arrows do nothing there) -- and only for sections that are shown: hiding
+a section moves the focus to a row of another, or back to column mode when none is left. Master has insert rows only; Direct has none.
+
+- **Up and Down** step rows, clamped at the bottom; Up on the first row returns to the column. **Left and Right** lower and raise the focused
+  send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:
+  `captureBeforeState`, then the parameter's begin-gesture, set and end-gesture (what a knob drag produces),
+  then `pushSnapshotFromCapture`. On an insert split row Right opens its paths and Left folds them; Left on a
+  row inside a split's paths steps up to that split row ([parallel paths](mixer.md#parallel-paths)). Otherwise
+  the arrows do nothing on an insert row, and never walk columns.
+- **B** (`mixerToggleRowBypass`, rebindable, Mixer category, default bare B) bypasses the focused row -- see
+  [Bypassing a row](#bypassing-a-row).
+- **Return** on an insert selects its module on the canvas, the same `selectOnCanvas` the EQ thumbnail's
+  click and the header's "Edit on canvas" button use; on a split row it opens or folds the paths, and on the
+  last insert row, "+ Insert", it opens the effect picker ([adding an insert](mixer.md#adding-an-insert)). **Delete** or **Backspace** removes the send or
+  insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus
+  use, undoable -- and a branching insert chain (read-only) keeps its rows. **Esc** returns to column mode.
+- Removing a row rebuilds the mixer and destroys the list that did it, so the panel touches nothing of
+  the old column afterwards: `reconcileRowFocus()` re-derives the row from the new lists, clamping the
+  index, falling to the other section, or leaving row mode. It runs after every `rebuild()` and every
+  section toggle, and `focusLost()` ends row mode.
+- The focused row is outlined with `synth::ui::paintFocusRing` (the panel is the component that holds focus,
+  so the ring is painted by the panel over its children, clipped to the section's frame) and scrolled into view
+  with `MixerSectionViewport::revealRange()`. The panel's accessibility **description** carries the row text --
+  `"Send to Reverb Bus, -6.0 dB"` (plus `", muted"`), `"Insert 2, Compressor"` (plus `", bypassed"`),
+  `"Insert 3, split into 2 paths, folded"`, `"Insert 4, Delay 1, path 1"`, `"Add an insert"` -- and announces a
+  change.
+
+### Bypassing a row
+
+Every insert row and every send row ends in a bypass icon button (`MixerIconButton` with `Icon::ModuleBypass`; its
+accent wash and glyph show the on state). It is the mouse twin of the **B** key, and both land in the same
+`toggleBypassForRow()` on the row's list, so a click and a key cannot diverge:
+
+- **An insert** toggles its module's own bypass parameter (`ModuleBase::setBypassed`, the one the canvas card's bypass
+  button flips), bracketed by `captureBeforeState`/`pushSnapshotFromCapture` as one undo step. A split row bypasses
+  every module under it in that one step. A branching (read-only) chain bypasses too: bypass changes no topology. The Master column's insert rows have the button and the key too.
+- **A send** toggles its persisted bypass bit (`ChannelStripModule::isSendBypassed`, serialised as `"bypass"` in
+  the send's extra state and carried through a reorder swap), through `synth::setSendBypassed` in one
+  `recordGraphAndMacroChange`, like the send's mute. How the audio path treats it is in
+  [`sends-and-buses.md`](sends-and-buses.md#bypassing-a-send).
+
+A bypassed row reads dimmed: an insert's name paints in `textDisabled`; a send's name, level knob, pan knob and M
+button paint at the shared dimmed alpha (`kDimmedProperty`) but stay enabled. The button's screen-reader title carries
+the state in words ("Compressor bypass, on", "Bypass send to Reverb Bus, off"), the row's panel-level description
+gains ", bypassed" (and is announced when B changes it), and the tooltip names the key through
+`MixerIconButton::tooltipProvider` ("Bypass Compressor  (B)", "Turn Compressor back on  (B)"), computed each time it
+is shown so a rebind needs no rebuild. The key is read only while a row has the panel's row focus; in column mode B
+is not claimed. These per-row buttons act on the focused row, so, like the timeline's M, S and R buttons, they are not
+labelled by the Cmd-hold [shortcut hints](../control/shortcuts.md#shortcut-hints).
+
+### Header controls and names
+
+The toolbar's Inserts, Sends and EQ toggles, Reset Meters and Add Bus, the side pane's Filter channels field and
+its All / Tracks / Buses chips are each their own Tab stop, with a `setTitle` name and a tooltip. A key that
+one of them does not use bubbles to the panel, so the column keys still work after a click on one. Return
+triggers a button (`juce::Button::keyPressed`); Space presses it and is consumed (`SpaceClaimingButton`, see
+[accessibility](../development/accessibility.md#space-on-a-focused-button)), so it never also plays. The toggles' tooltips name their
+shortcut (`"Hide Sends  (Ctrl+S)"`) and follow a rebind. `AppLookAndFeel::drawDrawableButton` paints the focus
+ring for the toggles.
+
+Every control in every strip carries a name and a tooltip: the fader and pan sliders, M and S, the meter and its
+peak readout, the EQ thumbnail, the channel name, colour dot and sources badge, the per-row bypass buttons, the chip, the send knobs and mute buttons, and the send and
+insert lists (their tooltip follows the part of a row under the pointer). `AccessibilityCoverageTests.cpp` audits a
+mixer with two tracks, a bus, a send, an insert and all three sections shown as the **Mixer** surface of the
+accessibility ratchet ([`docs/development/accessibility.md`](../development/accessibility.md)).
 
 **FRO227: the mixer is its own `MainComponent::EditSurface` (`Mixer`)** — real focus inside
 `MixerPanelComponent` (the panel itself or a column control, since every column control gives focus
@@ -573,6 +961,14 @@ already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAcc
 (FRO294) so `MixerSendList`'s own per-send pan knobs reapply the identical text after their own
 `SliderParameterAttachment`, rather than a second copy of the formatting.
 
+**The column's section controls never take keyboard focus.** The section viewports (a
+`juce::Viewport` wants focus by default), dividers and hidden-section strips all set
+`setWantsKeyboardFocus(false)`, so the panel stays the single focusable leaf (the toolbar's buttons are
+the deliberate exception). The
+toolbar's section toggles are toggle buttons named "Inserts"/"Sends"/"EQ", and a hidden section's
+strip is a button titled "Show Sends", so both are reachable from a screen reader; a hidden section's insert
+or send rows leave the accessibility tree with it.
+
 **Insert rows, "+ Send" and "Make channel" are real, named, reachable AX children, not just painted
 text.** `MixerInsertList`/`MixerSendList` draw most of a row themselves in `paint()` rather than as
 child components (the level knob, FRO294's pan knob, and, FRO295, the M mute button are the
@@ -586,11 +982,9 @@ row in `resized()`, `setInterceptsMouseClicks(false, false)` so the existing `mo
 stays the only path for a real click, titled `"<insert name>, bypassed"`/`"<insert name>"` or `"Add
 send"` and rebuilt on every `setEntries()` (same idiom as `MixerSendList::rebuildKnobs()`). Direct's
 "Make channel" button gets an explicit `setTitle("Make channel")` for the same reason
-`MixerMasterColumn`'s mute button already does — `ButtonAccessibilityHandler::getTitle()` falls back
-to `Button::getButtonText()` only when no title is set, and a bare ctor-argument fallback is one
-accidental rename away from leaking an internal string (`BottomDockComponent`'s own detach button and
-`StatusBarComponent`'s master-mute/transport buttons got the same explicit `setTitle()` fix in this
-ticket, for the identical reason).
+`MixerMasterColumn`'s mute button already does: `ButtonAccessibilityHandler::getTitle()` falls back
+to the button text only when no title is set, and that fallback is one rename from leaking an
+internal string (`BottomDockComponent`'s detach icons and `StatusBarComponent`'s buttons too).
 
 ## Related
 

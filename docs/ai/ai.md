@@ -11,7 +11,7 @@ Two providers are registered, both selectable in Settings → AI:
 - **Ollama (local)**, id `ollama` — talks to an Ollama server the user runs. Nothing leaves the
   machine.
 - **Remote (hosted)**, id `remote` — talks to the hosted inference service over HTTPS. The prompt,
-  the current patch and (in arrange mode) a summary of the arrangement are sent to that service.
+  the current patch and, with a timeline open, a summary of the arrangement are sent to that service.
 
 A brand-new install defaults to `remote`; an install that has launched before keeps `ollama` even
 if it has never opened AI settings. An unknown or corrupt persisted provider id falls back to
@@ -21,8 +21,13 @@ if it has never opened AI settings. An unknown or corrupt persisted provider id 
 
 - **Patches** — modules, connections, modulations and parameter values, as JSON in the
   [patch format](patch-format.md), gated by [`validatePatch`](patch-safety.md).
-- **Timeline changes** — MIDI tracks, clips, notes and automation lanes, as a `timelineOps`
-  envelope gated by [`TimelineOps::validate`](timeline-ops.md).
+- **Timeline changes** — instrument and MIDI tracks, clips, notes and automation lanes, as a
+  `timelineOps` envelope gated by [`TimelineOps::validate`](timeline-ops.md).
+- **Both at once** — one [edit plan](timeline-ops.md#one-edit-plan): a patch and a sibling
+  `timelineOps` list that may refer to each other (a modulation onto an insert the same answer
+  builds, a lane on a node it creates). The chat shows it as ONE card with ONE Apply, applied as one
+  undo step ([chat component](chat-component.md#one-answer-one-card)); the user asks for any mix in a
+  single message, with no mode to pick.
 
 It authors nothing else. Audio assets, file paths, plugin state and record arming have no
 authorable form at all — see [the agentic security model](timeline-safety.md#the-agentic-security-model).

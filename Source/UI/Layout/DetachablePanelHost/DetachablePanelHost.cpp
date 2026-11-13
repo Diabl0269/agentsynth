@@ -30,10 +30,12 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
     // reports button text (Button::getButtonText() otherwise returns that name verbatim).
     detachButton_.setButtonText({});
     detachButton_.onClick = [this] { toggleDetach(); };
+    dockBackButton_.onClick = [this] { setDetached(false); };
     addAndMakeVisible(detachButton_);
 
     addAndMakeVisible(panel_);
 
+    headerFade_.onFrame = [this] { resized(); };
     applyTooltip();
 }
 
@@ -54,6 +56,13 @@ void DetachablePanelHost::setEmbeddedHeader(bool embedded) {
     repaint();
 }
 
+void DetachablePanelHost::setEditsBlocked(bool blocked, std::function<void()> onRefused) {
+    editsBlocked_ = blocked;
+    onEditRefused_ = std::move(onRefused);
+    if (window_ != nullptr)
+        window_->setEditsBlocked(editsBlocked_, onEditRefused_);
+}
+
 void DetachablePanelHost::setHostedPanelFocusRegion(juce::String id, juce::Component& root) {
     focusRegionId_ = std::move(id);
     focusRegionRoot_ = &root;
@@ -66,10 +75,15 @@ void DetachablePanelHost::setDetached(bool detached) {
         return;
 
     if (detached) {
-        window_ = std::make_unique<DetachedPanelWindow>(panel_, detachButton_, titleLabel_, boundsKey_, appProperties_,
-                                                        lookAndFeel_, shortcutManager_);
+        headerFade_.snapTo(headerFade_.isShown()); // no fade runs on the strip while the panel is away
+        window_ = std::make_unique<DetachedPanelWindow>(panel_, title_, boundsKey_, appProperties_, lookAndFeel_,
+                                                        shortcutManager_);
         window_->onCloseRequested = [this] { setDetached(false); };
         window_->onAppShortcut = onAppShortcutFallback;
+        if (auto* slot = dynamic_cast<DockBackSlot*>(&panel_))
+            slot->setDockBackButton(&dockBackButton_);
+        if (editsBlocked_)
+            window_->setEditsBlocked(true, onEditRefused_);
         if (focusRegionRoot_ != nullptr)
             window_->registerHostedPanelFocusRegion(focusRegionId_, *focusRegionRoot_);
         // Promote the window to a real native peer BEFORE setVisible(true) --
@@ -84,13 +98,14 @@ void DetachablePanelHost::setDetached(bool detached) {
         window_->setVisible(true);
         window_->toFront(true);
     } else {
-        // Reparents titleLabel_/detachButton_/panel_ back into OUR OWN tree -- addAndMakeVisible
+        // The toolbar gives the button back, then panel_ returns to OUR OWN tree -- addAndMakeVisible
         // auto-detaches a child from whatever parent (the window's Content) currently holds it,
         // same idiom BottomDockComponent's own constructor uses to take timelinePanel_ in.
-        addAndMakeVisible(titleLabel_);
-        addAndMakeVisible(detachButton_);
+        if (auto* slot = dynamic_cast<DockBackSlot*>(&panel_))
+            slot->setDockBackButton(nullptr);
         addAndMakeVisible(panel_);
         window_.reset();
+        headerFade_.snapTo(!embeddedHeader_); // back docked: the strip is as the host wants it, no fade
         resized();
     }
 
@@ -104,11 +119,10 @@ void DetachablePanelHost::resized() {
         return; // nothing docked to lay out -- the window lays out its own borrowed copy
 
     auto bounds = getLocalBounds();
-    const bool showOwnHeader = !embeddedHeader_;
-    titleLabel_.setVisible(showOwnHeader);
-    detachButton_.setVisible(showOwnHeader);
-    if (showOwnHeader) {
-        auto header = bounds.removeFromTop(kHeaderStripHeight);
+    headerFade_.setShown(!embeddedHeader_);
+    // The strip's room follows its fade, so the panel slides instead of jumping.
+    if (const int height = juce::roundToInt((float)kHeaderStripHeight * headerFade_.progress()); height > 0) {
+        auto header = bounds.removeFromTop(height);
         detachButton_.setBounds(header.removeFromRight(kHeaderStripHeight));
         titleLabel_.setBounds(header);
     }
@@ -143,9 +157,8 @@ void DetachablePanelHost::applyTooltip() {
     // fallback getTitle() otherwise uses), so without an explicit title this icon-only button was
     // unnamed to a screen reader both docked AND inside its own DetachedPanelWindow -- same fix as
     // BottomDockComponent::refreshDetachButton()'s own detach button.
-    const juce::String label = isDetached() ? "Dock back" : "Open in window";
-    detachButton_.setTooltip(label);
-    detachButton_.setTitle(label);
+    detachButton_.setTooltip("Open in window");
+    detachButton_.setTitle("Open in window");
 }
 
 } // namespace synth::ui

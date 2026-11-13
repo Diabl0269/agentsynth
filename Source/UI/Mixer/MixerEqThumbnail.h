@@ -1,9 +1,11 @@
 #pragma once
 
-#include "Modules/FX/ParametricEQModule.h"
+#include <array>
+#include <atomic>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
 
 // MixerEqThumbnail.h (docs/mixer/panel.md#what-the-mixer-shows): a small frequency-response curve on a
@@ -37,10 +39,18 @@
 // AsyncUpdater; the actual recompute + repaint happens once, on the message thread, in
 // handleAsyncUpdate() -- the same thread-hop HostedPluginModule::InstanceListener uses for its own
 // audioProcessorChanged callback. paint() reads only the cached result, never the module.
+class AppUndoManager;
+class ParametricEQModule;
+
 namespace synth::ui {
+
+class EqBandGlide;
+template <typename T>
+class KeyedTween;
 
 class MixerEqThumbnail
     : public juce::Component
+    , public juce::SettableTooltipClient
     , private juce::AudioProcessorParameter::Listener
     , private juce::AsyncUpdater {
 public:
@@ -60,6 +70,18 @@ public:
      *  none (a headless test binding a module with no graph at all). */
     void setEqModule(ParametricEQModule* eq, juce::AudioProcessorGraph* graph = nullptr,
                      juce::AudioProcessorGraph::NodeID nodeId = {});
+
+    // Undo/redo glide (EqBandGlide.h; docs/layout/undo-glide.md).
+    void setUndoManager(AppUndoManager* manager) noexcept { undo_ = manager; }
+    KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
+    void flushForTest() { handleUpdateNowIfNeeded(); }
+    float getDrawnMagnitudeDbForTest(int index) const { return cachedMagnitudesDb_[(size_t)index]; }
+
+    /** How many of the 24 bands are on; the badge shows it (none for 0) and the tooltip says it ("EQ: 16 bands.
+     *  Click to open."; "1 band" for one). */
+    int getBandCount() const noexcept { return bandCount_; }
+    /** The badge's text, empty when no band is on. */
+    juce::String getBadgeText() const { return bandCount_ > 0 ? juce::String(bandCount_) : juce::String(); }
 
     /** Fires on mouseUp -- MixerColumnComponent forwards this through its existing onEditOnCanvas
      *  seam with the EQ node's own uuid, exactly like a column header click or the insert list's
@@ -87,15 +109,26 @@ private:
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     void handleAsyncUpdate() override;
 
+    void paintBadge(juce::Graphics& g) const;
     void detachListeners();
     void recompute();
+    void syncFromModule(bool restored);
+    void refreshBandCount();
 
     ParametricEQModule* eq_ = nullptr;
     juce::AudioProcessorGraph* graph_ = nullptr;
     juce::AudioProcessorGraph::NodeID nodeId_;
 
+    AppUndoManager* undo_ = nullptr;
+    std::atomic<bool> restorePending_{false};
+    std::unique_ptr<EqBandGlide> glide_;
+    struct LastBands; // the module's last-read band snapshots (defined in the .cpp so this header stays narrow)
+    std::unique_ptr<LastBands> lastBands_;
+    float lastOutputGainDb_ = 0.0f;
+
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;
+    int bandCount_ = 0;
     int recomputeCount_ = 0;
 
     static int liveUnbindCallCountForTest_;

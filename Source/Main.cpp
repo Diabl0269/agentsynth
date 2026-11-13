@@ -1,13 +1,27 @@
+#include "AutomationLaunch.h"
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
+#include "MainComponent/QuitRequest.h"
+#include "MainComponent/WindowKeyForward.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
+#include "Plugin/Hosting/PluginCrashRecovery.h"
 #include "Plugin/Hosting/PluginScanService.h"
+#include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
+#include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/MacPeerDroppedKeyRelay.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/AutomationHiding.h"
+#include "TestMode/TestModeLaunch.h"
+#include "TestMode/TestModePresentedFrame.h"
+#include "UI/Layout/MainMenuTooltips.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
 #include <JuceHeader.h>
 #include <iostream>
+#include <utility>
 
 // True on every platform where JUCE's entry point is a plain main(argc, argv) — i.e. everything
 // except a Windows GUI-subsystem build, whose WinMain gets no argv. See the entry point at the
@@ -39,9 +53,7 @@ public:
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
-    void initialise(const juce::String& commandLine) override {
-        juce::ignoreUnused(commandLine);
-
+    void initialise(const juce::String&) override {
 #if !SYNTH_HAS_ARGV_MAIN
         // Windows GUI fallback for the out-of-process plugin scan. Everywhere else main()
         // below short-circuits before the app object is ever constructed; here JUCE owns WinMain and
@@ -59,7 +71,27 @@ public:
         }
 #endif
 
-        migrateLegacyUserData();
+        // Automation launches (--no-audio-device / --no-keychain) must never read the keychain, so
+        // this runs before anything builds an AccountService.
+        synth::applyKeychainPolicyForLaunch(getCommandLineParameterArray(),
+                                            juce::SystemStats::getEnvironmentVariable(synth::kNoKeychainEnvVar, {}),
+                                            juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
+
+        // An automation launch keeps its windows off the user's screen unless asked otherwise; this must run before
+        // the first window exists.
+#if AGENTSYNTH_AUTOMATION
+        if (synth::isHiddenAutomationLaunch(getCommandLineParameterArray()))
+            synth::testmode::hideAutomationWindows();
+#endif
+
+        // Hosted plugins write files relative to the working directory; keep that out of the
+        // directory the app happened to be launched from.
+        synth::enterPluginScratchDirectory();
+
+        // An automation launch keeps all its settings and user data under its own directory (--settings-dir, else a
+        // fresh temporary one); that directory is new, so there is nothing to migrate into it.
+        if (synth::applySettingsDirForLaunch(getCommandLineParameterArray()).isEmpty())
+            migrateLegacyUserData();
 
         // Apply default theme so the LnF is valid before any Component is created.
         // ThemeManager::initialise() (with appProperties) is called inside MainComponent,
@@ -67,6 +99,21 @@ public:
         lookAndFeel.applyTheme(themeManager.getActiveTheme());
         juce::Desktop::getInstance().setDefaultLookAndFeel(&lookAndFeel);
         mainWindow.reset(new MainWindow(getApplicationName(), themeManager, lookAndFeel));
+#if JUCE_MAC
+        // JUCE's peer builds no key press for Ctrl+Shift+2 (NUL text); this relay hands it over.
+        droppedKeyRelay_ = std::make_unique<synth::MacPeerDroppedKeyRelay>();
+#endif
+
+        // `Agent Synth.app/Contents/MacOS/Agent Synth my.agsproj` (or the OS opening a project with the app).
+        // A path the OS hands over before this point waits in pendingProject_.
+        if (const auto bundle = synth::projectBundleFromCommandLine(getCommandLineParameterArray()))
+            pendingProject_ = *bundle;
+        // A project named on the command line waits for the answer when the last run died inside a plugin.
+        checkPreviousRun();
+        if (!awaitingCrashChoice_ && pendingProject_ != juce::File())
+            openProject(std::exchange(pendingProject_, juce::File()));
+
+        startTestModeIfRequested();
     }
 
     // CRITICAL ordering (spec section 7.1, constraint #1):
@@ -75,30 +122,112 @@ public:
     // 3. themeManager / lookAndFeel are data members declared BEFORE mainWindow,
     //    so they are destroyed AFTER mainWindow — they outlive the clear.
     void shutdown() override {
+        // Dialogs launched async (Settings) are otherwise deleted by JUCE after this object is gone.
+        synth::ui::deleteOpenModalDialogs();
+        if (runSentinel_ != nullptr)
+            runSentinel_->markCleanExit(); // reached on every normal quit; a crash never gets here
+        testModeServer_ = nullptr;         // stop answering before the window it drives goes away
         mainWindow = nullptr;
         juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
     }
 
     void systemRequestedQuit() override {
-        if (mainWindow != nullptr) {
-            if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent())) {
-                // Asks first, quits only on Save/Discard. quit() is the LAST thing the continuation
-                // does, and juce::JUCEApplicationBase::quit() only stops the dispatch loop
-                // (juce_events/messages/juce_ApplicationBase.cpp: it's a one-line call to
-                // MessageManager::stopDispatchLoop()) — shutdown(), which destroys mainWindow and
-                // with it the MainComponent whose method invoked this continuation, runs later, after
-                // main()'s call to JUCEApplicationBase::main() unwinds the now-stopped loop. Nothing
-                // here touches a freed object.
-                mc->guardUnsavedChanges("Quitting", [this] { quit(); });
-                return;
-            }
-        }
-        quit();
+        synth::requestQuit(mainWindow != nullptr ? mainWindow->getContentComponent() : nullptr, [this] { quit(); });
     }
 
-    void anotherInstanceStarted(const juce::String& commandLine) override { juce::ignoreUnused(commandLine); }
+    void anotherInstanceStarted(const juce::String& commandLine) override {
+        if (const auto bundle = synth::projectBundleFromCommandLine(commandLine))
+            openProject(*bundle);
+    }
 
 private:
+    // `--automation <port>`: the local test-mode server (docs/development/test-mode.md). Compiled in only when
+    // AGENTSYNTH_AUTOMATION is on; a packaged build says so and carries on as a normal launch.
+    void startTestModeIfRequested() {
+        const auto args = getCommandLineParameterArray();
+        if (!synth::isAutomationLaunch(args))
+            return;
+#if AGENTSYNTH_AUTOMATION
+        const auto port = synth::automationPortFromArgs(args);
+        if (!port.has_value()) {
+            std::cerr << "--automation needs a port number (0 picks a free one)" << std::endl;
+            return;
+        }
+        synth::testmode::LaunchOptions options;
+        options.port = *port;
+        options.keepAnimations = args.contains(synth::kAutomationMotionFlag);
+        if (const auto info = synth::flagValueFromArgs(args, synth::kAutomationInfoFlag); info.isNotEmpty())
+            options.infoFile = juce::File::getCurrentWorkingDirectory().getChildFile(info);
+        juce::String error;
+        testModeServer_ = synth::testmode::startForLaunch(options, error);
+        if (testModeServer_ == nullptr)
+            std::cerr << "test mode: " << error << std::endl;
+#else
+        juce::Logger::writeToLog("--automation is not available in this build (AGENTSYNTH_AUTOMATION is off)");
+#endif
+    }
+
+    // Routes a bundle to the open window (guarded like any Open, so unsaved changes are asked about first), or
+    // holds it until the window exists.
+    void openProject(const juce::File& bundle) {
+        if (mainWindow == nullptr || awaitingCrashChoice_) {
+            pendingProject_ = bundle;
+            return;
+        }
+        if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent())) {
+            mainWindow->toFront(!juce::ComponentPeer::hideWindowsForAutomation); // a hidden run never takes focus
+            mc->openProjectFromCommandLine(bundle);
+        }
+    }
+
+    // Looks at how the previous run ended (docs/architecture/plugin-layer.md, "When a plugin takes the app down"),
+    // asks about it when there is something to say, and starts this run's sentinel. An automation launch keeps out
+    // of it: its runs are killed on purpose and live in their own settings directory.
+    void checkPreviousRun() {
+        if (synth::isAutomationLaunch(getCommandLineParameterArray()))
+            return;
+        const auto stateDir = synth::userSettingsRootDirectory().getChildFile("run-state");
+        const auto outcome = synth::inspectPreviousRun(stateDir, synth::defaultCrashReportsDirectory(),
+                                                       synth::RunSentinel::processIsAlive);
+        runSentinel_ = std::make_unique<synth::RunSentinel>(stateDir, synth::RunSentinel::currentProcessId());
+
+        if (outcome.kind == synth::PreviousRunKind::CleanOrUnknown)
+            return;
+
+        // Async like every other question here (never a modal loop). The first button is the default (Return);
+        // Escape and closing the window answer 0, the choice that changes nothing.
+        auto options = juce::MessageBoxOptions().withIconType(juce::MessageBoxIconType::WarningIcon);
+        if (outcome.kind == synth::PreviousRunKind::Unexpected) {
+            juce::AlertWindow::showAsync(options.withTitle("Agent Synth Quit Unexpectedly")
+                                             .withMessage("Agent Synth quit unexpectedly last time.")
+                                             .withButton("OK"),
+                                         [](int) {});
+            return;
+        }
+
+        juce::String message = "Agent Synth quit last time inside " + outcome.plugin.name +
+                               ". Open your project without it? Its card then stays empty and says it is switched off, "
+                               "and nothing is lost.";
+        if (outcome.strikes > 1)
+            message += " It has now been blamed " + juce::String(outcome.strikes) + " times.";
+        awaitingCrashChoice_ = true;
+        const auto plugin = outcome.plugin;
+        juce::AlertWindow::showAsync(options.withTitle("Plugin Crash")
+                                         .withMessage(message)
+                                         .withButton("Open without it")
+                                         .withButton("Open normally"),
+                                     [this, plugin](int result) {
+                                         // Two-button convention: the first button returns 1, the second and a
+                                         // closed window 0.
+                                         if (result == 1)
+                                             synth::HostedPluginBackend::getDefault().skipPluginForNextLoad(
+                                                 plugin.name, plugin.bundlePath);
+                                         awaitingCrashChoice_ = false;
+                                         if (pendingProject_ != juce::File())
+                                             openProject(std::exchange(pendingProject_, juce::File()));
+                                     });
+    }
+
     // Must run before anything creates a juce::ApplicationProperties for kSettingsFolderName
     // (MainComponent's constructor does this) — otherwise JUCE creates an empty current-name
     // folder first, and migrateUserData's "already exists" guard skips the real migration.
@@ -145,7 +274,8 @@ private:
                 // the child processes happens on PluginScanService's own background thread; this
                 // call itself only flips an atomic and (at most) spawns that thread, so it is not on
                 // this window's construction critical path.
-                mc->maybeStartEagerPluginScan();
+                if (!synth::isAutomationLaunch(JUCEApplication::getCommandLineParameterArray()))
+                    mc->maybeStartEagerPluginScan();
 
                 // This is the real app's ONE construction site for MainComponent
                 // (every test builds one directly and never reaches here) — opt both detach hosts
@@ -172,6 +302,9 @@ private:
 
 #if JUCE_MAC
             setMacMainMenu(this);
+            // The system menu can show a hint on hover; JUCE sets none (UI/Layout/MainMenuTooltips.h).
+            if (auto* mc = dynamic_cast<MainComponent*>(getContentComponent()))
+                synth::ui::installMainMenuTooltips(synth::ui::collectCommandTooltips(mc->getCommandManager()));
 #else
             setMenuBar(this);
 #endif
@@ -188,6 +321,18 @@ private:
 
         void closeButtonPressed() override { JUCEApplication::getInstance()->systemRequestedQuit(); }
 
+        // The clip here is the area the peer is painting: the test mode's stale-pixel check follows it.
+        void paintOverChildren(juce::Graphics& g) override {
+            DocumentWindow::paintOverChildren(g);
+            synth::testmode::notePresentedPaint(*this, g);
+        }
+
+        // With nothing focused (right after launch, or once an in-place editor closes) a key lands on this window,
+        // not on a component under MainComponent; forward it so Cmd+N and the like still run.
+        bool keyPressed(const juce::KeyPress& key) override {
+            return synth::forwardWindowKeyToMainComponent(getContentComponent(), key);
+        }
+
         juce::StringArray getMenuBarNames() override { return {"File", "Edit", "Help"}; }
 
         juce::PopupMenu getMenuForIndex(int menuIndex, const juce::String&) override {
@@ -201,6 +346,8 @@ private:
                     menu.addCommandItem(&cm, AppCommands::exportPatchOnly);
                     menu.addCommandItem(&cm, AppCommands::exportAudio);
                     menu.addCommandItem(&cm, AppCommands::exportStems);
+                    menu.addCommandItem(&cm, AppCommands::exportMidi);
+                    menu.addCommandItem(&cm, AppCommands::collectAndArchive);
                     menu.addSeparator();
                     // Project and patch open as separate menu items - Open Project (.agsproj
                     // bundle, the rebindable Cmd+O) and Open Patch (.json preset, menu-only). addCommandItem
@@ -221,6 +368,7 @@ private:
 #endif
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::contribute);
+                    menu.addCommandItem(&cm, AppCommands::joinDiscord);
                 }
             }
             return menu;
@@ -239,6 +387,13 @@ private:
     synth::theme::ThemeManager themeManager;
     synth::theme::AppLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
+#if JUCE_MAC
+    std::unique_ptr<synth::MacPeerDroppedKeyRelay> droppedKeyRelay_;
+#endif
+    std::unique_ptr<synth::testmode::TestModeServer> testModeServer_;
+    std::unique_ptr<synth::RunSentinel> runSentinel_; // present from launch until a clean quit
+    bool awaitingCrashChoice_ = false;                // the "quit inside a plugin" question is open
+    juce::File pendingProject_;                       // a project the OS handed over before the window existed
 };
 
 //==============================================================================

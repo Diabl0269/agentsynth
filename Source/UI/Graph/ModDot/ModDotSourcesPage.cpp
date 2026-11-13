@@ -1,0 +1,419 @@
+#include "ModDotSourcesPage.h"
+
+#include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
+#include "ModDotAddSourceParts.h"
+#include "ModDotController.h"
+#include "ModDotPalette.h"
+#include "ModSourceRowWiring.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ExitEnterRowSlots.h"
+#include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
+#include <cmath>
+
+namespace synth::ui {
+
+namespace {
+SplitButtonHalfSpec addSourceHalf() {
+    return {ModDotGlyph::List, "Add source", "Add source", "Add source, list open", "Add source from a list"};
+}
+SplitButtonHalfSpec pickOnCanvasHalf() {
+    return {ModDotGlyph::Crosshair, "Pick on canvas", "Pick on canvas", "Pick on canvas, on",
+            "Pick a source on the canvas. Esc stops"};
+}
+} // namespace
+
+ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& controller,
+                                     juce::AudioProcessorGraph::NodeID card, int destChannel, KnobModTarget target)
+    : editor_(editor)
+    , controller_(controller)
+    , card_(card)
+    , destChannel_(destChannel)
+    , target_(std::move(target))
+    , split_(addSourceHalf(), pickOnCanvasHalf(), "Add a source")
+    , disconnectAll_(std::make_unique<ModDotLinkButton>(ModDotLinkButton::IconOnly{}, "Disconnect all connections",
+                                                        ModDotGlyph::Unlink))
+    , updater_(this) {
+    setTitle(target_.paramName + " modulation sources");
+    addAndMakeVisible(split_);
+    split_.leftHalf().onClick = [this] {
+        if (onAddSourceRequested)
+            onAddSourceRequested();
+    };
+    split_.rightHalf().onClick = [this] {
+        if (onPickOnCanvasRequested)
+            onPickOnCanvasRequested();
+    };
+    disconnectAll_->onClick = [this] { disconnectEverything(); };
+    addChildComponent(*disconnectAll_);
+    for (const auto& source : knobModSources(editor_, card_, destChannel_, true)) {
+        Entry entry;
+        entry.row = std::make_unique<ModDotSourceRow>(source, target_.paramName);
+        entry.current = entry.to = (float)ModDotSourceRow::kHeight;
+        wireRow(*entry.row);
+        addAndMakeVisible(*entry.row);
+        entries_.push_back(std::move(entry));
+    }
+    const auto chosen = controller_.chosenAttenuverter(card_, destChannel_);
+    for (auto& e : entries_)
+        e.row->setSelected(e.row->attenuverterId() == chosen);
+    disconnectFade_.current = disconnectFade_.to = disconnectTarget();
+    restoreSerialSeen_ = restoreSerial();
+    layoutRows();
+    setSize(kWidth, preferredHeight());
+}
+
+ModDotSourcesPage::~ModDotSourcesPage() { anim_.stop(updater_); }
+
+void ModDotSourcesPage::wireRow(ModDotSourceRow& row) {
+    wireModSourceRow(row, editor_, card_, destChannel_, [this] { sync(); });
+    row.onSelect = [this](ModDotSourceRow& r) { select(r.attenuverterId()); };
+    row.onRemove = [this](ModDotSourceRow& r) {
+        controller_.removeSource(card_, destChannel_, r.attenuverterId());
+        sync();
+        focusEntry();
+    };
+    row.onNavigate = [this](ModDotSourceRow& r, int step) { navigate(&r, step); };
+}
+
+juce::Button& ModDotSourcesPage::disconnectAllButton() noexcept { return *disconnectAll_; }
+
+// 1 while two or more sources are listed (one already has its own remove button), else 0.
+float ModDotSourcesPage::disconnectTarget() const {
+    return std::count_if(entries_.begin(), entries_.end(), [](const Entry& e) { return !e.leaving; }) >= 2 ? 1.0f
+                                                                                                           : 0.0f;
+}
+
+// One undo step for every source; the panel then follows the graph and the keys go to what is left.
+void ModDotSourcesPage::disconnectEverything() {
+    controller_.removeAllSources(card_, destChannel_);
+    sync();
+    focusEntry();
+}
+
+void ModDotSourcesPage::setRemoveHighlighted(bool on) {
+    removeHighlighted_ = on;
+    for (auto& e : entries_)
+        e.row->setRemoveHighlighted(on && !e.leaving);
+}
+
+void ModDotSourcesPage::select(juce::AudioProcessorGraph::NodeID attenuverterId) {
+    controller_.setLastChosen(card_, destChannel_, attenuverterId);
+    for (auto& e : entries_)
+        e.row->setSelected(!e.leaving && e.row->attenuverterId() == attenuverterId);
+}
+
+// True when `sources` are exactly the rows that are not on their way out.
+bool ModDotSourcesPage::followsSameSources(const std::vector<KnobModSource>& sources) const {
+    const auto isShown = [this](const KnobModSource& s) {
+        return std::any_of(entries_.begin(), entries_.end(),
+                           [&s](const Entry& e) { return !e.leaving && e.row->attenuverterId() == s.attenuverterId; });
+    };
+    const auto shown = std::count_if(entries_.begin(), entries_.end(), [](const Entry& e) { return !e.leaving; });
+    return static_cast<size_t>(shown) == sources.size() && std::all_of(sources.begin(), sources.end(), isShown);
+}
+
+// The number of undo/redo steps the document has taken: a row that appears after it moved came back from one.
+int ModDotSourcesPage::restoreSerial() const {
+    const auto* undo = editor_.getUndoManager();
+    return undo != nullptr ? undo->getRestoreSerial() : 0;
+}
+
+void ModDotSourcesPage::sync(bool fresh) {
+    const auto sources = knobModSources(editor_, card_, destChannel_, fresh);
+    const int serial = restoreSerial();
+    const bool restoredByUndo = serial != restoreSerialSeen_;
+    restoreSerialSeen_ = serial;
+    // The same sources as the motion in flight was started for: only the amounts follow, the motion plays on.
+    if (motionActive_ && followsSameSources(sources)) {
+        for (auto& e : entries_)
+            if (!e.leaving)
+                e.row->update(*std::find_if(sources.begin(), sources.end(), [&e](const KnobModSource& s) {
+                    return s.attenuverterId == e.row->attenuverterId();
+                }));
+        return;
+    }
+    landMotion(); // a different change lands the one playing first
+    for (auto& e : entries_) {
+        const auto it = std::find_if(sources.begin(), sources.end(), [&e](const KnobModSource& s) {
+            return s.attenuverterId == e.row->attenuverterId();
+        });
+        e.leaving = it == sources.end();
+        if (!e.leaving)
+            e.row->update(*it);
+    }
+    for (size_t i = 0; i < sources.size(); ++i) {
+        const auto& source = sources[i];
+        const bool known = std::any_of(entries_.begin(), entries_.end(), [&source](const Entry& e) {
+            return e.row->attenuverterId() == source.attenuverterId;
+        });
+        if (known)
+            continue;
+        Entry entry;
+        entry.row = std::make_unique<ModDotSourceRow>(source, target_.paramName);
+        entry.restored = restoredByUndo;
+        wireRow(*entry.row);
+        entry.row->setRemoveHighlighted(removeHighlighted_);
+        addAndMakeVisible(*entry.row);
+        // In the graph's own order: after the row of the closest source before it that is shown.
+        auto at = entries_.begin();
+        for (size_t before = i; before-- > 0;) {
+            const auto it = std::find_if(entries_.begin(), entries_.end(), [&sources, before](const Entry& e) {
+                return e.row->attenuverterId() == sources[before].attenuverterId;
+            });
+            if (it != entries_.end()) {
+                at = it + 1;
+                break;
+            }
+        }
+        entries_.insert(at, std::move(entry));
+    }
+    const auto chosen = controller_.chosenAttenuverter(card_, destChannel_);
+    for (auto& e : entries_)
+        e.row->setSelected(!e.leaving && e.row->attenuverterId() == chosen);
+    disconnectFade_.to = disconnectTarget();
+    animateLayout();
+}
+
+// What the change asks for. A removed row (by the panel, the timeline, a cable cut or an undo) shrinks away and then
+// the rows below close the gap; a row an undo brings back is made room for, grows and gets a fading outline: the shared
+// ExitEnterTimeline, one phase after another. A source the user just added only grows in. Everything lands at once when
+// the panel is not on screen.
+void ModDotSourcesPage::animateLayout() {
+    const bool anyLeaving = std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving; });
+    const bool anyRestored = std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.restored; });
+    disconnectFade_.from = disconnectFade_.current;
+    if (anyLeaving || anyRestored) {
+        startRemovalMotion();
+        return;
+    }
+    growNewRows();
+}
+
+// A row the user added grows from nothing to full (160 ms); the rows below follow because they are placed from the
+// heights above them.
+void ModDotSourcesPage::growNewRows() {
+    bool moving = disconnectFade_.current != disconnectFade_.to;
+    for (auto& e : entries_) {
+        e.from = e.current;
+        e.to = (float)ModDotSourceRow::kHeight;
+        moving = moving || e.from != e.to;
+    }
+    if (!moving) {
+        layoutRows();
+        return;
+    }
+    if (!modDotMotionAllowed(*this)) {
+        for (auto& e : entries_)
+            e.current = e.to;
+        disconnectFade_.current = disconnectFade_.to;
+        layoutRows();
+        return;
+    }
+    anim_.start(
+        updater_, kGrowMs, easeOutCubic,
+        [this](float t) {
+            for (auto& e : entries_)
+                e.current = e.from + (e.to - e.from) * t;
+            disconnectFade_.current = disconnectFade_.from + (disconnectFade_.to - disconnectFade_.from) * t;
+            layoutRows();
+        },
+        [this] {
+            for (auto& e : entries_)
+                e.current = e.to;
+            disconnectFade_.current = disconnectFade_.to;
+            layoutRows();
+        });
+}
+
+void ModDotSourcesPage::startRemovalMotion() {
+    exit_enter_slots::begin(entries_, (float)ModDotSourceRow::kHeight);
+    for (auto& e : entries_) {
+        if (e.leaving) {
+            e.row->setEnabled(false); // a row on its way out is not a control any more
+            e.row->setInterceptsMouseClicks(false, false);
+        }
+    }
+    if (!(isShowing() || forceAnimate_)) {
+        landMotion();
+        return;
+    }
+    reducedMotion_ = prefersReducedMotion();
+    timeline_ = exit_enter_slots::timelineFor(entries_);
+    motionActive_ = true;
+    applyTimelineAtMs(0.0);
+    const double total = timeline_.totalMs();
+    anim_.start(
+        updater_, total, [](float t) { return t; }, [this, total](float t) { applyTimelineAtMs((double)t * total); },
+        [this] { landMotion(); });
+}
+
+// Where the motion stands `elapsedMs` after it began: the rows leaving shrink (exit) and then their slots close (gap);
+// the rows restored open their slots (gap), grow, and fade an outline.
+void ModDotSourcesPage::applyTimelineAtMs(double elapsedMs) {
+    if (!motionActive_)
+        return;
+    exit_enter_slots::apply(entries_, timeline_, elapsedMs, reducedMotion_);
+    disconnectFade_.current =
+        disconnectFade_.from + (disconnectFade_.to - disconnectFade_.from) * timeline_.at(elapsedMs).gap;
+    layoutRows();
+    repaint();
+}
+
+// Every row at its final place and look: the rows that left are gone, the ones that came back are ordinary rows.
+void ModDotSourcesPage::landMotion() {
+    const bool wasActive =
+        motionActive_ || disconnectFade_.current != disconnectFade_.to ||
+        std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving || e.restored; });
+    if (!wasActive)
+        return;
+    motionActive_ = false;
+    disconnectFade_.current = disconnectFade_.to;
+    exit_enter_slots::land(entries_, (float)ModDotSourceRow::kHeight);
+    finishLeaving();
+    layoutRows();
+    repaint();
+}
+
+void ModDotSourcesPage::finishLeaving() {
+    entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving; }),
+                   entries_.end());
+}
+
+void ModDotSourcesPage::layoutRows() {
+    int y = kTitleHeight;
+    for (auto& e : entries_)
+        y += exit_enter_slots::place(*e.row, e, y, getWidth());
+    dividerY_ = y + 3;
+    split_.setBounds(6, dividerY_ + 4, getWidth() - 12, SplitButton::kHeight);
+    // In the title row, centred, its right edge on the rows' remove column.
+    const int side = disconnectAll_->preferredWidth();
+    disconnectAll_->setBounds(getWidth() - ModDotGlyphButton::kRowEdgeInset - side, (kTitleHeight - side) / 2, side,
+                              side);
+    disconnectAll_->setVisible(disconnectFade_.current > 0.0f);
+    disconnectAll_->setAlpha(juce::jlimit(0.0f, 1.0f, disconnectFade_.current));
+    disconnectAll_->setInterceptsMouseClicks(disconnectFade_.to > 0.0f, false);
+    heightChanged();
+}
+
+ModDotSourceRow* ModDotSourcesPage::animatingRowFor(juce::AudioProcessorGraph::NodeID attenuverterId) const {
+    for (const auto& e : entries_)
+        if (e.row->attenuverterId() == attenuverterId)
+            return e.row.get();
+    return nullptr;
+}
+
+int ModDotSourcesPage::slotHeightFor(juce::AudioProcessorGraph::NodeID attenuverterId) const {
+    for (const auto& e : entries_)
+        if (e.row->attenuverterId() == attenuverterId)
+            return juce::roundToInt(e.current);
+    return 0;
+}
+
+float ModDotSourcesPage::outlineAlphaFor(juce::AudioProcessorGraph::NodeID attenuverterId) const {
+    for (const auto& e : entries_)
+        if (e.row->attenuverterId() == attenuverterId)
+            return e.outline;
+    return 0.0f;
+}
+
+// The 1 px accent outline around a row an undo brought back, fading once it has grown.
+void ModDotSourcesPage::paintOverChildren(juce::Graphics& g) {
+    const auto p = modDotPaletteFor(*this);
+    for (const auto& e : entries_) {
+        if (e.outline <= 0.0f)
+            continue;
+        g.setColour(p.accent.withAlpha(e.outline));
+        g.drawRoundedRectangle(e.row->getBounds().toFloat().reduced(0.5f), p.radius, 1.0f);
+    }
+}
+
+int ModDotSourcesPage::preferredHeight() const { return dividerY_ + 4 + SplitButton::kHeight + 6; }
+
+void ModDotSourcesPage::resized() { layoutRows(); }
+
+void ModDotSourcesPage::paint(juce::Graphics& g) {
+    const auto p = modDotPaletteFor(*this);
+    g.setColour(p.text);
+    g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
+    // The title stops short of the "Disconnect all" icon at the right.
+    g.drawText(titleText(),
+               juce::Rectangle<int>(0, 0, getWidth(), kTitleHeight)
+                   .reduced(12, 0)
+                   .withTrimmedRight(ModDotLinkButton::kIconSide + ModDotGlyphButton::kRowEdgeInset),
+               juce::Justification::centredLeft, true);
+    g.setColour(p.border);
+    g.fillRect(juce::Rectangle<int>(8, dividerY_, getWidth() - 16, 1));
+}
+
+juce::String ModDotSourcesPage::titleText() const {
+    return target_.paramName + juce::String::fromUTF8(" \xC2\xB7 modulation");
+}
+
+void ModDotSourcesPage::focusEntry() {
+    for (auto& e : entries_)
+        if (!e.leaving && e.row->isSelected()) {
+            e.row->bar().grabKeyboardFocus();
+            return;
+        }
+    for (auto& e : entries_)
+        if (!e.leaving) {
+            e.row->bar().grabKeyboardFocus();
+            return;
+        }
+    split_.leftHalf().grabKeyboardFocus();
+}
+
+// Up/Down walk the rows (each row's bar), then the split button's list half, then "Disconnect all" when it is showing.
+void ModDotSourcesPage::navigate(juce::Component* from, int step) {
+    struct Stop {
+        juce::Component* control;
+        juce::Component* container;
+    };
+    std::vector<Stop> stops;
+    for (auto& e : entries_)
+        if (!e.leaving)
+            stops.push_back({&e.row->bar(), e.row.get()});
+    stops.push_back({&split_.leftHalf(), &split_});
+    if (disconnectFade_.to > 0.0f)
+        stops.push_back({disconnectAll_.get(), disconnectAll_.get()});
+    int index = (int)stops.size() - 1;
+    for (int i = 0; i < (int)stops.size(); ++i)
+        if (from != nullptr && (stops[(size_t)i].container == from || stops[(size_t)i].container->isParentOf(from)))
+            index = i;
+    index = juce::jlimit(0, (int)stops.size() - 1, index + step);
+    stops[(size_t)index].control->grabKeyboardFocus();
+}
+
+bool ModDotSourcesPage::keyPressed(const juce::KeyPress& key) {
+    if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
+        navigate(juce::Component::getCurrentlyFocusedComponent(), key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    return false;
+}
+
+int ModDotSourcesPage::rowCount() const {
+    int n = 0;
+    for (const auto& e : entries_)
+        n += e.leaving ? 0 : 1;
+    return n;
+}
+
+ModDotSourceRow* ModDotSourcesPage::rowAt(int index) const {
+    int n = 0;
+    for (const auto& e : entries_)
+        if (!e.leaving && n++ == index)
+            return e.row.get();
+    return nullptr;
+}
+
+ModDotSourceRow* ModDotSourcesPage::rowFor(juce::AudioProcessorGraph::NodeID attenuverterId) const {
+    for (const auto& e : entries_)
+        if (!e.leaving && e.row->attenuverterId() == attenuverterId)
+            return e.row.get();
+    return nullptr;
+}
+
+} // namespace synth::ui

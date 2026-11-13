@@ -85,6 +85,16 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.fadeInBeats = clip->fadeInBeats;
         entry.fadeOutBeats = clip->fadeOutBeats;
         entry.sourceStartSeconds = clip->sourceStartSeconds;
+        entry.stepsPerBar = clip->stepsPerBar;
+        entry.swing = clip->swing;
+        entry.humanise = clip->humanise;
+        entry.drumRows = clip->drumRows;
+        entry.mutedPitches = clip->mutedPitches;
+        entry.soloPitches = clip->soloPitches;
+        entry.scale = clip->scale;
+        entry.scaleVisible = clip->scaleVisible;
+        entry.noteRange = clip->noteRange;
+        entry.stretchOrigin = clip->stretchOrigin;
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -146,6 +156,26 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
             doc_->setClipGainDb(newId, entry.gainDb);
             doc_->setClipFades(newId, entry.fadeInBeats, entry.fadeOutBeats);
             doc_->setClipMuted(newId, entry.muted);
+            if (entry.stepsPerBar != synth::Clip::kDefaultStepsPerBar)
+                doc_->setClipStepsPerBar(newId, entry.stepsPerBar);
+            if (entry.swing != synth::Clip::kStraightSwing)
+                doc_->setClipSwing(newId, entry.swing);
+            if (entry.humanise != 0.0)
+                doc_->setClipHumanise(newId, entry.humanise);
+            for (const auto& row : entry.drumRows) {
+                doc_->setClipRowLength(newId, row.pitch, row.lengthSteps);
+                doc_->setClipRowSwing(newId, row.pitch, row.swing);
+            }
+            for (const int pitch : entry.mutedPitches)
+                doc_->setClipPitchMuted(newId, pitch, true);
+            for (const int pitch : entry.soloPitches)
+                doc_->setClipPitchSoloed(newId, pitch, true);
+            if (entry.scale.has_value() || entry.scaleVisible)
+                doc_->setClipScale(newId, entry.scale, entry.scaleVisible);
+            if (entry.noteRange.has_value())
+                doc_->setClipNoteRange(newId, entry.noteRange);
+            if (entry.stretchOrigin.has_value())
+                doc_->setClipStretchOrigin(newId, entry.stretchOrigin);
             newIds.push_back(newId);
         }
     };
@@ -165,34 +195,10 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
     return true;
 }
 
-bool TimelinePanelComponent::duplicateSelectedClips() {
-    if (doc_ == nullptr)
-        return false;
-
-    const auto selected = clipSelection_.getSelected();
-    if (selected.empty())
-        return false;
-
-    std::vector<synth::ClipId> newIds;
-    auto mutate = [this, &selected, &newIds] {
-        for (auto id : selected) {
-            const auto newId = doc_->duplicateClip(id);
-            if (newId.isValid())
-                newIds.push_back(newId);
-        }
-    };
-
-    if (undoManager_)
-        undoManager_->recordTimelineChange(*doc_, mutate);
-    else
-        mutate();
-
-    if (newIds.empty())
-        return false;
-
-    clipSelection_.setSelection(newIds);
-    return true;
-}
+// Duplicate is one repeat: the copies tile forward as ONE block after the selection's end. Calling
+// duplicateClip per clip instead dropped each copy right after its OWN source, so selecting two
+// adjacent clips put the first copy on top of the second original.
+bool TimelinePanelComponent::duplicateSelectedClips() { return repeatSelectedClips(1); }
 
 bool TimelinePanelComponent::canCutClips() const noexcept { return doc_ != nullptr && !clipSelection_.isEmpty(); }
 
@@ -342,6 +348,16 @@ bool TimelinePanelComponent::copyRange() {
             entry.fadeInBeats = fragment->fadeInBeats;
             entry.fadeOutBeats = fragment->fadeOutBeats;
             entry.sourceStartSeconds = fragment->sourceStartSeconds;
+            entry.stepsPerBar = fragment->stepsPerBar;
+            entry.swing = fragment->swing;
+            entry.humanise = fragment->humanise;
+            entry.drumRows = fragment->drumRows;
+            entry.mutedPitches = fragment->mutedPitches;
+            entry.soloPitches = fragment->soloPitches;
+            entry.scale = fragment->scale;
+            entry.scaleVisible = fragment->scaleVisible;
+            entry.noteRange = fragment->noteRange;
+            entry.stretchOrigin = fragment->stretchOrigin;
             captured.push_back(std::move(entry));
         }
     }

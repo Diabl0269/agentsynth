@@ -1,0 +1,38 @@
+# A marker dragged to the edge of the ruler stopped there; now the timeline scrolls along and the flag stays under the
+# pointer. A loop drawn to the edge keeps growing the same way.
+#
+# What a user does: opens a project with a 64-beat clip and a "Verse" marker at bar 3 (fixture edge-follow.agsproj),
+# shows the timeline in the main area, drags the Verse flag to the ruler's right edge and holds: the timeline scrolls
+# and the flag rides along under the pointer. Lets go, and one Cmd+Z puts the marker back at bar 3. Then draws a loop
+# in the ruler's top half from near the left of the view to the right edge and holds: the loop end keeps following the scrolled view.
+record: true
+save_project: ruler-marker-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/edge-follow.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - screenshot: {name: 1-verse-at-bar-3}
+  # Check 1: the Verse flag (local x 210, the bottom band) held at the right edge.
+  - mouseDown: {id: timelineRuler, x: 210, y: 23}
+  - mouseMoveHeld: {id: timelineRuler, x: 600, y: 23}
+  - glide: {name: marker-edge-follows, frames: 16, crop: {x: 400, y: 78, w: 1200, h: 120}, do: {mouseMoveHeld: {id: timelineRuler, x: 1196, y: 23}}}
+  - wait: {settleMs: 1000}
+  - mark: {check: 1, name: marker-follows-view}
+  - mouseUp: {id: timelineRuler, x: 1196, y: 23}
+  - wait: {}
+  - screenshot: {name: 2-marker-dropped}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: 3-marker-back}
+  - mark: {check: 2, name: one-undo-puts-the-marker-back}
+  # Check 3: a loop drawn from near the left of the view to the right edge (the top half) keeps growing as it scrolls.
+  - mouseDown: {id: timelineRuler, x: 96, y: 6}
+  - mouseMoveHeld: {id: timelineRuler, x: 600, y: 6}
+  - glide: {name: loop-edge-follows, frames: 12, crop: {x: 400, y: 78, w: 1200, h: 120}, do: {mouseMoveHeld: {id: timelineRuler, x: 1196, y: 6}}}
+  - wait: {settleMs: 1000}
+  - mark: {check: 3, name: loop-end-follows-view}
+  - mouseUp: {id: timelineRuler, x: 1196, y: 6}
+  - wait: {}

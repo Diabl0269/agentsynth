@@ -64,6 +64,11 @@ public:
         juce::String message;
         int retryAfterSeconds = 0;
         juce::String requestId;
+        // The HTTP status of the failed response (0 when none arrived) and the server's `error.code`
+        // ("PLAN_EXPIRED", "QUOTA_EXCEEDED", ...), for a caller that must react to one specific failure
+        // (the song steps client falls back on a 404 and re-plans on PLAN_EXPIRED). Empty when the body had none.
+        int httpStatus = 0;
+        juce::String code;
     };
 
     /**
@@ -134,6 +139,33 @@ public:
     }
 
     /**
+     * @brief Posts `body` (a JSON object, plus the provider's own productName) to the service route `route`
+     *        ("/v1/song/plan") and delivers the response's `data` as JSON, like sendCapabilityRequest() but for a
+     *        route that is not under /v1/capability/. Default: fails the callback with a typed Schema error.
+     */
+    virtual RequestId sendRouteRequest(const juce::String& route, const juce::var& body, CompletionCallback callback) {
+        juce::ignoreUnused(body);
+        failUnsupportedRoute(route, callback);
+        return {};
+    }
+
+    /** Receives one complete line of a streamed (NDJSON) response, on the message thread, in order. */
+    using StreamLineCallback = std::function<void(const juce::String& line)>;
+
+    /**
+     * @brief Posts `body` to `route` and reads the response as a stream of lines: `onLine` gets each complete line
+     *        as it arrives (message thread, in order), then `onFinished` fires once (success when the stream ended
+     *        normally; a typed error when the request failed before streaming, was cancelled, or the connection
+     *        dropped). cancel() closes the stream. Default: fails `onFinished` with a typed Schema error.
+     */
+    virtual RequestId streamRouteRequest(const juce::String& route, const juce::var& body, StreamLineCallback onLine,
+                                         CompletionCallback onFinished) {
+        juce::ignoreUnused(body, onLine);
+        failUnsupportedRoute(route, onFinished);
+        return {};
+    }
+
+    /**
      * @brief Requests cancellation of a previously started sendPrompt() or
      *        sendCapabilityRequest(). Providers that cannot cancel in-flight requests may
      *        implement this as a no-op.
@@ -192,6 +224,17 @@ public:
      *        AIIntegrationService::isCurrentProviderHosted().
      */
     virtual bool isHosted() const { return false; }
+
+private:
+    static void failUnsupportedRoute(const juce::String& route, const CompletionCallback& callback) {
+        if (!callback)
+            return;
+        AIResponse response;
+        response.success = false;
+        response.error.kind = AIErrorKind::Schema;
+        response.error.message = "Error: The active AI provider does not support service routes (" + route + ").";
+        callback(response);
+    }
 };
 
 } // namespace synth

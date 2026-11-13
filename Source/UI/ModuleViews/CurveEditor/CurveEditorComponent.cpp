@@ -1,9 +1,24 @@
 #include "CurveEditorComponent.h"
+#include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include <cmath>
 
 namespace synth::ui {
 
-CurveEditorComponent::CurveEditorComponent() { setWantsKeyboardFocus(false); }
+CurveEditorComponent::CurveEditorComponent() {
+    setWantsKeyboardFocus(true);
+    setTitle("Curve editor");
+    setDescription("Breakpoint curve. Left and Right pick a point, Shift with them selects several, Alt with an arrow "
+                   "moves the selection, Up and Down change its level, Control T inserts a point after the "
+                   "current one, Delete removes it.");
+    setTooltip("Curve editor: Left/Right pick a point, Shift+Left/Right select several, Alt+arrows move them "
+               "(Alt+Shift: finely), Up/Down change the level, Ctrl+T inserts a point after the current one, "
+               "Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: "
+               "drag points and bend handles, Shift-click adds a point to the selection, double-click to add or "
+               "remove a point");
+    keyHold_.speedFactor = [this](KeyAxis) { return keyDragSpeedFactor(); };
+    keyHold_.onFrame = [this] { applyKeyDrag(false); };
+    keyHold_.onEnd = [this] { endKeyDrag(); };
+}
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
     CurveGeometryConfig config = geometryConfig_;
@@ -12,7 +27,11 @@ CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
     return CurveEditorGeometry(model_, getLocalBounds().toFloat(), config);
 }
 
-void CurveEditorComponent::setModel(CurveModel model) {
+void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
+    draw_.cancel(); // a stroke in flight was drawn on the old curve
+    const auto placesBefore = glideMoved ? nodePositions() : std::vector<juce::Point<float>>();
+    const auto bendsBefore = glideMoved ? drawnBends() : std::vector<float>();
+    auto lineBefore = glideMoved ? drawnCurvePoints(currentGeometry()) : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
     model_ = std::move(model);
@@ -20,7 +39,7 @@ void CurveEditorComponent::setModel(CurveModel model) {
     const int newNumNodes = model_.getNumNodes();
     const bool topologyChanged = newNumNodes != oldNumNodes || model_.getMode() != oldMode;
     const bool indexOutOfRange =
-        dragIndex_ >= newNumNodes || hoveredIndex_ >= newNumNodes || selectedIndex_ >= newNumNodes;
+        dragIndex_ >= newNumNodes || hoveredIndex_ >= newNumNodes || cursorIndex() >= newNumNodes;
 
     if (topologyChanged || indexOutOfRange) {
         if (gestureActive_) {
@@ -31,11 +50,28 @@ void CurveEditorComponent::setModel(CurveModel model) {
         dragKind_ = DragKind::None;
         dragIndex_ = -1;
         dragFrozenRange_.reset();
+        boxSelect_.cancel();
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;
-        selectedIndex_ = -1;
+        selection_ = {};
+        pendingToggleIndex_ = -1;
+        pendingCollapseIndex_ = -1;
+    }
+    if (topologyChanged) {
+        pointTween_.clear();
+        bendTween_.clear();
+        if (glideMoved)
+            morphFrom(std::move(lineBefore));
+        else {
+            morphTween_.clear();
+            morphFrom_.clear();
+        }
+    } else if (glideMoved) {
+        glideNodesFrom(placesBefore);
+        glideBendsFrom(bendsBefore);
     }
     repaint();
+    refreshAccessibilityValue();
 }
 
 void CurveEditorComponent::setMinVisibleRange(double minRange) {
@@ -60,6 +96,16 @@ void CurveEditorComponent::setTimeLabelFormatter(std::function<juce::String(doub
 
 void CurveEditorComponent::setGrid(std::optional<CurveGrid> grid) {
     grid_ = grid;
+    repaint();
+}
+
+void CurveEditorComponent::setBackdropPainter(BackdropPainter painter) {
+    backdrop_ = std::move(painter);
+    repaint();
+}
+
+void CurveEditorComponent::setAxisGuides(std::optional<AxisGuides> guides) {
+    guides_ = std::move(guides);
     repaint();
 }
 
@@ -95,19 +141,12 @@ juce::Point<double> CurveEditorComponent::snapModelPoint(const CurveEditorGeomet
                                                          bool bypassSnap) const {
     if (!snapToGrid_ || !grid_.has_value() || bypassSnap)
         return point;
-
-    const double minX = model_.getMinX();
-    const double maxX = model_.getMaxX();
-    const double xDiv = (double)juce::jmax(1, grid_->xDivisions);
-    const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
-
-    double x = point.x;
-    if (maxX > minX) {
-        const double frac = juce::jlimit(0.0, 1.0, (x - minX) / (maxX - minX));
-        x = minX + (std::round(frac * xDiv) / xDiv) * (maxX - minX);
+    double y = point.y;
+    if (gridHasY() && grid_->snapY) {
+        const double yDiv = (double)grid_->yDivisions;
+        y = std::round(juce::jlimit(0.0, 1.0, point.y) * yDiv) / yDiv;
     }
-    const double y = std::round(juce::jlimit(0.0, 1.0, point.y) * yDiv) / yDiv;
-    return {x, y};
+    return {snapGridX(point.x), y};
 }
 
 int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool bypassSnap) {
@@ -115,23 +154,32 @@ int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool b
         return index;
 
     const auto geometry = currentGeometry();
-    const CurveNode constraints = model_.getNode(index);
-
     const juce::Point<double> snapped =
         snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
+    return applyNodeTarget(index, snapped);
+}
 
+int CurveEditorComponent::moveNodeInModel(CurveModel& model, int index, juce::Point<double> target) {
+    const CurveNode constraints = model.getNode(index);
     if (constraints.yMovable)
-        model_.setNodeY(index, (float)snapped.y);
-
+        model.setNodeY(index, (float)target.y);
     int newIndex = index;
     if (constraints.xMovable)
-        newIndex = model_.setNodeX(index, snapped.x).newIndex;
+        newIndex = model.setNodeX(index, target.x).newIndex;
+    return newIndex;
+}
 
+int CurveEditorComponent::applyNodeTarget(int index, juce::Point<double> target) {
+    const int newIndex = moveNodeInModel(model_, index, target);
+
+    if (newIndex != index)
+        remapSelectionForMove(index, newIndex);
     if (onNodeChanged)
         onNodeChanged(newIndex);
     if (newIndex != index && onPointsChanged)
         onPointsChanged();
     repaint();
+    refreshAccessibilityValue();
     return newIndex;
 }
 
@@ -146,11 +194,7 @@ void CurveEditorComponent::dragBendBy(int segment, float deltaPixelsY) {
     if (startLevel == endLevel)
         return; // flat segment: bend has no visible effect
 
-    // Dragging toward the side the curve already bulges increases the bulge, for both a rising
-    // and a falling segment: rising (end > start) bulges upward for a positive bend (the curve
-    // reads closer to `end` at the midpoint, which is the higher value), so dragging UP (negative
-    // pixelsY) should increase bend; falling is the mirror image.
-    const float directionSign = (endLevel >= startLevel) ? -1.0f : 1.0f;
+    const float directionSign = upwardBendSign(startLevel, endLevel);
     const float bendDelta = directionSign * (deltaPixelsY / kBendSensitivityPx) * 2.0f;
     const float newBend = juce::jlimit(-1.0f, 1.0f, model_.getBend(segment) + bendDelta);
 
@@ -174,21 +218,28 @@ void CurveEditorComponent::resetBend(int segment) {
     repaint();
 }
 
-int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) {
-    if (model_.getMode() != CurveMode::Free)
+int CurveEditorComponent::insertPointAt(juce::Point<float> point, bool bypassSnap) {
+    if (model_.getMode() != CurveMode::Free || model_.getNumNodes() >= CurveModel::kMaxNodes)
         return -1;
 
     const auto geometry = currentGeometry();
     const juce::Point<double> snapped =
         snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
 
-    beginGesture();
     const int index = model_.addPoint(snapped.x, (float)snapped.y);
-    selectedIndex_ = index;
+    setSelectedIndex(index);
     if (onPointsChanged)
         onPointsChanged();
-    endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
     repaint();
+    return index;
+}
+
+int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) {
+    if (model_.getMode() != CurveMode::Free || model_.getNumNodes() >= CurveModel::kMaxNodes)
+        return -1;
+    beginGesture();
+    const int index = insertPointAt(point, bypassSnap);
+    endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
     return index;
 }
 
@@ -201,8 +252,14 @@ bool CurveEditorComponent::removeNode(int index) {
     beginGesture();
     const bool removed = model_.removePoint(index);
     if (removed) {
-        if (selectedIndex_ == index)
-            selectedIndex_ = -1;
+        std::vector<int> kept;
+        for (const int j : selection_.selected())
+            if (j != index)
+                kept.push_back(j > index ? j - 1 : j);
+        const auto shift = [index](int j) { return j > index ? j - 1 : j; };
+        const int anchor = selection_.anchor().value_or(-1);
+        setSelection(std::move(kept), cursorIndex() == index ? -1 : shift(cursorIndex()),
+                     anchor == index ? -1 : shift(anchor));
         if (onPointsChanged)
             onPointsChanged();
     }
@@ -214,6 +271,12 @@ bool CurveEditorComponent::removeNode(int index) {
 }
 
 void CurveEditorComponent::updateHover(juce::Point<float> point) {
+    const auto lineBefore = highlightedLine(currentGeometry());
+    pointer_ = point;
+    if (lineBefore != highlightedLine(currentGeometry()))
+        repaint();
+    if (draw_.getPen().has_value())
+        return; // the pen's crosshair stays; there are no points to hover
     const CurveHitResult hit = hitTest(point);
     if (hit.kind == hoveredKind_ && hit.index == hoveredIndex_)
         return;
@@ -226,6 +289,8 @@ void CurveEditorComponent::updateHover(juce::Point<float> point) {
 }
 
 void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
+    if (draw_.press(e))
+        return;
     const CurveHitResult hit = hitTest(e.position);
 
     // A right-click starts no drag and opens no gesture -- it either shows a context menu (if a
@@ -251,15 +316,33 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
         // stood right now (before any state changes) -- see `dragFrozenRange_`'s doc comment.
         // Never frozen for a bend-handle drag: bend never moves x, nothing to freeze against.
         dragFrozenRange_ = currentGeometry().getVisibleRange();
-        selectedIndex_ = hit.index;
+        pendingToggleIndex_ = -1;
+        pendingCollapseIndex_ = -1;
+        const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
+        if (additive && isSelected(hit.index))
+            pendingToggleIndex_ = hit.index; // a click removes it; a drag keeps it and moves the group
+        else if (additive)
+            toggleSelected(hit.index);
+        else if (isSelected(hit.index) && selection_.size() > 1) {
+            pendingCollapseIndex_ = hit.index; // a click collapses to it; a drag moves the group
+            setSelection(selection_.selected(), hit.index, selection_.anchor().value_or(-1));
+        } else
+            setSelectedIndex(hit.index);
     }
     if (dragKind_ != DragKind::None)
         repaint();
+    else if (hit.kind == CurveHitKind::None)
+        boxSelect_.press(e.position.roundToInt(), e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown(),
+                         selection_.selected());
 }
 
 void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
-    if (dragKind_ == DragKind::None)
+    if (draw_.drag(e))
         return;
+    if (dragKind_ == DragKind::None) {
+        dragBoxTo(e.position);
+        return;
+    }
 
     if (!gestureActive_) {
         beginGesture();
@@ -267,7 +350,10 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (dragKind_ == DragKind::Node) {
-        dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
+        if (selection_.size() > 1 && isSelected(dragIndex_))
+            dragSelectionTo(dragIndex_, e.position, e.mods.isShiftDown());
+        else
+            dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
     } else if (dragKind_ == DragKind::Bend) {
         const float deltaY = e.position.y - lastDragPos_.y;
         dragBendBy(dragIndex_, deltaY);
@@ -275,7 +361,18 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
     lastDragPos_ = e.position;
 }
 
-void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
+void CurveEditorComponent::mouseUp(const juce::MouseEvent& e) {
+    if (draw_.release(e))
+        return;
+    endBox();
+    if (!gestureActive_) {
+        if (pendingToggleIndex_ >= 0)
+            toggleSelected(pendingToggleIndex_);
+        else if (pendingCollapseIndex_ >= 0)
+            setSelectedIndex(pendingCollapseIndex_);
+    }
+    pendingToggleIndex_ = -1;
+    pendingCollapseIndex_ = -1;
     if (gestureActive_) {
         endGesture();
         gestureActive_ = false;
@@ -291,6 +388,12 @@ void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
 void CurveEditorComponent::mouseMove(const juce::MouseEvent& e) { updateHover(e.position); }
 
 void CurveEditorComponent::mouseExit(const juce::MouseEvent&) {
+    if (pointer_.has_value()) {
+        const bool lit = highlightedLine(currentGeometry()).has_value();
+        pointer_.reset();
+        if (lit)
+            repaint();
+    }
     if (hoveredKind_ != CurveHitKind::None) {
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;
@@ -300,6 +403,8 @@ void CurveEditorComponent::mouseExit(const juce::MouseEvent&) {
 }
 
 void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
+    if (draw_.getPen().has_value())
+        return; // the pen draws; points are edited with it off
     const CurveHitResult hit = hitTest(e.position);
     if (hit.kind == CurveHitKind::BendHandle) {
         resetBend(hit.index);
@@ -309,7 +414,7 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     if (hit.kind == CurveHitKind::Node)
         removeNode(hit.index);
-    else
+    else if (!(onEmptyDoubleClick && onEmptyDoubleClick(e)))
         addPointAt(e.position, e.mods.isShiftDown());
 }
 

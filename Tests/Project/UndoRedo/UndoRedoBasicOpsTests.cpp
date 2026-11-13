@@ -3,6 +3,9 @@
 // and a multi-step complex graph modification.
 #include "UndoRedoTestFixture.h"
 
+#include "Modules/SamplerModule.h"
+#include <juce_audio_formats/juce_audio_formats.h>
+
 /**
  * Test 1: UndoAddModule
  * - Graph starts empty (0 nodes)
@@ -350,4 +353,48 @@ TEST_F(UndoRedoTest, ComplexGraphModification) {
 
     undoManager.redo(); // Add second connection
     ASSERT_EQ(graph.getConnections().size(), 2);
+}
+
+/**
+ * First load into an empty Sampler (the way SamplerChrome::loadSampleUndoably brackets a drop or a picked file):
+ * undo must leave the Sampler with no sample, redo must bring the sample back.
+ */
+TEST_F(UndoRedoTest, UndoFirstSampleLoadIntoEmptySampler) {
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("undo-first-load-1384.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> buffer(1, 1024);
+        buffer.clear();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(stream.get(), 44100.0, 1, 16, {}, 0));
+        ASSERT_NE(writer, nullptr);
+        stream.release();
+        writer->writeFromAudioSampleBuffer(buffer, 0, 1024);
+    }
+
+    auto node = graph.addNode(std::make_unique<SamplerModule>());
+    auto* sampler = dynamic_cast<SamplerModule*>(node->getProcessor());
+    ASSERT_NE(sampler, nullptr);
+    ASSERT_TRUE(sampler->getSampleFilePath().isEmpty());
+
+    undoManager.captureBeforeState(graph);
+    ASSERT_TRUE(sampler->loadSampleFile(file));
+    undoManager.pushSnapshotFromCapture(graph);
+    ASSERT_EQ(sampler->getSampleFilePath(), file.getFullPathName());
+
+    ASSERT_TRUE(undoManager.canUndo()) << "the first load is an undo step";
+    undoManager.undo();
+    auto* afterUndo = dynamic_cast<SamplerModule*>(graph.getNodes()[0]->getProcessor());
+    ASSERT_NE(afterUndo, nullptr);
+    EXPECT_TRUE(afterUndo->getSampleFilePath().isEmpty()) << "undo of the first load empties the Sampler";
+    EXPECT_EQ(afterUndo->getSample(), nullptr);
+    EXPECT_FALSE(undoManager.canUndo()) << "the load was one step";
+
+    undoManager.redo();
+    auto* afterRedo = dynamic_cast<SamplerModule*>(graph.getNodes()[0]->getProcessor());
+    ASSERT_NE(afterRedo, nullptr);
+    EXPECT_EQ(afterRedo->getSampleFilePath(), file.getFullPathName());
+    file.deleteFile();
 }

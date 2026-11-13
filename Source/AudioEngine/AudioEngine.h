@@ -1,13 +1,18 @@
 #pragma once
 
+#include "AudioEngine/AudioInputLayoutStore.h"
+#include "AudioEngine/InputTakeRecorder.h"
+#include "AudioEngine/MidiInputSources.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "Mixer/MixerPanLaw.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ModuleBase.h"
+#include "SoundBrowser/SoundPreviewPlayer.h"
 #include "Timeline/AudioClipStreamer.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/EpochExchange.h"
 #include "Timeline/TimelineSnapshotExchange.h"
+#include "Timeline/TrackAudioInput.h"
 #include "Transport/Metronome.h"
 #include "Transport/TransportService.h"
 #include <array>
@@ -19,12 +24,15 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace synth {
-class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
-class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
+class AuditionMonitor; // Forward declaration (Source/AudioEngine/AuditionMonitor.h)
+class MidiRecorder;    // Forward declaration (Source/Timeline/MidiRecorder.h)
+class TimelineDoc;     // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 
 namespace midi {
 class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/RemoteMessageSink.h)
@@ -34,7 +42,8 @@ class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/
 class AudioEngine
     : public juce::AudioIODeviceCallback
     , public juce::MidiInputCallback
-    , public juce::ChangeListener {
+    , public juce::ChangeListener
+    , private juce::Timer {
 public:
     // How the graph is driven.
     //   Standalone — AudioEngine owns an AudioDeviceManager, opens the default output device and
@@ -63,6 +72,9 @@ public:
 
     // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch).
     void setAudioDeviceDisabled(bool disabled) noexcept;
+    // Test seam, process-wide: off, initialiseDevices() opens no MIDI input.
+    static void setOpenAllMidiInputsForTest(bool open) noexcept;
+    static bool openAllMidiInputsEnabled() noexcept;
     bool isAudioDeviceDisabled() const noexcept;
 
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
@@ -147,6 +159,10 @@ public:
 
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
+    /** The project-open gate, apart from the user's mute: closed, the output is silent; opening ramps it in. Any
+     *  thread; open by default (docs/architecture/audio-engine.md#project-load-gate). */
+    void setLoadGateOpen(bool open) noexcept;
+    bool isLoadGateOpen() const noexcept;
 
     // The project's mixer pan law; see the .cpp definition and docs/mixer/mixer.md#pan-law.
     void setMixerPanLaw(synth::MixerPanLaw law) noexcept;
@@ -171,6 +187,11 @@ public:
 
     // MESSAGE THREAD. Re-publishes which modules have a cable on a Sidechain (Key) input.
     void refreshSidechainKeys();
+
+    // MESSAGE THREAD. Sampler MIDI-fed flags and Drum Kit pad links; see AudioEngineTimelinePublish.cpp.
+    void refreshMidiWiring();
+    // MESSAGE THREAD. Re-collects the nodes the MIDI driver thread delivers into.
+    void refreshExternalMidiNodes();
 
     // ---- Right-borrows-Left normalling (docs/architecture/audio-engine.md#normalling-fro324) ------------
     // MESSAGE THREAD. See AudioEngineTimelinePublish.cpp for every call site.
@@ -241,6 +262,14 @@ public:
     // renderPass.
     synth::Metronome& getMetronome() noexcept { return metronome_; }
     const synth::Metronome& getMetronome() const noexcept { return metronome_; }
+
+    // The Sounds view's preview, summed after the master at the end of renderNextBlock (see the class comment
+    // there and docs/architecture/audio-engine.md#sound-preview). Message-thread callers use play/stop/setGainDb;
+    // the audio thread only ever calls process(), from renderNextBlock.
+    synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() noexcept { return soundPreview_; }
+    // Makes a key-scale audition heard through a muted or solo-silenced sound (message thread; AuditionMonitor.h).
+    synth::AuditionMonitor& getAuditionMonitor() noexcept { return *auditionMonitor_; }
+    const synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() const noexcept { return soundPreview_; }
 
     // The timeline's message-thread -> audio-thread hand-off. The message thread publishes
     // snapshots here (and may reap on a timer); the engine opens exactly one audio block on it per
@@ -420,6 +449,44 @@ public:
     // instead of waiting for the audio thread to render a block with the new layout.
     int getDeviceInputChannelCount() const noexcept { return deviceInputChannelCount_.load(std::memory_order_relaxed); }
 
+    // ---- Recording from the input (AudioEngineInputRecording.cpp) ----
+    // What the UI needs to offer an input; `deviceName` is the one enableDeviceInputs() would open while inputs are
+    // off.
+    using AudioInputInfo = synth::AudioInputStatus;
+    // MESSAGE THREAD.
+    AudioInputInfo getAudioInputInfo();
+    // Any thread. Whether 0-based input `channel` is turned on and reaches the engine's input snapshot.
+    bool isInputChannelActive(int channel) const noexcept;
+    // MESSAGE THREAD. The loudest sample on 0-based input `channel` since the last read; resets it.
+    float readInputPeak(int channel) noexcept;
+    // MESSAGE THREAD, Standalone only (a no-op Hosted). Asks for microphone access, then turns on every input
+    // of the chosen device (at most 8); the change persists through onDeviceStateChanged.
+    void enableDeviceInputs();
+    // MESSAGE THREAD, Standalone only. Turns `numJacks` jacks from `firstJack` on or off (microphone access is asked
+    // first when turning on); the rest of the setup stays.
+    void setDeviceInputsUsed(int firstJack, int numJacks, bool used);
+    // Pairs and names per interface (docs/layout/settings-preferences.md#the-audio-tab); the owner saves it.
+    synth::AudioInputLayoutStore& getInputLayoutStore() noexcept { return inputLayout_; }
+    // MESSAGE THREAD. Records the interface that is open now as used (a first sighting gets an empty entry).
+    void noteOpenInterface();
+    // MESSAGE THREAD, Standalone only. Call for a setup the user chose, never for a change the system made.
+    void rememberOpenDeviceSettings();
+    // Takes recorded straight from the input; their WAVs are finalised by shutdown().
+    synth::InputTakeRecorder& getInputRecorder() noexcept { return inputRecorder_; }
+
+    // ---- Track input monitoring (AudioEngineTrackMonitoring.cpp) ----
+    // ANY THREAD. Record is on (a take rolling, or waiting for Play): an Auto-monitoring track keeps playing its input
+    // while the transport rolls. Set it before asking the transport to play, or the first blocks drop the input.
+    void setRecordingEngaged(bool engaged) noexcept { recordingEngaged_.store(engaged, std::memory_order_relaxed); }
+    // MESSAGE THREAD. Calls `onTrip(trackId)` once per track whose monitoring feedback guard tripped since the last
+    // call.
+    template <typename OnTrip>
+    void consumeMonitorGuardTrips(OnTrip&& onTrip) {
+        monitorGuardReports_.consume(onTrip);
+    }
+    // MESSAGE THREAD. Re-derives the Audio Input module's monitoring gate from the patch; publishTimeline calls it.
+    void refreshAudioInputGate();
+
     // Value types shared with the graph UI; defined in ModulationRoutingTypes.h so UI headers can
     // hold them without including this header.
     using ModRoutingInfo = ::ModRoutingInfo;
@@ -439,6 +506,8 @@ public:
                                                     juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex);
     void addEmptyModRouting();
     void removeModRouting(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
+    /** Frees every hosted plugin modulation slot that no longer has a cable. Message thread. */
+    void releaseUnconnectedHostedModSlots();
     void toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();
@@ -447,6 +516,10 @@ public:
     void openMidiDevicesForRemote(const std::vector<juce::String>& deviceNames);
     // Device *identifiers* (the MIDI Remote source key), never names. Empty in Hosted mode.
     std::vector<juce::String> getOpenMidiInputIdentifiers() const;
+    // MESSAGE THREAD. The MIDI inputs this machine has now, for pickers; empty in Hosted mode.
+    juce::Array<juce::MidiDeviceInfo> getAvailableMidiInputs() const;
+    // Which device each recorded note came from; lanes are handed out on the message thread.
+    synth::MidiInputSources& getMidiInputSources() noexcept { return midiInputSources_; }
 
 protected:
     // TEST SEAM (message thread): devices JUCE currently sees as connected. See AudioEngineMidi.cpp.
@@ -484,6 +557,9 @@ private:
     // into the caller's buffer), so its declaration order relative to the graph carries no lifetime
     // constraint — placed here because it is conceptually paired with the transport it clicks from.
     synth::Metronome metronome_;
+    // The sound preview and the first pass's transport position of the current callback, which it aligns loops to.
+    synth::soundbrowser::SoundPreviewPlayer soundPreview_;
+    synth::BlockTimeInfo previewBlockInfo_{};
     // Declared before the graph for the same reason as the transport: timeline modules read
     // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
     // first. Its own destructor reclaims everything published.
@@ -504,6 +580,7 @@ private:
     // allocates from the audio thread.
     synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
+    std::unique_ptr<synth::AuditionMonitor> auditionMonitor_; // after the graph: it goes first
     juce::AudioProcessorPlayer processorPlayer;
 
     // Message-thread only (initialise / shutdown / suspendDeviceCallback / resumeDeviceCallback),
@@ -512,6 +589,9 @@ private:
     bool deviceCallbackAttached_ = false;
 
     std::atomic<bool> masterMuted_{false};
+    std::atomic<bool> loadGateOpen_{true};
+    float loadGateGain_ = 1.0f; // audio thread only: where the opening ramp has got to
+    void applyLoadGate(juce::AudioBuffer<float>& buffer) noexcept;
     std::atomic<synth::MixerPanLaw> mixerPanLaw_{synth::MixerPanLaw::Balance}; // See setMixerPanLaw()
     std::atomic<bool> transportEnabled_{true};
     // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
@@ -522,6 +602,10 @@ private:
     // Soloed ChannelStrip count. Message-thread writes (refreshSoloGate / setChannelStripSoloed),
     // audio-thread reads (renderPass). See refreshSoloGate().
     std::atomic<int> soloedStripCount_{0};
+
+    void timerCallback() override;
+    // What refreshNormalling last saw of the sources' silence. Message thread only.
+    std::uint64_t silentSourcesSignature_ = 0;
 
     // Whether Audio Output's Right currently borrows Left. Message-thread writes
     // (refreshNormalling), audio-thread reads (renderNextBlock, right after the render pass). See
@@ -665,6 +749,25 @@ private:
     std::atomic<int> deviceInputChannelCount_{0};
 
     void prepareDeviceInputSnapshot(int numInputChannels, int blockSize);
+
+    // Input-take state; see AudioEngineInputRecording.cpp. The channel map turns a device input number into its
+    // index in the (packed, active-only) input snapshot, -1 when that input is off.
+    synth::InputTakeRecorder inputRecorder_;
+    std::array<std::atomic<int>, synth::InputTakeRecorder::kMaxInputChannels> inputChannelToSnapshot_{};
+    std::array<std::atomic<float>, synth::TransportService::kMaxDeviceInputChannels> inputPeaks_{};
+    std::array<const float*, synth::InputTakeRecorder::kMaxInputChannels> inputTakePointers_{};
+    std::map<juce::String, int> deviceInputCountCache_; // message thread only
+    synth::AudioInputLayoutStore inputLayout_;
+    void mapActiveInputs(const juce::BigInteger& activeInputs) noexcept;
+    std::atomic<bool> recordingEngaged_{false};
+    std::atomic<int> inputDeviceHash_{0}; // hashCode() of the open input device's name, 0 when Hosted
+    synth::MonitorGuardReports monitorGuardReports_;
+    std::atomic<bool> audioInputGuardLatched_{false}; // the guard tripped while Audio Input was wired
+    void publishInputMonitorContext() noexcept;
+    void pushInputTakes(int sampleOffset, int numSamples) noexcept;
+    void storeInputPeaks(int channels, int numSamples) noexcept;
+    int countDeviceInputs(const juce::String& deviceName);
+    juce::String applyInputEnabledSetup();
     // AUDIO THREAD, once per callback, BEFORE the graph runs. Copies the caller's input channels
     // into deviceInputSnapshot_ and records how many landed there.
     void captureDeviceInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
@@ -689,10 +792,16 @@ private:
     juce::MidiBuffer remoteHostScratchMidi_;
 
     juce::MidiMessageCollector midiMessageCollector;
+    synth::MidiInputSources midiInputSources_;
+    synth::MidiInputSources::Block midiSourcedBlock_; // this device callback's per-device notes, audio thread only
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
+    // Taken by driver threads and the message thread, never the audio thread.
+    std::mutex externalMidiNodesLock_;
+    std::vector<juce::AudioProcessorGraph::Node::Ptr> externalMidiNodes_;
 
     // MESSAGE THREAD, Standalone only. Returns whether the open set changed.
     bool reconcileMidiInputs();
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(AudioEngine)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

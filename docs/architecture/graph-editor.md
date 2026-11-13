@@ -21,7 +21,9 @@ layer map, signal flow and the index of the other topic docs.
 - `GraphEditorCommands.cpp` — snippets, copy/paste/duplicate, context menu, keyboard, delete/replace, timer
 - `GraphEditorDragDrop.cpp` — estimated module size, drag-preview API, file/plugin drop, drop placement
 - `GraphEditorStereoWiring.cpp` — dual-I/O wiring, stereo-pair completion, module-resize handling
-- `GraphEditorPersistence.cpp` — auto-arrange, patch save/load/new-patch
+- `GraphEditorAutoArrange.cpp` — auto-arrange: flattens the canvas for the pure layout and writes it back in one undo step
+- `GraphEditorModulators.cpp` — a timeline lane's modulators: a parameter's CV channel, adding an LFO card beside a module cabled into it (one undo step, joining the module's macro), removing one routing and a lone LFO, the mod-wire colour a row shows ([timeline/automation.md](../timeline/automation.md#modulators))
+- `GraphEditorPersistence.cpp` — patch save/load/new-patch
 
 `Source/UI/Graph/SmartConnectionEngine/` — `SmartConnectionEngine`, the first real
 collaborator class extracted out of `GraphEditor`: owns smart-connection mode/suggestion state and
@@ -54,20 +56,21 @@ a drop target by Component identity, so the override itself can't move off `Grap
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 
-- **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseDrag` on the canvas.
+- **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseMagnify` / `mouseDrag` on the canvas (`GraphEditorWheel.cpp`). A trackpad two-finger swipe or a mouse wheel **pans** (content follows the fingers; the OS's natural-scrolling choice is already in the deltas; Shift+wheel pans sideways; a mouse notch eases in over ~120 ms through `ScrollTweenRunner`, trackpad and inertial events apply at once). A trackpad **pinch zooms** around the point between the fingers; **Cmd/Ctrl+wheel** zooms at the cursor for mouse users. The controller surface canvas uses the same mapping; the minimap's own wheel still zooms.
 - **Wire drawing** — poly-bus wires (collapsed N-voice `DirectCV` connections) rendered with an "xN" badge; wire endpoints anchored to visible jacks via `ModuleBase`'s logical-port API.
 - **Drag-to-connect** — `beginConnectionDrag` / `dragConnection` / `endConnectionDrag`; resolves the dragged jacks through the logical-port API (`resolvePolyLink`) and creates one connection per voice when both ends front an equally-wide poly fan, so a single drag between two poly jacks wires the whole fan at once. `disconnectPort` removes every raw channel a jack owns, including all voices of a fan.
-- **Poly toggle rewire** — `rewireForPolyChange` re-anchors a module's existing cables to its new channel layout when its `poly` parameter changes (mono <-> fan), driven by `ModuleComponent`'s `"poly"` parameter listener.
+- **Poly toggle rewire** — `rewireForPolyChange` re-anchors a module's existing cables to its new channel layout when its `poly` parameter changes (mono <-> fan), driven by `ModuleComponent`'s `"poly"` parameter listener. A user click on the Poly pill reaches the whole voice graph through the fourth collaborator, `PolyChainController` (`getPolyChain()`), which flips every connected module's parameter inside one undo step; each card's listener re-anchors its own cables. See [`modulation.md`](../modules/modulation.md#the-poly-toggle).
 - **Module drag** — `finalizeModuleDrag` snaps the released module to the 8 px grid and resolves overlaps via spiral search. A live drag-preview system (`beginDragPreview` / `updateDragPreview` / `endDragPreview`) shows a themed grid-dot overlay plus a snapped landing ghost during drags.
 - **Library drops** — `resolvePlacement` + `finalizeModuleDrag` run on the real component after `updateComponents()` so the final position anti-overlaps using true pixel dimensions.
-- **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) topologically layers modules by signal-flow depth in a single undo step. See [`docs/layout/layout.md`](../layout/layout.md) for the full layout model.
+- **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) lays the canvas out in rows (shared modulators, then one per track, then one per remaining component) and aligned signal-flow columns, macros as blocks, in a single undo step. See [`docs/layout/layout.md`](../layout/layout.md) for the full layout model.
 - **Delete** — `requestDeleteModule(NodeID)` is the canonical deletion entry point; `ModuleComponent::deleteButton.onClick` delegates here.
+- **Card keys** — `CanvasCardKeyboard` (reached through `getCardKeyboard()`, where `MainComponent` installs the `ShortcutManager`) gets every canvas key press first: arrows select the nearest card in that direction, Alt+arrows move the selection one grid step as one undo step, Return steps into the selected card. A fourth collaborator under the same thin-owner rule below. See [`docs/layout/selection.md`](../layout/selection.md#keyboard).
 
 See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.
 
 ## New API goes on the collaborator, not GraphEditor
 
-`GraphEditor` is a thin owner of these three collaborators, not a facade over them. A new method
+`GraphEditor` is a thin owner of these three collaborators, not a facade over them (extracted in FRO77: `SmartConnectionEngine` in PR1, `MacroGroupController` in PR2, `GraphDragDropController` in PR3). A new method
 for one of these concerns is declared on the collaborator only and reached through
 `getMacroController()` / `getSmartConnections()` / `getDragDropController()` — all three accessors
 exist (FRO254). Re-declaring it on `GraphEditor` would add it to a header that ~300 translation

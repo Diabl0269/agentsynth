@@ -1,14 +1,18 @@
 #pragma once
 
-#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineTypes.h"
+#include "Timeline/TrackAudioInput.h"
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <vector>
 
 namespace synth {
+
+class TimelineDoc;
 
 // The audio thread's view of the timeline: a flat, immutable, allocation-free-to-read
 // projection of TimelineDoc.
@@ -69,6 +73,12 @@ struct TimelineSnapshot {
         int numLanes = 0;
         int firstAudioClip = 0; // range into audioClips[]
         int numAudioClips = 0;
+        // An Audio track's live input: its synth::MonitorMode and the device inputs it plays (0-based first, and a
+        // count of 0 when its input is not a device's -- no input or the whole mix -- so there is nothing to play).
+        int monitorMode = 0;
+        int inputFirstChannel = 0;
+        int inputNumChannels = 0;
+        int inputDeviceHash = 0; // hashCode() of the device the input was picked on; 0 = any device
     };
 
     struct NoteEvent {
@@ -77,6 +87,14 @@ struct TimelineSnapshot {
         int pitch = 0;
         int velocity = 0;
         int channel = 1;
+        // Per-hit drum settings, resolved by notePlays() against a pass counter. Every event of one hit shares the
+        // seed, so a repeat or its grace hit plays or skips together.
+        std::uint32_t rollSeed = 0;
+        std::uint8_t chance = 100;
+        std::uint8_t condHit = 1;
+        std::uint8_t condOf = 1;
+        int cycle = 0;         // which repetition of the pattern this event belongs to
+        int cyclesPerPass = 1; // how many cycles one pass over the clip spans
     };
 
     struct LaneInfo {
@@ -149,6 +167,25 @@ struct TimelineSnapshot {
     // Per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
     std::vector<AudioClipInfo> audioClips;
 
+    // splitmix64 over (value, salt): allocation-free, the roll behind chance.
+    static constexpr std::uint64_t mixHash(std::uint64_t value, std::uint64_t salt) noexcept {
+        std::uint64_t z = value + 0x9E3779B97F4A7C15ull * (salt + 1);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    }
+
+    // Whether the event sounds on pass `pass` (0 = the first pass of a preview or of the transport loop). Audio-thread
+    // safe.
+    static bool notePlays(const NoteEvent& event, std::int64_t pass) noexcept {
+        const std::int64_t cycle = event.cycle + pass * event.cyclesPerPass;
+        if (event.condOf > 1 && cycle % event.condOf != event.condHit - 1)
+            return false;
+        if (event.chance < 100)
+            return mixHash(event.rollSeed, static_cast<std::uint64_t>(pass)) % 100 < event.chance;
+        return true;
+    }
+
     // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is
     // anything soloed?" decides whether a non-soloed track is silent), so it is computed ONCE in
     // buildFrom rather than rescanned per track per block by every consumer. Audio tracks are not
@@ -159,8 +196,14 @@ struct TimelineSnapshot {
     // content" without diffing.
     std::int64_t revision = 0;
 
-    // Message thread only: allocates, walks juce::Strings, and reads the doc.
-    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc);
+    // Message thread only: allocates, walks juce::Strings, and reads the doc. `beatsPerBar` (the transport's time
+    // signature, 4 when unknown) sizes a drum clip's steps for its swing; a time-signature change reaches the audio
+    // thread with the next publish. `inputStatus` answers what the open interface offers, asked only when an audio
+    // track's input is picked by name (so a doc without one never probes the driver): that track monitors the jacks
+    // its name resolves to, or nothing when the interface has no such input.
+    using InputStatusProvider = std::function<AudioInputStatus()>;
+    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc, double beatsPerBar = 4.0,
+                                                       const InputStatusProvider& inputStatus = {});
 
     // Every index range in bounds and every run correctly sorted. Cheap enough for tests and the
     // stress harness to call per block; not called on the real audio path.
@@ -173,10 +216,11 @@ struct TimelineSnapshot {
     static std::atomic<int>& liveInstanceCount() noexcept;
 };
 
-// Timeline beat -> FILE FRAME for one audio clip. The ONE mapping playback and offline stream
-// priming share: frames are file frames advanced at the ENGINE's rate (this build does not
-// resample), and the clip's trim is in seconds because it indexes a recording, which does not move
-// when the tempo map does. Never negative — a beat before the clip starts reads its first frame.
+// Timeline beat -> PLAYBACK FRAME for one audio clip: a frame at the ENGINE's rate (the streamer
+// converts to file frames when the file's rate differs). The ONE mapping playback and offline
+// stream priming share. The clip's trim is in seconds because it indexes a recording, which does
+// not move when the tempo map does. Never negative — a beat before the clip starts reads its first
+// frame.
 inline std::int64_t sourceFrameForClipBeat(double clipStartBeat, double sourceStartSeconds, double beat, double bpm,
                                            double sampleRate) noexcept {
     const double secondsPerBeat = (bpm > 0.0) ? (60.0 / bpm) : 0.5;

@@ -1,7 +1,15 @@
 #pragma once
 
 #include "MidiRemote/RemoteModel.h"
+#include "PatchSaveLocation.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/ChevronTurn.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FoldAllButton.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -15,15 +23,35 @@
 // port disconnect. Each control persists through juce::ApplicationProperties and, when a
 // GraphEditor is wired, pushes live so the canvas does not wait for a restart.
 //
+// The rows are grouped into categories (Category below), picked from a drop-down under the title;
+// only the selected category's rows are laid out, inside a scrolling viewport. "All" shows every
+// category under its own collapsible header. A search query looks across every category.
+// Adding a row: docs/layout/settings-preferences.md.
+//
 // NOTE: PreferencesSettingsTab.cpp MUST be added to BOTH the app target AND the test
 // target in CMakeLists.txt.
-class PreferencesSettingsTab : public juce::Component {
+class PreferencesSettingsTab
+    : public juce::Component
+    , private juce::ChangeListener {
 public:
     explicit PreferencesSettingsTab(juce::ApplicationProperties& props);
-    ~PreferencesSettingsTab() override = default;
+    ~PreferencesSettingsTab() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+
+    // The category picker's entries, in drop-down order. Each layout*Groups unit lays out exactly
+    // one category (its rows), so a new row goes into the unit named for its category.
+    // All is last in the enum (so the other ids stay put) but first in the drop-down; it is never a
+    // layoutCategory, only a selection that shows every category under a collapsible header.
+    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, Privacy, All };
+    static constexpr int kNumSections = 7; // every Category before All
+    static juce::String categoryName(Category category);
+    // The stable name a category is saved under (never the display text or the enum value).
+    static juce::String persistedCategoryName(Category category);
+    Category getSelectedCategory() const { return selectedCategory; }
+    // Same path as picking the entry in the drop-down (fires the combo's onChange synchronously).
+    void setSelectedCategory(Category category);
 
     // Called by SettingsWindow once the tab exists; pushes the persisted values onto the canvas.
     void setGraphEditor(GraphEditor* ge);
@@ -31,8 +59,14 @@ public:
     // Testing hooks ---------------------------------------------------------
     GraphEditor::SmartConnectionMode getSmartConnectionMode() const;
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
+    SmartConnectionEngine::SideBySideMode getSideBySideMode() const;
+    void setSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    bool isShowCurvesOnCablesEnabled() const;
+    void setShowCurvesOnCablesEnabled(bool enabled);
+    bool isCablesOnTopEnabled() const;
+    void setCablesOnTopEnabled(bool enabled);
     // Plain on/off, ON by default
     // (see docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23).
     bool isReconnectChainOnDeleteEnabled() const;
@@ -51,6 +85,17 @@ public:
     // default (Cmd works either way) (see docs/macros/menu-and-membership.md).
     bool isMacroDragWithoutCmdEnabled() const;
     void setMacroDragWithoutCmdEnabled(bool enabled);
+    // Drag empty space inside an expanded macro's outline to move the macro instead of panning.
+    // Plain on/off, OFF by default (docs/layout/macro-cards.md).
+    bool isMoveMacroOnHullDragEnabled() const;
+    void setMoveMacroOnHullDragEnabled(bool enabled);
+    // "Collapsing also packs macros together": Fold and Pack Macros also tidies the folded cards into a grid. Plain
+    // on/off, ON by default (docs/macros/menu-and-membership.md).
+    bool isPackMacrosOnCollapseEnabled() const;
+    void setPackMacrosOnCollapseEnabled(bool enabled);
+    // "Packing also tidies the rest of the canvas": Auto Arrange runs after the pack. Plain on/off, ON by default.
+    bool isTidyCanvasOnPackEnabled() const;
+    void setTidyCanvasOnPackEnabled(bool enabled);
     // Plain on/off, ON by default — same shape as the two macro auto-port toggles above (a brand-new automation, not a
     // replacement for pre-existing silent behaviour)
     // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
@@ -68,8 +113,23 @@ public:
     void setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     bool isLoopSelectionArmsEnabled() const;
     void setLoopSelectionArmsEnabled(bool enabled);
+    bool isShowSectionsStripEnabled() const;
+    void setShowSectionsStripEnabled(bool enabled);
+    bool isSectionsCoverOnDropEnabled() const;
+    void setSectionsCoverOnDropEnabled(bool enabled);
     bool isDoubleClickSpansLocatorsEnabled() const;
     void setDoubleClickSpansLocatorsEnabled(bool enabled);
+    bool isAskBeforeRemovingLfoEnabled() const;
+    void setAskBeforeRemovingLfoEnabled(bool enabled);
+    bool isAskBeforeDeletingTrackEnabled() const;
+    void setAskBeforeDeletingTrackEnabled(bool enabled);
+    // "Record also starts playback" (default ON, the DAW convention): off, Record only engages recording and the take
+    // starts when Play does. Read at use time by MainComponent::handleRecordToggle.
+    bool isRecordStartsPlaybackEnabled() const;
+    void setRecordStartsPlaybackEnabled(bool enabled);
+    // Where Smooth follow pins the playhead, 10-90 percent of the visible width (a digits-only field), applied live.
+    int getFollowPointPercent() const;
+    void setFollowPointPercent(int percent);
     bool isNaturalScrollingEnabled() const;
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
@@ -106,8 +166,32 @@ public:
     // above. Only the Mixer honours "both" today (see
     // BottomDockComponent::usesMixerMirrorForDetach and
     // docs/mixer/panel.md#placement-and-detachable-windows).
+    // "Show info tooltips" (Panels & Windows): off hides the tooltips that explain a control; helper tips (a mixer
+    // channel's "Plays into this channel: ...") keep showing. Read live by synth::ui::AppTooltipWindow.
+    bool isShowInfoTooltipsEnabled() const;
+    void setShowInfoTooltipsEnabled(bool enabled);
+    // "Show button labels" (Panels & Windows): off leaves only the icons on the top bar and the canvas toolbar.
+    // Persisted at once; MainComponent re-applies the labels when the settings change.
+    bool isShowToolbarLabelsEnabled() const;
+    void setShowToolbarLabelsEnabled(bool enabled);
+
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
+    // "Animations" (Panels & Windows): Follow system (default) / Full / Reduced / Off. Setting it persists the choice
+    // and applies it to the whole app at once (synth::ui::setAnimationMode).
+    synth::ui::AnimationMode getAnimationMode() const;
+    void setAnimationMode(synth::ui::AnimationMode mode);
+    // "Duplicate points" (Timeline): where Cmd+D puts the copies of selected automation or curve points. Setting it
+    // persists the choice and applies it to every editor at once (synth::ui::setDuplicatePlacement).
+    synth::ui::DuplicatePlacement getDuplicatePlacement() const;
+    void setDuplicatePlacement(synth::ui::DuplicatePlacement placement);
+    // Where patch save/open dialogs start (Files & Autosave): with the project (default), the shared
+    // Patches folder, or a chosen folder. Read at use time by MainComponent through
+    // synth::PatchSaveLocation; see docs/layout/settings-preferences.md.
+    synth::PatchSaveMode getPatchSaveMode() const;
+    void setPatchSaveMode(synth::PatchSaveMode mode);
+    juce::File getPatchSaveCustomFolder() const;
+    void setPatchSaveCustomFolder(const juce::File& folder);
     // MIDI Remote group (docs/control/midi-remote-ui.md#settings). Default takeover is never
     // Takeover::useDefault; both are picked up live by MainComponent via the settings file.
     synth::Takeover getMidiRemoteDefaultTakeover() const;
@@ -115,8 +199,24 @@ public:
     bool isMidiRemoteShowBadgesEnabled() const;
     void setMidiRemoteShowBadgesEnabled(bool enabled);
 
+    // Privacy group (docs/development/usage-statistics.md). The toggle writes kShareUsageStatsSettingKey and, at once,
+    // creates or deletes the usage statistics id and queue file; MainComponent also hears it through the settings file.
+    bool isShareUsageStatsEnabled() const;
+    void setShareUsageStatsEnabled(bool enabled);
+    // Opens "What we collect" through the owner's URL seam; defaults to the system browser.
+    void setUrlOpener(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+    // Tests swap the system clipboard out: parallel test shards share it.
+    void setClipboardWriterForTest(std::function<void(const juce::String&)> writer) {
+        clipboardWriter = std::move(writer);
+    }
+
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
+    // "Play the scale when browsing keys" (default ON): off, no key picker plays a scale while a key is hovered.
+    // Read at the start of each audition (KeyAuditioner), so it applies at once. The key menus' play-scale row writes
+    // the same key; this checkbox follows it while the tab is open.
+    bool isPlayScaleOnBrowseEnabled() const;
+    void setPlayScaleOnBrowseEnabled(bool enabled);
     bool isPianoRollKeyLabelModeAll() const;
     void setPianoRollKeyLabelModeAll(bool labelEveryKey);
 
@@ -164,9 +264,38 @@ public:
     // sendNotificationSync), exactly as it would a real click.
     std::unique_ptr<juce::Component> createDualIOPerModuleDefaultsPopupForTest();
 
+    // Test seams: the real category selector and the scroll view the rows live in.
+    juce::ComboBox& getCategoryComboForTest() { return categoryCombo; }
+    juce::TextEditor& getSearchFieldForTest() { return searchField; }
+    juce::Component& getContentHostForTest() { return contentHost; }
+    juce::Viewport& getContentViewportForTest() { return contentViewport; }
+
     // Test-only: the hairline dividers paint() draws between preference groups, so a test can
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
+
+    // Collapsible sections of the "All" view (folds are ignored while a filter is active).
+    bool isSectionCollapsed(Category category) const;
+    void setSectionCollapsed(Category category, bool collapsed);
+    void setAllSectionsCollapsed(bool collapsed);
+    // True when every section is folded: the fold-all button then reads "Expand all".
+    bool areAllSectionsCollapsed() const;
+    // Test seams: a section's header, and the single Collapse all / Expand all button.
+    juce::Button& getSectionHeaderForTest(Category category);
+    synth::ui::FoldAllButton& getFoldAllButtonForTest() { return foldAllButton; }
+
+    // Test seams for the group fades (a group that a fold or a filter takes out fades while the rows below slide up):
+    // run the layout a fade's last frame asked for, and ask whether any group is still fading.
+    void flushLayoutForTest() { relayoutUpdater_.handleUpdateNowIfNeeded(); }
+    bool anyGroupFadingForTest() const;
+    // Test seams for the All view's chrome: the section headers and the fold-all strip fade when the view shows or
+    // hides them, the strip's height following the fade, and a header's chevron turns.
+    bool areSectionHeadersFadingForTest() const {
+        return sectionHeaderFade_ != nullptr && sectionHeaderFade_->isFading();
+    }
+    bool isFoldAllFadingForTest() const { return foldAllFade_ != nullptr && foldAllFade_->isFading(); }
+    float getSectionChevronOpennessForTest(Category category) const;
+    bool isSectionChevronTurningForTest(Category category) const;
 
     // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
@@ -189,19 +318,70 @@ public:
     }
 
 private:
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    // The layout helpers' shared closures: layoutContent's own filter / visibility / divider steps.
+    using GroupMatchFn = std::function<bool(std::initializer_list<juce::Component*>)>;
+    using SetVisibleFn = std::function<void(std::initializer_list<juce::Component*>, bool)>;
+    using BeginGroupFn = std::function<void(bool)>;
+
+    // One per category: lays out that category's groups (and sets layoutCategory first).
+    void layoutGraphGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                           const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutTimelineGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                              const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutAutosaveGroup(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                             const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                           const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void setupCategorySelector();
+
+    // Group fades (...GroupFades.cpp). A group that a filter or a fold takes out fades out while its rows squeeze
+    // together and the rows below slide up; one that comes back does the reverse. `fadeGroup` is what the layout's
+    // `groupMatches` closure ends in: it starts the fade towards `target` and answers whether the group still takes
+    // a slot in this pass (true while it is shown or fading). `squashFadingGroups` is the last step of resized().
+    bool fadeGroup(std::initializer_list<juce::Component*> comps, bool target);
+    void squashFadingGroups();
+
+    // "All" view. Every layout*Groups unit calls enterCategory() first: it records where the
+    // category's rows begin so placeSectionHeaders() can slot a header above them afterwards.
+    void enterCategory(Category category, int y);
+    bool categoryShown(Category category) const;
+    bool sectionHeadersActive() const { return selectedCategory == Category::All && searchQuery.isEmpty(); }
+    void placeSectionHeaders(int contentWidth);
+    void steerSectionChrome(bool headersAndStrip);
+    void refreshSectionTitles();
+    void setupSectionControls(); // chained from setupCategorySelector(); restores the saved folds
+    void saveSectionFolds();     // remembers which sections are folded (user setting preferencesFolded)
+
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
+    void setupSmartConnectionControls();
+    void persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistShowCurvesOnCables(bool enabled);
+    void persistCablesOnTop(bool enabled);
+    void setupCanvasDisplayToggles();
     void persistReconnectChainOnDelete(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
     void persistMacroSpliceCableOnPortDelete(bool enabled);
     void persistMacroDragWithoutCmd(bool enabled);
+    void persistMoveMacroOnHullDrag(bool enabled);
+    void persistPackMacrosOnCollapse(bool enabled);
+    void persistTidyCanvasOnPack(bool enabled);
     void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     void persistLoopSelectionArms(bool enabled);
     void persistDoubleClickSpansLocators(bool enabled);
+    void persistSectionsSetting(const char* key, bool enabled);
+    void persistAskBeforeRemovingLfo(bool enabled);
+    void persistAskBeforeDeletingTrack(bool enabled);
+    void persistRecordStartsPlayback(bool enabled);
+    void persistFollowPointPercent(int percent);
+    void initTimelineEditingToggles();
+    void setupDuplicatePointsControls();
+    void persistDuplicatePlacement(synth::ui::DuplicatePlacement placement);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
     void persistAutosaveEnabled(bool enabled);
@@ -211,10 +391,27 @@ private:
     void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     void persistMixerPlacement(const juce::String& placement);
     void persistPanelDetachMode(const juce::String& mode);
+    void persistShowInfoTooltips(bool enabled);
+    void persistShowToolbarLabels(bool enabled);
+    void persistAnimationMode(synth::ui::AnimationMode mode);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
+    void persistPlayScaleOnBrowse(bool enabled);
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
     void persistMidiRemoteShowBadges(bool enabled);
+    void persistPatchSaveMode(synth::PatchSaveMode mode);
+    void persistShareUsageStats(bool enabled);
+    void refreshUsageStatsIdRow();
+    void setupUsageStatsControls(); // chained from setupPatchSaveLocationControls(); the constructor is baselined
+    void layoutUsageStatsGroup(int& y, int contentWidth, bool previousGroupWasVisible, const GroupMatchFn& groupMatches,
+                               const SetVisibleFn& setGroupVisible);
+    // The patch-save-location row: constructs its controls (chained from setupMidiRemoteControls(),
+    // the constructor is baselined), refreshes the hint for the current mode, and lays it out.
+    void setupPatchSaveLocationControls();
+    void updatePatchSaveHint();
+    void launchPatchSaveFolderChooser();
+    void layoutPatchSaveLocationGroup(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                                      const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
 
     // Constructs/wires the two Mixer -> per-type default track preset combos.
     // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
@@ -226,6 +423,13 @@ private:
     // The panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
     // for the same baselined-constructor reason.
     void setupPanelDetachModeControls();
+    // The "Animations" combo, chained from the tail of setupPanelDetachModeControls() before the info tooltips row.
+    void setupAnimationModeControls();
+    // The "Show info tooltips" row, chained from the tail of setupAnimationModeControls() before the MIDI Remote
+    // group.
+    void setupInfoTooltipsControls();
+    // The "Show button labels" row, chained from the tail of setupInfoTooltipsControls() before the MIDI Remote group.
+    void setupToolbarLabelsControls();
     // The MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
     // same baselined-constructor reason.
     void setupMidiRemoteControls();
@@ -274,7 +478,7 @@ private:
     // Lays out the Mixer placement combo row -- chained from the TAIL of
     // layoutMixerDefaultTrackPresetGroup() (not called from layoutContent directly, and not
     // taking its `beginGroup` closure): layoutContent's own `pendingDivider` local (which
-    // `beginGroup` updates) is a baselined function this ticket must not grow, so
+    // `beginGroup` updates) is a baselined function (function-size ratchet) that must not grow, so
     // `previousGroupWasVisible` carries the one bit that closure would otherwise have tracked,
     // and this draws its own divider directly into `dividerBounds` (a plain member) when needed.
     void layoutMixerPlacementGroup(
@@ -289,8 +493,29 @@ private:
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // Lays out the MIDI Remote group, chained from layoutPanelDetachModeGroup() the same way
-    // that one is chained from layoutMixerPlacementGroup().
+    // Lays out the "Animations" row, chained from layoutPanelDetachModeGroup() and chaining on to the info tooltips
+    // row.
+    void
+    layoutAnimationModeGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                             const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                             const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the "Show info tooltips" row, chained from layoutAnimationModeGroup() and chaining on to the MIDI
+    // Remote group.
+    void
+    layoutInfoTooltipsGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                            const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                            const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the "Show button labels" row, chained from layoutInfoTooltipsGroup() and chaining on to the MIDI Remote
+    // group.
+    void
+    layoutToolbarLabelsGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                             const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                             const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // Lays out the MIDI Remote group, chained from layoutToolbarLabelsGroup() (after the info tooltips row) (after the
+    // panel-detach-mode row) the same way that one is chained from layoutMixerPlacementGroup().
     void
     layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
                           const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
@@ -310,16 +535,52 @@ private:
     // choice ModuleLibraryComponent's own search box makes for the module library). Esc clears it,
     // matching ModuleLibraryComponent::searchEditor's onEscapeKey.
     juce::TextEditor searchField;
+    // Category picker, left of the search field; one entry per Category, id = enum value + 1.
+    juce::ComboBox categoryCombo;
+    // Opens on the remembered category (setupCategorySelector); All when none is saved.
+    Category selectedCategory{Category::All};
+    // The category whose groups the layout pass is currently walking (set by each layout*Groups).
+    Category layoutCategory{Category::All};
+    // "All" view state: per-section fold, where each section's rows began in the last layout pass
+    // (-1 = not laid out), and the header buttons. The folds are remembered across windows and launches
+    // (saveSectionFolds).
+    bool sectionCollapsed[kNumSections] = {};
+    int sectionStartY[kNumSections] = {};
+    // A fold header of the "All" view (defined in ...Sections.cpp). A juce::Button so it is
+    // keyboard-reachable and named for screen readers.
+    struct SectionHeader
+        : juce::Button
+        , synth::ui::FoldableHeader {
+        SectionHeader(PreferencesSettingsTab& o, Category c);
+        void refreshTitle();
+        bool isFolded() const override;
+        void setFolded(bool folded) override;
+        void paintButton(juce::Graphics& g, bool hot, bool down) override;
+        PreferencesSettingsTab& owner;
+        Category category;
+        synth::ui::ChevronTurn turn{*this}; // the arrow's turn between open and folded
+    };
+    std::unique_ptr<SectionHeader> sectionHeaders[kNumSections];
+    // The one Collapse all / Expand all strip button, pinned top-right of the rows in the All view.
+    synth::ui::FoldAllButton foldAllButton;
+    // The headers fade as one when the view shows or hides them, and the strip fades with its height following.
+    std::unique_ptr<synth::ui::FadeVisibility> sectionHeaderFade_;
+    std::unique_ptr<synth::ui::FadeVisibility> foldAllFade_;
+    bool chromeLaidOut_ = false;
     juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;
     juce::Label smartConnectionLabel;
     juce::ComboBox smartConnectionCombo;
+    juce::Label sideBySideLabel_;
+    juce::ComboBox sideBySideCombo_; // "Connect side by side": Always | Only while holding Ctrl
     juce::ToggleButton doubleClickDisconnectToggle{"Double-click port to disconnect"};
     // Moved here from AppearanceSettingsTab: this is canvas-editing behaviour (whether the graph
     // shows snap guides while dragging), the same family as the two toggles above it, not an
     // appearance/theme setting. Persistence key ("alignmentGuidesEnabled") is unchanged.
+    juce::ToggleButton showCurvesOnCablesToggle{"Show curves on cables"};
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
+    juce::ToggleButton cablesOnTopToggle{"Draw cables on top of modules"};
     // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
     // and read as a mode picker rather than the on/off it actually is. The per-module override
     // button below shares this row (see resized()) rather than stacking under it — the two are one
@@ -336,14 +597,17 @@ private:
     juce::ComboBox macroAutoPortCombo_;
     // Plain on/off toggles, ON by default — see their getter/setter declarations above for why these are a
     // different shape from macroAutoPortCombo_ (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
-    juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
-                                                        "boundary"};
+    juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when a cable or mixer send "
+                                                        "crosses a boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
     // OFF by default, unlike the macro auto-port pair above — see its getter/setter declarations for why.
     juce::ToggleButton macroSpliceCableOnPortDeleteToggle{"When deleting a macro port by hand, splice the cable "
                                                           "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
+    juce::ToggleButton moveMacroOnHullDragToggle{"Drag inside a macro's outline to move the macro instead of panning"};
+    juce::ToggleButton packMacrosOnCollapseToggle{"Collapsing also packs macros together"};
+    juce::ToggleButton tidyCanvasOnPackToggle{"Packing also tidies the rest of the canvas"};
     // Not macro-specific -- see initMacroToggles()' own comment for why it lives here.
     juce::ToggleButton reconnectChainOnDeleteToggle{"Reconnect the chain when deleting a module"};
     // Plain on/off, ON by default — see the getter/setter declarations above for why this is a different
@@ -355,7 +619,18 @@ private:
     // The other half of the same locator conversation, so it sits in the same group as the row
     // above rather than getting a divider of its own: one is "make the locators from a selection",
     // this one is "make a clip from the locators".
+    juce::ToggleButton showSectionsStripToggle{"Timeline: show the Sections strip"};
+    // "Timeline: dropping a section on other music": Pushes the music later (id 1, default) | Covers it (id 2).
+    juce::Label sectionsDropLabel;
+    juce::ComboBox sectionsDropCombo;
+    juce::Label sectionsDropHint;
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
+    juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
+    juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track or its macro"};
+    juce::ToggleButton recordStartsPlaybackToggle{"Record also starts playback"};
+    juce::Label followPointLabel;
+    juce::TextEditor followPointEditor;
+    juce::Label followPointUnitLabel;
     juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
     // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
     // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as
@@ -374,6 +649,9 @@ private:
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
+    juce::ToggleButton playScaleOnBrowseToggle{"Play the scale when browsing keys"};
+    juce::Label duplicatePointsLabel;
+    juce::ComboBox duplicatePointsCombo;
     // Autosave. One single line: the toggle, then "Every: [field] min", then
     // "Keep: [field] backups" — three independent statements that read as one group, not stacked
     // rows. Both numeric fields are plain digits-only juce::TextEditors (exact-integer entry, no
@@ -400,10 +678,34 @@ private:
     // it in both places (2) (see docs/mixer/panel.md#placement-and-detachable-windows).
     juce::Label panelDetachModeLabel;
     juce::ComboBox panelDetachModeCombo;
+    // "Animations" -- Follow system (default, combo id 1) / Full / Reduced / Off.
+    juce::Label animationModeLabel;
+    juce::ComboBox animationModeCombo;
+    // "Show info tooltips" (default on) and its one-line hint.
+    juce::ToggleButton showInfoTooltipsToggle{"Show info tooltips"};
+    juce::Label showInfoTooltipsHint;
+    // "Show button labels" (default on).
+    juce::ToggleButton showToolbarLabelsToggle{"Show button labels"};
     // Default takeover (Jump / Pick-up / Scale) and the badge switch.
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;
     juce::ToggleButton midiRemoteShowBadgesToggle{"Show MIDI badges on mapped controls"};
+    // Patch save location: mode combo (ids: PatchSaveMode + 1), the custom-folder button and a hint
+    // that names the folder the current mode resolves to.
+    juce::Label patchSaveLabel;
+    juce::ComboBox patchSaveCombo;
+    juce::TextButton patchSaveChooseButton{"Choose..."};
+    juce::Label patchSaveHint;
+    std::unique_ptr<juce::FileChooser> patchSaveChooser;
+    // Privacy: opt-in toggle, the "What we collect" link, and the id row shown only while opted in.
+    juce::ToggleButton shareUsageStatsToggle{"Share anonymous usage statistics"};
+    juce::TextButton usageStatsLearnMoreButton{"What we collect"};
+    juce::Label usageStatsIdLabel;
+    juce::TextButton usageStatsCopyIdButton{"Copy ID"};
+    std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& url) { url.launchInDefaultBrowser(); };
+    std::function<void(const juce::String&)> clipboardWriter = [](const juce::String& text) {
+        juce::SystemClipboard::copyTextToClipboard(text);
+    };
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;
@@ -430,6 +732,27 @@ private:
 
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
+
+    // One fade per group, made on the group's first layout (which lands at once: what was there from the start does
+    // not fade). The key is the group's first component. `laidOutGroups_` is the groups the last pass walked, in
+    // order; `dividerAlphas_` is one per divider (a divider of a fading group fades with it).
+    struct GroupFade {
+        std::vector<juce::Component*> comps;
+        std::unique_ptr<synth::ui::FadeVisibility> fade;
+    };
+    std::map<juce::Component*, GroupFade> groupFades_;
+    std::vector<GroupFade*> laidOutGroups_;
+    std::vector<float> dividerAlphas_;
+    // Every frame of every fade asks for one more layout; they are coalesced into a single pass per turn.
+    struct RelayoutUpdater : juce::AsyncUpdater {
+        void handleAsyncUpdate() override {
+            if (run)
+                run();
+        }
+        std::function<void()> run;
+    };
+    RelayoutUpdater relayoutUpdater_;
+    synth::ui::ScrollIntoViewOnFocus followFocus_{contentViewport};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

@@ -1,7 +1,7 @@
 // TimelineClipLanePainting.cpp
 //
-// Tool affordances (copy-drag ghosts, Draw ghost, Split preview line) and waveform
-// painting for committed clips, plus the live-recording strip. TimelineClipLaneArea is
+// Tool affordances (copy-drag ghosts, Draw ghost, Split preview line), the waveform peaks cache and the
+// live-recording strip. The waveform drawing itself is in TimelineClipLaneWaveform.cpp. TimelineClipLaneArea is
 // declared in TimelineClipLaneArea.h; sibling TimelineClipLane*.cpp files in this
 // directory hold the rest of the class.
 
@@ -12,20 +12,13 @@
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
+#include "WaveformDraw.h"
 #include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
 
 namespace {
-constexpr int kMinWidthForWaveform = 24;
-
-// bpm/sampleRate fallbacks when there is no live transport (a headless test, or a
-// TimelineClipLaneArea built with setTransport() never called) — the same "no transport, assume
-// 120 bpm" convention currentBeatsPerBar() uses for beatsPerBar, and the same 44.1 kHz fallback
-// MainComponent's own audio-take code uses when a snapshot's sampleRate is not yet known.
-constexpr double kFallbackSampleRate = 44100.0;
-
 // A copy-drag ghost: a translucent wash of the SOURCE track's colour, well under the 0.65/0.85 a
 // real clip body paints at, plus a soft one-pixel outline. Translucency alone carries "not real
 // yet" on purpose — a true blur would mean rendering the region to an image and filtering it once
@@ -48,19 +41,20 @@ using namespace detail;
 // The single geometry source shared by paintDragGhosts() and getDragGhostRectsForTest() —
 // computing them separately is how a drawn affordance drifts from the one a test pins (the same
 // reasoning GraphEditor::buildVisibleCables() states).
-juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const DragOrigin& origin, int rowHeight) const {
-    return computeClipRect(viewState_, origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
-                           origin.lengthBeats, rowHeight);
+juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const TimelineRowLayout& layout,
+                                                            const DragOrigin& origin) const {
+    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_,
+                           origin.originalStart + previewDeltaBeats_, origin.lengthBeats);
 }
 
 std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {
     std::vector<juce::Rectangle<int>> rects;
     if (dragMode_ != DragMode::Move || !copyDrag_)
         return rects;
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     rects.reserve(dragClips_.size());
     for (const auto& origin : dragClips_)
-        rects.push_back(dragGhostRectFor(origin, rowHeight));
+        rects.push_back(dragGhostRectFor(layout, origin));
     return rects;
 }
 
@@ -80,10 +74,10 @@ void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
     if (dragMode_ != DragMode::Move || !copyDrag_ || doc_ == nullptr)
         return;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (const auto& origin : dragClips_) {
-        const auto rect = dragGhostRectFor(origin, rowHeight);
+        const auto rect = dragGhostRectFor(layout, origin);
         if (rect.getRight() < 0 || rect.getX() > getWidth())
             continue; // same offscreen cull paintClip() uses
 
@@ -120,9 +114,7 @@ void TimelineClipLaneArea::paintDrawGhost(juce::Graphics& g) {
     // ghost that has no clip/track of its own to borrow a colour from (see this section's header
     // comment) borrows the theme's accent instead — previously a flat white literal, which stayed
     // legible on Obsidian's dark bg0 by accident but would wash out on a light theme.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent.withAlpha(0.18f));
     g.fillRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f);
@@ -140,9 +132,7 @@ void TimelineClipLaneArea::paintSplitPreview(juce::Graphics& g) {
     // Themed the same way PianoRollComponent::paintSplitPreview is: the split line has no clip of
     // its own to borrow a colour from, so — like paintDrawGhost above — it borrows the theme's
     // accent instead of a flat white literal.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     const float x = (float)bounds.getCentreX();
     g.setColour(accent.withAlpha(0.9f));
@@ -168,38 +158,16 @@ const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::St
         const juce::File file = peaksResolver_(assetRef);
         if (file != juce::File())
             synth::PeaksFile::read(file, data);
+        // The sidecar carries no rate, so the audio file's header rate rides along in the same
+        // cached entry (one read per miss, never per paint). 0 means "use the transport rate".
+        if (assetSampleRateResolver_)
+            data.sampleRate = assetSampleRateResolver_(assetRef);
         it = peaksCache_.emplace(assetRef, std::move(data)).first;
     }
 
     if (it->second.bucketSize <= 0 || it->second.numChannels <= 0 || it->second.buckets.empty())
         return nullptr;
     return &it->second;
-}
-
-// "Nothing resolves" covers no resolver set, an unresolvable ref, or an unreadable/absent peaks
-// file.
-void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
-    if (rect.getWidth() <= kMinWidthForWaveform)
-        return;
-    const auto* data = findPeaksData(clip.assetRef);
-    if (data == nullptr)
-        return;
-
-    double bpm = kFallbackBpm;
-    double sampleRate = kFallbackSampleRate;
-    if (transport_ != nullptr) {
-        const auto snap = transport_->getPositionSnapshot();
-        if (snap.bpm > 0.0)
-            bpm = snap.bpm;
-        if (snap.sampleRate > 0.0)
-            sampleRate = snap.sampleRate;
-    }
-
-    const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
-    // Black at low alpha, not a theme token — a shadow-style darkening of whatever `fill` already
-    // is (the module cards' drop shadows are composed the same way), not a colour of its own.
-    g.setColour(juce::Colours::black.withAlpha(0.4f));
-    paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
 }
 
 // Mirrors findPeaksData's cache shape exactly: a miss is cached too, so a still-missing clip never
@@ -222,9 +190,7 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
 
     // Theme-token colours via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses;
     // a hardcoded fallback (Theme::Colors::error's own default) when headless.
-    juce::Colour hatchColour(0xffE5484D);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        hatchColour = lf->getTheme().colors.error;
+    const juce::Colour hatchColour = synth::theme::themeOf(*this).colors.error;
 
     // Dimmed fill first, so a missing clip visually recedes rather than reading as "just another
     // audio clip" — paintClip's own base fill/border are already drawn beneath this.
@@ -257,139 +223,123 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
     }
 }
 
-// Shared by paintWaveform() (a committed clip's peaks) and paintLiveRecordingStrip() (the live
-// accumulator's peaks) — one juce::Graphics::drawLine per x column, sampling
-// buckets[firstBucket + column's fraction of bucketCount] across every channel (min of mins, max
-// of maxes — a simple downmix, deliberately kept cheap enough to run every paint).
-void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                                const std::vector<std::pair<float, float>>& buckets, int numChannels,
-                                                int firstBucket, int bucketCount) {
-    if (bucketCount <= 0 || numChannels <= 0)
-        return;
+// One repaint over wherever the strips used to be, then a clean reset.
+void TimelineClipLaneArea::clearLiveRecording() { updateLiveRecordings({}); }
 
-    const auto bounds = rect.reduced(1);
-    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
-        return;
-
-    const float midY = (float)bounds.getCentreY();
-    const float halfHeight = (float)bounds.getHeight() * 0.5f;
-    const int width = juce::jmax(1, bounds.getWidth());
-
-    for (int x = bounds.getX(); x < bounds.getRight(); ++x) {
-        const double frac = (double)(x - bounds.getX()) / (double)width;
-        const int bucket = firstBucket + juce::jlimit(0, bucketCount - 1, (int)(frac * bucketCount));
-
-        float minValue = 0.0f, maxValue = 0.0f;
-        bool any = false;
-        for (int channel = 0; channel < numChannels; ++channel) {
-            const std::size_t index = (std::size_t)bucket * (std::size_t)numChannels + (std::size_t)channel;
-            if (index >= buckets.size())
-                continue;
-            const auto& pair = buckets[index];
-            minValue = any ? std::min(minValue, pair.first) : pair.first;
-            maxValue = any ? std::max(maxValue, pair.second) : pair.second;
-            any = true;
-        }
-        if (!any)
-            continue;
-
-        const float y0 = midY - juce::jlimit(-1.0f, 1.0f, maxValue) * halfHeight;
-        const float y1 = midY - juce::jlimit(-1.0f, 1.0f, minValue) * halfHeight;
-        g.drawLine((float)x, y0, (float)x, juce::jmax(y1, y0 + 1.0f), 1.0f);
-    }
-}
-
-// One repaint over wherever the strip used to be, then a clean reset.
-void TimelineClipLaneArea::clearLiveRecording() {
-    if (!liveRecording_.active)
-        return;
-    ++liveStripRepaintCount_;
-    repaint(liveStripRect_);
-    liveRecording_ = {};
-    livePeaks_.clear();
-    liveStripRect_ = {};
-}
-
-// MainComponent calls this every tick alongside the panel's other polled updates, whether or not
-// anything is actually recording — cheap when it isn't: `info.active == false` just clears any
-// previous strip (one repaint, once, on the falling edge) and returns. When it is, this copies the
-// tap's live peaks via copyLivePeaks(), a lock held only for that copy, never on the audio thread.
 void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
-    if (!info.active || info.tap == nullptr || doc_ == nullptr) {
-        clearLiveRecording();
+    if (!info.active) {
+        updateLiveRecordings({});
         return;
     }
-
-    int trackIndex = -1;
-    const auto& tracks = doc_->getTracks();
-    for (int i = 0; i < (int)tracks.size(); ++i) {
-        if (tracks[(std::size_t)i].id == info.track) {
-            trackIndex = i;
-            break;
-        }
-    }
-    if (trackIndex < 0) {
-        // The armed track vanished mid-take (deleted, or an undo/redo rebuilt the doc): nothing
-        // sane to paint. Same handling as "nothing recording".
-        clearLiveRecording();
-        return;
-    }
-
-    std::vector<std::pair<float, float>> peaks;
-    info.tap->copyLivePeaks(peaks);
-
-    const bool wasActive = liveRecording_.active;
-    const std::size_t previousBucketCount = livePeaks_.size();
-    liveRecording_ = info;
-    livePeaks_ = std::move(peaks);
-
-    const int rowHeight = getRowHeight();
-    const auto newRect = computeClipRect(viewState_, trackIndex, info.punchBeat,
-                                         std::max(0.0, info.currentBeat - info.punchBeat), rowHeight);
-
-    // Repaint-on-arrival: only when new peak buckets actually landed (or this is the strip's very
-    // first frame) is a repaint issued — the transport tick alone (which moves the rect's right
-    // edge every poll) is not "data arrival". The rect is still kept current either way, so a
-    // LATER arrival's dirty-rect union covers however far the strip silently grew in between.
-    if (wasActive && livePeaks_.size() == previousBucketCount) {
-        liveStripRect_ = newRect;
-        return;
-    }
-
-    const auto dirty = liveStripRect_.getUnion(newRect);
-    liveStripRect_ = newRect;
-    ++liveStripRepaintCount_;
-    repaint(dirty);
+    updateLiveRecordings({info});
 }
 
-void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
-    if (liveStripRect_.isEmpty())
+// MainComponent calls this every tick alongside the panel's other polled updates, whether or not anything is
+// recording. Each take's peaks are copied (a lock held only for that copy, never on the audio thread). A take
+// whose track vanished mid-take (deleted, or an undo rebuilt the doc) simply has no strip.
+//
+// Repaint-on-arrival: a strip repaints only when new peak buckets landed for it (or it is new, or gone); the
+// transport tick alone, which moves its right edge every poll, is not data arrival. The rect is still kept
+// current, so a later arrival's dirty union covers however far the strip silently grew in between. All the dirty
+// areas of one tick go out as one repaint.
+void TimelineClipLaneArea::updateLiveRecordings(const std::vector<LiveRecordingInfo>& takes) {
+    std::vector<LiveStrip> next;
+    if (doc_ != nullptr) {
+        const auto& tracks = doc_->getTracks();
+        for (const auto& info : takes) {
+            if (!info.active || (info.tap == nullptr && !info.copyPeaks))
+                continue;
+            const auto found = std::find_if(tracks.begin(), tracks.end(),
+                                            [&info](const synth::Track& track) { return track.id == info.track; });
+            if (found == tracks.end())
+                continue;
+            LiveStrip strip;
+            strip.info = info;
+            if (info.copyPeaks)
+                info.copyPeaks(strip.peaks, strip.rms);
+            else
+                info.tap->copyLivePeaks(strip.peaks, &strip.rms);
+            strip.rect = computeClipRect(viewState_, getRowLayout(), (int)(found - tracks.begin()), info.punchBeat,
+                                         std::max(0.0, info.currentBeat - info.punchBeat));
+            next.push_back(std::move(strip));
+        }
+    }
+
+    juce::Rectangle<int> dirty;
+    bool anyDirty = false;
+    const auto addDirty = [&](juce::Rectangle<int> area) {
+        dirty = anyDirty ? dirty.getUnion(area) : area;
+        anyDirty = true;
+    };
+    for (std::size_t i = 0; i < next.size(); ++i) {
+        const LiveStrip* previous =
+            i < liveStrips_.size() && liveStrips_[i].info.track == next[i].info.track ? &liveStrips_[i] : nullptr;
+        if (previous != nullptr && previous->peaks.size() == next[i].peaks.size())
+            continue;
+        addDirty(previous != nullptr ? previous->rect.getUnion(next[i].rect) : next[i].rect);
+        if (previous == nullptr && i < liveStrips_.size())
+            addDirty(liveStrips_[i].rect);
+    }
+    for (std::size_t i = next.size(); i < liveStrips_.size(); ++i)
+        addDirty(liveStrips_[i].rect);
+
+    liveStrips_ = std::move(next);
+    if (anyDirty) {
+        ++liveStripRepaintCount_;
+        repaint(dirty);
+    }
+}
+
+void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip) {
+    if (strip.rect.isEmpty())
         return;
 
     // Themed via the same accent idiom as paintDrawGhost/paintSplitPreview above: still
     // deliberately NOT the destination track's colour (kept distinct from a committed clip's
-    // fill, as the comment below always said), but no longer a flat white literal that could wash
-    // out against a light theme's background.
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    // fill), but no flat white literal that could wash out against a light theme's background.
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
-    const auto bodyBounds = liveStripRect_.toFloat().reduced(1.0f);
+    const auto bodyBounds = strip.rect.toFloat().reduced(1.0f);
     g.setColour(accent.withAlpha(0.12f)); // translucent — visibly "in progress", distinct from a
                                           // committed clip's fill
     g.fillRoundedRectangle(bodyBounds, 3.0f);
     g.setColour(accent.withAlpha(0.4f));
     g.drawRoundedRectangle(bodyBounds, 3.0f, 1.0f);
 
-    if (liveStripRect_.getWidth() <= kMinWidthForWaveform || livePeaks_.empty())
+    if (strip.rect.getWidth() <= kMinWidthForWaveform || strip.peaks.empty())
         return;
 
-    // The master tap is always stereo — see RecordTapModule::kNumChannels and every
-    // startCapture() call site in MainComponent — so this is not a guess specific to this class.
-    const int numChannels = RecordTapModule::kNumChannels;
-    const int bucketCount = (int)(livePeaks_.size() / (std::size_t)numChannels);
-    g.setColour(accent.withAlpha(0.7f));
-    paintWaveformColumns(g, liveStripRect_, livePeaks_, numChannels, 0, bucketCount);
+    // The take's own channel count: a whole-mix take is stereo, an input take mono or stereo.
+    const int numChannels = std::max(1, strip.info.numChannels);
+    const int bucketCount = (int)(strip.peaks.size() / (std::size_t)numChannels);
+    // The same ink rule as a committed clip, from the strip's own fill, so a take keeps its shape and weight when it
+    // commits; only the colour changes, from the accent to the track's.
+    paintWaveformColumns(g, strip.rect, strip.peaks, strip.rms, numChannels, 0, bucketCount,
+                         waveformInkFor(synth::theme::themeOf(*this).colors.bg1.overlaidWith(accent.withAlpha(0.12f))));
+}
+
+// The lane editors paint their own rows over the extra areas; this only fills what shows through
+// before they are placed (or past the last one), in the same bg-1 they use. The Automation track's
+// row continues its header column's section background across the lanes.
+void TimelineClipLaneArea::paintAutomationRows(juce::Graphics& g, const TimelineRowLayout& layout) {
+    juce::Colour laneBg(0xff13161B), sectionBg(0xff232833);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+        laneBg = lf->getTheme().colors.bg1;
+        sectionBg = lf->getTheme().colors.surfaceHi;
+    }
+    const int scroll = (int)std::llround(viewState_.trackScrollY);
+    const auto& tracks = doc_->getTracks();
+    for (int i = 0; i < (int)tracks.size(); ++i) {
+        const auto row = rowBounds(layout, i);
+        if (tracks[(size_t)i].kind == synth::TrackKind::Automation) {
+            g.setColour(sectionBg);
+            g.fillRect(row);
+        }
+        if (const int extra = layout.trackExtraHeight(i); extra > 0) {
+            g.setColour(laneBg);
+            g.fillRect(0, layout.trackTop(i) + layout.trackRowHeight(i) - scroll, getWidth(), extra);
+        }
+    }
 }
 
 } // namespace synth::ui

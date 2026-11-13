@@ -1,5 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
+#include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -20,7 +21,13 @@ constexpr int kEdgePaddingX = 4;
 constexpr int kEdgePaddingY = 2;
 constexpr int kBpmLabelWidth = 52;
 constexpr int kTimeSigLabelWidth = 40;
+constexpr int kSongKeyFieldWidth = 132;
 constexpr int kReadoutWidth = 92;
+// The design system's space unit: the gap a label keeps to the control it names.
+constexpr int kCaptionGap = 6;
+// The tempo and time signature labels stop this far above the bar's bottom edge, which with the 2 px inset of the
+// Add Track button under the bar leaves a caption gap between the two.
+constexpr int kLabelHeightInset = 4;
 constexpr int kCountInComboWidth = 64;
 
 // Persistence keys — restored/persisted in setApplicationProperties(), the same idiom
@@ -30,15 +37,6 @@ constexpr const char* kCountInBarsKey = "timelineCountInBars";
 
 // BPM drag tuning: this many pixels of vertical drag per "step" (1.0 BPM normally, 0.1 BPM fine).
 constexpr float kBpmDragPixelsPerStep = 4.0f;
-
-// Glyph geometry. The drawable square is the button's shorter side, inset by this fraction on every
-// edge — a proportional inset on a SQUARE, never a fraction of the width applied to both axes
-// (that flattened every glyph on a short bar, which is what read as "dense").
-constexpr float kGlyphInsetRatio = 0.24f;
-constexpr float kButtonCornerRadius = 3.0f;
-// The wash behind an engaged record button, so "armed" reads from across the room and not only from
-// the ~10 px circle.
-constexpr float kRecordEngagedWashAlpha = 0.18f;
 
 // A beat is always a quarter note regardless of the file's notated denominator — same formula
 // TransportService::getPosition() and TimelineRulerComponent::beatsPerBarFrom use, kept in sync
@@ -50,112 +48,32 @@ double beatsPerBarFrom(int numerator, int denominator) noexcept {
 } // namespace
 
 //==============================================================================
-juce::Colour TimelineTransportBar::GlyphButton::glyphColour() const {
-    using namespace synth::theme;
-
-    juce::Colour accent = juce::Colours::cyan;
-    juce::Colour textPrimary = juce::Colours::white;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        accent = lf->getTheme().colors.accent;
-        textPrimary = lf->getTheme().colors.textPrimary;
-    }
-
-    // Record is the exception to "lit == accent": engaged is always kRecordRedArgb, whatever the
-    // theme says, and idle is a neutral outline rather than a dim red one.
-    if (glyph_ == Glyph::Record)
-        return getToggleState() ? juce::Colour(kRecordRedArgb) : textPrimary.withAlpha(0.75f);
-    if (getToggleState())
-        return accent;
-    return glyph_ == Glyph::PlayStop ? textPrimary : textPrimary.withAlpha(0.7f);
-}
-
-void TimelineTransportBar::GlyphButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool) {
-    using namespace synth::theme;
-
-    juce::Colour bg, border;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        bg = lf->getTheme().colors.surface;
-        border = lf->getTheme().colors.border;
-    } else {
-        bg = juce::Colours::darkgrey.darker(0.4f);
-        border = juce::Colours::grey;
-    }
-
-    const auto bounds = getLocalBounds().toFloat().reduced(1.0f);
-    const bool recordEngaged = (glyph_ == Glyph::Record && getToggleState());
-    const juce::Colour recordRed(kRecordRedArgb);
-
-    g.setColour(shouldDrawHighlighted ? bg.brighter(0.15f) : bg);
-    g.fillRoundedRectangle(bounds, kButtonCornerRadius);
-    if (recordEngaged) {
-        g.setColour(recordRed.withAlpha(kRecordEngagedWashAlpha));
-        g.fillRoundedRectangle(bounds, kButtonCornerRadius);
-    }
-    g.setColour(recordEngaged ? recordRed : border);
-    g.drawRoundedRectangle(bounds, kButtonCornerRadius, 1.0f);
-
-    // One centred SQUARE for every glyph — see kGlyphInsetRatio.
-    const float side = std::min(bounds.getWidth(), bounds.getHeight());
-    const auto glyphArea =
-        juce::Rectangle<float>(side, side).withCentre(bounds.getCentre()).reduced(side * kGlyphInsetRatio);
-
-    g.setColour(glyphColour());
-
-    switch (glyph_) {
-    case Glyph::PlayStop: {
-        if (getToggleState()) {
-            g.fillRoundedRectangle(glyphArea.reduced(glyphArea.getWidth() * 0.06f), 1.5f); // stop = square
-        } else {
-            // Optical centring: a triangle's visual mass sits left of its bounding box, so it is
-            // nudged right and kept narrower than it is tall.
-            const auto tri = glyphArea.withTrimmedLeft(glyphArea.getWidth() * 0.12f);
-            juce::Path triangle;
-            triangle.addTriangle(tri.getX(), tri.getY(), tri.getX(), tri.getBottom(), tri.getRight(), tri.getCentreY());
-            g.fillPath(triangle);
-        }
+TimelineTransportBar::GlyphButton::GlyphButton(const juce::String& name, Glyph glyph)
+    : synth::ui::midilearn::RightClickSafeButton<synth::ui::IconButton>(name, synth::theme::Glyph::Play,
+                                                                        synth::ui::IconButton::Style::Framed)
+    , glyph_(glyph) {
+    using synth::theme::Glyph;
+    switch (glyph) {
+    case GlyphButton::Glyph::PlayStop:
+        setGlyph(Glyph::Play);
+        setGlyphWhenOn(Glyph::Stop);
         break;
-    }
-    case Glyph::Record: {
-        if (getToggleState())
-            g.fillEllipse(glyphArea);
-        else
-            g.drawEllipse(glyphArea.reduced(0.75f), 1.5f);
+    case GlyphButton::Glyph::Record:
+        setGlyph(Glyph::RecordIdle);
+        setGlyphWhenOn(Glyph::RecordOn);
+        // Record is the exception to "lit == accent": engaged is always kRecordRedArgb, whatever the
+        // theme says.
+        setOnColour(juce::Colour(kRecordRedArgb));
         break;
-    }
-    case Glyph::Loop: {
-        const float radius = glyphArea.getWidth() * 0.5f;
-        const auto centre = glyphArea.getCentre();
-        constexpr float kGapStartRadians = juce::MathConstants<float>::pi * 0.15f;
-        constexpr float kGapEndRadians = juce::MathConstants<float>::pi * 1.85f;
-
-        juce::Path loopPath;
-        loopPath.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, kGapStartRadians, kGapEndRadians, true);
-        const float strokeWidth = juce::jmax(1.4f, radius * 0.3f);
-        g.strokePath(loopPath,
-                     juce::PathStrokeType(strokeWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        // A small arrowhead at the arc's start so the bracket reads as a loop, not a plain "C".
-        // Sized off the radius so it scales with the button instead of overwhelming a small one.
-        const auto tip = centre.translated(radius * std::sin(kGapStartRadians), -radius * std::cos(kGapStartRadians));
-        const float arrow = juce::jmax(2.0f, radius * 0.5f);
-        juce::Path arrowHead;
-        arrowHead.addTriangle(tip.x - arrow, tip.y - arrow * 0.65f, tip.x + arrow, tip.y, tip.x - arrow * 0.35f,
-                              tip.y + arrow * 1.15f);
-        g.fillPath(arrowHead);
+    case GlyphButton::Glyph::Loop:
+        setGlyph(Glyph::Loop);
         break;
-    }
-    case Glyph::Metronome: {
-        // A plain "quarter note" glyph (notehead + stem) — asset-free and distinct at a glance from
-        // Record's plain circle. Proportioned as a group inside the square so it reads as a note
-        // rather than a blob hugging one corner.
-        const float headWidth = glyphArea.getWidth() * 0.58f;
-        const float headHeight = headWidth * 0.72f;
-        const juce::Rectangle<float> head(glyphArea.getX(), glyphArea.getBottom() - headHeight, headWidth, headHeight);
-        g.fillEllipse(head);
-        const float stemWidth = juce::jmax(1.0f, headWidth * 0.18f);
-        g.fillRect(head.getRight() - stemWidth, glyphArea.getY(), stemWidth, glyphArea.getHeight() - headHeight * 0.5f);
+    case GlyphButton::Glyph::Metronome:
+        setGlyph(Glyph::Metronome);
         break;
-    }
+    case GlyphButton::Glyph::ReturnToStart:
+        setGlyph(Glyph::ReturnToStart);
+        break;
     }
 }
 
@@ -174,20 +92,37 @@ void TimelineTransportBar::BpmDragLabel::mouseDrag(const juce::MouseEvent& e) {
 
 //==============================================================================
 TimelineTransportBar::TimelineTransportBar() {
+    addAndMakeVisible(returnToStartButton_);
+    returnToStartButton_.setComponentID("timelineTransportReturnToStart");
+    returnToStartButton_.setTitle("Return to Start");
+    returnToStartButton_.setDescription("Move the playhead to the start of the timeline");
+    returnToStartButton_.setTooltip("Return to Start");
+    returnToStartButton_.onClick = [this] {
+        if (onReturnToStart)
+            onReturnToStart();
+        else if (transport_ != nullptr)
+            transport_->locateBeat(0.0);
+    };
+
     addAndMakeVisible(playStopButton_);
+    playStopButton_.setTitle("Play / Stop");
     playStopButton_.setComponentID("timelineTransportPlayStop");
     playStopButton_.setClickingTogglesState(false); // the transport is the truth
     playStopButton_.setTooltip("Play / Stop");
     playStopButton_.onClick = [this] {
         if (transport_ == nullptr)
             return;
-        if (transport_->getPositionSnapshot().playing)
+        if (transport_->getPositionSnapshot().playing) {
             transport_->stop();
-        else
+        } else {
             transport_->play();
+            if (onPlayStarted)
+                onPlayStarted();
+        }
     };
 
     addAndMakeVisible(recordButton_);
+    recordButton_.setTitle("Record");
     recordButton_.setComponentID("timelineTransportRecord");
     recordButton_.setClickingTogglesState(false); // the owner is authoritative — see setRecordingState
     recordButton_.setTooltip("Record (arms the first armed track; implies Play)");
@@ -197,6 +132,7 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(loopButton_);
+    loopButton_.setTitle("Loop");
     loopButton_.setComponentID("timelineTransportLoop");
     loopButton_.setClickingTogglesState(false); // the transport is the truth
     loopButton_.setTooltip("Loop");
@@ -208,6 +144,7 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(metronomeButton_);
+    metronomeButton_.setTitle("Metronome");
     metronomeButton_.setComponentID("timelineTransportMetronome");
     metronomeButton_.setClickingTogglesState(false); // this bar owns the visual explicitly below
     metronomeButton_.setTooltip("Metronome click (summed after the graph - never recorded or bounced)");
@@ -277,6 +214,12 @@ TimelineTransportBar::TimelineTransportBar() {
             timeSigLabel_.setText(formatTimeSig(numerator, denominator), juce::dontSendNotification);
         }
     };
+
+    addAndMakeVisible(songKeyField_);
+
+    // The labels and buttons are centred in the strip at different heights, which would sort them by top edge.
+    synth::ui::setReadingFocusOrder({&returnToStartButton_, &playStopButton_, &recordButton_, &loopButton_,
+                                     &metronomeButton_, &countInCombo_, &bpmLabel_, &timeSigLabel_, &songKeyField_});
 }
 
 //==============================================================================
@@ -308,6 +251,7 @@ void TimelineTransportBar::setMetronome(synth::Metronome* metronome) noexcept {
 
 void TimelineTransportBar::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
+    songKeyField_.setApplicationProperties(props);
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
 
@@ -336,6 +280,7 @@ void TimelineTransportBar::updateFromTransport(const synth::TransportService::Po
         timeSigLabel_.setText(formatTimeSig(snapshot.timeSigNumerator, snapshot.timeSigDenominator),
                               juce::dontSendNotification);
 
+    songKeyField_.refreshFromTransport();
     refreshReadout(snapshot);
     // No timer of its own -- rides the SAME 10 Hz poll as everything else this method
     // resyncs (the class comment's "never any faster" rule).
@@ -405,6 +350,8 @@ void TimelineTransportBar::resized() {
         button.setBounds(bounds.removeFromLeft(buttonSize).withSizeKeepingCentre(buttonSize, buttonSize));
     };
 
+    placeButton(returnToStartButton_);
+    bounds.removeFromLeft(kGap);
     placeButton(playStopButton_);
     bounds.removeFromLeft(kGap);
     placeButton(recordButton_);
@@ -417,9 +364,16 @@ void TimelineTransportBar::resized() {
     countInCombo_.setBounds(bounds.removeFromLeft(kCountInComboWidth));
     bounds.removeFromLeft(kGap * 2);
 
-    bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth));
+    const int labelHeight = std::max(0, bounds.getHeight() - kLabelHeightInset);
+    bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth).withSizeKeepingCentre(kBpmLabelWidth, labelHeight));
     bounds.removeFromLeft(kGap);
-    timeSigLabel_.setBounds(bounds.removeFromLeft(kTimeSigLabelWidth));
+    timeSigLabel_.setBounds(
+        bounds.removeFromLeft(kTimeSigLabelWidth).withSizeKeepingCentre(kTimeSigLabelWidth, labelHeight));
+    bounds.removeFromLeft(kCaptionGap);
+    // The field takes what a short bar has left rather than overlapping the time signature.
+    const auto songKeySlot = bounds.removeFromLeft(kSongKeyFieldWidth);
+    songKeyField_.setBounds(
+        songKeySlot.withSizeKeepingCentre(songKeySlot.getWidth(), std::min(24, bounds.getHeight())));
     bounds.removeFromLeft(kGap * 2);
 
     readoutBounds_ = bounds.removeFromLeft(kReadoutWidth);

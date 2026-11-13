@@ -4,7 +4,10 @@
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 // ---- Named isActive predicates shared by more than one row ----
 
@@ -18,6 +21,49 @@ bool MainComponent::touchesAnyMacro() const {
             return true;
     }
     return false;
+}
+
+// The lane editor the point commands act on: the one holding focus, else the lane last shown or focused.
+synth::ui::AutomationLaneEditor* MainComponent::activeLaneEditor() const {
+    if (auto* focused = timelinePanel.getAutomationLanes().focusedEditor())
+        return focused;
+    return timelinePanel.getAutomationLanes().editorFor(timelinePanel.getSelectedAutomationLane());
+}
+
+// The lane the lane commands act on: the one whose editor or header holds focus, else the lane last shown or focused.
+synth::LaneId MainComponent::activeLane() const {
+    const auto focused = timelinePanel.getAutomationLanes().focusedLane();
+    return focused.isValid() ? focused : timelinePanel.getSelectedAutomationLane();
+}
+
+// The focused component when it sits in a timeline lane or mod row, else null (the canvas selection then decides).
+const juce::Component* MainComponent::replaceShortcutLaneFocus() const {
+    const auto& lanes = timelinePanel.getAutomationLanes();
+    const auto* focused = getFocusedComponentForMenu();
+    if (!bottomDock.isTimelineShowing() || focused == nullptr)
+        return nullptr;
+    return lanes.modulatorRowOwning(focused) != nullptr || lanes.laneOwning(focused).isValid() ? focused : nullptr;
+}
+
+// Replace Module With... means "swap what this is about": on a focused mod row its source (the row's Change source
+// picker), on a focused automation lane its parameter (the Change parameter picker), both right in the timeline; with
+// a canvas card selected, the card's Replace with... picker.
+bool MainComponent::canReplaceModuleFromShortcut() const {
+    if (const auto* focused = replaceShortcutLaneFocus())
+        return timelinePanel.getAutomationLanes().canOpenReplacePicker(focused);
+    return graphEditor.getCardKeyboard().canReplaceSelectedModule();
+}
+
+bool MainComponent::replaceModuleFromShortcut() {
+    if (const auto* focused = replaceShortcutLaneFocus())
+        return timelinePanel.getAutomationLanes().openReplacePicker(focused);
+    return graphEditor.getCardKeyboard().replaceSelectedModule();
+}
+
+// True while the active lane editor has a point selected.
+bool MainComponent::hasPointSelection() const {
+    const auto* editor = activeLaneEditor();
+    return editor != nullptr && !editor->getPointSelection().isEmpty();
 }
 
 // The Copy/Paste/Duplicate/Cut/Repeat block: each routes by resolveEditSurface(), but the exact
@@ -38,6 +84,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.hasClipSelection() || timelinePanel.hasRangeSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
+        case EditSurface::AutomationLane:
+            return hasPointSelection();
         case EditSurface::Graph:
             return graphEditor.getSelectionCount() > 0;
         case EditSurface::Mixer:
@@ -53,6 +101,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             // with nothing open has nowhere to put the block, so the row greys out rather than
             // silently discarding a paste.
             return timelinePanel.getPianoRoll().canPasteNotes();
+        case EditSurface::AutomationLane:
+            return activeLaneEditor() != nullptr && activeLaneEditor()->canPastePoints();
         case EditSurface::Graph:
             return graphEditor.canPaste();
         case EditSurface::Mixer:
@@ -66,6 +116,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.hasClipSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
+        case EditSurface::AutomationLane:
+            return activeLane().isValid(); // duplicates the lane
         case EditSurface::Graph:
             return graphEditor.getSelectionCount() > 0;
         case EditSurface::Mixer:
@@ -78,6 +130,8 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             return timelinePanel.canCutClips() || timelinePanel.hasRangeSelection();
+        case EditSurface::AutomationLane:
+            return hasPointSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:
@@ -96,6 +150,7 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:
         case EditSurface::Mixer:
+        case EditSurface::AutomationLane:
             return false; // no clipboard model on the mixer
         }
         break;
@@ -115,9 +170,15 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
         return !vertical;
     case EditSurface::TimelineClips:
     case EditSurface::PianoRoll:
-        return isBottomDockVisible;
+    case EditSurface::AutomationLane:
+        return isTimelineReachable();
     case EditSurface::Mixer:
         return false; // no zoom concept at all -- inactive on both axes, unlike Graph above
     }
     return true;
 }
+
+// Export is unavailable while an Export Audio/Stems render owns the engine.
+bool MainComponent::isExportAvailable() const { return !isBounceInProgress_; }
+
+bool MainComponent::isWelcomeScreenHidden() const { return welcomeFade_ == nullptr || !welcomeFade_->isShown(); }

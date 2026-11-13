@@ -61,3 +61,7 @@ build-*/
 # Local, untracked agent notes
 AGENTS.local.md
 .pr-body.md
+
+# Python bytecode caches (Tools/ui-verify, scripts)
+__pycache__/
+*.pyc

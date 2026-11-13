@@ -1,7 +1,10 @@
 #pragma once
 
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+#include <optional>
 #include <vector>
 
 // ControllersListComponent.h (docs/control/midi-remote-ui.md#controllers-list-left): the
@@ -63,6 +66,9 @@ public:
     void setSelectedProfileId(const juce::String& profileId);
     juce::String getSelectedProfileId() const noexcept { return selectedProfileId_; }
 
+    /** Opens the right-click menu of the selected row, anchored at that row. False when no row is selected. */
+    bool showContextMenuForSelectedRow();
+
     /** Proves the live-refresh pipeline actually reaches this component's rows, without a
      *  getter into every row's own fields. */
     int getRowCountForTest() const noexcept { return static_cast<int>(rows_.size()); }
@@ -76,6 +82,11 @@ public:
     /** The tooltip a hover over `profileId`'s row shows; empty for a row that needs none. */
     juce::String getTooltipForProfile(const juce::String& profileId) const;
     juce::String getTooltip() override;
+
+    /** What a screen reader reads for the list: the selected controller as "Name, 2 of 3" (with its
+     *  state in brackets when it is not simply present), or the controller count with none selected. */
+    juce::String getAccessibilityValueText() const;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     /** Row text as painted, for tests. */
     juce::String getRowDisplayNameForTest(const juce::String& profileId) const;
     /** "+ Add controller" clicked; `anchor` is the button, for the popover to point at. */
@@ -120,7 +131,8 @@ private:
         bool activityLit = false;
     };
 
-    void showContextMenuForRow(int rowIndex);
+    /** `screenAnchor` (screen coordinates) places the menu at the row instead of at the mouse. */
+    void showContextMenuForRow(int rowIndex, std::optional<juce::Rectangle<int>> screenAnchor = {});
     juce::Rectangle<int> boundsForRow(int rowIndex) const;
     int rowIndexAt(juce::Point<int> position) const;
 
@@ -128,6 +140,11 @@ private:
     juce::String selectedProfileId_;
     bool hosted_ = false;
     juce::TextButton addControllerButton_{"+ Add controller"};
+    synth::ui::FadeVisibility addControllerFade_{
+        &addControllerButton_};       // docs/layout/animation.md#fading-things-in-and-out
+    juce::String announcedValueText_; // last getAccessibilityValueText() handed to the peer
+
+    void refreshAccessibilityValue();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllersListComponent)
 };

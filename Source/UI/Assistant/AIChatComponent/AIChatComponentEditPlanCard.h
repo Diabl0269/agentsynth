@@ -1,0 +1,99 @@
+#pragma once
+
+#include "AIChatComponent.h"
+#include "StepIcons.h"
+
+namespace synth {
+
+// The one card an answer that changes the project renders: what the plan would do, one line per
+// phase (the patch, then the timeline ops), and one Apply that hands the whole plan to
+// AIIntegrationService::applyProjectEdit as one undo step. A plan the engine refused shows the
+// reason and no Apply. Below that, a details toggle (the per-change list and the plan's JSON) and
+// the thumbs feedback the patch card used to carry.
+//
+// To a screen reader the card is a group named "Edit plan"; the preview label carries the text as
+// its description. Every button is a Tab stop with the accent focus ring AppLookAndFeel draws, a
+// name and a tooltip. Nested in AIChatComponent so it reads MessageData directly.
+class AIChatComponent::EditPlanCard : public juce::Component {
+public:
+    using RateCallback = std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)>;
+
+    // `onApply` is ignored for a refused plan (data.planOk false), which gets no Apply button. It
+    // returns whether the plan was applied: on true the card turns Apply into a disabled "Applied"
+    // (data.planApplied starts a card in that state); on false Apply stays available.
+    EditPlanCard(const MessageData& data, std::function<bool()> onApply, RateCallback onRate);
+
+    void resized() override;
+
+    // The one line a plan with repairs shows under its preview: "1 detail skipped: <first note>", "(and N more)"
+    // after it when there are several. "skipped" when every note dropped something, else "adjusted". Empty for none.
+    static juce::String buildNotesLine(const juce::StringArray& notes, int skippedCount);
+    void parentHierarchyChanged() override { applyThemeColours(); }
+
+    // The kind of change a preview sentence describes (its icon): the kind named earliest in the sentence, a module
+    // when none is named. Static and pure so a test can pin the table.
+    static songsteps::StepKind kindForPlanLine(const juce::String& line);
+    // The icon of preview row `i`; null for a refused plan, which has no rows.
+    synth::ui::StepIconView* rowIcon(int i) const {
+        return i < (int)rowIcons.size() ? rowIcons[(size_t)i].get() : nullptr;
+    }
+
+    // `width` must be the width this card is laid out at (MessageBubble passes its content width);
+    // the preview text is measured wrapped at that width, so the two must agree.
+    int getRequiredHeight(int width) const;
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+private:
+    void setRating(AIChatComponent::PatchRatingUiState rating);
+    void notifyRate();
+    void applyThemeColours();
+    void showApplied();
+    void fillDetails();
+    int previewHeight(int width) const;
+    int notesHeight(int width) const;
+    void relayout();
+    int commentRowSlot() const;
+
+    static constexpr int kPadding = 8;
+    static constexpr int kRowGap = 8;
+    static constexpr int kHeaderHeight = 20;
+    static constexpr int kButtonRowHeight = 28;
+    static constexpr int kFeedbackRowHeight = 24;
+    static constexpr int kDetailsButtonWidth = 110;
+    static constexpr int kApplyButtonWidth = 88;
+    static constexpr int kDetailsHeight = 240;
+    static constexpr int kIconSize = 18;
+    static constexpr int kIconGap = 6;
+
+    const bool planOk;
+    bool applied = false;
+    juce::StringArray previewLines;
+    juce::String notesLine; // "1 detail skipped: ..."; empty when the plan needed no repair
+    bool isExpanded = false;
+    // What the details panel shows, held until it first opens (see fillDetails).
+    juce::String planSummary;
+    bool detailsFilled = false;
+    AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
+    RateCallback onRate;
+
+    juce::Label headerLabel;
+    juce::Label previewLabel;
+    std::vector<std::unique_ptr<synth::ui::StepIconView>> rowIcons; // one per preview line, none for a refused plan
+    int textInset() const { return rowIcons.empty() ? 0 : kIconSize + kIconGap; }
+    juce::Label notesLabel;
+    juce::TextButton detailsButton;
+    std::unique_ptr<juce::TextButton> applyButton;
+    juce::TextButton thumbsUpButton;
+    juce::TextButton thumbsDownButton;
+    juce::TextEditor commentField;
+    juce::TextButton commentSaveButton;
+    juce::TextEditor detailsDisplay;
+
+    // The feedback comment row and the details panel open and close with a fade and a height tween
+    // (160 ms in, 110 ms out); each frame lays the chat out again. Declared after what they wrap.
+    synth::ui::FadeVisibility commentFade_{&commentField, &commentSaveButton};
+    synth::ui::FadeVisibility detailsFade_{&detailsDisplay};
+};
+
+} // namespace synth

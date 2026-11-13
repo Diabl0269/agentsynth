@@ -5,29 +5,19 @@
 #include "MixerModel.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackChannelLink.h"
 #include "MixerModelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include <algorithm>
+#include <map>
 
 namespace synth {
 
 namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
-
-// This track's bound source node, resolved to a live node id -- the same uuid lookup
-// MainComponent::findNodeByUuid does, duplicated here because Core has no MainComponent to call
-// into (Source/Mixer/CLAUDE.md: this layer never depends on AppUI).
-NodeID resolveTrackSourceNode(juce::AudioProcessorGraph& graph, const Track& track) {
-    if (track.bindingUuid.isEmpty())
-        return {};
-    for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == track.bindingUuid)
-            return node->nodeID;
-    return {};
-}
 
 struct StripEntry {
     NodeID stripId;
@@ -39,24 +29,27 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
     MixerSnapshot snapshot;
 
     // Track-driven strips, in track order, de-duplicated by strip id (a channel fed by two tracks
-    // appears once, at the position of the FIRST track that feeds it). One findStripFedByTrackSource
-    // call per track (cheap: a bounded forward walk) rather than the fuller resolveTrackChannelLink
-    // (a node scan plus two BFS walks) -- that heavier query is only for "is this ONE track linked",
-    // not for building the whole column set.
+    // appears once, at the position of the FIRST track that feeds it). Every column below asks this one view
+    // (MixerModelGraphView.cpp): a per-column walk of the whole graph made a snapshot, and so every edit, O(columns x
+    // cables log cables).
+    const MixerGraphView view(graph, macros);
     std::vector<StripEntry> stripEntries;
+    std::map<juce::uint32, size_t> entryByStrip;
+    // The first track (in track order) each source node belongs to, for a linked column's colour below: asking every
+    // track per column made a snapshot grow with tracks x columns.
+    std::map<juce::uint32, juce::uint32> firstTrackColourBySource;
     for (const auto& track : doc.getTracks()) {
-        const auto sourceId = resolveTrackSourceNode(graph, track);
+        const auto sourceId = view.trackSource(track);
         if (sourceId == NodeID{})
             continue;
-        const auto stripId = findStripFedByTrackSource(graph, sourceId);
+        firstTrackColourBySource.emplace(sourceId.uid, track.colourArgb);
+        const auto stripId = view.stripFedBy(sourceId);
         if (stripId == NodeID{})
             continue;
-        auto it = std::find_if(stripEntries.begin(), stripEntries.end(),
-                               [&](const StripEntry& e) { return e.stripId == stripId; });
-        if (it == stripEntries.end())
+        if (const auto [it, added] = entryByStrip.emplace(stripId.uid, stripEntries.size()); added)
             stripEntries.push_back({stripId, {track.id}});
         else
-            it->feedingTracks.push_back(track.id);
+            stripEntries[it->second].feedingTracks.push_back(track.id);
     }
 
     // Orphan strips: a ChannelStripModule no track's walk reached (a hand-built patch, or a bus
@@ -65,11 +58,8 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
     for (auto* node : graph.getNodes()) {
         if (dynamic_cast<ChannelStripModule*>(node->getProcessor()) == nullptr)
             continue;
-        const auto id = node->nodeID;
-        const bool alreadyListed =
-            std::any_of(stripEntries.begin(), stripEntries.end(), [&](const StripEntry& e) { return e.stripId == id; });
-        if (!alreadyListed)
-            orphanStrips.push_back(id);
+        if (entryByStrip.count(node->nodeID.uid) == 0)
+            orphanStrips.push_back(node->nodeID);
     }
     std::sort(orphanStrips.begin(), orphanStrips.end(), [](NodeID a, NodeID b) { return a.uid < b.uid; });
     for (auto id : orphanStrips)
@@ -84,21 +74,29 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         // A bus IS a ChannelStrip -- the Kind only changes what the column PAINTS (a BUS badge and a
         // feeding-strips source line instead of a track chip and colour link)
         // (see docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip).
-        column.kind = isBusStrip(graph, entry.stripId) ? MixerColumn::Kind::Bus : MixerColumn::Kind::Strip;
+        column.kind = view.isBus(entry.stripId) ? MixerColumn::Kind::Bus : MixerColumn::Kind::Strip;
         column.nodeId = entry.stripId;
         column.uuid = node->properties["uuid"].toString();
         column.feedingTracks = entry.feedingTracks;
 
-        if (const auto* macro = macros.findByMember(column.uuid))
+        if (const auto* macro = view.channelMacros.nearest(column.uuid))
             column.colour = macro->colour;
-        column.name = stripColumnName(graph, doc, macros, entry.stripId);
+        column.name = stripColumnName(view, doc, entry.stripId);
 
-        const auto feeders = findTrackSourcesFeedingStrip(graph, entry.stripId);
+        const auto& feeders = view.trackSourcesFeeding(entry.stripId);
         column.linkedToTrack = column.kind == MixerColumn::Kind::Strip && feeders.size() == 1;
 
-        buildInsertsForColumn(graph, doc, macros, column);
-        buildBusSourcesForColumn(graph, doc, macros, column);
-        buildSendsForColumn(graph, doc, macros, column);
+        // A channel exactly ONE track feeds shows THAT track's colour (what the timeline shows), overriding the macro
+        // colour; a bus, a shared channel or an orphan keeps the macro colour. Read from `feeders` itself, not from
+        // linkedToTrack, so this stays independent of how the column kind is derived.
+        if (feeders.size() == 1 && !view.isBus(entry.stripId))
+            if (const auto first = firstTrackColourBySource.find(feeders[0].uid);
+                first != firstTrackColourBySource.end())
+                column.colour = juce::Colour(first->second);
+
+        buildInsertsForColumn(view, doc, column);
+        buildBusSourcesForColumn(view, doc, column);
+        buildSendsForColumn(view, doc, column);
         snapshot.columns.push_back(std::move(column));
     }
 
@@ -118,7 +116,7 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         master.nodeId = masterNode->nodeID;
         master.uuid = masterNode->properties["uuid"].toString();
         master.name = "Master";
-        buildInsertsForColumn(graph, doc, macros, master);
+        buildInsertsForColumn(view, doc, master);
         snapshot.columns.push_back(std::move(master));
     }
 

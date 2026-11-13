@@ -232,3 +232,112 @@ TEST(ArrangementContextTest, InjectionAppendsWhenNonEmpty) {
     EXPECT_TRUE(content.contains("\"Lead\""));
     EXPECT_TRUE(content.contains("Add a filter"));
 }
+
+// A renamed card is named by its title in the summary too, so the model and the person use one name.
+TEST(ArrangementContextTest, ABoundNodeIsNamedByItsCardTitle) {
+    juce::AudioProcessorGraph graph;
+    auto osc = graph.addNode(std::make_unique<OscillatorModule>());
+    osc->properties.set("uuid", "osc-uuid");
+    osc->properties.set("displayName", "Wobble Lead");
+
+    TimelineDoc doc;
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead");
+    doc.setTrackBinding(lead, "osc-uuid");
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("binding Wobble Lead")) << summary.toStdString();
+}
+
+// The marker names and beats ride in the context so a later edit can say "make the Drop louder".
+TEST(ArrangementContextTest, MarkersAreListedWithTheirBeats) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Lead");
+    doc.addMarker(8.0, "Drop", 0);
+    doc.addMarker(0.0, "Intro", 0);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("Markers (beats): \"Intro\" @ 0, \"Drop\" @ 8")) << summary.toStdString();
+    EXPECT_LT(summary.indexOf("Markers"), summary.indexOf("Track \"Lead\""))
+        << "the markers line sits above the tracks";
+
+    TimelineDoc none;
+    none.addTrack(TrackKind::Midi, "Lead");
+    EXPECT_FALSE(ArrangementContext::summarize(none, graph, makeSnapshot()).contains("Markers"));
+}
+
+TEST(ArrangementContextTest, ManyMarkersAreBoundedAndNeverPushOutEveryTrack) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Lead");
+    for (int i = 0; i < 100; ++i)
+        doc.addMarker(i * 4.0, "Section " + juce::String(i), 0);
+    doc.addMarker(500.0, "Line\nBreak", 0);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot(), 600);
+    EXPECT_TRUE(summary.contains("more")) << summary.toStdString();
+    EXPECT_TRUE(summary.contains("Track \"Lead\"")) << "the track still fits: " << summary.toStdString();
+    const juce::String markersLine =
+        summary.fromFirstOccurrenceOf("Markers", true, false).upToFirstOccurrenceOf("\n", false, false);
+    EXPECT_LE(markersLine.length(), 600 / 2 + 40);
+
+    TimelineDoc broken;
+    broken.addTrack(TrackKind::Midi, "Lead");
+    broken.addMarker(0.0, "Line\nBreak", 0);
+    EXPECT_TRUE(ArrangementContext::summarize(broken, graph, makeSnapshot()).contains("\"Line Break\" @ 0"));
+}
+
+TEST(ArrangementContextTest, AMarkerOnlyDocIsNotEmpty) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addMarker(0.0, "Intro", 0);
+    EXPECT_TRUE(ArrangementContext::summarize(doc, graph, makeSnapshot()).contains("\"Intro\" @ 0"));
+}
+
+// The model sees which clips are linked copies, since editing one of them edits the whole group.
+TEST(ArrangementContextTest, LinkedClipsAreMarked) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    const auto drums = doc.addTrack(TrackKind::Midi, "Drums");
+    const auto beat = doc.addClip(drums, 0.0, 4.0, "Beat");
+    doc.addNote(beat, makeNote(0.0, 36));
+    doc.duplicateClipLinked(beat);
+    doc.addClip(drums, 8.0, 4.0, "Fill");
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("3 clips @ 0-4 (linked), 4-8 (linked), 8-12 beats; 2 notes total"))
+        << summary.toStdString();
+}
+
+// Sections ride in the context in bars, one entry per placement, so a later edit can say "double the Chorus".
+TEST(ArrangementContextTest, SectionsAreListedInBarsWithTheirRepeats) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead");
+    doc.addClip(lead, 0.0, 32.0, "all");
+    doc.makeSection(0.0, 16.0, "Intro", 0, 0.5);
+    const auto verse = doc.makeSection(16.0, 32.0, "Verse", 0, 0.5);
+    doc.placeSection(verse, 32.0, synth::SectionDropMode::MakeRoom, 0.5);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("Sections (bars): \"Intro\" 1-4; \"Verse\" 5-8 (1 of 2); \"Verse\" 9-12 (2 of 2)"))
+        << summary.toStdString();
+    EXPECT_LT(summary.indexOf("Sections"), summary.indexOf("Track \"Lead\""));
+
+    TimelineDoc none;
+    none.addTrack(TrackKind::Midi, "Lead");
+    EXPECT_FALSE(ArrangementContext::summarize(none, graph, makeSnapshot()).contains("Sections"));
+}
+
+TEST(ArrangementContextTest, ManySectionsAreBoundedWithAMoreTail) {
+    juce::AudioProcessorGraph graph;
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Lead");
+    for (int i = 0; i < 60; ++i)
+        doc.makeSection(i * 4.0, i * 4.0 + 4.0, "Section number " + juce::String(i), 0, 0.5);
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot(), 2000);
+    const auto line = summary.fromFirstOccurrenceOf("Sections", true, false).upToFirstOccurrenceOf("\n", false, false);
+    EXPECT_LE(line.length(), 2000 / 4 + 40) << line.toStdString();
+    EXPECT_TRUE(line.contains(" more")) << line.toStdString();
+}

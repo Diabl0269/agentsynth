@@ -1,0 +1,137 @@
+// MainComponentCanvasReveal.cpp -- where the canvas sits when it is not the main view: laid into the
+// bottom panel's Canvas tab body, revealed on demand by the code that selects or frames a card, and the
+// Minimap toggle that follows the canvas's size. The canvas stays a MainComponent child throughout: the
+// dock only reports the rectangle (BottomDockComponent::getCanvasBodyBounds).
+#include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <utility>
+
+using synth::ui::BottomDockComponent;
+
+namespace {
+// The strip's height in a rectangle `available` px tall: the full strip, or half the rectangle when that is all
+// there is, so the canvas under it never vanishes in a very short panel.
+int canvasToolbarHeightIn(int available) { return juce::jmin(synth::ui::CanvasToolbar::kHeight, available / 2); }
+// A sibling of the dock paints under it, so the toolbar in the dock's tab strip goes directly above the dock (and under
+// everything that was above the dock before: the overlays, the AI panel's slide, the toasts).
+void raiseAboveBottomDock(juce::Component& parent, juce::Component& dock, juce::Component& c) {
+    const int dockIndex = parent.getIndexOfChildComponent(&dock);
+    if (parent.getIndexOfChildComponent(&c) > dockIndex)
+        return;
+    if (auto* above = parent.getChildComponent(dockIndex + 1); above != &c && above != nullptr)
+        c.toBehind(above);
+    else
+        c.toFront(false);
+}
+} // namespace
+
+// The canvas toolbar is the top row of the main area when the canvas is the main view. As a panel tab it shares the
+// dock's tab strip instead (icon-only chips at the strip's right end), so the tabs and the canvas buttons are one
+// header and the canvas keeps the whole tab body. Cheap enough to run on every slide frame: GraphEditor::resized()
+// re-fits the minimap, re-applies the content transform and clips the card accessibility to the new viewport, which is
+// the same work a window drag already does on every frame.
+void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
+    if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas) {
+        const bool leavingDock = std::exchange(canvasInDockLayout_, false);
+        bottomDock.setStripAccessoryWidth(0);
+        if (canvasToolbar_.setInStrip(false))
+            applyToolbarLabels(toolbarNarrowMode_);
+        canvasToolbar_.setVisible(true);
+        canvasToolbar_.setBounds(mainArea.removeFromTop(canvasToolbarHeightIn(mainArea.getHeight())));
+        graphEditor.setVisible(true);
+        graphEditor.setBounds(mainArea);
+        if (leavingDock)
+            restoreCanvasMainView();
+    } else {
+        // Hidden, not zero-sized, while the Canvas tab is not showing: its timers and predicates then
+        // read isShowing() as false and land synchronously.
+        const bool showing = bottomDock.isCanvasBodyShowing() && bottomDock.isVisible();
+        if (!canvasInDockLayout_) {
+            canvasInDockLayout_ = true;
+            canvasRecentrePending_ = true;
+            canvasMainView_ = graphEditor.getViewDoc(); // still the main area's view: the bounds change below
+        }
+        if (showing) {
+            const bool enteringStrip = canvasToolbar_.setInStrip(true);
+            bottomDock.setStripAccessoryWidth(synth::ui::CanvasToolbar::stripWidth());
+            canvasToolbar_.setBounds(bottomDock.getStripAccessoryBounds() + bottomDock.getPosition());
+            graphEditor.setBounds(bottomDock.getCanvasBodyBounds() + bottomDock.getPosition());
+            raiseAboveBottomDock(*this, bottomDock, canvasToolbar_);
+            if (enteringStrip)
+                applyToolbarLabels(toolbarNarrowMode_);
+        } else {
+            bottomDock.setStripAccessoryWidth(0);
+        }
+        canvasToolbar_.setVisible(showing);
+        graphEditor.setVisible(showing);
+        // Once, after the panel has finished sliding, so the fit measures its real height.
+        if (showing && canvasRecentrePending_ && timelineSlide_.getProgress() >= 1.0f && graphEditor.getHeight() > 0) {
+            canvasRecentrePending_ = false;
+            graphEditor.fitViewToModules();
+        }
+    }
+    refreshMinimapButton();
+}
+
+// A project's saved view belongs to the main area. While the canvas is in the panel it is kept for the canvas's
+// return, and the panel fits the new patch again on its next layout pass.
+void MainComponent::applyLoadedCanvasView(const synth::ViewDoc& view) {
+    graphEditor.applyViewDoc(view);
+    if (!canvasInDockLayout_)
+        return;
+    canvasMainView_ = view;
+    canvasRecentrePending_ = true;
+}
+
+// Puts the view the canvas had in the main area back, unless the patch moved on while it was in the panel and none of
+// its modules would be on screen: then it is fit to them instead. Runs inside the layout pass, so a swap's
+// arriving picture is taken of this view.
+void MainComponent::restoreCanvasMainView() {
+    canvasRecentrePending_ = false;
+    if (!canvasMainView_)
+        return;
+    graphEditor.applyViewDoc(*canvasMainView_);
+    canvasMainView_.reset();
+    const auto visible = graphEditor.getVisibleCanvasRect();
+    for (auto* module : graphEditor.getModuleComponents())
+        if (module != nullptr && visible.intersects(module->getBounds().toFloat()))
+            return;
+    if (!graphEditor.getModuleComponents().isEmpty())
+        graphEditor.fitViewToModules();
+}
+
+void MainComponent::ensureCanvasShowing() {
+    if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas)
+        return;
+    ensureBottomDockOpen();
+    bottomDock.setActiveTab(BottomDockComponent::Tab::Canvas);
+}
+
+juce::String MainComponent::getMainViewFocusRegionId() const {
+    switch (bottomDock.getMainView()) {
+    case BottomDockComponent::Tab::Timeline:
+        return "timeline";
+    case BottomDockComponent::Tab::Mixer:
+        return "mixer";
+    case BottomDockComponent::Tab::MidiRemote:
+        return "midiRemote";
+    case BottomDockComponent::Tab::Canvas:
+        break;
+    }
+    return "canvas";
+}
+
+// The toggle stays a real toggle (the preference is untouched) except while the size floor hides the map:
+// then there is nothing for it to show, and the tooltip says why.
+void MainComponent::refreshMinimapButton() {
+    const bool suppressed = graphEditor.isMinimapSuppressedBySize();
+    toggleMinimapButton.setEnabled(!suppressed);
+    if (suppressed) {
+        toggleMinimapButton.setTooltip("Needs a taller canvas");
+        return;
+    }
+    const juce::String base = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
+    toggleMinimapButton.setTooltip(synth::ui::formatShortcutHint(
+        base, ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleMinimap"))));
+}

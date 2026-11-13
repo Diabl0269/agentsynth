@@ -1,0 +1,518 @@
+// ModMatrixPickerTests.cpp
+//
+// The Mod Matrix's source/destination combos open a searchable picker: categories as headers, typing
+// filters, Up/Down/Return/Escape work, and a pick re-points the routing through the same path a combo
+// selection takes. Every test opens it through the combo's real showPopup().
+
+#include "../../TestWait.h"
+#include "ModMatrixCanvasHelpers.h"
+#include "ModMatrixPickerFirstRow.h"
+
+#include "Modules/LFOModule.h"
+#include "Modules/MacroInletModule.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModMatrixPickerCreate.h"
+#include "UI/Layout/SearchMatch.h"
+#include <gtest/gtest.h>
+
+namespace {
+
+using synth::ui::ModMatrixPicker;
+
+// Opens `combo`'s picker, capturing it instead of launching a CallOutBox (a headless test has no window).
+std::unique_ptr<ModMatrixPicker> openPicker(MatrixCanvas& c, juce::ComboBox* combo) {
+    std::unique_ptr<juce::Component> captured;
+    c.matrix().setPickerLauncherForTest(
+        [&captured](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { captured = std::move(p); });
+    combo->showPopup();
+    return std::unique_ptr<ModMatrixPicker>(dynamic_cast<ModMatrixPicker*>(captured.release()));
+}
+
+bool anyStartsWith(const std::vector<juce::String>& names, const juce::String& prefix) {
+    return std::any_of(names.begin(), names.end(), [&](const auto& n) { return n.startsWith(prefix); });
+}
+
+struct PickerFixture {
+    MatrixCanvas c{Boxed::DestInside};
+    std::unique_ptr<ModMatrixPicker> source, dest;
+
+    PickerFixture() {
+        c.addRow();
+        c.editor.setModuleDisplayName(c.lfo, "Wobble");
+        c.matrix().updateRowsFromGraph();
+        source = openPicker(c, c.matrix().getRowSourceComboForTest(0));
+        dest = openPicker(c, c.matrix().getRowDestComboForTest(0));
+    }
+};
+
+} // namespace
+
+TEST(ModMatrixPicker, ClickingTheComboOpensAPickerGroupedUnderCategoryHeaders) {
+    PickerFixture f;
+    ASSERT_NE(f.source, nullptr);
+    ASSERT_NE(f.dest, nullptr);
+
+    const auto names = f.source->getVisibleRowNamesForTest();
+    EXPECT_TRUE(anyStartsWith(names, "LFOs")) << "category header";
+    EXPECT_TRUE(anyStartsWith(names, "Wobble")) << "the renamed module, by its card title";
+    EXPECT_TRUE(anyStartsWith(f.dest->getVisibleRowNamesForTest(), "FilterIn - Cutoff"));
+}
+
+TEST(ModMatrixPicker, TypingFiltersCaseInsensitivelyAndHidesEmptyCategories) {
+    PickerFixture f;
+    const int height = f.source->getHeightForTest();
+
+    f.source->setSearchTextForTest("WOB");
+    const auto items = f.source->getVisibleItemTextsForTest();
+    ASSERT_FALSE(items.empty());
+    for (const auto& text : items)
+        EXPECT_TRUE(text.startsWith("Wobble")) << text;
+    // One header (LFOs) plus the matching rows; every other category header is gone.
+    EXPECT_EQ(f.source->getVisibleRowNamesForTest().size(), items.size() + 1);
+    EXPECT_EQ(f.source->getVisibleRowNamesForTest().front(), "LFOs");
+    EXPECT_EQ(f.source->getHeightForTest(), height) << "the popup does not resize while filtering";
+
+    f.source->setSearchTextForTest("no such module");
+    EXPECT_TRUE(f.source->getVisibleRowNamesForTest().empty());
+
+    f.source->setSearchTextForTest("");
+    EXPECT_GT(f.source->getVisibleRowNamesForTest().size(), items.size() + 1);
+}
+
+TEST(ModMatrixPicker, ASourceItemsAliasesAreSearchedButTheRowKeepsItsName) {
+    ModMatrixPicker picker("source",
+                           {{1, "Envelopes", "ADSR 1", synth::ui::moduleSearchAliases("ADSR 1")},
+                            {2, "LFOs", "LFO 1", synth::ui::moduleSearchAliases("LFO 1")}},
+                           0, [](int) {});
+    picker.setSearchTextForTest("env");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), std::vector<juce::String>{"ADSR 1"});
+}
+
+TEST(ModMatrixPicker, TheSearchMatchesTheTargetLabelToo) {
+    PickerFixture f;
+    f.dest->setSearchTextForTest("cutoff");
+
+    const auto items = f.dest->getVisibleItemTextsForTest();
+    ASSERT_EQ(items.size(), 2u) << "both Filters' Cutoff";
+    for (const auto& text : items)
+        EXPECT_TRUE(text.endsWith("Cutoff")) << text;
+    EXPECT_EQ(f.dest->getVisibleRowNamesForTest().front(), "Filters");
+}
+
+TEST(ModMatrixPicker, ChoosingARowRepointsTheRoutingThroughThePortSeam) {
+    PickerFixture f;
+    f.source->setSearchTextForTest("wobble");
+    f.source->chooseVisibleItemForTest(0);
+    f.c.matrix().updateRowsFromGraph();
+    f.source.reset();
+    f.dest->setSearchTextForTest("filterin - cutoff");
+    ASSERT_EQ(f.dest->getVisibleItemTextsForTest().size(), 1u);
+    f.dest->chooseVisibleItemForTest(0);
+    f.dest.reset();
+    f.c.matrix().updateRowsFromGraph();
+
+    // The same outcome as selecting the combo item: an inlet minted on the macro the Filter is in.
+    const auto inlets = f.c.nodesOf<MacroInletModule>();
+    ASSERT_EQ(inlets.size(), 1u);
+    EXPECT_TRUE(f.c.edge(inlets[0], f.c.nodesOf<AttenuverterModule>().front()));
+    EXPECT_TRUE(f.c.edge(f.c.nodesOf<AttenuverterModule>().front(), f.c.filterIn, kCutoff));
+    EXPECT_TRUE(f.c.matrix().getRowDestComboTextForTest(0).startsWith("FilterIn"));
+}
+
+TEST(ModMatrixPicker, ReturnPicksTheFirstMatchAndArrowsMoveTheHighlight) {
+    PickerFixture f;
+    f.dest->setSearchTextForTest("cutoff");
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0);
+    EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 1);
+    EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 1) << "stops at the last match";
+    EXPECT_TRUE(f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0);
+
+    f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+
+    EXPECT_EQ(f.c.matrix().getRowDestComboForTest(0)->getSelectedId(),
+              ModMatrixComponent::encodeComboId(f.c.filterIn, kCutoff))
+        << "FilterIn sorts first among the two Cutoff rows";
+}
+
+TEST(ModMatrixPicker, EscapeClosesWithoutPicking) {
+    PickerFixture f;
+    f.dest->setSearchTextForTest("cutoff");
+    f.dest->sendKeyForTest(juce::KeyPress(juce::KeyPress::escapeKey));
+
+    EXPECT_EQ(f.c.matrix().getRowDestComboForTest(0)->getSelectedId(), 0);
+    EXPECT_TRUE(f.c.nodesOf<MacroInletModule>().empty());
+}
+
+TEST(ModMatrixPicker, FlatSourceModeListsRowsWithoutCategoryHeaders) {
+    PickerFixture f;
+    f.source.reset();
+    f.c.matrix().setFlatSourceMenu(true);
+    f.source = openPicker(f.c, f.c.matrix().getRowSourceComboForTest(0));
+
+    EXPECT_EQ(f.source->getVisibleRowNamesForTest().size(), f.source->getVisibleItemTextsForTest().size());
+}
+
+TEST(ModMatrixPicker, ARenameWhileAPickerIsOpenWaitsUntilItCloses) {
+    PickerFixture f;
+    f.c.pickSource(f.c.lfo);
+    f.source.reset();
+    f.dest.reset();
+    f.source = openPicker(f.c, f.c.matrix().getRowSourceComboForTest(0));
+    f.c.editor.setModuleDisplayName(f.c.lfo, "Renamed");
+
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_TRUE(f.c.matrix().getRowSourceComboTextForTest(0).startsWith("Wobble")) << "left alone while open";
+
+    f.source.reset();
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_TRUE(f.c.matrix().getRowSourceComboTextForTest(0).startsWith("Renamed"));
+}
+
+TEST(ModMatrixPicker, EveryControlIsKeyboardReachableAndNamedForScreenReaders) {
+    PickerFixture f;
+    auto* sourceCombo = f.c.matrix().getRowSourceComboForTest(0);
+    auto* destCombo = f.c.matrix().getRowDestComboForTest(0);
+    for (auto* combo : {sourceCombo, destCombo}) {
+        EXPECT_TRUE(combo->getWantsKeyboardFocus());
+        EXPECT_TRUE(combo->getTitle().isNotEmpty());
+        EXPECT_TRUE(combo->getTooltip().isNotEmpty());
+    }
+
+    for (auto* picker : {f.source.get(), f.dest.get()}) {
+        EXPECT_TRUE(picker->getTitle().isNotEmpty());
+        auto& search = picker->getSearchEditorForTest();
+        EXPECT_TRUE(search.getWantsKeyboardFocus()) << "the search field takes focus when the picker opens";
+        EXPECT_TRUE(search.getTitle().isNotEmpty());
+        EXPECT_TRUE(search.getTooltip().isNotEmpty());
+    }
+}
+
+// The bug: juce::ComboBox::showPopupIfNotActive() raises its private "menu active" flag before
+// calling showPopup(), and only the stock menu lowers it again. The picker replaced that menu, so
+// the flag stayed up after the first open and every later click or Return was ignored. Driven
+// through the real key path (keyPressed -> showPopupIfNotActive -> async showPopup), not by calling
+// showPopup() directly, which never raises the flag and so passed before the fix.
+TEST(ModMatrixPicker, TheComboOpensItsPickerEveryTimeNotOnlyTheFirst) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    int launches = 0;
+    std::unique_ptr<juce::Component> open;
+    f.c.matrix().setPickerLauncherForTest([&](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) {
+        ++launches;
+        open = std::move(p);
+    });
+
+    for (auto* combo : {f.c.matrix().getRowSourceComboForTest(0), f.c.matrix().getRowDestComboForTest(0)}) {
+        for (int attempt = 1; attempt <= 3; ++attempt) {
+            const int before = launches;
+            EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+            synth::test::waitUntil([&] { return launches == before + 1; });
+            EXPECT_EQ(launches, before + 1) << "attempt " << attempt;
+            EXPECT_FALSE(combo->isPopupActive()) << "the stock flag is lowered while the picker is up";
+            open.reset(); // the picker closes, as a pick or Escape would
+        }
+    }
+}
+
+TEST(ModMatrixPicker, AnOpenedAndClosedPickerLetsThePanelRefreshAgain) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    std::unique_ptr<juce::Component> open;
+    f.c.matrix().setPickerLauncherForTest(
+        [&](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { open = std::move(p); });
+    f.c.pickSource(f.c.lfo);
+    auto* combo = f.c.matrix().getRowSourceComboForTest(0);
+    combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    synth::test::waitUntil([&] { return open != nullptr; });
+    open.reset();
+
+    f.c.editor.setModuleDisplayName(f.c.lfo, "Renamed");
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_TRUE(f.c.matrix().getRowSourceComboTextForTest(0).startsWith("Renamed"))
+        << "a closed picker no longer holds the list frozen";
+}
+
+TEST(ModMatrixPicker, ReturnOpensThePickerSpaceDoesNotAndArrowsNeverRepointTheRouting) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    int launches = 0;
+    f.c.matrix().setPickerLauncherForTest([&](std::unique_ptr<juce::Component>, juce::Rectangle<int>) { ++launches; });
+    f.c.pickSource(f.c.lfo);
+    auto* combo = f.c.matrix().getRowSourceComboForTest(0);
+    const int selected = combo->getSelectedId();
+
+    for (auto key :
+         {juce::KeyPress::upKey, juce::KeyPress::downKey, juce::KeyPress::leftKey, juce::KeyPress::rightKey}) {
+        EXPECT_FALSE(combo->keyPressed(juce::KeyPress(key))) << "left to the matrix's grid navigation";
+        EXPECT_EQ(combo->getSelectedId(), selected);
+    }
+    EXPECT_FALSE(combo->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "Space stays the app's play key";
+    EXPECT_EQ(launches, 0);
+    EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return launches == 1; });
+    EXPECT_EQ(launches, 1);
+}
+
+TEST(ModMatrixPicker, SearchMatchesWordByWordInAnyOrder) {
+    EXPECT_TRUE(synth::ui::searchMatches("Oscillator 8", "osc 8"));
+    EXPECT_TRUE(synth::ui::searchMatches("Oscillator 8 - Cutoff", "cut  OSC"));
+    EXPECT_TRUE(synth::ui::searchMatches("Anything", "   "));
+    EXPECT_FALSE(synth::ui::searchMatches("Oscillator 7", "osc 8"));
+    EXPECT_FALSE(synth::ui::searchMatches("Filter 1", "osc"));
+
+    PickerFixture f;
+    f.dest->setSearchTextForTest("cut filterin");
+    ASSERT_EQ(f.dest->getVisibleItemTextsForTest().size(), 1u);
+    EXPECT_EQ(f.dest->getVisibleItemTextsForTest().front(), "FilterIn - Cutoff");
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0) << "the one match is ready for Return";
+}
+
+// The picker is reused outside the matrix (the timeline's "Add automation..." list): rows read as a bare
+// parameter name under a module header, so the module's title rides along as hidden search text, and every
+// word of a query must match, in any order.
+TEST(ModMatrixPicker, EveryWordOfTheQueryMustMatchTheRowOrItsHiddenSearchText) {
+    ModMatrixPicker picker("parameter",
+                           {{1, "Filter 1", "Cutoff", "Filter 1"},
+                            {2, "Filter 1", "Resonance", "Filter 1"},
+                            {3, "Oscillator 1", "Detune", "Oscillator 1"}},
+                           0, [](int) {});
+
+    picker.setSearchTextForTest("filter cut");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), (std::vector<juce::String>{"Cutoff"}));
+    picker.setSearchTextForTest("cut filter");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), (std::vector<juce::String>{"Cutoff"})) << "any order";
+    picker.setSearchTextForTest("osc cut");
+    EXPECT_TRUE(picker.getVisibleItemTextsForTest().empty()) << "both words must match";
+    picker.setSearchTextForTest("  filter  ");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest().size(), 2u) << "extra spaces are ignored";
+}
+
+TEST(ModMatrixPicker, AReusedPickerCanBeRenamedForScreenReaders) {
+    ModMatrixPicker picker("parameter", {{1, {}, "Cutoff", {}}}, 0, [](int) {});
+    picker.setAccessibleNames("Add automation to Bass", "Search Bass parameters");
+    EXPECT_EQ(picker.getTitle(), "Add automation to Bass");
+    EXPECT_EQ(picker.getSearchEditorForTest().getTitle(), "Search Bass parameters");
+}
+
+// A typed query highlights the matched letters of every visible row's text, like the module library does.
+TEST(ModMatrixPicker, TypedQueryHighlightsTheMatchedLettersOfTheVisibleRows) {
+    ModMatrixPicker picker("source",
+                           {{1, "Sources", "Oscillator 7", "", "", true},
+                            {2, "Sources", "Oscillator 8", "", "", true},
+                            {3, "Sources", "Filter 1", "", "", true}},
+                           0, [](int) {});
+
+    for (const auto& spans : picker.getVisibleItemHighlightSpansForTest())
+        EXPECT_TRUE(spans.empty()) << "no query, no highlight";
+
+    picker.setSearchTextForTest("osc 8");
+    const auto spans = picker.getVisibleItemHighlightSpansForTest();
+    ASSERT_EQ(spans.size(), 1u);
+    ASSERT_EQ(spans[0].size(), 2u) << "'osc' and '8'";
+    EXPECT_EQ(spans[0][0].start, 0);
+    EXPECT_EQ(spans[0][0].length, 3);
+    EXPECT_EQ(spans[0][1].start, 11);
+}
+
+// On a query the highlighted row is the best match (prefix before word start before mid-word), not just the first.
+TEST(ModMatrixPicker, QueryHighlightsTheBestMatchingRow) {
+    ModMatrixPicker picker(
+        "source",
+        {{1, "", "Subtle Rod", "", "", true}, {2, "", "Pro Rod", "", "", true}, {3, "", "Rod Bank", "", "", true}}, 0,
+        [](int) {});
+    picker.setSearchTextForTest("rod");
+    ASSERT_EQ(picker.getVisibleItemTextsForTest().size(), 3u);
+    EXPECT_EQ(picker.getHighlightedItemIndexForTest(), 2) << "'Rod Bank' starts with the word";
+}
+
+// End to end: searching a new source and pressing Return swaps the routing and rebuilds the macro inlet (the swept
+// inlet's node goes mid-change, the fresh one is minted and the macro laid out again).
+TEST(ModMatrixPicker, ReturnOnASearchedSourceThatRebuildsAMacroInletLaysOutWithoutTouchingTheDeadCard) {
+    PickerFixture f;
+    const auto second = addModuleAt(f.c.editor, f.c.engine, std::make_unique<LFOModule>(), "Second", 100, 400);
+    f.c.editor.setModuleDisplayName(second, "Sway");
+    f.source.reset();
+    f.dest.reset();
+    f.c.pickSource(f.c.lfo);
+    f.c.pickDest(f.c.filterIn);
+    ASSERT_EQ(f.c.nodesOf<MacroInletModule>().size(), 1u) << "the first routing enters the macro by an inlet";
+
+    auto source = openPicker(f.c, f.c.matrix().getRowSourceComboForTest(0));
+    ASSERT_NE(source, nullptr);
+    source->setSearchTextForTest("sway");
+    source->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    source.reset();
+    f.c.matrix().updateRowsFromGraph();
+
+    const auto inlets = f.c.nodesOf<MacroInletModule>();
+    ASSERT_EQ(inlets.size(), 1u) << "the old inlet went, a fresh one took its place";
+    EXPECT_TRUE(f.c.edge(second, f.c.nodesOf<AttenuverterModule>().front()) ||
+                f.c.edge(inlets[0], f.c.nodesOf<AttenuverterModule>().front()));
+    EXPECT_TRUE(f.c.edge(f.c.nodesOf<AttenuverterModule>().front(), f.c.filterIn, kCutoff));
+}
+
+// Regression test for FRO790: a node removed mid-change (a swept macro inlet) leaves its card on the canvas until
+// the next reconcile, and the layout pass must not read that card's freed processor.
+TEST(ModMatrixPicker, TheLayoutPassSkipsACardWhoseNodeIsAlreadyGone) {
+    MatrixCanvas c(Boxed::DestInside);
+    c.editor.updateComponents();
+    const auto key = "n:" + juce::String((juce::int64)c.lfo.uid);
+    const auto has = [&] {
+        const auto units = c.editor.getMacroController().buildLayoutUnits({});
+        return std::any_of(units.begin(), units.end(), [&](const auto& u) { return u.key == key; });
+    };
+    ASSERT_TRUE(has());
+
+    c.engine.getGraph().removeNode(c.lfo); // the card stays until updateComponents()
+
+    EXPECT_FALSE(has());
+}
+
+// Regression test for the Add list: a picker whose first row sits under a category header opened scrolled past the
+// header and that row, because the highlight scrolled while the view still had no height.
+TEST(ModMatrixPicker, AFreshPickerOpensAtTheTopSoItsFirstHeaderAndRowAreInView) {
+    PickerFixture f;
+    ASSERT_NE(f.source, nullptr);
+    EXPECT_EQ(f.source->getViewTopForTest(), 0);
+    EXPECT_EQ(f.dest->getViewTopForTest(), 0);
+}
+
+TEST(ModMatrixPicker, TheModMatrixSourceAndDestinationOpenAtTheTop) {
+    PickerFixture f;
+    ASSERT_NE(f.source, nullptr);
+    ASSERT_NE(f.dest, nullptr);
+    first_row_test::expectOpensAtFirstRow(*f.source, "mod matrix source");
+    first_row_test::expectOpensAtFirstRow(*f.dest, "mod matrix destination");
+}
+
+namespace {
+
+std::unique_ptr<ModMatrixPicker> openSourcePicker(MatrixCanvas& c) {
+    std::unique_ptr<juce::Component> captured;
+    c.matrix().setPickerLauncherForTest(
+        [&captured](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { captured = std::move(p); });
+    c.matrix().getRowSourceComboForTest(0)->showPopup();
+    return std::unique_ptr<ModMatrixPicker>(dynamic_cast<ModMatrixPicker*>(captured.release()));
+}
+
+bool hasText(const std::vector<juce::String>& texts, const juce::String& text) {
+    return std::find(texts.begin(), texts.end(), text) != texts.end();
+}
+
+// The module a row reads from, looking through macro ports.
+NodeID realSourceOf(MatrixCanvas& c, NodeID attenuverter) {
+    const auto isPort = [&c](NodeID id) { return c.editor.getMacroController().nodeIsMacroPort(id); };
+    for (const auto& routing : c.engine.getModulationRoutings())
+        if (routing.attenuverterNodeID == attenuverter)
+            return synth::ui::resolveRouting(c.engine.getGraph(), routing, isPort).source.node;
+    return {};
+}
+
+struct CreateFixture {
+    MatrixCanvas c{Boxed::DestInside};
+    NodeID row;
+    std::unique_ptr<ModMatrixPicker> picker;
+
+    CreateFixture() {
+        row = c.addRow();
+        c.pickDest(c.filterIn);
+        picker = openSourcePicker(c);
+    }
+    // Arrows to the row named `text`, then Return, as a person would.
+    void arrowToAndEnter(const juce::String& text) {
+        for (int i = 0; i < 40 && picker->getVisibleItemTextsForTest().size() > 0; ++i) {
+            const auto texts = picker->getVisibleItemTextsForTest();
+            const int at = picker->getHighlightedItemIndexForTest();
+            if (at >= 0 && at < (int)texts.size() && texts[(size_t)at] == text)
+                break;
+            picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey));
+        }
+        picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    }
+};
+
+} // namespace
+
+TEST(ModMatrixPickerCreate, TypingASourceTypeOffersACreateRowForMatchingTypesOnly) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    EXPECT_FALSE(hasText(f.picker->getVisibleItemTextsForTest(), "Create new LFO")) << "nothing typed, no create row";
+
+    f.picker->setSearchTextForTest("lfo");
+    auto texts = f.picker->getVisibleItemTextsForTest();
+    EXPECT_TRUE(hasText(texts, "Create new LFO"));
+    EXPECT_FALSE(hasText(texts, "Create new envelope")) << "the envelope's name does not match";
+
+    f.picker->setSearchTextForTest("adsr");
+    texts = f.picker->getVisibleItemTextsForTest();
+    EXPECT_TRUE(hasText(texts, "Create new envelope"));
+    EXPECT_FALSE(hasText(texts, "Create new LFO"));
+
+    f.picker->setSearchTextForTest("zzzz");
+    EXPECT_TRUE(f.picker->getVisibleItemTextsForTest().empty()) << "text naming no type creates nothing";
+}
+
+TEST(ModMatrixPickerCreate, EveryCreateRowIsATypeFromTheSharedSourceList) {
+    const auto items = synth::ui::createSourceItems();
+    const auto& types = synth::ui::newModuleSources();
+    ASSERT_EQ(items.size(), types.size());
+    for (size_t i = 0; i < items.size(); ++i) {
+        const auto pick = synth::ui::createSourcePickFor(items[i].id);
+        ASSERT_TRUE(pick.has_value());
+        EXPECT_EQ(pick->typeName, types[i].typeName);
+        EXPECT_TRUE(items[i].isNew);
+    }
+    EXPECT_FALSE(synth::ui::createSourcePickFor(synth::ui::createSourceItems().front().id - 1).has_value());
+}
+
+TEST(ModMatrixPickerCreate, ReturnOnTheCreateRowAddsTheModuleAsTheRowsSourceInOneUndoStep) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    const auto lfosBefore = f.c.nodesOf<LFOModule>().size();
+    f.picker->setSearchTextForTest("lfo");
+    f.arrowToAndEnter("Create new LFO");
+    f.c.matrix().updateRowsFromGraph();
+
+    const auto lfos = f.c.nodesOf<LFOModule>();
+    ASSERT_EQ(lfos.size(), lfosBefore + 1);
+    const auto created = lfos.back();
+    EXPECT_EQ(realSourceOf(f.c, f.row), created) << "the new LFO is the row's source";
+
+    ASSERT_TRUE(f.c.undo.undo());
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_EQ(f.c.nodesOf<LFOModule>().size(), lfosBefore) << "one Cmd+Z removes the module";
+    EXPECT_NE(realSourceOf(f.c, f.row), created);
+    EXPECT_EQ(f.c.nodesOf<AttenuverterModule>().size(), 1u) << "and the row itself stays, as before the pick";
+}
+
+// The created card lands in the part of the canvas the Mod Matrix panel does not cover, not half under it.
+TEST(ModMatrixPickerCreate, TheCreatedCardLandsWhereTheMatrixPanelDoesNotCoverIt) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    f.c.editor.toggleModMatrixVisibility();
+    f.c.editor.completeModMatrixSlideForTest();
+    const auto panel = f.c.matrix().getBounds();
+    ASSERT_FALSE(panel.isEmpty());
+    const auto lfosBefore = f.c.nodesOf<LFOModule>();
+
+    f.picker->setSearchTextForTest("lfo");
+    f.arrowToAndEnter("Create new LFO");
+
+    const auto lfos = f.c.nodesOf<LFOModule>();
+    ASSERT_EQ(lfos.size(), lfosBefore.size() + 1);
+    juce::Rectangle<int> card;
+    for (auto* comp : f.c.editor.getModuleComponents())
+        if (comp->getNodeId() == lfos.back())
+            card = comp->getBounds();
+    ASSERT_FALSE(card.isEmpty());
+    EXPECT_FALSE(card.intersects(panel)) << "the card is not under the panel";
+    EXPECT_TRUE(f.c.editor.getVisibleCanvasRect().toNearestInt().contains(card)) << "and it is in view";
+}

@@ -1,0 +1,30 @@
+# Holding Alt+Right on a lane dot with snap on: the value tooltip ran ahead of the dot, the speed kept growing with the
+# grid (a one-bar grid could reach 256 beats a second) and the dot then seemed to slow down as it fell behind.
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 1 (fixture lane-hold.agsproj), clicks it
+# and holds Alt+Right with the 1/4 grid for about two seconds: the dot steps along with its tooltip on it, speeding up for
+# the first moment and then holding a top speed of 12 steps a second. Lets go: the dot stays, and one Cmd+Z puts it
+# back at beat 1.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario holds a point selection the undo probe's toolbar click would move
+save_project: lane-hold-steady
+steps:
+  - openProject: {path: "${FIXTURES}/lane-hold.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1}
+  - click: {id: automationLaneState, x: 24, y: 65}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - glide: {name: quarter-hold, frames: 40, crop: {x: 200, y: 760, w: 1400, h: 140}, do: {keyDown: {keys: alt+right}}}
+  - mark: {check: 1, name: dot-and-tooltip-after-hold}  # at once, so the clip holds the last seconds of the hold
+  - keyUp: {}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, holding: false, dragging: false}
+  - screenshot: {name: after-hold}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - mark: {check: 2, name: one-undo-puts-it-back}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1}
+  - screenshot: {name: undone}

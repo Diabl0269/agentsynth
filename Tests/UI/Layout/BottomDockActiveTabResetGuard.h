@@ -23,7 +23,7 @@
 //    (MainComponentSetupTimeline.cpp), which reads the separate "mixerPlacement" key
 //    (MixerPlacementController.cpp). When that key is "window" or "ownPanel",
 //    MixerPlacementController::applyPlacement() calls bottomDock.setMixerTabEnabled(false), which
-//    unconditionally forces activeTab_ back to Timeline (BottomDockComponent.cpp:112-113) and
+//    unconditionally forces activeTab_ back to Timeline (BottomDockComponent.cpp) and
 //    RE-PERSISTS "bottomDockActiveTab" as "timeline", overwriting the restore this test just made
 //    -- so mc2.isMixerTabActive() reads false. Confirmed by direct injection: writing
 //    mixerPlacement="window" into the real on-disk settings file and re-running
@@ -67,6 +67,13 @@ struct BottomDockActiveTabResetGuardMDT {
             // A drag-reorder test's own tab order must not leak into a later test's
             // "default order" assumption, same reasoning as bottomDockActiveTab above.
             s->removeValue("bottomDockTabOrder");
+            s->removeValue("mainView");
+            // A side-pane test's open state / width must not leak into a later test's "open at 200 px"
+            // default (the pane changes how much width the mixer columns get).
+            s->removeValue("sidePaneOpen.mixer");
+            s->removeValue("sidePaneWidth.mixer");
+            s->removeValue("sidePaneOpen.timeline");
+            s->removeValue("sidePaneWidth.timeline");
             s->saveIfNeeded();
         }
     }

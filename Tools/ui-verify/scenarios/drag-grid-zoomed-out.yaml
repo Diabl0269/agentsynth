@@ -1,0 +1,45 @@
+# Bug: dragging a card to the edge of a big, zoomed-out patch lagged: each edge-scroll tick recomputed the full landing
+# preview, and the drag's dot grid drew one dot per grid point over the whole view (thousands at a low zoom).
+#
+# What a user does (macros fixture, zoomed out three steps and then two more so a wide stretch of canvas shows):
+#   1. Presses "Oscillator 1" and drags it right: the dot grid shows over the canvas while the card is held, one dot
+#      every five snap steps, now drawn as one tiled fill.
+#   2. Zooms back in two steps and drags again: the grid's dots stay round and on the same points.
+#   3. Releases each time: the card lands, and Cmd+Z puts it back.
+# The edge-scroll throttle itself (test mode cannot hold the real mouse button the scroll checks) is covered by
+# CanvasEdgeScrollCost (Tests/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollTests.cpp), which also prints a tick's cost on a real project.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 523, y: 445, w: 93, h: 195}}
+  - mouseDown: {id: "card:Oscillator 1", x: 40, y: 8}
+  - mouseMoveHeld: {id: window, x: 700, y: 640}
+  - mouseMoveHeld: {id: window, x: 900, y: 660}
+  - screenshot: {name: 1-zoomed-out-drag-grid}
+  - mouseUp: {id: window, x: 900, y: 660}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: ""}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 523, y: 445, w: 93, h: 195}, within_ms: 1500}
+  - key: {keys: "cmd+="}
+  - key: {keys: "cmd+="}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 312, y: 424, w: 144, h: 305}}
+  - mouseDown: {id: "card:Oscillator 1", x: 72, y: 12}
+  - mouseMoveHeld: {id: window, x: 700, y: 560}
+  - mouseMoveHeld: {id: window, x: 900, y: 600}
+  - screenshot: {name: 2-zoomed-in-drag-grid}
+  - mouseUp: {id: window, x: 900, y: 600}
+  - wait: {}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 312, y: 424, w: 144, h: 305}, within_ms: 1500}

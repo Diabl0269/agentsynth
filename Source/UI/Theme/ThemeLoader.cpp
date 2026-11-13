@@ -23,7 +23,7 @@ std::optional<juce::Colour> ThemeLoader::parseHexColour(const juce::String& s) {
         return std::nullopt;
 
     // Strip the '#'
-    juce::String hex = s.substring(1).toUpperCase();
+    juce::String hex = s.substring(1).toUpperCase(); // not-ui-text: hex colour code
     const int len = hex.length();
 
     // Validate: must be all hex digits
@@ -96,7 +96,7 @@ static juce::String colourToHex(juce::Colour c) {
     // Emit as #AARRGGBB (8 hex digits, uppercase, with '#').
     // Use individual channel accessors to avoid signed/unsigned issues with toHexString.
     const auto toHex2 = [](uint8_t v) -> juce::String {
-        static const char digits[] = "0123456789ABCDEF";
+        static const char digits[] = "0123456789ABCDEF"; // not-ui-text: hex digit table
         char buf[3] = {digits[(v >> 4) & 0xF], digits[v & 0xF], '\0'};
         return juce::String(buf);
     };
@@ -164,6 +164,14 @@ struct OptionalColourKey {
     juce::Colour Colors::* member;
 };
 static constexpr OptionalColourKey kOptionalColourKeys[] = {
+    {"knobSkirt", &Colors::knobSkirt},
+    {"knobCapHighlight", &Colors::knobCapHighlight},
+    {"hueAmber", &Colors::hueAmber},
+    {"hueGreen", &Colors::hueGreen},
+    {"hueRose", &Colors::hueRose},
+    {"hueViolet", &Colors::hueViolet},
+    {"iconInk", &Colors::iconInk},
+    {"iconPaper", &Colors::iconPaper},
     {"meterFill", &Colors::meterFill},
     {"meterMid", &Colors::meterMid},
     {"meterHigh", &Colors::meterHigh},
@@ -181,6 +189,12 @@ static constexpr OptionalColourKey kOptionalColourKeys[] = {
     {"trackMuteOn", &Colors::trackMuteOn},
     {"trackSoloOn", &Colors::trackSoloOn},
     {"trackArmOn", &Colors::trackArmOn},
+    {"eqKindBell", &Colors::eqKindBell},
+    {"eqKindShelf", &Colors::eqKindShelf},
+    {"eqKindCut", &Colors::eqKindCut},
+    {"eqKindNotch", &Colors::eqKindNotch},
+    {"eqKindTilt", &Colors::eqKindTilt},
+    {"eqKindBandPass", &Colors::eqKindBandPass},
 };
 
 static bool parseOptionalPaletteColours(const juce::var& colorsVar, const Colors& defaults, Colors& colors) {
@@ -518,6 +532,14 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("error", colourToHex(c.error));
         colors->setProperty("knobBody", colourToHex(c.knobBody));
         colors->setProperty("knobPointer", colourToHex(c.knobPointer));
+        colors->setProperty("knobSkirt", colourToHex(c.knobSkirt));
+        colors->setProperty("knobCapHighlight", colourToHex(c.knobCapHighlight));
+        colors->setProperty("hueAmber", colourToHex(c.hueAmber));
+        colors->setProperty("hueGreen", colourToHex(c.hueGreen));
+        colors->setProperty("hueRose", colourToHex(c.hueRose));
+        colors->setProperty("hueViolet", colourToHex(c.hueViolet));
+        colors->setProperty("iconInk", colourToHex(c.iconInk));
+        colors->setProperty("iconPaper", colourToHex(c.iconPaper));
         colors->setProperty("meterFill", colourToHex(c.meterFill));
         colors->setProperty("meterMid", colourToHex(c.meterMid));
         colors->setProperty("meterHigh", colourToHex(c.meterHigh));
@@ -535,6 +557,12 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("trackMuteOn", colourToHex(c.trackMuteOn));
         colors->setProperty("trackSoloOn", colourToHex(c.trackSoloOn));
         colors->setProperty("trackArmOn", colourToHex(c.trackArmOn));
+        colors->setProperty("eqKindBell", colourToHex(c.eqKindBell));
+        colors->setProperty("eqKindShelf", colourToHex(c.eqKindShelf));
+        colors->setProperty("eqKindCut", colourToHex(c.eqKindCut));
+        colors->setProperty("eqKindNotch", colourToHex(c.eqKindNotch));
+        colors->setProperty("eqKindTilt", colourToHex(c.eqKindTilt));
+        colors->setProperty("eqKindBandPass", colourToHex(c.eqKindBandPass));
 
         // Cable category palette, emitted as a nested object so the round-trip matches the
         // parse shape above.

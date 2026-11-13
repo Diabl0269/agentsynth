@@ -1,0 +1,18 @@
+# A card's horizontal fader at its top value: the cap and the track end before the value text starts, so "100%" or
+# "0.0 dB" reads whole beside the cap.
+#
+# What a user does: opens a project with a VCA on an open track, clicks the VCA's Gain fader and presses End (the
+# maximum). The proof still is the VCA card with Gain at max.
+record: true
+save_project: vca-gain-max-fader
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - expect: {id: "card:VCA", exists: true}
+  - click: {id: "card:VCA > Gain"}
+  - wait: {settleMs: 800}
+  - key: {keys: end}
+  - mark: {check: 1, name: vca-gain-max}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: "card:VCA", name: vca-card}

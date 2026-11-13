@@ -1,0 +1,37 @@
+# Bug: a nested macro dragged out past its parent's border stayed inside the parent, and the parent's border grew to
+# follow it, while a module dragged the same way left. The macro has to leave, the parent's border has to stay put
+# while the drag runs, and one Cmd+Z has to put it back inside.
+#
+# What a user does (macros fixture, zoomed out so the whole outer macro is in the window):
+#   1. Presses on the open "Nested macro" name chip (inside "Outer macro") and drags it to the right, past the outer
+#      border, holding the button: the outer border stays where it was.
+#   2. Lets go: the nested macro is out of "Outer macro", which keeps its Oscillator and shrinks back.
+#   3. Presses Cmd+Z: the nested macro is back inside "Outer macro".
+# The folded-card drag, Esc, walking out of two levels and the ports are covered by MacroLeaveDragTests and
+# MacroDragMatrixTests (Tests/Macros/MacroContainer/), which drive the same mouse callbacks.
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:LFO 3", bounds: {x: 828, y: 101, w: 144, h: 201}}
+  - expect: {id: "card:LFO 3", macroPath: "Outer macro > Nested macro"}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:LFO 3", x: -30, y: -8}            # the "Nested macro" chip, just above LFO 3
+  - mouseMoveHeld: {id: window, x: 900, y: 140}
+  - mouseMoveHeld: {id: window, x: 1100, y: 220}
+  - mouseMoveHeld: {id: window, x: 1300, y: 300}
+  - mouseMoveHeld: {id: window, x: 1330, y: 300}            # past the outer border's right edge
+  - screenshot: {name: 2-mid-drag-outer-border-holds}
+  - mouseUp: {id: window, x: 1330, y: 300}
+  - wait: {}
+  - expect: {id: "card:LFO 3", macroPath: "Nested macro", within_ms: 1500}
+  - expect: {id: "card:ADSR 3", macroPath: "Nested macro"}
+  - expect: {id: "card:Oscillator 2", macroPath: "Outer macro"}
+  - screenshot: {name: 3-after-drop-left-the-parent}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:LFO 3", macroPath: "Outer macro > Nested macro", within_ms: 1500}
+  - screenshot: {name: 4-after-undo-back-inside}

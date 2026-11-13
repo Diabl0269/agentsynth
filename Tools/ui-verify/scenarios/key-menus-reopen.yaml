@@ -1,0 +1,55 @@
+# A Key field opened its picker only once: ComboBox's "menu active" latch was never lowered, so every later click was
+# ignored as "already open" (the keyboard path skipped the latch, so Space and Return kept working).
+#
+# What a user does: with the timeline open, clicks the transport bar's Key field (the picker opens), closes the picker
+# with Escape, clicks the field again (the picker opens again), closes it, and clicks a third time. Then adds a
+# Sequencer and does the same on its card's Key field.
+# The picker is its own desktop window, so a screenshot of the main window never shows it; the PNGs capture the picker.
+# Not driven here: the piano roll's scale Key, since no committed fixture has a clip;
+# KeyFieldTest.EveryKeyFieldOpensItsPickerOnASecondClick clicks all five owners twice.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape, instant: "the focus ring moves to or from the timeline panel"}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, exists: false}
+  - click: {id: timelineTransportSongKey, instant: "the focus ring moves to or from the timeline panel"}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPickerPanel, name: song-key-first-open}
+  - key: {keys: escape, instant: "the status bar text changes (plugin scan progress)"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: timelineTransportSongKey, instant: "the status bar text changes (plugin scan progress)"}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPickerPanel, name: song-key-second-open}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: timelineTransportSongKey, instant: "the status bar text changes (plugin scan progress)"}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - key: {keys: escape, instant: "the status bar text changes (plugin scan progress)"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: New empty project, instant: "the keyboard focus outline moves to the canvas panel"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the caret moves in the library search field"}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down, instant: "the selected row highlight moves in the library list"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPickerPanel, name: sequencer-key-first-open}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPickerPanel, name: sequencer-key-second-open}

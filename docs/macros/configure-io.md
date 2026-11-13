@@ -22,6 +22,11 @@ only. A MIDI row hides its shape controls entirely rather than showing them disa
 shape or poly concept applies to a MIDI port. The poly voice count is labelled and shown only for a
 Poly shape.
 
+The '+' at the foot of a macro's port strip reaches the same four choices without opening the dialog:
+the collapsed card's '+' and the open macro's hull '+' both build the menu with
+`MacroGroupController::buildAddPortMenu`, and the strip's '-' removes the bottom port on that side
+([`docs/layout/macro-cards.md`](../layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)).
+
 `GraphEditor::createMacroPortFromDroppedCable` is the separate convenience path for a cable dropped
 on a collapsed card's body; it is Mono only and wires the external side only
 ([`docs/macros/ports.md`](ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)).
@@ -37,7 +42,12 @@ combos above them painted fine. One `kAddBlockHeight` constant is used by both `
 
 `GraphEditor::renameMacroPort` and `GraphEditor::reorderMacroPortToIndex` back the row's name field
 and its drag handle. A row's drag handle (left of the name field) reorders it within its own
-direction group by an arbitrary number of slots in one gesture.
+direction group by an arbitrary number of slots in one gesture. The drag is the shared
+[reorder drag](../layout/animation.md#reorder-drag): the row under the pointer is lifted and follows
+it, the other rows of its group glide aside (an input never crosses into the outputs), and the drop
+settles into its slot. Nothing is committed while the row is held; the release sends one
+`onReorderPortTo`, and Esc glides everything back with nothing committed (it cancels a live drag
+instead of closing the dialog). The handle shows the grab cursor.
 
 **Reordering is structurally scoped to one direction.** `onReorderPortTo`'s index carries no
 `isInput` argument at all, which is what makes "an input cannot be dragged into the output section"
@@ -74,7 +84,7 @@ sections below, closes that: a re-colour now repaints the jack on *both* the col
 docked widget in real time, and the picker previews it live during the drag). Right-click resets to the kind-tint default
 (`onChangePortColour(nodeUuid, std::nullopt)`).
 
-The colour flows through to `GraphEditor::macroCardPortLayout`'s `MacroCardPort::colour`, so a
+The colour flows through to `MacroGroupController::macroCardPortLayout`'s `MacroCardPort::colour`, so a
 coloured port's jack dot on the collapsed card matches the colour picked here, and
 `ModuleComponent::resolveMacroPortJackColour` reads it for the expanded docked widget too, so an
 expanded widget and its own collapsed card read a coloured port's jack identically. Unset falls back
@@ -198,7 +208,8 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   untouched `StereoCollapsed` port as `Stereo` — a real delete-and-recreate — just from opening and
   closing the dialog. Voices only matter while a row shows Poly, never the lossy `StereoCollapsed`
   case, so `requestClose()` calls a narrower `maybeCommitVoicesOnClose()` that commits only when
-  `voicesEditor.isVisible()`.
+  the row's voices editor is shown (`voicesFade_.isShown()`: the logical state, which is false the moment the editor
+  starts fading out).
 - **Arrow Up and Down move focus between rows** — wired on the row's colour swatch and Delete glyph
   button only (`GlyphButton`/`PortColourSwatch::onVerticalArrow` to
   `MacroPortConfigDialog::moveRowFocus`), never on the shape combo or a text field, which already have
@@ -214,11 +225,27 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   action.
 - **Keyboard focus is visible.** `juce::Button::paint()` hands `paintButton()` only `isOver()` and
   `isDown()`, never keyboard-focus state, so a custom `paintButton` override draws nothing different
-  when tabbed to. `GlyphButton` and `PortColourSwatch` both check `hasKeyboardFocus(true)` and draw
-  an accent outline, reusing `AppLookAndFeel::drawTextEditorOutline`/`drawComboBox`'s own
-  accent-when-focused convention. `AppLookAndFeel::drawButtonBackground` carries the same fix, so
-  every plain `juce::TextButton` app-wide shows focus too. Every repaint here is the one JUCE's own
+  when tabbed to. `GlyphButton` (via the shared `IconButton`) and `PortColourSwatch` (via the shared `ColourSwatchButton`) call `synth::ui::paintFocusRing`
+  ([accessibility](../development/accessibility.md)), the same accent ring every stock control draws.
+  `AppLookAndFeel::drawButtonBackground` carries the same fix, so every plain `juce::TextButton`
+  app-wide shows focus too. Every repaint here is the one JUCE's own
   `Button::focusGained`/`focusLost` already trigger — no new timer (`Source/UI/CLAUDE.md`).
+
+- **Tab visits the controls in reading order.** Add-a-port block first (direction, kind, shape, voices,
+  name, Add), then each row (colour, name, shape, voice count, Delete) and Close last. The row's
+  controls are centred at different heights, so `PortRowComponent` gives them an explicit focus order;
+  a MIDI row's shape combo is hidden, so Tab skips it. Every control without visible text has a title
+  and a tooltip, and a row scrolled out of view scrolls in when focused.
+
+## Fades
+
+Things that appear and disappear in the dialog use `FadeVisibility`
+([animation](../layout/animation.md#fading-things-in-and-out)), never a bare `setVisible`: the "Add a port" shape box
+(gone for a MIDI kind) and voices editor (poly only) fade in their places; a row's voices editor fades with its shape
+while the shape box slides over as the voices block's width follows the fade; the "No inputs yet" / "No outputs yet"
+hints fade while their slot's height follows, so the section below slides (`layOutOrMeasureRows`, whose measure
+answers with the settled height so the dialog is sized for where it ends up). A row built with its dialog starts in
+its final state, with no fade.
 
 ## Deleting a port from the dialog
 

@@ -1,0 +1,188 @@
+// SoundPreviewFooter.cpp -- the waveform, Play/Stop, preview volume and Auto-play controls under the Sounds list.
+#include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
+#include "SoundBrowser/SoundPreviewPlayer.h"
+
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/ReducedMotion.h"
+
+namespace synth::ui {
+
+const juce::KeyPress SoundPreviewFooter::kDefaultPreviewKey(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier,
+                                                            0);
+
+SoundPreviewFooter::SoundPreviewFooter() {
+    addAndMakeVisible(wave_);
+    addChildComponent(curve_);
+
+    play_.setComponentID("soundPreviewPlay"); // a stable name for test mode: the title changes with the state
+    play_.setTitle("Play preview");
+    setPreviewKeyText(ShortcutManager::keyPressToDisplayString(kDefaultPreviewKey));
+    play_.onClick = [this] {
+        if (onTogglePlay)
+            onTogglePlay();
+        syncPlayState();
+    };
+    addAndMakeVisible(play_);
+
+    // Child order is the keyboard order: it follows the layout, Play, Match key, Auto-play, volume.
+    matchKey_.setTitle("Match key");
+    matchKey_.setTooltip("Play loops in the song's key");
+    matchKey_.onClick = [this] {
+        if (onMatchKeyChanged)
+            onMatchKeyChanged(matchKey_.getToggleState());
+    };
+    addAndMakeVisible(matchKey_);
+
+    autoPlay_.setTitle("Auto-play");
+    autoPlay_.setTooltip("Play a sound when you select it");
+    autoPlay_.setToggleState(true, juce::dontSendNotification);
+    autoPlay_.onClick = [this] {
+        if (onAutoPlayChanged)
+            onAutoPlayChanged(autoPlay_.getToggleState());
+    };
+    addAndMakeVisible(autoPlay_);
+
+    using Player = synth::soundbrowser::SoundPreviewPlayer;
+    volume_.setTitle("Preview volume");
+    volume_.setWantsKeyboardFocus(true); // juce::Slider turns it off; the volume is a keyboard stop
+    volume_.setTooltip("Preview volume, only for previews");
+    volume_.setRange(Player::kMinGainDb, Player::kMaxGainDb, 1.0);
+    volume_.setValue(Player::kDefaultGainDb, juce::dontSendNotification);
+    volume_.setDoubleClickReturnValue(true, Player::kDefaultGainDb);
+    volume_.setTextBoxIsEditable(false);
+    volume_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 20);
+    volume_.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + " dB"; };
+    volume_.onValueChange = [this] {
+        if (onGainChanged)
+            onGainChanged((float)volume_.getValue());
+    };
+    addAndMakeVisible(volume_);
+}
+
+SoundPreviewFooter::~SoundPreviewFooter() {
+    playTimer_.stopTimer();
+    shapeAnim_.stop(vblank_);
+}
+
+void SoundPreviewFooter::setPreviewKeyText(const juce::String& keyText) {
+    play_.setTooltip("Play or stop the preview (" + keyText + ")");
+}
+
+void SoundPreviewFooter::setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) {
+    player_ = player;
+    wave_.setPlayer(player);
+    syncPlayState();
+}
+
+void SoundPreviewFooter::setPlaying(bool playing) {
+    if (playing == playing_)
+        return;
+    playing_ = playing;
+    play_.setButtonText(playing ? "Stop" : "Play");
+    play_.setTitle(playing ? "Stop preview" : "Play preview");
+}
+
+void SoundPreviewFooter::syncPlayState() { setPlaying(player_ != nullptr && player_->isPlaying()); }
+
+// The label follows the player (a sound ends by itself, Space stops it, a selection starts another) from a light
+// timer that runs only while the footer shows.
+void SoundPreviewFooter::visibilityChanged() {
+    if (isVisible()) {
+        syncPlayState();
+        playTimer_.startTimerHz(12);
+    } else {
+        playTimer_.stopTimer();
+    }
+}
+
+void SoundPreviewFooter::showSound(const std::optional<synth::soundbrowser::SoundEntry>& entry) {
+    wave_.setFile(entry.has_value() ? juce::File(entry->path) : juce::File());
+}
+
+void SoundPreviewFooter::setCompact(bool compact) {
+    if (compact_ == compact)
+        return;
+    compact_ = compact;
+    applyShapeMix();
+    resized();
+}
+
+void SoundPreviewFooter::showShape(const std::optional<synth::shapes::LibraryShape>& shape) {
+    if (shape.has_value())
+        curve_.setShape(shape);
+    if (shape.has_value() == shapeTarget_)
+        return;
+    shapeTarget_ = shape.has_value();
+    const float from = shapeMix_;
+    const float to = shapeTarget_ ? 1.0f : 0.0f;
+    shapeAnim_.start(
+        vblank_, motionMs(120.0, 80.0), easeOutCubic,
+        [this, from, to](float t) {
+            shapeMix_ = from + (to - from) * t;
+            applyShapeMix();
+        },
+        [this, to] {
+            shapeMix_ = to;
+            applyShapeMix();
+        });
+}
+
+void SoundPreviewFooter::finishShapeMotionForTest() {
+    shapeAnim_.completeForTest();
+    shapeMix_ = shapeTarget_ ? 1.0f : 0.0f;
+    applyShapeMix();
+}
+
+// The transport (and the waveform) is on screen while any of it is left; the shape's picture while any of it shows.
+// A control that is faded out entirely is hidden, so it is no focus stop and no screen reader reaches it.
+void SoundPreviewFooter::applyShapeMix() {
+    const bool transport = shapeMix_ < 1.0f;
+    const bool picture = shapeMix_ > 0.0f && !compact_;
+    const float transportAlpha = 1.0f - shapeMix_;
+    for (juce::Component* c : {static_cast<juce::Component*>(&play_), static_cast<juce::Component*>(&volume_)}) {
+        c->setVisible(transport);
+        c->setAlpha(transportAlpha);
+    }
+    for (juce::Component* c : {static_cast<juce::Component*>(&autoPlay_), static_cast<juce::Component*>(&matchKey_),
+                               static_cast<juce::Component*>(&wave_)}) {
+        c->setVisible(transport && !compact_);
+        c->setAlpha(transportAlpha);
+    }
+    curve_.setVisible(picture);
+    curve_.setAlpha(shapeMix_);
+}
+
+void SoundPreviewFooter::resized() {
+    if (compact_) {
+        auto row = getLocalBounds().withTrimmedTop(1).reduced(12, 4);
+        play_.setBounds(row.removeFromLeft(56));
+        const int volumeWidth = juce::jmax(64, juce::jmin(100, row.getWidth() - 60));
+        volume_.setBounds(row.removeFromRight(juce::jmin(volumeWidth, row.getWidth())));
+        compactName_ = row.reduced(6, 0);
+        return;
+    }
+    compactName_ = {};
+    curve_.setBounds(getLocalBounds().reduced(12, 6));
+    auto area = getLocalBounds().reduced(12, 6);
+    wave_.setBounds(area.removeFromTop(40));
+    area.removeFromTop(6);
+    auto row = area.removeFromTop(24);
+    if (area.getWidth() < kSwitchesBesidePlayWidth) {
+        // Too narrow for two labelled switches beside Play: they take the row, Play shares the next one with the level.
+        matchKey_.setBounds(row.removeFromLeft(row.getWidth() / 2));
+        autoPlay_.setBounds(row);
+        area.removeFromTop(4);
+        auto levelRow = area.removeFromTop(22);
+        play_.setBounds(levelRow.removeFromLeft(56));
+        volume_.setBounds(levelRow);
+        return;
+    }
+    play_.setBounds(row.removeFromLeft(56));
+    const int switchWidth = juce::jmax(0, juce::jmin(110, (row.getWidth() - 8) / 2));
+    autoPlay_.setBounds(row.removeFromRight(switchWidth));
+    matchKey_.setBounds(row.removeFromRight(switchWidth));
+    area.removeFromTop(4);
+    volume_.setBounds(area.removeFromTop(22));
+}
+
+} // namespace synth::ui

@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <vector>
 
 namespace synth {
@@ -109,7 +110,7 @@ public:
      *  @param includeExtraState  see extractSnippet; a `state` key is dropped unless asked for, so
      *         a hand-edited snippet file cannot smuggle one into the trusted apply. */
     static juce::var prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase,
-                                      bool includeExtraState = false);
+                                      bool includeExtraState = false, std::map<int, int>* outIdMap = nullptr);
 
     // ---- Graph mutation --------------------------------------------------------------
 
@@ -129,7 +130,8 @@ public:
      *  @return the node ids added (Attenuverters excluded), empty on rejection/failure. */
     static std::vector<NodeID> insertSnippet(const juce::var& snippet, juce::AudioProcessorGraph& graph,
                                              juce::Point<int> dropPos, bool includeExtraState = false,
-                                             std::vector<Macro>* outMacros = nullptr, bool trustedPayload = false);
+                                             std::vector<Macro>* outMacros = nullptr, bool trustedPayload = false,
+                                             std::map<int, NodeID>* outCopies = nullptr);
 
     // ---- Snippet metadata ------------------------------------------------------------
 

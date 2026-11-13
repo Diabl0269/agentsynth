@@ -1,0 +1,51 @@
+# A morph map dot had no spoken position: a screen reader said only its shape and coordinates, never which dot of how
+# many it was.
+#
+# What a user does:
+#   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
+#   2. Moves between the dots: each one is named "Dot N of M, shape <name>, position X <n>%, Y <n>%".
+#   3. Presses Ctrl+T on the first dot: a dot is added after it, and every name is renumbered ("of M+1").
+record: true
+save_project: morph-dot-names
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: morphDot0, exists: true, within_ms: 5000}
+  - expect: {id: morphDot0, contains: {title: "Dot 1 of 3, shape "}}
+  - expect: {id: morphDot0, contains: {title: "position X "}}
+  - click: {id: morphDot0}
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 1-first-dot-focused}
+  - key: {keys: ctrl+t}
+  - wait: {}
+  - expect: {id: morphDot0, contains: {title: "Dot 1 of 4, shape "}}
+  - expect: {id: morphDot1, hasFocus: true, within_ms: 2000}
+  - expect: {id: morphDot1, contains: {title: "Dot 2 of 4, shape "}}
+  - screenshot: {id: window, name: 2-after-ctrl-t}

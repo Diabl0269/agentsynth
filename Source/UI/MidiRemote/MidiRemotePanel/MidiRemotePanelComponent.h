@@ -2,6 +2,9 @@
 
 #include "MidiRemote/EncoderAutoDetect.h"
 #include "MidiRemote/PickTarget.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h"
@@ -39,9 +42,19 @@ class MidiLearnController;
 // MainComponent::wireMidiRemoteEngine().
 namespace synth::ui {
 
-class MidiRemotePanelComponent : public juce::Component {
+class MidiRemotePanelComponent
+    : public juce::Component
+    , public DockBackSlot
+    , public KeyboardContextMenuProvider {
 public:
     MidiRemotePanelComponent();
+
+    /** The toolbar's right end holds the "Dock back" button while the panel is in its own window. */
+    void setDockBackButton(juce::Button* button) override { toolbar_.setDockBackButton(button); }
+
+    /** Opens the selected controller's right-click menu (Rename, Export, Delete, feedback output) at
+     *  its row in the Controllers list. False when no controller is selected. */
+    bool showContextMenuForKeyboardFocus() override { return controllersList_.showContextMenuForSelectedRow(); }
     ~MidiRemotePanelComponent() override;
 
     /** Wires the live engine/profile/project/canvas dependencies and does the first rebuild.
@@ -174,7 +187,9 @@ public:
     /** MIDI inputs a Recreate could bind to: not already used by a profile (Host MIDI in the plugin build). */
     std::vector<synth::ControllerProfile::Input> getRecreateInputs() const;
     juce::String getOrphanStatusTextForTest() const { return orphanView_.getStatusTextForTest(); }
-    bool isOrphanViewShownForTest() const { return orphanView_.isVisible(); }
+    bool isOrphanViewShownForTest() const { return orphanFade_.isShown(); }
+    bool isInspectorShownForTest() const { return inspectorFade_.isShown(); }
+    bool isPageStripShownForTest() const { return pageStripFade_.isShown(); }
     OrphanControllerComponent& getOrphanViewForTest() { return orphanView_; }
     ControlInspectorComponent& getInspectorForTest() { return inspector_; }
     const ControllerSurfaceCell* findSurfaceCellForTest(const juce::String& controlId) const {
@@ -313,6 +328,12 @@ private:
     std::map<juce::String, juce::int64> profileLastActivityMs_;
     static constexpr int kActivityLitMs = 150;
 
+    // The last raw hardware position (0..1) each absolute control reported, keyed by profile id +
+    // control id. A rebuild (any async live refresh) re-seeds the surface from the parameter, which
+    // under Scale takeover differs from where the knob physically is, so it would snap the cell away
+    // from the hardware until the next move; seeding from this keeps the cell on the knob.
+    std::map<juce::String, float> lastHardwareValue_;
+
     // scheduleLiveRefresh()'s coalescing latch -- true from the first call until the
     // deferred rebuildFromProfiles() actually runs, so several onChanged notifications in a row
     // (e.g. a Learn's profile write followed by its project-assignment write) collapse into one
@@ -344,6 +365,11 @@ private:
     ControlInspectorComponent inspector_;
     OrphanControllerComponent orphanView_;
     juce::String orphanStatus_;
+    // The inspector and the orphan view cross-fade in the same bounds; the page strip fades with the controller
+    // (docs/layout/animation.md#fading-things-in-and-out).
+    FadeVisibility inspectorFade_{&inspector_};
+    FadeVisibility orphanFade_{&orphanView_};
+    FadeVisibility pageStripFade_{&pageStrip_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiRemotePanelComponent)
 };

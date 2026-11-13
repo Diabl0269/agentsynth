@@ -3,6 +3,7 @@
 
 #include "AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
+#include "Modules/VoiceCountSource.h"
 #include <bit>
 
 AudioEngine::VoiceInfo AudioEngine::getActiveVoiceInfo() const {
@@ -11,6 +12,8 @@ AudioEngine::VoiceInfo AudioEngine::getActiveVoiceInfo() const {
         if (auto* pm = dynamic_cast<PolyMidiModule*>(node->getProcessor())) {
             info.maxVoices += 8;
             info.activeVoices += static_cast<int>(std::popcount(static_cast<unsigned>(pm->getActiveVoiceMask())));
+        } else if (auto* source = dynamic_cast<synth::VoiceCountSource*>(node->getProcessor())) {
+            info.activeVoices += source->displayVoiceCount();
         }
     }
     return info;
@@ -21,6 +24,11 @@ int AudioEngine::getDisplayVoiceCount() const { return getActiveVoiceInfo().acti
 void AudioEngine::setMasterMute(bool muted) noexcept { masterMuted_.store(muted, std::memory_order_relaxed); }
 
 bool AudioEngine::isMasterMuted() const noexcept { return masterMuted_.load(std::memory_order_relaxed); }
+
+// Never touches masterMuted_: the user's mute and the load gate are separate switches, either one silences.
+void AudioEngine::setLoadGateOpen(bool open) noexcept { loadGateOpen_.store(open, std::memory_order_release); }
+
+bool AudioEngine::isLoadGateOpen() const noexcept { return loadGateOpen_.load(std::memory_order_acquire); }
 
 // Message-thread writes (a project load, the mixer's own pan-law control) and reads; the audio
 // thread never touches this atomic directly -- renderPass republishes it once per pass into

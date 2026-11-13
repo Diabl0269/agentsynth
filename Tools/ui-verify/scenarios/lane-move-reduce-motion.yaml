@@ -1,0 +1,41 @@
+# With Reduce Motion chosen (Preferences > Animations: Reduced), moving an automation lane or a modulator row one place
+# with Alt+Up/Down lands it at once: a reorder is movement with no plain-fade form, so nothing glides. Before, the
+# headers glided 200 ms anyway (every reorderable list did).
+#
+# What a user does:
+#   1. Sets Animations to Reduced, opens a project with a Compressor lane pair on Audio 1 and an LFO on Ratio
+#      (fixture cross-track-lanes.agsproj), shows the timeline and opens Audio 1's automation.
+#   2. Focuses the Ratio lane header and presses Alt+Down: Ratio is below Attack straight away (checked with no wait).
+#      Alt+Up: back on top, again at once.
+#   3. Focuses the LFO 2 row and presses Alt+Down: it is on Attack at once.
+motion: true
+pop_check: {off: "reduced motion is on in this scenario, so changes land at once by design"}
+record: true
+save_project: end
+settings:
+  animationMode: "reduced"
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - wait: {}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}, within_ms: 2000}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 258, w: 200, h: 40}, within_ms: 2000}
+  - screenshot: {name: before}
+  # 2. The lane header: no wait between the key and the check, so a glide would be caught mid-way.
+  - key: {keys: alt+down, target: Ratio automation lane}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 204, w: 200, h: 40}}
+  - screenshot: {name: header-alt-down}
+  - key: {keys: alt+up, target: Ratio automation lane}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 258, w: 200, h: 40}}
+  - screenshot: {name: header-alt-up}
+  # 3. The modulator row.
+  - key: {keys: alt+down, target: LFO 2 mod lane on Ratio}
+  - expect: {id: "LFO 2 mod lane on Attack (ms)", showing: true, hasFocus: true}
+  - screenshot: {name: row-alt-down}

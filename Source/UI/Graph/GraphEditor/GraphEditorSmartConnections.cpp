@@ -20,8 +20,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 
-#include "Modules/MacroControlModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReducedMotion.h"
 
 GraphEditor::SmartConnectionMode GraphEditor::smartConnectionModeFromString(const juce::String& s) {
     return SmartConnectionEngine::smartConnectionModeFromString(s);
@@ -35,11 +35,58 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
 // through the host interface, so it can't move onto SmartConnectionEngine even though every
 // other forwarder in this file already has.
 void GraphEditor::refreshSmartSuggestions() {
-    smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState());
+    // The landing ghost follows the pointer a grid step at a time but jumps when the drag opens a gap between two cards
+    // (it takes the gap's slot) or dodges to a free spot: those jumps are a slide (DragGhostSlide).
+    dragDropController_.getGhostSlide().aim(dragDropController_.getDragPreviewGhost(), isShowing(), vblankUpdater,
+                                            [this](juce::Rectangle<int> area) { content.repaint(area); });
+    refreshSmartSuggestionsWithReveal(
+        [this] { smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState()); });
+}
+
+void GraphEditor::refreshSmartSuggestionsForModifierChange() {
+    refreshSmartSuggestionsWithReveal([this] {
+        smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
+    });
+}
+
+// The preview cables fade in (160 ms easeOutCubic, 80 ms under Reduce Motion) the moment a module comes within range,
+// instead of popping. Only an empty -> non-empty transition restarts the fade: a set that merely changes while the
+// module keeps moving (a different jack, an insert) keeps whatever opacity it has, so nothing flickers. Animations Off
+// lands at once.
+void GraphEditor::refreshSmartSuggestionsWithReveal(const std::function<void()>& refresh) {
+    const bool hadPreview = smartConnections_.getSmartSuggestionCount() > 0;
+    refresh();
+    const bool hasPreview = smartConnections_.getSmartSuggestionCount() > 0;
+    if (!hasPreview) {
+        smartPreviewRevealAnim_.stop(vblankUpdater);
+        smartPreviewReveal_ = 0.0f;
+        return;
+    }
+    if (hadPreview)
+        return;
+    smartPreviewReveal_ = 0.0f;
+    juce::Component::SafePointer<GraphEditor> safeEditor(this);
+    smartPreviewRevealAnim_.start(
+        vblankUpdater, synth::ui::motionMs(160.0, 80.0), synth::ui::easeOutCubic,
+        [safeEditor](float t) {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->smartPreviewReveal_ = t;
+            safeEditor->repaintCanvas();
+        },
+        [safeEditor] {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->smartPreviewReveal_ = 1.0f;
+            safeEditor->repaintCanvas();
+        });
 }
 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
-void GraphEditor::clearSmartSuggestions() { smartConnections_.clearSmartSuggestions(); }
+void GraphEditor::clearSmartSuggestions() {
+    smartConnections_.clearSmartSuggestions();
+    dragDropController_.getGhostSlide().reset(vblankUpdater); // a drag begins or ends: no ghost slides on
+}
 
 bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto& graph = audioEngine.getGraph();
@@ -58,12 +105,12 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
 void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
 
 // The drop-in-a-live-component check ModuleComponent::isInputJackKnobBound makes (a
-// ModulationTarget resolving to a VISIBLE slider) isn't available for a ghost preview, which has
-// no live component -- there is no tab-page/poly-visibility state to ask. "Has a bound parameter
-// at all" (parameterForModTarget != nullptr) is the same proxy GraphEditor::estimateModuleSize
-// uses for the same reason: it agrees with the live check for every module in practice (the only
-// divergence is a knob on a currently-hidden tab page, where the ghost estimate is very slightly
-// optimistic about how much the column has packed) and needs nothing but the processor itself.
+// ModulationTarget resolving to a VISIBLE slider outside a tab section) isn't available for a ghost
+// preview, which has no live component -- there is no poly-visibility state to ask. "Has a bound
+// parameter at all" (parameterForModTarget != nullptr) is the proxy: it agrees with the live check for
+// most modules (the divergence is a knob in a tab section or the More row, whose jack stays in the
+// gutter, so the ghost is optimistic about how much the column has packed) and needs nothing but the
+// processor itself.
 static bool jackIsKnobBoundForEstimate(ModuleBase* mb, int visibleIndex) {
     for (const auto& t : mb->getModulationTargets())
         if (mb->mapInputChannel(t.channelIndex).visibleJackIndex == visibleIndex &&
@@ -104,12 +151,6 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
         visible = isInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
 
     const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, jack) : 0;
-
-    if (auto* macro = dynamic_cast<MacroControlModule*>(proc)) {
-        if (!isInput) {
-            return {bounds.getRight() - 10, bounds.getY() + synth::LayoutUtil::macroRowCentreY(clamped)};
-        }
-    }
 
     if (isInput) {
         // A knob-bound jack draws no gutter dot -- its ghost preview cable lands on the

@@ -1,0 +1,110 @@
+#pragma once
+
+// One source of the mod dot's rows: swatch, name, amount bar, signed amount (click to type), "show in
+// timeline" and remove. Pure view: it reports what the user did and the page applies it to the graph.
+// docs/modules/modulation.md#the-mod-dot-menu.
+
+#include "KnobModSources.h"
+#include "ModDotAmountBar.h"
+#include "ModDotGlyphButton.h"
+#include "ModDotMotion.h"
+#include "UI/Layout/NavigationSearchField.h"
+#include <functional>
+#include <memory>
+
+namespace synth::ui {
+
+class ModCurveChip;
+
+class ModDotSourceRow final : public juce::Component {
+public:
+    static constexpr int kHeight = 34;
+
+    static constexpr int kElasticName = -1; // Look::nameWidth: the name takes up to kNameMax, the fader keeps kMinBar
+    static constexpr int kNameMax = 90;
+    static constexpr int kMinBar = 48;
+
+    /** How the row is laid out where it is not the knob's sources page: one line, `height` tall, the name `nameWidth`
+     *  wide (elastic by default), the "show in timeline" button only when `timeline`. */
+    struct Look {
+        int height = kHeight;
+        int nameWidth = kElasticName;
+        bool timeline = true;
+    };
+    void setLook(const Look& look);
+
+    ModDotSourceRow(const KnobModSource& source, const juce::String& paramName);
+    ~ModDotSourceRow() override;
+
+    juce::AudioProcessorGraph::NodeID attenuverterId() const noexcept { return source_.attenuverterId; }
+    const KnobModSource& source() const noexcept { return source_; }
+    /** Re-reads name and amount from the graph; a bar mid-drag is left alone. */
+    void update(const KnobModSource& source);
+
+    /** The remove button in the negative colour with a pulse: the user double-clicked the dot and must pick one. */
+    void setRemoveHighlighted(bool on) { removeButton_.setDanger(on); }
+    void setSelected(bool selected);
+    bool isSelected() const noexcept { return selected_; }
+
+    // What the user did.
+    std::function<void(ModDotSourceRow&)> onSelect;
+    std::function<void(ModDotSourceRow&)> onGestureBegin;
+    std::function<void(ModDotSourceRow&, float amount)> onAmountDragged; // live, between begin and end
+    std::function<void(ModDotSourceRow&)> onGestureEnd;
+    std::function<void(ModDotSourceRow&, float amount)> onAmountTyped; // one undo step
+    std::function<void(ModDotSourceRow&)> onShowInTimeline;
+    std::function<void(ModDotSourceRow&)> onRemove;
+    /** Up/Down on any control of the row: the page moves focus to the neighbouring row. */
+    std::function<void(ModDotSourceRow&, int step)> onNavigate;
+
+    ModDotAmountBar& bar() noexcept { return bar_; }
+    juce::Button& amountButton() noexcept;
+    juce::Button& timelineButton() noexcept { return timelineButton_; }
+    /** Shows the connection's response curve and opens its editor (wired by the page). */
+    ModCurveChip& curveChip() noexcept { return *curveChip_; }
+    juce::Button& removeButton() noexcept { return removeButton_; }
+    /** The name's area: elides a long name with '…' and shows the full name as its tooltip. */
+    juce::Component& nameArea() noexcept;
+    juce::Rectangle<int> nameBounds() const noexcept { return nameArea_; }
+    /** What the row draws: the name, or only its port ("Pad 2 level") when "<module> . <port>" does not fit. */
+    juce::String shownName() const;
+    /** The same button as its glyph type (what the port connections panel's row hands its callers). */
+    ModDotGlyphButton& removeGlyph() noexcept { return removeButton_; }
+    bool isEditingAmount() const noexcept { return editor_ != nullptr; }
+    juce::TextEditor* amountEditor() noexcept { return editor_.get(); }
+    juce::Colour swatchColour() const;
+
+    void beginAmountEdit();
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+private:
+    class AmountButton;
+    class NameTip;
+    void endAmountEdit(bool apply);
+    void applyNames();
+    void setReadingFocusOrder();
+    juce::Rectangle<int> layoutControls(juce::Rectangle<int> r, int gap);
+
+    KnobModSource source_;
+    juce::String paramName_;
+    Look look_;
+    bool selected_ = false;
+    ModDotHoverFade hover_;
+    ModDotAmountBar bar_;
+    std::unique_ptr<AmountButton> amountButton_;
+    std::unique_ptr<ModCurveChip> curveChip_;
+    std::unique_ptr<NameTip> nameTip_;
+    ModDotGlyphButton timelineButton_;
+    ModDotGlyphButton removeButton_;
+    std::unique_ptr<NavigationSearchField> editor_;
+    std::unique_ptr<NavigationSearchField> retired_;
+    juce::Rectangle<int> nameArea_;
+    juce::Rectangle<int> swatchArea_;
+};
+
+} // namespace synth::ui

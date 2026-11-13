@@ -9,14 +9,51 @@
 #include "GraphEditorInternal.h"
 
 #include "Modules/MacroMidiInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Graph/PortPanel/PortConnector.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UserSettings.h"
 
 #include <algorithm>
+#include <optional>
+#include <utility>
 
 using namespace detail;
+
+namespace {
+
+// The raw channel carrying the Right leg of the stereo pair whose Left leg is `destVisibleJack` (raw
+// `leftRaw`) on `dest`, or -1 when that jack is not the Left of a pair. A null `dest` is the graph's
+// Audio Output, whose jack 0 is Left over a contiguous Right. A module's pair is its jack 0 (the FX
+// and voice modules), or any jack labelled Left/Right as a pair (Master's Mix L / Mix R and
+// Direct L / Direct R). The Right leg is asked of the module -- adjacent for the FX, a dedicated
+// kRightBase block for the split-block modules -- never assumed to be leftRaw + 1.
+int stereoPairRightLeg(const ModuleBase* dest, int leftRaw, int destVisibleJack) {
+    if (dest == nullptr)
+        return destVisibleJack == 0 ? leftRaw + 1 : -1;
+
+    const auto adjacent = dest->mapInputChannel(leftRaw + 1);
+    if (adjacent.role == PortRole::Audio && destVisibleJack == 0)
+        return leftRaw + 1;
+
+    const bool labelledPair = jackIsLeftOfSplitPair(*dest, destVisibleJack, /*isInput=*/true);
+    const int rightLeg = dest->rightAudioLegChannel();
+    if (destVisibleJack == 0 && rightLeg > leftRaw && labelledPair &&
+        dest->mapInputChannel(rightLeg).role == PortRole::Audio)
+        return rightLeg;
+    if (labelledPair && adjacent.role == PortRole::Audio && adjacent.visibleJackIndex == destVisibleJack + 1)
+        return leftRaw + 1;
+    return -1;
+}
+
+} // namespace
 
 // Works out which raw-channel fan a cable dropped between two *visible* jacks should wire.
 // Port hit-testing yields visible jack indices, which are not raw channel numbers once a
@@ -55,7 +92,8 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             bestScore = score;
 
             int voiceCount = std::min(s.voiceSpan, d.voiceSpan);
-            int sourceStride = 1;
+            int sourceStride = s.rawStride;
+            int destStride = d.rawStride;
 
             // One mono modulator patched onto a per-voice mod-CV fan drives every voice, the way a
             // single LFO shakes all the voices of a hardware poly synth. Deliberately limited to
@@ -63,6 +101,13 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             // the same time, and broadcasting audio onto a poly *voice* fan would be a paraphonic
             // instrument (identical signal through a shared cutoff — bit-identical for 8x the DSP).
             if (s.voiceSpan == 1 && d.voiceSpan > 1 && d.role == PortRole::ModCV) {
+                voiceCount = d.voiceSpan;
+                sourceStride = 0;
+            }
+
+            // One mono oscillator's audio on a poly Restart jack syncs every voice: it carries no note, so nothing
+            // about the chord changes, and syncing only the first voice would leave the others free-running.
+            if (s.voiceSpan == 1 && d.voiceSpan > 1 && d.role == PortRole::Gate && s.role == PortRole::Audio) {
                 voiceCount = d.voiceSpan;
                 sourceStride = 0;
             }
@@ -98,19 +143,16 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             // Collapsed stereo source (span 2) dropped on dest jack 0: fan L→L / R→R when the
             // dest actually has a second audio channel (Audio Output, Dual I/O). A mono Filter
             // jack 0 must not steal its Cutoff CV on ch1.
-            if (s.voiceSpan == 2 && s.role == PortRole::Audio && d.voiceSpan == 1 && destVisibleJack == 0) {
-                bool destHasStereoPair = dest == nullptr;
-                if (dest != nullptr) {
-                    const auto other = dest->mapInputChannel(d.rawHeadChannel + 1);
-                    destHasStereoPair = other.role == PortRole::Audio;
-                }
-                if (destHasStereoPair) {
+            if (s.voiceSpan == 2 && s.role == PortRole::Audio && d.voiceSpan == 1) {
+                const int rightLeg = stereoPairRightLeg(dest, d.rawHeadChannel, destVisibleJack);
+                if (rightLeg >= 0) {
                     voiceCount = 2;
-                    sourceStride = 1;
+                    sourceStride = s.rawStride;
+                    destStride = rightLeg - d.rawHeadChannel;
                 }
             }
 
-            link = {s.rawHeadChannel, d.rawHeadChannel, voiceCount, sourceStride};
+            link = {s.rawHeadChannel, d.rawHeadChannel, voiceCount, sourceStride, destStride};
         }
     }
 
@@ -126,12 +168,61 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
     if (dest == nullptr && destVisibleJack == 0) {
         for (const auto& s : sourceTargets) {
             if (s.role == PortRole::Audio && s.voiceSpan == 2) {
-                return PolyLink{s.rawHeadChannel, 0, 2, 1};
+                return PolyLink{s.rawHeadChannel, 0, 2, s.rawStride};
             }
         }
     }
 
     return link;
+}
+
+namespace {
+juce::Component::SafePointer<juce::Component>& focusBeforeCableDrag();
+
+// Whether a release at `screenPos` lands on a module card before any macro card: endConnectionDrag walks the cards'
+// jacks and knobs first, then a plugin card's body. Hit tests only (no modulation slot claimed, no picker opened), so
+// the drag tick can ask it every move.
+bool moduleCardTakesCable(const juce::OwnedArray<ModuleComponent>& cards, const ModuleComponent* source,
+                          juce::Point<int> screenPos, bool fromInput, bool isMidi) {
+    for (auto* comp : cards) {
+        if (comp == nullptr || !comp->isVisible() || comp == source)
+            continue;
+        const auto local = comp->getLocalPoint(nullptr, screenPos);
+        auto port = comp->getPortForPoint(local);
+        if (!port && !fromInput && !isMidi)
+            port = comp->getModTargetPortForPoint(local);
+        if (port && port->isInput != fromInput && port->isMidi == isMidi)
+            return true;
+    }
+    if (fromInput || isMidi)
+        return false;
+    for (auto* comp : cards) // offerHostedModTarget: the first card under the point decides
+        if (comp != nullptr && comp->isVisible() && comp != source &&
+            comp->getLocalBounds().contains(comp->getLocalPoint(nullptr, screenPos))) {
+            auto* hosted = dynamic_cast<synth::HostedPluginModule*>(comp->getModule());
+            return hosted != nullptr && hosted->hasInstance();
+        }
+    return false;
+}
+
+// The hint on each folded card: only the card `drop` lands on shows one, and a refused drop shows none.
+void showMacroCardDropHints(juce::OwnedArray<MacroCardComponent>& cards,
+                            const std::optional<MacroGroupController::CardCableDrop>& drop) {
+    using Kind = MacroGroupController::CardCableDrop::Kind;
+    for (auto* card : cards) {
+        if (card == nullptr)
+            continue;
+        std::optional<MacroCardComponent::CableDropHint> hint;
+        if (drop.has_value() && drop->card == card && drop->kind != Kind::refused)
+            hint = MacroCardComponent::CableDropHint{drop->kind == Kind::newPort, drop->portIsInput, drop->portUuid,
+                                                     drop->kind == Kind::existingPort ? drop->visibleJack : -1};
+        card->setCableDropHint(hint);
+    }
+}
+} // namespace
+
+bool GraphEditor::isCableDragFrom(const ModuleComponent& card) const noexcept {
+    return isDraggingConnection && dragSourceModule == &card;
 }
 
 void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
@@ -142,6 +233,11 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
+    edgeScroll_->beginCableDrag(screenPos); // held at the edge of the view, the canvas scrolls under the cable
+    // Escape has to reach GraphEditor::keyPressed even when a card's control held the focus; the drag ends by giving it
+    // back.
+    focusBeforeCableDrag() = juce::Component::getCurrentlyFocusedComponent();
+    grabKeyboardFocus();
     maybeShowModDropHint(sourceModule, channelIndex, isInput, isMidi);
     repaintCanvas();
 }
@@ -177,25 +273,150 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
     dragCurrentPos = screenPos;
 
     // Ring whichever knob the cable would land on, so a Serum-style mod drop is aimed rather
-    // than guessed at. Only a cable dragged FROM an output can land on a knob.
+    // than guessed at. Only a cable dragged FROM an output can land on a knob. A folded More row
+    // under the cable opens first, so a hidden parameter's knob can take it too.
     for (auto* comp : content.getModules()) {
         int target = -1;
         if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             const auto localPos = comp->getLocalPoint(nullptr, screenPos);
-            if (!comp->getPortForPoint(localPos))
+            comp->unfoldMoreRowForCableDrag(localPos);
+            if (auto* body = comp->getCardBody())
+                body->cableDragMoved(comp->getLocalBounds().contains(localPos)); // leaving folds a row the cable opened
+            if (!comp->getPortForPoint(localPos)) {
                 if (auto port = comp->getModTargetPortForPoint(localPos))
                     target = port->index;
+                else if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(comp->getModule());
+                         hosted != nullptr && hosted->hasInstance() && comp->getLocalBounds().contains(localPos))
+                    target = ModuleComponent::kHostedCardBodyDropChannel;
+            }
         }
         comp->setModDropTargetChannel(target);
     }
 
+    // A folded macro's card under the cable shows where the drop would land, from the drop's own answer.
+    std::optional<MacroGroupController::CardCableDrop> macroDrop;
+    if (dragSourceModule != nullptr &&
+        !moduleCardTakesCable(content.getModules(), dragSourceModule, screenPos, dragSourceIsInput, dragSourceIsMidi))
+        macroDrop = macroController_.cardCableDropAt(screenPos, dragSourceModule->getNodeId(), dragSourceChannel,
+                                                     dragSourceIsInput, dragSourceIsMidi);
+    showMacroCardDropHints(content.getMacroCards(), macroDrop);
+
     repaintCanvas();
 }
 
-// Drops the pending modulation drop-target highlight on every card.
+namespace {
+// A drop on a plugin knob or a pad knob that is not modulated yet: claim a modulation slot for its parameter, so the
+// cable has a channel to land on. Claimed before the cable's undo step opens, so undo leaves the slot claimed with no
+// cable; AudioEngine::releaseUnconnectedHostedModSlots frees it on the next rebuild. Every slot taken: the drop is
+// refused.
+std::optional<ModuleComponent::Port> claimHostedModSlot(ModuleComponent& card, ModuleComponent::Port port,
+                                                        const std::function<void(const juce::String&)>& status) {
+    auto* host = dynamic_cast<synth::ModSlotHost*>(card.getModule());
+    const int channel = host != nullptr ? host->bindModSlot(card.hostedParamForDropChannel(port.index)) : -1;
+    if (channel < 0) {
+        if (host != nullptr && status)
+            status(card.cardTitle() + " already has " + juce::String(host->maxModSlots()) +
+                   (port.index <= ModuleComponent::kUnboundPadKnobChannelBase ? " modulated pad knobs"
+                                                                              : " modulated parameters"));
+        return std::nullopt;
+    }
+    port.index = channel;
+    return port;
+}
+
+// A cable from `source` released over a plugin card's body (the knobs were checked first): open the parameter search
+// there. True when a picker opened, so no other drop rule runs; the cable lands only if the person picks.
+bool offerHostedModTarget(GraphEditor& editor, ModuleComponent& source, int sourceJack, juce::Point<int> screenPos) {
+    for (auto* card : editor.getModuleComponents()) {
+        if (card == nullptr || !card->isVisible() || card == &source ||
+            !card->getLocalBounds().contains(card->getLocalPoint(nullptr, screenPos)))
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(card->getModule());
+        if (hosted == nullptr || !hosted->hasInstance())
+            return false;
+        synth::ui::showHostedModTargetPicker(editor, *card, source.getNodeId(), sourceJack, screenPos);
+        return true;
+    }
+    return false;
+}
+} // namespace
+
+namespace {
+// The control that held the keyboard when the cable was picked up (one cable at a time, message thread only).
+juce::Component::SafePointer<juce::Component>& focusBeforeCableDrag() {
+    static juce::Component::SafePointer<juce::Component> focused;
+    return focused;
+}
+
+// Gives the keyboard back to what had it, unless the drag or the drop has already moved it somewhere on purpose.
+void restoreFocusAfterCableDrag(juce::Component& editor) {
+    auto previous = std::exchange(focusBeforeCableDrag(), nullptr);
+    if (previous != nullptr && previous->isShowing() && editor.hasKeyboardFocus(false))
+        previous->grabKeyboardFocus();
+}
+
+// A More row this cable drag opened, and whether the drop is on a control of that row (which keeps it open).
+struct CableOpenedRow {
+    juce::Component::SafePointer<ModuleComponent> card;
+    bool dropOnRevealedControl = false;
+};
+
+std::vector<CableOpenedRow> cableOpenedRows(const juce::OwnedArray<ModuleComponent>& cards,
+                                            juce::Point<int> screenPos) {
+    std::vector<CableOpenedRow> rows;
+    for (auto* card : cards)
+        if (auto* body = card->getCardBody(); body != nullptr && body->isMoreOpenedByCableDrag())
+            rows.push_back({card, body->moreRowWidgetAt(card->getLocalPoint(nullptr, screenPos))});
+    return rows;
+}
+
+// The drag is over: every row it opened folds, except the one whose control took the cable (`landedOn`), which
+// stays and is the person's from now on. A card the connection rebuilt is gone from `rows` (its pointer is null).
+void settleCableOpenedRows(const std::vector<CableOpenedRow>& rows, const ModuleComponent* landedOn) {
+    for (const auto& row : rows)
+        if (auto* card = row.card.getComponent(); card != nullptr && card->getCardBody() != nullptr)
+            card->getCardBody()->cableDragEnded(row.dropOnRevealedControl && card == landedOn);
+}
+
+// The row a drop kept open is part of the drop's undo step: Cmd+Z folds it, Cmd+Shift+Z opens it again (the cards the
+// step moved are restored by the graph's own snapshot).
+class MoreRowKeptOpenAction : public juce::UndoableAction {
+public:
+    MoreRowKeptOpenAction(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId)
+        : editor_(&editor)
+        , nodeId_(nodeId) {}
+
+    bool perform() override {
+        if (std::exchange(firstPerform_, false))
+            return true; // the row is already open: the drop did it
+        return setRow(true);
+    }
+    bool undo() override { return setRow(false); }
+    int getSizeInUnits() override { return (int)sizeof(*this); }
+
+private:
+    bool setRow(bool unfolded) {
+        if (editor_ == nullptr)
+            return true;
+        for (auto* card : editor_->getModuleComponents())
+            if (card != nullptr && card->getNodeId() == nodeId_ && card->getCardBody() != nullptr)
+                card->getCardBody()->setMoreUnfoldedByHistory(unfolded);
+        return true;
+    }
+
+    juce::Component::SafePointer<GraphEditor> editor_;
+    juce::AudioProcessorGraph::NodeID nodeId_;
+    bool firstPerform_ = true;
+};
+} // namespace
+
+// Drops the pending drop-target highlight on every card: a knob's ring and a folded macro's drop hint (which fades).
 void GraphEditor::clearModDropTargets() {
     for (auto* comp : content.getModules())
         comp->setModDropTargetChannel(-1);
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr)
+            card->setCableDropHint(std::nullopt);
 }
 
 // Wires two visible jacks the same way a completed cable-drag does (poly fan, MIDI,
@@ -209,28 +430,31 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
     if (srcNode == nullptr || dstNode == nullptr)
         return;
 
-    auto* srcModuleBase = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
-    auto* dstModuleBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor());
+    // Inside the cable's own undo step, and before the link is resolved: a module with no cables yet joins the poly
+    // state of the module it is first cabled to (PolyChainController::joinConnectedModules), which decides the fan.
+    auto doConnect = [this, &graph, srcId, dstId, srcJack, dstJack, isMidi] {
+        polyChain_->joinConnectedModules(srcId, dstId);
+        auto* srcModuleBase = dynamic_cast<ModuleBase*>(graph.getNodeForId(srcId)->getProcessor());
+        auto* dstModuleBase = dynamic_cast<ModuleBase*>(graph.getNodeForId(dstId)->getProcessor());
 
-    PolyLink link{srcJack, dstJack, 1};
-    if (!isMidi)
-        link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
+        PolyLink link{srcJack, dstJack, 1};
+        if (!isMidi)
+            link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
 
-    // An attenuverter sits in the path of a single mod wire; a poly fan stays direct so
-    // AudioEngine can collapse its N raw edges into one PolyBus. Structural pitch/gate
-    // sources are never wrapped either — see carriesStructuralSignal.
-    bool isCV = false;
-    if (!isMidi && link.voiceCount == 1 && dstModuleBase != nullptr &&
-        !carriesStructuralSignal(srcModuleBase, link.sourceRawChannel)) {
-        for (const auto& t : dstModuleBase->getModulationTargets()) {
-            if (t.channelIndex == link.destRawChannel) {
-                isCV = true;
-                break;
+        // An attenuverter sits in the path of a single mod wire; a poly fan stays direct so
+        // AudioEngine can collapse its N raw edges into one PolyBus. Structural pitch/gate
+        // sources are never wrapped either — see carriesStructuralSignal.
+        bool isCV = false;
+        if (!isMidi && link.voiceCount == 1 && dstModuleBase != nullptr &&
+            !carriesStructuralSignal(srcModuleBase, link.sourceRawChannel)) {
+            for (const auto& t : dstModuleBase->getModulationTargets()) {
+                if (t.channelIndex == link.destRawChannel) {
+                    isCV = true;
+                    break;
+                }
             }
         }
-    }
 
-    auto doConnect = [this, &graph, srcId, dstId, link, isMidi, isCV] {
         if (isMidi) {
             graph.addConnection({{srcId, juce::AudioProcessorGraph::midiChannelIndex},
                                  {dstId, juce::AudioProcessorGraph::midiChannelIndex}});
@@ -238,8 +462,7 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
             audioEngine.addModRouting(srcId, link.sourceRawChannel, dstId, link.destRawChannel);
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection(
-                    {{srcId, link.sourceRawChannel + v * link.sourceStride}, {dstId, link.destRawChannel + v}});
+                graph.addConnection({{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}});
         }
     };
 
@@ -252,9 +475,32 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
 void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
+    edgeScroll_->end();
 
-    bool connectedToAModule = false; // gates the macro-card fallback below — unchanged loop otherwise
-    for (auto* comp : content.getModules()) {
+    // The connection, a macro port it mints and the room a kept-open row makes are ONE undo step.
+    std::optional<AppUndoManager::ScopedUndoGroup> undoGroup;
+    if (undoManager)
+        undoGroup.emplace(*undoManager);
+
+    const auto openedRows = cableOpenedRows(content.getModules(), screenPos);
+    const ModuleComponent* landedOn = nullptr;  // the card whose jack or knob took the cable
+    juce::AudioProcessorGraph::NodeID landedId; // the same card's node: its component may be rebuilt
+    bool connectedToAModule = false;            // gates the macro-card fallback below — unchanged loop otherwise
+    juce::String refusal; // why a jack under the cursor was passed over, said when nothing connects
+
+    // A connection can rebuild the cards (a macro port minted by the drop, a Dual I/O change, a Track In's auto
+    // channel all reach updateComponents), which frees and reallocates the very array a walk over
+    // content.getModules() reads. So the candidates are copied out first as weak pointers, top-most card first
+    // (the one the person sees under the cursor), and the walk stops at the first connection: a drop lands on one
+    // jack, and nothing touches a card or the array after the call that may have rebuilt them.
+    std::vector<juce::Component::SafePointer<ModuleComponent>> candidates;
+    for (int i = content.getNumChildComponents(); --i >= 0;)
+        if (auto* card = dynamic_cast<ModuleComponent*>(content.getChildComponent(i)))
+            candidates.emplace_back(card);
+    const juce::Component::SafePointer<ModuleComponent> sourceCard(dragSourceModule);
+
+    for (const auto& candidate : candidates) {
+        auto* comp = candidate.getComponent();
         // A hidden member of a collapsed macro is not "on the canvas" as a drop target (same
         // reasoning as collectModuleBoxes' marquee/group-drag exclusion) — it is kept alive only
         // so its position tracks the card, and its ORIGINAL bounds (group-bounds top-left, see
@@ -271,6 +517,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         // for a cable coming from an output — a mod source drives a destination, not the reverse.
         if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             port = comp->getModTargetPortForPoint(localPos);
+            if (port && port->index <= ModuleComponent::kUnboundHostedKnobChannelBase)
+                port = claimHostedModSlot(*comp, *port, onStatusMessage);
             // A knob names its CV jack by RAW channel (the ModulationTarget's channelIndex), while
             // everything below speaks in VISIBLE jack indices. On a collapsed stereo pair the two
             // differ by one (raw ch0/ch1 are the single "Audio" jack), so without this mapping a
@@ -283,10 +531,14 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         if (port) {
             if (comp == dragSourceModule)
                 continue;
-            if (port->isInput == dragSourceIsInput)
+            if (port->isInput == dragSourceIsInput) {
+                refusal = "Connect an output to an input";
                 continue;
-            if (port->isMidi != dragSourceIsMidi)
+            }
+            if (port->isMidi != dragSourceIsMidi) {
+                refusal = "MIDI jacks connect only to MIDI jacks; audio and CV jacks to audio and CV jacks";
                 continue;
+            }
 
             auto& graph = audioEngine.getGraph();
             juce::AudioProcessorGraph::Node* srcNode = nullptr;
@@ -305,138 +557,94 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
-                // A MIDI cable from a Track In node landing here may newly make some audio reach the output with no
-                // channel — build one, in the SAME undo step as the connection itself (and as any auto-created macro
-                // port the connection below also mints, so a Track In dragged across a macro boundary straight onto an
-                // unchanneled instrument gets ALL of it undone by one Cmd+Z). Gated by
-                // autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a MIDI drag from a Track In) falls
-                // straight through to the plain-connect branch below
-                // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
-                if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
-                    nodeIsTimelineMidiSource(realSrc->nodeID)) {
-                    const auto realSrcId = realSrc->nodeID;
-                    const auto realDstId = realDst->nodeID;
-                    auto doMutation = [this, realSrcId, srcJack, realDstId, dstJack] {
-                        if (!autoCreateMacroPortsOnDragEnabled ||
-                            !macroController_.maybeAutoCreateMacroPortsForDrag(realSrcId, srcJack, realDstId, dstJack,
-                                                                               /*isMidi=*/true, /*recordUndo=*/false))
-                            connectPorts(realSrcId, srcJack, realDstId, dstJack, /*isMidi=*/true,
-                                         /*recordUndo=*/false);
-                        // realDstId is always the real destination node, whether or not either
-                        // side just got a minted macro port above — maybeAutoCreateMacroPortsForDrag
-                        // wires any port it mints straight through to this same node — so the
-                        // search for un-channeled output feeds always starts here.
-                        maybeAutoCreateChannelAfterConnect(realDstId);
-                        updateComponents();
-                    };
-                    if (undoManager)
-                        undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-                    else
-                        doMutation();
-                } else if (!autoCreateMacroPortsOnDragEnabled ||
-                           !macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
-                                                                              dstJack, dragSourceIsMidi)) {
-                    // If this completed drag crosses a macro boundary (an EXPANDED macro's member on
-                    // one side, something outside that same macro on the other — the collapsed-card
-                    // drop above is a different code path), mint and wire a matching port instead of
-                    // the plain direct connection. Gated by autoCreateMacroPortsOnDragEnabled
-                    // (Preferences); when it handles the drag it returns true and the plain
-                    // connectPorts below is skipped entirely
-                    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
-                    connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
-                }
+                // The drop rules (poly fan, MIDI, attenuverter for mono CV, macro auto ports, a Track In's auto
+                // channel) live in PortConnector, shared with the port connections panel's Add destination so they
+                // cannot drift.
+                synth::ui::PortConnector::connectJacks(*this, realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
+                                                       dragSourceIsMidi, /*recordUndo=*/true,
+                                                       content.getLocalPoint(nullptr, screenPos).toFloat());
                 connectedToAModule = true;
+                landedOn = comp;
+                landedId = comp->getNodeId();
+                break;
             }
         }
     }
+    if (sourceCard == nullptr)
+        dragSourceModule = nullptr; // the connection rebuilt the card the drag started on
 
-    // Macro card drop (docs/macros/ports.md#how-a-port-is-drawn): nothing above matched (no module jack under the
-    // cursor), so check whether the release point is over a COLLAPSED macro's card.
+    // A modulation cable released on a plugin card's body, not on a knob: pick any of the plugin's parameters.
+    if (!connectedToAModule && dragSourceModule != nullptr && !dragSourceIsInput && !dragSourceIsMidi)
+        connectedToAModule = offerHostedModTarget(*this, *dragSourceModule, dragSourceChannel, screenPos);
+
+    // Macro card drop (docs/macros/ports.md#a-cable-hovering-a-folded-card): nothing above matched (no module jack
+    // under the cursor), so a release over a FOLDED macro's card lands where cardCableDropAt says, the same answer the
+    // drag's hint showed. On an existing port's jack the cable wires into that port's own node and follows the SAME
+    // rules as a drop on a module's own jack (PortConnector::connectJacks: a source inside another macro leaves
+    // through its own ports, a Track In's auto channel, the poly fan), and a port with nothing behind it yet is joined
+    // to the module it was made for (connectEmptyPortInterior), both legs for a two-jack Stereo port. The row dropped
+    // on picks the port's jack (Left 0, Right 1); a one-row port is its jack 0. Anywhere else on the card a fresh port
+    // is shaped from the dropped cable (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed); a
+    // port that already carries this cable takes it again and nothing new is made. A refused drop does nothing.
+    // The cable then slides from the release point to the port's jack instead of appearing there
+    // (docs/macros/ports.md#a-cable-dropped-on-a-folded-card): armed once, after the edit and outside its undo record,
+    // so a redo does not slide it again, and after the card glide's Scope so the slide ends on the card's final jacks.
     if (!connectedToAModule && dragSourceModule != nullptr) {
-        for (auto* card : content.getMacroCards()) {
-            if (card == nullptr || !card->isVisible()) // visible exactly while its macro is collapsed
-                continue;
-            const auto cardLocal = card->getLocalPoint(nullptr, screenPos);
-            if (!card->getLocalBounds().contains(cardLocal))
-                continue;
-
-            auto& graph = audioEngine.getGraph();
-            juce::AudioProcessorGraph::Node* srcNode = nullptr;
-            for (auto* n : graph.getNodes())
-                if (n->getProcessor() == dragSourceModule->getModule()) {
-                    srcNode = n;
-                    break;
-                }
-            if (srcNode == nullptr)
-                break;
-
-            // dragSourceIsInput == false: the drag started at an OUTPUT looking for a
-            // destination -> the macro offers an INPUT (MacroInlet/MacroMidiInlet) to receive
-            // it. dragSourceIsInput == true: started at an INPUT looking for a source -> the
-            // macro offers an OUTPUT.
-            const bool newPortIsInput = !dragSourceIsInput;
-
-            // An existing port's jack under the cursor wires directly into that port's own
-            // node, rather than always minting a fresh one — "one jack per port" makes a jack a
-            // real, precise drop target, not just the card as a whole. A jack whose direction or
-            // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
-            // module-jack drop is refused a few lines above
-            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted). DEFERRED
-            // (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable below. For a Mono port that
-            // IS the port's one visible jack; for an existing Stereo port this wires the Left leg only and leaves Right
-            // unconnected — a card jack summarises the whole port as one dot
-            // (docs/macros/ports.md#how-a-port-is-drawn), so there is no separate "Right" drop target to land on yet.
-            // Widening this to resolvePolyLink-style fan-out for an existing Stereo/Poly-N port is future work, not a
-            // regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable
-            // way to wire a non-Mono port completely.
-            if (auto hitPort = macroController_.macroCardPortForPoint(card->getMacroId(), cardLocal)) {
-                if (hitPort->isInput == newPortIsInput &&
-                    (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
-                    const auto portNodeId = macroController_.resolveMemberNodeId(hitPort->nodeUuid);
-                    if (graph.getNodeForId(portNodeId) != nullptr) {
-                        const auto connSrcId = newPortIsInput ? srcNode->nodeID : portNodeId;
-                        const auto connDstId = newPortIsInput ? portNodeId : srcNode->nodeID;
-                        const int connSrcJack = newPortIsInput ? dragSourceChannel : 0;
-                        const int connDstJack = newPortIsInput ? 0 : dragSourceChannel;
-
-                        // The same auto-channel trigger as the direct-jack branch above,
-                        // for a Track In dropped straight onto an EXISTING port jack on a
-                        // collapsed macro's card. The port node (a MacroMidiInletModule) is a
-                        // plain pass-through — findUnchanneledOutputFeeds (via
-                        // maybeAutoCreateChannelAfterConnect) reaches whatever it forwards to on
-                        // its own, so searching from the port node itself is enough.
-                        if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
-                            nodeIsTimelineMidiSource(connSrcId)) {
-                            auto doMutation = [this, connSrcId, connSrcJack, connDstId, connDstJack] {
-                                connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, /*isMidi=*/true,
-                                             /*recordUndo=*/false);
-                                maybeAutoCreateChannelAfterConnect(connDstId);
-                                updateComponents();
-                            };
-                            if (undoManager)
-                                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-                            else
-                                doMutation();
-                        } else {
-                            connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, dragSourceIsMidi, true);
-                        }
-                        connectedToAModule = true;
-                    }
-                }
-                break;
+        using DropKind = MacroGroupController::CardCableDrop::Kind;
+        const auto drop = macroController_.cardCableDropAt(screenPos, dragSourceModule->getNodeId(), dragSourceChannel,
+                                                           dragSourceIsInput, dragSourceIsMidi);
+        if (drop.has_value() && drop->kind != DropKind::refused) {
+            drop->card->setCableDropHint(std::nullopt, /*instant=*/true);
+            connectedToAModule = true; // the card took the cable: a jack passed over on the way is not a refusal
+            const auto srcId = dragSourceModule->getNodeId();
+            const auto dropPoint = content.getLocalPoint(nullptr, screenPos).toFloat();
+            repaintCanvas(); // the slide diffs against the cables as drawn before the drop
+            const auto cablesBefore = rebuildVisibleCables();
+            // The Scope lives through both branches: a card that grows a row glides to its new height.
+            if (CardGlideAnimator::Scope glide(cardGlide_); drop->kind == DropKind::existingPort) {
+                const bool toInput = drop->portIsInput;
+                const auto portNodeId = drop->portNodeId;
+                const int portJack = std::max(drop->visibleJack, 0);
+                const auto connSrcId = toInput ? srcId : portNodeId;
+                const auto connDstId = toInput ? portNodeId : srcId;
+                const int connSrcJack = toInput ? dragSourceChannel : portJack;
+                const int connDstJack = toInput ? portJack : dragSourceChannel;
+                const auto macroId = drop->macroId;
+                auto doDrop = [this, macroId, portNodeId, connSrcId, connSrcJack, connDstId, connDstJack] {
+                    synth::ui::PortConnector::connectJacks(*this, connSrcId, connSrcJack, connDstId, connDstJack,
+                                                           dragSourceIsMidi, /*recordUndo=*/false);
+                    macroController_.connectEmptyPortInterior(macroId, portNodeId);
+                    updateComponents();
+                };
+                if (undoManager)
+                    undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doDrop);
+                else
+                    doDrop();
+            } else if (drop->kind == DropKind::newPort) {
+                macroController_.createMacroPortFromDroppedCable(drop->macroId, drop->portIsInput, dragSourceIsMidi,
+                                                                 srcId, dragSourceChannel);
             }
-
-            // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
-            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed) — the whole card is still
-            // a valid drop target, and a fresh Mono port is created to receive the cable. The auto-channel path does
-            // NOT apply here: createMacroPortFromDroppedCable wires no interior leg (the freshly-minted port has
-            // nothing behind it yet), so there is nothing for findUnchanneledOutputFeeds to find.
-            macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
-                                                             srcNode->nodeID, dragSourceChannel);
-            break;
+            armMacroPortSlide(cablesBefore, dropPoint);
         }
     }
 
+    // A drop on a jack that cannot take this cable is not silent: a toast says why.
+    if (!connectedToAModule && refusal.isNotEmpty())
+        onDropRefused(refusal);
+
+    // A row kept open makes room for the cards it grew over (handleModuleResized): recorded inside the cable's step so
+    // Cmd+Z folds the row and glides those cards back, and Cmd+Shift+Z replays both.
+    const auto settle = [&] { settleCableOpenedRows(openedRows, landedOn); };
+    if (undoManager && landedOn != nullptr)
+        undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, settle);
+    else
+        settle();
+    if (undoManager && landedOn != nullptr)
+        for (const auto& row : openedRows)
+            if (row.dropOnRevealedControl && row.card.getComponent() == landedOn)
+                if (auto* body = landedOn->getCardBody(); body != nullptr && body->isMoreUnfolded())
+                    undoManager->recordUiAction(std::make_unique<MoreRowKeptOpenAction>(*this, landedId));
+    restoreFocusAfterCableDrag(*this);
     isDraggingConnection = false;
     dragSourceModule = nullptr;
     clearModDropTargets();

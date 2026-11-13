@@ -47,15 +47,18 @@ different argument — see [timeline ops](timeline-ops.md#the-local-path).
 One line per item, in `TimelineDoc`'s own stable order: a header
 (`"Arrangement: N tracks, bpm B, T/S, loop [a, b)"`, or `"loop off"`), then per track its kind,
 name, `armed`/`muted`/`soloed` flags shown only when set, and its binding; a compressed clip line
-for MIDI tracks (`"3 clips @ 0-8, 8-12, 16-20 beats; 42 notes total"`); one line per clip for audio
+for MIDI tracks (`"3 clips @ 0-8, 8-12, 16-20 beats; 42 notes total"`, a [linked clip](../timeline/linked-clips.md)'s
+window followed by `(linked)`); one line per clip for audio
 tracks (name, beat window, bare file name); then one line per automation lane
 (`"cutoff lane on Filter: 12 points, Read"`).
+
+When the document has markers, one `"Markers (beats): \"Intro\" @ 0, \"Drop\" @ 8"` line follows the header, so a later edit can refer to a section by name. It stops at half of `maxChars` with a `", +K more"` tail (a marked-up project cannot push every track out), and line breaks in a name become spaces.
 
 `maxChars` (default 2000) is enforced at **track granularity only** — a track is included whole or
 not at all, so the result is never cut mid-line — and a dropped tail is marked deterministically
 with `"... [+K more tracks]"`.
 
 Tests: `Tests/Timeline/ArrangementContextTests.cpp` — tracks, clips and lanes rendered across bound,
-unbound and orphaned states; track-granularity truncation; the empty-doc case; the file-path-leak
+unbound and orphaned states; track-granularity truncation; the markers line (order, bound, one-line names, a markers-only doc); the empty-doc case; the file-path-leak
 pin; plus a seam-level test that the injected request gains an `## Arrangement` section exactly when
 `buildPatchAugmentedContent` should add one.

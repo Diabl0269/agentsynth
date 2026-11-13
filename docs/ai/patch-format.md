@@ -24,13 +24,51 @@ model, and presets, snippets and undo snapshots all persist it.
   - `id`: a unique integer identifier, meaningful only within one document.
   - `type`: the module's factory type name (`"Oscillator"`, `"Filter"`, `"ADSR"`).
   - `params`: optional key/value pairs for the module's parameters.
-- **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index.
+    A param left out takes the module's current default (an Oscillator or Wavetable with only `unison` set gets the default Detune, Blend, Width and Rand).
+- **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index. A MIDI connection (a Sequencer or other MIDI source to an instrument) uses `srcPort` -1 and `dstPort` -1; a port index past a module's audio ports builds no cable (silently), so a sequencer cable written as port 0 to port 0 would be lost (edit plans repair that one case, see [timeline-ops](timeline-ops.md#one-edit-plan)).
+- **`modulations`** — optional control routings, each created as an attenuverter between source and
+  destination: `source`, optional `sourcePort` (default 0), `dest`, optional `amount` (-1 to 1,
+  default 1) and `bypass`, and the destination channel named by **`destPort` or `destParam`** (see
+  below).
+
+### A modulation's destination: `destPort` or `destParam`
+
+`destPort` is the destination module's raw CV input channel. `destParam` is a parameter id
+(`"cutoff"`) resolved to that channel by `ModuleBase::modulationChannelForParam`, the same rule the
+canvas modulator picker uses (`GraphEditor::modulationChannelFor` calls it): the first of the
+module's `getModulationTargets()` whose `paramId` equals it, or which declares no `paramId` and
+whose jack name equals that parameter's display name.
+
+On the untrusted path `validatePatch` requires **at least one of the two**; when both are present
+they must name the same channel. Neither present is `ModulationInvalidPort` ("One of \"destParam\" ...
+or \"destPort\" is required") - a missing `destPort` used to be read as port 0, usually the audio
+input, so a model that forgot it silently modulated the wrong thing. A `destParam` that resolves to
+no jack is rejected with the destination's modulatable parameter ids, and a `destPort` that
+disagrees with `destParam` is rejected too. The destination is resolved on the live processor for a
+node that exists (an existing node in merge mode, or one an earlier step of an
+[edit plan](timeline-ops.md#one-edit-plan) built) and on a factory instance with the patch's own
+`params` applied for a node only the patch creates, so a poly Filter's cutoff jack is found where
+it really is. The trusted path is unchanged: our own snapshots always write `destPort`, and an
+absent one there still reads as 0. `getPatchSchema()` keeps the shipped modulation shape
+(`destPort` required); `getPatchSchemaWithTimelineOps()` adds `destParam` and drops `destPort` from
+`required`. Tests: `Tests/AI/AIStateMapper/AIStateMapperDestParamTests.cpp`.
 
 Parameter ids are the exact lowercase `paramID` strings from `getModuleSchema()` (`waveform`, not
 `Waveform`), and values are raw and unnormalized within each parameter's declared range — `cutoff`
 is Hz (20 to 20000), not a 0 to 1 fraction. Oscillator has no `frequency` parameter: pitch comes
 from the incoming MIDI note (or A4/440 Hz if none is connected) offset by `octave`, `coarse` and
 `fine`.
+
+A Parametric EQ node carries all 24 bands in the schema, catalog, patch context and node JSON (`band1On` ... `band24Slope`; band N's type is `bandNType`, a cut's slope `bandNSlope`); a patch may set any of them (a choice by name or index; an out-of-range one is rejected), and a band the patch leaves out stays off. The "Current patch state" the model is shown is the compact view (`graphToJSON(graph, /*forModel=*/true)`): a band that is off with all six parameters at their defaults is omitted; saving and undo keep every band. The module table in the system prompt lists the per-band parameters once as `bandN...` rows (N = 1-24; the catalog still lists every id), then ends the EQ with a note that bands are added, not slots filled (turn on as many as needed from the first free slot, set `bandNType` and for cuts `bandNSlope`), built from the module's own type and slope names.
+
+The same registry is exported as JSON by `AIStateMapper::getModuleCatalogJson()` (`Source/AI/AIStateMapper/AIStateMapperCatalog.cpp`; version 1: per authorable module `audioIn` (true when some input is a signal input: a channel reached only through a knob's mod cable, such as the Level of Drum Kit, Pluck and Mallet, does not count), `audioOut`, optional `category` and `params` of `{id, kind: float|choice|bool|int, min, max, default, choices, modulatable}` (`modulatable` is set when a modulation may name the parameter as `destParam`), plus `instrumentTracks` with the `addInstrumentTrack` instruments and the ADSR envelope's params). `AIEvalHarness --dump-module-catalog FILE` writes it; the hosted AI server vendors the output so it sees the real parameter ids. Tests: `Tests/AI/AIStateMapper/AIStateMapperCatalogTests.cpp`.
+
+### An LFO's rate: Hz unless the patch says otherwise
+
+The LFO starts in Sync mode (`mode` true, rate from `rateSync`), where `rateHz` is ignored. Models
+usually write only `{"rateHz": 5}`, so on the untrusted (model) path an LFO whose params set `rateHz`
+and neither `mode` nor `rateSync` is switched to Hz mode. An explicit `mode` or `rateSync` is kept, and
+trusted JSON (snapshots, presets) is applied exactly as written.
 
 ## Per-node `state`
 
@@ -44,8 +82,99 @@ module is free to read this as a filename, so accepting it from model output tur
 suggestion into an arbitrary file read. `Sampler` nodes stay fully authorable by the model; the
 node is simply created with no sample loaded.
 
-Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited to emit
-one.
+**The one exception: an `LFO` node's Custom curve.** A module opts in through
+`ModuleBase::setUntrustedExtraState()`, which the untrusted path calls instead of `setExtraState()`;
+only `LFOModule` overrides it. Its `state` is the drawn curve,
+`{"version": 1, "points": [{"x": 0, "y": 1, "bend": 0}, {"x": 0.3, "y": 0.2, "bend": -0.5}, {"x": 1, "y": 0, "bend": 0}]}`
+(x, y in 0..1, bend in -1..1, at most 64 points), and `LfoCustomWave::fromVar` clamps every value, sorts
+the points, pins the first to x = 0 and the last to x = 1, and turns anything malformed into the default
+triangle. It is pure data, so it cannot name a file. The curve plays when the node's `shape` is `Custom`;
+with `retrig` on it restarts on every note, so a model can give each note its own shape, such as a pitch
+swoop on a bird call. Tests: `Tests/AI/LfoCurveTrustTests.cpp`.
+
+The LFO's Custom wave can also be a list of shapes the `morphX` / `morphY` params blend between, in the
+Filter's list format below (`{"shapes": [{"name", "position", "curve"}, ...]}`, the curve being the points
+object above, a bad curve becoming the triangle). It is read under the same caps as the Filter's: at most
+16 shapes, 64 points a curve, 3 map values clamped to 0..1, a name of at most 24 characters of letters,
+digits, space and `-`, every other key ignored. A state with a `shapes` key but no usable shape leaves the
+current shapes unchanged; the bare curve object above still sets one shape. The blend is inverse-distance
+over the map, as the Filter's. Tests: `Tests/AI/LfoCustomShapesTrustTests.cpp`.
+
+**The second exception: a `Filter` node's Custom shapes.** `FilterModule` overrides
+`setUntrustedExtraState()` too. Its `state` is the shape list the Custom filter type morphs between:
+
+```json
+{"shapes": [
+  {"name": "dark", "position": [0.1, 0.2],
+   "curve": {"points": [{"x": 0, "y": 0.8, "bend": 0}, {"x": 0.4, "y": 0.5, "bend": 0}, {"x": 1, "y": 0.1, "bend": 0}]}},
+  {"name": "bright", "position": [0.9, 0.7],
+   "curve": {"points": [{"x": 0, "y": 0.2, "bend": 0}, {"x": 0.6, "y": 0.8, "bend": 0}, {"x": 1, "y": 0.8, "bend": 0}]}}
+]}
+```
+
+Per shape only these are read: `curve.points` (x, y in 0..1, bend in -1..1, at most 64 points; x is log
+frequency from 20 Hz to 20 kHz, y maps linearly from -48 dB to +12 dB so 0.8 is 0 dB), `position` (at
+most 3 values, each clamped to 0..1) and `name`, reduced to at most 24 characters of letters, digits,
+space and `-` (anything else is dropped). At most 16 shapes are read. Any other key is ignored, and a
+state with no usable shape list leaves the current shapes unchanged. The model sets Morph X/Y, Shift,
+Depth, Cutoff (moves the response) and Resonance (a peak at the cutoff) through ordinary `params` (`morphX`, `morphY`,
+`shift`, `depth`, `cutoff`, `resonance`) with `filterType` set to Custom.
+
+The same `state` may carry the per-note settings, which make each note of a Filter (mono or poly) sit at its own place on
+the map ([custom-filter.md](../modules/custom-filter.md#per-note-cursors)):
+
+```json
+{"perNote": {"mode": "byPitch", "smoothness": 0.3}}
+```
+
+Only `mode` (exactly one of `off`, `byHand`, `byPitch`, `random`; anything else is ignored) and `smoothness`
+(a number, clamped to 0..1: 0 jumps at each note, 1 glides for 500 ms) are read; each applies on its own, with or
+without a `shapes` list. The By hand key map (`keys`) and every other key are ignored, so a model can pick By
+hand but never which key goes where.
+Every other module's `state` stays trusted-only. A Filter insert of an `addInstrumentTrack` op may carry the same
+`state` (see [timeline-ops.md](timeline-ops.md)); it goes through `AIStateMapper::applyUntrustedState`, the same
+untrusted door. Tests: `Tests/AI/FilterCustomShapesTrustTests.cpp`.
+
+**The third exception: a `Sequencer` or `Poly Sequencer` node's pattern.** Both override
+`setUntrustedExtraState()`. The steps no longer exist as parameters; they are the node's `state`
+([sequencer-design.md](../modules/sequencer-design.md#the-pattern-is-module-state)):
+
+```json
+{"version": 1, "seed": 12345,
+ "customScale": {"name": "My scale", "mask": 2741},
+ "steps": [
+   {"pitch": 48, "gate": 0.6},
+   {"pitch": 55, "velocity": 90, "chance": 75, "repeat": 2, "nudge": 0.1, "condition": "2/4"},
+   {"pitch": 60, "on": false}
+ ]}
+```
+
+Per step (all optional; a field left out is its default, a step left out keeps the factory pattern): `pitch` 0..127,
+`on`, `gate` 0.05..1, `velocity` 1..127, `chance` 0..100, `repeat` 1..8, `slide` (Sequencer only), `nudge`
+-0.5..0.5, `condition` (`"hit/of"`, both 1..8, hit at most of), `filter` 0..1 (Sequencer only, sent as CC 74) and
+`chord` (Poly Sequencer only: `Unison`, `Major`, `Minor`, `Maj7`, `Min7`, `5ths`, `Octs`, `Random`, `Scale Triad`,
+`Scale Seventh`, `Scale Sus2`, `Scale Sus4`, `Scale Add9`, `Scale Sixth`, `Dom7`, `Dim`, `Aug`, `Sus2`, `Sus4`,
+`Sixth`, `Min6`, `Add9`, `Dim7`, `HalfDim7`, `MinMaj7`). `seed` (optional, 32 bits) fixes the chance rolls and the
+Random chord; without one the module keeps its own. `customScale` (a name of at most 64 characters and a 12-bit
+`mask`) is the scale used when the `scale` parameter is `Custom`. `SequencerPattern::fromVar` clamps every value,
+ignores unknown keys and wrong types, reads at most 128 steps, and turns anything missing into the factory pattern;
+it is pure data and cannot name a file. How many steps play is the ordinary `steps` parameter (1..128), the step
+length `rate`. A `state` replaces the whole pattern. The "current patch" sent to a model keeps a sequencer's `state` (every other module's is stripped), so edits see the existing steps. A node with no `state` at all leaves the pattern as it is.
+`getModuleSchema()` (the system prompt's module tables) adds a short note under each sequencer's table naming this shape,
+since the parameter table cannot show the steps.
+Tests: `Tests/Modules/Sequencer/SequencerPatternTests.cpp`, `SequencerStateTests.cpp`.
+
+**Old keys keep working.** Projects, presets and patches written before the pattern moved into `state` set
+`Pitch N`, `Gate N`, `F.Env N` (Sequencer) or `Step N Root`, `Step N Chord`, `Gate N` (Poly Sequencer) in `params`.
+Those ids are no longer parameters, but `ModuleBase::adoptLegacyParams` reads them at the end of
+`applyParamsToProcessor` on both paths (a `Pitch` of 0 becomes a step that is off, a chord by name or by index), and
+`isLegacyParamId` lets `validatePatch` accept them instead of rejecting an unknown key. `state` is applied after
+`params`, so a node carrying both ends with the state.
+
+Nothing in `getPatchSchema()` advertises `state` (not even the LFO curve: the schema's node
+properties are a union across module types, so it cannot say "only on an LFO"), so a constrained
+decoder is never invited to emit one; a caller that knows the curve format, such as the hosted song
+builder, sends it explicitly.
 
 A `Hosted Plugin` node's `state` also carries the optional key `"cardLayout"` (the per-instance
 knob layout, see [`../control/plugin-card-layout.md`](../control/plugin-card-layout.md)): trusted-only
@@ -60,8 +189,10 @@ integer `id`, which merge-mode apply renumbers — is what long-lived references
 
 **Trusted-path only**, like `state`: `applyJSONToGraph` adopts an incoming `uuid` when
 `trusted == true` and ignores it otherwise, so a provider cannot hand two nodes the same identity
-or claim one that something else already points at. Untrusted nodes get a fresh uuid on the next
-`graphToJSON`.
+or claim one that something else already points at. Every node `applyJSONToGraph` creates without
+an adopted uuid is given a fresh one at creation (`ensureNodeUuid`, mirrored into the processor), so
+a caller can address it by uuid as soon as the apply returns - an edit plan's `writeLane` by
+`nodeId` relies on that.
 
 That uuid is also what makes undo and redo node-preserving.
 `AIStateMapper::applySnapshotPreservingNodes` — the third apply path, used **only** by
@@ -95,6 +226,36 @@ graph change, so a custom title stored there is clobbered by the next node added
 Pinned by `ModuleTitleRoundTripsThroughGraphJSON` and
 `UntrustedPatchDisplayNameIsCappedAndDisplayOnly`.
 
+## Per-node `cardLayout`
+
+A node may carry a `"cardLayout"` object: the user's per-instance card layout for a built-in module (a
+`CardLayout` JSON document, see [`layout/module-card-layout.md`](../layout/module-card-layout.md)). It is
+emitted only when set, so every other node's JSON is byte-identical to a document from before the field
+existed. It is a node property like `displayName`, not part of the module's `"state"`; a hosted plugin's
+own layout is a separate `"cardLayout"` key *inside* its `"state"`.
+
+Unlike `displayName` it is applied on the **trusted path only**, like `uuid` and `state`: undo
+snapshots (including the node-preserving restore, which also removes it from a node whose snapshot has
+none), presets, projects and the in-app clipboard. The untrusted apply path ignores it, `getPatchSchema()`
+never mentions it, and the model-bound patch context strips it, so a provider is never invited to emit
+one. A `.agsnip` file on disk drops it (the same `includeExtraState` rule as `state`); the in-app
+clipboard and duplicate keep it. Layout is presentation only and never changes a parameter's value, id
+or range.
+
+**Why trusted-only though it is display-only.** A hostile layout could hide every control of an
+authorable module; accepting one untrusted needs a validator (known `paramId`s, bounded sizes) that does
+not exist yet.
+
+Pinned by `Tests/AI/CardLayoutTrustTests.cpp`.
+
+## Per-node `controlStyle`
+
+A node may carry a `"controlStyle"` object, `{"knob":"neon","fader":"ring"}` with only the set keys: the
+module's own knob and fader style (ids as in Settings > Appearance > Controls). It follows the `cardLayout`
+rules exactly: emitted only when set, applied on the trusted path only (the restore form also removes it),
+stripped from the model-bound patch context, dropped from a `.agsnip` file and kept by the in-app
+clipboard. An id this build does not know reads as unset. Pinned by `Tests/UI/Theme/ControlStyleNodeTests.cpp`.
+
 ## Reserved keys and forward compatibility
 
 Parameter values are a flat scalar map, permanently. Time-varying data lives under the reserved
@@ -102,7 +263,7 @@ Parameter values are a flat scalar map, permanently. Time-varying data lives und
 something clear to do with it: old builds preserve it, new builds honour it, neither corrupts the
 other's data.
 
-`"timeline"`, `"macros"` and `"midiRemote"` are reserved root keys and are **refused, not ignored**,
+`"timeline"`, `"macros"` (macro card layout), `"midiRemote"` (MIDI controller assignments), `"mixerPanLaw"` (the mixer's per-project pan law), `"mixerView"` (which mixer channels are pinned or hidden) and `"view"` (the graph canvas zoom and pan) are reserved root keys, all app-authored project data, and are **refused, not ignored**,
 on the untrusted path (`PatchValidationError::TimelineNotAllowed` for the first). The validator lets
 unknown keys through, so a future build that starts honouring one of them would otherwise silently
 begin executing provider-authored data against patches accepted today. Refusing means that door can

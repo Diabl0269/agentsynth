@@ -20,6 +20,8 @@
 //                              for why the CallOutBox/floating split is implemented this way.
 // Mirrors MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
 
+#include "../../ShortcutDisplayText.h"
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
@@ -216,8 +218,8 @@ TEST(ModuleLibraryHelpPopupSeam, ComponentPassesItsShortcutManagerIntoThePopup) 
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto lines = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts);
     const juce::String joined = lines.joinIntoString(" | ");
-    EXPECT_TRUE(joined.contains(cmdU));
-    EXPECT_FALSE(joined.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(joined, cmdU));
+    EXPECT_FALSE(synth::test::has(joined, cmdZ));
 }
 
 TEST(ModuleLibraryHelpPopupSeam, RefreshingAfterARebindUpdatesTheShortcutSectionOfAPersistentPopup) {
@@ -235,14 +237,15 @@ TEST(ModuleLibraryHelpPopupSeam, RefreshingAfterARebindUpdatesTheShortcutSection
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto cmdU =
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
-    ASSERT_TRUE(popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|").contains(cmdZ));
+    ASSERT_TRUE(synth::test::has(
+        popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|"), cmdZ));
 
     manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     comp.refreshHelpPopoverForTest();
 
     const auto after = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|");
-    EXPECT_TRUE(after.contains(cmdU));
-    EXPECT_FALSE(after.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(after, cmdU));
+    EXPECT_FALSE(synth::test::has(after, cmdZ));
 }
 
 // ============================================================================
@@ -524,7 +527,7 @@ TEST(ModuleLibraryHelpContent, ShortcutLinesWithNoManagerUseTheDocumentedDefault
     const auto lines = ModuleLibraryHelpPopup::shortcutLines(nullptr);
     const juce::String joined = lines.joinIntoString(" | ");
     EXPECT_TRUE(joined.contains("Undo"));
-    EXPECT_TRUE(joined.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(joined, cmdZ));
     EXPECT_TRUE(joined.contains("Redo"));
     EXPECT_TRUE(joined.contains("Play / Stop"));
     EXPECT_TRUE(joined.contains("Space"));
@@ -546,13 +549,13 @@ TEST(ModuleLibraryHelpContent, RebindingAShortcutChangesItsLineImmediately) {
     const auto cmdU =
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     ASSERT_GE(undoIndex, 0);
-    EXPECT_TRUE(before[undoIndex].contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(before[undoIndex], cmdZ));
 
     manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     const auto after = ModuleLibraryHelpPopup::shortcutLines(&manager);
 
-    EXPECT_TRUE(after[undoIndex].contains(cmdU));
-    EXPECT_FALSE(after[undoIndex].contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(after[undoIndex], cmdU));
+    EXPECT_FALSE(synth::test::has(after[undoIndex], cmdZ));
 }
 
 TEST(ModuleLibraryHelpContent, ClearingAShortcutDropsItsKeyButKeepsTheLabel) {
@@ -569,4 +572,51 @@ TEST(ModuleLibraryHelpContent, ClearingAShortcutDropsItsKeyButKeepsTheLabel) {
         }
     }
     EXPECT_TRUE(found);
+}
+
+// A section's body fades and its height follows the fade, so the sections below slide and the popup resizes in
+// steps instead of jumping.
+TEST(ModuleLibraryHelpPopupSeam, CollapsingASectionFadesItsBodyAndTweensTheHeight) {
+    ModuleLibraryHelpPopup popup;
+    const int fullBody = popup.getSectionBodyHeightForTest(0);
+    ASSERT_GT(fullBody, 0);
+    // The popup is capped in height, so fold the other sections away (off screen: at once) to see section 0 move it.
+    popup.toggleSectionForTest(1);
+    popup.toggleSectionForTest(2);
+    const int fullPopup = popup.getHeight();
+
+    FadeAnimateGuard animate;
+    popup.toggleSectionForTest(0);
+    EXPECT_FALSE(popup.isSectionExpandedForTest(0)) << "the logical state flips at once";
+    EXPECT_TRUE(popup.isSectionBodyVisibleForTest(0)) << "the words stay until the fade has ended";
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(popup.getSectionBodyHeightForTest(0), 0);
+    EXPECT_LT(popup.getSectionBodyHeightForTest(0), fullBody);
+    EXPECT_LT(popup.getHeight(), fullPopup);
+    const int mid = popup.getHeight();
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(popup.isSectionBodyVisibleForTest(0));
+    EXPECT_EQ(popup.getSectionBodyHeightForTest(0), 0);
+    EXPECT_LT(popup.getHeight(), mid);
+
+    popup.toggleSectionForTest(0); // and back out
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_GT(popup.getSectionBodyHeightForTest(0), 0);
+    EXPECT_LT(popup.getSectionBodyHeightForTest(0), fullBody);
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(popup.getSectionBodyHeightForTest(0), fullBody);
+    EXPECT_EQ(popup.getHeight(), fullPopup);
+}
+
+TEST(ModuleLibraryHelpPopupSeam, CollapsingASectionOffScreenLandsAtOnce) {
+    ModuleLibraryHelpPopup popup;
+    const int fullPopup = popup.getHeight();
+    for (int i = 0; i < ModuleLibraryHelpPopup::kSectionCount; ++i)
+        popup.toggleSectionForTest(i);
+    EXPECT_FALSE(popup.isSectionBodyVisibleForTest(1));
+    EXPECT_EQ(popup.getSectionBodyHeightForTest(1), 0);
+    EXPECT_LT(popup.getHeight(), fullPopup);
+    for (int i = 0; i < ModuleLibraryHelpPopup::kSectionCount; ++i)
+        popup.toggleSectionForTest(i);
+    EXPECT_EQ(popup.getHeight(), fullPopup);
 }

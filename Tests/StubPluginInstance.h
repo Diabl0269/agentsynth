@@ -86,7 +86,11 @@ public:
         ++setValueCalls;
     }
     float getDefaultValue() const override { return defaultValue_; }
-    juce::String getName(int) const override { return name_; }
+    juce::String getName(int) const override {
+        ++nameReads;
+        return name_;
+    }
+    void setNameForTest(const juce::String& name) { name_ = name; }
     juce::String getLabel() const override { return {}; }
     float getValueForText(const juce::String& text) const override {
         const int index = traits_.choices.indexOf(text);
@@ -97,6 +101,8 @@ public:
 
     /** How many times setValue() ran: a widget-driven write must cost exactly one, never an echo. */
     std::atomic<int> setValueCalls{0};
+    /** How many times getName() ran: crossing a real plugin's wrapper is what a long list must not repeat. */
+    mutable int nameReads = 0;
 
 private:
     juce::String paramId_;
@@ -149,6 +155,14 @@ struct StubParamSpec {
     bool isBypass = false; // the instance reports this parameter from getBypassParameter()
 };
 
+/** Extra enabled aux OUTPUT buses after the main pair (a multi-out sampler like Maschine 2). `droppable`: the
+ *  stub also accepts the layout with those aux buses disabled; otherwise only its exact default layout. */
+struct StubAuxOutputs {
+    int count = 0;
+    int channelsEach = 2;
+    bool droppable = true;
+};
+
 /** A juce::AudioPluginInstance that marks the audio it touches and round-trips a state blob.
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
@@ -163,6 +177,18 @@ struct StubParamSpec {
  *    an instance. */
 class StubPluginInstance : public juce::AudioPluginInstance {
 public:
+    static BusesProperties makeBuses(int numInputs, int numOutputs, const StubAuxOutputs& aux) {
+        auto props =
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
+                .withOutput("Output", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numOutputs)),
+                            numOutputs > 0);
+        for (int i = 0; i < aux.count; ++i)
+            props = props.withOutput("Aux " + juce::String(i + 1),
+                                     juce::AudioChannelSet::discreteChannels(aux.channelsEach), true);
+        return props;
+    }
+
     /** The gain the stub applies to every output channel. Distinctive on purpose. */
     static constexpr float kGainMarker = 0.5f;
 
@@ -185,20 +211,24 @@ public:
     // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
     // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
     //
+    // flexibleLayout: false (the default) makes the stub accept ONLY the bus layout it was built with, like a
+    // plugin that is genuinely mono-only / fixed-width; true makes it accept any layout, like the many real
+    // plugins whose default main bus is mono but which also run in stereo (HostedPluginModule's stereo
+    // negotiation asks such a plugin for a stereo main output).
+    //
     // initialLatency is deliberately LAST: every existing call site names its arguments
     // positionally, so a new parameter anywhere else would have to touch all of them.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
                        juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false,
-                       int initialLatency = 0)
-        : juce::AudioPluginInstance(
-              BusesProperties()
-                  .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
-                  .withOutput("Output", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numOutputs)),
-                              numOutputs > 0))
+                       int initialLatency = 0, bool flexibleLayout = false, StubAuxOutputs aux = {})
+        : juce::AudioPluginInstance(makeBuses(numInputs, numOutputs, aux))
         , name_(std::move(pluginName))
         , format_(std::move(format))
         , uid_(uid)
-        , reportsEditor_(reportsEditor) {
+        , reportsEditor_(reportsEditor)
+        , flexibleLayout_(flexibleLayout)
+        , auxDroppable_(aux.droppable) {
+        defaultLayout_ = getBusesLayout();
         // A stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
         // addHostedParameter (not addParameter, which AudioPluginInstance hides private — every
         // hosted parameter must be a HostedAudioProcessorParameter) takes ownership, exactly like
@@ -243,6 +273,20 @@ public:
     }
 
     const juce::String getName() const override { return name_; }
+
+    bool isBusesLayoutSupported(const BusesLayout& layout) const override {
+        if (flexibleLayout_ || layout == defaultLayout_)
+            return true;
+        // Droppable aux buses: the default layout with any of the aux OUTPUT buses (index 1+) disabled.
+        if (!auxDroppable_ || layout.inputBuses != defaultLayout_.inputBuses ||
+            layout.outputBuses.size() != defaultLayout_.outputBuses.size())
+            return false;
+        for (int i = 0; i < layout.outputBuses.size(); ++i)
+            if (layout.outputBuses[i] != defaultLayout_.outputBuses[i] &&
+                !(i > 0 && layout.outputBuses[i].isDisabled()))
+                return false;
+        return true;
+    }
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParameter_; }
 
@@ -349,6 +393,9 @@ private:
     juce::String format_;
     int uid_ = 0;
     bool reportsEditor_ = false;
+    bool flexibleLayout_ = false;
+    bool auxDroppable_ = false;
+    BusesLayout defaultLayout_;
 
     // The honest-latency delay line — see the class comment. One slot per reported sample, per
     // channel; the first getLatencySamples() samples out of a freshly sized line are silence,

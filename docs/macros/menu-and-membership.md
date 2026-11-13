@@ -144,6 +144,18 @@ one shot. Three members, each scoped to exactly one direction of one operation, 
   BOTH halves from the start. Audio still reached its destination either way (the stranded port
   was a live pass-through), so this was graph clutter and a misleading picture, not broken sound.
 
+  A modulation chain (LFO to attenuverter to knob) re-routes through macro ports on every drag in or out,
+  not just the first: in `MacroGroupControllerPortSplice.cpp` a hidden attenuverter stands for the module on
+  its other channel-0 edge (`throughAttenuverter`) in `macroPortsThatBecomeInteriorOnAdd`,
+  `macroPortsThatBecomeObsoleteOnRemove` and the edge filters of both crossing-plan builders. A modulation
+  re-routed by a drag out takes the grouping shape LFO to attenuverter to inlet to knob.
+
+  Every node and cable change the splicing makes is issued with `UpdateKind::none` inside a
+  `synth::GraphRebuildScope`, and each membership change (`applyMacroMembershipChange`,
+  `addSelectionToMacro`, `removeSelectionFromMacro`, grouping and ungrouping) opens one around all of it, so
+  the audio graph is rebuilt once per crossing, not once per re-routed cable
+  ([graph-queries.md](../architecture/graph-queries.md#one-audio-graph-rebuild-per-edit)).
+
 `buildMacroPortCrossingPlan`'s own `memberUids.size() < 2` early return was removed: the incremental
 callers legitimately need a crossing plan for a one-member "inside" set — removing one of a macro's
 two ordinary members leaves exactly one remaining member whose newly external cable still needs a port
@@ -229,6 +241,7 @@ and never touches Ctrl):
 | Platform | Gesture | `reparentArmed` | Result |
 |---|---|---|---|
 | macOS | Cmd-drag | true | reparent (join or leave) only |
+| macOS | plain drag of a single module (the drag-without-Cmd preference, on by default) | true | reparent (join or leave) only |
 | macOS | Ctrl-drag | false — `isCommandDown()` is false, distinct keys | insert-between only, unchanged |
 | Windows and Linux | Ctrl-drag, which IS Cmd-drag (`commandModifier` is `ctrlModifier`) | true | **both**: insert-between AND reparent, if the drag crosses a hull |
 
@@ -240,37 +253,77 @@ and never touches Ctrl):
 at `mouseDown`.** Sampling only at press time meant the user had to already be holding the modifier
 before grabbing the module, with no way to discover the gesture since the candidate highlight never
 lit up. `mouseDrag` re-reads the live modifier each tick, gated on `!isSelectionDragActive()`: a
-multi-selection group drag keeps whatever `mouseDown` latched for its whole gesture — reparenting one
-member out of a group drag is ambiguous, in both which macro and which dragged module, and stays out
-of scope — but an ordinary single-module drag can have the modifier pressed or released mid-gesture
+multi-selection group drag keeps whatever `mouseDown` latched for its whole gesture (it changes membership
+as a group, on the drop: [Dragging a group into or out of a macro](#dragging-a-group-into-or-out-of-a-macro))
+— but an ordinary single-module drag can have the modifier pressed or released mid-gesture
 and see the candidate highlight arm or clear immediately.
 
-**The painted hull for the macro a drag is pulling a member OUT of shrinks away from that member
-immediately, not only once LEAVE actually arms.** `macroHullBounds()` is a live union, so painting it
-directly for the module's own about-to-be-left macro made the outline chase the module as it was
-dragged out — pulling a member toward the edge of a two-member macro looked like it was growing the
-hull to stay around it, making "remove from macro" look impossible. `GraphEditor` tracks
-`macroDragDraggedNodeId_`, set and cleared by the exact same
-`updateMacroDragCandidate`/`clearMacroDragCandidate` calls as the two candidate ids (one lifetime,
-not three) and set FIRST, unconditionally, before the candidate itself is computed — so the shrink
-starts on the very first tick, before any LEAVE candidate has armed.
-`GraphEditor::paintedMacroHullBounds(macroId)` is what `paintExpandedMacroHulls` calls instead of
-`macroHullBounds` directly: it returns `macroHullBoundsExcluding` for the macro the dragged module
-currently belongs to, and the ordinary live `macroHullBounds` for every other macro, including one
-the drag might JOIN (a transfer's target is by construction a DIFFERENT macro from the one being
-left, so the dragged module contributes nothing to its hull). **Hit-testing
-(`macroHullAt`, used by click-to-select and the hull's right-click menu) is unaffected and keeps
-using `macroHullBounds` — this substitution is paint-only.**
+**A macro keeps the border it had at press, and still counts the dragged member as inside, until
+that member's centre leaves that border.** `macroHullBounds()` is a live union of member cards, so a
+member on the macro's edge defines that edge: tested or painted live, the border would collapse on the
+first tick and the member would count as outside at once, and a member pulled toward the edge would
+make the hull chase it. At press (`ModuleComponent::mouseDown`, armed or not, since Cmd can arm the
+drag mid-gesture) `GraphEditor::beginMacroDragFreeze`
+snapshots the live hull, dragged card included, of the member's own macro and every ancestor into
+`MacroGroupController` (`freezeHullsForDrag`); `clearMacroDragCandidate` drops it. While it is held,
+`macroDragJoinOrLeaveTarget` tests the LEAVE against the frozen border (falling back to
+`macroHullBoundsExcluding` when no drag holds one, e.g. a plain query). Membership changes
+[live, the moment the centre crosses](#live-membership-during-the-drag), and the macro just joined is frozen
+again so the module stays a member until its centre leaves that border.
+
+`GraphEditor::paintedMacroHullBounds(macroId)` is the one painted border: the frozen rect for the
+member's own macro and ancestors while `macroDragLeaveId_` is empty (staying), `macroHullBoundsExcluding`
+once a LEAVE is armed (the hull lets go of the member), and the ordinary live hull for every other macro,
+including one the drag might JOIN (its hull holds none of the dragged module). The dashed outline, the
+input/output strips and their '+'/'-' footers (`paintMacroPortStrips`) and, through
+`MacroGroupController::setPaintedHullProvider`, the name chip, the collapse button and the hull hit tests
+(`macroHullAt`, `macroHullPortButtonAt`) all read it, so none of them stretches to the dragged card. Port
+widgets follow the painted border: while it glides (see [Macro borders glide](#macro-borders-glide)) the
+glide driver re-docks them every frame.
 
 **The Windows and Linux arbitration happens at `mouseUp`, and only decides WHICH of the two gestures
 a reparent-armed drag ends up as, never WHETHER one can fire** — that is `reparentArmed`'s job,
-decided at press. If the last candidate `mouseDrag` computed is non-empty, `mouseUp` reparents;
+decided at press. A crossing already applied live is not applied again. If the last candidate `mouseDrag`
+computed is non-empty (a group drag, or a leave that would dissolve the macro, which wait for the drop),
+or the module already moved live, `mouseUp` reparents;
 otherwise it falls through to the plain finalize path, which carries Ctrl's own insert-between
 behaviour (`SmartConnectionEngine` samples `isInsertModifierDown()` live, from inside
 `finalizeModuleDrag`). Because Windows and Linux cannot express "Ctrl but not Cmd" at all, a
 Ctrl-drag there that crosses a cable AND a hull in the same gesture performs BOTH. That is a genuine
 platform limitation, not a bug — there is no way to offer the two gestures as separately addressable
 without a second, unrelated modifier.
+
+### Live membership during the drag
+
+**The module joins or leaves the moment its centre crosses the border, not on release.** When
+`updateMacroDragCandidate` finds a crossing, `canApplyMembershipLive` / `applyMembershipLive`
+(`GraphEditorDragDrop.cpp`) run the same incremental add and remove as the drop path, so the cables
+re-route through (or away from) the macro's ports during the drag and nothing moves on release. The
+macro just joined is re-frozen (its border held where it is), so the module stays a member until its
+centre leaves that border — the same hysteresis as the press-time freeze. Two cases still wait for the
+drop: a group (multi-selection) drag ([its own path](#dragging-a-group-into-or-out-of-a-macro)), and a leave when the module is the macro's last ordinary member
+(leaving would dissolve the macro). Crossing back and forth any number of times is still ONE undo step
+back to the press state: the drag keeps the macros as they were at press (`macrosBeforeLiveDrag_`) and
+passes them as `macrosBeforeOverride` to `AppUndoManager::recordGraphAndMacroChange`, next to the
+mousedown graph capture described below.
+
+Other live-drag rules: `hasMacroDragCandidate()` is also true while the module sits somewhere other
+than at press, and `getMacroDragLiveOwnerId()` names the macro it was moved into, whose hull stays
+emphasised until the drop. If the drag stops being a reparent drag mid-gesture (Cmd released with the
+drag-without-Cmd preference off), `revertLiveMembership` puts the crossing back. A drag cancelled before
+the drop still records its change (`recordUnfinishedLiveMembershipChange`). On drop, the joined macro
+makes room for its neighbours at the module's final spot (`makeRoomFor`), and the module flashes only if
+no crossing slide is still running.
+
+### Macro borders glide
+
+A macro's border glides to its new bounds instead of snapping (220 ms, `easeOutCubic`). `MacroHullGlide`
+(`Source/UI/Graph/MacroHullGlide/`) is pure state; `GraphEditor::paintedMacroHullBounds` applies it on top
+of `macroHullTargetBounds` (the former body of `paintedMacroHullBounds`), so the dashed outline, the port
+strips, the chip and buttons and the docked port widgets all glide together, the driver re-docking the port
+widgets each frame. It is armed at a live membership change, at a candidate change, and when a drag ends
+and the frozen border is released. Each edge is an offset from the live border, so a border that keeps
+moving still lands on it.
 
 **One undo step, and it must reuse the mousedown-time graph capture.**
 `GraphEditor::finalizeMacroMembershipDrag` is modelled on `finalizeMacroCardDrag`: one lambda runs the
@@ -311,10 +364,135 @@ A crossing drag reuses the incremental membership path wholesale
 the same auto-port creation and splice-out-when-interior behaviour as the menu-driven add and remove,
 with no new port logic of its own.
 
+## Grouping rules
+
+Right-click "Create Macro from N Modules" (the canvas menu and a module's own menu), Cmd+G and "Add
+Selection to Macro" all read the selection the same way, through `macro_units::resolveUnits`
+(`Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h`). The selection resolves into **units**:
+
+- a **whole macro**: every module in it, nested ones included, is selected. The outermost such macro
+  is the unit, so selecting a parent's card is one unit, not one per level. Port nodes never decide
+  wholeness (they are jacks on the hull, not modules a marquee picks up); `selectMacro` does select
+  them, and they travel with their macro;
+- a **loose node**: anything else, tagged with the macro that directly contains it, or top level.
+
+Each unit has a **container**: the macro that directly contains it (for a whole macro, its parent).
+`MacroGroupController::groupSelectionIntoMacro` groups when there are **at least two units that share
+one container**, and the new macro's `parentId` is that container. The new card is closed and the modules fold into it with motion, like a collapse ([Macro fold](../layout/animation.md#macro-fold)). So one rule covers every case:
+
+- two loose modules at top level: a top-level macro, as always;
+- two whole macros, or a whole macro and a loose module beside it: a parent macro around them (the
+  macros become its children, the loose modules its direct members);
+- two loose modules inside an open macro: a macro nested in that macro.
+
+A selected port node whose macro is not whole is dropped, never grouped. Loose nodes leave their
+container's `members` as they join the new macro, because a uuid is a direct member of exactly one
+macro (`MacroSet::fromVar` rejects a save where one is claimed twice). The auto-port crossing plan runs
+over the new macro's whole inside set (each child's modules and ports too), so a cable leaving a
+child's outlet port gets a port on the new macro as well. The whole change is one undo step, and the
+new macro is selected, collapsed, with its card at the units' top-left.
+
+**Refusals** show a status message and change nothing: fewer than two units ("Select at least two
+modules or macros to group into a macro."), or units in different containers ("Can't group: the
+selection spans different macros. ..."). A selection that reaches into a closed card can only select
+the whole card, so a refusal never depends on what is hidden.
+
+**Add Selection to Macro** uses the same units against the target macro: a loose module beside the
+macro (in the macro's own container) joins it directly, a whole macro beside it nests under it, and
+anything already inside the target is skipped. A module in no macro is accepted at any depth, because
+the Cmd-drag finalize and a library drop hand over a module they have just taken out of (or never put
+in) a macro. Anything at another level refuses the whole add.
+
+"Make Channel" does **not** nest: a chain with a module already in a macro still refuses. A channel's
+strip feeds Master directly and that edge must never be a port, so a channel macro inside another
+macro would force exactly that port on the outer one.
+
+### Cmd+G
+
+Cmd+G (`MacroGroupController::groupOrToggleSelectionMacros`) picks one verb from the units:
+
+| Selection | Cmd+G |
+|---|---|
+| Only whole macros (one or several) | Toggles them collapsed/expanded, as always |
+| Two or more units under one container | Groups them (the rules above) |
+| A single module in no macro | Grouping refuses with its status message |
+| Anything else (a single module inside an open macro, or units spread across containers) | Toggles the touched macros; modules outside a macro are left alone, with a status message |
+
+Two changes from the flat model: two loose modules inside an open macro now **group** (they used to
+collapse the macro), and a whole macro plus a loose module beside it now **nests** (it used to toggle
+the macro). To collapse an open macro with Cmd+G, select it whole (its chip, or every module in it);
+Cmd+Alt+G still always toggles.
+
+### Fold and Pack Macros (Cmd+Ctrl+G)
+
+"Fold and Pack Macros" (`MacroGroupController::foldAndPackSelectionMacros`, default Cmd+Ctrl+G on macOS and
+Ctrl+Alt+Shift+G elsewhere, where Cmd and Ctrl are the same key; Edit menu, next to Collapse / Expand Macro; rebindable
+in the Keyboard Shortcuts list) acts on every macro the selection touches (Cmd+A selects them all; Shift-click a folded card or an open macro's name chip adds or removes one macro, and a Shift marquee across folded cards selects them, see [selection](../layout/selection.md)):
+
+- **Any of them open:** every open one folds with the usual [fold motion](../layout/animation.md#macro-fold). With the
+  preference **Collapsing also packs macros together** on (Preferences > Graph, on by default, key
+  `packMacrosOnCollapse`), the folded cards then sit in a grid: rows of up to four, 24 px apart, in the order the cards
+  stood (top to bottom, then left to right), starting at the top-left corner of the first of them
+  (`macro_pack::packedPositions`, `MacroPackLayout.h`, a pure function). Loose modules and everything else stay put and
+  the space left behind closes up when the second preference, **Packing also tidies the rest of the canvas** (on by
+  default, key `tidyCanvasOnPack`, only applies while packing is on), runs the existing Auto Arrange
+  (`GraphEditor::autoArrange(false)`, the toolbar's `computeHierarchicalArrange`) over the whole canvas right after the
+  pack, in the same undo step and glide; turn it off and loose modules and everything else stay put, leaving the space
+  empty. A nested macro is folded but not moved: its parent holds it. A card that was
+  already folded joins the grid.
+- **Preference off:** only the folds, in place. Macros keep their places: opening a stack of folded macros slides
+  each one aside only where an open border grows into it, and folding them again brings every one home, whatever
+  order they opened and fold in (a fold or an open is not a move by the user, see
+  [Shrinking](../layout/layout.md#making-room-when-something-grows)).
+- **All of them already folded:** they all expand where their cards sit, making room for neighbours as an expand
+  always does. Nothing is unpacked, and expanding one packed card later opens it where its card sits.
+
+The folds, the packing moves (`moveUnitBy`, the mover make-room uses) and the undo record are one step: Cmd+Z puts
+every module and every fold state back. The model is final at once, so the folds fly straight to the packed card
+positions and a card that was already folded glides there (160 ms): no card jumps. The plain Collapse / Expand Macro
+command never packs.
+
+## Nested macros
+
+A macro can sit inside another (`Macro::parentId`); [grouping](#grouping-rules) creates one. The
+editing commands below handle nesting. A patch with no nesting behaves exactly as before.
+
+- **Ungroup on a parent** splices out only the parent's own port nodes, then promotes its direct
+  members and its child macros one level up (to the grandparent, or top level). The child keeps its own
+  ports and members. Selecting a whole parent (every nested module) ungroups only the parent; selecting
+  just a child's module ungroups the child, whose members then move into the parent. Everything the
+  ungrouped macro held is re-selected.
+- **Delete Macro and Members** on a track's channel macro deletes the track too, after a confirmation: see
+  [tracks](../timeline/tracks.md#row-context-menu).
+- **Delete Macro and Members** on a parent deletes every descendant macro and every nested module, as
+  one undo step.
+- **Collapse toggle** (Cmd+G and the menu): a selected module hidden inside a collapsed macro resolves to
+  the outermost collapsed macro above it, so the toggle expands the card the user sees, not an inner
+  macro they cannot. Collapsing a parent never changes its children's own collapsed flags: an open child folds into
+  the parent's card first, and expanding the parent brings each child back open or folded as it was
+  ([Macro fold](../layout/animation.md#macro-fold)). The toggle follows the same rule: when it folds a selection
+  that touches a macro and macros nested in it, only the outermost ones fold, so the next toggle opens the whole
+  nest with each inner macro open or folded as it was before. The flag lives on each macro (saved with the
+  project), so nothing extra is remembered.
+- **Nested folds share one duration:** a nest of N open levels folds or unfolds in the time of one flat macro
+  (every level runs on a clock 1/N as long, `Timeline::scale`), not one macro's time per level.
+- **Remove from Macro** moves a module up ONE level, into its macro's parent; from a top-level macro it
+  leaves entirely, as before. A macro left with no direct members and no children dissolves.
+- **Cmd drag** (see [the hull border section](#cmd-drag-across-a-hull-border)): the join candidate is the
+  deepest expanded hull under the dragged module's centre, skipping the macro being left; each ancestor
+  of that macro is tested against its border frozen at press (`macroHullBoundsExcluding` without one), so
+  a parent's hull no longer follows the module (its live union would otherwise contain it forever) and
+  the painted hull of every ancestor lets go of it once a leave is armed. Dragging a child's member into the parent's own space is a transfer (leave the
+  child, join the parent); dragging it out of the parent as well leaves every level in one gesture;
+  dragging a parent's member into a child's hull joins the child. The finalize walks the module up one
+  level at a time, each step planning its own port splices, all in one undo step.
+- **Auto-deleting a one-sided port** dissolves its macro only when it has no direct members and no children.
+
 ## Cable crawl and module flash (FRO41)
 
 **A drag that actually crosses a hull (a real join, leave, or transfer — never a plain move) also
-gets a short, time-bounded animation once `finalizeMacroMembershipDrag` lands**: the module itself
+gets a short, time-bounded animation, started when the crossing is applied (live, mid-drag) or when
+`finalizeMacroMembershipDrag` lands**: the module itself
 gets a fading ring on top of its card (`GraphEditor::GraphContentComponent::paintOverChildren`), and
 any cable that just changed which node it lands on — because the port splicing above auto-created or
 removed a macro port for it — slides from its old anchor to its new one instead of jumping there.
@@ -335,10 +513,19 @@ into one straight cable that never had a single well-defined "old anchor" — bo
 already sat where the new cable's endpoints are; only the bend at the port disappeared. Scoping to
 the dragged module's own cables sidesteps that case rather than mismatching it.
 
+**A cable dropped across a hull slides in from the drop point.** Releasing a cable (on a jack or a knob) that
+crosses an expanded macro's boundary mints a port, and the new cables have no earlier self to match.
+`endConnectionDrag` snapshots the visible cables before the mint and hands both snapshots plus the release point to
+`armMacroPortSlide`, which calls `MacroCrossingAnimator::armSlideFrom`: every cable that is new and ends on a macro
+port has that port-side end emerge from the release point and settle on the port (the other end stays put, there is
+no module flash). A same-level drop mints no port and arms nothing. The driver is the same one, started by
+`startMacroCrossingDriver`.
+
 **`GraphEditor::buildVisibleCables()` stays a pure memo of live graph/component state** — the tween
 never teaches it anything about macros. `MacroCrossingAnimator::applyTo()` runs as the very last step
-of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), overwriting a matched
-cable's endpoints with the current lerp; once the tween finishes, `applyTo()` is a no-op and the
+of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), offsetting a matched
+cable's endpoints from their LIVE anchors by `(from - to) * (1 - progress)` rather than lerping between
+fixed points, so a slide started mid-drag stays attached to the moving card; once the tween finishes, `applyTo()` is a no-op and the
 memo's own freshly-computed anchor shows through unchanged, which is already the correct final
 position.
 
@@ -350,10 +537,12 @@ uses these to assert the animation armed on finalize, that a re-anchored cable's
 strictly between its old and new anchor mid-tween, and that finishing lands it exactly on the new one
 with the tween state cleared.
 
-There is no reduced-motion / "disable animations" setting anywhere in this codebase today, so this
-animation — like every other `AnimationDriver` use — is unconditional; a future reduced-motion
-preference would gate `armMacroCrossingAnimation`'s call into `macroCrossingDriverAnim_.start()`
-alongside every other animator, not add a special case here.
+The only reduced-motion check in the codebase is `synth::ui::prefersReducedMotion()` (the operating
+system's Reduce motion setting), which today only the popup windows obey
+([Popup windows](../layout/animation.md#popup-windows)). This animation, like every other
+`AnimationDriver` use outside them, is unconditional; honouring the setting here would gate
+`armMacroCrossingAnimation`'s call into `macroCrossingDriverAnim_.start()` alongside every other
+animator, not add a special case.
 
 ## Dragging without Cmd (the preference)
 
@@ -370,11 +559,20 @@ live re-derivation in `mouseDrag`. The preference adds two exclusions, both corr
   and skip `finalizeSelectionDrag`, leaving the group's drag state armed and the other members
   unresolved. The preference arms reparent only when the selection is just the dragged module (Cmd
   cannot hit this: a Cmd press collapses the selection onto the module first), and `mouseDrag` keeps
-  its `!isSelectionDragActive()` guard, so a group drag never reparents and always finalizes as a
-  group.
+  its `!isSelectionDragActive()` guard, so a group drag never reparents one member and always finalizes as a
+  group (the group then joins or leaves as a whole on the drop, see below).
 - **Never with Ctrl held (macOS).** A macOS Ctrl-drag is the insert-between gesture and stays that
   alone; the preference does not arm it. (On Windows and Linux Ctrl IS Cmd, so the platform matrix
   above applies unchanged.)
+
+**Landing inside the hull.** A module that will join a hull is not blocked by it: `resolvePlacement` leaves the
+join candidate's hull (and its ancestors') out of the placement blockers, so it lands where it was released, inside
+the hull, instead of being pushed clear. A collapsed card is different: it is a solid obstacle and dropping on it
+never joins. A library drag sets the join candidate BEFORE placing its ghost, for the same reason. A canvas card's
+ghost is placed before the tick's live crossing (the crossing reads the card's bounds), so a tick that joins, leaves or
+transfers places it again right after (`GraphDragDropController::replaceGhostAfterCrossing`, which moves the ghost only
+and never re-samples the insert gap): the outline is never one frame behind the macros.
+See [placement blockers](../layout/layout.md#making-room-when-something-grows).
 
 **Why you may want to turn it off.** With a small macro the "excluding hull" a member is tested
 against is tiny (for two members it is just the other member's footprint), so plainly rearranging a
@@ -384,24 +582,122 @@ that gets in the way.
 ## Dropping a library module into a macro
 
 A module dragged from the library and dropped with its ghost's CENTRE over an expanded macro's hull
-joins that macro, when Cmd is held or the preference above is on
-(`GraphDragDropController::itemDropped`). Details:
+joins that macro (`GraphDragDropController::itemDropped`). No modifier is needed and the preference above is
+ignored: that preference is about moving existing cards out of or between macros, and a library drop has no such
+ambiguity. With nested macros the innermost open macro under the pointer wins; a collapsed macro is never a target
+(its interior is hidden). Details:
 
 - **Modules only.** Snippet and hosted-plugin payloads drop exactly as before and never join.
-- **Hull tested at the ghost's centre before anti-overlap** (`macroHullAt`, so the smallest expanded
-  hull wins) — which is the cursor, since the ghost is centred on it. Not at the card's final landing
-  slot: a hull is mostly member cards, so the free slot the card is pushed to is usually outside it,
-  and testing that would fail exactly when the macro is tight. The card lands at the free slot and,
-  as a member, pulls the live hull out to include it. Dropping outside every hull is an ordinary
-  drop, modifier or not.
+- **Hull tested at the ghost's centre** (`macroHullAt`, so the innermost expanded hull wins) — which is the
+  cursor, since the ghost is centred on it. Dropping outside every hull is an ordinary drop.
+- **Lands where it was dropped.** A joining card is NOT moved to the nearest free slot (an open hull is mostly
+  member cards, so that slot was often far away, even off screen). The drag ghost sits at the snapped pointer spot
+  and so does the card; the members it overlaps are pushed aside by `MacroGroupController::makeRoomFor` (inside the
+  same undo record, gliding like any push) and the hull grows around it. Other drops keep the nearest-free-slot
+  placement. If the landing spot is still off screen the view pans to it (an instant jump; there is no animated
+  pan helper yet).
 - **One undo step.** `GraphEditor::addModuleAtCanvasPosition` takes an optional macro id; with one it
   records through `recordGraphAndMacroChange` instead of `recordStructuralChange`, so node creation,
   its uuid, any smart connections and the membership (with its port splicing) are a single Cmd+Z.
 - **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
   puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
-- **One seam for the modifier.** `GraphEditor::isMacroJoinModifierDown()` (Cmd realtime state, or the
-  preference) is the only place the drop side reads the modifier; tests drive the Cmd half through
-  `setMacroJoinCommandOverrideForTests`.
+
+## Dropping a macro into another, or out of its parent
+
+A whole macro dragged across a border changes its parent the way a module does across a hull border
+([Cmd drag across a hull border](#cmd-drag-across-a-hull-border)): released on an open macro it nests there (join),
+dragged out past its parent's border it leaves the parent (leave), and dragged out of one onto another it moves across
+(transfer). Both ways of dragging a macro do all three: a folded card dragged by its body, and an open macro dragged by
+its name chip (or by its empty space, with the "move macro on hull drag" preference).
+
+- **Where the drag point is.** The card's centre (folded card) or the pointer (name chip).
+- **Leave.** `MacroGroupController::macroUnitDragTargets` arms a leave when the drag point is outside the parent's
+  border. That border is the one frozen at the press (`beginMacroUnitDrag` freezes the hull of every ancestor), so the
+  parent does not follow the macro as it is dragged away: the live hull is a union that includes the dragged child,
+  and reading it would never let the child out. A parent with nothing else inside (no other member, no other child) is
+  carried rather than left, as a module's sole-member hull is.
+- **Join target.** The innermost open border under the drag point, from `macroNestTargetAt` (no leave) or a
+  `deepestMacroAt` search that reads ancestors through their frozen borders (leave). A folded macro is never a target
+  (its inside is hidden). Left out: the dragged macro itself and every macro inside it, so a macro can never be dropped
+  into itself or its own descendant (`MacroSet::setParent` would refuse the cycle anyway), and its own parent, which
+  is no change.
+- **Live outline and frozen border.** While the drag arms a target, `updateMacroNestCandidate` hands the join target
+  to `GraphEditor::setMacroDropCandidate` and keeps the leave target in `macroLeaveCandidate()`; both get the heavier
+  outline a module drag's targets get. Every ancestor's painted border stays at its press size for the whole drag
+  (`GraphEditor::macroHullTargetBounds` returns the frozen hull while `draggedMacroUnit()` is set) and glides to its
+  new size on the drop ([Macro borders glide](#macro-borders-glide)). The candidates clear on drop, on a press that
+  never moved, on Esc and in `cancelLiveDragGestures`.
+- **Walking out of several levels.** A drop outside the grandparent too leaves both, one level at a time
+  (`moveMacroOutOfParent`), until the macro reaches the container that holds the join target, or the top level. A drop
+  in the grandparent's own space leaves only the parent.
+- **Ports splice.** Each level the macro leaves runs the same plan a module leaving runs
+  (`buildMacroPortCrossingPlanForRemovedMembers`, then `spliceMacroPorts` and `spliceOutMacroPort` for ports that
+  now have nothing inside), with the macro's whole subtree as the leaving members: a cable from a member that stays to
+  one inside the macro gets a port on the parent's border, and a port the macro no longer needs is spliced out. A join
+  then calls `addSelectionToMacro(..., recordUndo=false)` per level, each step planning its own ports.
+- **Where it lands.** The target's border (and its ancestors') is left out of the placement blockers
+  (`placementBlockers(..., macroNestCandidate())`, in `finalizeMacroCardDrag` and `finalizeSelectionDrag`), so the
+  card or the open macro lands where it was released, then `makeRoomFor` pushes what the macro covers. A parent the
+  macro left gives back the room it took (`returnDisplacedNeighbours`).
+- **One undo step.** The drop's own record (`finalizeMacroCardDrag`, or the chip `mouseUp`, both consuming the
+  mousedown graph capture) runs `moveDraggedMacroToCandidate` after the positions are final. One Cmd+Z puts back the
+  position, the parent and every port.
+- **Esc.** Esc while a whole macro is dragged (`GraphEditor::cancelMacroUnitDrag`) puts the macro and everything that
+  moved with it back, drops the candidates and the mousedown capture, and records nothing. A module drag has no Esc
+  cancel.
+- **Folding.** The nested macro is an ordinary child: folding the new parent flies it in as one box and opening it
+  brings it back open or folded as it was ([Macro fold](../layout/animation.md#macro-fold)).
+- A channel macro nests like any other, as it does with Cmd+G.
+- **Several macros selected.** Pressing the card or chip of a macro that is selected together with other macros or
+  modules keeps the selection (`MacroGroupController::selectMacroForDrag`), so the drag moves all of it, every folded
+  card included, as one undo step. `beginMacroUnitDrag` arms no unit drag; the group's own drag
+  ([below](#dragging-a-group-into-or-out-of-a-macro)) holds the borders, outlines the target and joins or leaves on
+  the drop, which is `finalizeSelectionDrag`. Esc does not cancel it. A click that never moved selects just that macro.
+
+Tests, through the real card and canvas mouse events: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`
+(join), `MacroLeaveDragTests.cpp` (leave one and two levels, transfer, port splicing, Esc, the carried parent) and
+`MacroDragMatrixTests.cpp`, the drag matrix: module, folded card and open chip, each made to join, leave, transfer and
+stay, each one undo step, plus the multi-macro row (each unit dragged with a second macro, folded or open, selected:
+both move by the same delta in one step). A membership gesture added for one of these units and missing on another
+fails a row there.
+The in-app checks are `Tools/ui-verify/scenarios/macro-leave-drag.yaml` and `multi-macro-drag.yaml`.
+
+## Dragging a group into or out of a macro
+
+**Several selected cards dragged together join, nest in or leave macros as one, on the drop, in one undo step**, the
+way one card does. Two modules dropped on an open macro both join it; two macros (folded or open) both nest in it; a
+mix does both; a group dragged out of its macro's border onto the empty canvas leaves it. One Cmd+Z puts everything
+back. **No key is held:** a plain drag of a group joins or leaves on the drop, whatever Cmd and the "Drag modules into
+and out of macros without Cmd" preference say (`finalizeSelectionDrag` and `applyGroupDrop` read neither); Cmd and
+the preference decide only a single module's drag ([Dragging without Cmd](#dragging-without-cmd-the-preference)).
+
+- **Units.** At press (`GraphEditor::beginSelectionDrag`, more than one card moving) `MacroGroupController::
+  beginGroupDrag` resolves the moving nodes into units the way grouping does (`macro_units::unitsFor`: a whole macro,
+  or a loose module, each with the macro that directly holds it). A macro's own card or chip drag with only it
+  selected is a unit drag instead (`beginMacroUnitDrag` ends the group drag).
+- **Held borders.** The macro each unit sits in, and its ancestors, are live unions that would follow the group, so
+  their borders are held at press (`groupDragHeldHull`, painted through `macroHullTargetBounds`) until the drop, which
+  glides them to their new bounds.
+- **The anchor and the target.** Every pointer tick aims from the grabbed unit: the pressed module's centre
+  (`dragSelectionBy` with an initiator), the pressed folded card's centre (`dragMacroCardBy`) or the chip pointer.
+  `groupDropTargetAt` is the deepest open border under it, never a dragged macro or a macro inside one (no cycles), with
+  the held border for the group's own macros. The target is outlined with the join stroke when a unit would move into
+  it, and each macro a unit would walk out of with the leave stroke, so what the drag shows is what the drop does. A
+  keyboard nudge never aims, so it changes no membership.
+- **The drop** (`applyGroupDrop`, inside the selection drag's own undo record, after the rigid-body placement, which
+  treats the target as room to land in): each macro unit takes `moveMacroInto` (the unit drag's walk, out level by
+  level then down), each module walks out of every macro not on the target's chain (`removeSelectionFromMacro`), or
+  steps down out of its own macro's member list as a single drag does, and the modules then join the target in one
+  `addSelectionToMacro`, so a cable between two of them gets no port. Room is made (`makeRoomFor`) only once the whole
+  group is in: made per unit, the border one unit just grew would push the group's other units, still outside, off the
+  spot the placement gave them, and away from the landing ghost.
+
+Tests: `Tests/Macros/MacroContainer/MacroGroupDropTests.cpp`: every drag kind (single module, single folded card,
+single open macro, two modules, two macros, a module and a macro) dropped on an open macro ends inside it, outlined
+before the release, one undo step; a group dragged out leaves; a group never drops into a macro it carries; for every
+kind and a plain group move the ghost shown before the release is where the cards land (the
+[landing ghost](../layout/selection.md#group-drag-resolves-as-one-rigid-body)). In-app:
+`Tools/ui-verify/scenarios/group-drop-into-macro.yaml`.
 
 ## The expanded hull's collapse button
 

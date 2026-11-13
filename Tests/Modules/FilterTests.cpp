@@ -94,7 +94,7 @@ TEST_F(FilterTest, MultiParamModulation) {
 TEST_F(FilterTest, FilterTypeParameterExists) {
     auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
     ASSERT_NE(typeParam, nullptr);
-    EXPECT_EQ(typeParam->choices.size(), 7);
+    EXPECT_EQ(typeParam->choices.size(), 8); // the seven ladder/notch types, then Custom
 }
 
 TEST_F(FilterTest, AllFilterTypesProcessWithoutCrash) {
@@ -188,4 +188,29 @@ TEST_F(FilterTest, PolyMode_NoBleed) {
 
     // Voice 1 should remain silent (no bleed)
     EXPECT_NEAR(polyBuffer.getRMSLevel(1, 0, 512), 0.0f, 1e-6f);
+}
+
+// Regression test for FRO1171: a linear knob spent its first tenth of travel on 20 Hz to 2 kHz.
+TEST_F(FilterTest, CutoffKnobMovesEqualOctavesPerEqualTravel) {
+    auto* cutoff = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff"));
+    ASSERT_NE(cutoff, nullptr);
+    EXPECT_FLOAT_EQ(cutoff->convertFrom0to1(0.0f), 20.0f);
+    EXPECT_FLOAT_EQ(cutoff->convertFrom0to1(1.0f), 20000.0f);
+    const double octavesPerTenth = std::log2(1000.0) / 10.0;
+    for (int step = 0; step < 10; ++step) {
+        const double low = cutoff->convertFrom0to1((float)step / 10.0f);
+        const double high = cutoff->convertFrom0to1((float)(step + 1) / 10.0f);
+        EXPECT_NEAR(std::log2(high / low), octavesPerTenth, 0.01) << "step " << step;
+    }
+}
+
+TEST_F(FilterTest, CutoffHertzSurvivesTheKnobPositionRoundTrip) {
+    auto* cutoff = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff"));
+    ASSERT_NE(cutoff, nullptr);
+    EXPECT_FLOAT_EQ(cutoff->get(), 440.0f) << "the default stays where it was";
+    for (const float hz : {20.0f, 55.5f, 440.0f, 1234.0f, 8000.0f, 20000.0f}) {
+        *cutoff = hz;
+        EXPECT_NEAR(cutoff->get(), hz, 0.02f);
+        EXPECT_NEAR(cutoff->convertFrom0to1(cutoff->convertTo0to1(hz)), hz, 0.02f);
+    }
 }

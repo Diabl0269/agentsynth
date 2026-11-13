@@ -3,6 +3,7 @@
 // Covers ThemeManager, ThemeLoader, BuiltInThemes, AppLookAndFeel::applyTheme,
 // and the WCAG contrast requirement.  All 15 cases from spec section 9.
 
+#include "TestPaths.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
@@ -127,7 +128,7 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::ComboBox::arrowColourId), c.textMuted);
     EXPECT_EQ(lf.findColour(juce::ComboBox::buttonColourId), c.surfaceHi);
 
-    EXPECT_EQ(lf.findColour(juce::PopupMenu::backgroundColourId), c.surface);
+    EXPECT_EQ(lf.findColour(juce::PopupMenu::backgroundColourId), c.surface.withAlpha(0.99f));
     EXPECT_EQ(lf.findColour(juce::PopupMenu::textColourId), c.textPrimary);
     EXPECT_EQ(lf.findColour(juce::PopupMenu::highlightedTextColourId), c.textPrimary);
     // Highlighted bg = accent with alpha 0.25
@@ -153,6 +154,21 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabOutlineColourId), c.border);
     // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into Core;
     // ModuleComponent::applyKeyboardThemeColours themes the on-screen keyboard instead.
+}
+
+// Regression test for FRO792: the "Don't ask again" box in a confirm window was dark text on the stock dark alert
+// surface on every light theme. An alert window takes its surface, outline and text from the theme. (No real
+// AlertWindow here: it needs a native window the headless runner does not have.)
+TEST(ThemeLookAndFeelTest, AlertWindowColoursAndItsCheckboxTextReadOnEveryBuiltInTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        const auto surface = lf.findColour(juce::AlertWindow::backgroundColourId);
+        EXPECT_EQ(surface, theme.colors.surface) << theme.name;
+        EXPECT_EQ(lf.findColour(juce::AlertWindow::textColourId), theme.colors.textPrimary) << theme.name;
+        EXPECT_EQ(lf.findColour(juce::AlertWindow::outlineColourId), theme.colors.border) << theme.name;
+        EXPECT_GE(wcagContrast(lf.findColour(juce::ToggleButton::textColourId), surface), 4.5) << theme.name;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -664,11 +680,12 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     EXPECT_EQ(m.aiPanelWidth, 300);
     EXPECT_EQ(m.iconSize, 16);
     EXPECT_EQ(m.timelinePanelHeight, 220);
-    EXPECT_EQ(m.timelineTrackHeaderWidth, 190);
+    EXPECT_EQ(m.timelineTrackHeaderWidth, 200);
     EXPECT_EQ(m.timelineTransportBarHeight, 34);
     // 30, up from 24: the ruler strip tiles a bar/beat numbers row and a marker band, and 24 left
     // the marker flag too small to read (see docs/timeline/ruler.md#the-marker-band).
     EXPECT_EQ(m.timelineRulerHeight, 30);
+    EXPECT_EQ(m.timelineSectionStripHeight, 24) << "the Sections strip above the ruler";
     EXPECT_EQ(m.timelineTrackRowHeight, 56);
 }
 
@@ -694,6 +711,7 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
     EXPECT_FALSE(jsonStr.contains("timelineTrackHeaderWidth"));
     EXPECT_FALSE(jsonStr.contains("timelineTransportBarHeight"));
     EXPECT_FALSE(jsonStr.contains("timelineRulerHeight"));
+    EXPECT_FALSE(jsonStr.contains("timelineSectionStripHeight"));
     EXPECT_FALSE(jsonStr.contains("timelineTrackRowHeight"));
 }
 

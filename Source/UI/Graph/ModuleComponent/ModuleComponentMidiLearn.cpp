@@ -27,6 +27,8 @@
 
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/ModSlotHost.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -48,6 +50,47 @@ void ModuleComponent::MidiLearnableRegistry::add(juce::Component& component, juc
     if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(&component))
         e.baseTooltip = tooltipClient->getTooltip();
     entries_.push_back(std::move(e));
+}
+
+// A knob that re-binds (the Drum Kit's picked-pad knobs follow the pad) keeps one entry: on a new parameter its
+// mapping badge, automated marker and their tooltip lines start over, so the next tick shows the new parameter's own.
+// The control's current tooltip becomes the base either way, since its owner rewrites it on every bind.
+bool ModuleComponent::MidiLearnableRegistry::rebind(juce::Component& component, juce::RangedAudioParameter* param) {
+    if (param == nullptr)
+        return false;
+    for (auto& e : entries_) {
+        if (e.component != &component)
+            continue;
+        if (e.paramId != param->paramID) {
+            if (e.marker.isAutomated())
+                e.component->setDescription(e.descriptionBeforeAutomated);
+            e.param = param;
+            e.paramId = param->paramID;
+            e.mapped = false;
+            e.tooltip = {};
+            e.marker = {};
+            e.automatedName = {};
+            e.descriptionBeforeAutomated = {};
+        }
+        if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(&component))
+            e.baseTooltip = tooltipClient->getTooltip();
+        applyTooltip(e);
+        return false;
+    }
+    add(component, param);
+    return true;
+}
+
+// The control keeps showing its mapping on top of the new tooltip, the way it would have had the
+// tooltip been set before registration.
+void ModuleComponent::MidiLearnableRegistry::setBaseTooltip(const juce::Component& component,
+                                                            const juce::String& tooltip) {
+    for (auto& e : entries_) {
+        if (e.component != &component)
+            continue;
+        e.baseTooltip = tooltip;
+        applyTooltip(e);
+    }
 }
 
 // A hosted-plugin card's knob/toggle/choice control. `param` is the live instance
@@ -94,10 +137,7 @@ bool ModuleComponent::MidiLearnableRegistry::refreshBadges(
             continue;
         e.mapped = mapped;
         e.tooltip = tooltip;
-        if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(e.component)) {
-            tooltipClient->setTooltip(mapped ? (e.baseTooltip.isNotEmpty() ? e.baseTooltip + " - " + tooltip : tooltip)
-                                             : e.baseTooltip);
-        }
+        applyTooltip(e);
         changed = true;
     }
     return changed;
@@ -111,12 +151,32 @@ void ModuleComponent::registerMidiLearnable(juce::Component& control, juce::Rang
     midiLearnableRegistry_.add(control, param);
 }
 
+// The card hears the control's right-click from its first bind on, like a createControls() knob.
+void ModuleComponent::rebindMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param) {
+    if (midiLearnableRegistry_.rebind(control, param))
+        control.addMouseListener(this, false);
+    refreshMidiLearnBadges();
+    // A pad knob that now shows another pad takes its ring and mod dot along (padKnobForTarget answers per pad).
+    if (dynamic_cast<synth::ModSlotHost*>(module) != nullptr) {
+        syncModDotButtons();
+        repaint();
+    }
+}
+
 void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
                                                   const juce::String& paramId) {
     midiLearnableRegistry_.addHosted(control, param, paramId);
 }
 
 void ModuleComponent::clearHostedMidiLearnable() { midiLearnableRegistry_.clearHosted(); }
+
+// Test/inspection: every registered control's parameter id and hosted flag, in registration order.
+std::vector<ModuleComponent::MidiLearnableEntryForTest> ModuleComponent::midiLearnableEntriesForTest() const {
+    std::vector<MidiLearnableEntryForTest> out;
+    for (const auto& e : midiLearnableRegistry_.entries())
+        out.push_back({e.paramId, e.hosted});
+    return out;
+}
 
 // The pick-target overlay's view of this card: every registered control with its parameter,
 // so the overlay never needs to know what a card is. Hosted controls are included the same as
@@ -131,10 +191,16 @@ void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate
 // Menu
 // ============================================================================
 
+// A card-body control (a toggle, combo, switch or stepper) also gets the layout items.
 void ModuleComponent::showMidiLearnOnlyMenu(juce::RangedAudioParameter* param) {
     if (param == nullptr)
         return;
-    showMidiLearnOnlyMenu(param->paramID, param->getName(100));
+    juce::PopupMenu menu;
+    appendMidiLearnMenuItems(menu, param->paramID, param->getName(100));
+    synth::appendCardLayoutMenuItems(menu, owner, undoManager, nodeId, cardBody_.get(), param->paramID);
+    if (menu.getNumItems() == 0)
+        return;
+    showContextMenuHook_(menu);
 }
 
 // Hosted-plugin toggle/choice controls -- same menu, keyed on a plain paramId + display
@@ -233,7 +299,7 @@ void ModuleComponent::setMidiLearnArmedParam(const juce::String& paramId) {
             return;
         for (const auto& e : midiLearnableRegistry_.entries())
             if (e.param != nullptr && e.paramId == id) {
-                repaint(e.component->getBounds().expanded(2));
+                repaint(getLocalArea(e.component, e.component->getLocalBounds()).expanded(2));
                 return;
             }
     };
@@ -260,13 +326,13 @@ void ModuleComponent::refreshMidiLearnBadges() {
 }
 
 void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
 
     for (const auto& e : midiLearnableRegistry_.entries()) {
         if (e.mapped)
-            synth::ui::midilearn::paintMidiMappedBadge(g, e.component->getBounds(), badgeColour);
+            synth::ui::midilearn::paintMidiMappedBadge(g, getLocalArea(e.component, e.component->getLocalBounds()),
+                                                       badgeColour);
     }
 
     if (midiLearnArmedParamId_.isEmpty())
@@ -278,8 +344,8 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
         // Time-bounded overall by RemoteEngine's 10 s learn timeout (setMidiLearnArmedParam({})
         // on cancel/bind/timeout); repainted only by the existing gated 15 Hz timerCallback while
         // armed -- never a free-running animation (docs/control/midi-remote-ui.md#the-learn-interaction).
-        synth::ui::midilearn::paintMidiLearnArmedOutline(g, e.component->getBounds(), armedColour,
-                                                         midiLearnArmedSinceMs_);
+        synth::ui::midilearn::paintMidiLearnArmedOutline(g, getLocalArea(e.component, e.component->getLocalBounds()),
+                                                         armedColour, midiLearnArmedSinceMs_);
         break;
     }
 }

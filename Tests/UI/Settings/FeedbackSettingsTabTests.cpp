@@ -1,3 +1,4 @@
+#include "../../TestWait.h"
 #include "AI/AccountService.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
@@ -169,11 +170,11 @@ TEST_F(FeedbackSettingsTabTest, TypingTextEnablesSendButton) {
     tab.setFeedbackFileForTesting(tempFile);
 
     tab.getFeedbackEditorForTest().setText("something broke", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(tab.getSendButtonForTest().isEnabled());
 
     tab.getFeedbackEditorForTest().setText("", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(tab.getSendButtonForTest().isEnabled());
 }
 
@@ -182,7 +183,7 @@ TEST_F(FeedbackSettingsTabTest, WhitespaceOnlyTextDoesNotEnableSendButton) {
     tab.setFeedbackFileForTesting(tempFile);
 
     tab.getFeedbackEditorForTest().setText("   \n  ", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(tab.getSendButtonForTest().isEnabled());
 }
 
@@ -191,10 +192,10 @@ TEST_F(FeedbackSettingsTabTest, ClickingSendRecordsToStoreAndClearsEditor) {
     tab.setFeedbackFileForTesting(tempFile);
 
     tab.getFeedbackEditorForTest().setText("please add MIDI export", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     tab.getCategoryComboForTest().setSelectedId(2, juce::sendNotificationSync); // Feature Request
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::waitUntil([&] { return tab.getStatusTextForTest().isNotEmpty(); });
 
     EXPECT_TRUE(tab.getFeedbackEditorForTest().getText().isEmpty());
     EXPECT_FALSE(tab.getSendButtonForTest().isEnabled());
@@ -213,13 +214,13 @@ TEST_F(FeedbackSettingsTabTest, EditingAfterSendClearsStatusMessage) {
     tab.setFeedbackFileForTesting(tempFile);
 
     tab.getFeedbackEditorForTest().setText("first note", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::waitUntil([&] { return tab.getStatusTextForTest().isNotEmpty(); });
     ASSERT_TRUE(tab.getStatusTextForTest().isNotEmpty());
 
     tab.getFeedbackEditorForTest().setText("second note", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(tab.getStatusTextForTest().isEmpty());
 }
 
@@ -245,10 +246,9 @@ TEST_F(FeedbackSettingsTabTest, SignedInUserSyncsFeedbackToServer) {
     tab.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
 
     tab.getFeedbackEditorForTest().setText("please add MIDI export", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     tab.getCategoryComboForTest().setSelectedId(2, juce::sendNotificationSync); // Feature Request
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
         << "feedback POST never landed on the background thread";
@@ -290,9 +290,8 @@ TEST_F(FeedbackSettingsTabTest, SyncUsesLocalApiUrlOverrideWhenSet) {
     tab.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
 
     tab.getFeedbackEditorForTest().setText("local server test", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }));
     EXPECT_EQ(captured->url, juce::String("http://localhost:9999/v1/feedback"));
@@ -314,9 +313,8 @@ TEST_F(FeedbackSettingsTabTest, SignedOutStillSyncsFeedbackAnonymouslyViaDeviceI
     tab.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
 
     tab.getFeedbackEditorForTest().setText("crashes on launch", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
         << "feedback POST never landed on the background thread while signed out";

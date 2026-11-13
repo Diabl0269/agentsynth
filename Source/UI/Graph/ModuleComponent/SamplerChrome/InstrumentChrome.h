@@ -1,0 +1,72 @@
+#pragma once
+
+// What ModuleComponent asks of the chrome a card draws above its body when the module plays an Instrument (the
+// Sampler's SamplerChrome, the Drum Kit's DrumKitChrome). Message thread only for every member.
+
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+
+class AppUndoManager;
+
+namespace synth::ui {
+
+class CardKnobSlider;
+
+class InstrumentChrome {
+public:
+    struct Host {
+        juce::Component* card = nullptr; ///< Parent of every component the chrome adds; outlives it.
+        AppUndoManager* undo = nullptr;  ///< Null: instrument loads record no undo step.
+        juce::AudioProcessorGraph* graph = nullptr;
+        std::function<void()> kitChanged;           ///< Called when the loaded instrument changed (may be empty).
+        std::function<bool()> drumMachineAvailable; ///< Drum Kit: does a track play it? (empty: no)
+        std::function<void()> openDrumMachine;      ///< Drum Kit: the "Drum machine" button was pressed.
+        std::function<void()> relayout;             ///< The chrome's height changed: lay the card out again.
+        std::function<void(juce::AudioProcessorGraph::NodeID)> showNode; ///< Drum Kit: show a module on the canvas.
+        /** Drum Kit: hiding the pad on `note` named `padName`; runs `proceed` now, or after a confirmation when its
+         *  drum has hits in a clip (empty: no question). */
+        std::function<void(int note, const juce::String& padName, std::function<void()> proceed)> confirmHidePad;
+        /** Drum Kit: a picked-pad knob now drives `param`, so its right-click MIDI Learn targets that pad. */
+        std::function<void(juce::Component& knob, juce::RangedAudioParameter* param)> rebindLearnable;
+        /** Drum Kit: gives a picked-pad knob the card's ring, mod dot and cable gestures, once; `knob` outlives the
+         * card's use. */
+        std::function<void(CardKnobSlider& knob)> wireKnob;
+        /** Drum Kit: the pad knobs are about to show another pad, which moves where its cables end. */
+        std::function<void()> cableEndsMove;
+        /** The picker's "Get more sounds..." row: opens Settings on its Sound packs tab (empty: nothing happens). */
+        std::function<void()> openSoundPacks;
+    };
+
+    virtual ~InstrumentChrome() = default;
+
+    /** Places the chrome from `y` (the card's content origin) and returns the y below it. */
+    virtual int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) = 0;
+    /** Places what the chrome shows under the card's body controls from `y`; returns the y below it. */
+    virtual int layoutBelowBody(int y, int /*contentX*/, int /*contentW*/, bool /*apply*/) { return y; }
+    /** The card's gated tick. */
+    virtual void poll() = 0;
+    /** Re-reads the module (after a project's deferred loads landed). */
+    virtual void refreshLoaded() = 0;
+    /** Drum Kit: how opaque the picked pad's mod ring is now (it fades in over a pick); 1 for every other chrome. */
+    virtual float padRingAlpha() const { return 1.0f; }
+    /** Drum Kit: the ring of the pad parameter `paramId` that is fading out of its knob after a pick. */
+    struct LeavingRing {
+        juce::Slider* knob = nullptr;
+        float alpha = 0.0f;
+    };
+    virtual std::optional<LeavingRing> leavingPadRing(const juce::String& /*paramId*/) const { return std::nullopt; }
+    /** The module is already freed: give up any parameter attachment without touching its parameters (leaks it). */
+    virtual void releaseBindings() {}
+
+    // ---- File drop and the Sampler's sample name: nothing for a chrome that has none ----
+    virtual void refreshSampleLabel(const juce::String& /*fallbackMessage*/ = {}) {}
+    virtual bool isInterestedInDrop(const juce::StringArray&) const { return false; }
+    virtual void dragEntered(const juce::StringArray&) {}
+    virtual void dragLeft() {}
+    virtual bool dropFiles(const juce::StringArray&) { return false; }
+    virtual void paintDropHint(juce::Graphics&, juce::Rectangle<int>) const {}
+};
+
+} // namespace synth::ui

@@ -1,5 +1,7 @@
 #include "AppLookAndFeel.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CardOutline.h"
+#include "UI/Layout/CableCurve.h"
 
 namespace synth::theme {
 
@@ -27,7 +29,7 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
     const auto& tr = theme.treatment;
 
     const float radius = m.cornerRadius;
-    auto body = bounds.reduced(2.0f);
+    auto body = synth::ui::cardBodyRect(bounds);
 
     // Soft drop shadow. We intentionally AVOID juce::DropShadow here: its per-paint gaussian
     // blur re-rasterizes every time a (buffered) card is re-rendered at a new zoom scale, which
@@ -111,17 +113,14 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         g.setColour(c.border);
         g.drawHorizontalLine((int)header.getBottom(), header.getX(), header.getRight());
 
-        // Title: uppercase, tracked.
+        // Title: plain text in the module's own case.
         g.setColour(selected ? c.accent : (bypassed ? c.textDisabled : c.textPrimary));
         g.setFont(juce::Font(juce::FontOptions(theme.type.h2, juce::Font::bold)));
-        juce::String tracked;
-        for (auto ch : title.toUpperCase())
-            tracked << juce::String::charToString(ch) << " ";
         // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
         // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
         // whether the LED is currently lit — so the title never shifts when RMS crosses the
         // lit/unlit threshold.
-        g.drawText(tracked.trimEnd(), header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
+        g.drawText(title, header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
                    juce::Justification::centredLeft, true);
     }
 
@@ -155,11 +154,8 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
 
     // Build the path if the caller didn't.
     juce::Path wire = path;
-    if (wire.isEmpty()) {
-        const float dx = p2.x - p1.x;
-        wire.startNewSubPath(p1);
-        wire.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
-    }
+    if (wire.isEmpty())
+        wire = synth::ui::makeCablePath(p1, p2);
 
     // `activity` is a raw signal peak supplied by the caller, and not every CV source is normalised
     // (Poly MIDI's pitch fan carries Hz). Clamp before it scales any geometry — an unbounded value
@@ -167,14 +163,15 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
     const float normalisedActivity = juce::jlimit(0.0f, 1.0f, activity);
     const float coreWidth = m.wireCoreWidth * (1.0f + normalisedActivity * 0.4f);
 
-    // Casing (dark underlay).
-    g.setColour(theme.colors.bg0.withAlpha(0.6f));
+    // Casing (dark underlay). The wire's own alpha (a dimmed or fading cable) scales the casing and the glow too, so
+    // nothing of a faded cable stays at full strength.
+    g.setColour(theme.colors.bg0.withAlpha(0.6f * colour.getFloatAlpha()));
     g.strokePath(wire,
                  juce::PathStrokeType(m.wireCasingWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     // Neon glow behind the core (Glass only, cost-gated).
     if (tr.glow > 0.0f) {
-        g.setColour(colour.withAlpha(tr.glow * 0.5f));
+        g.setColour(colour.withMultipliedAlpha(tr.glow * 0.5f));
         g.strokePath(
             wire, juce::PathStrokeType(coreWidth * 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }

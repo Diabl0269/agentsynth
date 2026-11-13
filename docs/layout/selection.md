@@ -15,14 +15,16 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | Drag on empty canvas | Pan — unchanged |
 | **Shift** + drag on empty canvas | Marquee-select, *replacing* the selection |
 | **Cmd/Ctrl + Shift** + drag | Marquee-select, *adding* to the selection |
-| Click a module body | Select just that module |
+| Click a module body | Select just that module — also when it was one of several selected: the group is kept while the button is down so a drag moves it, and a click with no movement collapses the selection onto the clicked module on release |
 | **Shift** + click a module | Toggle that module's membership (does **not** start a drag) |
+| **Shift** + click a folded macro card, an open macro's name chip, or an open macro's empty space | Toggle the whole macro in the selection, so several macros can be selected together (each folded card draws its selected outline while all its members are selected). **Cmd** + click a card does the same. Fold and Pack Macros, Collapse / Expand, Delete and a drag then act on all of them. On the empty space the toggle happens on release, and only when no box was drawn: a **Shift** + drag from there is still a selection box |
+| **Shift** + drag a marquee across folded macro cards | Selects the macros whose cards it touches (their members are hidden, so the card stands in) |
 | **Cmd** + click a module (no movement) | Toggle that module's membership, same as Shift |
-| **Cmd** + drag a module across an expanded macro's hull (or a plain drag, with the on-by-default "drag without Cmd" preference) | Joins, leaves, or moves the module between macros in one gesture — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract; a group drag never changes membership |
-| Drag any selected module | Move the entire selection together |
-| Click empty canvas (no drag) | Clear the selection |
+| **Cmd** + drag a module across an expanded macro's hull (or a plain drag, with the on-by-default "drag without Cmd" preference) | Joins, leaves, or moves the module between macros in one gesture — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract; a group drag joins or leaves as a whole on the drop ([group drag](../macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro)) |
+| Drag any selected module, or the card or name chip of any selected macro | Move the entire selection together: modules, open macros and folded cards (a folded card follows its hidden members, `macro_nesting::collapsedMacrosCarriedBy`). The drop resolves as one rigid body over what is visible and is one undo step; dropped on an open macro the group joins (modules) and nests in (macros) it, and dragged out of its macro's border it leaves ([group drag](../macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro)). A click (no movement) on a macro's card or chip selects just that macro, as a click on a module does |
+| Click empty canvas (no drag) | Clear the selection. Inside an expanded macro's hull the first click selects the macro; a click on the hull of an already-selected macro clears (a double-click on the hull keeps it selected) |
 | Right-click a module | Select it if it was not, then open the menu |
-| Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Locate Master — [shortcuts](../control/shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
+| Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Go to Output — [shortcuts](../control/shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
 
 Two details that are easy to get wrong:
 
@@ -35,6 +37,18 @@ Two details that are easy to get wrong:
   called. Ctrl (insert-between, see [smart-connections](smart-connections.md)) and Cmd (macro
   reparent) each arm a DEFERRED click-versus-drag classification instead, resolved at `mouseUp` by
   whether the press moved.
+
+## Keyboard
+
+The canvas selection is also the keyboard's card focus: there is no separate "focused card".
+`CanvasCardKeyboard` (`Source/UI/Graph/CanvasCardKeyboard/`, owned by `GraphEditor`, which hands it every key
+first) maps the arrows to `selectModule` on the nearest card in that direction (`nearestCardInDirection`,
+`Source/UI/Graph/CardNavigation.h`), Alt+arrows to a one-grid-step move committed exactly like a drag
+(`captureBeforeState` → `finalizeModuleDrag` → `pushSnapshotFromCapture` for one card;
+`beginSelectionDrag` → `dragSelectionBy` → `finalizeSelectionDrag` inside `recordGraphAndMacroChange` for a
+group), and Return to `ModuleComponent::enterFromKeyboard`. Inside the card, `ModuleComponent::keyPressed`
+(`ModuleComponentKeyboard.cpp`) cycles Tab within the card and hands focus back to the canvas on Escape. Keys
+and defaults: [shortcuts](../control/shortcuts.md#canvas-card-keys).
 
 ## SelectionModel
 
@@ -87,6 +101,15 @@ drifts at non-1.0 zoom and shears the group apart.
 Calling the single-module `finalizeModuleDrag()` per member instead would spiral them away from each
 other and destroy the arrangement the user just made.
 
+**The landing ghost is that same placement, live.** Every tick of a group drag (`dragSelectionBy`, then
+`dragMacroCardBy` and the chip drag once they have aimed) runs the drop's own placement on where the cards are now
+(`groupLandingOffset`, or `foldedCardLanding` for a lone folded card, both in `GraphEditorSelection.cpp` and called by
+`finalizeSelectionDrag` / `finalizeMacroCardDrag` too) and stores one rect per moved visible card in
+`GraphDragDropController::setGroupGhosts`. The canvas paints those in place of the single-card ghost, so the ghost
+shows where the whole group lands, inside a macro it drops into or out of one it leaves. A widely spread group is
+still one rigid box, gaps included, so it can land away from a nearby macro's cards it would straddle; the ghost shows
+that too.
+
 `cancelSelectionDrag()` exists for the zero-delta case, a click that never moved. Preset positions
 are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would
 visibly nudge the group.
@@ -122,7 +145,8 @@ indefinitely.** Two ways that happens, and what closes each:
    `GraphEditor::cancelLiveDragGestures()`, which cancels `selectionDragActive` and
    `dragPreviewActive` together, is called from all three sites: unconditionally in
    `detachAllModuleComponents()`, where every component is going so cancelling is always correct;
-   and, in `updateComponents()` / `syncMacroCards()`, only when the SPECIFIC component being removed
+   and, in `updateComponents()` / `syncMacroCards()` / `detachModuleComponentsFor()` (an undo or redo
+   that frees some nodes), only when the SPECIFIC component being removed
    is the drag's own initiator (`dragPreviewSelfId` for a module drag,
    `MacroCardComponent::isBodyDragActive()` for a card drag). A non-initiating group member
    vanishing on its own is harmless: the initiator survives, its real `mouseUp` is still coming, and
@@ -140,3 +164,26 @@ through the actual `mouseDown` / `mouseDrag` / `mouseUp` callbacks and asserts e
 same real gesture path, then drives `detachAllModuleComponents()` / `updateComponents()` / a
 member-removing `updateComponents()` in place of the `mouseUp` that a rebuild makes impossible, and
 asserts the flags still end clear with nothing crashing.
+
+## Canvas mouse gestures
+
+Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
+habit changes. The rest of this doc is the full contract.
+
+| Gesture | Action |
+|---------|--------|
+| Drag on empty canvas | Pan (unchanged) |
+| **Shift** + drag on empty canvas | Marquee-select, replacing the selection |
+| **Cmd/Ctrl + Shift** + drag | Marquee-select, adding to the selection |
+| Click a module | Select just that module |
+| **Shift**/**Cmd** + click a module | Toggle that module in the selection |
+| Drag any selected module | Move the whole selection together |
+| Drag a module across an expanded macro's outline | Join, leave, or move it between macros (a plain drag by default; **Cmd** + drag when "Drag modules into and out of macros without Cmd" is off in `Settings → Preferences`; single module only, never a group). See [macro membership](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) |
+| Click empty canvas | Clear the selection |
+| Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
+| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Go to Output (see [Locate Master](../control/shortcuts.md#locate-master); greyed out with neither Master nor Audio Output) |
+| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`); on a CV jack that drives a modulated knob, remove its one source or, with several, pick which |
+
+Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
+on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste
+cascade there, so a following `Cmd+V` continues from the same place.

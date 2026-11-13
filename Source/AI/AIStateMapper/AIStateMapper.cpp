@@ -3,11 +3,17 @@
 // Owns createModule/the type-name lookups, graphToJSON, and applyJSONToGraph (the merge-patch
 // applier). The class itself is declared in AIStateMapper.h; validatePatch (the untrusted-input
 // security boundary) lives in AIStateMapperValidation.cpp, snapshot restore in
-// AIStateMapperSnapshots.cpp, and AI-facing schema generation in AIStateMapperSchema.cpp.
+// AIStateMapperSnapshots.cpp, AI-facing schema generation in AIStateMapperSchema.cpp, and the prompt's module
+// table (getModuleSchema) in AIStateMapperModuleTable.cpp.
 
 #include "AIStateMapper.h"
+#include "GraphRebuildBatch.h"
 
 #include "AIStateMapperInternal.h"
+#include "AudioEngine/ConnectionIndex.h"
+#include "AudioEngine/SamplerMidiWiring.h"
+#include "Mixer/MasterSplice.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 #include <map>
 #include <optional>
@@ -16,6 +22,23 @@
 namespace synth {
 
 namespace {
+// "Oscillator 1" -> "Oscillator": the trailing instance number updateModuleNames adds.
+juce::String stripNumericSuffix(const juce::String& name) {
+    const int lastSpace = name.lastIndexOf(" ");
+    if (lastSpace != -1 && name.substring(lastSpace + 1).containsOnly("0123456789"))
+        return name.substring(0, lastSpace);
+    return name;
+}
+
+// A patch's "remove" entry. False (nothing removed, the id keeps its mapping) for a node the output dock protects:
+// Audio Output never leaves the patch, nor Master while a mixer channel exists.
+bool removePatchNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
+    if (outputDockDeleteRefusal(graph, id).isNotEmpty())
+        return false;
+    if (graph.getNodeForId(id) != nullptr)
+        graph.removeNode(id, juce::AudioProcessorGraph::UpdateKind::none); // the apply rebuilds once
+    return true;
+}
 
 // Adopts a patch node's "uuid" onto the live node — trusted callers only. Untrusted input never
 // dictates identity: a model could otherwise hand two nodes the same uuid, or claim the uuid of a
@@ -31,6 +54,24 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
     }
 }
 
+// applyJSONToGraph issues every topology op with UpdateKind::none and rebuilds the render sequence ONCE when it
+// returns (the snapshot path's rule, AIStateMapperSnapshots.cpp). A synchronous rebuild per added node and cable made
+// pasting or duplicating cost (ops x graph size): seconds per duplicated track in a 30-track project.
+struct RebuildOnExit {
+    juce::AudioProcessorGraph& graph;
+    ~RebuildOnExit() { GraphRebuildBatch::rebuild(graph); } // once, or at the end of an enclosing batch
+};
+
+bool connectDeferred(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& c) {
+    return graph.addConnection(c, juce::AudioProcessorGraph::UpdateKind::none);
+}
+
+juce::AudioProcessorGraph::Node::Ptr addNodeDeferred(juce::AudioProcessorGraph& graph,
+                                                     std::unique_ptr<juce::AudioProcessor> processor,
+                                                     std::optional<juce::AudioProcessorGraph::NodeID> id = {}) {
+    return graph.addNode(std::move(processor), id, juce::AudioProcessorGraph::UpdateKind::none);
+}
+
 } // namespace
 
 std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::String& type) {
@@ -40,10 +81,7 @@ std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::St
     }
 
     // Strip trailing number suffix for backwards compatibility (e.g., "Oscillator 1" → "Oscillator")
-    juce::String baseName = type;
-    int lastSpace = baseName.lastIndexOf(" ");
-    if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))
-        baseName = baseName.substring(0, lastSpace);
+    const juce::String baseName = stripNumericSuffix(type);
 
     it = detail::moduleFactory().find(baseName);
     if (it != detail::moduleFactory().end())
@@ -114,7 +152,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             // only by the display name it was constructed with — so emit that name rather than the
             // generic key, or an Amp Env comes back from every save/undo as a plain "ADSR".
             // createModule resolves any name containing "Env"/"ADSR", so this always round-trips.
-            return mb->getName();
+            // The " <n>" updateModuleNames appends to tell two apart is dropped: it is not part of
+            // the type, and a card's layout is looked up by this key ("ADSR 1" has no default
+            // layout, so an undo that rebuilt the card drew the flat automatic list).
+            return stripNumericSuffix(mb->getName());
         case ModuleType::LFO:
             return "LFO";
         case ModuleType::Sequencer:
@@ -168,6 +209,12 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Macros";
         case ModuleType::Sampler:
             return "Sampler";
+        case ModuleType::DrumKit:
+            return "Drum Kit";
+        case ModuleType::Pluck:
+            return "Pluck";
+        case ModuleType::Mallet:
+            return "Mallet";
         case ModuleType::Wavetable:
             return "Wavetable";
         case ModuleType::SampleHold:
@@ -228,74 +275,107 @@ juce::String AIStateMapper::ensureNodeUuid(juce::AudioProcessorGraph::Node* node
     return uuid;
 }
 
-juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
+// `forModel` is the compact view the model is shown (never for saving, undo or presets): a Parametric EQ's disabled
+// band still at every default is left out, so an EQ using four bands of 24 does not spend 140 entries. A patch that
+// omits a band leaves it off, so the view reads back to the same graph.
+juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph, bool forModel) {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("schemaVersion", kSchemaVersion);
 
     juce::Array<juce::var> nodes;
-    for (auto* node : graph.getNodes()) {
-        if (auto* processor = node->getProcessor()) {
-            juce::DynamicObject::Ptr n = new juce::DynamicObject();
-            n->setProperty("id", (int)node->nodeID.uid);
-            n->setProperty("type", getFactoryTypeName(processor));
-
-            // Stable per-node identity, generated on first save and persisted back onto the node so
-            // every later save of the same node emits the same string. The integer "id" cannot
-            // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
-            // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
-            n->setProperty("uuid", ensureNodeUuid(node));
-
-            // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
-            // processor's own name: "type" carries the factory type, and the processor's getName()
-            // is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes
-            // wholesale on every graph change (it even strips trailing digits to renumber). Storing
-            // a custom name there would be clobbered on the next node add. Emitted only when set, so
-            // every un-renamed node's JSON stays byte-identical to before.
-            const auto displayName = node->properties["displayName"].toString();
-            if (displayName.isNotEmpty())
-                n->setProperty("displayName", displayName);
-
-            // Params — store denormalized values to match applyJSONToGraph expectations
-            juce::DynamicObject::Ptr params = new juce::DynamicObject();
-            for (auto* param : processor->getParameters()) {
-                if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
-                    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                        // Store choice as string name for readability
-                        params->setProperty(choice->paramID, choice->getCurrentChoiceName());
-                    } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                        params->setProperty(boolParam->paramID, boolParam->get());
-                    } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-                        // Store denormalized value
-                        float denormalized = ranged->getNormalisableRange().convertFrom0to1(ranged->getValue());
-                        params->setProperty(ranged->paramID, denormalized);
-                    } else {
-                        params->setProperty(p->paramID, p->getValue());
-                    }
-                }
-            }
-            n->setProperty("params", juce::var(params.get()));
-
-            // Non-parameter module state (e.g. the Sampler's loaded file). Emitted only when the
-            // module has some, so every other node's JSON is byte-identical to before.
-            if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
-                juce::var extraState = mb->getExtraState();
-                if (!extraState.isVoid())
-                    n->setProperty("state", extraState);
-            }
-
-            // Position
-            juce::DynamicObject::Ptr pos = new juce::DynamicObject();
-            pos->setProperty("x", node->properties["x"]);
-            pos->setProperty("y", node->properties["y"]);
-            n->setProperty("position", juce::var(pos.get()));
-
-            nodes.add(juce::var(n.get()));
-        }
-    }
+    for (auto* node : graph.getNodes())
+        if (auto n = nodeToJSON(*node, forModel); !n.isVoid())
+            nodes.add(n);
     root->setProperty("nodes", nodes);
 
+    // The cables are taken once: a scan of getConnections() per attenuverter made every undo snapshot
+    // O(attenuverters x cables log cables).
+    const ConnectionIndex cables(graph);
+    root->setProperty("connections", connectionsToJSON(cables));
+    root->setProperty("modulations", modulationsToJSON(graph, cables));
+    return juce::var(root.get());
+}
+
+// graphToJSON's per-node shape, and the one the undo history's snapshot cache (GraphSnapshotCache) builds a node
+// from: a field added here must be added to that cache's freshness check too, or a snapshot reuses a stale entry.
+juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node, bool forModel) {
+    auto* processor = node.getProcessor();
+    if (processor == nullptr)
+        return {};
+    juce::DynamicObject::Ptr n = new juce::DynamicObject();
+    n->setProperty("id", (int)node.nodeID.uid);
+    n->setProperty("type", getFactoryTypeName(processor));
+
+    // Stable per-node identity, persisted onto the node on first save. Not the integer "id": merge-mode apply
+    // renumbers nodes, and long-lived references (automation lanes, track bindings) key on the uuid.
+    n->setProperty("uuid", ensureNodeUuid(&node));
+
+    // User's custom card title, a separate field from the processor's auto-numbered name ("Chorus 2"), which
+    // AudioEngine::updateModuleNames() recomputes on every graph change. Emitted only when set.
+    const auto displayName = node.properties["displayName"].toString();
+    if (displayName.isNotEmpty())
+        n->setProperty("displayName", displayName);
+
+    // Per-instance display: the card layout (a built-in module's own, not the hosted plugin's extra-state key of
+    // the same name) and the control style. Emitted only when set, so every other node's JSON is byte-identical
+    // to before; trusted-apply only (see applyNodePresentation).
+    for (const char* key : {kCardLayoutNodeProperty, kControlStyleNodeProperty})
+        if (const auto& value = node.properties[key]; value.isObject())
+            n->setProperty(key, value.clone());
+
+    // Params, denormalized (a choice by name). One no surface shows is left out at its default (see
+    // detail::isUnexposedParam), so the JSON of a module that gained it is unchanged.
+    juce::DynamicObject::Ptr params = new juce::DynamicObject();
+    for (auto* param : processor->getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(param);
+                r != nullptr && r->getValue() == r->getDefaultValue() &&
+                detail::isUnexposedParam(*processor, r->paramID))
+                continue;
+            if (forModel && detail::isDisabledDefaultEqBandParam(*processor, p->paramID))
+                continue;
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                params->setProperty(choice->paramID, choice->getCurrentChoiceName());
+            } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
+                params->setProperty(boolParam->paramID, boolParam->get());
+            } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
+                float denormalized = ranged->getNormalisableRange().convertFrom0to1(ranged->getValue());
+                params->setProperty(ranged->paramID, denormalized);
+            } else {
+                params->setProperty(p->paramID, p->getValue());
+            }
+        }
+    }
+    n->setProperty("params", juce::var(params.get()));
+
+    // Non-parameter module state (e.g. the Sampler's loaded file). Emitted only when the
+    // module has some, so every other node's JSON is byte-identical to before.
+    if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
+        juce::var extraState = mb->getExtraState();
+        if (!extraState.isVoid())
+            n->setProperty("state", extraState);
+        // Which card panels are open (scope / response / spectrum): presentation only, so it has
+        // its own key ("cardView") rather than sharing "state", whose shape each module type owns.
+        const juce::var view = mb->getCardViewState().toVar();
+        if (!view.isVoid())
+            n->setProperty("cardView", view);
+    }
+
+    // Position
+    juce::DynamicObject::Ptr pos = new juce::DynamicObject();
+    pos->setProperty("x", node.properties["x"]);
+    pos->setProperty("y", node.properties["y"]);
+    n->setProperty("position", juce::var(pos.get()));
+    return juce::var(n.get());
+}
+
+juce::var
+AIStateMapper::connectionsToJSON(const ConnectionIndex& cables,
+                                 const std::function<bool(const juce::AudioProcessorGraph::Connection&)>& include) {
     juce::Array<juce::var> connections;
-    for (const auto& conn : graph.getConnections()) {
+    for (const auto& conn : cables.all()) {
+        if (include && !include(conn))
+            continue;
         juce::DynamicObject::Ptr c = new juce::DynamicObject();
         c->setProperty("src", (int)conn.source.nodeID.uid);
 
@@ -312,8 +392,10 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
         c->setProperty("isMidi", conn.source.isMIDI());
         connections.add(juce::var(c.get()));
     }
-    root->setProperty("connections", connections);
+    return connections;
+}
 
+juce::var AIStateMapper::modulationsToJSON(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables) {
     // Scan for AttenuverterModule nodes and emit modulations array
     juce::Array<juce::var> modulations;
     for (auto* node : graph.getNodes()) {
@@ -322,8 +404,8 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             bool hasSource = false;
             juce::AudioProcessorGraph::NodeID sourceNodeID;
             int sourceChannel = 0;
-            for (const auto& conn : graph.getConnections()) {
-                if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0) {
+            for (const auto& conn : cables.into(node->nodeID)) {
+                if (conn.destination.channelIndex == 0) {
                     sourceNodeID = conn.source.nodeID;
                     sourceChannel = conn.source.channelIndex;
                     hasSource = true;
@@ -335,8 +417,8 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             bool hasDest = false;
             juce::AudioProcessorGraph::NodeID destNodeID;
             int destChannel = 0;
-            for (const auto& conn : graph.getConnections()) {
-                if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0) {
+            for (const auto& conn : cables.outOf(node->nodeID)) {
+                if (conn.source.channelIndex == 0) {
                     destNodeID = conn.destination.nodeID;
                     destChannel = conn.destination.channelIndex;
                     hasDest = true;
@@ -357,75 +439,15 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
                     modEntry->setProperty("amount", amount);
                 }
 
-                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenverter, "bypassed"))) {
+                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenverter, "bypassed")))
                     modEntry->setProperty("bypass", param->get());
-                }
 
+                detail::writeModCurve(*modEntry, *attenverter);
                 modulations.add(juce::var(modEntry.get()));
             }
         }
     }
-    root->setProperty("modulations", modulations);
-
-    return juce::var(root.get());
-}
-
-juce::String AIStateMapper::getModuleSchema() {
-    juce::String schema = "### Available Modules and Parameters\n\n";
-
-    for (const auto& entry : detail::moduleFactory()) {
-        // Hide non-authorable modules from AI — modulation uses the "modulations" array instead
-        if (detail::isInternalOnlyModule(entry.first))
-            continue;
-
-        auto processor = entry.second();
-        if (!processor)
-            continue;
-
-        schema += "#### " + entry.first + "\n";
-        schema += "| Parameter ID | Name | Range / Options | Default |\n";
-        schema += "| :--- | :--- | :--- | :--- |\n";
-
-        for (auto* param : processor->getParameters()) {
-            if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-                juce::String rangeStr;
-                if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                    rangeStr = "Choice: [" + choice->choices.joinIntoString(", ") + "]";
-                } else if (dynamic_cast<juce::AudioParameterBool*>(param)) {
-                    rangeStr = "Boolean (0 or 1)";
-                } else {
-                    auto range = p->getNormalisableRange();
-                    rangeStr = juce::String(range.start) + " to " + juce::String(range.end);
-                }
-
-                schema += "| `" + p->paramID + "` | " + p->name + " | " + rangeStr + " | " +
-                          juce::String(p->getDefaultValue()) + " |\n";
-            }
-        }
-        schema += "\n";
-    }
-
-    // Modulation targets section
-    schema += "### Modulation Targets\n\n";
-    schema += "Use the `modulations` array to route modulation sources to these targets.\n\n";
-    schema += "| Module | Target | Port |\n";
-    schema += "| :--- | :--- | :--- |\n";
-
-    for (const auto& entry : detail::moduleFactory()) {
-        auto processor = entry.second();
-        if (!processor)
-            continue;
-        if (auto* mb = dynamic_cast<ModuleBase*>(processor.get())) {
-            auto targets = mb->getModulationTargets();
-            for (const auto& t : targets) {
-                schema += "| " + entry.first + " | " + t.name + " | " + juce::String(t.channelIndex) + " |\n";
-            }
-        }
-    }
-
-    schema += "\n**Modulation Sources**: LFO, ADSR, Amp Env, Filter Env, Oscillator, Sequencer\n\n";
-
-    return schema;
+    return modulations;
 }
 
 int AIStateMapper::findChoiceIndex(juce::AudioParameterChoice* p, const juce::String& choiceText) {
@@ -443,24 +465,56 @@ int AIStateMapper::findChoiceIndex(juce::AudioParameterChoice* p, const juce::St
     return -1;
 }
 
+// The public door to the untrusted apply path, for model-authored params that arrive outside a
+// patch (a timelineOps insert): exactly what applyJSONToGraph does for an untrusted node's params.
+void AIStateMapper::applyUntrustedParams(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj) {
+    if (processor != nullptr && paramsObj != nullptr)
+        applyParamsToProcessor(processor, paramsObj, /*trusted=*/false);
+}
+
+// The same door for a model-authored "state" blob outside a patch (a timelineOps insert): it reaches
+// ModuleBase::setUntrustedExtraState exactly as a patch node's "state" does, and a module without one ignores it.
+void AIStateMapper::applyUntrustedState(juce::AudioProcessor* processor, const juce::var& state) {
+    if (processor == nullptr || state.isVoid())
+        return;
+    auto holder = std::make_unique<juce::DynamicObject>();
+    holder->setProperty("state", state);
+    applyExtraStateToProcessor(processor, holder.get(), /*trusted=*/false);
+}
+
+void AIStateMapper::applyParamsToNewProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                              bool trusted) {
+    const auto* paramsObj = nodeObj->getProperty("params").getDynamicObject();
+    if (paramsObj != nullptr)
+        applyParamsToProcessor(processor, paramsObj, trusted);
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        module->applyStoredParamDefaults(paramsObj != nullptr ? paramsObj->getProperties() : juce::NamedValueSet(),
+                                         trusted);
+}
+
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                            bool trusted, bool skipUnchanged) {
-    // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost
-    // notifies its listeners unconditionally, and one of ours re-anchors a module's cables when
-    // "poly" changes — i.e. it mutates the graph. A snapshot restore re-applies every parameter of
-    // every surviving node, so for that caller the redundant writes are the overwhelming majority.
-    // The tolerance only has to absorb the float round-trip through the JSON's denormalized value;
-    // it is orders of magnitude below any parameter step a user or a model can express.
+    // Writing a value a parameter already holds is not a no-op: setValueNotifyingHost notifies unconditionally, and
+    // a "poly" listener re-anchors cables (mutates the graph). A snapshot restore re-applies every parameter, so it
+    // skips those writes; the tolerance only absorbs the float round-trip through the JSON's denormalized value.
     auto setNormalised = [skipUnchanged](juce::RangedAudioParameter* p, float normalised) {
         if (skipUnchanged && std::abs(p->getValue() - normalised) <= 1.0e-6f)
             return;
         p->setValueNotifyingHost(normalised);
     };
 
+    // Each parameter's value is found with one Identifier (one string-pool lookup), not one for the presence test and
+    // another for the read: a snapshot restore asks this of every parameter of every node in the project.
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
-            if (paramsObj->hasProperty(p->paramID)) {
-                auto jsonValue = paramsObj->getProperty(p->paramID);
+            const auto* found = paramsObj->getProperties().getVarPointer(juce::Identifier(p->paramID));
+            if (detail::isUnexposedParam(*processor, p->paramID) && (!trusted || found == nullptr)) {
+                if (trusted) // nodeToJSON left it out at its default
+                    setNormalised(p, p->getDefaultValue());
+                continue; // the model never sets one
+            }
+            if (found != nullptr) {
+                const auto& jsonValue = *found;
 
                 if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p)) {
                     if (jsonValue.isString()) {
@@ -480,13 +534,16 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                     auto range = p->getNormalisableRange();
 
                     // Detect likely normalized 0-1 values from AI models that ignore range instructions.
-                    // If the actual range extends beyond [0,1] but the value is within [0,1],
-                    // the AI probably sent a normalized value — convert it to the actual range.
+                    // Only a value the range cannot hold counts as a mistake: a cutoff of 0.5 on
+                    // 20..20000 Hz is not a legal cutoff, so it is read as "halfway" and converted.
+                    // A value the range CAN hold (an ADSR decay of 0.2 s on 0..5, an LFO rate of
+                    // 0.5 Hz on 0..N) is what the model meant, and stays exactly as written.
                     // Skip this heuristic for integer params — small values like 0 or 1 are
                     // almost always valid denormalized values, not normalized.
                     bool isIntParam = (dynamic_cast<juce::AudioParameterInt*>(p) != nullptr);
                     bool rangeIsUnitInterval = (range.start >= 0.0f && range.end <= 1.0f);
-                    if (!trusted && !isIntParam && !rangeIsUnitInterval && val >= 0.0f && val <= 1.0f) {
+                    if (!trusted && !isIntParam && !rangeIsUnitInterval && val >= 0.0f && val <= 1.0f &&
+                        val < range.start) {
                         val = range.convertFrom0to1(val);
                     }
 
@@ -496,22 +553,47 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
             }
         }
     }
+
+    // A model that gives an LFO a rate in Hz but no mode means Hz: the LFO starts in Sync, where
+    // rateHz is ignored, so a 10 Hz pulse or 5 Hz vibrato would play as a slow 1/4-note wobble.
+    // Our own snapshots always carry "mode", so this only ever applies to model output.
+    const auto& props = paramsObj->getProperties();
+    if (!trusted && props.contains("rateHz") && !props.contains("mode") && !props.contains("rateSync"))
+        for (auto* param : processor->getParameters())
+            if (auto* mode = dynamic_cast<juce::AudioParameterBool*>(param); mode != nullptr && mode->paramID == "mode")
+                setNormalised(mode, 0.0f);
+
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        module->adoptLegacyParams(props);
 }
 
 void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                                bool trusted) {
     // Untrusted (model-authored) JSON never reaches setExtraState: a module may read this as a
     // filename (SamplerModule does), so honouring it for remote output would let a patch suggestion
-    // name an arbitrary file for the app to open. Our own snapshots and presets are trusted.
-    if (!trusted || !nodeObj->hasProperty("state"))
+    // name an arbitrary file for the app to open. Our own snapshots and presets are trusted. The only
+    // exception is a module that opts in through setUntrustedExtraState with pure, clamped data (the
+    // LFO's Custom curve); every other module's override is the default no-op.
+    auto* mb = dynamic_cast<ModuleBase*>(processor);
+    if (mb == nullptr)
         return;
-    if (auto* mb = dynamic_cast<ModuleBase*>(processor))
+    if (!trusted) {
+        if (nodeObj->hasProperty("state"))
+            mb->setUntrustedExtraState(nodeObj->getProperty("state"));
+        return;
+    }
+    if (nodeObj->hasProperty("state"))
         mb->setExtraState(nodeObj->getProperty("state"));
+    // "cardView" is presentation only and cannot name a file, but it stays trusted-only too: a provider has no
+    // business opening scopes on the user's cards.
+    if (nodeObj->hasProperty("cardView"))
+        mb->setCardViewState(CardViewState::fromVar(nodeObj->getProperty("cardView")));
 }
 
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,
                                      bool trusted, bool autoConnectNewNodes,
-                                     std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap) {
+                                     std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap,
+                                     const PatchIdScope* scope) {
     if (!json.isObject()) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON is not an object.");
         return false;
@@ -524,13 +606,18 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
     // Validate the entire patch before making any changes — a rejected patch must never be
     // partially applied.
-    auto validation = validatePatch(json, graph, clearExisting, trusted);
+    // A scope only ever widens a MERGE patch's namespace (see PatchIdScope); replace mode clears the
+    // nodes it would name.
+    if (clearExisting)
+        scope = nullptr;
+    auto validation = validatePatch(json, graph, clearExisting, trusted, /*allowInternalModuleTypes=*/false, scope);
     if (!validation.ok) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON patch validation failed: " + validation.message);
         return false;
     }
 
     const juce::ScopedLock sl(graph.getCallbackLock());
+    const RebuildOnExit rebuildOnExit{graph}; // every op below defers its rebuild
 
     if (clearExisting) {
         graph.clear();
@@ -539,12 +626,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
     std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
     std::set<juce::AudioProcessorGraph::NodeID> newlyCreatedNodes;
 
-    // Pre-populate idMap with existing nodes when merging
-    if (!clearExisting) {
-        for (auto* node : graph.getNodes()) {
-            idMap[(int)node->nodeID.uid] = node->nodeID;
-        }
-    }
+    // Pre-populate idMap with existing nodes when merging (and the scope's plan ids, if any)
+    if (!clearExisting)
+        detail::seedMergeIdMap(graph, scope, idMap);
 
     // Process removals before adding new nodes
     if (rootObj->hasProperty("remove")) {
@@ -552,11 +636,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (removeList) {
             for (const auto& idVar : *removeList) {
                 int nodeIdToRemove = (int)idVar;
-                auto juceNodeId = juce::AudioProcessorGraph::NodeID((juce::uint32)nodeIdToRemove);
-                if (graph.getNodeForId(juceNodeId) != nullptr) {
-                    graph.removeNode(juceNodeId);
-                }
-                idMap.erase(nodeIdToRemove);
+                const auto juceNodeId = detail::removalTarget(idMap, scope, nodeIdToRemove);
+                if (juceNodeId.has_value() && removePatchNode(graph, *juceNodeId))
+                    idMap.erase(nodeIdToRemove);
             }
         }
     }
@@ -578,31 +660,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     auto mappedDest =
                         idMap.count(destId) ? idMap[destId] : juce::AudioProcessorGraph::NodeID((juce::uint32)destId);
 
-                    juce::AudioProcessorGraph::NodeID nodeToRemove;
-                    bool found = false;
-                    for (auto* node : graph.getNodes()) {
-                        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
-                            continue;
-
-                        bool sourceMatch = false;
-                        bool destMatch = false;
-                        for (const auto& conn : graph.getConnections()) {
-                            if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0 &&
-                                conn.source.nodeID == mappedSource)
-                                sourceMatch = true;
-                            if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0 &&
-                                conn.destination.nodeID == mappedDest && conn.destination.channelIndex == destPort)
-                                destMatch = true;
-                        }
-
-                        if (sourceMatch && destMatch) {
-                            nodeToRemove = node->nodeID;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found)
-                        graph.removeNode(nodeToRemove);
+                    if (const auto atten =
+                            detail::findModulationAttenuverter(graph, mappedSource, mappedDest, destPort))
+                        graph.removeNode(*atten, juce::AudioProcessorGraph::UpdateKind::none);
                 }
             }
         }
@@ -649,7 +709,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                 }
                                 applyExtraStateToProcessor(existingNode->getProcessor(), nObj, trusted);
                                 adoptUuidIfTrusted(existingNode, nObj, trusted);
-                                detail::applyDisplayNameToNode(existingNode, nObj);
+                                detail::applyNodePresentation(existingNode, nObj, trusted);
                                 // Update position if provided
                                 if (nObj->hasProperty("position")) {
                                     if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -665,11 +725,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     auto processor = createModule(type);
                     if (processor) {
                         // Set parameters using helper
-                        if (nObj->hasProperty("params")) {
-                            if (auto* pObj = nObj->getProperty("params").getDynamicObject()) {
-                                applyParamsToProcessor(processor.get(), pObj, trusted);
-                            }
-                        }
+                        applyParamsToNewProcessor(processor.get(), nObj, trusted);
                         applyExtraStateToProcessor(processor.get(), nObj, trusted);
 
                         // Preserve node identity when restoring OUR OWN snapshot (undo/redo, preset load).
@@ -682,12 +738,15 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         if (trusted && clearExisting && oldId > 0)
                             preservedId = juce::AudioProcessorGraph::NodeID((juce::uint32)oldId);
 
-                        auto node = graph.addNode(std::move(processor), preservedId);
+                        auto node = addNodeDeferred(graph, std::move(processor), preservedId);
                         if (node) {
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
                             adoptUuidIfTrusted(node.get(), nObj, trusted);
-                            detail::applyDisplayNameToNode(node.get(), nObj);
+                            // Minted at creation rather than at the next graphToJSON, so a caller
+                            // can address the node by uuid the moment the apply returns.
+                            ensureNodeUuid(node.get());
+                            detail::applyNodePresentation(node.get(), nObj, trusted);
                             if (nObj->hasProperty("position")) {
                                 if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
                                     node->properties.set("x", posObj->getProperty("x"));
@@ -728,26 +787,26 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         // Auto-detect modulation targets: if the destination port is a
                         // modulation target, route through an attenuverter automatically
                         // (same logic as GraphEditor::endConnectionDrag).
-                        // Skip if source is already an AttenuverterModule (existing routing).
+                        // Skip an AttenuverterModule source (existing routing) and a macro port: the routing
+                        // through a port already has its attenuverter before the port, and a second doubles it.
                         bool isModTarget = false;
-                        if (!isMidiConnection &&
-                            dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) == nullptr) {
+                        if (!isMidiConnection && !detail::isModulationPassThrough(srcNode->getProcessor())) {
                             if (auto* modBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor()))
                                 isModTarget = modBase->isAutoPromotableModTarget(dstPort);
                         }
 
                         if (isModTarget) {
                             // Create attenuverter chain: source -> attenuverter -> dest
-                            auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
+                            auto attenNode = addNodeDeferred(graph, std::make_unique<AttenuverterModule>());
                             if (attenNode) {
                                 if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
                                         findParameterByID(attenNode->getProcessor(), "amount")))
                                     param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(1.0f));
-                                graph.addConnection({{idMap[srcOld], srcPort}, {attenNode->nodeID, 0}});
-                                graph.addConnection({{attenNode->nodeID, 0}, {idMap[dstOld], dstPort}});
+                                connectDeferred(graph, {{idMap[srcOld], srcPort}, {attenNode->nodeID, 0}});
+                                connectDeferred(graph, {{attenNode->nodeID, 0}, {idMap[dstOld], dstPort}});
                             }
                         } else if (isMidiConnection || (srcPort < srcPorts && dstPort < dstPorts)) {
-                            graph.addConnection({{idMap[srcOld], srcPort}, {idMap[dstOld], dstPort}});
+                            connectDeferred(graph, {{idMap[srcOld], srcPort}, {idMap[dstOld], dstPort}});
                         }
                     }
                 }
@@ -755,72 +814,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
-    // 3. Modulations
-    if (rootObj->hasProperty("modulations")) {
-        auto* modList = rootObj->getProperty("modulations").getArray();
-        if (modList) {
-            for (const auto& modVar : *modList) {
-                if (auto* modObj = modVar.getDynamicObject()) {
-                    int sourceId = (int)modObj->getProperty("source");
-                    int destId = (int)modObj->getProperty("dest");
-                    int sourcePort = modObj->hasProperty("sourcePort") ? (int)modObj->getProperty("sourcePort") : 0;
-                    int destPort = (int)modObj->getProperty("destPort");
-                    float amount = modObj->hasProperty("amount") ? (float)modObj->getProperty("amount") : 1.0f;
-                    bool bypass = modObj->hasProperty("bypass") ? (bool)modObj->getProperty("bypass") : false;
-
-                    // Get mapped node IDs
-                    if (idMap.count(sourceId) && idMap.count(destId)) {
-                        auto mappedSource = idMap[sourceId];
-                        auto mappedDest = idMap[destId];
-
-                        // Skip if an attenuverter already exists for this routing
-                        // (e.g., from nodes/connections arrays in the same JSON)
-                        bool alreadyExists = false;
-                        for (auto* existingNode : graph.getNodes()) {
-                            if (dynamic_cast<AttenuverterModule*>(existingNode->getProcessor()) == nullptr)
-                                continue;
-                            bool srcMatch = false, dstMatch = false;
-                            for (const auto& conn : graph.getConnections()) {
-                                if (conn.destination.nodeID == existingNode->nodeID &&
-                                    conn.destination.channelIndex == 0 && conn.source.nodeID == mappedSource &&
-                                    conn.source.channelIndex == sourcePort)
-                                    srcMatch = true;
-                                if (conn.source.nodeID == existingNode->nodeID && conn.source.channelIndex == 0 &&
-                                    conn.destination.nodeID == mappedDest && conn.destination.channelIndex == destPort)
-                                    dstMatch = true;
-                            }
-                            if (srcMatch && dstMatch) {
-                                alreadyExists = true;
-                                break;
-                            }
-                        }
-                        if (alreadyExists)
-                            continue;
-
-                        // Create attenuverter node
-                        auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
-                        if (attenNode) {
-                            if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
-                                    findParameterByID(attenNode->getProcessor(), "amount"))) {
-                                param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(amount));
-                            }
-
-                            if (bypass) {
-                                if (auto* bp = dynamic_cast<juce::AudioParameterBool*>(
-                                        findParameterByID(attenNode->getProcessor(), "bypassed"))) {
-                                    bp->setValueNotifyingHost(1.0f);
-                                }
-                            }
-
-                            // Add connections
-                            graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}});
-                            graph.addConnection({{attenNode->nodeID, 0}, {mappedDest, destPort}});
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // 3. Modulations (AIStateMapperModulations.cpp)
+    if (auto* modList = rootObj->getProperty("modulations").getArray())
+        detail::applyModulationEntries(*modList, graph, idMap, trusted);
 
     // 4. Auto-connect: in merge mode, connect new unconnected audio nodes to Audio Output.
     //
@@ -839,13 +835,17 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             }
         }
 
+        // One index for the three checks below: each only ever asks about a node before that node's own cable is
+        // added, and the audio cables added in between are never MIDI, so a snapshot answers exactly as the live
+        // graph would.
+        const ConnectionIndex cables(graph);
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator",    "Noise",          "Sampler", "Wavetable", "Filter",     "VCA",
-                "Distortion",    "Delay",          "Reverb",  "Amp Env",   "Filter Env", "Chorus",
-                "Phaser",        "Compressor",     "Flanger", "Limiter",   "Bitcrusher", "Pitch Shifter",
-                "Parametric EQ", "Ring Modulator", "Gate"};
+                "Oscillator", "Noise",      "Sampler",       "Drum Kit",      "Pluck",          "Mallet",
+                "Wavetable",  "Filter",     "VCA",           "Distortion",    "Delay",          "Reverb",
+                "Amp Env",    "Filter Env", "Chorus",        "Phaser",        "Compressor",     "Flanger",
+                "Limiter",    "Bitcrusher", "Pitch Shifter", "Parametric EQ", "Ring Modulator", "Gate"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
@@ -857,65 +857,25 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     continue;
 
                 bool hasOutgoing = false;
-                for (const auto& conn : graph.getConnections()) {
-                    if (conn.source.nodeID == newNodeId && !conn.source.isMIDI()) {
+                for (const auto& conn : cables.outOf(newNodeId)) {
+                    if (!conn.source.isMIDI()) {
                         hasOutgoing = true;
                         break;
                     }
                 }
 
                 if (!hasOutgoing && node->getProcessor()->getTotalNumOutputChannels() > 0) {
-                    graph.addConnection({{newNodeId, 0}, {audioOutputNode->nodeID, 0}});
+                    connectDeferred(graph, {{newNodeId, 0}, {audioOutputNode->nodeID, 0}});
                 }
             }
         }
 
-        // Auto-connect MIDI: find existing MIDI sources and connect to new MIDI-accepting nodes
-        // Types that accept MIDI input
-        // Sampler is here because a note-on retriggers it and transposes it against rootNote — the
-        // same reason Oscillator is.
-        static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sampler", "Sequencer",
-                                                                  "Poly Sequencer", "Poly MIDI"};
-
-        // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
-        std::set<juce::AudioProcessorGraph::NodeID> midiSources;
-        for (const auto& conn : graph.getConnections()) {
-            if (conn.source.isMIDI() && newlyCreatedNodes.find(conn.source.nodeID) == newlyCreatedNodes.end()) {
-                midiSources.insert(conn.source.nodeID);
-            }
-        }
-
-        if (!midiSources.empty()) {
-            auto midiSourceId = *midiSources.begin(); // Use the first MIDI source found
-            for (auto newNodeId : newlyCreatedNodes) {
-                auto* node = graph.getNodeForId(newNodeId);
-                if (node == nullptr)
-                    continue;
-
-                juce::String typeName = node->getProcessor()->getName();
-                if (midiAcceptingTypes.find(typeName) == midiAcceptingTypes.end())
-                    continue;
-
-                // Check if this node already has incoming MIDI
-                bool hasMidiInput = false;
-                for (const auto& conn : graph.getConnections()) {
-                    if (conn.destination.nodeID == newNodeId && conn.destination.isMIDI()) {
-                        hasMidiInput = true;
-                        break;
-                    }
-                }
-
-                if (!hasMidiInput && node->getProcessor()->acceptsMidi()) {
-                    graph.addConnection({{midiSourceId, juce::AudioProcessorGraph::midiChannelIndex},
-                                         {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
-                }
-            }
-        }
+        detail::autoConnectNewNodesToMidi(graph, cables, newlyCreatedNodes);
     }
 
+    synth::publishSamplerMidiWiring(graph); // the nodes were already audible while cables landed
     if (outIdMap != nullptr)
         *outIdMap = idMap;
-
     return true;
 }
 

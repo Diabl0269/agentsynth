@@ -5,14 +5,22 @@
 #include "MixerColumnHeader.h"
 #include "MixerEqThumbnail.h"
 #include "MixerFader.h"
-#include "MixerInsertList.h"
+#include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowsMotion.h"
 #include "MixerSendList.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/AutomatedMarker.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerSections/MixerSectionControls.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <set>
 #include <vector>
 
 class AppUndoManager;
@@ -22,19 +30,22 @@ class ModuleBase;
 class ChannelStripModule;
 
 // MixerColumnComponent.h (docs/mixer/panel.md#what-the-mixer-shows): one ChannelStrip's column --
-// header, source line, insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
+// header (colour dot, name, sources badge), insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
 // the tracks-feeding row. A background click (not on a control) selects the strip's macro on the
 // canvas (docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects its macro").
 namespace synth::ui {
 
 class MixerColumnComponent : public juce::Component {
 public:
-    /** The fader's own minimum draggable height (MixerFader.cpp's 16px dB readout plus a
-     *  slider left at least ~40px tall) -- resized() guarantees this by shrinking the insert/send
-     *  lists, the EQ thumbnail and the pan knob first, in that order, before this ever gives way. */
-    static constexpr int kMinFaderHeight = 56;
+    /** The fader's own minimum draggable height -- see MixerSectionLayout::resolve(). */
+    static constexpr int kMinFaderHeight = MixerSectionLayout::kMinFaderHeight;
 
     MixerColumnComponent();
+
+    /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */
+    void setSectionLayout(MixerSectionLayout& layout);
+    /** Repaints the section dividers after the layout's hover/drag state changed. */
+    void repaintSectionDividers();
 
     /** References must outlive this component -- same lifetime contract BottomDockComponent's own
      *  constructor threads down through MixerPanelComponent. `meterReader` defaults to the
@@ -45,11 +56,19 @@ public:
                    GraphEditor& graphEditor, AudioEngine& audioEngine,
                    synth::MeterReader meterReader = synth::MeterReader::Mixer);
 
-    /** `sourceLine`: the feeding tracks' names, comma-joined (computed by the caller, which holds
-     *  the TimelineDoc -- Core's MixerColumn only carries TrackIds). */
-    void setColumn(const synth::MixerColumn& column, const juce::String& sourceLine);
+    /** `sources`: the feeding tracks' names, comma-joined (computed by the caller, which holds the TimelineDoc --
+     *  Core's MixerColumn only carries TrackIds); they feed the header's sources badge. */
+    void setColumn(const synth::MixerColumn& column, const juce::String& sources);
+    /** True when the last setColumn() was given exactly `column` and `sources`. */
+    bool showsColumn(const synth::MixerColumn& column, const juce::String& sources) const;
+    /** True when the strip or one of the inserts this column binds controls to has its node uid in `uids`. */
+    bool bindsAnyOf(const std::set<juce::uint32>& uids) const;
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
+    /** The strip's stable uuid -- what the panel re-finds a column by across a rebuild. */
+    juce::String getUuid() const { return uuid_; }
+    /** True when the header shows a sources badge (a source that differs from the channel's name). */
+    bool hasSources() const noexcept { return showsSources_; }
 
     /** Test seam: the header this column owns -- a test drives its inline rename through
      *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
@@ -85,16 +104,33 @@ public:
      *  the two paths can never diverge. A no-op after unbindFromGraph() (graph_/undoManager_/
      *  audioEngine_ null then), same guard the former inline lambdas already had. */
     void toggleMuted();
+    /** The Rename key: opens the header's inline name editor; false for a column with nothing to rename. */
+    bool beginHeaderRename() { return header_.beginNameEdit(); }
     void toggleSoloed();
 
     /** The fader nudged one undo step, or false when nothing is bound (Direct-column-style
      *  no-op) or the fader has no live param (post-unbind). */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+    /** Moves the pan by `delta` (the parameter runs -1 left to +1 right) as one gesture; false when unbound. */
+    bool nudgePan(float delta);
+    /** The pan keys' text for the pan knob's tooltip, e.g. "Shift+Left / Shift+Right"; empty names none. */
+    void setPanShortcutText(const juce::String& keys);
+    /** The fader nudge keys' text for the fader's tooltip. */
+    void setFaderShortcutText(const juce::String& keys) { fader_.setNudgeShortcutText(keys); }
+    /** The EQ curve, a keyboard row of the panel's row walk while it shows an EQ. */
+    const MixerEqThumbnail& getEqThumbnail() const noexcept { return eqThumbnail_; }
 
     MixerFader& getFaderForTest() noexcept { return fader_; }
     juce::Slider& getPanSliderForTest() noexcept { return panSlider_; }
     juce::Button& getMuteButtonForTest() noexcept { return muteButton_; }
     juce::Button& getSoloButtonForTest() noexcept { return soloButton_; }
+
+    /** The row lists the panel's keyboard row focus walks (MixerPanelRowKeyboard.cpp). */
+    MixerInsertList& getInsertList() noexcept { return insertList_; }
+    MixerSendList& getSendList() noexcept { return sendList_; }
+    /** The node of the first Parametric EQ among the inserts (the one the thumbnail shows); invalid when none. */
+    juce::AudioProcessorGraph::NodeID getEqNodeId() const noexcept { return eqNodeId_; }
+    juce::String getEqNodeUuid() const { return eqNodeUuid_; }
 
     /** The strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
      *  distinct from setSelected()'s reveal highlight (they may co-paint). MixerPanelComponent
@@ -126,8 +162,12 @@ public:
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;
-    /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas. */
+    /** Fires with the target to select on the canvas: the header's "Edit on canvas" button (the channel, or the macro
+     *  of a branching chain) and the EQ thumbnail's click (the EQ's own uuid). */
     std::function<void(const juce::String&)> onEditOnCanvas;
+    /** An insert row's "Show on canvas" (or a double-click on it), or the send row menu's "Show <bus> on canvas": the
+     * module's uuid to select and bring into view, unlike onEditOnCanvas, which prefers the channel's macro. */
+    std::function<void(const juce::String&)> onFocusModule;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
     /** Fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,
@@ -147,8 +187,26 @@ public:
         sendList_.moveSendRow = std::move(provider);
     }
 
+    /** Forwarded to the send list's drop hand-off -- see MixerSendList::onSettlePending. */
+    void setSendSettlePendingHandler(std::function<void(int finalRow, float fromY)> handler) {
+        sendList_.onSettlePending = std::move(handler);
+    }
+    /** What the insert and send rows look like now, for the replacement column that `next` builds (pictures only when
+     *  rows go and none come). Call before this column is destroyed; see MixerRowsMotion. */
+    MixerRowsMotion::Snapshot captureRowSnapshot(const synth::MixerColumn& next);
+    /** Plays the rows that came or went since `before`, on this freshly laid-out column. */
+    void playRowMotion(const MixerRowsMotion::Snapshot& before);
+    MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
+    /** Starts the dropped send row's settle on this (rebuilt) column -- see MixerSendList::startSettleFrom. */
+    void startSendSettle(int finalRow, float fromY) { sendList_.startSettleFrom(finalRow, fromY); }
+
     /** Test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
+    MixerSectionViewport& getSectionViewportForTest(MixerSection section) noexcept;
+    MixerSectionDivider& getSectionDividerForTest(MixerSection section) noexcept { return dividers_[(size_t)section]; }
+    MixerCollapsedSection& getCollapsedSectionForTest(MixerSection section) noexcept {
+        return collapsed_[(size_t)section];
+    }
 
     /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain.
      *  `elapsedSeconds`: measured once by MixerPanelComponent::refreshMeters() and threaded down
@@ -184,6 +242,14 @@ public:
      *  -- mirrors ModuleComponent::findMidiLearnableParamForTest. */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
 
+    /** Test/inspection: whether `component`'s parameter was automated as of the last tick. */
+    bool isAutomatedMarkerShownForTest(const juce::Component* component) const {
+        for (const auto& e : midiLearnableEntries_)
+            if (e.component == component)
+                return e.automated.fade.isAutomated();
+        return false;
+    }
+
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
 
@@ -199,8 +265,9 @@ public:
      *  to inspect the menu a real right-click mouseDown() built, without ever opening a popup. A
      *  null hook restores the real showMenuAsync() behaviour. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     void mouseDown(const juce::MouseEvent& event) override;
@@ -227,8 +294,33 @@ public:
      *  A no-op post-unbind (graph_ null), same guard toggleSoloed() above already uses. */
     void refreshMuteSoloVisual();
 
+    /** Re-tints the header swatch (and top stripe) in place -- the cheap path for a track colour edit, which must
+     *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
+    void setHeaderColour(juce::Colour colour) {
+        header_.setColour(colour);
+        shownColumn_.colour = colour;
+    }
+
+    /** Whether the header's dot opens a colour picker; false leaves it a plain swatch. */
+    void setColourEditable(bool editable, const juce::String& shortcut = {}) {
+        header_.setColourEditable(editable, shortcut);
+    }
+    juce::Rectangle<int> getColourDotScreenBounds() const { return header_.getColourDotScreenBounds(); }
+    /** Fires when the dot is clicked or activated from the keyboard, with its screen bounds. */
+    std::function<void(juce::Rectangle<int>)> onColourPickRequested;
+
+    /** Makes the header a drag handle for reordering this column (see MixerColumnHeader::ReorderHooks);
+     *  a column that never calls it stays fixed. */
+    void setReorderHooks(MixerColumnHeader::ReorderHooks hooks);
+    /** Sets the callback for a right-click on the header (the pin menu). */
+    void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
+    /** 0..1: how strongly the column is drawn lifted (accent border and tint) while it is dragged. */
+    void setLift(float lift);
+
 private:
     void rebindControls();
+    void refreshCollapsedSummaries(int insertCount, int sendCount, bool hasEq);
+    void layoutSections(const MixerSectionLayout::Geometry& geometry, juce::Rectangle<int> inner);
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
     /** header_.onNameEdited's handler -- see MixerColumnHeader.h's own class comment for the rename
@@ -252,6 +344,11 @@ private:
     void refreshMidiLearnBadges();
     void repaintArmedMidiLearnOutline(); // Keeps the armed breathing outline animating; see .cpp
     void paintMidiLearnOverlays(juce::Graphics& g);
+    /** The automation-lane marker beside every automated control (MixerColumnAutomationMarker.cpp): one query per
+     *  column on the 10 Hz tick, repainting only while a marker fades or changes. */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
 
     /** One entry per learnable control currently bound -- cleared and rebuilt by rebindControls()
      *  (and, for send rows, by sendList_'s own onSendKnobBuilt callback fired from inside it),
@@ -265,6 +362,7 @@ private:
         bool isSolo = false;
         juce::String targetName;
         bool mapped = false;
+        synth::ui::AutomatedControlState automated;
     };
     std::vector<MidiLearnableEntry> midiLearnableEntries_;
     /** Controls this column has already addMouseListener'd itself onto -- registerMidiLearnable()
@@ -283,7 +381,7 @@ private:
     /** Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test
      *  replaces it via setShowContextMenuHookForTest(). */
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     GraphEditor* graphEditor_ = nullptr;
@@ -296,10 +394,13 @@ private:
 
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
-    juce::String sourceLine_;
+    bool showsSources_ = false;
+    synth::MixerColumn shownColumn_; // what the last setColumn() was given, for showsColumn()
+    juce::String shownSources_;
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
+    juce::String editOnCanvasTarget_;
     /** The same EQ's NodeID -- compared against MixerInsertList::onBeforeNodeRemoved's argument to
      *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (use-after-free
      *  fix; unbindFromGraph() above handles the graph-replacing-restore case, not this one). Empty
@@ -307,12 +408,22 @@ private:
     juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
-    juce::Label sourceLineLabel_;
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;
+    MixerRowsMotion rowsMotion_{*this};
+    // Used only until setSectionLayout() hands over the panel's shared one (a standalone column).
+    MixerSectionLayout ownSectionLayout_;
+    MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
+    MixerSectionViewport insertViewport_;
+    MixerSectionViewport sendViewport_;
+    std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
+    std::array<MixerCollapsedSection, MixerSectionLayout::kSectionCount> collapsed_;
+    // After the viewports and strips they fade (destroyed first).
+    std::array<std::unique_ptr<MixerSectionSwap>, MixerSectionLayout::kSectionCount> sectionSwaps_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
+    juce::String panShortcutText_;
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
@@ -324,6 +435,7 @@ private:
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> soloButton_{"S"};
     bool selected_ = false;
     bool keyboardFocused_ = false;
+    float lift_ = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnComponent)
 };

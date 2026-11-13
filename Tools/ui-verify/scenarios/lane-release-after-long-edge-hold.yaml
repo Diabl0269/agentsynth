@@ -1,0 +1,24 @@
+# Letting go of a lane dot after a long hold at the edge: the release changes nothing on screen. The view stays where
+# the last scroll left it and the dot stays on the beat it showed (one Cmd+Z puts it back).
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 52 (fixture lane-edge.agsproj), drags the
+# dot to the right edge and holds there for about two seconds while the view scrolls several bars, then lets go. The
+# frames after the release show the view and the dot standing still.
+record: true
+save_project: lane-release-after-long-edge-hold
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1}
+  - mouseDown: {id: automationLaneState, x: 1248, y: 65}
+  - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 65}
+  - glide: {name: long-edge-hold, frames: 20, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1396, y: 65}}}
+  - glide: {name: release-stands-still, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseUp: {id: automationLaneState, x: 1396, y: 65}}}
+  - mark: {check: 1, name: release-after-long-hold-stands-still}
+  - expect: {id: automationLaneState, points: 1, dragging: false}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: drag-undone}
+  - mark: {check: 2, name: one-undo-after-long-hold}

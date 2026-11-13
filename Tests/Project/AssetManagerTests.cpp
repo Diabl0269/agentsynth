@@ -19,11 +19,15 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "MainComponent/MainComponentAudioImport.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UserSettings.h"
+#include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -336,6 +340,32 @@ TEST_F(AssetManagerRelinkTest, DroppedAudioFileImportsIntoSavedBundleAsOneUndoSt
     EXPECT_FALSE(mc.getUndoManager().canUndo());
 }
 
+// Regression test for FRO1413: a dropped file got no waveform sidecar, so its clip painted no waveform until a stretch
+// wrote one.
+TEST_F(AssetManagerRelinkTest, DroppedAudioFileGetsItsWaveformSidecarAndPaintsIt) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Peaks.agsproj");
+    mc.saveProjectForTest(bundleDir);
+    ASSERT_TRUE(ProjectBundle::isBundle(bundleDir));
+
+    const auto source = root.getChildFile("peaky.wav");
+    ASSERT_TRUE(writeWav(source, 44100, 1, 44100.0, [](juce::int64 i, int) { return (float)i / 44100.0f; }));
+
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+
+    EXPECT_TRUE(bundleDir.getChildFile("Peaks").getChildFile("peaky.agpk").existsAsFile());
+    const auto* track = doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_NE(mc.getTimelinePanel().getClipLaneArea().getWaveformShapeForTest(track->clips[0].id), "none")
+        << "the clip must paint a waveform from its first frame";
+}
+
 TEST_F(AssetManagerRelinkTest, DroppedAudioFileOnUnsavedProjectUsesTheRecordingsPolicy) {
     MainComponent mc(std::make_unique<MockProviderAM>());
     mc.setSize(1600, 900);
@@ -576,4 +606,292 @@ TEST_F(AssetManagerAdoptionTest, MissingSourceFileIsLeftUntouched) {
     const auto bundleDir = root.getChildFile("AdoptMissing.agsproj");
     EXPECT_EQ(AssetManager::adoptRecordingsAssets(doc, recordingsRoot, bundleDir), 0);
     EXPECT_EQ(doc.getClip(clipId)->assetRef, juce::String("Recordings/never-existed.wav"));
+}
+
+// ---- A Stretch edge drag on an audio clip (the lane half is in TimelineClipLaneSizingTests.cpp) ----
+
+TEST_F(AssetManagerRelinkTest, StretchingAnAudioClipImportsAStretchedCopyAsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Stretch.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
+
+    // Two seconds of A440, so the stretched copy's length and pitch can be measured.
+    constexpr double kSampleRate = 44100.0;
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeWav(source, 88200, 1, kSampleRate, [](juce::int64 i, int) {
+        return 0.5f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / kSampleRate);
+    }));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    ASSERT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats;
+    mc.getUndoManager().clearUndoHistory();
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 2.0);
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_EQ(c->assetRef, juce::String("Audio/loop-stretch200.wav"));
+    EXPECT_DOUBLE_EQ(c->lengthBeats, length * 2.0);
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Stretched loop to 200%");
+    const auto copy = bundleDir.getChildFile("Audio/loop-stretch200.wav");
+    EXPECT_TRUE(bundleDir.getChildFile("Peaks/loop-stretch200.agpk").existsAsFile()) << "it keeps a waveform";
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(copy));
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NEAR((double)reader->lengthInSamples, 4.0 * kSampleRate, 2.0) << "twice as long";
+    juce::AudioBuffer<float> data(1, (int)reader->lengthInSamples);
+    reader->read(&data, 0, data.getNumSamples(), 0, true, false);
+    int crossings = 0;
+    for (int i = 44100; i < 132300; ++i) // the middle two seconds
+        crossings += data.getSample(0, i) < 0.0f && data.getSample(0, i + 1) >= 0.0f ? 1 : 0;
+    EXPECT_NEAR(crossings / 2.0, 440.0, 4.0) << "the same pitch";
+
+    // ONE undo step back to the original file, which stays in the project; redo plays the copy again.
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    mc.getUndoManager().undo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop.wav"));
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->lengthBeats, length);
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+    EXPECT_TRUE(bundleDir.getChildFile("Audio/loop.wav").existsAsFile());
+    mc.getUndoManager().redo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop-stretch200.wav"));
+}
+
+TEST_F(AssetManagerRelinkTest, AStretchRendersTheAudioTheClipPlaysAtTheProjectTempo) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    ASSERT_TRUE(transport.setBpm(90.0));
+    transport.tick(512);
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().bpm, 90.0);
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.saveProjectForTest(root.getChildFile("Tempo.agsproj")));
+
+    // Two seconds is three beats at 90 BPM; at the 120 BPM fallback the window would be 1.5 s.
+    constexpr double kSampleRate = 44100.0;
+    const auto source = root.getChildFile("tempo.wav");
+    ASSERT_TRUE(writeWav(source, 88200, 1, kSampleRate, [](juce::int64 i, int) {
+        return 0.5f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / kSampleRate);
+    }));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    ASSERT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    ASSERT_NEAR(doc.getClip(clip)->lengthBeats, 3.0, 1e-6);
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, 6.0);
+
+    const auto copy = mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(doc.getClip(clip)->assetRef);
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(copy));
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NEAR((double)reader->lengthInSamples, 6.0 * 60.0 / 90.0 * kSampleRate, 2.0) << "six beats at 90 BPM";
+}
+
+TEST_F(AssetManagerRelinkTest, AnAudioClipThatCannotStretchIsResizedAndSaysWhy) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto clip = doc.addClip(doc.addTrack(TrackKind::Audio, "Audio 1"), 4.0, 4.0, "gone");
+    ASSERT_TRUE(doc.setClipAsset(clip, "Audio/gone.wav", 0.0));
+    mc.getUndoManager().clearUndoHistory();
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 5.0, 3.0);
+
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/gone.wav"));
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->startBeat, 5.0);
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->lengthBeats, 3.0);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "The clip's audio file is missing; resized instead");
+    EXPECT_TRUE(mc.getUndoManager().canUndo());
+}
+
+// ---- Stretching again renders from the original audio ----
+
+namespace {
+constexpr double kStretchRate = 44100.0;
+
+juce::AudioBuffer<float> readAsset(MainComponent& mc, const juce::String& ref) {
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(
+        formats.createReaderFor(mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(ref)));
+    juce::AudioBuffer<float> data;
+    if (reader == nullptr)
+        return data;
+    data.setSize(1, (int)reader->lengthInSamples);
+    reader->read(&data, 0, data.getNumSamples(), 0, true, false);
+    return data;
+}
+
+// Cycles per second over [from, to) samples, by upward zero crossings.
+double frequencyOf(const juce::AudioBuffer<float>& data, int from, int to) {
+    int crossings = 0;
+    for (int i = from; i < to - 1; ++i)
+        crossings += data.getSample(0, i) < 0.0f && data.getSample(0, i + 1) >= 0.0f ? 1 : 0;
+    return crossings / ((to - from) / kStretchRate);
+}
+
+// Two seconds: 200 Hz for the first second, 800 Hz for the second.
+bool writeTwoToneLoop(const juce::File& file) {
+    return writeWav(file, 88200, 1, kStretchRate, [](juce::int64 i, int) {
+        const double hz = i < 44100 ? 200.0 : 800.0;
+        return 0.5f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * hz * (double)i / kStretchRate);
+    });
+}
+} // namespace
+
+TEST_F(AssetManagerRelinkTest, AClipStretchedBackToItsOriginalLengthIsTheOriginalAgain) {
+    // Regression test for FRO1147: each stretch rendered from the previous copy, so 150% then 100% was a new file.
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Back.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeTwoToneLoop(source));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats;
+    const auto original = readAsset(mc, "Audio/loop.wav");
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 1.5);
+    ASSERT_NE(doc.getClip(clip)->assetRef, juce::String("Audio/loop.wav"));
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length);
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_EQ(c->assetRef, juce::String("Audio/loop.wav")) << "the original itself, not a second copy";
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0);
+    EXPECT_DOUBLE_EQ(c->lengthBeats, length);
+    EXPECT_FALSE(c->stretchOrigin.has_value());
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Stretched loop to 100%");
+    const auto now = readAsset(mc, c->assetRef);
+    ASSERT_EQ(now.getNumSamples(), original.getNumSamples());
+    for (int i = 0; i < now.getNumSamples(); i += 97)
+        ASSERT_NEAR(now.getSample(0, i), original.getSample(0, i), 1e-6f);
+    EXPECT_EQ(bundleDir.getChildFile("Audio").findChildFiles(juce::File::findFiles, false).size(), 2)
+        << "the original and the 150% copy only";
+}
+
+TEST_F(AssetManagerRelinkTest, ASecondStretchRendersFromTheOriginalAndUndoRestoresTheOrigin) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.saveProjectForTest(root.getChildFile("Second.agsproj")));
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeTwoToneLoop(source));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats;
+    mc.getUndoManager().clearUndoHistory();
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 2.0);
+    const auto first = *doc.getClip(clip);
+    ASSERT_TRUE(first.stretchOrigin.has_value());
+    EXPECT_EQ(first.stretchOrigin->assetRef, juce::String("Audio/loop.wav"));
+    EXPECT_NEAR(first.stretchOrigin->ratio, 0.5, 1e-9);
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 3.0);
+    const auto* c = doc.getClip(clip);
+    ASSERT_TRUE(c->stretchOrigin.has_value());
+    EXPECT_EQ(c->stretchOrigin->assetRef, juce::String("Audio/loop.wav")) << "never the first copy";
+    EXPECT_NEAR(c->stretchOrigin->ratio, 1.0 / 3.0, 1e-9);
+    EXPECT_FALSE(c->assetRef.contains("stretch200")) << "named from the original, not the 200% copy";
+    const auto data = readAsset(mc, c->assetRef);
+    EXPECT_NEAR((double)data.getNumSamples(), 6.0 * kStretchRate, 4.0) << "three times the original";
+    EXPECT_NEAR(frequencyOf(data, 20000, 100000), 200.0, 6.0) << "the first tone, same pitch";
+
+    mc.getUndoManager().undo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, first.assetRef);
+    EXPECT_EQ(doc.getClip(clip)->stretchOrigin, first.stretchOrigin) << "one step restores the clip and its origin";
+    mc.getUndoManager().undo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop.wav"));
+    EXPECT_FALSE(doc.getClip(clip)->stretchOrigin.has_value());
+}
+
+TEST_F(AssetManagerRelinkTest, StretchingATrimmedStretchedClipKeepsOnlyThePartShown) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.saveProjectForTest(root.getChildFile("Trim.agsproj")));
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeTwoToneLoop(source));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats; // 4 beats at 120 bpm
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 2.0);
+    ASSERT_TRUE(doc.trimClipStart(clip, length, 0.5)); // keeps the second half: the 800 Hz second of the original
+    MainComponentAudioImport::stretchAudioClip(mc, clip, length, length * 2.0);
+
+    const auto* c = doc.getClip(clip);
+    ASSERT_TRUE(c->stretchOrigin.has_value());
+    EXPECT_EQ(c->stretchOrigin->assetRef, juce::String("Audio/loop.wav"));
+    EXPECT_NEAR(c->stretchOrigin->offsetSeconds, 1.0, 1e-9) << "the shown part starts 1 s into the original";
+    const auto data = readAsset(mc, c->assetRef);
+    EXPECT_NEAR((double)data.getNumSamples(), 4.0 * kStretchRate, 4.0) << "the shown second, stretched 4x";
+    EXPECT_NEAR(frequencyOf(data, 10000, data.getNumSamples() - 10000), 800.0, 8.0) << "only the 800 Hz part";
+}
+
+TEST_F(AssetManagerRelinkTest, AMissingOriginalFallsBackToTheCurrentAsset) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Missing.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeTwoToneLoop(source));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats;
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 2.0);
+    const auto copyRef = doc.getClip(clip)->assetRef;
+    ASSERT_TRUE(bundleDir.getChildFile("Audio/loop.wav").deleteFile());
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 3.0);
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_NE(c->assetRef, copyRef) << "it stretched rather than failing";
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Stretched loop to 150%");
+    ASSERT_TRUE(c->stretchOrigin.has_value());
+    EXPECT_EQ(c->stretchOrigin->assetRef, copyRef) << "the copy is the best original left";
+    EXPECT_NEAR((double)readAsset(mc, c->assetRef).getNumSamples(), 6.0 * kStretchRate, 4.0);
+}
+
+TEST_F(AssetManagerAdoptionTest, AdoptionRewritesAStretchOriginInTheRecordingsFolderToo) {
+    ASSERT_TRUE(
+        writeWav(recordingsRoot.getChildFile("take-1.wav"), 500, 1, 44100.0, [](juce::int64, int) { return 0.f; }));
+    ASSERT_TRUE(writeWav(recordingsRoot.getChildFile("take-1-stretch200.wav"), 500, 1, 44100.0,
+                         [](juce::int64, int) { return 0.f; }));
+    TimelineDoc doc;
+    const auto clip = doc.addClip(doc.addTrack(TrackKind::Audio, "Audio 1"), 0.0, 4.0, "Take");
+    ASSERT_TRUE(doc.setClipAsset(clip, "Recordings/take-1-stretch200.wav", 0.0));
+    ASSERT_TRUE(doc.setClipStretchOrigin(clip, synth::Clip::StretchOrigin{"Recordings/take-1.wav", 0.25, 0.5}));
+
+    const auto bundleDir = root.getChildFile("AdoptOrigin.agsproj");
+    EXPECT_EQ(AssetManager::adoptRecordingsAssets(doc, recordingsRoot, bundleDir), 2);
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_EQ(c->assetRef, juce::String("Audio/take-1-stretch200.wav"));
+    ASSERT_TRUE(c->stretchOrigin.has_value());
+    EXPECT_EQ(c->stretchOrigin->assetRef, juce::String("Audio/take-1.wav"));
+    EXPECT_DOUBLE_EQ(c->stretchOrigin->offsetSeconds, 0.25);
+    EXPECT_DOUBLE_EQ(c->stretchOrigin->ratio, 0.5);
+    EXPECT_TRUE(bundleDir.getChildFile("Audio/take-1.wav").existsAsFile());
 }

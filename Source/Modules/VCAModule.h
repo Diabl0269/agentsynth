@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
+#include "Modules/SoftLimit.h"
 #include <cmath>
 #include <optional>
 
@@ -35,7 +37,9 @@ public:
         // StereoAudio::Declared: 24 outputs, so the Auto shape test cannot see the stereo pair — the
         // right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("VCA", kNumChannels, kNumChannels, StereoAudio::Declared) {
-        addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
+        addParameter(gainParam =
+                         new juce::AudioParameterFloat("gain", "Gain", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                       synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // gates in stereo). Collapsed, its jack layout is the plain mono one — Audio, CV.
@@ -44,12 +48,12 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(samplesPerBlock);
+        prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedGain.reset(sampleRate, 0.01);
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
         // below so both see a filled Right leg exactly as if the user had cabled it.
@@ -84,14 +88,11 @@ public:
             auto* audioData = buffer.getWritePointer(0);
             const float* cvData = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
 
-            // If ch1 has no signal, try ch8 (poly envelope routing)
-            if (cvData != nullptr && numChannels > 8) {
-                float rms1 = 0.0f;
-                for (int s = 0; s < std::min(numSamples, 64); ++s)
-                    rms1 += cvData[s] * cvData[s];
-                if (rms1 < 1e-6f)
-                    cvData = buffer.getReadPointer(8);
-            }
+            // If ch1 carries nothing at all this block, try ch8 (poly envelope routing). The whole
+            // block is probed: an envelope that idles at 0 and fires mid-block would be missed by
+            // a head-of-block probe, muting its attack and then stepping in a block later.
+            if (cvData != nullptr && numChannels > 8 && !hasAnyNonZero(cvData, numSamples))
+                cvData = buffer.getReadPointer(8);
 
             // The right leg is gated by the SAME gain ramp and the same CV, so both legs stay
             // level-matched; walking the smoother twice would leave R a block behind L. Skipped
@@ -111,15 +112,13 @@ public:
                 buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
             }
             if (auto* vb = getVisualBuffer())
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(buffer.getSample(0, s));
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
         } else {
             // --- Poly mode: 8 voices summed to stereo (ch0/ch1) ---
             // Each voice is multiplied by its envelope CV and the master gain,
-            // then all voices are accumulated into a single stereo sum.
-            // A fixed 1/MAX_VOICES normalization prevents hot signals from clipping,
-            // and std::tanh provides gentle soft saturation as a safety net.
-            static constexpr float kNorm = 1.0f / static_cast<float>(MAX_VOICES);
+            // then all voices are accumulated into a single stereo sum, each at the fixed
+            // synth::kPolyVoiceGain: a chord is louder than one note and nothing is normalised by
+            // the voice count. synth::softLimit rounds only what passes 0.9.
 
             if (numChannels >= 2) {
                 auto* outL = buffer.getWritePointer(0);
@@ -131,20 +130,21 @@ public:
                 float* outRightLeg = hasRight ? buffer.getWritePointer(kRightBase) : nullptr;
 
                 for (int s = 0; s < numSamples; ++s) {
-                    float gain = smoothedGain.getNextValue();
+                    const float voiceGain = smoothedGain.getNextValue() * synth::kPolyVoiceGain;
                     float sum = 0.0f;
                     float sumRight = 0.0f;
                     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
                         float cv = (v + MAX_VOICES < numChannels) ? buffer.getSample(v + MAX_VOICES, s) : 1.0f;
-                        sum += buffer.getSample(v, s) * gain * cv;
-                        if (hasRight && kRightBase + v < numChannels)
-                            sumRight += buffer.getSample(kRightBase + v, s) * gain * cv;
+                        sum += buffer.getSample(v, s) * voiceGain * cv;
+                        if (hasRight && kRightBase + v < numChannels) {
+                            sumRight += buffer.getSample(kRightBase + v, s) * voiceGain * cv;
+                        }
                     }
-                    float mixed = std::tanh(sum * kNorm);
+                    float mixed = synth::softLimit(sum);
                     outL[s] = mixed;
                     outR[s] = mixed;
                     if (outRightLeg != nullptr)
-                        outRightLeg[s] = std::tanh(sumRight * kNorm);
+                        outRightLeg[s] = synth::softLimit(sumRight);
                 }
 
                 // Zero out voice channels 2-7 so they don't leak downstream
@@ -156,8 +156,7 @@ public:
                     buffer.clear(kRightBase + v, 0, numSamples);
             }
             if (auto* vb = getVisualBuffer())
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(buffer.getSample(0, s));
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
 
         // Clear CV channels to prevent leaking to downstream modules.
@@ -267,6 +266,15 @@ public:
         return std::nullopt;
     }
 
+    /** The legacy ch1 copy of the output is faded with the legs. Mono bypass clears it (ch1 is the gain CV
+        jack there), so it has no dry path; in poly mode bypass leaves voice 1's audio input on it. */
+    int duplicateOutputChannel() const override { return 1; }
+    int bypassDryChannel(int outputChannel) const override {
+        if (outputChannel == 1 && !polyParam->get())
+            return -1;
+        return ModuleBase::bypassDryChannel(outputChannel);
+    }
+
     bool isAutoPromotableModTarget(int dstChannel) const override {
         if (polyParam->get())
             return false;
@@ -275,6 +283,7 @@ public:
 
 private:
     static constexpr int MAX_VOICES = 8;
+
     juce::AudioParameterFloat* gainParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain;

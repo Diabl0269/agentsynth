@@ -1,0 +1,213 @@
+// StepGridMotion.cpp -- every animation of the step grid, each time-bounded and started by a change (never a
+// free-running timer): lanes folding in and out (160 ms, the card's height following), the columns sliding to a
+// page (160 ms), bars gliding to values changed from outside a drag (160 ms with a small per-step stagger) and steps
+// dimming past Steps (120 ms). Reduce Motion shortens them to 80 ms without the stagger; Animations Off lands at once
+// (ReducedMotion.h, docs/layout/animation.md).
+#include "StepGridComponent.h"
+#include "UI/Layout/FadeVisibility.h"
+
+namespace synth::ui {
+
+using namespace stepgrid;
+
+namespace {
+
+constexpr double kBodyMs = 160.0;
+constexpr double kReducedMs = 80.0;
+constexpr double kDimMs = 120.0;
+constexpr double kStaggerMs = 4.0;
+
+double glideTotalMs() {
+    return motionMs(kBodyMs, kReducedMs) + (prefersReducedMotion() ? 0.0 : kStaggerMs * (kColumns - 1));
+}
+
+} // namespace
+
+bool StepGridComponent::isMotionRunning() const {
+    return revealAnim_.isRunning() || pageAnim_.isRunning() || glideAnim_.isRunning() || dimAnim_.isRunning();
+}
+
+void StepGridComponent::finishMotionForTest() {
+    revealAnim_.completeForTest();
+    pageAnim_.completeForTest();
+    glideAnim_.completeForTest();
+    dimAnim_.completeForTest();
+}
+
+void StepGridComponent::stepMotionForTest(double ms) {
+    glideAnim_.stepForTest(ms);
+    dimAnim_.stepForTest(ms);
+}
+
+// The card's height follows every frame; the neighbours make room ONCE per direction: a lane opening asks for its
+// final footprint when it starts (the card is measured at that size for the call), a lane closing gives the room
+// back when it has gone.
+void StepGridComponent::startRevealMotion(std::uint16_t from, std::uint16_t to) {
+    revealTarget_ = to;
+    const auto target = revealsOf(to);
+    const bool grows = computeLayout(target, getWidth()).total > computeLayout(reveal_, getWidth()).total;
+    revealAnim_.stop(vblank_);
+    auto notify = [this] {
+        if (hooks_.layoutChanged)
+            hooks_.layoutChanged();
+    };
+    if (!FadeVisibility::canAnimateIn(this)) {
+        reveal_ = target;
+        layoutParts();
+        notify();
+        if (hooks_.makeRoom)
+            hooks_.makeRoom();
+        return;
+    }
+    juce::ignoreUnused(from);
+    revealFrom_ = reveal_;
+    revealTo_ = target;
+    if (grows) {
+        settling_ = true;
+        notify();
+        if (hooks_.makeRoom)
+            hooks_.makeRoom();
+        settling_ = false;
+    }
+    revealAnim_.start(
+        vblank_, motionMs(kBodyMs, kReducedMs), easeOutCubic,
+        [this, notify](float t) {
+            for (size_t i = 0; i < reveal_.size(); ++i)
+                reveal_[i] = revealFrom_[i] + (revealTo_[i] - revealFrom_[i]) * t;
+            layoutParts();
+            notify();
+        },
+        [this, notify, grows] {
+            reveal_ = revealTo_;
+            layoutParts();
+            notify();
+            if (!grows && hooks_.makeRoom)
+                hooks_.makeRoom();
+        });
+}
+
+void StepGridComponent::startPageSlide(float toPage) {
+    pageAnim_.stop(vblank_);
+    if (!FadeVisibility::canAnimateIn(this)) {
+        slidePos_ = toPage;
+        repaint();
+        return;
+    }
+    pageFrom_ = slidePos_;
+    pageAnim_.start(
+        vblank_, motionMs(kBodyMs, kReducedMs), easeOutCubic,
+        [this, toPage](float t) {
+            slidePos_ = pageFrom_ + (toPage - pageFrom_) * t;
+            repaint();
+        },
+        [this, toPage] {
+            slidePos_ = toPage;
+            repaint();
+        });
+}
+
+void StepGridComponent::startGlide(const SequencerPattern& from) { startGlide(from, scale_, transpose_); }
+
+void StepGridComponent::startGlide(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose) {
+    ++glideStarts_;
+    const bool interrupts = gliding_ && FadeVisibility::canAnimateIn(this);
+    if (interrupts)
+        captureDrawnAsGlideStart(from, fromScale, fromTranspose);
+    glideAnim_.stop(vblank_);
+    gliding_ = false;
+    fromDrawn_ = interrupts;
+    if (!FadeVisibility::canAnimateIn(this))
+        return;
+    glideFrom_ = from;
+    glideFromScale_ = fromScale;
+    glideFromTranspose_ = fromTranspose;
+    startLabelFade();
+    gliding_ = true;
+    glideElapsed_ = 0.0f;
+    glideAnim_.start(
+        vblank_, glideTotalMs(), [](float t) { return t; },
+        [this](float t) {
+            glideElapsed_ = t;
+            repaint();
+        },
+        [this] {
+            gliding_ = false;
+            fromDrawn_ = false;
+            repaint();
+        });
+}
+
+// A second glide while the first runs (a second Cmd+Z, a key change under an undo) starts each bar where it is drawn
+// now: `from` is the state the running glide was heading for, so the drawn place is its start moved by its mix.
+void StepGridComponent::captureDrawnAsGlideStart(const SequencerPattern& from, const MusicalScale& fromScale,
+                                                 int fromTranspose) {
+    auto drawn = [this](float start, float target, int step) { return start + (target - start) * glideMix(step); };
+    for (int s = 0; s < kMaxSequencerSteps; ++s) {
+        const auto& oldStart = glideFrom_.steps[(size_t)s];
+        const float startPitch =
+            fromDrawn_
+                ? fromPitch_[(size_t)s]
+                : (float)glideFromScale_.snapPitch(juce::jlimit(0, 127, (int)oldStart.pitch + glideFromTranspose_));
+        const float targetPitch =
+            (float)fromScale.snapPitch(juce::jlimit(0, 127, (int)from.steps[(size_t)s].pitch + fromTranspose));
+        const float pitch = drawn(startPitch, targetPitch, s);
+        std::array<float, kSequencerLaneCount> normals{};
+        for (int lane = 0; lane < kSequencerLaneCount; ++lane) {
+            const float startNormal =
+                fromDrawn_ ? fromNormal_[(size_t)lane][(size_t)s] : laneNormal((SequencerLane)lane, oldStart);
+            normals[(size_t)lane] = drawn(startNormal, laneNormal((SequencerLane)lane, from.steps[(size_t)s]), s);
+        }
+        fromPitch_[(size_t)s] = pitch;
+        for (int lane = 0; lane < kSequencerLaneCount; ++lane)
+            fromNormal_[(size_t)lane][(size_t)s] = normals[(size_t)lane];
+    }
+}
+
+// How far step `step`'s bar has travelled from the old value to the new one (0..1, eased).
+float StepGridComponent::glideMix(int step) const {
+    if (!gliding_)
+        return 1.0f;
+    const double total = glideTotalMs();
+    const double elapsed = (double)glideElapsed_ * total;
+    const double stagger = prefersReducedMotion() ? 0.0 : kStaggerMs * (double)(step % kColumns);
+    const double body = motionMs(kBodyMs, kReducedMs);
+    const float local = (float)juce::jlimit(0.0, 1.0, (elapsed - stagger) / std::max(1.0, body));
+    return prefersReducedMotion() ? local : easeOutCubic(local);
+}
+
+// Steps changed: every column's shade heads for its new 0 or 1 from the level it shows RIGHT NOW. A hold or drag
+// changes Steps again before the last dim ended, so a restart from the old from/to pair would flash the columns that
+// were mid-fade; retargeting from the shown level keeps each one moving one way (as ButtonStateEase does).
+void StepGridComponent::startDim() {
+    for (int s = 0; s < kMaxSequencerSteps; ++s)
+        dimFrom_[(size_t)s] = dimAmount(s);
+    dimAnim_.stop(vblank_);
+    dimToSteps_ = stepCount();
+    if (!FadeVisibility::canAnimateIn(this)) {
+        dimT_ = 1.0f;
+        repaint();
+        return;
+    }
+    dimT_ = 0.0f;
+    dimAnim_.start(
+        vblank_, motionMs(kDimMs, kReducedMs), [](float t) { return t; },
+        [this](float t) {
+            dimT_ = t;
+            repaint();
+        },
+        [this] {
+            dimT_ = 1.0f;
+            repaint();
+        });
+}
+
+// 0 for a step that plays, 1 for one past Steps, in between while Steps has just changed.
+float StepGridComponent::dimAmount(int step) const {
+    const float to = step >= (dimToSteps_ >= 0 ? dimToSteps_ : stepCount()) ? 1.0f : 0.0f;
+    if (dimT_ >= 1.0f)
+        return to;
+    const float from = dimFrom_[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)];
+    return from + (to - from) * dimT_;
+}
+
+} // namespace synth::ui

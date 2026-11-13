@@ -6,17 +6,17 @@ reviewed.
 
 ## Patch feedback
 
-`AIChatComponent::PatchCard` carries a "Good"/"Bad" pair next to the
-[diff preview](patch-preview.md), plus an optional single-line comment revealed once a rating is
-picked. Clicking either commits immediately — thumbs are meant to be zero-friction, not a form — and
-reveals the comment field for anyone who wants to say why. Submitting a comment later, with Enter or
-"Save", writes a second record rather than mutating the first, because the underlying store is an
-append-only log, not a keyed table.
+`AIChatComponent::EditPlanCard`, the one card an answer that changes the project carries, has a
+thumbs up/down pair under its [preview](patch-preview.md), plus an optional single-line comment
+revealed once a rating is picked. Clicking either commits immediately — thumbs are meant to be
+zero-friction, not a form — and reveals the comment field for anyone who wants to say why.
+Submitting a comment later, with Enter or "Send", writes a second record rather than mutating the
+first, because the underlying store is an append-only log, not a keyed table.
 
 `Source/AI/PatchFeedbackStore` appends one JSON object per line to
 `<user app data>/Agent Synth/patch_feedback.jsonl`:
-`{timestamp, rating, comment?, conversationId?, messageId?, patch}`. `patch` is the parsed patch
-JSON, falling back to a `patchRaw` string if it does not parse; `conversationId` and `messageId` are
+`{timestamp, rating, comment?, conversationId?, messageId?, patch}`. `patch` is the parsed plan
+JSON (a patch, a `timelineOps` list, or both), falling back to a `patchRaw` string if it does not parse; `conversationId` and `messageId` are
 present only when known.
 
 **This local log is written unconditionally on every rating**, regardless of plan and regardless of

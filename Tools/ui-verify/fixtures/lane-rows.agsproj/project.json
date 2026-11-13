@@ -1,0 +1,727 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Audio Input",
+      "uuid": "bf4d2db6-06e7-4d68-88d9-b5fc2e6b1472",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 10,
+        "y": 10
+      }
+    },
+    {
+      "id": 2,
+      "type": "Audio Output",
+      "uuid": "edac9247-6b06-4f26-be90-d627217efcb7",
+      "params": {
+      },
+      "position": {
+        "x": 4600,
+        "y": 8
+      }
+    },
+    {
+      "id": 3,
+      "type": "Oscillator",
+      "uuid": "20f94910-145d-4994-8f88-6c046476c6bf",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 0.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 0.0,
+        "blend": 1.0,
+        "width": 0.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 350,
+        "y": 10
+      }
+    },
+    {
+      "id": 4,
+      "type": "Filter",
+      "uuid": "3cdfd18d-8717-4bbe-9736-23cd858bd5e3",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "cutoff": 1000.0,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 650,
+        "y": 10
+      }
+    },
+    {
+      "id": 5,
+      "type": "VCA",
+      "uuid": "96fe1241-c284-4e28-acd3-02f277009117",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": 0.800000011920929,
+        "poly": false,
+        "muted": false
+      },
+      "position": {
+        "x": 950,
+        "y": 10
+      }
+    },
+    {
+      "id": 6,
+      "type": "Amp Env",
+      "uuid": "564ae69c-91b3-448c-8f80-0796fae45b78",
+      "params": {
+        "bypassed": false,
+        "attack": 0.099999994039536,
+        "decay": 0.099999994039536,
+        "sustain": 0.800000011920929,
+        "release": 0.5,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 584,
+        "y": 620
+      }
+    },
+    {
+      "id": 7,
+      "type": "Filter Env",
+      "uuid": "2924b039-6e90-420a-bbb4-33f33c927f06",
+      "params": {
+        "bypassed": false,
+        "attack": 0.099999994039536,
+        "decay": 0.099999994039536,
+        "sustain": 0.800000011920929,
+        "release": 0.5,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 880,
+        "y": 620
+      }
+    },
+    {
+      "id": 8,
+      "type": "Sequencer",
+      "uuid": "22088240-cd88-4c94-8f05-b9e2103eecb5",
+      "params": {
+        "bypassed": false,
+        "run": false,
+        "bpm": 120.0,
+        "syncToTransport": false,
+        "steps": 8.0,
+        "rate": "1/4",
+        "transpose": 0.0,
+        "gate": 1.0,
+        "velocity": 1.0,
+        "chance": 1.0,
+        "scaleRoot": "C",
+        "scale": "No scale",
+        "followSongKey": true
+      },
+      "state": {
+        "version": 1,
+        "seed": 1738516062,
+        "steps": []
+      },
+      "position": {
+        "x": 10,
+        "y": 620
+      }
+    },
+    {
+      "id": 10,
+      "type": "Distortion",
+      "uuid": "6aa73bc2-5c5d-420d-9503-64b8c1faea18",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "drive": 1.0,
+        "mix": 0.5,
+        "type": "Soft",
+        "oversampling": "2x",
+        "outputLevel": 1.0,
+        "muted": false,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1250,
+        "y": 10
+      }
+    },
+    {
+      "id": 11,
+      "type": "Delay",
+      "uuid": "eacc2c6f-0685-49bc-a632-254db059ade2",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "time": 1.0,
+        "feedback": 0.399999976158142,
+        "mix": 0.300000011920929,
+        "tempoSync": false,
+        "timeDiv": "1/4",
+        "pingPong": false,
+        "outputLevel": 1.0,
+        "muted": false,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1250,
+        "y": 425
+      }
+    },
+    {
+      "id": 12,
+      "type": "Reverb",
+      "uuid": "614feb9e-6365-40ff-8c3c-f93309fe823e",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "roomSize": 0.5,
+        "damping": 0.5,
+        "wet": 0.330000013113022,
+        "dry": 0.400000005960464,
+        "width": 1.0,
+        "preDelay": 0.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1250,
+        "y": 810
+      }
+    },
+    {
+      "id": 13,
+      "type": "Attenuverter",
+      "uuid": "acd46e58-86ee-43b1-aded-89f217bc27b2",
+      "params": {
+        "bypassed": false,
+        "amount": 1.0
+      },
+      "position": {
+        "x": 950,
+        "y": 340
+      }
+    },
+    {
+      "id": 14,
+      "type": "Attenuverter",
+      "uuid": "804b89a3-5872-41dd-a73e-27247d6f4f96",
+      "params": {
+        "bypassed": false,
+        "amount": 1.0
+      },
+      "position": {
+        "x": 650,
+        "y": 340
+      }
+    },
+    {
+      "id": 15,
+      "type": "MIDI Keyboard",
+      "uuid": "12694a05-8abb-4d97-b3ed-af45b43d2e9b",
+      "params": {
+        "bypassed": false,
+        "octave": 0.0
+      },
+      "position": {
+        "x": 10,
+        "y": 1128
+      }
+    },
+    {
+      "id": 16,
+      "type": "Track In",
+      "uuid": "4d2e3cd6-5bd1-44a4-ad9b-1326de006440",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 112,
+        "y": 1328
+      }
+    },
+    {
+      "id": 17,
+      "type": "Filter",
+      "uuid": "b15f9df2-c653-49ce-975e-f22924a030c0",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "cutoff": 440.000030517578125,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 3944,
+        "y": 600
+      }
+    },
+    {
+      "id": 18,
+      "type": "Oscillator",
+      "uuid": "7c26280f-3ccb-48b9-88e8-94c68f74c371",
+      "params": {
+        "bypassed": false,
+        "dualIO": true,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 4240,
+        "y": 600
+      }
+    },
+    {
+      "id": 19,
+      "type": "LFO",
+      "uuid": "09a47830-1520-466d-abf6-a39425ed8152",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 3640,
+        "y": 600
+      }
+    },
+    {
+      "id": 20,
+      "type": "Attenuverter",
+      "uuid": "50d4f2cf-d64a-4150-a120-eec1310c8dfc",
+      "params": {
+        "bypassed": false,
+        "amount": 0.5
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    },
+    {
+      "id": 21,
+      "type": "LFO",
+      "uuid": "3606f5af-6108-44c6-9f45-e1232084c25d",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 3344,
+        "y": 304
+      }
+    },
+    {
+      "id": 22,
+      "type": "Attenuverter",
+      "uuid": "6f47958f-1e57-4a36-b2a2-1ec589d2887a",
+      "params": {
+        "bypassed": false,
+        "amount": 0.5
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 3,
+      "srcPort": 0,
+      "dst": 4,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 4,
+      "srcPort": 0,
+      "dst": 5,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 5,
+      "srcPort": 0,
+      "dst": 10,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 5,
+      "srcPort": 0,
+      "dst": 10,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 6,
+      "srcPort": 0,
+      "dst": 13,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 7,
+      "srcPort": 0,
+      "dst": 14,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 8,
+      "srcPort": -1,
+      "dst": 3,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 8,
+      "srcPort": -1,
+      "dst": 6,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 8,
+      "srcPort": -1,
+      "dst": 7,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 10,
+      "srcPort": 0,
+      "dst": 11,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 10,
+      "srcPort": 1,
+      "dst": 11,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 11,
+      "srcPort": 0,
+      "dst": 12,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 11,
+      "srcPort": 1,
+      "dst": 12,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 12,
+      "srcPort": 0,
+      "dst": 2,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 12,
+      "srcPort": 1,
+      "dst": 2,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 13,
+      "srcPort": 0,
+      "dst": 5,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 14,
+      "srcPort": 0,
+      "dst": 4,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 15,
+      "srcPort": -1,
+      "dst": 3,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 15,
+      "srcPort": -1,
+      "dst": 6,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 15,
+      "srcPort": -1,
+      "dst": 7,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 16,
+      "srcPort": -1,
+      "dst": 18,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 18,
+      "srcPort": 0,
+      "dst": 17,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 20,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 0,
+      "dst": 17,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 0,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 0,
+      "dst": 17,
+      "dstPort": 1,
+      "isMidi": false
+    }
+  ],
+  "modulations": [
+    {
+      "source": 6,
+      "sourcePort": 0,
+      "dest": 5,
+      "destPort": 1,
+      "amount": 1.0,
+      "bypass": false
+    },
+    {
+      "source": 7,
+      "sourcePort": 0,
+      "dest": 4,
+      "destPort": 1,
+      "amount": 1.0,
+      "bypass": false
+    },
+    {
+      "source": 19,
+      "sourcePort": 0,
+      "dest": 17,
+      "destPort": 1,
+      "amount": 0.5,
+      "bypass": false
+    },
+    {
+      "source": 21,
+      "sourcePort": 0,
+      "dest": 17,
+      "destPort": 1,
+      "amount": 0.5,
+      "bypass": false
+    }
+  ],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 1,
+    "nextLaneId": 2,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 0,
+        "name": "Track 1",
+        "colourArgb": 4283417087,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "4d2e3cd6-5bd1-44a4-ad9b-1326de006440",
+        "clips": [],
+        "lanes": [
+          {
+            "id": 1,
+            "nodeUuid": "b15f9df2-c653-49ce-975e-f22924a030c0",
+            "paramId": "cutoff",
+            "recordMode": 1,
+            "paramIndexHint": -1,
+            "range": {
+              "minValue": 0.0,
+              "maxValue": 1.0,
+              "defaultValue": 0.5
+            },
+            "points": []
+          }
+        ]
+      }
+    ],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": 0.0,
+    "panY": 0.0
+  }
+}

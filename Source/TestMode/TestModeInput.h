@@ -1,0 +1,55 @@
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+
+// TestModeInput.h: synthetic mouse and keyboard input for the test-mode server. Everything goes through the target's
+// ComponentPeer (the same entry the OS uses), never into a component's mouseDown() directly and never through the OS
+// event queue, so the real cursor and keyboard are untouched. Message thread only.
+namespace synth::testmode {
+
+/** Modifier names ("cmd", "shift", "alt", "ctrl") to a ModifierKeys; unknown names set `error`. */
+juce::ModifierKeys modifiersFromNames(const juce::StringArray& names, juce::String& error);
+
+/** "cmd+z", "space", "shift+tab", "escape" ... to a KeyPress. Empty `error` on success. */
+juce::KeyPress keyPressFromText(const juce::String& text, juce::String& error);
+
+enum class Button { left, right };
+
+/** One mouse position and state in the peer of `target`: `local` is in target's coordinates. */
+struct MouseStep {
+    juce::Component* target = nullptr;
+    juce::Point<int> local;
+    juce::ModifierKeys keys; // key modifiers held (no mouse buttons)
+    bool buttonDown = false;
+    Button button = Button::left;
+    /** True: while a press is in progress the event goes to the window the press happened in, at this point's screen
+     *  position even when that is outside the window, as the OS does for a held button (implicit capture). The
+     *  event is not hit-tested against `target`'s own window, so a drag over a second window reaches the app the way a
+     *  hand's does. Ignored when no press is in progress. */
+    bool captured = false;
+};
+
+/** Delivers one mouse event through the peer. False (with `error`) when the target is not on a native window. */
+bool sendMouse(const MouseStep& step, juce::String& error);
+
+/** One mouse-wheel event at `local` in the peer of `target` (the pointer moves there first). `dx`/`dy` are JUCE wheel
+ *  units: a notch of a mouse wheel is about 0.1 to 0.25, and positive `dy` scrolls the content up. */
+bool wheel(juce::Component& target, juce::Point<int> local, float dx, float dy, juce::ModifierKeys keys,
+           juce::String& error);
+
+/** A press and release at `local` (clicks 1 or 2, the second quickly enough to count as a double click). */
+bool click(juce::Component& target, juce::Point<int> local, Button button, int clicks, juce::ModifierKeys keys,
+           juce::String& error);
+
+/** Sends a key through the peer of `target`, which delivers it to the focused component (or the window). `handled`
+ *  reports whether anything consumed it. False (with `error`) when the target is not on a native window. */
+bool pressKey(juce::Component& target, const juce::KeyPress& key, bool& handled, juce::String& error);
+
+/** Where the last synthetic mouse event put the pointer, in screen coordinates; empty before the first one. */
+std::optional<juce::Point<int>> lastPointerScreenPoint();
+
+/** The centre of a component, in its own coordinates. */
+juce::Point<int> centreOf(const juce::Component& c);
+
+} // namespace synth::testmode

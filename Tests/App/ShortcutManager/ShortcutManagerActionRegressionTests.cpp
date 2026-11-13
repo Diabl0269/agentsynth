@@ -1,19 +1,21 @@
 // Concern: per-feature regression coverage for individually-added shortcut actions (minimap,
 // macro group/ungroup/collapse, piano-roll scale toggles, snap/quantise, export-patch-only,
 // focus-region, timeline focused-track mute/solo/arm).
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
+#include <map>
 
 // ---------------------------------------------------------------------------
 // Minimap toggle
 // ---------------------------------------------------------------------------
 
-// Default binding for the minimap toggle must be Cmd+K, with no extra modifiers.
-TEST_F(ShortcutManagerTest, ToggleMinimapDefaultBindingIsCmdK) {
+// Default binding for the minimap toggle is Opt+Cmd+K: plain Cmd+K opens the command palette.
+TEST_F(ShortcutManagerTest, ToggleMinimapDefaultBindingIsOptCmdK) {
     const auto kp = manager.getBinding("toggleMinimap");
     EXPECT_EQ(kp.getKeyCode(), 'k');
     EXPECT_TRUE(kp.getModifiers().isCommandDown());
     EXPECT_FALSE(kp.getModifiers().isShiftDown());
-    EXPECT_FALSE(kp.getModifiers().isAltDown());
+    EXPECT_TRUE(kp.getModifiers().isAltDown());
 }
 
 // AppCommands::getCommandForAction must resolve "toggleMinimap" to the real command ID.
@@ -119,6 +121,35 @@ TEST_F(ShortcutManagerTest, GetActionDescription_CollapseMacroIsTheStaticToggleL
     const auto description = ShortcutManager::getActionDescription("collapseMacro");
     EXPECT_FALSE(description.isEmpty());
     EXPECT_EQ(description, "Collapse / Expand Macro");
+}
+
+// ---------------------------------------------------------------------------
+// Fold and Pack Macros
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosDefaultsToCmdCtrlGOnMac) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+    manager.resetToDefaults();
+    const auto kp = manager.getBinding("foldAndPackMacros");
+    EXPECT_EQ(kp.getKeyCode(), 'g');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isCtrlDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+}
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosDoesNotShadowGroupOnOtherPlatforms) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    manager.resetToDefaults();
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(manager.getBinding("foldAndPackMacros"),
+                                                  manager.getBinding("groupSelection")));
+    EXPECT_FALSE(manager.getBinding("foldAndPackMacros").getKeyCode() == 0);
+}
+
+TEST_F(ShortcutManagerTest, FoldAndPackMacrosIsARebindableCommandWithAName) {
+    EXPECT_EQ(AppCommands::getCommandForAction("foldAndPackMacros"), AppCommands::foldAndPackMacros);
+    EXPECT_TRUE(manager.getActionIds().contains("foldAndPackMacros"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("foldAndPackMacros"), "Fold and Pack Macros");
 }
 
 // ---------------------------------------------------------------------------
@@ -445,11 +476,148 @@ TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsDoNotCollideWithAnyExisti
     }
 }
 
+// timelineMonitorFocusedTrack -- bare i, the same surface action as m/s/r: the focused audio track row flips its
+// Monitor between On and Auto.
+TEST_F(ShortcutManagerTest, TimelineMonitorFocusedTrackIsBareIWithItsNameCategoryAndNoConflict) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineMonitorFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineMonitorFocusedTrack"), "Monitor Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineMonitorFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineMonitorFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'i');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys());
+    EXPECT_TRUE(manager.getConflictingAction("timelineMonitorFocusedTrack", kp).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineMonitorFocusedTrack", kp);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineMonitorFocusedTrack"), AppCommands::kNoCommand);
+}
+
+// timelineDeleteFocusedTrack -- Cmd+Backspace, Timeline category, claimed by the focused track row's keyPressed. Bare
+// Backspace/Delete on clips and the canvas are fixed keys outside the table, so nothing else carries this chord.
+TEST_F(ShortcutManagerTest, TimelineDeleteFocusedTrackIsRegisteredWithItsNameCategoryAndCmdBackspace) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineDeleteFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineDeleteFocusedTrack"), "Delete Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineDeleteFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineDeleteFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), juce::KeyPress::backspaceKey);
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::commandModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineDeleteFocusedTrackHasNoConflictAndNoCommand) {
+    const auto binding = manager.getBinding("timelineDeleteFocusedTrack");
+    EXPECT_TRUE(manager.getConflictingAction("timelineDeleteFocusedTrack", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineDeleteFocusedTrack", binding);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineDeleteFocusedTrack"), AppCommands::kNoCommand);
+}
+
 TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveNoCommand) {
     // Pure surface actions: MainComponent never dispatches these through ApplicationCommandManager.
     EXPECT_EQ(AppCommands::getCommandForAction("timelineMuteFocusedTrack"), AppCommands::kNoCommand);
     EXPECT_EQ(AppCommands::getCommandForAction("timelineSoloFocusedTrack"), AppCommands::kNoCommand);
     EXPECT_EQ(AppCommands::getCommandForAction("timelineArmFocusedTrack"), AppCommands::kNoCommand);
+}
+
+// ---------------------------------------------------------------------------
+// timelineDuplicateFocusedTrack -- Cmd+D, Timeline category. It shares its chord with the General
+// "duplicateSelection" on purpose (conflicts are per category) and, like the m/s/r row above, is a pure
+// surface action: the track header's keyPressed claims the key, the command layer never sees it.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TimelineDuplicateFocusedTrackIsRegisteredWithItsNameCategoryAndCmdD) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineDuplicateFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineDuplicateFocusedTrack"), "Duplicate Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineDuplicateFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineDuplicateFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'd');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::commandModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineDuplicateFocusedTrackSharesCmdDWithDuplicateSelectionWithoutConflict) {
+    const auto binding = manager.getBinding("timelineDuplicateFocusedTrack");
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(manager.getBinding("duplicateSelection"), binding))
+        << "Cmd+D elsewhere keeps duplicating the selection";
+    EXPECT_TRUE(manager.getConflictingAction("timelineDuplicateFocusedTrack", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineDuplicateFocusedTrack", binding);
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineDuplicateFocusedTrackHasNoCommand) {
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineDuplicateFocusedTrack"), AppCommands::kNoCommand);
+    EXPECT_NE(AppCommands::getCommandForAction("duplicateSelection"), AppCommands::kNoCommand);
+}
+
+// ---------------------------------------------------------------------------
+// timelineShowFocusedTrackModule -- Ctrl+E, Timeline category: a surface action claimed by the track header's
+// keyPressed. The Mixer's "mixerToggleEq" carries the same chord on the Mac; conflicts are per category.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleIsRegisteredWithItsNameCategoryAndCtrlE) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineShowFocusedTrackModule"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineShowFocusedTrackModule"), "Show Focused Track Module");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineShowFocusedTrackModule"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineShowFocusedTrackModule");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::ctrlModifier));
+}
+
+TEST_F(ShortcutManagerTest, TimelineShowFocusedTrackModuleHasNoConflictInItsCategory) {
+    const auto binding = manager.getBinding("timelineShowFocusedTrackModule");
+    EXPECT_TRUE(manager.getConflictingAction("timelineShowFocusedTrackModule", binding).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineShowFocusedTrackModule", binding);
+}
+
+// openFeedback -- Cmd+Shift+F, General category, command-dispatched to the top bar's Feedback button.
+TEST_F(ShortcutManagerTest, OpenFeedbackIsRegisteredWithCmdShiftFAndItsOwnCommand) {
+    EXPECT_TRUE(manager.getActionIds().contains("openFeedback"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("openFeedback"), "Send Feedback");
+    EXPECT_EQ(ShortcutManager::getCategory("openFeedback"), ShortcutCategory::General);
+    const auto kp = manager.getBinding("openFeedback");
+    EXPECT_EQ(kp.getKeyCode(), 'f');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier));
+    EXPECT_TRUE(manager.getConflictingAction("openFeedback", kp).isEmpty())
+        << "collides with " << manager.getConflictingAction("openFeedback", kp);
+    EXPECT_NE(AppCommands::getCommandForAction("openFeedback"), AppCommands::kNoCommand);
+}
+
+// timelineToggleFocusedTrackPluginWindow -- Ctrl+Cmd+E on the Mac, Ctrl+Alt+E elsewhere (Cmd IS Ctrl there, so the Mac
+// chord would collapse into Ctrl+E), Timeline category.
+TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowIsRegisteredWithCtrlCmdEOnMacAndCtrlAltEElsewhere) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineToggleFocusedTrackPluginWindow"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineToggleFocusedTrackPluginWindow"),
+              "Toggle Focused Track Plugin Window");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineToggleFocusedTrackPluginWindow"), ShortcutCategory::Timeline);
+
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+    auto kp = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::ctrlModifier));
+
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    kp = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+    EXPECT_EQ(kp.getKeyCode(), 'e');
+    EXPECT_TRUE(kp.getModifiers() ==
+                juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier));
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(kp, manager.getBinding("timelineShowFocusedTrackModule")))
+        << "distinct from Ctrl+E";
+}
+
+TEST_F(ShortcutManagerTest, TimelineTogglePluginWindowHasNoConflictOnEitherPlatform) {
+    // The Mac table is only checked on a Mac: elsewhere JUCE's commandModifier IS ctrlModifier, so the Mac
+    // default Ctrl+Cmd+E collapses to Ctrl+E there and would read as a clash that no Mac user can hit.
+#if JUCE_MAC
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Mac, ShortcutManager::DefaultsPlatform::Other};
+#else
+    const auto platforms = {ShortcutManager::DefaultsPlatform::Other};
+#endif
+    for (const auto platform : platforms) {
+        manager.setDefaultsPlatform(platform);
+        const auto binding = manager.getBinding("timelineToggleFocusedTrackPluginWindow");
+        EXPECT_TRUE(manager.getConflictingAction("timelineToggleFocusedTrackPluginWindow", binding).isEmpty())
+            << "collides with " << manager.getConflictingAction("timelineToggleFocusedTrackPluginWindow", binding);
+    }
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineShowFocusedTrackModuleHasNoCommand) {
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineShowFocusedTrackModule"), AppCommands::kNoCommand);
 }
 
 // ---------------------------------------------------------------------------
@@ -482,4 +650,68 @@ TEST_F(ShortcutManagerTest, TogglePlaybackKeepsItsSpaceBindingAfterTheAliasWasAd
     const auto space = manager.getBinding("togglePlayback");
     EXPECT_EQ(space.getKeyCode(), juce::KeyPress::spaceKey);
     EXPECT_TRUE(space.getModifiers() == juce::ModifierKeys());
+}
+
+// ---------------------------------------------------------------------------
+// Rename / Replace the selected module card
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, RenameSelectedModuleDefaultsToF2AndReplaceToCmdAltR) {
+    const auto rename = manager.getBinding("renameSelectedModule");
+    EXPECT_EQ(rename.getKeyCode(), juce::KeyPress::F2Key);
+    EXPECT_EQ(rename.getModifiers().getRawFlags() & juce::ModifierKeys::allKeyboardModifiers, 0);
+
+    const auto replace = manager.getBinding("replaceSelectedModule");
+    EXPECT_EQ(replace.getKeyCode(), 'r');
+    EXPECT_TRUE(replace.getModifiers().isCommandDown());
+    EXPECT_TRUE(replace.getModifiers().isAltDown());
+    EXPECT_FALSE(replace.getModifiers().isShiftDown());
+
+    EXPECT_EQ(AppCommands::getCommandForAction("renameSelectedModule"), AppCommands::renameSelectedModule);
+    EXPECT_EQ(AppCommands::getCommandForAction("replaceSelectedModule"), AppCommands::replaceSelectedModule);
+    EXPECT_EQ(ShortcutManager::getCategory("renameSelectedModule"), ShortcutCategory::Graph);
+    EXPECT_EQ(ShortcutManager::getCategory("replaceSelectedModule"), ShortcutCategory::Graph);
+}
+
+TEST_F(ShortcutManagerTest, OnTheMacTableNoOtherActionSharesTheRenameOrReplaceChordAndRepeatAndRecordKeepTheirs) {
+    if (ShortcutManager::hostDefaultsPlatform() != ShortcutManager::DefaultsPlatform::Mac)
+        GTEST_SKIP() << "the Mac chord table needs Cmd and Ctrl to be distinct keys";
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Mac);
+
+    EXPECT_EQ(manager.getActionsForKeyPress(manager.getBinding("renameSelectedModule")),
+              juce::StringArray("renameSelectedModule"));
+    EXPECT_EQ(manager.getActionsForKeyPress(manager.getBinding("replaceSelectedModule")),
+              juce::StringArray("replaceSelectedModule"));
+    EXPECT_EQ(manager.getBinding("repeatSelection"), juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(manager.getBinding("transportRecord"), juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0));
+}
+
+TEST_F(ShortcutManagerTest, OnTheOtherTableEveryDefaultChordIsStillUniqueWithinItsCategory) {
+    manager.setDefaultsPlatform(ShortcutManager::DefaultsPlatform::Other);
+    std::map<std::pair<int, juce::String>, juce::String> seen;
+    for (const auto& id : manager.getActionIds()) {
+        const auto binding = manager.getBinding(id);
+        if (!binding.isValid())
+            continue;
+        auto flags = binding.getModifiers().getRawFlags();
+        if ((flags & juce::ModifierKeys::commandModifier) != 0) // off the Mac, Cmd is Ctrl
+            flags = (flags & ~juce::ModifierKeys::commandModifier) | juce::ModifierKeys::ctrlModifier;
+        const auto chord = juce::String(binding.getKeyCode()) + "/" + juce::String(flags);
+        const auto key = std::make_pair(static_cast<int>(ShortcutManager::getCategory(id)), chord);
+        const auto [it, inserted] = seen.emplace(key, id);
+        EXPECT_TRUE(inserted) << id << " shares its chord with " << it->second;
+    }
+}
+
+// trackHeaderTogglePoly -- bare P while a track header holds focus. It lives in its own Track Header category so it
+// does not collide with the Timeline's bare P (loop the selection), which every other timeline surface keeps.
+TEST_F(ShortcutManagerTest, TrackHeaderTogglePolyIsBareP_InItsOwnCategoryWithNoConflict) {
+    EXPECT_TRUE(manager.getActionIds().contains("trackHeaderTogglePoly"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("trackHeaderTogglePoly"), "Poly On or Off for Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("trackHeaderTogglePoly"), ShortcutCategory::TrackHeader);
+    const auto kp = manager.getBinding("trackHeaderTogglePoly");
+    EXPECT_EQ(kp.getKeyCode(), static_cast<int>('p'));
+    EXPECT_FALSE(kp.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers));
+    EXPECT_TRUE(manager.getConflictingAction("trackHeaderTogglePoly", kp).isEmpty());
+    EXPECT_EQ(AppCommands::getCommandForAction("trackHeaderTogglePoly"), AppCommands::kNoCommand);
 }

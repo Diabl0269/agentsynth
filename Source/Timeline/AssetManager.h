@@ -25,8 +25,8 @@ namespace synth {
  * or deleted.
  *
  * `collectUnusedAssets`/`cleanUnusedAssets` walk `<bundleRoot>/Audio/` for files no clip
- * references, alongside each one's `<bundleRoot>/Peaks/<stem>.agpk` sidecar. A clip whose assetRef
- * names a file that isn't actually there is simply skipped (nothing to enumerate), and the scan
+ * references (as its assetRef or as its stretch origin), alongside each one's `<bundleRoot>/Peaks/<stem>.agpk` sidecar.
+ * A clip whose assetRef names a file that isn't actually there is simply skipped (nothing to enumerate), and the scan
  * never reaches outside `bundleRoot`.
  *
  * `adoptRecordingsAssets` imports every clip whose assetRef carries the reserved `Recordings/`
@@ -82,9 +82,9 @@ public:
      *  history; see the caller, `MainComponent::saveToFile`). `recordingsRoot` is the same
      *  `<app data>/<settings folder>/Recordings` directory `MainComponent::chooseTakeFiles` writes
      *  into. A ref whose source file is no longer on disk, or that fails to import, is left
-     *  untouched (still resolvable exactly as before, or already the "missing asset" case §2
-     *  handles) — this pass never deletes the original `Recordings/` file either way. Returns the
-     *  number of DISTINCT old refs adopted (0 if the doc has none). */
+     *  untouched (still resolvable exactly as before, or already the "missing asset" case
+     *  docs/architecture/app-wiring.md#asset-management handles) — this pass never deletes the original `Recordings/`
+     * file either way. Returns the number of DISTINCT old refs adopted (0 if the doc has none). */
     static int adoptRecordingsAssets(TimelineDoc& doc, const juce::File& recordingsRoot, const juce::File& bundleRoot);
 
 private:

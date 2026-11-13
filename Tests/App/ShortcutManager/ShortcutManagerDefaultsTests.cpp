@@ -1,13 +1,16 @@
 // Concern: default bindings and the action-table integrity tripwires (uniqueness, category
 // partitioning/contiguity, surface-vs-command resolution).
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
 
 namespace {
 
 // Every action id a COMPONENT resolves for itself, written out literally rather than derived from
 // the manager. That is the whole point: this list is a transcription of what
-// PianoRollComponent::keyPressed, TimelinePanelComponent::keyPressed and
-// TimelineClipLaneArea::keyPressed actually ask for, so if one of them is missing from
+// PianoRollComponent::keyPressed, TimelinePanelComponent::keyPressed,
+// TimelineClipLaneArea::keyPressed, MixerPanelComponent::keyPressed, EQCurveComponent::keyPressed and
+// CanvasCardKeyboard::keyPressed
+// actually ask for, so if one of them is missing from
 // ShortcutManager::resetToDefaults() the test fails instead of the KEY silently going dead.
 //
 // The failure mode it guards is specific and invisible: with a manager installed, resolution is
@@ -31,11 +34,85 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeUp",
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
+        "pianoRollToggleVelocityLane",
+        // SamplerMapBlocks::keyPressed
+        "samplerMapPlaySelected",
+        // DrumMachineComponent::keyPressed
+        "drumMachineToggleHit",
+        "drumMachineToggleAccent",
+        "drumMachineLouder",
+        "drumMachineSofter",
+        "drumMachineCarryRight",
+        "drumMachineCarryLeft",
+        "drumMachinePlayClip",
+        "drumMachineRowShorter",
+        "drumMachineRowLonger",
+        "drumMachineRowShorterBar",
+        "drumMachineRowLongerBar",
+        // MixerPanelComponent::keyPressed
+        "mixerToggleInserts",
+        "mixerToggleSends",
+        "mixerToggleEq",
+        "mixerEnterRows",
+        "mixerOpenEq",
+        "mixerOpenColour",
+        "mixerPanLeft",
+        "mixerPanRight",
+        "mixerToggleChannelHidden",
+        "mixerToggleRowBypass",
+        "mixerMoveRowUp",
+        "mixerMoveRowDown",
+        "mixerFocusTopBar",
+        "mixerNudgeFaderUp",
+        "mixerNudgeFaderDown",
+        // SoundBrowserComponent::handlePreviewKey (Shift+Space; plain Space stays the transport)
+        "soundPreviewToggle",
+        // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp) and the on-card nudge keys
+        "layoutEditorToggleShown",
+        "layoutEditorMoveUp",
+        "layoutEditorMoveDown",
+        "layoutEditorRename",
+        "layoutEditorNudgeLeft",
+        "layoutEditorNudgeRight",
+        "layoutEditorNudgeUp",
+        "layoutEditorNudgeDown",
+        "layoutEditorNudgeLeftBig",
+        "layoutEditorNudgeRightBig",
+        "layoutEditorNudgeUpBig",
+        "layoutEditorNudgeDownBig",
+        "layoutEditorRemoveControl",
+        // EQCurveComponent::keyPressed
+        "eqSelectPrev",
+        "eqSelectNext",
+        "eqMoveLeft",
+        "eqMoveRight",
+        "eqMoveUp",
+        "eqMoveDown",
+        "eqWidthUp",
+        "eqWidthDown",
+        "eqSolo",
+        "eqTypeMenu",
+        "eqAddBand",
+        "eqRemoveBand",
+        "eqDuplicateBand",
+        // CanvasCardKeyboard::keyPressed
+        "canvasSelectCardLeft",
+        "canvasSelectCardRight",
+        "canvasSelectCardUp",
+        "canvasSelectCardDown",
+        "canvasMoveCardLeft",
+        "canvasMoveCardRight",
+        "canvasMoveCardUp",
+        "canvasMoveCardDown",
+        "canvasEnterCard",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",
         "timelineLoopSelection",
         "timelineFollowPlayheadToggle",
+        "timelineFollowModeCycle",
+        "timelineGlideBack",
+        "timelineGlideForward",
         "timelineToolSelect",
         "timelineToolRange",
         "timelineToolSplit",
@@ -43,13 +120,46 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineToolErase",
         "timelineToolMute",
         "timelineToolDraw",
+        "timelineShapeFree",
+        "timelineShapeLine",
+        "timelineShapeSine",
+        "timelineShapeTriangle",
+        "timelineShapeSaw",
+        "timelineShapeSquare",
+        "timelineShapeMenu",
         "timelineJumpToLocator1",
         "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
+        "timelineClipPrevious",
+        "timelineClipNext",
+        "timelineClipAbove",
+        "timelineClipBelow",
+        "timelineClipOpen",
+        "timelineClipMoveEarlier",
+        "timelineClipMoveLater",
+        "timelineClipDuplicateLinked",
+        "timelineRenderToAudioTrack",
+        "timelineMakeSection", // TimelineClipLaneArea::keyPressed, with a live range
+        // AutomationLaneEditor / AutomationLaneHeaderComponent, through TimelineAutomationLanes
+        "timelineMoveLaneUp",
+        "timelineMoveLaneDown",
         // TimelineTrackHeaderComponent::keyPressed
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",
         "timelineArmFocusedTrack",
+        "timelineMonitorFocusedTrack",
+        "timelineToggleTrackAutomation",
+        "timelineDeleteFocusedTrack",
+        "timelineIncreaseTrackHeight",
+        "timelineDecreaseTrackHeight",
+        "timelineResetTrackHeight",
+        "timelineDuplicateFocusedTrack",
+        "timelineCopyFocusedTracks",
+        "timelineSelectAllTracks",
+        "timelinePasteTracks",
+        "timelineShowFocusedTrackModule",
+        "timelineToggleFocusedTrackPluginWindow",
+        "trackHeaderTogglePoly", // TimelineTrackHeaderComponent::keyPressed
     };
     return ids;
 }
@@ -61,11 +171,19 @@ const juce::StringArray& surfaceResolvedActionIds() {
 // (see EveryActionIdHasABindingACategoryAndADescription below), so this is the one exception list.
 const juce::StringArray& intentionallyUnboundActionIds() {
     static const juce::StringArray ids{
+        // The per-view show/swap actions: the digits belong to the positional showDockTab / swapDockTab actions.
+        "toggleTimelinePanel",
+        "toggleMixerPanel",
+        "toggleMidiRemotePanel",
+        "showCanvas",
+        "swapTimelineToMain",
+        "swapMixerToMain",
+        "swapMidiRemoteToMain",
+        "swapCanvasToMain",
+        "detachMainView",
         "transportPlay",
         "transportStop",
         "transportToggleLoop",
-        "transportRecord",
-        "transportToggleMetronome",
         "transportReturnToStart",
         // Cursor moves and loop-locator jumps.
         "transportNudgeBackBeat",
@@ -82,6 +200,23 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "selectPreviousModule",
         "selectNextTrack",
         "selectPreviousTrack",
+        // The triplet and dotted Set Grid values.
+        "snapSetWholeTriplet",
+        "snapSetHalfTriplet",
+        "snapSetQuarterTriplet",
+        "snapSetEighthTriplet",
+        "snapSetSixteenthTriplet",
+        "snapSetThirtySecondTriplet",
+        "snapSetSixtyFourthTriplet",
+        "snapSetHundredTwentyEighthTriplet",
+        "snapSetWholeDotted",
+        "snapSetHalfDotted",
+        "snapSetQuarterDotted",
+        "snapSetEighthDotted",
+        "snapSetSixteenthDotted",
+        "snapSetThirtySecondDotted",
+        "snapSetSixtyFourthDotted",
+        "snapSetHundredTwentyEighthDotted",
     };
     return ids;
 }
@@ -141,6 +276,20 @@ TEST_F(ShortcutManagerTest, EveryDefaultBindingIsUnique) {
     for (const auto& actionId : manager.getActionIds())
         EXPECT_TRUE(manager.getConflictingAction(actionId, manager.getBinding(actionId)).isEmpty())
             << actionId << " collides with " << manager.getConflictingAction(actionId, manager.getBinding(actionId));
+}
+
+// Shift+Space is the Sounds view's preview key and nothing else's; plain Space stays the song's play key, and neither
+// matches the other (the matcher compares modifiers exactly).
+TEST_F(ShortcutManagerTest, ShiftSpaceIsOnlyTheSoundPreviewAndPlainSpaceStaysThePlayKey) {
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' ');
+    const juce::KeyPress plainSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, ' ');
+    EXPECT_EQ(manager.getBinding("soundPreviewToggle"), shiftSpace);
+    EXPECT_EQ(manager.getActionsForKeyPress(shiftSpace), juce::StringArray("soundPreviewToggle"));
+    EXPECT_FALSE(manager.getActionsForKeyPress(plainSpace).contains("soundPreviewToggle"));
+    EXPECT_TRUE(manager.getActionsForKeyPress(plainSpace).contains("togglePlayback"));
+    EXPECT_FALSE(manager.getActionsForKeyPress(shiftSpace).contains("togglePlayback"));
+    EXPECT_EQ(AppCommands::getCommandForAction("soundPreviewToggle"), AppCommands::kNoCommand)
+        << "the preview key is the Sounds view's own, so the window never turns it into a command";
 }
 
 // Every id needs a binding and a label. The COMMAND half of this invariant is no longer universal:

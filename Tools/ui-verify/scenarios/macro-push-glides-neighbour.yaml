@@ -1,0 +1,50 @@
+# Bug: opening a macro pushes the macro beside it aside, and the pushed macro jumped to its new place instead of
+# gliding. A folded neighbour's card already glided; an OPEN neighbour's cards glided but its border, name chip and port
+# strips jumped ahead of them.
+#
+# The project is the fixture macro-push-neighbour.agsproj: Tal's 'fro830 test' project (macros Oscillator 1, Oscillator 2,
+# Macro, Macro2) set up as open-macro-pushes-neighbour-right.yaml leaves it (made with motion off, since a wheel pan lands
+# differently each run under motion): "Oscillator 2" folded, the folded "Macro" right beside its card. The run saves it
+# as 'fro830 test macros close' (`save_project`), in the state a user starts from, and a review check names exactly that.
+#   1. Opens "Oscillator 2" with its card's chevron: the folded "Macro" slides right. The clip starts folded, shows the
+#      glide frame by frame (a `glide` step: the slide is 220 ms, one frame would catch it as a blur) and ends landed.
+#   2. Cmd+Z: "Oscillator 2" folds again and "Macro" slides back.
+#   3. Opens "Macro" (its chevron), then opens "Oscillator 2" again: the OPEN "Macro" slides right with its border,
+#      chip and port strips moving together with its cards. Its clip starts with "Macro" open and "Oscillator 2" folded.
+# CardGlideMacroPush.* covers the first and last frames headlessly (folded, open, Reduce Motion).
+# (No `expect` on "Macro": its id finds the hidden card first, so only the stills and the project show its state.)
+# Each mark sits on the landed state (after the glide), never mid-glide; proof/<glide>-strip.png is the frames across it.
+motion: true
+pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the macro fold state its later steps expect
+record: true
+save_project: fro830-test-macros-close
+steps:
+  - copyFixture: {name: macro-push-neighbour.agsproj}
+  - openProject: {path: "${SCRATCH}/macro-push-neighbour.agsproj"}
+  - wait: {}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}
+  - screenshot: {name: 1-macro-beside-the-folded-card}
+  - glide: {name: folded-neighbour-slide, frames: 14, crop: {x: 200, y: 280, w: 1400, h: 260}, do: {click: {id: "macroCard:Oscillator 2", x: 262, y: 18}}}   # the card's open chevron
+  - wait: {settleMs: 1000}                                    # waitForIdle cannot see the fold, so let it land
+  - expect: {id: "macroCard:Oscillator 2", collapsed: false}
+  - mark: {check: 1, name: folded-neighbour-glides}            # landed: "Oscillator 2" open, "Macro" to its right
+  - screenshot: {name: 2-folded-neighbour-landed}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}
+  # Open the neighbour first. Two cards are named "Macro" (one sits inside the folded Oscillator 1, hidden), so an id
+  # would find the wrong one: click the visible card's chevron on the window.
+  - click: {id: window, x: 493, y: 356}
+  - wait: {settleMs: 1000}
+  - screenshot: {name: 3-open-neighbour-beside-the-folded-card}
+  - glide: {name: open-neighbour-slide, frames: 14, crop: {x: 200, y: 280, w: 1400, h: 260}, do: {click: {id: "macroCard:Oscillator 2", x: 262, y: 18}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: false}
+  - mark: {check: 2, name: open-neighbour-border-glides}       # landed: border, chip and cards of "Macro" moved together
+  - screenshot: {name: 4-open-neighbour-landed}
+  # Leave the saved project as a user starts the check: "Oscillator 2" folded, "Macro" folded.
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1000}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}

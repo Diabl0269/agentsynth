@@ -1,6 +1,8 @@
 #pragma once
 
+#include "FilterSpectrumAnalyser.h"
 #include "FrequencyGrid.h"
+#include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/FilterModule.h"
 #include "Modules/VisualBuffer.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -11,13 +13,15 @@
 
 class FrequencyResponseComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     FrequencyResponseComponent(FilterModule& filter)
         : filterModule(filter) {
         magnitudes.resize(numPoints, 0.0f);
-        fftData.resize(fftSize * 2, 0.0f);
-        spectrumMagnitudes.resize(numPoints, -80.0f);
+        setTitle("Filter response");
+        setDescription("Frequency response curve of the filter");
+        setTooltip("Filter response: the filter's gain across 20 Hz to 20 kHz");
         // Timer starts only while showing — the Filter card hides this view by default, and a
         // free-running 30 Hz tick on every Filter instance would be wasted work (and a repaint
         // source) for a component the user has not opened.
@@ -77,77 +81,75 @@ public:
     static constexpr float maxDb = 50.0f;
 
     void timerCallback() override {
+        // Every value is the modulated one (knob plus the last block's CV), so the curve shows what the filter does
+        // now.
         float cutoff = filterModule.getCurrentCutoff();
-        float resonance = filterModule.getCurrentResonance();
-        float drive = filterModule.getCurrentDrive();
+        float resonance = filterModule.getModulatedResonance();
+        float drive = filterModule.getModulatedDrive();
         int filterType = filterModule.getCurrentFilterType();
 
-        if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType) {
+        const bool custom = filterType == FilterModule::kCustomTypeIndex;
+        const CustomState customNow{filterModule.getModulatedMorphX(),
+                                    filterModule.getModulatedMorphY(),
+                                    filterModule.getModulatedShift(),
+                                    filterModule.getModulatedDepth(),
+                                    cutoff,
+                                    resonance,
+                                    filterModule.getCustomShapesGeneration()};
+        if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType ||
+            (custom && !(customNow == lastCustom))) {
             lastCutoff = cutoff;
             lastResonance = resonance;
             lastDrive = drive;
             lastFilterType = filterType;
+            lastCustom = customNow;
             recomputeMagnitudes();
+            ++recomputeCount;
             repaint();
         }
 
         // Update spectrum from audio data
-        if (showSpectrum && filterModule.getVisualBuffer()) {
-            auto* vb = filterModule.getVisualBuffer();
-            std::vector<float> samples(vb->getSize(), 0.0f);
-            vb->copyTo(samples);
-
-            // Fill FFT buffer (zero-pad if needed)
-            std::fill(fftData.begin(), fftData.end(), 0.0f);
-            int copySize = std::min((int)samples.size(), fftSize);
-            for (int i = 0; i < copySize; ++i)
-                fftData[i] = samples[i];
-
-            // Apply window and perform FFT
-            window.multiplyWithWindowingTable(fftData.data(), fftSize);
-            fft.performFrequencyOnlyForwardTransform(fftData.data());
-
-            // Convert to dB at log-spaced frequency points
-            double sampleRate = filterModule.getLastSampleRate();
-            float binWidth = static_cast<float>(sampleRate) / static_cast<float>(fftSize);
-            float normFactor = 2.0f / static_cast<float>(fftSize);
-
-            for (int i = 0; i < numPoints; ++i) {
-                float freq = indexToFreq(i);
-                float exactBin = freq / binWidth;
-                int bin0 = static_cast<int>(exactBin);
-                int bin1 = bin0 + 1;
-                float frac = exactBin - static_cast<float>(bin0);
-
-                float mag = 0.0f;
-                if (bin0 >= 0 && bin1 < fftSize / 2) {
-                    mag = fftData[bin0] * (1.0f - frac) + fftData[bin1] * frac;
-                } else if (bin0 >= 0 && bin0 < fftSize / 2) {
-                    mag = fftData[bin0];
-                }
-                mag *= normFactor;
-
-                float db = 20.0f * std::log10(std::max(mag, 0.00001f));
-                float target = juce::jlimit(-80.0f, 0.0f, db);
-                // Smooth the spectrum (exponential moving average)
-                spectrumMagnitudes[i] += 0.3f * (target - spectrumMagnitudes[i]);
-            }
-
+        if (showSpectrum) {
+            spectrum.analyse(filterModule.getSpectrumBuffer(), filterModule.getLastSampleRate());
             repaint();
         }
     }
+
+    /** Custom type only: a double-click on the view (the card opens the shape editor on the nearest shape). */
+    std::function<void()> onCustomDoubleClick;
+    void mouseDoubleClick(const juce::MouseEvent&) override {
+        if (lastFilterType == FilterModule::kCustomTypeIndex && onCustomDoubleClick)
+            onCustomDoubleClick();
+    }
+    /** Test mode: the card's `filterSpectrumPeakDb` (-80 at the floor) and `filterSpectrumAtFloor`. */
+    void addSpectrumTestState(juce::DynamicObject& into) const {
+        const float peak = getSpectrumPeakDbForTest();
+        into.setProperty("filterSpectrumPeakDb", (double)peak);
+        into.setProperty("filterSpectrumAtFloor", peak <= synth::ui::FilterSpectrumAnalyser::kMinDb + 0.01f);
+    }
+    /** The loudest point of the spectrum, in dB (kMinDb at the floor), for tests and test mode. */
+    float getSpectrumPeakDbForTest() const {
+        const auto& db = spectrum.getDb();
+        float peak = synth::ui::FilterSpectrumAnalyser::kMinDb;
+        for (float v : db)
+            peak = v > peak ? v : peak;
+        return peak;
+    }
+    /** The smoothed spectrum points (1024 values in dB), for tests. */
+    const std::vector<float>& getSpectrumDbForTest() const { return spectrum.getDb(); }
+    /** How many times the curve was recomputed (and repainted for it), for tests. */
+    int getRecomputeCountForTest() const { return recomputeCount; }
+    /** The plotted dB at curve point `index` (of 1024), for tests. */
+    float getMagnitudeDbForTest(int index) const { return magnitudes[(size_t)index]; }
 
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds().toFloat();
         float w = bounds.getWidth();
         float h = bounds.getHeight();
 
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-
-        juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
-        juce::Colour gridColor = lf ? lf->getTheme().colors.border.withAlpha(0.4f) : juce::Colour(0xff2a2a3e);
-        juce::Colour mutedText = lf ? lf->getTheme().colors.textMuted : juce::Colour(0xff6a6a7e);
+        juce::Colour bgColor = synth::theme::themeOf(*this).colors.bg1;
+        juce::Colour gridColor = synth::theme::themeOf(*this).colors.border.withAlpha(0.4f);
+        juce::Colour mutedText = synth::theme::themeOf(*this).colors.textMuted;
 
         // Dark background
         g.fillAll(bgColor);
@@ -225,7 +227,7 @@ public:
         fillPath.closeSubPath();
 
         // Gradient fill under curve
-        juce::Colour accent = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00b4d8);
+        juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
         juce::ColourGradient gradient(accent.withAlpha(0.375f), 0.0f, 0.0f, // 0x60 == 96/255 ≈ 0.375
                                       accent.withAlpha(0.063f), 0.0f, h,    // 0x10 == 16/255 ≈ 0.063
                                       false);
@@ -266,8 +268,8 @@ public:
 
         // Draw live spectrum (green) — uses its own dB range for visibility
         if (showSpectrum) {
-            constexpr float specMinDb = -80.0f;
-            constexpr float specMaxDb = 0.0f;
+            constexpr float specMinDb = synth::ui::FilterSpectrumAnalyser::kMinDb;
+            constexpr float specMaxDb = synth::ui::FilterSpectrumAnalyser::kMaxDb;
 
             juce::Path specPath;
             juce::Path specFill;
@@ -276,7 +278,7 @@ public:
                 float freq = indexToFreq(i);
                 float x = freqToX(freq, w);
                 // Map spectrum dB to full component height
-                float normY = (spectrumMagnitudes[i] - specMaxDb) / (specMinDb - specMaxDb);
+                float normY = (spectrum.getDb()[(size_t)i] - specMaxDb) / (specMinDb - specMaxDb);
                 float y = juce::jlimit(0.0f, h, normY * h);
 
                 if (specFirst) {
@@ -292,7 +294,7 @@ public:
             specFill.lineTo(w, h);
             specFill.closeSubPath();
 
-            juce::Colour accent2 = lf ? lf->getTheme().colors.accent2 : juce::Colour(0xff00D1FF);
+            juce::Colour accent2 = synth::theme::themeOf(*this).colors.accent2;
 
             // Semi-transparent green fill
             juce::ColourGradient specGradient(accent2.withAlpha(0.188f), 0.0f, 0.0f, accent2.withAlpha(0.031f), 0.0f, h,
@@ -304,7 +306,7 @@ public:
             g.strokePath(specPath, juce::PathStrokeType(1.0f));
         }
 
-        // Cutoff frequency marker
+        // Cutoff frequency marker (in Custom, where the resonant bell sits)
         float cutoffX = freqToX(lastCutoff, w);
         g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
         g.drawVerticalLine((int)cutoffX, 0.0f, h);
@@ -314,20 +316,23 @@ private:
     FilterModule& filterModule;
     std::vector<float> magnitudes;
     static constexpr int numPoints = 1024;
+    static constexpr int kNotchTypeIndex = 6;
 
     float lastCutoff = 0.0f;
     float lastResonance = 0.0f;
     float lastDrive = 0.0f;
     int lastFilterType = -1;
+    int recomputeCount = 0;
+    struct CustomState {
+        float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f, cutoff = 0.0f, resonance = 0.0f;
+        int generation = -1;
+        bool operator==(const CustomState&) const = default;
+    } lastCustom;
 
     // Spectrum analyzer
     bool showSpectrum = false;
-    static constexpr int fftOrder = 10; // 1024-point FFT
-    static constexpr int fftSize = 1 << fftOrder;
-    juce::dsp::FFT fft{fftOrder};
-    juce::dsp::WindowingFunction<float> window{fftSize, juce::dsp::WindowingFunction<float>::hann};
-    std::vector<float> fftData;
-    std::vector<float> spectrumMagnitudes;
+    synth::ui::FilterSpectrumAnalyser spectrum;
+    static_assert(FilterModule::kSpectrumSamples == synth::ui::FilterSpectrumAnalyser::kFftSize);
 
     float indexToFreq(int i) const { return synth::ui::FrequencyGrid::indexToFreq(i, numPoints); }
 
@@ -341,15 +346,29 @@ private:
         float resonance = lastResonance;
         int filterType = lastFilterType;
 
+        if (filterType == FilterModule::kCustomTypeIndex) {
+            // The drawn shapes blended at the morph cursor, shifted (Shift and Cutoff), scaled, then given the
+            // resonant bell: what the kernel is designed from.
+            const auto db = synth::customfilter::responseGridDb(filterModule.getCustomShapes(), lastCustom.morphX,
+                                                                lastCustom.morphY, lastCustom.shift, lastCustom.depth,
+                                                                lastCustom.cutoff, lastCustom.resonance);
+            for (int i = 0; i < numPoints; ++i)
+                magnitudes[(size_t)i] = plotDb(db[(size_t)i]);
+            return;
+        }
+
         if (cutoff < 20.0f)
             cutoff = 20.0f;
 
         float Q = 0.707f + resonance * 15.0f;
+        // The ladder types (all but Notch) raise their level with Drive below the saturation; Notch ignores it.
+        const float driveDb =
+            filterType == kNotchTypeIndex ? 0.0f : 20.0f * std::log10(synth::ladderDriveGain(lastDrive));
 
         for (int i = 0; i < numPoints; ++i) {
             float freq = indexToFreq(i);
             float mag = computeMagnitude(freq, cutoff, Q, filterType);
-            float db = 20.0f * std::log10(std::max(mag, 0.0001f));
+            float db = 20.0f * std::log10(std::max(mag, 0.0001f)) + driveDb;
             magnitudes[i] = plotDb(db);
         }
     }

@@ -5,14 +5,55 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
+#include "MainComponentCommandPalette.h"
+#include "MainComponentShortcutHints.h"
+#include "ShortcutManager/AppCommands.h"
+#include "SoundBrowser/LoopStretch.h"
+#include "Telemetry/UsageStatsChoice.h"
+#include "UI/AddList/AddList.h"
+#include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
+#include "UI/Layout/PopupMotion.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history -- see the root CMakeLists.txt's
 // "What's New" block. ${CMAKE_BINARY_DIR}/generated is on AppUI's private include path.
+#include "UI/Library/LibrarySidebarViews.h"
 #include "WhatsNewData.h"
 
 void MainComponent::addCanvasAndPanels() {
     addAndMakeVisible(graphEditor);
-    addAndMakeVisible(moduleLibrary);
+    // The canvas's own top row. Laid out by layoutCanvas() wherever the canvas is, and hidden with it.
+    addAndMakeVisible(canvasToolbar_);
+    // Right above the canvas: the main area's other views sit under every panel and overlay, as it does.
+    addChildComponent(mainViewHolder_);
+    bottomDock.setMainAreaHolder(&mainViewHolder_);
+    librarySidebar_ = std::make_unique<synth::ui::LibrarySidebarViews>(moduleLibrary, appProperties.getUserSettings());
+    librarySidebar_->onLayoutChanged = [this] { resized(); };
+    // The Sounds view previews through the engine, after the master; Near song tempo reads the transport's tempo.
+    librarySidebar_->getSounds().setPreviewPlayer(&audioEngine.getSoundPreview());
+    librarySidebar_->getSounds().setShortcutManager(&shortcutManager); // the preview key (Shift+Space) is rebindable
+    librarySidebar_->getSounds().onSoundActivated = [this](const synth::soundbrowser::SoundEntry& sound) {
+        auto& sounds = librarySidebar_->getSounds();
+        MainComponentAudioImport::loadSoundFromBrowser(*this, juce::File(sound.path),
+                                                       sound.kind == synth::soundbrowser::SoundKind::Loop
+                                                           ? sounds.loopTargetFor(sound)
+                                                           : synth::soundbrowser::LoopTarget{});
+    };
+    librarySidebar_->getSounds().onShapeActivated = [this](const synth::shapes::LibraryShape& shape) {
+        return MainComponentAudioImport::stampShapeFromBrowser(*this, shape);
+    };
+    librarySidebar_->getSounds().songTempoProvider = [this] {
+        return audioEngine.getTransport().getDocumentState().bpm;
+    };
+    // The song's key for Match key and the Song key chip; the transport tells the view whenever it changes.
+    auto sendSongKey = [this] {
+        librarySidebar_->getSounds().setSongKey(
+            synth::soundbrowser::soundKeyForScale(audioEngine.getTransport().getDocumentState().songKey));
+    };
+    audioEngine.getTransport().onSongKeyChanged = sendSongKey;
+    sendSongKey();
+    addAndMakeVisible(*librarySidebar_);
 
     // Grey out the singleton I/O rows once the patch already has one, and repaint the library
     // whenever the graph's module set changes so that state stays accurate.
@@ -31,6 +72,11 @@ void MainComponent::addCanvasAndPanels() {
         // publish callbacks installed on it, and this is the one hook every path that adds a node
         // already runs through. Idempotent — re-assigning the same two slots costs nothing.
         installHostedPluginObservers();
+        // The passes below are part of the full reconcile; skipped when one follows (fullReconcileFollows()).
+        if (fullReconcileFollows()) {
+            bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
+            return;
+        }
         // Safety net for graph changes with no explicit post-apply site of their own — the
         // canonical one being "the user deleted the Track In node from the canvas", which goes
         // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
@@ -41,22 +87,24 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
+        // A cable patched or deleted on the canvas adds or drops a lane's modulator row; the rows are derived
+        // from the graph, so they are re-derived on every structural change (cheap: a few lanes on screen).
+        timelinePanel.refreshModulators();
         // A canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
         // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
         bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
         // The other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
-        // deliberately never rebuilds the mixer. Left alone, every fader would sit on screen
-        // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
-        // against the settled graph, and is a no-op unless the columns are actually detached, so
-        // it does NOT turn every structural change into a full mixer rebuild. Covers the
-        // "both places" mirror view too, when one is open.
-        bottomDock.rebuildIfUnboundMixerViews();
+        // deliberately never rebuilds the mixer. This re-binds against the settled graph, and also
+        // catches a module added into a track's chain; it rebuilds only when the columns are
+        // detached or the mixer's snapshot changed, so an unrelated structural change costs one
+        // snapshot compare. Covers the "both places" mirror view too, when one is open.
+        bottomDock.rebuildIfStaleMixerViews();
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
-    moduleLibrary.setVisible(isLibraryVisible);
+    librarySidebar_->setVisible(isLibraryVisible);
     // Added unconditionally — isBottomDockVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.
@@ -198,8 +246,6 @@ void MainComponent::addToolbarToggleButtons() {
         beginPanelSlide();
     };
 
-    addAndMakeVisible(toggleMinimapButton);
-    toggleMinimapButton.setComponentID("toggleMinimap");
     toggleMinimapButton.onClick = [this] {
         graphEditor.toggleMinimapVisibility();
         appProperties.getUserSettings()->setValue("minimapVisible", graphEditor.isMinimapVisible() ? "1" : "0");
@@ -207,8 +253,6 @@ void MainComponent::addToolbarToggleButtons() {
         applyToolbarIcons();
     };
 
-    addAndMakeVisible(toggleModMatrixButton);
-    toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
         graphEditor.toggleModMatrixVisibility();
         applyToolbarIcons();
@@ -223,9 +267,13 @@ void MainComponent::addToolbarToggleButtons() {
     themeToggleButton.setComponentID("themeToggle");
     themeToggleButton.onClick = [this] { themeManager->toggleLightDarkMode(); };
 
-    addAndMakeVisible(autoArrangeButton);
-    autoArrangeButton.setComponentID("autoArrangeButton");
     autoArrangeButton.onClick = [this] { graphEditor.autoArrange(); };
+    // The canvas toolbar's Add opens the list with modules first; a press with the toolbar's ring on it is a keyboard
+    // open, so focus comes back to the ring afterwards.
+    canvasToolbar_.addButton().onClick = [this] {
+        openAddList(synth::ui::AddListOrigin::Canvas, canvasToolbar_.addButton(),
+                    canvasToolbar_.hasKeyboardFocus(false));
+    };
 
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
@@ -234,6 +282,59 @@ void MainComponent::addToolbarToggleButtons() {
     addAndMakeVisible(feedbackButton);
     feedbackButton.setComponentID("feedbackButton");
     feedbackButton.onClick = [this]() { launchSettingsWindow("Feedback"); };
+
+    addAndMakeVisible(searchButton);
+    searchButton.setComponentID("searchButton");
+    searchButton.onClick = [this] { MainComponentCommandPalette::toggle(*this); };
+}
+
+// The visible text of a toggle says what a press does ("Hide Library" / "Show Library"), so that same
+// string is its screen-reader name in every width: narrow mode only drops the visible text, and the
+// toggles are not click-toggling buttons, so a screen reader gets no checked state to carry it.
+//
+// `iconOnly` is the narrow-width answer; the "Show button labels" preference forces icon-only on top of it, for the
+// top bar and the canvas toolbar alike. The canvas toolbar is re-laid because a captioned button is wider.
+void MainComponent::applyToolbarLabels(bool iconOnly) {
+    toolbarLabelsShown_ = synth::ui::showToolbarLabels(appProperties.getUserSettings());
+    iconOnly = iconOnly || !toolbarLabelsShown_;
+    const bool darkTheme = themeManager != nullptr && themeManager->getActiveTheme().isDark;
+    const std::pair<juce::DrawableButton*, juce::String> labels[] = {
+        {&toggleLibraryButton, isLibraryVisible ? "Hide Library" : "Show Library"},
+        {&newButton, "New"},
+        {&saveButton, "Save"},
+        {&loadButton, "Load"},
+        {&settingsButton, "Settings"},
+        {&feedbackButton, "Feedback"},
+        {&undoButton, "Undo"},
+        {&redoButton, "Redo"},
+        {&searchButton, "Search"},
+        {&canvasToolbar_.addButton(), "Add"},
+        {&autoArrangeButton, "Auto Arrange"},
+        {&toggleMinimapButton, graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"},
+        {&toggleModMatrixButton, graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"},
+        {&toggleAiPanelButton, isAiPanelVisible ? "Hide AI" : "Show AI"},
+        {&toggleBottomPanelButton, isBottomDockVisible ? "Hide Panel" : "Show Panel"},
+        {&themeToggleButton, darkTheme ? "Light Mode" : "Dark Mode"},
+    };
+    for (const auto& [button, label] : labels) {
+        button->setTitle(label);
+        button->setButtonText(iconOnly ? juce::String() : label);
+    }
+    canvasToolbar_.setIconOnly(iconOnly);
+    // In the dock's tab strip the row is too short for a caption: the chips alone, their names in the tooltips.
+    if (canvasToolbar_.isInStrip())
+        for (auto* button : {&autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton})
+            button->setButtonText({});
+    // The Timeline and Mixer panels follow the preference alone: narrow mode is about the top bar's width. The mixer
+    // is the same panel in the dock, its own panel or a detached window.
+    timelinePanel.setToolbarLabelsShown(toolbarLabelsShown_);
+    bottomDock.getMixerPanel().setToolbarLabelsShown(toolbarLabelsShown_);
+}
+
+// Called on every settings write: only a flip of "Show button labels" does any work.
+void MainComponent::applyToolbarLabelPreference() {
+    if (synth::ui::showToolbarLabels(appProperties.getUserSettings()) != toolbarLabelsShown_)
+        applyToolbarLabels(toolbarNarrowMode_);
 }
 
 // One place for both entry points (the gear and the feedback button), which differ only in the tab
@@ -245,11 +346,17 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
         if (profile.input.identifier != synth::midi::hostSourceKey())
             profiledDevices.push_back(profile.input.name);
 
-    auto* settingsComp =
-        new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager,
-                           *themeManager, &graphEditor, &accountService,
-                           /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices));
-    settingsComp->setSize(500, 450);
+    auto* settingsComp = new SettingsWindow(
+        audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager, *themeManager,
+        &graphEditor, &accountService,
+        /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices), &*soundPackInstaller_,
+        librarySidebar_ ? &librarySidebar_->getFolderBook() : nullptr, &audioSettingsSource_);
+    settingsComp->setSize(SettingsWindow::kDefaultWidth, SettingsWindow::kDefaultHeight);
+    // The Preferences "What we collect" link opens through the same seam as the Help menu's pages.
+    settingsComp->setUrlOpener([safeThis = juce::Component::SafePointer<MainComponent>(this)](const juce::URL& url) {
+        if (auto* self = safeThis.getComponent())
+            self->urlOpener_(url);
+    });
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(settingsComp);
@@ -257,7 +364,8 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    options.launchAsync();
+    if (auto* window = synth::ui::PopupMotion::launchDialog(options))
+        window->setResizeLimits(SettingsWindow::kMinWidth, SettingsWindow::kMinHeight, 4096, 4096);
 }
 
 void MainComponent::assembleToolbar() {
@@ -267,12 +375,45 @@ void MainComponent::assembleToolbar() {
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
-                        &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &toggleBottomPanelButton, &themeToggleButton});
+                        &undoButton, &redoButton, &searchButton, &toggleAiPanelButton, &toggleBottomPanelButton,
+                        &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
     setSize(1600, 900);
+
+    // Cmd-hold shortcut hints: which buttons carry a key-cap bubble, and the action behind each. The
+    // overlay reads the current key from shortcutManager every time it appears. The theme toggle has
+    // no shortcut action, so it is simply not listed.
+    synth::ui::MainWindowHintParts hintParts;
+    hintParts.buttons = {{&toggleLibraryButton, "toggleLibrary"},
+                         {&newButton, "newPatch"},
+                         {&saveButton, "savePreset"},
+                         {&loadButton, "openProject"},
+                         {&settingsButton, "openSettings"},
+                         {&feedbackButton, "openFeedback"},
+                         {&undoButton, "undo"},
+                         {&redoButton, "redo"},
+                         {&searchButton, "openCommandPalette"},
+                         {&canvasToolbar_.addButton(), "openAddTrackMenu"},
+                         {&autoArrangeButton, "autoArrange"},
+                         {&toggleMinimapButton, "toggleMinimap"},
+                         {&toggleModMatrixButton, "toggleModMatrix"},
+                         {&toggleAiPanelButton, "toggleAiPanel"},
+                         {&toggleBottomPanelButton, "toggleBottomPanel"},
+                         {&bottomDock.getMixerPanel().getSidePaneButton(), "toggleSidePane"},
+                         {&timelinePanel.getSidePaneButton(), "toggleSidePane"},
+                         {&statusBar.getTransportButton(), "togglePlayback"}};
+    for (const auto& target : timelinePanel.getShortcutHintTargets())
+        hintParts.buttons.push_back(target);
+    hintParts.dock = &bottomDock;
+    hintParts.transport = &timelinePanel.getTransportBar();
+    hintParts.pianoRoll = &timelinePanel.getPianoRoll();
+    hintParts.mixer = &bottomDock.getMixerPanel();
+    hintParts.statusBar = &statusBar;
+    hintParts.toggleBottomPanelButton = &toggleBottomPanelButton;
+    hintParts.isDockOpen = [this] { return isBottomDockVisible; };
+    shortcutHints_ = synth::ui::makeMainWindowShortcutHints(*this, shortcutManager, std::move(hintParts));
 }
 
 void MainComponent::wireStatusBar() {
@@ -313,7 +454,11 @@ void MainComponent::createWelcomeScreen() {
     // must never be constructed there.
     if (ownedAudioEngine != nullptr) {
         welcomeScreen_ = std::make_unique<synth::ui::WelcomeScreenComponent>();
+        welcomeFade_ =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{welcomeScreen_.get()});
 
+        // Only fires in the dismissible mode (reopened over an open project): hide it, project untouched.
+        welcomeScreen_->onDismissRequested = [this] { hideWelcomeScreen(); };
         welcomeScreen_->onNewProject = [this] {
             // AppCommands::newPatch's own guard ("New Patch") runs first; newPatch() itself calls
             // hideWelcomeScreen() as the LAST step of its body, so a Cancel answer never touches it.
@@ -329,28 +474,35 @@ void MainComponent::createWelcomeScreen() {
         // project (patch + timeline), so it routes through the project half, not the patch half.
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };
+        welcomeScreen_->onContributeRequested = [this] { openContributePage(); };
+        welcomeScreen_->onSocialLinkRequested = [this](const juce::String& url) { urlOpener_(juce::URL(url)); };
+        // The card writes through the same function as the Preferences toggle; the settings change that write
+        // broadcasts reaches applyTelemetryPreference() like any other, so the running service follows.
+        welcomeScreen_->onUsageStatsChoice = [this](bool share) {
+            synth::telemetry::applyShareUsageStatsChoice(*appProperties.getUserSettings(), share);
+        };
+        welcomeScreen_->onUsageStatsLearnMoreRequested = [this] {
+            urlOpener_(juce::URL(synth::telemetry::kUsageStatsPrivacyUrl));
+        };
+        welcomeScreen_->setUsageStatsPromptShown(
+            synth::telemetry::shouldAskAboutUsageStats(appProperties.getUserSettings()));
         welcomeScreen_->onWhatsNewRequested = [this] {
             // Deliberately does NOT hide the welcome screen — the user should be able to read
             // What's New and still see/use the overlay's other options afterward.
             showWhatsNewDialog();
         };
-        welcomeScreen_->onShowAtLaunchChanged = [this](bool shouldShow) {
-            appProperties.getUserSettings()->setValue("showWelcomeScreenAtLaunch", shouldShow);
-            appProperties.saveIfNeeded();
-        };
 
         if (recentProjects.pruneMissing() > 0)
             saveRecentProjects();
         welcomeScreen_->setRecentProjects(recentProjects.getEntries());
-        const bool showAtLaunch = appProperties.getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", true);
-        welcomeScreen_->setShowAtLaunch(showAtLaunch);
         welcomeScreen_->setLatestVersionLabel(juce::String(synth::branding::kProductName) + " " +
                                               synth::whatsnew::kReleaseTag);
 
         // Added LAST — JUCE paints children in addAndMakeVisible order, so this must come after
         // every other addAndMakeVisible() call above to sit on top of the toolbar/canvas.
         addAndMakeVisible(*welcomeScreen_);
-        welcomeScreen_->setVisible(showAtLaunch);
+        welcomeScreen_->setVisible(true); // always shown at launch: no opt-out. A legacy
+                                          // "showWelcomeScreenAtLaunch" in old settings files is ignored.
         // setSize(1600, 900) above already ran resized() once, before this component existed — a
         // child added afterwards starts at zero bounds and would otherwise sit unsized until the
         // next real window resize. resized() itself is idempotent (every other panel's layout is

@@ -14,6 +14,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/VCAModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <set>
 
 using namespace detail;
 
@@ -270,13 +271,13 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             // c.destination.channelIndex, the very channel our left leg is already wired to, so it is
             // visible by construction.
             //
-            // Confined to split-block modules on purpose: their right leg is hidden again on
-            // collapse, so dropHiddenRightLegConnections removes this extra cable for free and the
-            // on/off round-trip is exact. An FX's raw1 stays part of its collapsed jack, so the same
-            // cable would survive a collapse and be indistinguishable from a hand-drawn one.
-            // (myOutputLeg >= 0 on a split-block module already implies it is currently dual: its
-            // kRightBase is only reachable from a visible jack in that state.)
-            if (destLeg < 0 && destNode != nullptr && mb->hasSplitBlockStereo() &&
+            // A split-block source loses the extra cable on collapse for free (its right leg is a hidden
+            // block again). A contiguous-pair FX source keeps raw ch1 in its collapsed jack, so it only
+            // qualifies into a collapsed split-block peer, and removeSummedRightLegIntoCollapsedPeers
+            // takes the cable away on collapse, keeping the round-trip exact.
+            const auto* destMb = destNode != nullptr ? dynamic_cast<ModuleBase*>(destNode->getProcessor()) : nullptr;
+            if (destLeg < 0 && destNode != nullptr &&
+                (mb->hasSplitBlockStereo() || (destMb != nullptr && destMb->hasSplitBlockStereo())) &&
                 !hasEdge(nodeId, myOutputLeg, destNode->nodeID, c.destination.channelIndex))
                 graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, c.destination.channelIndex}});
         }
@@ -398,10 +399,32 @@ bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawCha
     for (int jack = 0; jack < visible; ++jack)
         for (const auto& t : mb.getJackTargets(jack, isInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                if (t.rawHeadChannel + v == rawChannel)
+                if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                     return true;
     return false;
 }
+
+namespace {
+// A contiguous-pair FX source (right leg on raw ch1) that is collapsed again: its summed second cable
+// into a collapsed split-block peer's one jack has no jack of its own any more, so it goes. Only a
+// cable whose left twin is wired to the very same peer channel counts as that sum.
+void removeSummedRightLegIntoCollapsedPeers(juce::AudioProcessorGraph& graph, const ModuleBase& mb,
+                                            juce::AudioProcessorGraph::NodeID nodeId) {
+    if (mb.isDualIO() || mb.hasSplitBlockStereo() || mb.rightAudioLegChannel() != 1)
+        return;
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.destination.isMIDI() || c.source.channelIndex != 1)
+            continue;
+        auto* destNode = graph.getNodeForId(c.destination.nodeID);
+        auto* destMb = destNode != nullptr ? dynamic_cast<ModuleBase*>(destNode->getProcessor()) : nullptr;
+        if (destMb == nullptr || !destMb->hasSplitBlockStereo() || destMb->isDualIO())
+            continue;
+        if (graph.isConnected({{nodeId, 0}, c.destination}))
+            graph.removeConnection(c);
+    }
+}
+} // namespace
 
 // Unhooks a collapsed split-block module's hidden right leg, RE-POINTING each cable onto the
 // matching channel of the surviving left block wherever the far end still exposes it (and
@@ -426,6 +449,7 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     // left wired to that block has to be dropped here or it becomes a cable whose effect the user
     // can hear but never reach. (Only for split-block layouts: dropping ch1 on an FX module would
     // silently break the perfectly valid collapsed stereo pair.)
+    removeSummedRightLegIntoCollapsedPeers(graph, *mb, nodeId);
     if (mb->isDualIO() || !mb->hasSplitBlockStereo())
         return;
 
@@ -452,10 +476,15 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     for (const auto& c : graph.getConnections()) {
         if (c.source.isMIDI() || c.destination.isMIDI())
             continue;
-        const bool fromHiddenOutput =
-            c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
+        // A channel at or above the right block that a visible jack still owns is not hidden: the
+        // Channel Strip's collapsed input jack covers both its raw legs, kRightBase included, and its
+        // main Right and send legs sit above kRightBase as visible jacks of their own.
+        const bool fromHiddenOutput = c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase &&
+                                      c.source.channelIndex < outputCount &&
+                                      !audioChannelReachableFromJack(*mb, c.source.channelIndex, /*isInput=*/false);
         const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
-                                     c.destination.channelIndex < inputCount;
+                                     c.destination.channelIndex < inputCount &&
+                                     !audioChannelReachableFromJack(*mb, c.destination.channelIndex, /*isInput=*/true);
         if (!fromHiddenOutput && !intoHiddenInput)
             continue;
 
@@ -504,11 +533,23 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     }
 }
 
-// A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
-// Drops any routing left on an output jack that is no longer visible, then pushes overlapping
-// neighbours clear. The resized module itself never moves.
+// A module changed footprint in place (the Macro bank's "Knobs" count, a Scope/Response/envelope-graph fold, a poly or
+// Dual I/O toggle, ...). Drops any routing left on an output jack that is no longer visible, then lets neighbours make
+// room (or come back). The resized module itself never moves.
 void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
+        return;
+
+    // A card that is still being constructed (updateComponents() adds it to the canvas only after its
+    // constructor returns) has not "grown", and its saved position must survive a load or undo: making room
+    // for it would push neighbours around on geometry that is not final yet.
+    bool onCanvas = false;
+    for (auto* comp : content.getModules())
+        if (comp == moduleComp) {
+            onCanvas = true;
+            break;
+        }
+    if (!onCanvas)
         return;
 
     auto& graph = audioEngine.getGraph();
@@ -522,12 +563,19 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     //    No undo transaction is opened here: the parameter gesture that changed the count already
     //    snapshots the whole graph before and after, so this is part of that single undo step.
     if (auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule())) {
-        auto channelStillExposed = [mb](int rawChannel, bool isInput) {
+        // A knob-only target (a plugin parameter's modulation slot) has no jack at all: its cable lands on the knob.
+        std::set<int> knobOnlyChannels;
+        for (const auto& target : mb->getModulationTargets())
+            if (target.knobOnly)
+                knobOnlyChannels.insert(target.channelIndex);
+        auto channelStillExposed = [mb, &knobOnlyChannels](int rawChannel, bool isInput) {
+            if (isInput && knobOnlyChannels.count(rawChannel) > 0)
+                return true;
             const int visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
             for (int j = 0; j < visible; ++j) {
                 for (const auto& t : mb->getJackTargets(j, isInput))
                     for (int v = 0; v < t.voiceSpan; ++v)
-                        if (t.rawHeadChannel + v == rawChannel)
+                        if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                             return true;
             }
             return false;
@@ -561,23 +609,17 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
             graph.removeConnection(c);
     }
 
-    // 2. Nudge neighbours clear of the new footprint. The resized module stays put.
-    std::vector<synth::LayoutUtil::Box> boxes;
-    for (auto* comp : content.getModules())
-        if (comp != nullptr)
-            boxes.push_back({comp->getNodeId(), comp->getBounds()});
-
-    for (const auto& moved : synth::LayoutUtil::resolveOverlapsAfterResize(nodeId, boxes)) {
-        for (auto* comp : content.getModules()) {
-            if (comp == nullptr || comp->getNodeId() != moved.id)
-                continue;
-            comp->setTopLeftPosition(moved.pos);
-            if (auto* node = graph.getNodeForId(moved.id)) {
-                node->properties.set("x", moved.pos.x);
-                node->properties.set("y", moved.pos.y);
-            }
-        }
-    }
-
+    // 2. Neighbours this card pushed aside before come back if they can, then whatever the new footprint covers is
+    //    pushed clear (shortest way, cascade, glide). A macro member also widens its macro's hull, so the push runs
+    //    inside out as whole units, inside the same undo step as the gesture. The card itself never moves.
+    macroController_.reflowForResizedModule(nodeId);
     repaintCanvas();
+}
+
+void GraphEditor::setOutputDeviceInfoProvider(std::function<juce::String()> provider) {
+    outputDeviceInfoProvider = std::move(provider);
+}
+
+void GraphEditor::setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides) {
+    dualIOPerModuleOverrides = std::move(overrides);
 }

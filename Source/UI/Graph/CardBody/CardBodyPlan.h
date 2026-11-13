@@ -1,0 +1,210 @@
+#pragma once
+
+#include "Modules/CardLayout.h"
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+#include <vector>
+
+namespace synth {
+
+/** One thing a card body shows: a parameter's widget or a view. */
+struct CardBodyItem {
+    /** The widget drawn; each kind lays out as its own run (CardBodyLayout.cpp). */
+    enum class Kind {
+        Choice,
+        Knob,
+        Toggle,
+        View,
+        KnobLarge,
+        FaderV,
+        FaderH,
+        Segmented,
+        Stepper,
+        FaderVLong,
+        XYPad,
+        Button
+    };
+    /** A vertical fader, short or long. */
+    static constexpr bool isVerticalFader(Kind kind) { return kind == Kind::FaderV || kind == Kind::FaderVLong; }
+
+    Kind kind = Kind::Knob;
+    juce::RangedAudioParameter* param = nullptr; ///< Null for a view.
+    CardView view = CardView::Scope;             ///< Meaningful for a view only.
+    /** An XY pad only: the parameter its vertical axis drives (`param` drives the horizontal one). */
+    juce::RangedAudioParameter* partner = nullptr;
+    /** A Button only: held (on while pressed) instead of toggling. */
+    bool momentary = false;
+    /** Stands in an XY pad as its vertical axis: no widget, no cell and no More-row entry of its own. */
+    bool consumed = false;
+    juce::Component* widget = nullptr;        ///< Null until built, and always in a measure-only plan.
+    juce::Component* label = nullptr;         ///< The caption above a knob or choice; null otherwise.
+    std::optional<juce::String> caption;      ///< The layout's label override; nullopt = the parameter's name.
+    std::optional<CardCondition> when;        ///< The layout item's condition; nullopt = none.
+    std::optional<juce::Point<int>> at;       ///< The layout item's free position; nullopt = flows.
+    std::optional<juce::Range<double>> range; ///< The layout item's narrowed range; nullopt = the full one.
+    int section = -1;                         ///< Index into CardBodyPlan::sections; -1 = More or unplaced.
+    int swapGroup = -1;                       ///< Index into CardBodyPlan::swapGroups; -1 = none.
+    /** Where else the item sits: one parameter named again in a section that is the other look of the same
+     *  alternative group (the ADSR's Sustain, which has no note division, stands in both its looks). The one
+     *  widget is placed by whichever of its sections is shown. */
+    struct Placement {
+        int section = -1;
+        std::optional<juce::Point<int>> at;
+    };
+    std::vector<Placement> alsoIn;
+    bool shown = true;      ///< A `show` condition's current result.
+    bool collapses = false; ///< A code rule that hides it also takes its cell away (the Macros above the Knobs count).
+    bool dimmed = false;    ///< A `dim` condition or a code dim rule greys it out now.
+    bool pill = false;      ///< A footer toggle, drawn as the small pill.
+    bool keyField = false;  ///< The sequencers' Key: a follow-or-own key field in a wider cell (a Choice otherwise).
+    bool open = true;       ///< A view only: shown now (the layout's `open`, then the card's toggle).
+    /** A view only: how much of its height it takes now while it fades in or out (0 to 1), written by the live card
+     *  body each time it lays out; negative = follow `open`, as in a plan that is only measured. */
+    mutable float reveal = -1.0f;
+
+    /** The text the card shows for this parameter: the override, else the parameter's name. */
+    juce::String captionText() const;
+};
+
+/**
+ * What a card body shows and where, built from a module and its resolved layout without creating
+ * any component, so the same plan can be measured statically or built and laid out live.
+ * docs/layout/module-card-layout.md#rendering.
+ */
+struct CardBodyPlan {
+    struct Section {
+        juce::String id; ///< The layout section's id; empty in the automatic layout.
+        int columns = CardSection::kDefaultColumns;
+        std::vector<int> items;             ///< Indices into `items`, in card order.
+        std::optional<juce::String> title;  ///< Drawn as a header row above the items; nullopt = none.
+        juce::Component* header = nullptr;  ///< The header row; null until built, and without a title.
+        juce::Component* divider = nullptr; ///< A row section's 1 px rule on its left; empty at the start of a line.
+        std::optional<CardCondition> visibleWhen;
+        bool visible = true; ///< visibleWhen's current result (false while codeHidden).
+        bool codeHidden =
+            false;            ///< The card hides this section whatever its condition says (CardBody::setSectionHidden).
+        bool holding = false; ///< Not visible any more but still laid out while its controls fade out.
+        bool footer = false;  ///< The footer row (CardSection::kFooterId), always laid out last.
+        bool row = false;     ///< A `row` presentation section: laid out beside the row sections around it.
+        bool freeform = false; ///< An item has a free position: the section is placed by position, not in runs.
+        int tabGroup = -1;     ///< Index into CardBodyPlan::tabGroups; -1 = a grid section.
+        int altGroup = -1;     ///< Index into CardBodyPlan::altGroups; -1 = none.
+        /** Where the last applied layout put this section's cells: the y below its header and the y
+         *  below its last cell, in card pixels. Written by a live layout pass only (a free position is
+         *  relative to cellTop); stale for a tab section, whose controls the on-card editor outlines but never moves.
+         */
+        mutable int cellTop = 0;
+        mutable int cellBottom = 0;
+
+        /** True when the section draws a header row: a non-empty title over at least one item. A tab's
+         *  title is its tab, never a header row. */
+        bool hasHeader() const {
+            return tabGroup < 0 && title.has_value() && title->trim().isNotEmpty() && !items.empty();
+        }
+    };
+
+    /** Consecutive `presentation: tab` sections: one tab strip, one section's items shown at a time. */
+    struct TabGroup {
+        std::vector<int> sections;        ///< Indices into `sections`, in tab order.
+        int selected = 0;                 ///< Index into `sections`: the tab shown now (per card, not saved).
+        juce::Component* strip = nullptr; ///< The tab strip; null until built.
+    };
+
+    /** Consecutive sections whose `visibleWhen` test one parameter for values no two share (the ADSR's Time and
+     *  Tempo looks): they take the same area, the card keeps the tallest one's height, and only the one that
+     *  holds is placed. */
+    struct AltGroup {
+        std::vector<int> sections; ///< Indices into `sections`, in layout order.
+    };
+
+    /** Consecutive `show` items testing one parameter: they share one cell, so a swap never resizes. */
+    struct SwapGroup {
+        std::vector<int> members;                               ///< Item indices, in layout order.
+        CardBodyItem::Kind cellKind = CardBodyItem::Kind::Knob; ///< The member kind with the tallest cell.
+        int span = 1;                                           ///< The widest member's span (spans are not drawn yet).
+    };
+
+    /** A code dim rule bound to this module's items and parameters. */
+    struct DimRule {
+        int item = -1;
+        std::vector<juce::RangedAudioParameter*> watched;
+        std::function<bool(juce::AudioProcessor&)> dims;
+        bool hides = false;        ///< Hides the item (CardBodyItem::shown) instead of dimming it.
+        bool collapses = false;    ///< With `hides`: the hidden item takes no cell either.
+        juce::String disabledHint; ///< Not empty: the item is disabled too while the rule applies, with this tooltip.
+    };
+
+    /** What a re-evaluation changed: any result at all, and whether a section appeared or went. */
+    struct ConditionChange {
+        bool any = false;
+        bool sections = false;
+    };
+
+    std::vector<CardBodyItem> items; ///< Parameter items in declaration order (the build order), then views.
+    std::vector<Section> sections;   ///< Placement, top to bottom; footer sections last.
+    std::vector<int> more;           ///< Hidden or unplaced parameter items, in declaration order.
+    std::vector<SwapGroup> swapGroups;
+    std::vector<TabGroup> tabGroups;
+    std::vector<AltGroup> altGroups;
+    std::vector<DimRule> dimRules;
+
+    /** `layout` nullopt = the automatic layout; `dimRules` apply only with a layout. Conditions are
+     *  evaluated against the module's current values. The module must outlive the plan. */
+    static CardBodyPlan forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
+                                  const std::vector<CardDimRule>& dimRules = {});
+
+    /** Re-reads every condition and dim rule against `module`'s current values. Message thread. */
+    ConditionChange evaluateConditions(juce::AudioProcessor& module);
+    /** Every parameter a condition or dim rule reads, once each. */
+    std::vector<juce::RangedAudioParameter*> watchedParameters(juce::AudioProcessor& module) const;
+
+    /** The tooltip of the rule that disables `item` right now, or empty when no rule does. */
+    juce::String disabledHint(int item, juce::AudioProcessor& module) const;
+
+    /** The parameter item for `paramId`, or -1. */
+    int findParam(const juce::String& paramId) const;
+    /** True when the item sits in a section shown now (a swapped-out member keeps its cell); a tab
+     *  section is shown only while its tab is selected. */
+    bool isOnCard(int item) const;
+    /** True when the item sits in a tab section, selected or not. */
+    bool isTabbed(int item) const;
+    /** True when the item sits in a look of an alternative group: out of view in the other look it still keeps its
+     *  cell and its knob-bound CV jack, so the gutter never changes with the look. */
+    bool isInAltGroup(int item) const;
+    /** The item's free position in `section` (its own, or one it was named again in); nullopt = flows. */
+    std::optional<juce::Point<int>> atIn(int item, int section) const;
+    /** The text on a tab section's tab: its title, else its id. */
+    juce::String tabTitle(int section) const;
+    bool hasFooter() const;
+};
+
+/** True when `condition` holds for `module` now: a choice's value string or a bool's "true"/"false"
+ *  is in `is`. A parameter the module lacks, or of another type, never applies its effect (true). */
+bool cardConditionHolds(const CardCondition& condition, juce::AudioProcessor& module);
+
+/** The segments a switch for `param` shows, left to right: a choice's values, a bool's off and on
+ *  texts; empty for any other parameter. */
+juce::StringArray cardBodySegmentLabels(const juce::RangedAudioParameter& param);
+
+/** True for the slider kinds (knob, large knob, faders): a modulation target lands on these. */
+bool isContinuousKind(CardBodyItem::Kind kind);
+
+/** The kind `widget` draws `param` as, or the parameter's automatic kind when the widget does not
+ *  suit it (a fader on a choice, a segmented switch with too many values); nullopt = no widget. */
+std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget);
+
+/** The Macros knob a parameter id names ("macro3" is 2), or -1 for any other id. */
+int macroIndexOf(const juce::String& paramId);
+/** Captions every Macros knob in `plan` with its module's own name for it, and an XY pad with both its axes' names
+ *  (nothing on any other module). */
+void applyMacroNames(juce::AudioProcessor& module, CardBodyPlan& plan);
+
+/** True when the card builds its parameter widgets through a CardBody (every built-in module). */
+bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module);
+
+/** True when the card's body is laid out from layout data (false for the bespoke cards). */
+bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module);
+
+} // namespace synth

@@ -1,0 +1,35 @@
+# A plugin switched off after a crash can be turned back on from its card. Check 1.
+#
+# What a user does:
+#   1. Agent Synth quit inside a plugin; the user relaunches and answers "Open without it". An automation launch never asks, so
+#      the `skipPluginForNextLoad` step does what that answer does (the same HostedPluginBackend call) before the open.
+#   2. The project opens with the plugin's card empty: it says "AUDelay is switched off for this open: Agent Synth quit
+#      inside it last time." and a Turn on button sits under it.
+#   3. Turn on: the button goes, the plugin loads and the card shows its knobs, with the project's saved state kept.
+#
+# A saved project cannot carry "switched off" (the skip lasts one load, it is not in the file), so the saved
+# fro1691-switched-off project is the plain one with the plugin back on.
+record: true
+save_project: fro1691-switched-off
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - skipPluginForNextLoad: {name: AUDelay}
+  - openProject: {path: "${FIXTURES}/hosted-plugin-mod.agsproj"}
+  - wait: {}
+  - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
+  - expect: {id: hostedLoadStatus, showing: true, within_ms: 10000}
+  - expect: {id: turnPluginBackOn, showing: true, within_ms: 2000}
+  - expect: {count: {prefix: "hostedKnob:", equals: 0}}
+  - screenshot: {name: switched-off}
+  - wait: {}
+  - hover: {id: turnPluginBackOn}
+  - wait: {}
+  - glide: {name: turn-on-glide, frames: 12, do: {click: {id: turnPluginBackOn}}}   # the press, then the plugin loading back
+  - expect: {id: turnPluginBackOn, showing: false, within_ms: 10000}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 10000}
+  - expect: {id: hostedLoadStatus, showing: false, within_ms: 2000}
+  - wait: {}
+  - click: {id: "card:AUDelay", x: 20, y: 12}    # the pointer approaches and rests on the loaded card (its frames are the clip)
+  - click: {id: "card:AUDelay", x: 150, y: 12}
+  - mark: {check: 1, name: turn-back-on}

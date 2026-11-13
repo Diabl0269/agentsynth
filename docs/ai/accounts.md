@@ -25,6 +25,42 @@ revokes the whole token family if a consumed one reappears; a crash between "use
 would leave a dead token in the keychain and silently sign the user out on the next launch. A failed
 save publishes a SignedOut snapshot with an error rather than continuing.
 
+### Where the refresh token lives per platform
+
+macOS: the Keychain. Windows: the Windows Credential Manager (a generic credential named after the
+same service string, kept per machine for the signed-in user), so sign-in survives a restart. Linux:
+in memory only, so the user signs in again on each launch. All three sit behind `KeychainTokenStore`.
+
+### Keychain access and permission prompts
+
+macOS pins a Keychain item to the code signature of the build that created it, so a build signed
+differently (every ad-hoc build, a different identity) can be asked for permission on each access.
+`KeychainTokenStore` therefore touches the Keychain as little as it can: it reads the item once per
+process and serves later `load()` calls from memory, skips a `save()` of an unchanged token, and
+updates the one item in place instead of deleting and re-adding it (a refused delete used to leave
+the old item behind, so the add failed as a duplicate and sign-in could not persist its token). A
+refused delete on sign-out falls back to blanking the stored value, which `load()` reads as signed
+out. The data-protection Keychain would avoid prompts entirely but needs a provisioned entitlement
+that ad-hoc and Apple Development builds do not have (`errSecMissingEntitlement`, -34018); stable
+signing, `scripts/dev-sign-app.sh` locally and Developer ID for releases, is what stops the prompt
+after the first Always Allow.
+
+Local dev builds keep their own sign-in. A non-CI Apple build defines `AGENTSYNTH_DEV_KEYCHAIN` (root
+`CMakeLists.txt`, same condition as `cmake/DevSign.cmake`) and uses the service
+`<bundle id>.dev.refreshtoken` instead of the release app's `<bundle id>.refreshtoken`, so it never
+reads the item the installed app created (whose access list does not trust the dev signature, which
+raises the login-keychain password prompt at startup). The dev build asks you to sign in once of its
+own. `KeychainTokenStore::defaultServiceName()` makes the choice. A launch with `--no-audio-device`
+(or `AGENTSYNTH_NO_AUDIO_DEVICE`) or `--no-keychain` (or `AGENTSYNTH_NO_KEYCHAIN=1`) never touches
+the keychain at all: `Main.cpp` calls `applyKeychainPolicyForLaunch()` before any `AccountService`
+exists, which switches every store to memory (signed out on each such launch).
+
+The test binary never touches the real item: `Tests/TestMain.cpp` calls
+`KeychainTokenStore::useInMemoryStoreForProcess(true)`, so every default-constructed store (the one
+each `MainComponent`'s `AccountService` builds, whose `attemptSilentSignIn()` reads the token at
+startup) keeps its token in memory. `KeychainTokenStoreIsolationTests.cpp` fails if that switch is
+missing. `KeychainTokenStore` tests use an explicit per-test service name, never the production one.
+
 `completeSignIn()` also re-checks for cancellation before persisting. Without that check, a
 `cancelSignIn()` or `signOut()` landing in the window between "the round trip completed" and "the
 tokens are persisted and published" would be silently overwritten, signing the user back in a moment
@@ -68,6 +104,35 @@ silent sign-in attempt produces. `accountService` is default-constructed with th
 and `KeychainTokenStore`; on a machine with no stored refresh token that attempt is a fast, silent
 no-op, which is why every `MainComponent`-constructing test runs at its normal speed.
 
+## Account tab
+
+Settings > Account (`Source/UI/Settings/AccountSettingsTab`), next to the AI tab; it exists only when the
+window was given an `AccountService`. Signed out it shows one line and a Sign in button (the same
+`launchSignInDialog` the AI panel's row uses). Signed in it shows the email, the plan line
+(`PlanBadge::formatText`, "Pro · 42 of 500 requests this month"), "Renews <date>" or, once the
+subscription is set to stop, "Ends <date>" (`PlanBadge::formatPeriodLine`, from the snapshot's
+`periodEndIso` / `cancelAtPeriodEnd`), Sign out, and:
+
+- **Manage subscription** (Pro) opens a popover (`AccountFlowPanel`, a call-out growing out of the button) with
+  "Change payment or see invoices" (opens `kBillingPortalUrl`) and "Cancel my subscription" (the leaving
+  question first, then the portal). Free shows **Upgrade to Pro**, the existing checkout link.
+- **Delete account…** opens a confirmation that lists what is removed, then the leaving question, then
+  `DELETE /v1/account` (`AuthClient::deleteAccount`). 204 signs out locally (stored tokens cleared like Sign out)
+  and the tab says "Your account was deleted."; 409 `SUBSCRIPTION_ACTIVE` says to cancel first and offers Manage
+  subscription; any other error shows the server's message, or a network line, with Try again.
+- **The leaving question** (`LeavingSurveyPanel`): eight reason toggles, an optional comment (2000 characters),
+  Skip and Continue. Continue sends `POST /v1/exit-survey` `{kind: "cancel"|"delete", reasons, comment?}`
+  (`AuthClient::submitExitSurvey`), Skip sends nothing, and neither blocks leaving: a failed post is ignored. For
+  delete the answer is posted first (the token dies with the account), then the delete follows regardless.
+
+Requests run through `AccountRequests` (a detached worker with a copied `AuthClient`, the result handed back on the
+message thread), like the Feedback tab's sync. Unlike the other calls there is no refresh-and-retry on a 401: the
+client has none, so an expired session shows "sign in again". Esc closes a panel and focus returns to its button.
+The tab watches the snapshot with a 250 ms timer that runs only while it is showing, because the AI chat owns
+`onStateChanged`; the same timer re-fetches the plan when the app returns to the foreground (so "Renews" turns
+into "Ends" after a cancel in the browser portal), via the injectable `setForegroundCheckForTesting`. Tests: `Tests/UI/Settings/Account*Tests.cpp`, `LeavingSurveyPanelTests.cpp`,
+`Tests/Account/AuthClient/AuthClientExitSurveyTests.cpp`.
+
 ## Device id and anonymous trial
 
 `Source/Auth/DeviceIdStore.h/.cpp` generates a stable per-install identifier (`juce::Uuid`, dashed
@@ -78,7 +143,7 @@ reuses it for the lifetime of the install. If the file is missing, empty, or its
 look like a plausible id, a fresh one is generated and written rather than crashing or leaving the
 id blank — a lost or corrupted id just makes the backend see this install as new, which is harmless.
 
-**Not a secret.** Unlike the refresh token, which is Keychain-backed via `KeychainTokenStore`, the
+**Not a secret.** Unlike the refresh token, which is held by `KeychainTokenStore` (Keychain on macOS, Credential Manager on Windows), the
 device id grants no account access by itself; it is only a "this install" signal, so it is
 deliberately stored in a plain file. Both `AccountService`, for `AuthClient`, and `RemoteProvider`
 construct their own `DeviceIdStore` in their production constructors and read the same persisted
@@ -119,7 +184,9 @@ instead of the flat error bubble every other kind gets:
 - The assistant bubble carries the server's message verbatim, with no `"Error: "` prefix, the same
   as `TrialExhausted` and `ServiceCapacityExceeded`, plus an **"Upgrade to Pro"** button opening
   `synth::branding::kUpgradeUrl` (`Source/Branding.h`, a static checkout link) via the injected
-  `urlOpener`. `AIChatComponent::setUrlOpenerForTesting()` swaps that for a non-browser-launching
+  `urlOpener`, with the signed-in account's email appended as `?customer_email=` by
+  `buildUpgradeUrl()` (`Source/AI/UpgradeUrl.h`), because the server activates Pro by matching the
+  Polar customer's email to the account's. The bare link is used when no email is known. `AIChatComponent::setUrlOpenerForTesting()` swaps that for a non-browser-launching
   fake in tests.
 - The button is carried on `MessageData::showUpgradeAction`, which is deliberately **not**
   reconstructed by the history-replay loop in `AIChatComponent`'s constructor: a New Chat or an app

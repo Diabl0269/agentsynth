@@ -4,7 +4,9 @@
 // MidiRemotePanelComponent::refreshActivity -> ControllerSurfaceCell::noteActivity.
 #include "MidiRemotePanelTestFixture.h"
 
+#include "../../TestWait.h"
 #include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 
 namespace {
@@ -22,7 +24,7 @@ protected:
         controller_->arm(node_->nodeID, "cutoff");
         send(juce::MidiMessage::controllerEvent(1, kMappedCc, 64));
         settle();
-        pump();
+        synth::test::waitUntil([&] { return (doc_.assignments.size()) == (1u); });
         ASSERT_EQ(doc_.assignments.size(), 1u);
         profileId_ = doc_.assignments.front().control.profileId;
         mappedControlId_ = doc_.assignments.front().control.controlId;
@@ -47,7 +49,7 @@ protected:
         knob.layout.row = 0;
         profile.controls.push_back(knob);
         ASSERT_TRUE(controller_->updateProfile(profile));
-        pump();
+        synth::test::flushMessageQueue();
         panel_.selectForTest(profileId_, mappedControlId_);
         ASSERT_NE(panel_.findSurfaceCellForTest("unmapped-knob"), nullptr);
     }
@@ -57,6 +59,14 @@ protected:
         remoteEngine_.drain();
         panel_.refreshActivity();
         pump();
+    }
+
+    // The cell's value once it has reached `target`, or after the wait gives up: a busy runner can
+    // land the tick's repaint after one 20 ms pump.
+    float cellValueOnceNear(const juce::String& controlId, float target) {
+        synth::test::waitUntil(
+            [&] { return std::abs(panel_.getSurfaceCellValueForTest(controlId) - target) <= 0.02f; });
+        return panel_.getSurfaceCellValueForTest(controlId);
     }
 
     juce::String profileId_;
@@ -69,7 +79,7 @@ TEST_F(MidiRemotePanelLiveActivityTest, MappedKnobMoveShowsOnTheSurfaceWithoutAT
     for (int value : {10, 40, 100, 127}) {
         send(juce::MidiMessage::controllerEvent(1, kMappedCc, value));
         tick();
-        EXPECT_NEAR(panel_.getSurfaceCellValueForTest(mappedControlId_), value / 127.0f, 0.02f)
+        EXPECT_NEAR(cellValueOnceNear(mappedControlId_, value / 127.0f), value / 127.0f, 0.02f)
             << "after moving the mapped knob to " << value;
     }
 }
@@ -81,7 +91,7 @@ TEST_F(MidiRemotePanelLiveActivityTest, UnmappedKnobMoveShowsOnTheSurfaceWithout
     for (int value : {5, 90, 30}) {
         send(juce::MidiMessage::controllerEvent(1, kUnmappedCc, value));
         tick();
-        EXPECT_NEAR(panel_.getSurfaceCellValueForTest("unmapped-knob"), value / 127.0f, 0.02f)
+        EXPECT_NEAR(cellValueOnceNear("unmapped-knob", value / 127.0f), value / 127.0f, 0.02f)
             << "after moving the unmapped knob to " << value;
     }
 }
@@ -94,7 +104,7 @@ TEST_F(MidiRemotePanelLiveActivityTest, FastTwistBetweenTicksEndsOnTheLastPositi
         send(juce::MidiMessage::controllerEvent(1, kMappedCc, value));
     send(juce::MidiMessage::controllerEvent(1, kMappedCc, 111));
     tick();
-    EXPECT_NEAR(panel_.getSurfaceCellValueForTest(mappedControlId_), 111 / 127.0f, 0.02f);
+    EXPECT_NEAR(cellValueOnceNear(mappedControlId_, 111 / 127.0f), 111 / 127.0f, 0.02f);
 }
 
 // Two profiles bound to the same device (an imported copy of a profile, say): the one the user has
@@ -115,13 +125,13 @@ TEST_F(MidiRemotePanelLiveActivityTest, SecondProfileOnTheSameDeviceMovesLive) {
     knob.message.number = kUnmappedCc;
     copy.controls.push_back(knob);
     ASSERT_TRUE(controller_->addProfile(copy));
-    pump();
+    synth::test::flushMessageQueue();
     panel_.selectForTest(copy.id, knob.id);
     ASSERT_NE(panel_.findSurfaceCellForTest(knob.id), nullptr);
 
     send(juce::MidiMessage::controllerEvent(1, kUnmappedCc, 99));
     tick();
-    EXPECT_NEAR(panel_.getSurfaceCellValueForTest(knob.id), 99 / 127.0f, 0.02f)
+    EXPECT_NEAR(cellValueOnceNear(knob.id, 99 / 127.0f), 99 / 127.0f, 0.02f)
         << "before FRO272 only the first profile on a device ever received its activity";
 }
 
@@ -133,9 +143,11 @@ TEST_F(MidiRemotePanelLiveActivityTest, MovesInterleavedWithPumpsStayCurrent) {
     for (int value : {20, 70, 120, 50}) {
         send(juce::MidiMessage::controllerEvent(1, kMappedCc, value));
         remoteEngine_.drain();
-        pump();
+        synth::test::flushMessageQueue();
         panel_.refreshActivity();
-        pump();
+        synth::test::waitUntil([&] {
+            return std::abs((panel_.getSurfaceCellValueForTest(mappedControlId_)) - (value / 127.0f)) <= (0.02f);
+        });
         EXPECT_NEAR(panel_.getSurfaceCellValueForTest(mappedControlId_), value / 127.0f, 0.02f)
             << "after moving the mapped knob to " << value;
     }

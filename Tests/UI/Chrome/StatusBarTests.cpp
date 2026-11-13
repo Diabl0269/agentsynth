@@ -1,7 +1,9 @@
 // StatusBarTests.cpp
-// Headless unit tests for StatusBarComponent (§4.1) and AudioEngine voice/mute API (§4.2).
+// Headless unit tests for StatusBarComponent (docs/layout/chrome.md#status-bar) and
+// the AudioEngine voice/mute API (docs/architecture/audio-engine.md#audioengine).
 
 #include "AudioEngine/AudioEngine.h"
+#include "Modules/Pluck/PluckModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
@@ -332,7 +334,7 @@ TEST(AudioEngineVoiceTest, GetActiveVoiceInfo_ReturnsZeroWithoutPolyModules) {
 
 TEST(AudioEngineVoiceTest, CountsPolyMidiVoices_MaxVoicesEight) {
     // Verify the PolyMidiModule voice-mask logic independently: after a note-on, popcount
-    // should report 1; maxVoices should be 8 per module (spec §4.2).
+    // should report 1; maxVoices should be 8 per module.
     PolyMidiModule pm;
     pm.prepareToPlay(44100.0, 512);
 
@@ -389,4 +391,25 @@ TEST(AudioEngineVoiceTest, MasterMute_ZeroesOutput) {
     EXPECT_TRUE(engine.isMasterMuted());
     engine.setMasterMute(false);
     EXPECT_FALSE(engine.isMasterMuted());
+}
+
+// ---------------------------------------------------------------------------
+// AudioEngine - getActiveVoiceInfo counts the voices of a Pluck in the graph
+// ---------------------------------------------------------------------------
+
+TEST(AudioEngineVoiceTest, CountsPluckVoices) {
+    AudioEngine engine;
+    auto node = engine.getGraph().addNode(std::make_unique<PluckModule>());
+    ASSERT_NE(node, nullptr);
+    auto* pluck = dynamic_cast<PluckModule*>(node->getProcessor());
+    ASSERT_NE(pluck, nullptr);
+    pluck->prepareToPlay(44100.0, 512);
+    EXPECT_EQ(engine.getDisplayVoiceCount(), 0);
+
+    juce::AudioBuffer<float> buf(pluck->getTotalNumOutputChannels(), 512);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 57, (juce::uint8)100), 0);
+    midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 0);
+    pluck->processBlock(buf, midi);
+    EXPECT_EQ(engine.getDisplayVoiceCount(), 2);
 }

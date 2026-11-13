@@ -1,27 +1,61 @@
-# AppUI's source list, split out of the root CMakeLists.txt (FRO62) purely to keep that file
-# under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh) -- registering the
-# GraphEditor split's new per-concern units pushed it over. No behavior change: paths stay
-# relative to the repo root, exactly as when they sat inline in add_library(AppUI STATIC ...).
+# AppUI's source list, split out of the root CMakeLists.txt to keep that file under the line cap.
+# Paths are relative to the repo root.
 set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
+    Source/MainComponent/QuitRequest.h
+    Source/MainComponent/QuitRequest.cpp
     Source/MainComponent/MainComponent.h
     Source/MainComponent/MainComponentInternal.h
     Source/MainComponent/MainComponentRemoteActionInvoker.h
     Source/MainComponent/MainComponentRemoteActionInvoker.cpp
+    Source/MainComponent/CoreSoundSwapper.cpp
+    Source/MainComponent/CoreSoundSwapper.h
+    Source/MainComponent/MainComponentTimelineOpsHost.h
+    Source/MainComponent/MainComponentTimelineOpsHost.cpp
+    Source/MainComponent/MainComponentTimelineOpsHostSounds.cpp
     Source/MainComponent/MainComponentSetup.cpp
+    Source/MainComponent/MainComponentAddList.cpp
     Source/MainComponent/MainComponentSetupToolbar.cpp
     Source/MainComponent/MainComponentSetupTimeline.cpp
     Source/MainComponent/MainComponentCallbacks.cpp
     Source/MainComponent/MainComponentFileIO.cpp
+    Source/MainComponent/MainComponentTelemetry.cpp
+    Source/MainComponent/MainComponentTransportDoc.cpp
+    Source/MainComponent/MainComponentExportMidi.cpp
+    Source/MainComponent/MainComponentExportMidiSeams.h
+    Source/MainComponent/MainComponentCollectArchive.cpp
+    Source/MainComponent/MainComponentCollectArchiveSeams.h
+    Source/MainComponent/MainComponentTypes.h
+    Source/MainComponent/MainComponentTestSeams.cpp
     Source/MainComponent/MainComponentCommands.cpp
     Source/MainComponent/MainComponentCommandTable.cpp
+    Source/MainComponent/MainComponentSnapCommands.cpp
     Source/MainComponent/MainComponentCommandPredicates.cpp
     Source/MainComponent/MainComponentSelectionCommands.cpp
     Source/MainComponent/MainComponentPanels.cpp
+    Source/MainComponent/MainComponentCanvasReveal.cpp
+    Source/MainComponent/MainComponentMainView.cpp
+    Source/MainComponent/MainComponentMainViewMotion.cpp
+    Source/MainComponent/MainComponentDockFocus.cpp
+    Source/MainComponent/MainComponentFocusRegions.cpp
     Source/MainComponent/MainComponentTimeline.cpp
+    Source/MainComponent/MainComponentClipStretch.cpp
+    Source/MainComponent/MainComponentAutomationOwner.cpp
+    Source/MainComponent/MainComponentAutomationLanes.cpp
+    Source/MainComponent/MainComponentCustomLfo.cpp
+    Source/MainComponent/MainComponentLaneSubtree.cpp
+    Source/MainComponent/MainComponentModulators.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
+    Source/MainComponent/MainComponentTrackModule.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
+    Source/MainComponent/MainComponentTrackDelete.cpp
+    Source/MainComponent/MainComponentMacroDelete.cpp
+    Source/Timeline/TrackRemovalSet.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
+    Source/MainComponent/MainComponentTrackDuplicate.cpp
+    Source/MainComponent/MainComponentTrackSelectionActions.cpp
+    Source/MainComponent/MainComponentShortcutHints.h
+    Source/MainComponent/MainComponentShortcutHints.cpp
     Source/UserSettings.h
     Source/MidiRemote/ControllerProfileStore.h
     Source/MidiRemote/ControllerProfileStore.cpp
@@ -39,43 +73,149 @@ set(APPUI_SOURCES
     Source/MidiRemote/MidiLearnControllerRetarget.cpp
     Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
     Source/UI/Timeline/TimelineRulerComponent.cpp
     Source/UI/Timeline/TimelinePlayheadOverlay.h
     Source/UI/Timeline/TimelinePlayheadOverlay.cpp
-    Source/UI/Timeline/TimelineTrackHeaderComponent.h
-    Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponentPaint.cpp
+    Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponentBulk.cpp
     Source/UI/Timeline/ChannelChipComponent.h
     Source/UI/Timeline/ChannelChipComponent.cpp
+    Source/UI/Timeline/TrackRoutingMenus.h
+    Source/UI/Timeline/TrackRoutingMenus.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneActions.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneInput.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPanePaint.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
+    Source/UI/Timeline/TrackColourPicker.h
+    Source/UI/Timeline/TrackColourPicker.cpp
+    Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h
+    Source/UI/Timeline/CursorGlide/TimelineCursorGlide.cpp
+    Source/UI/Timeline/CursorGlide/PhysicalKeyState.h
+    Source/UI/Timeline/CursorGlide/PhysicalKeyState.cpp
     Source/UI/Timeline/TrackChannelLinkController.h
     Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h
     Source/UI/Timeline/TimelineTransportBar.cpp
     Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
+    Source/UI/Timeline/TimelineRowLayout.h
+    Source/UI/Timeline/TimelineRowLayout.cpp
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.cpp
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.cpp
+    Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h
+    Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
+    Source/UI/Timeline/AutomationLanes/AutomationHandleDensity.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
+    Source/UI/Timeline/AutomationLanes/LaneMenuHook.h
+    Source/UI/Timeline/AutomationLanes/LaneTarget.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
+    Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
+    Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
+    Source/UI/Timeline/TrackPolyState.h
+    Source/UI/Timeline/TrackVoiceToggle.h
+    Source/UI/Timeline/TrackVoiceToggle.cpp
+    Source/UI/Timeline/TrackShowModuleButton.h
+    Source/UI/Timeline/TrackShowModuleButton.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderControls.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderParameterPicker.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlChip.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlChip.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlIcons.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlMoreRow.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlMoreRow.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStrip.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlStripEdit.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneMarkerIcon.cpp
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.h
+    Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneNameButton.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesCustomLfo.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesBlockMotion.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesHeight.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorFold.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorDrag.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesDragGap.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesReorder.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesShapes.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneRangeSelection.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeIcons.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h
+    Source/UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneKitRows.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneWaveform.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformDraw.h
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.h
+    Source/UI/Timeline/TimelineClipLaneArea/WaveformSampleCache.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneLinkedClips.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRange.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneKeyboard.cpp
+    Source/UI/Timeline/ClipAccessibilityText.h
+    Source/UI/Timeline/ClipKeyboardNav.h
+    Source/UI/Timeline/ClipKeyboardNav.cpp
     Source/UI/Timeline/ClipSelectionModel.h
     Source/UI/Timeline/RangeSelectionModel.h
     Source/UI/Mixer/MixerColumnHeader.h
+    Source/UI/Mixer/MixerHeader/MixerIconButton.h
+    Source/UI/Mixer/MixerHeader/MixerIconButton.cpp
+    Source/UI/Mixer/MixerHeader/MixerColourDot.h
+    Source/UI/Mixer/MixerHeader/MixerColourDot.cpp
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
-    # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
-    # AppLookAndFeel (Core) caches an effective MeterColourStops itself now, and this file's
-    # PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
+    # MeterColourStops.h/.cpp live in Core's source list (root CMakeLists.txt): AppLookAndFeel (Core) caches
+    # one, and this file's PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
@@ -85,16 +225,29 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerFaderSlider.cpp
     Source/UI/Mixer/MixerFader.h
     Source/UI/Mixer/MixerFader.cpp
-    Source/UI/Mixer/MixerInsertList.h
-    Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/MixerInsertList/MixerInsertList.h
+    Source/UI/Mixer/MixerInsertList/MixerInsertList.cpp
+    Source/UI/Mixer/MixerInsertList/MixerInsertListEdits.cpp
     Source/UI/Mixer/EqResponseCurve.h
     Source/UI/Mixer/MixerEqThumbnail.h
     Source/UI/Mixer/MixerEqThumbnail.cpp
+    Source/UI/Mixer/MixerRowFocus.h
+    Source/UI/Mixer/MixerRowsMotion.h
+    Source/UI/Mixer/MixerRowsMotion.cpp
     Source/UI/Mixer/MixerSendList.h
     Source/UI/Mixer/MixerSendList.cpp
+    Source/UI/Mixer/MixerSendListRows.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionLayout.h
+    Source/UI/Mixer/MixerSections/MixerSectionLayout.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionViewport.h
+    Source/UI/Mixer/MixerSections/MixerSectionViewport.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionControls.h
+    Source/UI/Mixer/MixerSections/MixerSectionControls.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerColumnMidiLearn.cpp
+    Source/UI/Mixer/MixerColumnAutomationMarker.cpp
+    Source/UI/Mixer/MixerMasterColumnAutomationMarker.cpp
     Source/UI/Mixer/MixerDirectColumn.h
     Source/UI/Mixer/MixerDirectColumn.cpp
     Source/UI/Mixer/MixerMasterColumn.h
@@ -102,15 +255,107 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelRowKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnReuse.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnMotion.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPane.h
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPane.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPaneDrag.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
+    Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
+    Source/UI/Layout/ProgressStrip.cpp
+    Source/UI/Layout/ProgressStrip.h
+    Source/UI/Layout/AppShortcutRelay.h
+    Source/UI/Layout/AppShortcutRelay.cpp
+    Source/UI/Layout/PopupHost.h
+    Source/UI/Layout/PopupHost.cpp
+    Source/UI/Layout/SplitButton.h
+    Source/UI/Layout/SplitButton.cpp
+    Source/UI/Layout/SidePane/SidePane.h
+    Source/UI/Layout/SidePane/SidePane.cpp
+    Source/UI/Layout/SidePane/SidePaneToggleButton.h
+    Source/UI/Layout/SidePane/SidePaneToggleButton.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelSections.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
-    Source/UI/Layout/BottomDockComponent.h
-    Source/UI/Layout/BottomDockComponent.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponent.h
+    Source/UI/Layout/BottomDockComponent/BottomDockComponent.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponentDetach.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponentMainView.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponentTabMotion.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockComponentTabStrip.cpp
+    Source/UI/Layout/BottomDockComponent/BottomDockTabMotion.h
+    Source/UI/Layout/BottomDockComponent/BottomDockTabMotion.cpp
+    Source/UI/Layout/BottomDockTabModel.h
+    Source/UI/Layout/BottomDockTabModel.cpp
+    Source/UI/Layout/MainViewHolder.h
+    Source/UI/Layout/MainViewHolder.cpp
+    Source/UI/Layout/MainViewSwapMotion.h
+    Source/UI/Layout/MainViewSwapMotion.cpp
+    Source/UI/Layout/ArrowKeyNavigation.h
+    Source/UI/Layout/ArrowKeyNavigation.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthMenuModel.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthMenuModel.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthPopup.cpp
+    Source/UI/Layout/NoteLengthMenu/NoteLengthBox.h
+    Source/UI/Layout/NoteLengthMenu/NoteLengthBox.cpp
+    Source/UI/Layout/NoteRangePicker/NoteRangeGeometry.h
+    Source/UI/Layout/NoteRangePicker/NoteRangePicker.h
+    Source/UI/Layout/NoteRangePicker/NoteRangePicker.cpp
+    Source/UI/Layout/NoteRangePicker/NoteRangePickerGestures.cpp
+    Source/UI/Layout/LaneChips/LaneChipRow.h
+    Source/UI/Layout/LaneChips/LaneChipRow.cpp
+    Source/UI/Layout/FoldAllButton.h
+    Source/UI/Layout/FoldAllButton.cpp
+    Source/UI/Layout/NavigationSearchField.h
+    Source/UI/Layout/SearchMatch.h
+    Source/UI/Layout/SearchMatch.cpp
+    Source/UI/Layout/TabSwitchKeys.h
+    Source/UI/Layout/TabSwitchKeys.cpp
+    Source/UI/Layout/TabStripKeys.h
+    Source/UI/Layout/ListBoxFocusRing.h
+    Source/UI/Layout/ListBoxFocusRing.cpp
+    Source/UI/Layout/TabStripKeys.cpp
+    Source/UI/Layout/TextFieldKeys.h
+    Source/UI/Layout/TextFieldKeys.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
     Source/UI/Mixer/MixerMirrorController.cpp
+    Source/UI/Layout/ExitEnterList/ExitEnterListPlan.h
+    Source/UI/Layout/ExitEnterList/ExitEnterListPlan.cpp
+    Source/UI/Layout/ExitEnterList/ExitEnterListMotion.h
+    Source/UI/Layout/ExitEnterList/ExitEnterListMotion.cpp
+    Source/UI/Layout/ReorderDrag/ReorderDragAnimator.h
+    Source/UI/Layout/ReorderDrag/ReorderDragAnimator.cpp
+    Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
+    Source/UI/Layout/ReorderDrag/ReorderFramePump.h
+    Source/UI/Layout/ReorderDrag/ReorderDragSession.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.cpp
+    Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
+    Source/UI/Layout/DragCursor.h
+    Source/UI/Layout/ExitEnterRowSlots.h
+    Source/UI/Layout/FocusRing.h
+    Source/UI/Layout/FocusRing.cpp
+    Source/UI/Layout/ActionGlyphs.h
+    Source/UI/Layout/ActionGlyphs.cpp
+    Source/UI/Layout/KeyRing.h
+    Source/UI/Layout/KeyRing.cpp
+    Source/UI/Layout/TooltipHelpHandler.h
+    Source/UI/Layout/NonModalLabel.cpp
+    Source/UI/Layout/NonModalLabel.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
+    Source/UI/Layout/EdgeResizeHandle.h
+    Source/UI/Layout/EdgeResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h
@@ -120,10 +365,22 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollPainting.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollEditTools.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollAccessibility.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollAudition.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollVelocity.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLane.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLaneGestures.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLanePainting.cpp
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneMath.h
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneMath.cpp
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.h
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollTestState.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollCopyDrag.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
@@ -133,27 +390,82 @@ set(APPUI_SOURCES
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryPainting.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
+    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryAccessibility.cpp
+    Source/UI/Library/ModuleLibraryAccessibilityText.h
     Source/UI/PianoRoll/NoteSelectionModel.h
+    Source/UI/Timeline/TimelineBeatsPerBar.h
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
+    Source/UI/Timeline/AutomationLaneEditorPoints.cpp
+    Source/UI/Timeline/AutomationLaneEditorValueField.cpp
+    Source/UI/Timeline/AutomationLaneEditorStretch.cpp
+    Source/UI/Timeline/AutomationLaneEditorDrawnPoints.cpp
+    Source/UI/Timeline/AutomationLaneEditorCurvePath.cpp
+    Source/UI/Timeline/AutomationLaneEditorEdgeScroll.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.cpp
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h
+    Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
+    Source/UI/Timeline/AutomationLanes/LaneToolCursors.cpp
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.cpp
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.h
+    Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.h
+    Source/UI/Assistant/AIChatComponent/AIChatComponentEditPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentSong.cpp
+    Source/UI/Assistant/AIChatComponent/SongCardBase.h
+    Source/UI/Assistant/AIChatComponent/SongCardBase.cpp
+    Source/UI/Assistant/AIChatComponent/SongPlanCard.h
+    Source/UI/Assistant/AIChatComponent/SongPlanCard.cpp
+    Source/UI/Assistant/AIChatComponent/SongPlanCardSounds.cpp
+    Source/UI/Assistant/AIChatComponent/BuildStepsCard.h
+    Source/UI/Assistant/AIChatComponent/BuildStepsCard.cpp
+    Source/UI/Assistant/AIChatComponent/SongSession.h
+    Source/UI/Assistant/AIChatComponent/StepIcons.h
+    Source/UI/Assistant/AIChatComponent/StepIcons.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentExport.cpp
+    Source/UI/Assistant/AIChatComponent/ChatMessageViewport.h
+    Source/UI/Assistant/ChatMessageAccessibilityText.h
     Source/UI/Assistant/AccountRow.cpp
     Source/UI/Assistant/AccountRow.h
+    Source/UI/Assistant/EntitlementWatcher.cpp
+    Source/UI/Assistant/EntitlementWatcher.h
     Source/UI/Assistant/PlanBadge.cpp
     Source/UI/Assistant/PlanBadge.h
     Source/UI/Assistant/SignInDialog.cpp
     Source/UI/Assistant/SignInDialog.h
+    Source/UI/Chrome/ConfirmDontAskDialog.cpp
+    Source/UI/Chrome/ConfirmDontAskDialog.h
+    Source/UI/Timeline/DeleteTrackConfirm.cpp
+    Source/UI/Timeline/DeleteTrackConfirm.h
     Source/UI/Chrome/ExportAudioDialog.cpp
     Source/UI/Chrome/ExportAudioDialog.h
+    Source/UI/Chrome/Toast/ToastComponent.h
+    Source/UI/Chrome/Toast/ToastComponent.cpp
+    Source/UI/Chrome/ProgressTaskWindow.cpp
+    Source/UI/Chrome/ProgressTaskWindow.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.h
+    Source/UI/Chrome/CanvasToolbar/CanvasToolbar.cpp
+    Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
+    Source/UI/Graph/GraphEditor/CableEndGlide.cpp
+    Source/UI/Graph/GraphEditor/CableEndName.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp
@@ -164,56 +476,183 @@ set(APPUI_SOURCES
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMinimapSlide.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroHullStrips.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroHullGlide.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorCableRetract.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorLoadReveal.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimator.h
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimator.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealAnimatorGroups.cpp
+    Source/UI/Graph/ProjectLoad/LoadRevealTimeline.h
+    Source/UI/Graph/ProjectLoad/LoadRevealTimeline.cpp
+    Source/UI/Graph/ProjectLoad/SignalFlowOrder.h
+    Source/UI/Graph/ProjectLoad/SignalFlowOrder.cpp
+    Source/UI/Graph/ProjectLoad/EditBlockOverlay.h
+    Source/UI/Graph/ProjectLoad/EditBlockOverlay.cpp
+    Source/UI/Graph/ProjectLoad/LoadStageLine.h
+    Source/UI/Graph/ProjectLoad/LoadStageLine.cpp
+    Source/UI/Graph/ProjectLoad/ProjectLoadPipeline.h
+    Source/UI/Graph/ProjectLoad/ProjectLoadPipeline.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroCableAnchors.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
+    Source/UI/Graph/CardOutline.h
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorGhosts.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorOrigins.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorBorders.cpp
+    Source/UI/Graph/MacroFoldAnimator/MacroFoldAnimator.cpp
+    Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
+    Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
+    Source/UI/Graph/CanvasFrame/CanvasFrame.h
+    Source/UI/Graph/CanvasFrame/CanvasFrame.cpp
+    Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.h
+    Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorCanvasFrame.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorCanvasTick.cpp
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
+    Source/UI/Graph/MacroHullGlide/MacroHullGlide.h
+    Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.h
+    Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.cpp
+    Source/UI/Graph/MacroHullGlide/MacroHullGlide.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupController.h
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerInternal.h
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDisplacement.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerFold.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerFoldPack.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerMacroDrop.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerGroupDrop.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDeleteReflow.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDuplicateGlide.cpp
+    Source/UI/Graph/MacroGroupController/MacroPackLayout.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerProgrammaticRouting.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerPortDrop.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
+    Source/UI/Graph/MacroGroupController/MacroNesting.h
+    Source/UI/Graph/MacroGroupController/ModelCardBounds.h
+    Source/UI/Graph/MacroGroupController/MacroNesting.cpp
+    Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
+    Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
+    Source/UI/Graph/DragGhostSlide/DragGhostSlide.h
+    Source/UI/Graph/DragGhostSlide/DragGhostSlide.cpp
+    Source/UI/Graph/InsertGap/InsertGap.h
+    Source/UI/Graph/InsertGap/InsertGap.cpp
+    Source/UI/Graph/InsertGap/InsertGapKeyboard.h
+    Source/UI/Graph/InsertGap/InsertGapKeyboard.cpp
+    Source/UI/Layout/InsertGap/InsertGapPlan.h
+    Source/UI/Layout/InsertGap/InsertGapPlan.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorAutoArrange.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorModulators.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorOutputDock.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorReplace.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
+    Source/UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h
+    Source/UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.cpp
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorTestSeams.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorWheel.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDeleteHeal.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.h
     Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModBand.h
     Source/UI/Graph/ModuleComponent/CardKnobSlider.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentCardView.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.h
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
-    Source/UI/Graph/ModuleComponent/WavetableTabStrip.cpp
-    Source/UI/Graph/ModuleComponent/WavetableTabStrip.h
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackLayout.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackMemo.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
+    Source/UI/Graph/PortPanel/PortConnector.h
+    Source/UI/Graph/PortPanel/PortConnector.cpp
+    Source/UI/Graph/PortPanel/PortConnectorNewModule.cpp
+    Source/UI/Graph/PortPanel/PortConnectionList.h
+    Source/UI/Graph/PortPanel/PortConnectionList.cpp
+    Source/UI/Graph/PortPanel/PortConnectionRow.h
+    Source/UI/Graph/PortPanel/PortConnectionRow.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanel.h
+    Source/UI/Graph/PortPanel/PortConnectionsPanel.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanelMotion.cpp
+    Source/UI/Graph/PortPanel/PortConnectionsPanelPages.cpp
+    Source/UI/Graph/PortPanel/PortTargetList.h
+    Source/UI/Graph/PortPanel/PortTargetList.cpp
+    Source/UI/Graph/PortPanel/PortTargetSearchPage.h
+    Source/UI/Graph/PortPanel/PortTargetSearchPage.cpp
+    Source/UI/Graph/PolyChain/PolyChainController.h
+    Source/UI/Graph/PolyChain/PolyChainController.cpp
+    Source/UI/Graph/PortPanel/PortPanelController.h
+    Source/UI/Graph/PortPanel/PortPanelController.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
+    Source/UI/Graph/ModuleComponent/ReplaceWithPicker.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentSequencerCard.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentPickerRow.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentPickerRow.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChromeLoad.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerKeyStrip.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerChromeMap.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapFields.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.cpp
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h
+    Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentAccessibility.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentAutomationMarker.cpp
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
+    Source/UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h
+    Source/UI/Graph/PluginKnobPicker/HostedParameterCardMenu.cpp
+    Source/UI/Graph/PluginKnobPicker/HostedModTargetPicker.h
+    Source/UI/Graph/PluginKnobPicker/HostedModTargetPicker.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.h
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginTouchToAdd.h
+    Source/UI/Graph/PluginKnobPicker/PluginTouchToAdd.cpp
+    Source/UI/Layout/AutomatedMarker.h
+    Source/UI/Layout/AutomatedMarker.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
@@ -236,6 +675,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceSelection.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMarquee.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceGroupDrag.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMotion.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceView.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
@@ -247,70 +687,314 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHandshake.cpp
-    Source/UI/Macros/MacroCardComponent.cpp
+    Source/UI/Macros/MacroCardComponent/MacroCardComponent.cpp
+    Source/UI/Macros/MacroCardComponent/MacroCardComponentPorts.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
-    Source/UI/Macros/MacroCardComponent.h
+    Source/UI/Macros/MacroCardComponent/MacroCardComponent.h
     Source/UI/ModuleViews/FrequencyResponseComponent.h
     Source/UI/ModuleViews/FrequencyGrid.h
     Source/UI/ModuleViews/EQCurveComponent.h
+    Source/UI/ModuleViews/EQCurveKeyboard.cpp
+    Source/UI/ModuleViews/EQCurveInteraction.cpp
+    Source/UI/ModuleViews/EQCurvePaint.cpp
+    Source/UI/ModuleViews/EQCurveSolo.cpp
+    Source/UI/ModuleViews/EQCurveTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandKinds.h
+    Source/UI/ModuleViews/EQBandKinds.cpp
+    Source/UI/ModuleViews/EQBandStrip.h
+    Source/UI/ModuleViews/EQBandStrip.cpp
+    Source/UI/ModuleViews/EQBandTypeMenu.h
+    Source/UI/ModuleViews/EQBandTypeMenu.cpp
+    Source/UI/ModuleViews/EQBandTypePill.h
+    Source/UI/ModuleViews/EQBandTypePill.cpp
+    Source/UI/ModuleViews/EQSoloButton.h
+    Source/UI/ModuleViews/EQSoloButton.cpp
+    Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h
-    # Reusable breakpoint curve editor (FRO111) -- not yet wired into any module card.
     Source/UI/ModuleViews/CurveEditor/CurveModel.h
     Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
     Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.h
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridModel.h
+    Source/UI/ModuleViews/StepGrid/StepGridModel.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridLayout.h
+    Source/UI/ModuleViews/StepGrid/StepGridLayout.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridPageStrip.h
+    Source/UI/ModuleViews/StepGrid/StepGridPageStrip.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridComponent.h
+    Source/UI/ModuleViews/StepGrid/StepGridComponent.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridMotion.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridPaint.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridEdit.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridKeys.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridToolActions.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChordActions.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChords.h
+    Source/UI/ModuleViews/StepGrid/StepGridChords.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridChordPicker.h
+    Source/UI/ModuleViews/StepGrid/StepGridChordPicker.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridTools.h
+    Source/UI/ModuleViews/StepGrid/StepGridTools.cpp
+    Source/UI/ModuleViews/StepGrid/StepGridRandomizePanel.h
+    Source/UI/ModuleViews/StepGrid/StepGridRandomizePanel.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorSelection.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorClipboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorGridLines.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.h
+    Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMap.h
+    Source/UI/ModuleViews/MorphMap/MorphMapInternal.h
+    Source/UI/ModuleViews/MorphMap/MorphMapPalette.h
+    Source/UI/ModuleViews/MorphMap/MorphMap.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapKeyboard.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapArrowGlide.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapGlide.h
+    Source/UI/ModuleViews/MorphMap/MorphMapGlide.cpp
+    Source/UI/ModuleViews/MorphMap/MorphMapPaint.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeMapController.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeMapController.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawing.cpp
+    Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.h
+    Source/UI/ModuleViews/ShapeEditor/NoteKeyStrip.cpp
+    Source/UI/ModuleViews/ShapeEditor/PerNoteBar.h
+    Source/UI/ModuleViews/ShapeEditor/PerNoteBar.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorInternal.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditor.cpp
+    Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.cpp
+    Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.cpp
+    Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h
+    Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp
     Source/UI/ModuleViews/WavetableDisplayComponent.h
     Source/UI/ModuleViews/TriggerMeterComponent.h
     Source/UI/ModuleViews/ThresholdControlComponent.h
+    Source/UI/ModuleViews/GainReductionMeterComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
-    Source/UI/Settings/AudioSettingsTab.cpp
-    Source/UI/Settings/AudioSettingsTab.h
+    Source/UI/Graph/ModMatrixEndpoints.cpp
+    Source/UI/Graph/ModMatrixLists.cpp
+    Source/UI/Graph/ModMatrixEndpoints.h
+    Source/UI/Graph/ModMatrixKeyboard.cpp
+    Source/UI/Graph/ModMatrixKeyboard.h
+    Source/UI/Graph/ModMatrixPicker.cpp
+    Source/UI/Graph/ModMatrixPicker.h
+    Source/UI/Layout/SwitchGlide.h
+    Source/UI/Layout/TagHue.cpp
+    Source/UI/Layout/TagHue.h
+    Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.cpp
+    Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.h
+    Source/UI/Settings/SettingsTabs.cpp
+    Source/UI/Settings/SettingsTabs.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
+    Source/UI/Chrome/UsageStatsPromptComponent.cpp
+    Source/UI/Chrome/UsageStatsPromptComponent.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
     Source/UI/Chrome/WelcomeScreenComponent.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintText.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintText.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlayEntries.cpp
     # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
     # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
+    Source/Plugin/Hosting/HostedPluginEditorFrame.cpp
+    Source/Plugin/Hosting/HostedPluginEditorFrame.h
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     Source/Plugin/Hosting/HostedPluginEditorWindow.h
     Source/Plugin/Hosting/HostedPluginWindowManager.h
-    # FRO337 (Esc/Cmd+W closes a focused hosted-plugin window) — the header is always listed (it is
-    # inert everywhere but mac, guarded by `#if JUCE_MAC` internally, same idiom as
-    # Source/Update/UpdateManager.h below); the mac-only .mm implementation is added to the AppUI
-    # target directly below, right after add_library(AppUI ...), mirroring root CMakeLists.txt's
-    # SparkleUpdateManager.mm registration.
+    # The Esc/Cmd+W key monitor header is always listed (inert off mac, `#if JUCE_MAC` inside, like
+    # Source/Update/UpdateManager.h below); its mac-only .mm is added to the AppUI target right after
+    # add_library(AppUI ...), mirroring root CMakeLists.txt's SparkleUpdateManager.mm registration.
     Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.h
     # Plugin card layout (FRO126) — the per-plugin-type store reads the settings folder, so it is
     # app layer, not Core; the resolver that consults it sits beside it.
+    Source/Plugin/Hosting/CardLayoutStore.cpp
+    Source/Plugin/Hosting/CardLayoutStore.h
+    Source/UI/Graph/CardBody/CardLayoutOverride.cpp
+    Source/UI/Graph/CardBody/CardLayoutOverride.h
+    Source/UI/Graph/CardBody/ControlStyleNodeOverride.cpp
+    Source/UI/Graph/CardBody/ControlStyleNodeOverride.h
+    Source/UI/Graph/ControlStyle/ControlStyleCards.cpp
+    Source/UI/Graph/ControlStyle/ControlStyleCards.h
+    Source/UI/Graph/ControlStyle/ControlStyleMenu.cpp
+    Source/UI/Graph/ControlStyle/ControlStyleMenu.h
+    Source/UI/Graph/ControlStyle/ControlStylePanel.cpp
+    Source/UI/Graph/ControlStyle/ControlStylePanel.h
+    Source/UI/Graph/CardBody/DefaultCardLayouts.cpp
+    Source/UI/Graph/CardBody/DefaultCardLayouts.h
+    Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsMacros.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSequencers.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFilterDynamics.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutResolver.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutResolver.h
+    Source/UI/Graph/CardBody/ModuleCardLayoutStore.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutStore.h
     Source/Plugin/Hosting/PluginCardLayoutStore.cpp
     Source/Plugin/Hosting/PluginCardLayoutStore.h
     Source/Plugin/Hosting/HostedPluginCardLayout.cpp
     Source/Plugin/Hosting/HostedPluginCardLayout.h
     Source/UI/Settings/AppearanceSettingsTab.cpp
     Source/UI/Settings/AppearanceSettingsTab.h
+    Source/UI/Settings/KnobStylePicker.cpp
+    Source/UI/Settings/KnobStylePicker.h
     Source/UI/Settings/MeterColourStopsEditor.cpp
     Source/UI/Settings/MeterColourStopsEditor.h
+    Source/UI/Settings/AccountFlowPanel.cpp
+    Source/UI/Settings/AccountFlowPanel.h
+    Source/UI/Settings/AccountButtonStyle.h
+    Source/UI/Settings/AccountRequests.cpp
+    Source/UI/Settings/AccountRequests.h
+    Source/UI/Settings/AccountSettingsTab.cpp
+    Source/UI/Settings/AccountSettingsTab.h
+    Source/UI/Settings/LeavingSurveyPanel.cpp
+    Source/UI/Settings/LeavingSurveyPanel.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
+    Source/UI/Settings/SoundPacks/SoundPackCredit.cpp
+    Source/UI/Settings/SoundPacks/SoundPackCredit.h
+    Source/UI/Settings/SoundPacks/SoundPackDisclosure.cpp
+    Source/UI/Settings/SoundPacks/SoundPackDisclosure.h
+    Source/UI/Settings/SoundPacks/SoundPackRow.cpp
+    Source/UI/Settings/SoundPacks/SoundPackRow.h
+    Source/UI/Settings/SoundPacks/SoundPacksSettingsTab.cpp
+    Source/UI/Settings/SoundPacks/SoundPacksSettingsTab.h
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocation.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationMode.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltips.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabToolbarLabels.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabUsageStats.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabSections.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
-    Source/ShortcutManager/AppCommands.h
-    Source/ShortcutManager/ShortcutManager.h
-    Source/ShortcutManager/ShortcutManagerActionNames.cpp
     Source/Update/UpdateManager.h
+    Source/UI/Graph/CardBody/CardBody.cpp
+    Source/UI/Graph/CardBody/CardBody.h
+    Source/UI/Graph/CardBody/CardBodyConditions.cpp
+    Source/UI/Graph/CardBody/CardBodyFooter.cpp
+    Source/UI/Graph/CardBody/CardBodyGeometry.cpp
+    Source/UI/Graph/CardBody/CardBodyGeometry.h
+    Source/UI/Graph/CardBody/CardBodyLayout.cpp
+    Source/UI/Graph/CardBody/CardBodyLayoutWalk.h
+    Source/UI/Graph/CardBody/CardBodyMeasure.cpp
+    Source/UI/Graph/CardBody/CardBodyMeasure.h
+    Source/UI/Graph/CardBody/CardBodyMoreButton.h
+    Source/UI/Graph/CardBody/CardBodyMoreRow.cpp
+    Source/UI/Graph/CardBody/CardBodyPlan.cpp
+    Source/UI/Graph/CardBody/CardBodyPlan.h
+    Source/UI/Graph/CardBody/CardBodySwapMotion.cpp
+    Source/UI/Graph/CardBody/CardBodyTabs.cpp
+    Source/UI/Graph/CardBody/CardBodyViews.cpp
+    Source/UI/Graph/CardBody/CardBodyViews.h
+    Source/UI/Graph/CardBody/CardLayoutQuickEdit.cpp
+    Source/UI/Graph/CardBody/CardLayoutQuickEdit.h
+    Source/UI/Graph/CardWidgets/CardControlGestures.h
+    Source/UI/Graph/CardWidgets/CardFader.cpp
+    Source/UI/Graph/CardWidgets/CardFader.h
+    Source/UI/Graph/CardWidgets/CardSegmentedSwitch.cpp
+    Source/UI/Graph/CardWidgets/CardSegmentedSwitch.h
+    Source/UI/Graph/CardWidgets/CardStepper.cpp
+    Source/UI/Graph/CardWidgets/CardStepper.h
+    Source/UI/Graph/CardWidgets/CardTogglePill.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
+    Source/UI/Graph/ModuleComponent/ModChipFade.h
+    Source/UI/Graph/ModuleComponent/ModRingFades.cpp
+    Source/UI/Graph/ModuleComponent/ModRingFades.h
+    Source/UI/Graph/CardBody/ModuleCardLayoutBinding.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutBinding.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorSource.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorModel.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h
+    Source/UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.cpp
+    Source/UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h
+    Source/UI/Graph/CardLayoutEditor/HostedCardLayoutSource.cpp
+    Source/UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorRow.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorRow.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentKeyboard.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentRows.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentScope.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentTestSeams.cpp
+    Source/UI/Graph/CardLayoutEditor/PresetNamePrompt.cpp
+    Source/UI/Graph/CardLayoutEditor/PresetNamePrompt.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddPanel.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddRow.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutAddRow.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutEditBar.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutEditBar.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAdd.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAddDrop.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorFollow.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorGroups.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorHideDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorScope.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTimeTempo.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorTestSeams.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutHideZone.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOutline.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardAddControlModel.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardCells.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.h
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp
+    Source/UI/Graph/CardBody/CardBlockFade.h
+    Source/UI/Graph/CardBody/CardBodyFades.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
+include(cmake/ShortcutSources.cmake) # appends the shortcut manager and its users' units to APPUI_SOURCES
+include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES
+include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_SOURCES
+include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group move and rename to APPUI_SOURCES
+list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake
+include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag grid to APPUI_SOURCES
+include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Morph Shapes card to APPUI_SOURCES
+include(cmake/ModDotSources.cmake) # appends the mod dot panel and the modulation row parts to APPUI_SOURCES

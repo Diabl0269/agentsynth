@@ -1,7 +1,8 @@
 # Timeline Ruler and Markers
 
 `Source/UI/Timeline/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin
-strip (`Metrics::timelineRulerHeight` = 30) docked at the top of the lanes region: bar and beat
+strip (`Metrics::timelineRulerHeight` = 30) docked at the top of the lanes region, under the 24 px [Sections strip](sections.md) (the strip and
+the ruler share one x and width): bar and beat
 ticks, the loop brace, marker flags, and the two drag gestures that seek the playhead and set the
 loop range.
 
@@ -68,6 +69,14 @@ FIFO dedupes nothing. `postSeekIfChanged` dedupes on the beat clamped to `>= 0` 
 dedupes on the `[start, end]` pair. `mouseUp` calls its zone's poster again, so it is a no-op when
 the last drag update already posted the final value.
 
+**A drag follows the view.** A loop drag, a scrub or a marker drag held in the ruler's left or right 24 px edge zone
+scrolls the shared timeline view, faster nearer the edge (`TimelineRulerEdgeScroll.cpp`, the shared `EdgeScrollTimer`);
+each tick re-derives the loop end, the playhead or the flag from the still pointer, so it stays under it, and the view
+stops at beat 0. The panel hears each scroll (`onViewScrolledByDrag`): follow-playhead turns off and the section strip
+repaints. Release and the pointer moving back in stop it. Escape mid-drag stops it too: a marker drag commits nothing, a
+loop drag puts back the loop it started from, and a scrub leaves the playhead where it is. While the piano roll lends
+the ruler its mapping (`setMappingOverride`) nothing scrolls, since the strip then shows the roll's beats.
+
 ## The loop brace
 
 The brace is drawn whenever a RANGE exists (`loopEnd > loopStart`) — **not** only while looping is
@@ -111,7 +120,7 @@ rather than in the track list.
 **Why not a marker track.** It would have to be excluded from every place that iterates tracks to
 make sound.
 
-**Where they come from.** The `"+ Track"` menu's **Add Marker** entry (`kAddMarkerMenuId` — see
+**Where they come from.** The `"Add Track"` menu's **Add Marker** entry (`kAddMarkerMenuId` — see
 [add-track](add-track.md#add-marker)) calls `TimelinePanelComponent::addMarkerAtPlayhead()`: a
 marker at the transport's CURRENT position — **unsnapped**, because a cue marks something the user
 just heard, so it belongs exactly where the playhead is; a later drag *does* snap — named `"Marker
@@ -264,7 +273,7 @@ drive the outcomes through `applyMarkerContextChoice`. Production behaviour is u
 seam idiom appears in `PianoRollComponent::promptExtendClipToFitNotes`, `requestRepaintStrip`, and
 `ModuleLibraryComponent::showHelpPopover` / `launchHelpCallOutBox`.
 
-`TimelinePanelComponent::openAddTrackMenu` is the same seam for the `"+ Track"` menu. No test
+`TimelinePanelComponent::openAddTrackMenu` is the same seam for the `"Add Track"` menu. No test
 reaches it today — they all drive `applyAddTrackMenuChoice`, the documented headless entry point —
 but a test that clicked the button would crash identically, so the override point exists before
 someone writes that test. Those two are the only real-window creations under the panel and the

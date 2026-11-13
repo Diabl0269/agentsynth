@@ -20,7 +20,12 @@ and `spliceMasterNode`'s `Strip -> Master(Mix)` classification all unchanged.
 `MixerColumn::Kind::Bus` is **display only**, set when the strip carries `"isBus": true` in its
 trusted extra state — written by "Add bus" and by the merge-point buses — **or**, as a structural
 fallback for patches built before that flag existed, when one of its signal predecessors is another
-strip. A cable into a Compressor or Gate **Key** input is not a signal predecessor
+strip **and no track source feeds it**. **FRO355: a strip a track plays into is that track's channel,
+whatever else feeds it** — a send from track A into track B's channel leaves B a linked track
+channel (it gains a "receives" badge, below), where it used to flip to BUS and drop its link. The
+rule is judged live on every rebuild, so an old patch needs no migration; the one visible change is
+that "Bus N" fallback names (and so stem file names) can renumber on a patch where a track channel
+used to count as a bus. A cable into a Compressor or Gate **Key** input is not a signal predecessor
 (`PortRole::Sidechain`, [`fx-modules.md`](../modules/fx-modules.md#key-inputs-sidechain)), so a bass
 channel keyed from a kick channel stays a channel. **The flag is what a freshly added, still-unfed bus has to go on.** A track preset scrubs
 `"isBus"` from every captured strip
@@ -40,19 +45,30 @@ and **a send is a plain `AudioProcessorGraph` connection** from those channels i
 see it: JUCE's parallel-path delay compensation, stem export, and the canvas cable renderer. On the
 canvas a send is therefore an ordinary cable on the strip's new visible jacks — no new cable concept.
 
+**A send across a macro boundary goes through macro ports (FRO354).** A track's strip sits inside its
+channel macro, so with "Auto-create macro ports when a cable or mixer send crosses a boundary" on (the default) a send between two channels leaves
+the source's macro through an outlet port and enters the target's through one Stereo inlet — the same
+as a hand-drawn cable. Removing or retargeting the send removes the ports it no longer uses, in the
+same undo step. `MixerSendList` runs every row mutation through
+`MacroGroupController::applyProgrammaticConnectionChange`; the Core flows themselves stay
+macro-agnostic. Off, the send is the two direct cables it always was. See
+[`docs/macros/auto-ports.md`](../macros/auto-ports.md#programmatic-connections).
+
 ## Channel layout
 
 | | channels |
 |---|---|
-| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right, so `kNumInputs = 5` |
+| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right |
+| cable inputs (knob-only, appended) | `kFirstCvChannel = 5`: Gain `5`, Pan `6`, Send 1-4 Level `7..10`, Send 1-4 Pan `11..14`, so `kNumInputs = 15`; read live once per block before the output hygiene clears |
 | main out | `0` = Left, `1..3` reserved, `4` = Right, `5..7` reserved |
 | send L block | `kSendBase = 8`, slot *k* at `8 + k` |
 | send R block | slot *k* at `kSendBase + kMaxSends + k` |
 | | `kNumOutputs = 16` |
 
 **Each send's right leg is on its own block, so the "right leg never on ch1" invariant
-(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(5, 16)` is false, so no Dual
-I/O toggle is inherited.
+(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(15, 16)` is false, so the Dual
+I/O toggle comes from the strip's explicit `StereoAudio::Declared`. It collapses the main out to one `Audio` jack
+over `0` and `4` and shifts the send jacks up one; no raw channel in the table moves.
 
 ## What is a parameter and what is state
 
@@ -96,6 +112,10 @@ jack, its mixer row and its `sendNLevel` parameter always agree.
 
 ## Reordering sends
 
+A send row is reordered by dragging its name, or with the focused row's **Alt+Up / Alt+Down** (`mixerMoveRowUp` /
+`mixerMoveRowDown`, rebindable); focus follows the row. Each row's target menu (a click on its name) also has a "Show <bus> on canvas" item that centres the
+target bus's module ([edit on canvas](edit-on-canvas.md#insert-and-send-rows)).
+
 **FRO296: reordering swaps the REAL slots, not a display-only order on top of them** — the user wants
 "Send 1" to always be the TOP ROW everywhere (the knob's title, a lane's name, the target menu), so
 dragging a row to a new position is `synth::swapSends`/`synth::moveSendRow`
@@ -137,6 +157,14 @@ MIDI mapping together. `MixerPanelComponent::moveSendRow` also republishes the l
 assignment cache (`MidiLearnController::publishAssignments()`) right after its own edit and again as
 the undo/redo postRestore, so a hardware control already resolves against the send's new slot with no
 separate reconcile step.
+
+**The commit must not rebuild the mixer from inside itself.** That edit's undo step wakes the
+structure-changed catch-up (`rebuildIfStale`), which would destroy the send list whose `moveRow` is still
+running; its next line, `onMutated()`, then reads freed members (a segfault on Linux through
+`MixerColumnComponent`'s `onMutated` lambda, silent on macOS). The move provider in
+`MixerPanelColumnReuse.cpp` holds `rebuildIfStale()` and `rebuildWhenShown()` for the length of
+`moveSendRow` (`rebuildHoldDepth_`), so the one rebuild is the `onMutated()` that follows. Test:
+`MixerSendListDragTests.TheListIsStillAliveWhenItsMoveReturnsAndTheMixerRebuildsOnce`.
 
 ## Pre and post, mute and bypass
 
@@ -181,6 +209,18 @@ of transition in this codebase.
 
 **Every branch writes every send channel** — the reserved `5..7` and all of `8..15` are cleared
 unconditionally up front — or a stale block from the previous callback leaks into a bus.
+
+### Bypassing a send
+
+**A send can be bypassed on its own.** Like mute, the bypass is non-parameter trusted state
+(`isSendBypassed`/`setSendBypassed`, a `bypassMask_` atomic next to `muteMask_`, serialised as `"bypass"` in the send's
+entry in the strip's extra state; an entry saved before it existed loads un-bypassed, and `removeSend` and `addSend`
+clear it so a reused slot starts live). The level parameter is never touched, so restoring always returns the send at
+the level it left. **Unlike mute it ramps:** `writeSendLegs` makes a bypassed slot's level target 0 and lets the slot's
+own smoother carry it there over the usual 20 ms, so bypassing and restoring never click; once the ramp has settled at
+silence the slot is left at the hygiene pass's silence (no per-sample work), and a send restored as bypassed starts
+silent in `prepareToPlay` instead of ramping down from its level. A swap during a row reorder carries the bit with its
+send. The row's bypass button and the B key are described in [`panel.md`](panel.md#bypassing-a-row).
 
 ## Latency across the parallel path
 
@@ -228,17 +268,25 @@ delay-compensated per-edge mute node, which is out of scope.
 ## The send and bus UI
 
 A bus column is an ordinary strip column with three differences: a **"BUS" badge** instead of the
-linked badge, a source line listing the feeding strips' names instead of tracks, and no track chip or
+link glyph, a sources badge listing the feeding strips' names instead of tracks, and no track chip or
 colour link. Its insert list works exactly like any other column's — including the bypassed Gate, EQ
 and Compressor "Add bus" builds — via the backward walk
 [`docs/mixer/mixer.md`](mixer.md#inserts-in-a-free-form-graph) describes for a column with no feeding
 track. **Buses sit after the track-driven strips and before Direct**, which is exactly where the
 existing orphan-strip append puts them.
 
+**A track channel that receives sends** (FRO355) keeps its link glyph and track sources badge and adds
+a compact **"receives" badge** — a small arrow plus the number of strips sending into it — whose
+tooltip lists them ("Receives sends from: Drums, Keys"). The names come from
+`MixerColumn::receivesFrom`, the Strip-kind twin of a bus's `busSources`; the header's tooltip and
+accessible description spell every badge out in words (see [`mixer.md`](mixer.md#column-badges)).
+
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
 target-bus button, a rotary level knob attached straight onto `sendNLevel`, a rotary **pan knob**
-(FRO294) attached straight onto `sendNPan`, an **"M" mute toggle** (FRO295), a `PRE`/`POST` toggle and
-an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
+(FRO294) attached straight onto `sendNPan`, a **bypass icon toggle** (see
+[Bypassing a send](#bypassing-a-send)), an **"M" mute toggle** (FRO295), a `Pre`/`Post` toggle and
+an `x` — plus a `+ Send` row while a slot is free. The bypass button's width came out of the row's other parts (the
+knobs, M and Pre/Post each gave up a few pixels), so a target name keeps about 28 px of a 140 px column and ellipsises. **FRO301: a screen reader names each level knob by
 its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
 the same "-6.0 dB" format as the fader and pan knob
 ([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)); the pan knob follows the
@@ -254,11 +302,11 @@ it is a ticked "Mono" item at the top of the row's existing target menu (`showTa
 through `synth::setSendMono` inside the same one-`recordGraphAndMacroChange` shape every other row
 mutation uses. A mono row shows a small filled dot painted (not a component) at the left edge of
 the target-name area — a dot, not a letter, because an "M" there read as a second mute button — and
-its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `PRE`/`POST` already use, so the row's
-component budget stays exactly level knob + pan knob + M mute button + real-click PRE/POST/remove
+its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `Pre`/`Post` already use, so the row's
+component budget stays exactly level knob + pan knob + M mute button + real-click Pre/Post/remove
 hit areas.
 
-**FRO295: the M button is a real `juce::TextButton`, not painted text like PRE/POST** — it reuses the
+**FRO295: the M button is a real `juce::TextButton`, not painted text like Pre/Post** — it reuses the
 exact button type/convention `MixerColumnComponent`'s own strip-level mute button uses
 (`setClickingTogglesState(false)` plus a manual `setToggleState` kept in step by `rebuildKnobs()`),
 so its on/off colouring comes from `AppLookAndFeel`'s `TextButton::buttonOnColourId` (the theme's
@@ -270,20 +318,27 @@ every other row mutation uses.
 
 **FRO296: drag a row by its target-name area to reorder it.** The name area is the same region a
 plain click already used to open the target menu, so `MixerSendList` defers the click-vs-drag
-decision to a small pixel threshold (`kRowDragThreshold`, the same value/reasoning
+decision to the reorder animator's 4 px threshold (the same value
 `TimelineTrackHeaderComponent`'s own row-reorder drag uses) — a press that never crosses it is a
-plain click and still opens the menu; one that does becomes a drag. While dragging, a thin insertion
-line (the theme's accent colour, no new colour) is painted at the hovered drop boundary. Releasing
-calls `MixerPanelComponent::moveSendRow` — the one place graph, `TimelineDoc` and macros are all
+plain click and still opens the menu; one that does becomes a drag. The drag is the shared
+[reorder drag](../layout/animation.md#reorder-drag) (`ReorderDragSession`): the row under the pointer is
+lifted (raised wash, 1 px accent border) and follows it, the other row glides aside (160 ms), Esc
+glides everything back with nothing committed, and the name area shows the grab cursor on hover and
+during the drag. Nothing is committed while the row is held. Releasing calls `MixerPanelComponent::moveSendRow` — the one place graph, `TimelineDoc` and macros are all
 reachable together — which does the real swap and lane rebind (see "Slots are sparse" above) as ONE
-undo step. The knobs, M button, PRE/POST and `x` all keep working exactly as before: only a press that
+undo step. The commit rebuilds the mixer and destroys this list, so the drop's settle is handed over:
+just before committing, the list reports `{final row, y it was drawn at}` (`onSettlePending`) up through
+`MixerColumnComponent` to `MixerPanelComponent`, which keeps it with the strip's node id (like
+`columnReorder_` does for columns); at the end of `rebuild()` it calls `startSettleFrom()` on the new
+column of that strip, and the dropped row glides from the drop y into its slot (140 ms `easeOutCubic`,
+`ReorderDragSession::settleInto`; its neighbours already sit in their final places). The pending settle
+is cleared whether or not a column is found, and by a refused move. Not showing, it lands at once. The knobs, M button, Pre/Post and `x` all keep working exactly as before: only a press that
 lands on the name area itself, past the menu-vs-drag threshold, is claimed by the drag.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob
-→ **Automate 'Send N Level'** creates the lane and opens the automation strip on it (the same
-`onAutomateParameterRequested` route a canvas knob uses — the only way in from a track with no lanes
-yet, since the track header's `A` button only appears once one exists). Once the strip is open, its
-lane picker also offers an "Add lane…" entry per
+→ **Automate 'Send N Level'** creates the lane and shows it under its track (the same
+`onAutomateParameterRequested` route a canvas knob uses). The timeline's lane choices
+(`collectAutomationLaneOptions`) also offer an "Add lane…" entry per
 active, not-yet-automated slot, labelled by `synth::describeSendSlotLabel` with the SAME "Send to
 \<target\>" / "Send N (no target)" text the knob's own accessible title uses, so the picker entry and
 the knob it drives always read the same thing. A `sendNLevel` is an ordinary `RangedAudioParameter`
@@ -305,7 +360,7 @@ existence, channel bounds and "not already connected", and **accepts a cycle wit
 hand on the canvas. **A refusal changes nothing at all, so no empty undo step is recorded** — and the
 same holds for every other refusal (a non-strip target, self, out of slots).
 
-**"Add bus"** — `+ Bus` on the dock's tab strip, and "New bus..." in every send menu — builds a
+**"Add bus"** — `Add Bus` on the mixer panel's toolbar, and "New bus..." in every send menu — builds a
 bypassed Gate, bypassed EQ, bypassed Compressor, Stereo Strip, Master(Mix) chain via the shared chain
 builder, boxed in a macro named "Bus N". A boxed bus takes its macro's name.
 
@@ -326,7 +381,8 @@ forward to them. Reordering needs nothing new: `swapSends`/`moveSendRow` remap c
 channel, so a Key send moves like any other.
 
 **The target is still never stored.** `synth::resolveSendTarget` walks forward from the slot's raw
-left output: an edge landing on a Sidechain input makes that module a Key target (checked *before*
+left output: an edge landing on a Sidechain input — looking through any macro ports in between, so a
+ported Key send still resolves — makes that module a Key target (checked *before*
 the `isSignalEdge` filter, which drops key edges by design); otherwise the first strip reached, as
 `findSendTarget` always did. The nearest hit wins. `findSendTarget` stays the strip-only view and
 reports a Key send as no strip at all, so every bus/solo/stem caller keeps its meaning.

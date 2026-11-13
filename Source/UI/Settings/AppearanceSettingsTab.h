@@ -1,8 +1,11 @@
 #pragma once
 
 #include "UI/Graph/CableColour.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/PianoRoll/NoteColour.h"
+#include "UI/Settings/KnobStylePicker.h"
 #include "UI/Settings/MeterColourStopsEditor.h"
 #include "UI/Theme/ThemeManager.h"
 #include <cmath>
@@ -134,6 +137,7 @@ public:
     }
 
 private:
+    class SwatchStrip;    // shared keyboard + mouse behaviour of the two swatch rows
     class CableSwatchRow; // strip of clickable colour swatches for the active mode
     class NoteSwatchRow;  // strip of clickable pitch-class swatches (piano roll note colours)
     class ThemeListModel; // juce::ListBoxModel drawing name + swatches; defined in .cpp? No —
@@ -141,6 +145,8 @@ private:
                           // class here or in an AppearanceSettingsTab.cpp if they prefer; if a
                           // .cpp is added it MUST be added to BOTH CMakeLists (app + tests).
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void nameControlsForAccessibility();
+    void buildKnobsSection(const juce::Font& sectionHeaderFont);
 
     // The scrolled content: a bare host whose paint delegates back to the tab so the section
     // dividers are drawn in the same coordinate space the controls are laid out in — same idiom as
@@ -172,6 +178,13 @@ private:
     // move it, otherwise fall through to the base Component's default bubble-to-parent behaviour.
     class ThemeListBox : public juce::ListBox {
     public:
+        void focusGained(FocusChangeType) override { repaint(); }
+        void focusLost(FocusChangeType) override { repaint(); }
+        void paintOverChildren(juce::Graphics& g) override {
+            juce::ListBox::paintOverChildren(g);
+            synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 2.0f);
+        }
+
         void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override {
             auto& bar = getVerticalScrollBar();
             if (bar.isVisible()) {
@@ -188,6 +201,7 @@ private:
 
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
+    synth::ui::ScrollIntoViewOnFocus followFocus_{contentViewport};
 
     synth::theme::ThemeManager& themeManager;
     juce::ApplicationProperties& appProperties;
@@ -212,6 +226,10 @@ private:
     // Hairline rules between sections, painted in paint() from these bounds — same pattern as
     // PreferencesSettingsTab::dividerBounds.
     std::vector<juce::Rectangle<int>> dividerBounds;
+
+    // ---- Knob style ----
+    juce::Label knobsTitleLabel;
+    std::unique_ptr<synth::ui::KnobStylePicker> knobStylePicker;
 
     // ---- Cable colour controls ----
     juce::Label cablesTitleLabel;

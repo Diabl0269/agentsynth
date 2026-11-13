@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, view group (a signal branching off to a bus). Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M6.5 3v18" stroke-width="2.6" fill="none" stroke="#FF00FF" stroke-linecap="round" />
+  <path d="M6.5 12h9.5" stroke-width="2.4" fill="none" stroke="#FF00FF" stroke-linecap="round" />
+  <path d="M13 8l4.4 4-4.4 4" stroke-width="2.2" fill="none" stroke="#FF00FF" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="19" y="5" width="2.6" height="14" rx="1.1" fill="#FF00FF" fill-opacity=".45" />
+</svg>

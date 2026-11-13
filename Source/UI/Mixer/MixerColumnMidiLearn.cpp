@@ -175,9 +175,9 @@ void MixerColumnComponent::showParamMidiLearnMenu(juce::RangedAudioParameter& pa
 
 // "Automate '<Param>'" on the fader, pan and send-level knobs -- the same
 // GraphEditor::onAutomateParameterRequested route a canvas knob's right-click uses
-// (MainComponent::automateParameter: creates the lane if needed and opens the automation strip on
-// it). The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
-// parameters from a track with no lanes yet (the track header's A button only shows once one exists).
+// (MainComponent::automateParameter: creates the lane if needed and shows it under its track).
+// The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
+// parameters from a track with no lanes yet (the track header's fold arrow only shows once one exists).
 void MixerColumnComponent::appendAutomateMenuItem(juce::PopupMenu& menu, juce::RangedAudioParameter& param) {
     if (!graphEditor_->onAutomateParameterRequested)
         return;
@@ -314,9 +314,8 @@ void MixerColumnComponent::repaintArmedMidiLearnOutline() {
 }
 
 void MixerColumnComponent::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
 
     for (const auto& e : midiLearnableEntries_) {
         if (!e.mapped)
@@ -329,6 +328,10 @@ void MixerColumnComponent::paintMidiLearnOverlays(juce::Graphics& g) {
         // local bounds (the pre-fix code) mixed two different coordinate frames and put every
         // badge/outline at this column's own top-left corner instead of on the control.
         const auto bounds = getLocalArea(e.component, e.component->getLocalBounds());
+        // A send knob scrolled out of its section (or in a hidden one) shows no badge.
+        if (sendViewport_.isParentOf(e.component) &&
+            (!sendViewport_.isVisible() || !sendViewport_.getBounds().contains(bounds.getCentre())))
+            continue;
         synth::ui::midilearn::paintMidiMappedBadge(g, bounds, badgeColour);
     }
 

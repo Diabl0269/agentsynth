@@ -10,8 +10,8 @@
 //     whatever is in the render buffer post-graph. LoudSynthWithoutMonitoringNeverTrips uses a raw
 //     juce::AudioGraphIOProcessor passthrough (nothing to do with the module's own gate) to prove
 //     the guard never evaluates while monitoring is disabled.
-//   * MAINCOMPONENT layer — the poll wiring: armed-Audio-track derivation, the trip-latches-until-
-//     re-arm rule, and the status-bar message.
+//   * MAINCOMPONENT layer — the gate follows the patch, never the armed tracks; a trip keeps it shut
+//     until the Audio Input is unwired and wired again; the poll shows the status-bar message.
 //
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
@@ -352,38 +352,44 @@ protected:
     }
 };
 
-TEST_F(MainComponentFeedbackGuardTest, ArmEnablesDisarmDisables) {
+// Arming an audio track no longer opens the Audio Input module: a track hears its own input through its Track Audio
+// node instead. The module passes input only while it has a cable out of it.
+TEST_F(MainComponentFeedbackGuardTest, TheGateFollowsTheWiringNotTheArmedTracks) {
     MainComponent mc(std::make_unique<MinimalProvider>());
     mc.setSize(1600, 900);
     quiesceEngine(mc);
 
     auto& doc = mc.getTimelineDoc();
     auto& engine = mc.getAudioEngine();
-
-    ASSERT_FALSE(engine.isInputMonitoringEnabled()) << "nothing armed yet";
+    auto& graph = engine.getGraph();
+    mc.getGraphEditor().detachAllModuleComponents();
+    graph.clear();
+    auto in = graph.addNode(std::make_unique<AudioInputModule>());
+    auto out = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+    engine.refreshAudioInputGate();
+    ASSERT_FALSE(engine.isInputMonitoringEnabled()) << "an unwired Audio Input is silent";
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
     ASSERT_TRUE(doc.setTrackArmed(track, true));
     mc.timerCallback();
-    EXPECT_TRUE(engine.isInputMonitoringEnabled()) << "an armed Audio track must enable monitoring";
+    EXPECT_FALSE(engine.isInputMonitoringEnabled()) << "arming a track must not open the hand-patched module";
 
+    graph.addConnection({{in->nodeID, 0}, {out->nodeID, 0}});
+    engine.refreshAudioInputGate();
+    EXPECT_TRUE(engine.isInputMonitoringEnabled()) << "wiring it onward is asking to hear it";
     ASSERT_TRUE(doc.setTrackArmed(track, false));
     mc.timerCallback();
-    EXPECT_FALSE(engine.isInputMonitoringEnabled()) << "disarming must disable monitoring again";
+    EXPECT_TRUE(engine.isInputMonitoringEnabled()) << "disarming changes nothing either";
 }
 
-TEST_F(MainComponentFeedbackGuardTest, StaysOffAfterTripWhileArmedThenDisarmRearmReenables) {
+TEST_F(MainComponentFeedbackGuardTest, StaysOffAfterTripUntilTheInputIsUnwiredAndWiredAgain) {
     MainComponent mc(std::make_unique<MinimalProvider>());
     mc.setSize(1600, 900);
     quiesceEngine(mc);
     buildPassthroughPatch(mc);
 
-    auto& doc = mc.getTimelineDoc();
     auto& engine = mc.getAudioEngine();
-
-    const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
-    ASSERT_TRUE(doc.setTrackArmed(track, true));
-    mc.timerCallback();
+    engine.refreshAudioInputGate();
     ASSERT_TRUE(engine.isInputMonitoringEnabled());
 
     FakeAudioIODevice fake(2, 2);
@@ -399,27 +405,26 @@ TEST_F(MainComponentFeedbackGuardTest, StaysOffAfterTripWhileArmedThenDisarmRear
         engine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, kBlockSize, {});
     ASSERT_FALSE(engine.isInputMonitoringEnabled()) << "the guard must have tripped within 40 blocks";
 
-    // The poll consumes the trip: shows the message, and must NOT re-enable monitoring even though
-    // the Audio track is still armed.
+    // The poll consumes the trip and shows the message; a re-derived gate stays shut while the wiring is unchanged.
     mc.timerCallback();
     EXPECT_FALSE(engine.isInputMonitoringEnabled());
-    // ASCII. This assertion used to hold a UTF-8 em dash in a juce::String("...") literal — which
-    // decodes as Latin-1, so the EXPECTED value was itself mojibake and matched the equally broken
-    // production string. Both are ASCII now; see CLAUDE.md's string-literal invariant.
     EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(),
               juce::String("Input muted - sustained clipping (feedback protection)"));
-
-    // Still armed, still latched, across a further poll.
+    engine.refreshAudioInputGate();
     mc.timerCallback();
-    EXPECT_FALSE(engine.isInputMonitoringEnabled()) << "staying armed must not re-enable monitoring after a trip";
+    EXPECT_FALSE(engine.isInputMonitoringEnabled()) << "staying wired must not re-open it after a trip";
 
-    // Disarm then re-arm — the explicit reset gesture.
-    ASSERT_TRUE(doc.setTrackArmed(track, false));
-    mc.timerCallback();
+    // Unwire, then wire again: the explicit reset gesture.
+    auto& graph = engine.getGraph();
+    const auto connections = graph.getConnections();
+    for (const auto& connection : connections)
+        graph.removeConnection(connection);
+    engine.refreshAudioInputGate();
     EXPECT_FALSE(engine.isInputMonitoringEnabled());
-    ASSERT_TRUE(doc.setTrackArmed(track, true));
-    mc.timerCallback();
-    EXPECT_TRUE(engine.isInputMonitoringEnabled()) << "disarm + re-arm must clear the latch";
+    for (const auto& connection : connections)
+        graph.addConnection(connection);
+    engine.refreshAudioInputGate();
+    EXPECT_TRUE(engine.isInputMonitoringEnabled()) << "unwire + rewire must clear the latch";
 
     engine.audioDeviceStopped();
 }

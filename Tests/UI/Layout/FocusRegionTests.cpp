@@ -17,10 +17,17 @@
 //     command active/inactive, keyPressed's return value) rather than asserting real focus moved.
 
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
+#include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -95,7 +102,7 @@ TEST(FocusRegionRegistryTest, NullIsOpenMeansAlwaysOpen) {
     EXPECT_TRUE(region.isCurrentlyOpen());
 }
 
-// The acceptance criterion this task calls out explicitly: Tab-cycling only ever visits regions
+// The key contract: Tab-cycling only ever visits regions
 // that are currently OPEN, skipping closed ones entirely, and wraps at both ends.
 TEST(FocusRegionRegistryTest, NextOpenRegionIdSkipsClosedRegionsAndWrapsBothWays) {
     synth::ui::FocusRegionRegistry reg;
@@ -250,19 +257,24 @@ bool commandIsActive(MainComponent& mc, juce::CommandID cmdId) {
 
 } // namespace
 
+// The launch overlay always shows at construction (no opt-out); tests that need it out of the way
+// hide it the same way MainComponent::hideWelcomeScreen() does.
+static void hideWelcomeScreen(MainComponent& mc) {
+    if (auto* ws = mc.getWelcomeScreenForTest())
+        ws->setVisible(false);
+}
+
 class FocusRegionMainComponentTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
         // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
         // into the same real on-disk settings file every other key here already guards.
-        guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "bottomDockVisible",
-                                         "aiPanelVisible", "timelineWindowBounds"});
-        // A known baseline every test in this fixture starts from: welcome screen hidden (out of the
-        // way for the Tab-cycle/registration tests), Library open, Toolbar/Canvas always open,
+        guard_.emplace(
+            juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", "timelineWindowBounds"});
+        // A known baseline every test in this fixture starts from: Library open, Toolbar/Canvas always open,
         // Timeline/AI Panel/Mod Matrix closed -- i.e. exactly "toolbar" + "library" + "canvas" open
         // at construction.
-        writePref("showWelcomeScreenAtLaunch", "0");
         writePref("librarySidebarVisible", "1");
         writePref("bottomDockVisible", "0");
         writePref("aiPanelVisible", "0");
@@ -273,26 +285,32 @@ private:
     std::optional<PersistedKeysGuard> guard_;
 };
 
-// The registry MainComponent builds must be exactly the six regions, in the
-// documented Tab-cycle order (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix).
-TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsInOrder) {
+// The registry MainComponent builds must be exactly the documented regions, in the documented Tab-cycle order
+// (Toolbar, Library, Canvas toolbar, Canvas, Dock tabs, Timeline, Routing pane, Scale pane, Mixer, Controllers, AI
+// Panel, Mod Matrix).
+TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheDocumentedRegionsInOrder) {
     // The mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
     // not appended at the end (see MixerFocusRegionTests.cpp for the two regions' open predicates).
     // "midiRemote" joined as an 8th region the same way, right after "mixer" -- all three
     // share the one dock now.
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray(
-                       {"toolbar", "library", "canvas", "timeline", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids,
+              juce::StringArray({"toolbar", "library", "canvasToolbar", "canvas", "dockTabs", "timeline",
+                                 "timelineRouting", "scaleAssist", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
     EXPECT_EQ(regs.findById("toolbar")->root, &mc.getToolbar());
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
+    EXPECT_EQ(regs.findById("dockTabs")->root, &mc.getBottomDock().getTabStripFocus());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
+    EXPECT_EQ(regs.findById("timelineRouting")->root, &mc.getTimelinePanel().getRoutingPane());
+    EXPECT_EQ(regs.findById("scaleAssist")->root, &mc.getTimelinePanel().getPianoRoll().getScaleAssistPanel());
     EXPECT_EQ(regs.findById("mixer")->root, &mc.getBottomDock().getMixerPanel());
     EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getBottomDock().getMidiRemotePanel());
     EXPECT_EQ(regs.findById("aiPanel")->root, &mc.getAiChatComponent());
@@ -306,6 +324,7 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsIn
 // double-outline guard.
 TEST_F(FocusRegionMainComponentTest, RegionContainingResolvesTheNestedModMatrixNotTheOuterCanvas) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     auto& regs = mc.getFocusRegionsForTest();
     auto& modMatrix = mc.getGraphEditor().getModMatrix();
 
@@ -322,6 +341,7 @@ TEST_F(FocusRegionMainComponentTest, RegionContainingResolvesTheNestedModMatrixN
 // so a real grabKeyboardFocus() call is never exercised end-to-end here).
 TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         EXPECT_TRUE(region.root->getWantsKeyboardFocus()) << "region \"" << region.id << "\" root";
 }
@@ -331,6 +351,7 @@ TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
 // ever visits what's open, and opening a previously-closed region splices it back into the cycle.
 TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     auto& regs = mc.getFocusRegionsForTest();
 
     ASSERT_TRUE(mc.isLibraryConfiguredVisible());
@@ -338,24 +359,48 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     ASSERT_FALSE(mc.isAiPanelConfiguredVisible());
     ASSERT_FALSE(mc.getGraphEditor().isModMatrixVisible());
 
-    // "toolbar", "library" and "canvas" are open (Toolbar has no closed state, same as Canvas) --
+    // "toolbar", "library", "canvasToolbar" and "canvas" are open (Toolbar has no closed state, same as Canvas) --
     // everything else is skipped.
     EXPECT_EQ(regs.nextOpenRegionId("toolbar", true), "library");
-    EXPECT_EQ(regs.nextOpenRegionId("library", true), "canvas");
-    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the three closed ones";
+    EXPECT_EQ(regs.nextOpenRegionId("library", true), "canvasToolbar");
+    EXPECT_EQ(regs.nextOpenRegionId("canvasToolbar", true), "canvas");
+    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the closed ones";
     EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "canvas") << "wraps backward too";
 
-    // Opening the timeline (via the real command, not a fake) adds it at its registered position.
+    // Opening the timeline (via the real command, not a fake) adds the dock's tab strip and then the
+    // timeline panel at their registered positions.
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
-    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "timeline");
+    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "dockTabs");
+    EXPECT_EQ(regs.nextOpenRegionId("dockTabs", true), "timeline");
     EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "wraps back to the top";
+}
+
+// The routing pane is a Tab stop right after the track list, only while the side pane is open on the Timeline; the
+// scale pane (inside the piano roll) only while the roll shows it. Shift+Tab reverses.
+TEST_F(FocusRegionMainComponentTest, TabVisitsTheRoutingPaneAfterTheTimelineOnlyWhileItIsOpen) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
+    auto& regs = mc.getFocusRegionsForTest();
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
+    mc.getTimelinePanel().getSidePane().setOpen(false);
+    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "closed side pane: no routing stop";
+    EXPECT_FALSE(regs.findById("timelineRouting")->isCurrentlyOpen());
+
+    mc.getTimelinePanel().getSidePane().setOpen(true);
+    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "timelineRouting");
+    EXPECT_EQ(regs.nextOpenRegionId("timelineRouting", true), "toolbar") << "no scale pane while no clip is open";
+    EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "timelineRouting") << "Shift+Tab reverses";
+    EXPECT_EQ(regs.nextOpenRegionId("timelineRouting", false), "timeline");
+    EXPECT_FALSE(regs.findById("scaleAssist")->isCurrentlyOpen());
 }
 
 // Tab and Shift+Tab dispatch successfully (there is always at least Library+Canvas open) when the
 // welcome screen isn't in the way.
 TEST_F(FocusRegionMainComponentTest, KeyPressedTabDispatchesSuccessfullyWhenNotSuppressed) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
     ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
 
@@ -368,8 +413,9 @@ TEST_F(FocusRegionMainComponentTest, KeyPressedTabDispatchesSuccessfullyWhenNotS
 // Tab-cycling is suppressed entirely while the launch overlay is up front.
 TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVisible) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible()) << "SetUp forced showWelcomeScreenAtLaunch=0";
+    ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible()) << "hidden explicitly after construction";
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusNextRegion));
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusPrevRegion));
 
@@ -400,6 +446,7 @@ TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVis
 // side effects rather than asserting real OS focus moved.
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenDispatches) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "SetUp forced bottomDockVisible=0";
 
     const auto binding = mc.getShortcutManager().getBinding("focusTimeline");
@@ -408,13 +455,14 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenD
     // MainComponent::keyPressed dispatches via ApplicationCommandManager::invokeDirectly(id, true) --
     // ASYNCHRONOUSLY, like every other command it dispatches (see keyPressed's own loop) -- so
     // perform() runs on the next message-loop pump, not synchronously inside keyPressed() itself.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.isBottomDockConfiguredVisible(); });
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "Cmd+Shift+T must open a closed Timeline panel";
 }
 
 // Cmd+Shift+T on an ALREADY-open Timeline must not close it (it is a focus command, not a toggle).
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOnAnAlreadyOpenTimelineLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
@@ -426,17 +474,19 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOnAnAlreadyOpenTimelineLeavesItOpe
 TEST_F(FocusRegionMainComponentTest, CmdShiftLOpensTheLibraryIfClosedThenDispatches) {
     writePref("librarySidebarVisible", "0"); // override this fixture's usual "starts open" baseline
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isLibraryConfiguredVisible());
 
     const auto binding = mc.getShortcutManager().getBinding("focusLibrary");
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(mc.keyPressed(binding));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // see the Cmd+Shift+T test's comment
+    synth::test::waitUntil([&] { return mc.isLibraryConfiguredVisible(); });
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "Cmd+Shift+L must open a closed Library sidebar";
 }
 
 TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.isLibraryConfiguredVisible()) << "SetUp forced librarySidebarVisible=1";
 
     EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusLibrary, false));
@@ -452,17 +502,19 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen
 TEST_F(FocusRegionMainComponentTest, CmdFOpensTheLibraryIfClosedThenDispatches) {
     writePref("librarySidebarVisible", "0"); // override this fixture's usual "starts open" baseline
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isLibraryConfiguredVisible());
 
     const auto binding = mc.getShortcutManager().getBinding("focusLibrarySearch");
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(mc.keyPressed(binding));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // see the Cmd+Shift+T test's comment
+    synth::test::waitUntil([&] { return mc.isLibraryConfiguredVisible(); });
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "Cmd+F must open a closed Library sidebar";
 }
 
 TEST_F(FocusRegionMainComponentTest, CmdFOnAnAlreadyOpenLibraryLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.isLibraryConfiguredVisible()) << "SetUp forced librarySidebarVisible=1";
 
     EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusLibrarySearch, false));
@@ -474,6 +526,7 @@ TEST_F(FocusRegionMainComponentTest, CmdFOnAnAlreadyOpenLibraryLeavesItOpen) {
 // task's own scope: "Suppress ALL TAB CYCLING while welcomeScreen_ is visible").
 TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWelcomeScreen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
     mc.getWelcomeScreenForTest()->setVisible(true);
 
@@ -488,6 +541,7 @@ TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWe
 
 TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr)
         << "docked by default -- the region must already be registered";
 
@@ -499,4 +553,162 @@ TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsReg
 
     mc.getBottomDock().getTimelineHost().setDetached(false);
     EXPECT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr) << "redocking must re-register it";
+}
+
+// The Add Track shortcut shows the Timeline and opens the "Add Track" picker (headless: through the launcher's hook).
+TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensThePicker) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
+    ASSERT_TRUE(commandIsActive(mc, AppCommands::openAddTrackMenu));
+
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p,
+                                                                   juce::Rectangle<int>) { picker = std::move(p); };
+    const bool ran = mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_TRUE(ran);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a closed Timeline is opened first";
+    ASSERT_NE(picker, nullptr);
+    const auto texts = picker->getVisibleItemTextsForTest();
+    EXPECT_NE(std::find(texts.begin(), texts.end(), juce::String("MIDI Track")), texts.end());
+}
+
+namespace {
+// Runs the Add Track command with the launcher hook capturing the picker and the screen bounds it points at.
+struct AddTrackCommandRun {
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    juce::Rectangle<int> anchor;
+    int opened = 0;
+};
+
+void armAddTrackHook(AddTrackCommandRun& run) {
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&run](std::unique_ptr<synth::ui::ModMatrixPicker> p,
+                                                                juce::Rectangle<int> anchor) {
+        run.picker = std::move(p);
+        run.anchor = anchor;
+        ++run.opened;
+    };
+}
+} // namespace
+
+// Regression test for FRO1094: the picker was launched under the "+ Track" button while the Timeline was still
+// collapsed, so it opened at the bottom of the window. It now anchors at the button's settled place.
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerAnchorsToTheButtonOfAnOpenedTimeline) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    ASSERT_EQ(run.opened, 1) << "animations off: the slide lands at once, so the picker opens in the same call";
+    const auto button = mc.getTimelinePanel().getAddTrackButton().getScreenBounds();
+    EXPECT_FALSE(button.isEmpty());
+    EXPECT_EQ(run.anchor, button);
+}
+
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerOpensAtOnceWhenTheTimelineIsAlreadyOpen) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_EQ(run.opened, 1);
+    EXPECT_EQ(run.anchor, mc.getTimelinePanel().getAddTrackButton().getScreenBounds());
+}
+
+// A slide in flight (stood in for with a tween no VBlank drives) holds the picker back until the slide lands.
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerWaitsForTheTimelineSlideToLand) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).snapTo(0.5f);
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).retarget(1.0f, true);
+    ASSERT_TRUE(mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).isMoving());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    EXPECT_EQ(run.opened, 0) << "still sliding: nothing to point at yet";
+
+    mc.simulateToggleAiPanelClick(); // the next slide to land (headless: at once) ends this one too
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+    EXPECT_EQ(run.opened, 1);
+    EXPECT_EQ(run.anchor, mc.getTimelinePanel().getAddTrackButton().getScreenBounds());
+}
+
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerIsDroppedWhenTheTimelineClosesBeforeTheSlideLands) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).snapTo(0.5f);
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).retarget(1.0f, true);
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    mc.simulateToggleBottomPanelClick(); // closed again before it landed
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_EQ(run.opened, 0);
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
+}
+
+// A timeline hotkey's message ("Snap on") lands in MainComponent's toast, above the open timeline dock rather than
+// behind it.
+TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveTheOpenDock) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+
+    synth::ui::ToastComponent* toast = nullptr;
+    for (auto* child : mc.getChildren())
+        if (auto* candidate = dynamic_cast<synth::ui::ToastComponent*>(child))
+            toast = candidate;
+    ASSERT_NE(toast, nullptr);
+    ASSERT_TRUE(static_cast<bool>(mc.getTimelinePanel().onShowMessage));
+
+    mc.getTimelinePanel().onShowMessage("Follow: Smooth");
+    EXPECT_TRUE(toast->isToastShown());
+    EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
+    EXPECT_LE(toast->getBounds().getBottom(), mc.getBottomDock().getY()) << "above the dock, not under it";
+    for (int i = mc.getIndexOfChildComponent(toast) + 1; i < mc.getNumChildComponents(); ++i)
+        EXPECT_TRUE(mc.getChildComponent(i)->isAlwaysOnTop())
+            << "only always-on-top siblings (the tooltip) may sit above";
+    EXPECT_GT(mc.getIndexOfChildComponent(toast), mc.getIndexOfChildComponent(&mc.getBottomDock()))
+        << "on top of the dock";
+
+    mc.getTimelinePanel().onShowMessage("Snap on");
+    EXPECT_EQ(toast->getMessageForTest(), "Snap on") << "a second change replaces the message";
+}
+
+// The guard of a ring that waits for a panel slide (the transport-bar key with the dock closed): a late ring must not
+// steal focus a later scene or the user moved elsewhere.
+TEST(DeferredRingStillWanted, DecidesFromTheSlideTheDockAndWhereTheKeysAre) {
+    juce::Component panel, child, pressed, elsewhere;
+    panel.addAndMakeVisible(child);
+    using synth::ui::deferredRingStillWanted;
+    EXPECT_TRUE(deferredRingStillWanted(false, true, &elsewhere, &pressed, panel)) << "nothing slid: ring now";
+    EXPECT_FALSE(deferredRingStillWanted(true, false, &pressed, &pressed, panel)) << "dock closed again";
+    EXPECT_FALSE(deferredRingStillWanted(true, true, &elsewhere, &pressed, panel)) << "keys moved elsewhere";
+    EXPECT_FALSE(deferredRingStillWanted(true, true, nullptr, &pressed, panel)) << "focus left the window";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &pressed, &pressed, panel)) << "keys unchanged";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, nullptr, nullptr, panel)) << "no focus then, none now";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &child, &pressed, panel)) << "focus now inside the panel";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &panel, &pressed, panel)) << "focus now on the panel";
 }

@@ -3,7 +3,9 @@
 // command table, the Redo shortcut, and copy/paste/duplicate reaching the canvas.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 
 // The jack-layout preference has to reach the patch the app OPENS with, not just modules created
@@ -194,7 +196,7 @@ TEST_F(MainComponentTest, ToggleModMatrixButtonToggleStateFollowsVisibility) {
     mainComp.setSize(1600, 900);
 
     juce::Button* toggleBtn = nullptr;
-    for (auto* child : mainComp.getChildren())
+    for (auto* child : mainComp.getCanvasToolbar().getChildren())
         if (auto* btn = dynamic_cast<juce::Button*>(child))
             if (btn->getComponentID() == "toggleModMatrix")
                 toggleBtn = btn;
@@ -278,7 +280,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     for (const auto& actionId : shortcuts.getActionIds())
         if (AppCommands::getCommandForAction(actionId) != AppCommands::kNoCommand)
             expectedActions.add(actionId);
-    auto expectedCommandCount = expectedActions.size();
+    // renameSelectedModuleAlt is a second key for the rename command: it maps to that command, which one row serves.
+    auto expectedCommandCount = expectedActions.size() - 1;
 #if JUCE_MAC || JUCE_WINDOWS
     expectedCommandCount += 1; // checkForUpdates
 #endif
@@ -289,6 +292,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     expectedCommandCount += 2;
     // Contribute joins them as a third unconditional, chord-less Help command.
     expectedCommandCount += 1;
+    // Join the Discord is a fourth, with the same treatment.
+    expectedCommandCount += 1;
     // openPreset is a menu-only command: patch-load is reached via the Load menu/chooser, so
     // only openProject took the rebindable Cmd+O binding. openPreset is still registered in
     // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table
@@ -297,6 +302,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // exportStems is a third menu-only command, same treatment as openPreset above: no
     // ShortcutManager actionId/binding, registered here so the File menu can invoke it.
     expectedCommandCount += 1; // exportStems is menu-only (analogous to openPreset)
+    expectedCommandCount += 1; // exportMidi is menu-only too
+    expectedCommandCount += 1; // collectAndArchive is menu-only too
     // exportPatchOnly (Cmd+Shift+P) joined exportAudio (Cmd+Shift+E) as a rebindable
     // action with a default binding, so both are now counted through expectedActions above; the old
     // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew,
@@ -408,4 +415,27 @@ TEST_F(MainComponentTest, PasteCommandIsInertUntilSomethingHasBeenCopied) {
     juce::ApplicationCommandInfo liveInfo(AppCommands::pasteSelection);
     mainComp.getCommandInfo(AppCommands::pasteSelection, liveInfo);
     EXPECT_EQ(liveInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0);
+}
+
+// The real top-bar button path: the click starts the fade instead of hiding at once.
+TEST_F(MainComponentTest, ToolbarMinimapButtonClickAnimatesTheMap) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    auto& editor = mainComp.getGraphEditor();
+    editor.setMinimapAnimateOffScreenForTest(true);
+    synth::ui::setReducedMotionForTest(false);
+    struct Reset {
+        ~Reset() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } reset;
+    ASSERT_TRUE(editor.getMinimap().isVisible());
+
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_FALSE(editor.isMinimapVisible());
+    EXPECT_TRUE(editor.getMinimap().isVisible()) << "still fading";
+    editor.finishMinimapSlideForTest();
+    EXPECT_FALSE(editor.getMinimap().isVisible());
+
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_TRUE(editor.getMinimap().isVisible());
+    editor.finishMinimapSlideForTest();
+    EXPECT_FLOAT_EQ(editor.getMinimap().getAlpha(), 1.0f);
 }

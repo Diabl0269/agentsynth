@@ -5,8 +5,12 @@
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
@@ -50,9 +54,11 @@ bool MainComponent::saveToFile(const juce::File& file) {
 
         // The bundle carries the graph, timeline AND macros; PatchDocument comes from the graph
         // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
-        const auto result =
-            synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
-                                       graphEditor.getMacros(), midiRemoteDoc, audioEngine.getMixerPanLaw());
+        const synth::ViewDoc canvasView = graphEditor.getViewDoc();
+        const auto result = synth::ProjectBundle::save(
+            file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
+            midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc(),
+            &audioEngine.getTransport().getDocumentState(), &canvasView);
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
             return false;
@@ -71,6 +77,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
         markDocumentClean();
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+        countUsage(synth::telemetry::Feature::PresetSaved); // a user save of a project bundle succeeded
         return true;
     }
 
@@ -79,6 +86,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+    countUsage(synth::telemetry::Feature::PresetSaved); // a user save of a plain patch succeeded
     return true;
 }
 
@@ -112,7 +120,9 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     }
 
     ProgrammaticApplyScope guard(*this);
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // see loadBundleFromFile
     graphEditor.loadPreset(file, append);
+    countUsage(synth::telemetry::Feature::PresetLoaded); // a user opened a plain patch file
     reconcileTimelineAfterGraphChange();
     // A legacy patch is not a bundle, so the document that is now open has no bundle to resave to;
     // leaving the previous bundle's path installed would make the next Cmd+S overwrite a project
@@ -120,6 +130,9 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     // currentBundleDir_ = file, so only this plain-preset tail needs the reset.)
     currentBundleDir_ = juce::File();
     refreshAssetRoots();
+    // Opening replaces the document; adding a patch on top (append) keeps the history so it stays undoable.
+    if (!append)
+        startFreshUndoHistory();
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
@@ -136,6 +149,10 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
 // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
 bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // "Open without it" covers this load only
+    // On screen the open comes to life as it loads: the audio gate closes, samples and wavetables decode off the
+    // message thread, and the canvas reveal starts once it is built (ProjectLoadPipeline.h). Off screen: null.
+    auto* deferredAssets = projectLoad_->beginLoad();
     // Detach BEFORE the load frees the current graph's processors — the same ordering
     // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
     // otherwise read a freed VisualBuffer).
@@ -152,11 +169,20 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     refreshAssetRoots();
 
     synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
-    const auto result =
-        synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
-                                   graphEditor.getMacros(), midiRemoteDoc, &loadedPanLaw);
+    synth::MixerViewDoc loadedMixerView;
+    synth::TransportDoc loadedTransport;
+    // Seeded with the current view: a project that never saved one leaves it where it is.
+    synth::ViewDoc loadedView = graphEditor.getViewDoc();
+    const auto result = [&] {
+        const synth::DeferredAssetLoads::Scope deferDecodes(deferredAssets);
+        return synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                          graphEditor.getPatchDocument(), graphEditor.getMacros(), midiRemoteDoc,
+                                          &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    }();
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
+    if (result.ok)
+        audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
     graphEditor.updateComponents();
     if (!result.ok) {
         // load() is all-or-nothing, so a failure has to leave the previous project intact —
@@ -165,12 +191,18 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         currentBundleDir_ = previousBundleDir;
         refreshAssetRoots();
         statusBar.showMessage("Load failed: " + result.message);
+        projectLoad_->graphBuilt(false);
         return false;
     }
     // The engine's own pan law follows the just-loaded bundle -- absent means Balance
     // (an existing project's mix is never changed underfoot), never left at whatever the
     // previously open document happened to have.
     audioEngine.setMixerPanLaw(loadedPanLaw);
+    // Likewise the mixer's pinned / hidden channels: absent means every column scrolling and shown. The
+    // mixer is rebuilt from this by reconcileTimelineAfterGraphChange() below.
+    bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
+    applyLoadedTransport(loadedTransport);
+    applyLoadedCanvasView(loadedView); // a view change only: no undo step, never marks the document unsaved
 
     // A freshly loaded project starts every profile on page 1 -- this is a NEW project's
     // assignments, not the ordinary edits publishAssignments() below also handles, which must
@@ -180,9 +212,15 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // own copy (and the module cards' MIDI Learn badges) must follow before the reconcile below
     // re-resolves targets against it.
     midiLearnController_.publishAssignments();
+    // Lanes saved on the shared Automation track move to the track that plays their module, before the
+    // reconcile below so it republishes (and rebinds the recorder against) the final layout.
+    moveLanesToOwningTracks();
+    // A project saved with LFO sections plays them as amount lanes from now on (once, here, not an undo step).
+    migrateSectionsToAmountLanes();
     // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory();
     markDocumentClean();
     recentProjects.addProject(bundleDir);
     saveRecentProjects();
@@ -191,6 +229,10 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // Covers both the welcome screen's "Open an existing project" bundle path AND its
     // recent-project rows (both go through openFromFile -> here).
     hideWelcomeScreen();
+    // Projects saved before imports wrote a waveform sidecar get theirs now, off this thread.
+    MainComponentAudioImport::backfillMissingPeaks(*this);
+    countUsage(synth::telemetry::Feature::ProjectOpened); // a user opened a project bundle (not during startup wiring)
+    projectLoad_->graphBuilt(true); // last: the view is restored, so the reveal starts where the user will look
     return true;
 }
 
@@ -202,6 +244,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
 // programmatic way ProjectBundle::load always has.
 bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
+    synth::HostedPluginBackend::ScopedClearSkips endPluginSkips; // see loadBundleFromFile
+    auto* deferredAssets = projectLoad_->beginLoad();            // see loadBundleFromFile
     graphEditor.detachAllModuleComponents();
 
     const juce::File previousBundleDir = currentBundleDir_;
@@ -209,24 +253,39 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     refreshAssetRoots();
 
     synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
-    const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument(), graphEditor.getMacros(),
-                                                           midiRemoteDoc, &loadedPanLaw);
+    synth::MixerViewDoc loadedMixerView;
+    synth::TransportDoc loadedTransport;
+    synth::ViewDoc loadedView = graphEditor.getViewDoc(); // seeded: see loadBundleFromFile
+    const auto result = [&] {
+        const synth::DeferredAssetLoads::Scope deferDecodes(deferredAssets);
+        return synth::ProjectBundle::loadAutosave(
+            bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
+            midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport, &loadedView);
+    }();
+    if (result.ok)
+        audioEngine.updateModuleNames(); // a loaded second Diva reads "Diva 2" right away, not on the next edit
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;
         refreshAssetRoots();
         statusBar.showMessage("Recovery failed: " + result.message);
+        projectLoad_->graphBuilt(false);
         return false;
     }
     // Same "follows the just-loaded state" rule as loadBundleFromFile.
     audioEngine.setMixerPanLaw(loadedPanLaw);
+    bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
+    applyLoadedTransport(loadedTransport);
+    applyLoadedCanvasView(loadedView); // a view change only: no undo step, never marks the document unsaved
 
     // Same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
     remoteEngine.resetActivePages();
     // loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
     midiLearnController_.publishAssignments();
+    moveLanesToOwningTracks();      // same load-time lane move as loadBundleFromFile
+    migrateSectionsToAmountLanes(); // same load-time migration as loadBundleFromFile
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory(); // after the load mutations; the dirty flag below is set directly, not from the serial
     // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
     // still holds the older, last-explicitly-saved content), so the document must read as dirty —
     // see the header comment on loadAutosaveFromFile for why isDirty_ is written directly here
@@ -247,6 +306,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // The autosave-recovery Restore arm is one more way a recent-project row (or "Open
     // an existing project") can finish opening a bundle — see openFromFile's own comment.
     hideWelcomeScreen();
+    countUsage(synth::telemetry::Feature::ProjectOpened); // a user restored a project from its autosave
+    projectLoad_->graphBuilt(true);
     return true;
 }
 
@@ -375,7 +436,7 @@ void MainComponent::markDocumentClean() {
 // True while an audio or MIDI take is actively capturing — checked by the autosave gate so it
 // never fires mid-take (see docs/architecture/project-bundle.md#autosave-and-crash-recovery). No public accessor for
 // the underlying AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
-bool MainComponent::isRecordingActive() const { return audioTake_.capturing || midiRecorder.isRecording(); }
+bool MainComponent::isRecordingActive() const { return !audioTakes_.empty() || midiRecorder.isRecording(); }
 
 // The autosave gate, run once per timerCallback() tick (no second juce::Timer). Fires
 // performAutosave() only when ALL of: enabled in preferences, a bundle is open, no take is
@@ -424,9 +485,11 @@ void MainComponent::performAutosave() {
         settings == nullptr
             ? kDefaultAutosaveBackupCount
             : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
-    const auto result = synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument(), graphEditor.getMacros(),
-                                                           backupCount, midiRemoteDoc, audioEngine.getMixerPanLaw());
+    const synth::ViewDoc canvasView = graphEditor.getViewDoc();
+    const auto result = synth::ProjectBundle::saveAutosave(
+        currentBundleDir_, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
+        backupCount, midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc(),
+        &audioEngine.getTransport().getDocumentState(), &canvasView);
     if (result.ok)
         lastAutosavedEditSerial_ = undoManager.getEditSerial();
     else

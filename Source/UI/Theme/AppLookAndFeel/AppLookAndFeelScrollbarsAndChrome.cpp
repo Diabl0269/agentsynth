@@ -1,4 +1,5 @@
 #include "AppLookAndFeel.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::theme {
 
@@ -85,7 +86,7 @@ void AppLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
     g.fillAll(label.findColour(juce::Label::backgroundColourId));
 
     if (!label.isBeingEdited()) {
-        const auto alpha = label.isEnabled() ? 1.0f : 0.5f;
+        const auto alpha = !label.isEnabled() ? 0.5f : (paintsDimmed(label) ? kDisabledControlAlpha : 1.0f);
         g.setColour(label.findColour(juce::Label::textColourId).withMultipliedAlpha(alpha));
         g.setFont(label.getFont());
 
@@ -103,9 +104,15 @@ juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipTex
     // the pointer instead: horizontally centred on it, 14 px below the hotspot (a typical cursor's
     // height), flipped to just above when there is no room. Measured with the SAME font
     // drawTooltip() renders with, so the fitted text never clips.
+    // A tip can span several lines (a macro lists its modules): the box is the widest line wide and
+    // one font height per line tall, so no line is clipped.
     const juce::Font font(juce::FontOptions(theme.type.label + 1.0f));
-    const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, tipText)) + 14;
-    const int h = (int)std::ceil(font.getHeight()) + 8;
+    const auto lines = juce::StringArray::fromLines(tipText);
+    float widest = 0.0f;
+    for (const auto& line : lines)
+        widest = juce::jmax(widest, juce::GlyphArrangement::getStringWidth(font, line));
+    const int w = (int)std::ceil(widest) + 14;
+    const int h = (int)std::ceil(font.getHeight()) * juce::jmax(1, lines.size()) + 8;
 
     const int x = screenPos.x - w / 2;
     const bool below = screenPos.y + 14 + h <= parentArea.getBottom();
@@ -113,17 +120,22 @@ juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipTex
     return juce::Rectangle<int>(x, y, w, h).constrainedWithin(parentArea);
 }
 
+void paintTooltipBox(juce::Graphics& g, juce::Rectangle<float> bounds, const Theme& theme, float alpha) {
+    constexpr float kTooltipRadius = 5.0f;
+    g.setColour(theme.colors.surfaceHi.withMultipliedAlpha(alpha));
+    g.fillRoundedRectangle(bounds, kTooltipRadius);
+    g.setColour(theme.colors.border.withMultipliedAlpha(alpha));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), kTooltipRadius, theme.metrics.borderWidth);
+}
+
 void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) {
     const auto& c = theme.colors;
-    auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
-    g.setColour(c.surfaceHi);
-    g.fillRoundedRectangle(bounds, 5.0f);
-    g.setColour(c.border);
-    g.drawRoundedRectangle(bounds.reduced(0.5f), 5.0f, theme.metrics.borderWidth);
+    paintTooltipBox(g, juce::Rectangle<float>(0, 0, (float)width, (float)height), theme);
 
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 1.0f)));
-    g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred, 3);
+    g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred,
+                     juce::jmax(1, juce::StringArray::fromLines(text).size()));
 }
 
 void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,
@@ -193,6 +205,8 @@ void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g
                        : button.findColour(juce::TabbedButtonBar::tabTextColourId));
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f, active ? juce::Font::bold : juce::Font::plain)));
     g.drawFittedText(button.getButtonText(), button.getActiveArea().reduced(6, 0), juce::Justification::centred, 1);
+
+    synth::ui::paintFocusRing(g, button.getActiveArea().toFloat(), button, r);
 }
 
 void AppLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar& bar, juce::Graphics& g) {

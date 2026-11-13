@@ -12,7 +12,7 @@ ballistics themselves.
 
 ## A per reader peak latch
 
-**One latch per leg, keyed by `MeterReader` (`Mixer`, `TrackHeader`), not one shared float.**
+**One latch per leg, keyed by `MeterReader` (`Mixer`, `TrackHeader`), not one shared float.** A meter reader takes its own slot and never reads another reader's; a new consumer gets a new enumerator in `Source/Mixer/PeakMeterLatch.h`, never an existing one repurposed.
 `Source/Mixer/PeakMeterLatch.h`: the audio thread's `storeBlockPeak()` is a **lock-free CAS-max loop
 into EVERY reader's own slot**, and each reader's `takePeak()` is a read-and-reset of **only its own
 slot** — so the mixer column and a track header's channel chip poll independently and never steal
@@ -35,7 +35,9 @@ A NaN or non-positive input is dropped rather than latched, and silence reads ba
 **-60 to +3 dBFS** (`Source/UI/Mixer/MixerMeterScale.h`). Tick marks at +3, 0, -6, -12, -18, -24,
 -30, -40, -50 and -60 dBFS (Cubase's own channel-meter marks plus our own +3 dB headroom cap), with
 the 0 dB tick drawn visibly stronger. Tick NUMBERS appear only where the column has room
-(`MixerMeter::paint`'s own width check); the dashes themselves always draw.
+(`MixerMeter::paint`'s own width check); the dashes themselves always draw. The headroom tick prints
+with its sign ("+3", `meterTickLabel`), and every label box is kept inside the meter
+(`meterTickLabelTop`), so the top and bottom numbers are never half cut off by the meter's edge.
 
 **The mapping is Cubase's own taper, NOT linear in dB.** `meterDbToFraction` and its inverse
 `meterFractionToDb` are a monotonic **piecewise-linear interpolation through ten breakpoints**
@@ -114,7 +116,9 @@ stop's colour — its `dbFrom` is treated as -inf, never a hard edge a quieter v
 ## User editable meter colours
 
 Settings > Appearance carries a **"Meter Colours"** section
-(`Source/UI/Settings/MeterColourStopsEditor`) that adds, drags, recolours and removes stops. The
+(`Source/UI/Settings/MeterColourStopsEditor`) that adds, drags, recolours and removes stops, with the
+keyboard too (Tab in selects the floor handle, Left/Right choose a handle, Up/Down move it, Return
+recolours, + adds, Delete removes; the focus ring shows). The
 result is **ONE GLOBAL `meterColourStops` override cached on `synth::theme::AppLookAndFeel` and read
 by every meter painter** — `MixerMeter::paint` and `ChannelChipComponent::paintButton` both read the
 same `AppLookAndFeel::getMeterColourStops()` cache, so setting an override changes both and clearing
@@ -152,7 +156,7 @@ ticks.
 
 A plain click resets that column; Option or Alt-click resets every column
 (`onResetAllRequested`, fanned out by `MixerPanelComponent::resetAllMeterReadouts()`); the mixer panel
-header's "Reset Meters" button, next to "+ Bus", calls the same fan-out. `reset()` clears both the max
+toolbar's "Reset Meters" button, next to "Add Bus", calls the same fan-out. `reset()` clears both the max
 and the clip colour.
 
 ## The Master meter and Master inserts
@@ -188,7 +192,7 @@ bar.**
 | `Tests/UI/Mixer/MixerMeterPaintTests.cpp` | `MixerMeter::paint` actually draws POSITIONAL bands, not one flat colour, for a bar spanning multiple zones — pixel-sampled off an offscreen render at the low-zone and high-zone heights of the same bar |
 | `Tests/UI/Mixer/MixerMeterBallisticsTests.cpp` | attack is instant; release falls at `kMeterReleaseDbPerSecond` scaled by the elapsed time passed in; the peak-hold line snaps to a new peak instantly, holds for `kMeterPeakHoldSeconds`, then falls at `kMeterPeakHoldFallDbPerSecond` — every case drives `advanceMeterBallistics` with explicit elapsed-time arguments, never a wall clock |
 | `Tests/UI/Mixer/MixerMeterReadoutTests.cpp` | turns the clip colour once a peak exceeds 0 dBFS and stays that colour across later quiet ticks; `reset()` clears both the max and the clip colour; a real `mouseUp` with no modifiers resets the readout; an Alt-modifier click fires `onResetAllRequested` instead |
-| `Tests/UI/Mixer/MixerColumnComponentMeterTests.cpp` | a column's readout reaches through `MixerPanelComponent::resetAllMeterReadouts()` — an Alt-click on ONE column's readout resets every strip column's and Master's; the dock's "Reset Meters" button does the same |
+| `Tests/UI/Mixer/MixerColumnComponentMeterTests.cpp` | a column's readout reaches through `MixerPanelComponent::resetAllMeterReadouts()` — an Alt-click on ONE column's readout resets every strip column's and Master's; the toolbar's "Reset Meters" button does the same |
 | `Tests/UI/Theme/ThemeMeterZoneTests.cpp` | `meterMid`, `meterHigh` and `meterClip` parse from JSON, fall back to `Theme.h`'s defaults when the keys are absent, a malformed value rejects the whole theme, and all four built-ins populate the three tokens distinctly |
 | `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp` | the channel chip's meter displays a fraction of the dB scale, not the raw linear peak; the per-reader latch's two independent slots are exercised across the render and solo cases |
 | `Tests/Engine/OutputMeterTapTests.cpp` | `AudioEngine::takeOutputMeterPeak`: each leg latches the graph output's own peak (a negative excursion counts) and reads back once, another `MeterReader`'s slot is untouched, a silent graph latches nothing, a mono buffer's right leg follows its left |

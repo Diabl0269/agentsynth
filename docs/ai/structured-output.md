@@ -4,7 +4,7 @@ How the JSON schemas the client sends as a model's `format` are built, the shape
 break a grammar compiler, and the openness tradeoff that constrains them.
 
 The schemas themselves are generated in `Source/AI/AIStateMapper/AIStateMapperSchema.cpp`:
-`getPatchSchema()`, `getPatchSchemaWithTimelineOps()` and `getTimelineOpsEnvelopeSchema()`. What
+`getPatchSchema()` and `getPatchSchemaWithTimelineOps()`. What
 each one is used for is in [patch safety](patch-safety.md) and [timeline ops](timeline-ops.md).
 
 ## Envelope codegen
@@ -33,7 +33,11 @@ path. `$ref` indirection is untested territory for llama.cpp's grammar compiler,
 all this schema has ever needed.
 
 `getPatchSchemaWithTimelineOps()` stays a client-side C++ extension on top of the generated
-envelope.
+envelope. Beyond the optional `timelineOps` array it widens two things for [edit
+plans](timeline-ops.md#one-edit-plan): the op item gains `nodeId` (integer), and the modulation item
+gains `destParam` (string) with `destPort` dropped from `required`. Both are plain typed fields, never
+`{}` or `anyOf`; `validatePatch` and the plan validator enforce the either-or rules the schema cannot
+express. `getPatchSchema()` keeps its shape.
 
 ## Shapes a grammar compiler mishandles
 

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_core/juce_core.h>
 #include <utility>
 #include <vector>
@@ -21,10 +22,12 @@ namespace synth {
  *
  *     offset  size  field
  *     0       4     magic, the ASCII bytes 'A','G','P','K'
- *     4       4     uint32  version           (currently 1)
+ *     4       4     uint32  version           (currently 2; 1 is still read)
  *     8       4     uint32  bucketSize        (source samples per bucket, currently 256)
  *     12      4     uint32  numChannels
- *     16      ...   per bucket, per channel: float32 min, float32 max
+ *     16      ...   per bucket, per channel: float32 min, float32 max, and (version 2 only) float32 rms
+ *
+ * `rms` is the bucket's root-mean-square; a version 1 file has none (see PeaksFile.cpp).
  *
  * A bucket covers `bucketSize` SOURCE SAMPLES PER CHANNEL. The bucket count is
  * `ceil(lengthSamples / bucketSize)` — the final bucket is short rather than padded, and its
@@ -45,13 +48,18 @@ public:
         int bucketSize = 0;
         int numChannels = 0;
         std::vector<std::pair<float, float>> buckets;
+        /** One RMS value per `buckets` slot (same order), or EMPTY for a version 1 file / data without RMS. */
+        std::vector<float> rms;
+        /** The audio file's sample rate (0 = unknown); in-memory only, filled by the caller, never read from .agpk. */
+        double sampleRate = 0.0;
     };
 
     /** Peaks-file magic and version — format, not implementation detail. Bit-identical to the
      *  values `RecordTapModule` originally defined (`kPeaksMagic`/`kPeaksVersion`), which now
      *  alias these so every file this build has ever written still parses. */
     static constexpr std::uint32_t kMagic = 0x4b475041u; // 'A','G','P','K' little-endian
-    static constexpr std::uint32_t kVersion = 1;
+    static constexpr std::uint32_t kVersion = 2;
+    static constexpr std::uint32_t kVersionNoRms = 1;
 
     /** Hard cap on a .agpk file's size, checked BEFORE the file is loaded into memory. A sidecar
      *  this large cannot be a real peaks file for any take this app would ever record (256 source
@@ -62,15 +70,51 @@ public:
     /** Parses an .agpk file into `out`. Returns false — and leaves `out` untouched — on: a
      *  missing/unopenable file, a file over `kMaxFileBytes`, a bad magic or an unsupported version,
      *  a zero bucketSize or numChannels, or a payload whose byte count isn't a whole number of
-     *  (min,max) pairs forming whole buckets (garbage/truncated). Tolerant of a short FINAL bucket
-     *  in the musical sense (see the class comment) — that is not a structural defect, so it is
-     *  never a rejection reason. */
+     *  (min,max[,rms]) slots forming whole buckets (garbage/truncated). Accepts versions 1 and 2. Tolerant of a short
+     * FINAL bucket in the musical sense (see the class comment) — that is not a structural defect, so it is never a
+     * rejection reason. */
     static bool read(const juce::File& file, Data& out);
 
     /** Writes a complete .agpk file in one shot: the header, then `data.buckets` verbatim in
      *  file order. Creates parent directories if missing; truncates/overwrites an existing file.
      *  Returns false on any I/O failure or if `data.bucketSize`/`data.numChannels` is <= 0. */
     static bool write(const juce::File& file, const Data& data);
+
+    /** Folds buckets into `numColumns` (min,max) pairs, every bucket kept (see PeaksFile.cpp). */
+    static std::vector<std::pair<float, float>> aggregateToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                   int numChannels, int firstBucket, int bucketCount,
+                                                                   int numColumns);
+
+    /** RMS twin of aggregateToColumns; `rms` is `Data::rms` (empty in, empty out). */
+    static std::vector<float> aggregateRmsToColumns(const std::vector<float>& rms, int numChannels, int firstBucket,
+                                                    int bucketCount, int numColumns);
+
+    /** Like aggregateToColumns, but with fewer buckets than columns the outline is linearly interpolated between bucket
+     *  centres instead of repeating a bucket (no flat steps when zoomed in). Identical to it otherwise. */
+    static std::vector<std::pair<float, float>> smoothToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                int numChannels, int firstBucket, int bucketCount,
+                                                                int numColumns);
+
+    /** RMS twin of smoothToColumns. */
+    static std::vector<float> smoothRmsToColumns(const std::vector<float>& rms, int numChannels, int firstBucket,
+                                                 int bucketCount, int numColumns);
+
+    /** Exact per-column results from raw samples (see PeaksFile.cpp for the column span and channel fold). */
+    struct SampleColumns {
+        std::vector<std::pair<float, float>> minMax;
+        std::vector<float> rms;
+    };
+    /** `block` holds file samples from `blockStart`; column x starts at `firstColumnStartSample + x *
+     * samplesPerColumn`. */
+    static SampleColumns sampleColumns(const juce::AudioBuffer<float>& block, std::int64_t blockStart,
+                                       double firstColumnStartSample, double samplesPerColumn, int numColumns);
+
+    /** Reads `numSamples` frames (all channels, silence past the end) from `startSample`; false if unreadable. */
+    static bool readAudioSamples(const juce::File& audioFile, std::int64_t startSample, int numSamples,
+                                 juce::AudioBuffer<float>& out);
+
+    /** Peaks of an already-written audio file (a render), bucketed like a take's; false if unreadable or unwritable. */
+    static bool writeForAudioFile(const juce::File& audioFile, const juce::File& peaksFile, int bucketSize);
 
     /**
      * @brief Incremental bucket accumulation — the math `RecordTapModule`'s drain step used to do
@@ -115,6 +159,7 @@ public:
         int bucketFill_ = 0;
         std::vector<float> bucketMin_;
         std::vector<float> bucketMax_;
+        std::vector<double> bucketSumSquares_;
     };
 
 private:

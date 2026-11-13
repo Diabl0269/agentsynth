@@ -1,31 +1,74 @@
 # Adding Tracks
 
-The `"+ Track"` button at the top of the timeline panel's header column, and every flow it starts.
+The `"Add Track"` button at the top of the timeline panel's header column, and every flow it starts. The button is an
+amber icon chip with its name beside it (the chip alone when Show button labels is off; [inline
+buttons](../layout/chrome.md#inline-buttons)); its label and screen-reader name are "Add" either way.
 The header rows it creates are [tracks](tracks.md); the channel chains it builds are
 [`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel).
 
-## The menu
+## The Add list
 
-`"+ Track"` carries the tooltip *"Add a MIDI or Audio track"* so the menu is not a surprise, and
-opens:
+The button opens the **Add list**: one searchable list of tracks, modules, presets, snippets and markers, the same list
+the canvas toolbar's **Add** button opens. Each row ends with a muted kind word (Track, Module, Track preset, Bus preset,
+Snippet, Marker) that the search also matches, so "track sam" leaves only the Sampler track; a screen reader reads it
+after the name ("Sampler, Track"). Opened from the Timeline the track groups come first, from the canvas the module
+groups; More (Insert Track Preset from File..., Add Marker, Create Channels) is always last.
 
-- **MIDI Track** / **Audio Track**
-- an **Instrument Track** submenu — **Oscillator** / **Wavetable** / **Sampler**, poly variants,
-  then a **Plugin** sub-submenu
-- the saved track presets for each kind
-- a separator, then **Add Marker**
+- A track or marker row does what the picker below did: the Timeline is shown if it is not, then `finishAddTrackMenu(id)`.
+- A module, plugin card or snippet row does what Return on that row in the library sidebar does
+  (`ModuleLibraryComponent::activateAddListRow`): the canvas shows and the card goes after the one selected card, or at
+  the view centre. A module already on the canvas that allows only one (Audio Input/Output) stays greyed with its reason.
+
+`AddList.h` (`Source/UI/AddList/`) orders and tags the rows (the tag at the right edge is 11 px and coloured by kind, the table in [theming](../layout/theming.md#colour-code-kinds)): track rows keep their menu ids, library rows get
+`kAddListLibraryIdBase + index`. `MainComponent::openAddList(origin, anchor, fromKeyboard)` builds them (the library
+rows are read once when the list opens and found again by identity at pick time, like the plugin snapshot below),
+and the Timeline reaches it through `TrackHeaderHost::openAddList`; with no host (tests) its own track-only picker
+opens. Cmd+T opens the list from the canvas toolbar's Add button when the canvas or its toolbar has keyboard focus,
+otherwise from the Timeline's. After a keyboard open focus goes back to the button that opened it.
+
+## The picker
+
+`"Add"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
+and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
+[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add...** shortcut (Cmd+T on
+macOS, Ctrl+Alt+T elsewhere, rebindable). Pressing it, or the shortcut, opens a **searchable picker** in a call-out
+under the button: the same shared list as a module card's "Replace with..." (`synth::ui::ModMatrixPicker`). The search
+field has focus, so typing filters at once (all words, any order); Up/Down move, Return picks the first match until
+moved, Escape closes. The rows sit under these headers:
+
+- **Tracks**: MIDI Track / Audio Track
+- **Instrument Tracks**: Oscillator / Wavetable / Sampler / Drum Kit / Pluck / Mallet / Noise and the poly variants (only the Oscillator and Wavetable have a poly entry; a Noise track is always mono)
+- **Plugins**: the scanned instrument plugins (a greyed "Scanning for plugins..." or "No instrument plugins found" row when there are none)
+- one header per saved track preset kind (**Audio Track from Preset**, **Instrument Track from Preset**, **Bus from Preset**)
+- **More**: Insert Track Preset from File..., Add Marker, Create Channels (greyed, with the reason, when every track already has a channel)
+
+`TimelinePanelComponent::buildAddTrackMenu()` is still the single source of the entries and of the build-time
+snapshots below. `openAddTrackMenu()` builds that `juce::PopupMenu`, appends Create Channels, and
+`synth::ui::flattenAddTrackMenu` (`AddTrackPicker.h`) turns it into picker rows: each row's id IS the menu item's id,
+so a pick calls `finishAddTrackMenu(id, ...)` -> `applyAddTrackMenuChoice(id)` unchanged. The submenu title becomes the
+header, and the preset kinds and plugins carry extra search words ("plugin instrument vst au", "preset", "marker flag").
 
 Menu ids are `TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` /
 `kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` / `kAddInstrumentSamplerMenuId`
-/ `kAddMarkerMenuId`. The MIDI and Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
-`addAudioTrack()`); each Instrument submenu entry calls `addInstrumentTrack(instrumentModuleType)`
+/ `kAddInstrumentNoiseMenuId` / `kAddMarkerMenuId`. The MIDI and Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
+`addAudioTrack()`); each Instrument entry calls `addInstrumentTrack(instrumentModuleType)`
 with its module type string.
 
-`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them — the
-same split the binding and context menus use, since a `juce::PopupMenu` never runs in the test
-binary. `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
-`simulateAddInstrumentTrackClick(menuId)` call straight into it. `openAddTrackMenu()` is the
-`protected virtual` that creates the real window — see
+**Focus.** Opened from the keyboard (the button was focused, or the shortcut ran), the picker hands focus back to
+`"Add Track"` when it closes: `finishAddTrackMenu` does it after a pick, and the picker's `onClosed` (run from its
+destructor) does it after Escape or a click away, once only. The shortcut itself is
+`TimelinePanelComponent::openAddTrackMenuFromShortcut()`: it focuses the button, then opens the picker as a keyboard open;
+`MainComponent` runs it once the Timeline has finished showing: with the panel closed, the show slide (about 190 ms)
+is still moving "+ Track" when the command starts, and a call-out launched then points at the collapsed place at
+the bottom of the window. The command waits with `PanelSlide::whenSettled` on the timeline slide (runs at once when
+the panel is already open or animations are off), then opens the picker under the button's final bounds. The same wait
+guards "Set Song Key", the other command that opens a pop-up under a timeline control right after showing it.
+
+`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them. A picker never runs
+headless in the test binary, so `synth::ui::test_hooks::addTrackPickerHookForTest()` receives the built picker instead of
+a call-out (`TimelineAddTrackPickerTests.cpp`). `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
+`simulateAddInstrumentTrackClick(menuId)` call straight into the seam. `openAddTrackMenu()` is the
+`protected virtual` that opens the real picker; see
 [ruler](ruler.md#opening-a-menu-is-a-protected-virtual) for why that seam exists.
 
 ## Menu options resolve against a build-time snapshot
@@ -36,12 +79,12 @@ into the member `instrumentPluginMenuSnapshot_` the moment the menu is built by
 `buildAddTrackMenu()`. `applyAddTrackMenuChoice` resolves strictly against that snapshot, never by
 re-collecting.
 
-**Why, and why this differs from the automation strip's lane picker.** The known-plugin list
+**Why, and why this differs from the timeline's automation lane choices.** The known-plugin list
 backing this menu is mutated by `PluginScanService::runScan` on a BACKGROUND thread and re-sorted
 by name in `MainComponent::getInstrumentPluginOptions()`. A scan completing between the menu
 opening and the click landing can otherwise change what index N means, silently resolving the click
 against a plugin the menu never actually showed there — the live symptom is a menu showing
-"Massive", clicking it, and getting a Sampler track instead. The automation strip's lane picker
+"Massive", clicking it, and getting a Sampler track instead. The automation lane choices
 (`collectAutomationLaneOptions` / `applyAutomationLaneMenuChoice`) deliberately re-runs its
 collector at click time, because an automation lane is document data mutated only on the message
 thread, so that is safe.
@@ -50,9 +93,29 @@ The track-preset lists follow the same build-time-snapshot rule
 (`audioTrackPresetMenuSnapshot_` / `instrumentTrackPresetMenuSnapshot_`), since a preset can be
 saved or deleted between the menu opening and the click landing.
 
+## Where the "Add automation..." picker says a module lives
+
+A track's "Add automation..." picker ([automation](automation.md#adding-a-lane-from-the-timeline)) groups its rows by
+module, and each group header says where the module is: "Oscillator · in Bass" for a module inside the track (the nodes
+Duplicate Track copies, `MainComponent::nodesAttachedToTrack`; `AutomatableParameter::placement` is `InTrack`) and
+"Oscillator · shared" for one the track only feeds from or adopts, such as the default project's free-standing starter
+patch (`Shared`); a lane on a shared module is not copied by Duplicate Track. The track's own groups come first, shared
+ones after, each set in its usual order. Search still matches parameter and module names, and the headings and rows read
+the same wording to a screen reader (`ModMatrixPicker::Item::accessibleName`). The Unassigned section's list has no labels.
+
+## Left/right jacks preference
+
+Modules a new track builds follow **Preferences -> "Split Left/Right jacks on new modules"** and its
+per-module overrides, the same as a library drop: the instrument node and the channel's insert FX
+(Gate, Parametric EQ, Compressor). Core's chain builders cannot see `GraphEditor`, so
+`MainComponent::newModuleHook()` is handed in as `DefaultChannelLayout::onNewModule` and runs on each
+insert right after creation, before it enters the graph. The infrastructure the chain forces a shape on
+(Channel Strip, Master, Track In/Track Audio, Voice Mixer, ADSR/VCA/Poly MIDI) ignores the preference.
+Track presets are different: they keep the jacks they were saved with.
+
 ## Track presets
 
-Below the Instrument submenu, `"+ Track"` lists every saved preset for each track kind — own
+Below the Instrument submenu, `"Add Track"` lists every saved preset for each track kind — own
 **Audio**, **Instrument** and **Bus** submenus, one item per preset via
 `synth::TrackPresetManager::listTrackPresets`, ids `kAddTrackPresetAudioMenuIdBase` /
 `kAddTrackPresetInstrumentMenuIdBase` / `kAddTrackPresetBusMenuIdBase` — then a final **"Insert
@@ -79,7 +142,7 @@ build, matched against `synth::branding::kProductName` / `kCompanyName` rather t
 literal, so it can never offer to host itself. The library sidebar goes through a different
 collector and is unaffected.
 
-Opening the menu (`buildAddTrackMenu()`, called by `openAddTrackMenu()` before it shows the result,
+Opening the picker (`buildAddTrackMenu()`, called by `openAddTrackMenu()` before it flattens the result,
 and the headless test seam for inspecting the built `juce::PopupMenu`'s contents) calls
 `TrackHeaderHost::ensureInstrumentPluginsScanned()` first, which `MainComponent` wires straight to
 its existing `maybeStartEagerPluginScan()` — the SAME hosted-mode-guarded entry point the eager
@@ -101,7 +164,7 @@ handled.
 
 **Add Marker** sits below a separator because it is **not a track**: it adds no header row and no
 graph node, it drops a flag on the ruler ([ruler](ruler.md#markers)). It shares this menu because
-`"+ Track"` is where a user reaches for "add something to the arrangement", and a second button for
+`"Add Track"` is where a user reaches for "add something to the arrangement", and a second button for
 one item would not earn its pixels. It is handled *before* `applyAddTrackMenuChoice`'s
 `TrackHeaderHost` null-check — a marker is document data with nothing behind it to wire — and calls
 `addMarkerAtPlayhead()`.
@@ -118,8 +181,10 @@ transaction, so one Cmd+Z removes all of it and redo restores it with the same n
 2. Create a `Track In` node through `AIStateMapper::createModule`, so it round-trips through
    `graphToJSON` / `applyJSONToGraph` — that is how undo, redo and `.agsproj` reproduce it — assign
    a fresh uuid and mirror it into the processor with `ModuleBase::setNodeUuid`, and place it at
-   the canvas' left edge below every existing module
-   (`GraphEditor::findLeftEdgeSlotBelowModules`).
+   the canvas' left edge below every existing module, with x floored at `LayoutUtil::kMacroHullSideOutset` so the
+   channel macro's open hull starts at x >= 0 (`GraphEditor::findLeftEdgeSlotBelowModules`). An AI edit plan's
+   track uses the same slot while the canvas has no cards; the existing modules then block through their model
+   rects ([where things land](../ai/timeline-ops.md#where-things-land)).
 3. **Auto-wire only when unambiguous.** If the patch contains **exactly one** MIDI-driven
    instrument — module type `Poly MIDI`, `Oscillator`, `Wavetable`, `Sampler`, `Sequencer` or
    `Poly Sequencer`; MIDI *sources* (`Track In`, `External MIDI`, `MIDI Keyboard`) are excluded —
@@ -148,10 +213,12 @@ graph+timeline transaction with a third domain, the macro set:
    reusing the existing singleton after the first channel; the same "Rec Tap when spliced, else Audio
    Output" target the old direct wire used) and wires the strip into Master's Mix input.
 3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, Gate, EQ, Compressor, Channel Strip}` into ONE
-   collapsed macro named after the track. **Master stays outside the macro**, and the
-   Strip → Master cable is left a plain graph edge, deliberately never a macro port — see
-   [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain) for why: the Mix-vs-Direct classification `spliceMasterNode`
-   does would break behind a `MacroOutlet`.
+   collapsed macro named after the track. **Master stays outside the macro.** Core builds the
+   Strip → Master cable as a plain graph edge; the app then moves it behind ONE output port of the macro
+   (`GraphEditor::routeChannelOutputThroughMacroPort`, a single stereo jack, or two with the Split
+   Left/Right jacks preference), so the track's sound visibly leaves through its own card — see
+   [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain). The Mix-vs-Direct classification
+   `spliceMasterNode` does looks through macro ports to the strip behind them.
 4. Bind the track to the `Track Audio` node's uuid and give it the palette colour for its index.
 
 `GraphEditor::updateComponents()` runs **inside** the transaction's mutation, not after, so
@@ -164,7 +231,7 @@ factory default chain — see [`docs/mixer/mixer.md`](../mixer/mixer.md#an-instr
 full design.
 
 The picker offers exactly the audio-producing MIDI instruments (**Oscillator**, **Wavetable**,
-**Sampler**), deliberately not every module the MIDI entry's own auto-wire search recognises as
+**Sampler**, **Drum Kit**, **Pluck**, **Mallet**, **Noise**), deliberately not every module the MIDI entry's own auto-wire search recognises as
 "MIDI-driven": Poly MIDI outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them
 audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
 `MainComponent::addInstrumentTrack`):
@@ -175,18 +242,22 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    and builds the channel automatically. See [`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)'s table note.
 2. Create the `Track In` node (same factory, uuid and placement idiom as the MIDI entry), then the
    chosen instrument to its right, and wire `Track In -> instrument` on the MIDI channel — always
-   unambiguous, since the instrument was just created for this track alone.
+   unambiguous, since the instrument was just created for this track alone. **The cable is drawn only
+   when the instrument's `acceptsMidi()` is true.** The Noise module returns false (a pure generator), so
+   a Noise track has no MIDI cable into it; the ADSR of step 4 is still gated by `Track In -> ADSR` on the
+   MIDI channel, so each note opens the envelope and the noise is heard only while notes play.
 3. A poly instrument's raw ch0-7 (up to 8 simultaneous voices) cannot feed
    `buildDefaultAudioChannel` directly, which wants one stereo pair, so
    `synth::addVoiceMixerForPolyInstrument` (Core, `ChannelFlows.h`) sums them into a Voice Mixer
    first when the instrument's own `poly` parameter is on ([`docs/mixer/mixer.md`](../mixer/mixer.md#mono-and-stereo)). A
    factory-created instrument defaults to poly OFF, so this is a no-op on the golden path.
-4. For an **Oscillator** or **Wavetable** instrument ([`docs/mixer/mixer.md`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument)): neither has an
-   envelope of its own, so a held or released note drones forever.
+4. For an **Oscillator**, **Wavetable** or **Noise** instrument ([`docs/mixer/mixer.md`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument)): none has an
+   envelope of its own, so a held or released note (or, for Noise, no note at all) sounds forever.
+   Noise is mono (its single output feeds both VCA legs) and is always built with `poly` off.
    `synth::addEnvelopeAndVCAForRawInstrument` inserts an ADSR (gated by the same Track In MIDI as
    the instrument, forced non-poly) driving a VCA (also forced non-poly) ahead of the rest of the
-   chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, which
-   already has its own one-shot playback envelope.
+   chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, **Drum Kit**, **Pluck** and **Mallet**, which
+   already shape their own amplitude.
 5. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer or VCA, whichever
    step 3 or 4 last produced) into the same `Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor
    (bypassed) -> Channel Strip (Stereo)` chain the Audio entry uses, then splices Master. A split-block source
@@ -194,7 +265,62 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    `ModuleBase::rightAudioLegChannel()` — or `VCAModule::kRightBase`, once step 4 has run — as
    `buildDefaultAudioChannel`'s `sourceRightChannel` parameter instead of the ch1 default.
 6. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], [ADSR+VCA
-   if Oscillator/Wavetable], Gate, EQ, Compressor, Strip}` into ONE collapsed macro named after the
+   if Oscillator/Wavetable/Noise], Gate, EQ, Compressor, Strip}` into ONE collapsed macro named after the
    track, the same way the Audio entry's macro is built — Master stays outside it, for the same
    reason.
 7. Bind the track to the `Track In` node's uuid and give it the palette colour for its index.
+
+The same build also runs from a model's `addInstrumentTrack` timeline op, through
+`MainComponent::buildInstrumentTrackBody` with the op's exact track name and without the default
+track preset lookup, plus optional effect **inserts** placed after the step-3/4 envelope stage and
+before the Gate (each a macro member) — see
+[`docs/ai/timeline-ops.md`](../ai/timeline-ops.md#addinstrumenttrack). On a failure partway, that
+shared body removes every node it added and the doc track before returning.
+
+## Duplicate a track
+
+**Cmd+D on a focused track row**, or **Duplicate Track** in the row's right-click menu (it names the shortcut), adds a
+copy directly below it with its modules, clips, notes and automation. The key is the rebindable
+`timelineDuplicateFocusedTrack` (Timeline category, default Cmd+D). It shares the chord with the General
+`duplicateSelection` because conflicts are per category and the row's own `keyPressed()` claims the key before the
+command layer sees it: Cmd+D anywhere else (canvas, clips, piano roll) keeps its meaning. The Automation section header
+has nothing to copy and lets the key bubble.
+
+`MainComponent::duplicateTrack` (`MainComponentTrackDuplicate.cpp`) runs ONE graph + timeline + macro undo step, then
+the reconcile pass:
+
+1. **Which modules.** The nodes the track plays and no other track does (`resolveAutomationOwners`, the rule
+   [automation](automation.md#which-track-a-lane-lands-on) uses), minus the output dock (Master and everything after it).
+   A node two tracks reach stays shared, and so does a free-standing patch that only feeds the output dock: a node is
+   copied only when cables through the track's own nodes link it to the track's start without passing through Master.
+2. **Copy.** The same `SnippetManager::extractSnippet` / `insertSnippet` pair copy-paste uses
+   ([snippets-clipboard](../layout/snippets-clipboard.md#copy-paste-and-duplicate)): new node ids and uuids, parameters and
+   extra state carried, cables between copied modules and their macros (with ports and nesting) come across, placed one
+   gap below the original's lowest card. `insertSnippet`'s `outCopies` hands back original id -> copy id.
+3. **Boundary cables.** A paste drops wires that left the selection; a duplicated track must not, so every cable between
+   a copied module and a module that was not copied is re-created on the copy: into Master (the copy's channel is routed
+   like a new track's), into a shared bus, and from a shared source. A modulation routing into a copied module from a
+   shared modulator is re-created through `AudioEngine::addModRouting` with its amount. A modulator (LFO, envelope)
+   that moves a copied module is copied with it and joins the copy's macro, so the copy is wrapped in its own macro
+   exactly like the original. A channel macro named after the
+   track is renamed to the copy's name so two mixer columns never read the same.
+4. **Timeline.** `TimelineDoc::duplicateTrack` inserts the copy below the source with fresh ids on the track, clips, notes
+   and lanes; the binding and each lane are re-pointed through the original-uuid -> copy-uuid map. A modulation
+   routing's amount lane (keyed by its hidden Attenuverter, which paste rebuilds) joins that map too, so a copied
+   modulator keeps the source track's drawn amount curve and the same undo step removes it. A lane whose module is
+   shared stays with the original (a (module, parameter) pair carries one lane doc-wide). The same goes for a lane, and
+   an LFO added on it, on the starter project's free-standing patch: that patch is not part of the track, so it has no
+   track macro to join and is not copied. The copy is named "<name> copy",
+   takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
+
+Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The copy's row, its
+mixer strip and its canvas macro and cards come out of the original's while the rows and columns after make room in the
+same movement, and Cmd+Z sends them back in ([duplicate-motion](../layout/duplicate-motion.md)); adding a track from "Add
+Track" grows the new row in after the others make room (`MainComponent::TrackGrowInScope`). Under Reduce Motion it is a
+plain fade, and off-screen it lands at once. A mixer strip's right-click menu also offers "Duplicate Track" (the same action, for
+a strip fed by exactly one track). At `kMaxTracks` nothing happens and the status bar says so.
+
+Tests: `Tests/App/MainComponent/MainComponentDuplicateTrackTests.cpp` (the real key through the row; new ids, remapped
+cables, Master routing, clips, notes, lane; one undo and redo),
+`Tests/UI/Timeline/TimelineTrackDuplicateTests.cpp` (key, rebind, menu, glide),
+`Tests/Timeline/TimelineDoc/TimelineDocTracksTests.cpp` (`duplicateTrack`).

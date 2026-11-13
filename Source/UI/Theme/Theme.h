@@ -28,28 +28,37 @@ enum class ThemeStyle {
 // at call sites. Defaults below match the Obsidian theme so a half-populated theme
 // still renders sanely.
 struct Colors {
-    juce::Colour bg0{0xff0B0D10};          // deepest page / window background
-    juce::Colour bg1{0xff13161B};          // canvas / graph editor background
-    juce::Colour surface{0xff1B1F26};      // module cards / panels
-    juce::Colour surfaceHi{0xff232833};    // raised surface / card top gradient stop
-    juce::Colour border{0xff2A2F38};       // hairline borders
-    juce::Colour accent{0xff00D1FF};       // primary accent (selection, value arc)
-    juce::Colour accent2{0xff00D1FF};      // secondary accent (Neon cyan vs magenta etc.)
-    juce::Colour audioWire{0xffE8EDF2};    // audio signal wires
-    juce::Colour midiWire{0xffB48EF5};     // MIDI note/event wires
-    juce::Colour modWire{0xff00D1FF};      // modulation CV wires (DirectCV / attenuverter)
-    juce::Colour pitchWire{0xffAAD4FF};    // poly pitch fan wires (GraphEditor role==Pitch)
-    juce::Colour gateWire{0xffFFA500};     // poly gate fan wires (GraphEditor role==Gate)
-    juce::Colour polyBusWire{0xff00E5FF};  // poly ModCV bus wires (RoutingKind::PolyBus)
-    juce::Colour textPrimary{0xffEAEEF3};  // primary text
-    juce::Colour textMuted{0xff8A93A0};    // secondary/label text
-    juce::Colour textDisabled{0xff5C6470}; // disabled / bypassed text
-    juce::Colour success{0xff46C66B};      // activity LED / OK
-    juce::Colour warning{0xffE0A33D};      // warning / mute-pending
-    juce::Colour error{0xffE5484D};        // error / mute
-    juce::Colour knobBody{0xff13161B};     // knob body gradient inner stop (outer = surfaceHi)
-    juce::Colour knobPointer{0xffEAEEF3};  // knob pointer line
-    juce::Colour meterFill{0xff00D1FF};    // output meter LOW zone fill (below -18 dBFS)
+    juce::Colour bg0{0xff0B0D10};              // deepest page / window background
+    juce::Colour bg1{0xff13161B};              // canvas / graph editor background
+    juce::Colour surface{0xff1B1F26};          // module cards / panels
+    juce::Colour surfaceHi{0xff232833};        // raised surface / card top gradient stop
+    juce::Colour border{0xff2A2F38};           // hairline borders
+    juce::Colour accent{0xff00D1FF};           // primary accent (selection, value arc)
+    juce::Colour accent2{0xff00D1FF};          // secondary accent (Neon cyan vs magenta etc.)
+    juce::Colour audioWire{0xffE8EDF2};        // audio signal wires
+    juce::Colour midiWire{0xffB48EF5};         // MIDI note/event wires
+    juce::Colour modWire{0xff00D1FF};          // modulation CV wires (DirectCV / attenuverter)
+    juce::Colour pitchWire{0xffAAD4FF};        // poly pitch fan wires (GraphEditor role==Pitch)
+    juce::Colour gateWire{0xffFFA500};         // poly gate fan wires (GraphEditor role==Gate)
+    juce::Colour polyBusWire{0xff00E5FF};      // poly ModCV bus wires (RoutingKind::PolyBus)
+    juce::Colour textPrimary{0xffEAEEF3};      // primary text
+    juce::Colour textMuted{0xff8A93A0};        // secondary/label text
+    juce::Colour textDisabled{0xff5C6470};     // disabled / bypassed text
+    juce::Colour success{0xff46C66B};          // activity LED / OK
+    juce::Colour warning{0xffE0A33D};          // warning / mute-pending
+    juce::Colour error{0xffE5484D};            // error / mute
+    juce::Colour knobBody{0xff13161B};         // knob body gradient inner stop (outer = surfaceHi)
+    juce::Colour knobPointer{0xffEAEEF3};      // knob pointer line
+    juce::Colour knobSkirt{0xff0E1014};        // Chunky control style: the fader slot
+    juce::Colour knobCapHighlight{0x2effffff}; // Chunky control style: the sheen on the fader cap
+    // Module-family hues for knobs when "Colour controls by module family" is on (see familyHue()).
+    juce::Colour hueAmber{0xffF5C542};  // sources
+    juce::Colour hueGreen{0xff4ADE80};  // sequencing, envelopes
+    juce::Colour hueRose{0xffFF6FA8};   // modulation FX, time FX, dynamics
+    juce::Colour hueViolet{0xffB48EF5}; // toolbar icon family hue (not used by knobs)
+    juce::Colour iconInk{0xff0B0D10};   // dark glyph ink for icons drawn on a light fill
+    juce::Colour iconPaper{0xffF4F6F8}; // light glyph paper for icons drawn on a dark fill
+    juce::Colour meterFill{0xff00D1FF}; // output meter LOW zone fill (below -18 dBFS)
     // The meter's remaining three level zones, mid/high/clip ascending -- meterFill above stays
     // the LOW zone for theme back-compat (it predates the zone model). See MeterColourStops.h
     // for the exact band edges (-18/-6/0 dBFS) and docs/mixer/meters.md#colour-zones.
@@ -74,6 +83,15 @@ struct Colors {
     juce::Colour trackMuteOn{0xffFFA033}; // mute button, active
     juce::Colour trackSoloOn{0xffFFD23D}; // solo button, active
     juce::Colour trackArmOn{0xffE5484D};  // arm/record button, active
+
+    // Parametric EQ band kinds (docs/modules/fx-modules.md#parametric-eq-module): the ring of a band's dot and the
+    // body of its chip. Fixed across every theme, so a band reads the same wherever the EQ is shown.
+    juce::Colour eqKindBell{0xff00D1FF};     // bell (peak)
+    juce::Colour eqKindShelf{0xffF5B94A};    // low and high shelf
+    juce::Colour eqKindCut{0xffA78BFA};      // low and high cut
+    juce::Colour eqKindNotch{0xffFF6B9A};    // notch
+    juce::Colour eqKindTilt{0xff3DDC97};     // tilt
+    juce::Colour eqKindBandPass{0xff7BE495}; // band pass
 
     // Active-tool highlight in the timeline edit-tool strip (Select/Split/Glue/Erase/Mute/Draw
     // — see Source/UI/Timeline/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
@@ -103,6 +121,33 @@ struct Colors {
         juce::Colour(0xffA0A8B4)  // Utility
     };
 };
+
+// The knob colour for a module family, given as the int index of synth::ui::ModuleCategory (the
+// kCableCategoryIds order). Filters and utility use the theme accent. Out-of-range -> accent.
+inline juce::Colour familyHue(const Colors& c, int categoryIndex) {
+    switch (categoryIndex) {
+    case 0:
+        return c.hueAmber; // sources
+    case 1:
+    case 2:
+        return c.hueGreen; // sequencing, envelopes
+    case 4:
+    case 5:
+    case 6:
+        return c.hueRose; // modfx, timefx, dynamics
+    default:
+        return c.accent; // filters, utility
+    }
+}
+
+// Component property a ModuleComponent sets on itself (value: int ModuleCategory) so every knob
+// inside it can find its family by walking the parent chain.
+inline constexpr const char* kKnobFamilyProperty = "knobFamily";
+
+// Component properties a ModuleComponent sets on itself (value: int KnobStyle) when its module, or its
+// module type, has its own knob or fader style; absent means the app-wide Settings choice.
+inline constexpr const char* kKnobStyleProperty = "knobStyleOverride";
+inline constexpr const char* kFaderStyleProperty = "faderStyleOverride";
 
 // Geometry / spacing. Pixel units at zoom 1.0.
 struct Metrics {
@@ -139,12 +184,13 @@ struct Metrics {
     int aiPanelWidth{300};        // code-only; not parsed from user JSON
     int iconSize{16};             // code-only; not parsed from user JSON
 
-    // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
+    // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+J).
     int timelinePanelHeight{220}; // code-only; not parsed from user JSON
-    // 190 (was 160): widened alongside the M/S/R/A toggle row (TimelineTrackHeaderComponent::
+    // 200 (was 190, 160 before that): 190 was widened alongside the M/S/R toggle row (TimelineTrackHeaderComponent::
     // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the
-    // name label down to a handful of pixels when a track's automation ("A") button is visible.
-    int timelineTrackHeaderWidth{190}; // code-only; not parsed from user JSON
+    // name label down to a handful of pixels next to the fold arrow and lane badge; 200 leaves room for an LFO
+    // modulator row's shape combo beside a sync-rate combo that now lists "1/128".
+    int timelineTrackHeaderWidth{200}; // code-only; not parsed from user JSON
     // 34 (was 28): grown so TimelineTransportBar's glyph buttons (kButtonSize 22->26) actually
     // render larger instead of being clamped back down by the strip height.
     int timelineTransportBarHeight{34}; // code-only; not parsed from user JSON
@@ -153,16 +199,18 @@ struct Metrics {
     // to be squeezed to 9 px, which is where "the flag is barely visible" came from; 30 gives the
     // numbers 17 px and the flags 13. Code-only; not parsed from user JSON.
     int timelineRulerHeight{30};
+    // The Sections strip above the ruler: one row of section blocks (3 px inset above and below, so an 18 px block).
+    // Code-only, like the ruler's height; not parsed from user JSON.
+    int timelineSectionStripHeight{24};
     // The row height BOTH the track-header column and the clip-lane area lay their rows
     // out at — the single source that keeps header rows and clip rows aligned. Replaces what used
     // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant
     // now only serves as the headless literal fallback and is kept equal to this default.
     int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON
 
-    // The automation strip docked at the BOTTOM of the panel's lanes region (header row of
-    // tool buttons + lane/record-mode pickers, above the AutomationLaneEditor curve canvas). The
-    // clip-lane area (and the piano roll) shrink by exactly this much while the strip is open.
-    int timelineAutomationStripHeight{72}; // code-only; not parsed from user JSON
+    // One automation lane row folded out under its track (lane header + curve editor), before the
+    // vertical zoom scales it the same way it scales timelineTrackRowHeight.
+    int timelineAutomationLaneRowHeight{40}; // code-only; not parsed from user JSON
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).
@@ -170,7 +218,7 @@ struct Typography {
     juce::String uiFamily{"Inter"};
     juce::String monoFamily{"JetBrains Mono"};
     float h1{18.0f};    // window / large headings
-    float h2{13.0f};    // card titles (rendered uppercase + tracked at call sites)
+    float h2{13.0f};    // card titles (drawn in the module's own case)
     float label{10.5f}; // knob names, port labels, section heads
     float value{10.0f}; // mono value readouts
     float micro{8.5f};  // smallest captions

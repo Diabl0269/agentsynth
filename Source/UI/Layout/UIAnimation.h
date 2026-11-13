@@ -15,9 +15,15 @@
 // Section 2 requires juce_animation + juce_gui_basics (VBlankAttachment).
 // ============================================================================
 
+#include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <functional>
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+#include <vector>
 
 namespace synth::ui {
 
@@ -33,6 +39,9 @@ inline float easeOutCubic(float t) noexcept {
     return 1.0f - u * u * u;
 }
 
+/** Cubic ease-in: starts slow, accelerates away -- for a thing leaving or being sent back. */
+inline float easeInCubic(float t) noexcept { return t * t * t; }
+
 /** Cubic ease-in-out: slow start, fast middle, slow finish. */
 inline float easeInOutCubic(float t) noexcept {
     if (t < 0.5f)
@@ -47,6 +56,14 @@ inline float easeOutBack(float t) noexcept {
     constexpr float c3 = c1 + 1.0f;
     const float u = t - 1.0f;
     return 1.0f + c3 * u * u * u + c1 * u * u;
+}
+
+/** Ease-out-back with a gentle overshoot: peaks at 1.08 (8% past the end), then settles to 1. Things the
+ *  user adds grow in with it. */
+inline float easeOutBackGrow(float t) noexcept {
+    constexpr float c1 = 1.5f;
+    const float u = t - 1.0f;
+    return 1.0f + (c1 + 1.0f) * u * u * u + c1 * u * u;
 }
 
 // ============================================================================
@@ -114,37 +131,98 @@ public:
      *  @param onComplete       Optional; called once when progress reaches 1.0.
      *
      *  Calling start() while an animation is already running replaces it; the
-     *  old animator is removed from the updater before the new one is added.
+     *  old one is stopped first (see stop()). It is safe to call from the onComplete
+     *  or onUpdate of any animation on the same updater, including this driver's own.
      */
     void start(juce::VBlankAnimatorUpdater& updater, double durationMs, std::function<float(float)> easingFn,
                std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
-        // Stop / remove previous animation if any.
-        stop(updater);
+        begin([&updater](const juce::Animator& a) { updater.addAnimator(a); }, durationMs, std::move(easingFn),
+              std::move(onUpdate), std::move(onComplete));
+    }
 
-        animator = juce::ValueAnimatorBuilder{}
-                       .withDurationMs(durationMs)
-                       .withEasing(std::move(easingFn))
-                       .withValueChangedCallback(std::move(onUpdate))
-                       .withOnCompleteCallback(std::move(onComplete))
-                       .build();
-
-        updater.addAnimator(*animator);
-        animator->start();
+    /** Same as above on a plain `juce::AnimatorUpdater`, whose `update()` the caller runs (headless tests). */
+    void start(juce::AnimatorUpdater& updater, double durationMs, std::function<float(float)> easingFn,
+               std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
+        begin([&updater](const juce::Animator& a) { updater.addAnimator(a); }, durationMs, std::move(easingFn),
+              std::move(onUpdate), std::move(onComplete));
     }
 
     // -------------------------------------------------------------------------
-    /** Immediately stop a running animation and remove it from the updater.
-     *  Safe to call even if no animation is in progress.
+    /** Immediately stop a running animation. Safe to call even if none is in progress, and from inside any
+     *  animation's own callbacks on the same updater.
+     *
+     *  The updater is never asked to remove the entry: erasing it while the updater is still running that very
+     *  animator frees the entry the updater reads straight afterwards. The handle is released instead and the updater
+     *  drops the expired entry on its next pass. The updater parameter is kept so call sites need no change.
      */
-    void stop(juce::VBlankAnimatorUpdater& updater) {
-        if (animator.has_value()) {
-            updater.removeAnimator(*animator);
-            animator.reset();
+    void stop(juce::VBlankAnimatorUpdater&) { stop(); }
+    void stop(juce::AnimatorUpdater&) { stop(); }
+
+    void stop() {
+        if (run != nullptr) {
+            ++run->generation;
+            Run::retire(run->animator);
+            run.reset();
         }
     }
 
-    /** Returns true if an animation is currently in progress. */
-    bool isRunning() const noexcept { return animator.has_value(); }
+    /** Returns true if an animation is currently in progress. A finished one is not: the animator stays held after its
+     *  last frame, and a layout pass that defers to "the running tween" must not wait on one that already landed. */
+    bool isRunning() const noexcept {
+        return run != nullptr && run->animator.has_value() && !run->animator->isComplete();
+    }
+
+    /** Test seam: lands a running animation on its final frame and runs its complete callback, standing in for the
+     *  VBlank frames that never reach an off-screen component. A no-op when nothing runs. */
+    void completeForTest() {
+        if (run == nullptr || !run->animator.has_value())
+            return;
+        run->testClock = true; // synthetic frame times: the stall guard must not mistake the jump for a stall
+        const auto keepAlive = run;
+        const juce::Animator current = *run->animator;
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        current.update(now);                                 // the frame that starts it
+        current.update(now + current.getDurationMs() + 1.0); // and the one past its end
+    }
+
+    /** Test seam: advances a running animation to `ms` after its first frame, standing in for the VBlank frames that
+     *  never reach an off-screen component, so a test can read the values between the start and the end. The first
+     *  call starts the clock (and rewinds an animation real frames already advanced); later calls move it. A no-op when
+     *  nothing runs. After a stall restart (see `stallGuardForTest`) the clock starts again at the next call, so `ms`
+     *  counts from the restart. */
+    void stepForTest(double ms) {
+        if (run == nullptr || !run->animator.has_value())
+            return;
+        run->testClock = true;
+        if (!testClockEntered && run->hasFrame && !run->animator->isComplete()) {
+            // Real frames already ran before the first call: start over, so `ms` counts from the call and not from
+            // a real clock a loaded machine let run ahead.
+            run->baseProgress = 0.0;
+            run->lastProgress = 0.0;
+            run->hasFrame = false;
+            ++run->generation;
+            Run::retire(run->animator);
+            run->launch();
+        }
+        testClockEntered = true;
+        const auto generationBefore = run->generation;
+        const auto keepAlive = run; // a stall restart replaces the animator inside its own update()
+        const juce::Animator current = *run->animator;
+        if (!testClockStart.has_value()) {
+            testClockStart = juce::Time::getMillisecondCounterHiRes();
+            current.update(*testClockStart); // the frame that starts it
+        }
+        current.update(*testClockStart + ms);
+        if (run != nullptr && run->generation != generationBefore)
+            testClockStart.reset();
+    }
+
+    /** Test seam: makes the stall guard act on stepForTest's synthetic frame times too (it ignores them otherwise, so
+     *  a test may jump the clock). Call after start(). */
+    void stallGuardForTest(bool on) noexcept {
+        if (run != nullptr)
+            run->guardInTest = on;
+    }
 
     // -------------------------------------------------------------------------
     /** Linearly interpolate between two rectangles by normalised t ∈ [0,1].
@@ -167,9 +245,104 @@ public:
     }
 
 private:
-    // The Animator is held as optional so we can cheaply test "is active".
-    // The shared_ptr inside Animator keeps the underlying impl alive.
-    std::optional<juce::Animator> animator;
+    void begin(std::function<void(const juce::Animator&)> registerWithUpdater, double durationMs,
+               std::function<float(float)> easingFn, std::function<void(float)> onUpdate,
+               std::function<void()> onComplete) {
+        stop(); // the previous animation, if any
+        testClockStart.reset();
+        testClockEntered = false;
+
+        // Animations: Off lands on the final frame at once; nothing is left running.
+        if (animationsOff()) {
+            if (onUpdate)
+                onUpdate(easingFn ? easingFn(1.0f) : 1.0f);
+            if (onComplete)
+                onComplete();
+            return;
+        }
+
+        run = std::make_shared<Run>();
+        run->registerWithUpdater = std::move(registerWithUpdater);
+        run->durationMs = durationMs;
+        run->easing = easingFn ? std::move(easingFn) : [](float t) { return t; };
+        run->onUpdate = std::move(onUpdate);
+        run->onComplete = std::move(onComplete);
+        run->launch();
+    }
+
+    // One running animation. Frames come from a VBlank clock, and a message-thread stall (a graph rebuild, a plugin
+    // load) lets the next frame arrive far past the last. juce::Animator would answer with a jump to the end, so a
+    // frame that arrives later than kStallMs after the previous one moves the animation by one nominal frame instead
+    // and the rest of it is re-launched from there: the motion is still seen, it just ends later.
+    struct Run : std::enable_shared_from_this<Run> {
+        static constexpr double kStallMs = 80.0;
+        static constexpr double kFrameMs = 16.0;
+
+        std::function<void(const juce::Animator&)> registerWithUpdater;
+        double durationMs = 0.0;
+        std::function<float(float)> easing;
+        std::function<void(float)> onUpdate;
+        std::function<void()> onComplete;
+        std::optional<juce::Animator> animator;
+        double baseProgress = 0.0; // overall progress at which the current animator began
+        double lastProgress = 0.0; // overall progress applied by the last frame
+        bool hasFrame = false;     // a frame has been applied
+        std::uint64_t generation = 0;
+        bool testClock = false;   // frames come from stepForTest
+        bool guardInTest = false; // act on stepForTest's frames too
+
+        void launch() {
+            const double remaining = durationMs * (1.0 - baseProgress);
+            const auto gen = generation;
+            // Weak, so the animator does not own the run; locked per call so a callback that stops or restarts the
+            // driver cannot free the run (and the very function it is executing) under itself.
+            const std::weak_ptr<Run> weak = weak_from_this();
+            animator = juce::ValueAnimatorBuilder{}
+                           .withDurationMs(std::max(remaining, 1.0))
+                           .withEasing([](float t) { return t; })
+                           .withValueChangedCallback([weak, gen](float p) {
+                               if (const auto self = weak.lock())
+                                   self->onFrame(p, gen);
+                           })
+                           .withOnCompleteCallback([weak, gen] {
+                               if (const auto self = weak.lock();
+                                   self != nullptr && gen == self->generation && self->onComplete)
+                                   self->onComplete();
+                           })
+                           .build();
+            registerWithUpdater(*animator);
+            animator->start();
+        }
+
+        // The one way an animator leaves an updater. Dropping the handle makes the updater's weak entry expire, and
+        // the updater erases it on a later pass. Calling removeAnimator instead erases the entry at once, which is a
+        // use after free when the updater is in the middle of running this animator (a completion callback that
+        // starts or stops an animation), because it reads the entry again after the animator's update returns.
+        static void retire(std::optional<juce::Animator>& handle) { handle.reset(); }
+
+        void onFrame(float p, std::uint64_t gen) {
+            if (gen != generation)
+                return;
+            double progress = baseProgress + static_cast<double>(p) * (1.0 - baseProgress);
+            const bool guardOn = !testClock || guardInTest;
+            const bool stalled = guardOn && hasFrame && (progress - lastProgress) * durationMs > kStallMs;
+            if (stalled) {
+                progress = lastProgress + kFrameMs / durationMs;
+                baseProgress = progress;
+                ++generation;
+                retire(animator);
+                launch();
+            }
+            lastProgress = progress;
+            hasFrame = true;
+            if (onUpdate)
+                onUpdate(easing(static_cast<float>(progress)));
+        }
+    };
+
+    std::shared_ptr<Run> run;
+    std::optional<double> testClockStart; // stepForTest's clock; reset with each animation
+    bool testClockEntered = false;        // stepForTest has run for this animation (a stall restart keeps it)
 };
 
 // ============================================================================
@@ -255,6 +428,27 @@ public:
         tweening_ = false;
     }
 
+    /** Runs `fn` once this panel has landed: at once when no tween is in flight (open already, or nothing can
+     *  animate), else when the owner calls runSettled() after the slide's final layout. For anything anchored to
+     *  a control inside the panel (a call-out), which has no true position until then. */
+    void whenSettled(std::function<void()> fn) {
+        if (!tweening_) {
+            fn();
+            return;
+        }
+        settled_.push_back(std::move(fn));
+    }
+
+    /** The owner's end-of-slide hook, called after finish() and the final layout: runs what whenSettled() queued. */
+    void runSettled() {
+        if (tweening_)
+            return;
+        auto waiting = std::move(settled_);
+        settled_.clear();
+        for (auto& fn : waiting)
+            fn();
+    }
+
     /** True while a tween is in flight for THIS panel (the others sharing the driver may be
      *  standing still — their from == to makes applyTweenAt a no-op). */
     bool isMoving() const noexcept { return tweening_; }
@@ -281,6 +475,73 @@ private:
     float from_ = 0.0f;
     float to_ = 0.0f;
     bool tweening_ = false;
+    std::vector<std::function<void()>> settled_;
+};
+
+// ============================================================================
+// ShownFade -- the fade of an overlay that is a component or a drawn layer, not a window (a window uses PopupMotion)
+// ============================================================================
+
+/** An opacity that eases to a target over a time proportional to the distance it still has to go (a fade that turns
+ *  round part-way takes a part of the time). It lands at once when `host` is not showing or Animations is Off, and is a
+ *  plain, short, linear fade under Reduce Motion. `host` supplies the vblank and the on-screen test and must outlive
+ *  this. `onFrame` runs after every change of alpha(), including the landing. */
+class ShownFade {
+public:
+    static constexpr double kReducedMs = 80.0;
+
+    explicit ShownFade(juce::Component& host)
+        : host_(host)
+        , vblank_(&host) {}
+    ~ShownFade() { driver_.stop(vblank_); }
+
+    void fadeTo(float target, double fullMs, std::function<float(float)> easing) {
+        if ((!host_.isShowing() && !animateOffScreen()) || animationsOff()) {
+            jumpTo(target);
+            return;
+        }
+        const float from = alpha_;
+        if (prefersReducedMotion()) {
+            fullMs = kReducedMs;
+            easing = [](float t) { return t; };
+        }
+        const double ms = std::max(1.0, std::abs((double)target - (double)from) * fullMs);
+        driver_.start(vblank_, ms, std::move(easing),
+                      [this, from, target](float e) { set(from + (target - from) * e); });
+    }
+
+    /** Stops any fade and sets the alpha now. */
+    void jumpTo(float value) {
+        driver_.stop(vblank_);
+        set(value);
+    }
+
+    float alpha() const noexcept { return alpha_; }
+    bool isRunning() const noexcept { return driver_.isRunning(); }
+
+    /** Test seams: animate although the host is not on screen, and advance the running fade to `ms` after its start
+     *  (no vblank reaches an off-screen component). */
+    static void setAnimateOffScreenForTest(bool animate) { animateOffScreen() = animate; }
+    void stepForTest(double ms) { driver_.stepForTest(ms); }
+
+    std::function<void()> onFrame;
+
+private:
+    static bool& animateOffScreen() {
+        static bool animate = false;
+        return animate;
+    }
+
+    void set(float value) {
+        alpha_ = juce::jlimit(0.0f, 1.0f, value);
+        if (onFrame)
+            onFrame();
+    }
+
+    juce::Component& host_;
+    float alpha_ = 0.0f;
+    juce::VBlankAnimatorUpdater vblank_;
+    AnimationDriver driver_;
 };
 
 // ============================================================================

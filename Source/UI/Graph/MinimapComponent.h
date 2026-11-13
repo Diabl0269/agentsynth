@@ -56,6 +56,17 @@ class MinimapComponent
 public:
     MinimapComponent();
 
+    /** Smallest map the owner draws (it is a quarter of the editor in each direction, so the floor
+     *  below follows from these two). */
+    static constexpr int kMinMapWidth = 60;
+    static constexpr int kMinMapHeight = 40;
+
+    /** False only when an editor this small could not hold a legible map: the owner then hides the map
+     *  (its preference is untouched) and greys out the toggle. Anything bigger shrinks the map to fit. */
+    static bool fitsEditor(int editorWidth, int editorHeight) noexcept {
+        return editorWidth >= kMinMapWidth * 4 && editorHeight >= kMinMapHeight * 4;
+    }
+
     /** Replaces the model. Repaints ONLY when the new model differs from the current one —
      *  the owner ticks at 30 Hz and a static patch must not cause a repaint storm. */
     void setModel(MinimapModel model);
@@ -67,7 +78,7 @@ public:
      *  only on an actual change, same as setModel(). */
     void setViewport(juce::Rectangle<float> viewport);
 
-    /** Sets the display string for the show/hide shortcut (e.g. "Cmd+K") and rebuilds the tooltip,
+    /** Sets the display string for the show/hide shortcut (e.g. "Opt+Cmd+K") and rebuilds the tooltip,
      *  so hovering the map surfaces the same binding the toolbar button advertises. The owner
      *  supplies it already resolved: the binding is rebindable and lives in ShortcutManager, which
      *  this component deliberately doesn't depend on. Pass an empty string for "no binding", and
@@ -76,6 +87,11 @@ public:
 
     /** Canvas point the user asked to centre the view on (click or drag on the map). */
     std::function<void(juce::Point<float>)> onNavigate;
+
+    /** The same, for the press that starts a click or a drag: when set it takes the press (the owner eases the view
+     *  there), and the drag that follows goes through onNavigate, which stays instant so the view follows the pointer.
+     */
+    std::function<void(juce::Point<float>)> onNavigateEased;
 
     /** Wheel on the map zooms the main editor. Argument is a wheel deltaY (same sign/scale as
      *  juce::MouseWheelDetails::deltaY) so the owner can apply its own zoom curve. */
@@ -103,6 +119,8 @@ public:
     static constexpr float kWorldMargin = 80.0f;
 
     void paint(juce::Graphics& g) override;
+    /** How many times the nodes and cables were drawn rather than reused (test seam). */
+    int getThumbnailRenderCountForTest() const noexcept { return thumbnailRenders_; }
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
@@ -115,13 +133,20 @@ private:
 
     /** Shared by mouseDown/mouseDrag: converts the event position to a canvas point and fires
      *  onNavigate. */
-    void navigateTo(juce::Point<float> localPos);
+    void navigateTo(juce::Point<float> localPos, bool press);
 
     /** Rebuilds the tooltip from the fixed description plus the current shortcut display. */
     void updateTooltip();
 
+    void paintNodesAndCables(juce::Graphics& g, const juce::AffineTransform& transform) const;
+
     MinimapModel model_;
     juce::String shortcutDisplay_;
+    juce::Image thumbnail_; // nodes and cables as last drawn, reused while they, the mapping and the scale hold
+    juce::AffineTransform thumbnailTransform_;
+    juce::Colour thumbnailAccent_;
+    bool thumbnailValid_ = false;
+    int thumbnailRenders_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MinimapComponent)
 };

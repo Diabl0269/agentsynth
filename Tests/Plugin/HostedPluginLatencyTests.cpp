@@ -30,6 +30,7 @@
 
 #include "../FakeAudioIODevice.h"
 #include "../StubPluginInstance.h"
+#include "../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -173,7 +174,7 @@ TEST(HostedPluginLatencyTest, RuntimeLatencyChangeFollowsOnTheMessageThread) {
     // The same value again is not a change: juce::AudioProcessor::setLatencySamples does not even
     // notify, and the module must not manufacture an owner callback (i.e. a graph rebuild) for it.
     std::thread([&factory] { factory.live->setReportedLatency(512); }).join();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(latencyFires, 1) << "an unchanged latency must not rebuild anyone's graph";
 
     std::thread([&factory] { factory.live->setReportedLatency(64); }).join();
@@ -202,7 +203,7 @@ TEST(HostedPluginLatencyTest, AnUnloadCancelsARetiredInstanceUpdate) {
     std::thread([&factory] { factory.live->setReportedLatency(4096); }).join(); // queued, never pumped
     module.unloadPlugin();
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(module.getLatencySamples(), 0) << "a retired instance's queued change must not resurrect its latency";
     EXPECT_EQ(latencyFires, 1) << "only the unload's own N -> 0 edge";
 }
@@ -241,7 +242,7 @@ TEST(HostedPluginLatencyTest, ReloadRepointsTheListenerAtTheNewInstance) {
     // ...and the RETIRED instance is no longer listened to. (It is still alive — reaping needs the
     // audio thread to move on — which is exactly what makes this assertable.)
     first->setReportedLatency(9999);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(module.getLatencySamples(), 192) << "a retired instance must not drive the live node's latency";
     EXPECT_EQ(latencyFires, 1);
 }

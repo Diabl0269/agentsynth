@@ -381,6 +381,8 @@ void AccountService::runRefreshEntitlementFlow(const juce::String& accessTokenFo
     s.monthlyRequestLimit = entitlement.monthlyRequestLimit;
     s.requestsUsed = entitlement.requestsUsed;
     s.entitlementKnown = true;
+    s.periodEndIso = entitlement.periodEndIso;
+    s.cancelAtPeriodEnd = entitlement.cancelAtPeriodEnd;
     publishSnapshot(s);
 }
 
@@ -466,12 +468,16 @@ void AccountService::completeSignIn(const juce::String& newAccessToken, const ju
     int monthlyRequestLimit = 0;
     int requestsUsed = 0;
     bool entitlementKnown = false;
+    juce::String periodEndIso;
+    bool cancelAtPeriodEnd = false;
     const auto entitlement = authClient.fetchEntitlement(newAccessToken, cancelRequested);
     if (entitlement.ok) {
         plan = entitlement.plan;
         monthlyRequestLimit = entitlement.monthlyRequestLimit;
         requestsUsed = entitlement.requestsUsed;
         entitlementKnown = true;
+        periodEndIso = entitlement.periodEndIso;
+        cancelAtPeriodEnd = entitlement.cancelAtPeriodEnd;
     } else {
         juce::Logger::writeToLog("AccountService: fetchEntitlement after sign-in failed (non-fatal): " +
                                  entitlement.transportError);
@@ -486,6 +492,8 @@ void AccountService::completeSignIn(const juce::String& newAccessToken, const ju
     s.monthlyRequestLimit = monthlyRequestLimit;
     s.requestsUsed = requestsUsed;
     s.entitlementKnown = entitlementKnown;
+    s.periodEndIso = periodEndIso;
+    s.cancelAtPeriodEnd = cancelAtPeriodEnd;
     publishSnapshot(s);
 
     juce::Logger::writeToLog("AccountService: sign-in succeeded (" + maskEmail(email) + ").");

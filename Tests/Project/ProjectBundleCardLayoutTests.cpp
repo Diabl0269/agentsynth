@@ -11,6 +11,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -54,7 +55,8 @@ class ProjectBundleCardLayoutTest : public ::testing::Test {
 protected:
     void SetUp() override {
         root_ = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                    .getChildFile("agentsynth-projectbundle-cardlayout-tests");
+                    .getChildFile("agentsynth-projectbundle-cardlayout-tests_" +
+                                  juce::Uuid().toString()); // unique: sharded CI
         root_.deleteRecursively();
         root_.createDirectory();
     }

@@ -6,6 +6,7 @@ namespace synth::ui {
 
 //==============================================================================
 MinimapComponent::MinimapComponent() {
+    setComponentID("minimap");
     setInterceptsMouseClicks(true, false);
     updateTooltip();
 }
@@ -19,7 +20,7 @@ void MinimapComponent::setShortcutHint(const juce::String& shortcutDisplay) {
 
 void MinimapComponent::updateTooltip() {
     // Leads with the toggle action + its shortcut, matching how the toolbar buttons read
-    // ("Hide Minimap  (Cmd+K)"), then the navigation gestures. The verb is always "Hide" because
+    // ("Hide Minimap  (Opt+Cmd+K)"), then the navigation gestures. The verb is always "Hide" because
     // the map can only be hovered while it is on screen.
     setTooltip(formatShortcutHint("Hide Minimap", shortcutDisplay_) + " - click or drag to navigate, scroll to zoom");
 }
@@ -27,6 +28,8 @@ void MinimapComponent::updateTooltip() {
 void MinimapComponent::setModel(MinimapModel model) {
     if (model_ == model)
         return;
+    if (model.nodes != model_.nodes || model.cables != model_.cables)
+        thumbnailValid_ = false;
     model_ = std::move(model);
     repaint();
 }
@@ -92,37 +95,23 @@ juce::Point<float> MinimapComponent::mapToWorld(juce::Point<float> mapPoint, juc
 //==============================================================================
 juce::Rectangle<float> MinimapComponent::getMapArea() const { return getLocalBounds().toFloat().reduced(4.0f); }
 
-void MinimapComponent::navigateTo(juce::Point<float> localPos) {
-    if (!onNavigate)
+void MinimapComponent::navigateTo(juce::Point<float> localPos, bool press) {
+    const auto& handler = press && onNavigateEased ? onNavigateEased : onNavigate;
+    if (!handler)
         return;
-    onNavigate(mapToWorld(localPos, computeWorldBounds(model_), getMapArea()));
+    handler(mapToWorld(localPos, computeWorldBounds(model_), getMapArea()));
 }
 
 //==============================================================================
 void MinimapComponent::paint(juce::Graphics& g) {
-    auto* lnf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-
-    // Headless tests install the stock JUCE LnF; fall back to the token defaults (see
-    // StatusBarComponent::paint for the same shape) so colour resolution stays exercised.
-    juce::Colour bg0, bg1, border, accent;
-    float cornerRadius, borderWidth;
-    if (lnf) {
-        const auto& c = lnf->getTheme().colors;
-        const auto& m = lnf->getTheme().metrics;
-        bg0 = c.bg0;
-        bg1 = c.bg1;
-        border = c.border;
-        accent = c.accent;
-        cornerRadius = m.cornerRadius;
-        borderWidth = m.borderWidth;
-    } else {
-        bg0 = juce::Colours::black;
-        bg1 = juce::Colour(0xff13161b);
-        border = juce::Colours::grey;
-        accent = juce::Colours::cyan;
-        cornerRadius = 8.0f;
-        borderWidth = 1.0f;
-    }
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const auto& m = synth::theme::themeOf(*this).metrics;
+    const auto bg0 = c.bg0;
+    const auto bg1 = c.bg1;
+    const auto border = c.border;
+    const auto accent = c.accent;
+    const float cornerRadius = m.cornerRadius;
+    const float borderWidth = m.borderWidth;
 
     const auto bounds = getLocalBounds().toFloat();
 
@@ -136,6 +125,45 @@ void MinimapComponent::paint(juce::Graphics& g) {
     const auto world = computeWorldBounds(model_);
     const auto transform = computeWorldToMap(world, mapArea);
 
+    // The nodes and cables are drawn into an image and reused: the map sits over the canvas, so every canvas tick and
+    // pan frame repaints it, and drawing every card and cable each time made those frames cost in proportion to the
+    // patch. The image is redrawn when they change, or the mapping, the pixel scale or the accent colour does.
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    const auto imageArea = (bounds * scale).getSmallestIntegerContainer();
+    if (!thumbnailValid_ || thumbnail_.getBounds() != imageArea.withZeroOrigin() || transform != thumbnailTransform_ ||
+        accent != thumbnailAccent_) {
+        thumbnail_ = juce::Image(juce::Image::ARGB, juce::jmax(1, imageArea.getWidth()),
+                                 juce::jmax(1, imageArea.getHeight()), true);
+        juce::Graphics ig(thumbnail_);
+        ig.addTransform(juce::AffineTransform::scale(scale));
+        paintNodesAndCables(ig, transform);
+        thumbnailTransform_ = transform;
+        thumbnailAccent_ = accent;
+        thumbnailValid_ = true;
+        ++thumbnailRenders_;
+    }
+    g.drawImageTransformed(thumbnail_, juce::AffineTransform::scale(1.0f / scale));
+
+    // Viewport: dim everything outside it with a translucent wash (even-odd fill between the map
+    // area and the viewport rect leaves a "hole" over the viewport), then stroke the viewport.
+    const auto viewportMap = model_.viewport.transformedBy(transform).getIntersection(mapArea);
+
+    juce::Path wash;
+    wash.addRectangle(mapArea);
+    if (!viewportMap.isEmpty())
+        wash.addRectangle(viewportMap);
+    wash.setUsingNonZeroWinding(false); // even-odd: the viewport rect punches a hole in the wash
+    g.setColour(bg0.withAlpha(0.45f));
+    g.fillPath(wash);
+
+    if (!viewportMap.isEmpty()) {
+        g.setColour(accent);
+        g.drawRect(viewportMap, 1.5f);
+    }
+}
+
+void MinimapComponent::paintNodesAndCables(juce::Graphics& g, const juce::AffineTransform& transform) const {
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     // Cables: thin straight lines (this is a thumbnail, not the bezier the canvas draws).
     for (const auto& cable : model_.cables) {
         const auto p1 = cable.p1.transformedBy(transform);
@@ -164,28 +192,11 @@ void MinimapComponent::paint(juce::Graphics& g) {
             g.drawRoundedRectangle(r, kNodeCornerRadius, 1.5f);
         }
     }
-
-    // Viewport: dim everything outside it with a translucent wash (even-odd fill between the map
-    // area and the viewport rect leaves a "hole" over the viewport), then stroke the viewport.
-    const auto viewportMap = model_.viewport.transformedBy(transform).getIntersection(mapArea);
-
-    juce::Path wash;
-    wash.addRectangle(mapArea);
-    if (!viewportMap.isEmpty())
-        wash.addRectangle(viewportMap);
-    wash.setUsingNonZeroWinding(false); // even-odd: the viewport rect punches a hole in the wash
-    g.setColour(bg0.withAlpha(0.45f));
-    g.fillPath(wash);
-
-    if (!viewportMap.isEmpty()) {
-        g.setColour(accent);
-        g.drawRect(viewportMap, 1.5f);
-    }
 }
 
 //==============================================================================
-void MinimapComponent::mouseDown(const juce::MouseEvent& e) { navigateTo(e.position); }
-void MinimapComponent::mouseDrag(const juce::MouseEvent& e) { navigateTo(e.position); }
+void MinimapComponent::mouseDown(const juce::MouseEvent& e) { navigateTo(e.position, true); }
+void MinimapComponent::mouseDrag(const juce::MouseEvent& e) { navigateTo(e.position, false); }
 
 void MinimapComponent::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) {
     if (onZoom)

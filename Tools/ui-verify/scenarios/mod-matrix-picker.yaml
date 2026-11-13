@@ -1,0 +1,43 @@
+# The Mod Matrix's picker lists only what is in view, so the keyboard and a pick must still reach every row.
+#
+# What a user does:
+#   1. Opens a project with an LFO and a plugin (fixture hosted-plugin-mod.agsproj; Apple's AUDelay, listed through the
+#      seeded scan list because test mode does not scan) and shows the matrix.
+#   2. Adds a row and opens its source box: the picker opens; typing narrows it, Return picks, the box shows the LFO.
+#   3. Opens the row's destination box, walks down the list with the arrow keys and presses Return.
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/hosted-plugin-mod.agsproj"}
+  - wait: {}
+  - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - expect: {id: modMatrix, showing: true, within_ms: 2000}
+  - click: {id: addModulation}
+  - wait: {}
+  - expect: {id: modSource, showing: true, within_ms: 2000}
+  - click: {id: modSource}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: modMatrixPicker, name: source-list}
+  - type: {text: lfo}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: source-filtered}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: modDest}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - screenshot: {id: modMatrixPicker, name: dest-walked-down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - screenshot: {id: modMatrix, name: routed}

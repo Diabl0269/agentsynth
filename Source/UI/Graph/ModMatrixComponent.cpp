@@ -1,64 +1,293 @@
 #include "ModMatrixComponent.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Graph/ModMatrixCurveColumn.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Graph/ModMatrixKeyboard.h"
+#include "UI/Graph/ModMatrixLists.h"
+#include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModMatrixPickerCreate.h"
+#include "UI/Graph/ModMatrixRowMotion.h"
+#include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <functional>
 #include <map>
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace {
-// MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
-// relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
-// never auto-wrapped in a fresh attenuverter (Tests/Macros/MacroPortFlowTests.cpp's drop-a-cable tests
-// pin that). A modulation cable through an attenuverter
-// (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter) can still
-// splice a MacroInletModule in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this
-// row's destination combo needs something to show and match against — without changing what the module declares
-// globally (which would resurrect the auto-wrap problem for ordinary drops). Display-only: this never becomes a real
-// ModulationTarget the module advertises anywhere else. A spliced port is always Mono with its one active raw channel
-// at 0 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
-// docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter — the internal jack an AttenuverterChain lands
-// on is never poly-fanned), so channel 0 is the only candidate.
-std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) {
-    auto targets = module->getModulationTargets();
-    if (targets.empty() && dynamic_cast<MacroInletModule*>(module) != nullptr)
-        targets.push_back({"In", 0});
-    return targets;
+using NodeID = juce::AudioProcessorGraph::NodeID;
+using Connection = juce::AudioProcessorGraph::Connection;
+
+using Endpoint = synth::ui::RoutingEndpoint;
+using synth::ui::attenuverterEdge;
+using synth::ui::edgesAround;
+using synth::ui::realEndpointBehindPorts;
+
+/** Moves the attenuverter downstream of every macro inlet its output feeds, so a routing entering a macro
+ *  reads source -> inlet -> attenuverter -> member: the shape a dragged cable builds, and the one that
+ *  keeps the real destination (not the port) on the matrix row. The crossing-plan splice the programmatic
+ *  seam reuses puts the port after the attenuverter instead (the grouping-time shape). */
+void slideAttenuverterPastInlets(juce::AudioProcessorGraph& graph, NodeID atten) {
+    for (;;) {
+        const auto in = attenuverterEdge(graph, atten, true);
+        const auto out = attenuverterEdge(graph, atten, false);
+        if (!in || !out)
+            return;
+        auto* portNode = graph.getNodeForId(out->destination.nodeID);
+        if (portNode == nullptr || dynamic_cast<MacroInletModule*>(portNode->getProcessor()) == nullptr)
+            return;
+        std::vector<Connection> portIn, portOut;
+        edgesAround(graph, portNode->nodeID, portIn, portOut);
+        if (portIn.size() != 1 || portOut.size() != 1)
+            return;
+        const Connection next = portOut.front();
+        graph.removeConnection(*in);
+        graph.removeConnection(*out);
+        graph.removeConnection(next);
+        graph.addConnection({in->source, out->destination});
+        graph.addConnection({next.source, {atten, 0}});
+        graph.addConnection({{atten, 0}, next.destination});
+    }
 }
+
+/** A hash of every module title the combos list. Cheap enough for the 10 Hz tick, and it changes when a
+ *  card is renamed or the auto-numbering shifts, neither of which changes the node count. */
+size_t moduleTitlesSignature(juce::AudioProcessorGraph& graph) {
+    juce::uint64 hash = 1469598103934665603ull;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<ModuleBase*>(node->getProcessor()) == nullptr)
+            continue;
+        hash = (hash ^ node->nodeID.uid) * 1099511628211ull;
+        hash = (hash ^ (juce::uint64)synth::moduleTitle(*node).hashCode64()) * 1099511628211ull;
+    }
+    return (size_t)hash;
+}
+
+/** A combo that shows its closed label as usual but opens the searchable picker instead of a menu. With no
+ *  picker hook wired it falls back to the stock menu. Reachable by keyboard (Return opens it, like any
+ *  combo; Space stays the app's play key) and outlined in the accent colour while focused. */
+class PickerComboBox : public juce::ComboBox {
+public:
+    std::function<void()> onShowPicker;
+
+    void showPopup() override {
+        if (onShowPicker) {
+            // ComboBox::showPopupIfNotActive() raised the private "menu active" flag before calling
+            // this, and only the stock menu's close (or hidePopup) lowers it. The picker replaces that
+            // menu, so lower it here: left raised, every later click and Return is ignored as "already
+            // open", and the panel stops refreshing because the row reads as having a popup up.
+            juce::ComboBox::hidePopup();
+            onShowPicker();
+        } else
+            juce::ComboBox::showPopup();
+    }
+    // The arrows belong to the matrix's grid navigation (ModMatrixKeyboard.h), not to stepping through
+    // the list: a stock combo re-points the routing on every arrow press, one undo step each.
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key == juce::KeyPress::upKey || key == juce::KeyPress::downKey || key == juce::KeyPress::leftKey ||
+            key == juce::KeyPress::rightKey)
+            return false;
+        return juce::ComboBox::keyPressed(key);
+    }
+    void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }
+};
+
+/** The row's amount slider: Up/Down nudge the amount (as on a mixer fader), Left/Right are left to the
+ *  matrix's grid navigation so the slider is never a dead end for the keyboard. */
+class AmountSlider : public juce::Slider {
+public:
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key == juce::KeyPress::leftKey || key == juce::KeyPress::rightKey)
+            return false;
+        return juce::Slider::keyPressed(key);
+    }
+};
 } // namespace
 
-ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr)
+struct ModMatrixComponent::ModRow
+    : public juce::Component
+    , public juce::ComboBox::Listener
+    , public juce::AudioProcessorParameter::Listener {
+    ModRow(ModMatrixComponent& owner, juce::AudioProcessorGraph::NodeID id);
+
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
+    ~ModRow() override;
+
+    void setRowIndex(int index) {
+        if (rowIndex != index)
+            applyRowNames(index);
+        if (rowIndex != index)
+            repaint();
+        rowIndex = index;
+    }
+    // Screen-reader names carry the row number, so VoiceOver says which routing a control belongs to.
+    void applyRowNames(int index);
+    int rowIndex = 0;
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void comboBoxChanged(juce::ComboBox* comboBox) override;
+    void lookAndFeelChanged() override;
+
+    // Re-applies the themed bypass/delete icons; called from the constructor and again from
+    // lookAndFeelChanged() on every theme switch (mirrors ModuleComponent::applyHeaderButtonIcons).
+    void applyButtonIcons();
+
+    ModMatrixComponent& owner;
+    juce::AudioProcessorGraph::NodeID attenuverterId;
+
+    // Keeps the attenuverter's processor alive for at least as long as this row holds parameter
+    // attachments into it. juce::ParameterAttachment's destructor unconditionally calls
+    // parameter.removeListener() on the reference it captured at construction, so the processor
+    // MUST outlive amountAttachment/bypassAttachment — including when the node has already been
+    // removed from the graph (removeModRouting) before updateRowsFromGraph() erases this row.
+    // Graph nodes are reference counted; removeNode() drops the node from the processing list
+    // immediately, and holding this Ptr only defers destruction of the object itself.
+    juce::AudioProcessorGraph::Node::Ptr attenuverterNode;
+
+    PickerComboBox sourceCombo;
+    PickerComboBox destCombo;
+    // The picker currently open for each combo, if any. A combo holds only its selected row: the lists are the panel's.
+    juce::Component::SafePointer<juce::Component> sourcePicker;
+    juce::Component::SafePointer<juce::Component> destPicker;
+    AmountSlider amountSlider;
+    juce::Label amountValueLabel;
+    synth::ui::ModCurveChip curveChip;
+    std::unique_ptr<juce::DrawableButton> bypassToggle;
+    std::unique_ptr<juce::DrawableButton> deleteButton;
+
+    std::unique_ptr<juce::SliderParameterAttachment> amountAttachment;
+    std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
+
+    std::map<int, float> gestureStartValues;
+
+    bool isPopupOpen() const {
+        return sourceCombo.isPopupActive() || destCombo.isPopupActive() || sourcePicker != nullptr ||
+               destPicker != nullptr;
+    }
+    void showPicker(bool forSource);
+
+    void detach();
+    void refresh(const ModRoutingInfo& info, const synth::ConnectionIndex& cables);
+
+    // Re-points the attenuverter's edges and runs the change as ONE undo step.
+    // `claimDest`, when given, picks the destination inside the same undo step; invalid leaves the routing as it was.
+    void reroute(bool sourceChanged, Endpoint source, Endpoint dest, std::function<Endpoint()> claimDest = {});
+    void pickHostedDestination(const synth::ui::HostedDestination& dest);
+    void pickNewSource(const synth::ui::CreateSourcePick& pick);
+    // Runs graph mutations, in order, through the macro-port seam (or plain, in a bare panel) as ONE undo step.
+    void applyRoutingChange(const std::vector<std::function<bool()>>& mutations, bool slideAttenuverter);
+};
+
+ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr, GraphEditor* editor)
     : audioEngine(engine)
-    , undoManager(undoMgr) {
+    , undoManager(undoMgr)
+    , graphEditor(editor)
+    , lists_(std::make_unique<synth::ui::ModMatrixLists>(engine.getGraph())) {
     // Makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
     // succeed deterministically rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's
     // ctor). Also matters here because this component nests INSIDE the "canvas" region (it is a
     // child of GraphEditor) — see FocusRegionRegistry::regionContaining's nesting note.
     setWantsKeyboardFocus(true);
+    setComponentID("modMatrix");
+    addKeyListener(&synth::ui::modMatrixArrowKeys());
+    contentContainer.addKeyListener(&synth::ui::modMatrixArrowKeys());
 
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentContainer);
+    // The row list is a scroll container, not a control: the arrow keys move between its rows'
+    // controls and scroll the focused one into view (ModMatrixKeyboard.cpp).
+    viewport.setWantsKeyboardFocus(false);
 
     addAndMakeVisible(addButton);
-    addButton.setComponentID("addModulation");
+    addButton.setComponentID(synth::ui::modmatrix_ids::kAdd);
+    addButton.setTooltip("Add a modulation routing");
     addButton.onClick = [this] { addModulation(); };
 
     addAndMakeVisible(flatToggle);
     flatToggle.onClick = [this] { setFlatSourceMenu(flatToggle.getToggleState()); };
     flatToggle.setToggleState(isSourceMenuFlat, juce::dontSendNotification);
+    flatToggle.setComponentID(synth::ui::modmatrix_ids::kFlat);
+    flatToggle.setTooltip("List sources in one flat list instead of grouped by category");
 
     startTimerHz(10);
 }
 
-ModMatrixComponent::~ModMatrixComponent() { stopTimer(); }
+ModMatrixComponent::~ModMatrixComponent() {
+    stopTimer();
+    removeKeyListener(&synth::ui::modMatrixArrowKeys());
+    contentContainer.removeKeyListener(&synth::ui::modMatrixArrowKeys());
+}
+
+// A routing change a row is running can splice out a port, and that path clears the panel; freeing the row
+// there would free the code still running. The clear waits for the next refresh instead.
+void ModMatrixComponent::clearRows() {
+    if (routingChangeDepth > 0) {
+        clearPending = true;
+        return;
+    }
+    if (!clearedRows_)
+        clearedRows_ = snapshotRows(); // the rows that come back after the clear are the ones that stay
+    rows.clear();
+    repaint();
+}
+
+std::vector<synth::ui::ExitEnterListRow> ModMatrixComponent::rowMotionRows() const {
+    std::vector<synth::ui::ExitEnterListRow> list;
+    for (size_t i = 0; i < rows.size(); ++i)
+        list.push_back({juce::String(rows[i]->attenuverterId.uid), (float)i * kRowHeight, (float)kRowHeight});
+    return list;
+}
+
+juce::String ModMatrixComponent::getRowSourceComboTextForTest(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)rows.size())
+        return {};
+    return rows[(size_t)rowIndex]->sourceCombo.getText();
+}
+
+juce::String ModMatrixComponent::getRowDestComboTextForTest(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)rows.size())
+        return {};
+    return rows[(size_t)rowIndex]->destCombo.getText();
+}
+
+juce::ComboBox* ModMatrixComponent::getRowSourceComboForTest(int rowIndex) {
+    return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->sourceCombo : nullptr;
+}
+
+std::vector<std::pair<int, juce::String>> ModMatrixComponent::getSourceListForTest() {
+    std::vector<std::pair<int, juce::String>> list;
+    for (const auto& item : lists_->sources())
+        list.emplace_back(item.id, item.text);
+    return list;
+}
+
+juce::ComboBox* ModMatrixComponent::getRowDestComboForTest(int rowIndex) {
+    return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->destCombo : nullptr;
+}
 
 void ModMatrixComponent::setFlatSourceMenu(bool shouldBeFlat) {
     if (isSourceMenuFlat != shouldBeFlat) {
         isSourceMenuFlat = shouldBeFlat;
-        for (auto& row : rows)
-            row->populateCombos();
+        lists_->setFlat(shouldBeFlat);
+        updateRowsFromGraph();
     }
 }
 
@@ -67,7 +296,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     // cast returns null, so we fall back to the legacy literals.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
-    const juce::Colour bgColour = lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1c1e);
+    const juce::Colour bgColour = synth::theme::themeOf(*this).colors.bg1;
     const juce::Colour surfaceHiColour =
         lf != nullptr ? lf->getTheme().colors.surfaceHi : juce::Colours::white.withAlpha(0.1f);
     const juce::Colour surfaceColour =
@@ -90,7 +319,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
 
     g.setColour(textPrimaryColour);
     g.setFont(juce::Font(18.0f, juce::Font::bold));
-    g.drawText("MODULATION MATRIX", titleArea.reduced(10, 0), juce::Justification::centredLeft, true);
+    g.drawText("Modulation Matrix", titleArea.reduced(10, 0), juce::Justification::centredLeft, true);
 
     // Column Headers
     auto headerArea = area.removeFromTop(30);
@@ -104,17 +333,21 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     const float w = (float)area.getWidth();
     const float sourceColW = (w - rowNumColW) * kSourceColFrac;
     const float destColW = (w - rowNumColW) * kDestColFrac;
-    // Headers offset by kRowNumColW for the row numbers; the AMOUNT column deliberately stops
+    // Headers offset by kRowNumColW for the row numbers; the Amount column deliberately stops
     // short of the row's bypass/delete icon columns, leaving that header cell blank.
-    g.drawText("SOURCE", juce::Rectangle<float>(rowNumColW, (float)headerArea.getY(), sourceColW, 30.0f),
+    g.drawText("Source", juce::Rectangle<float>(rowNumColW, (float)headerArea.getY(), sourceColW, 30.0f),
                juce::Justification::centred, true);
-    g.drawText("DESTINATION",
+    g.drawText("Destination",
                juce::Rectangle<float>(rowNumColW + sourceColW, (float)headerArea.getY(), destColW, 30.0f),
                juce::Justification::centred, true);
-    g.drawText("AMOUNT",
+    g.drawText("Amount",
                juce::Rectangle<float>(rowNumColW + sourceColW + destColW, (float)headerArea.getY(),
                                       (w - rowNumColW) * 0.25f, 30.0f),
                juce::Justification::centred, true);
+    synth::ui::mod_matrix_curve::drawHeader(
+        g, juce::Rectangle<float>((float)area.getWidth() - 60.0f - (float)synth::ui::mod_matrix_curve::kColumnWidth -
+                                      (float)kGutter * 0.5f,
+                                  (float)headerArea.getY(), (float)synth::ui::mod_matrix_curve::kColumnWidth, 30.0f));
 
     // Footer separator: hairline above the add/flat-toggle controls, matching the header band's
     // painted treatment so the row list reads as visually distinct from the footer chrome.
@@ -153,10 +386,36 @@ void ModMatrixComponent::resized() {
     }
 }
 
-void ModMatrixComponent::timerCallback() { updateRowsFromGraph(); }
+void ModMatrixComponent::timerCallback() { updateRowsIfOpen(); }
+
+void ModMatrixComponent::updateRowsIfOpen() {
+    if (!isVisible()) {
+        staleWhileClosed_ = true;
+        // The tick also numbers same-type modules app-wide ("LFO 2"); that cheap check runs while closed too.
+        if (const int nodes = audioEngine.getGraph().getNumNodes(); nodes != namedNodeCount_) {
+            audioEngine.updateModuleNames();
+            namedNodeCount_ = nodes;
+        }
+        return;
+    }
+    updateRowsFromGraph();
+}
+
+void ModMatrixComponent::visibilityChanged() {
+    if (isVisible() && std::exchange(staleWhileClosed_, false))
+        updateRowsFromGraph();
+}
 
 void ModMatrixComponent::updateRowsFromGraph() {
+    if (routingChangeDepth > 0)
+        return; // the next tick picks the change up, once the row that made it has returned
+    if (std::exchange(clearPending, false))
+        clearRows();
     auto activeRoutings = audioEngine.getActiveModRoutings();
+    auto before = std::move(clearedRows_);
+    std::vector<juce::String> startKeys;
+    for (const auto& row : before ? before->rows : rowMotionRows())
+        startKeys.push_back(row.key);
 
     // Stable sort by NodeID so row numbers are consistent
     std::sort(activeRoutings.begin(), activeRoutings.end(),
@@ -166,75 +425,73 @@ void ModMatrixComponent::updateRowsFromGraph() {
 
     bool componentsChanged = false;
 
-    // Check for removed rows
+    std::unordered_map<juce::uint32, const AudioEngine::ModRoutingInfo*> routingByAttenuverter;
+    routingByAttenuverter.reserve(activeRoutings.size());
+    for (const auto& routing : activeRoutings)
+        routingByAttenuverter[routing.attenuverterNodeID.uid] = &routing;
+
+    // Rows whose routing has gone leave; a routing with no row gets one.
+    std::unordered_set<juce::uint32> hasRow;
+    hasRow.reserve(rows.size());
     for (int i = (int)rows.size() - 1; i >= 0; --i) {
-        bool found = false;
-        for (const auto& routing : activeRoutings) {
-            if (routing.attenuverterNodeID == rows[i]->attenuverterId) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+        if (routingByAttenuverter.count(rows[(size_t)i]->attenuverterId.uid) == 0) {
+            if (!before && !componentsChanged)
+                before = snapshotRows(); // the picture a removal shrinks away from
             rows.erase(rows.begin() + i);
             componentsChanged = true;
+        } else {
+            hasRow.insert(rows[(size_t)i]->attenuverterId.uid);
         }
     }
-
-    // Check for new or changed rows
     for (const auto& routing : activeRoutings) {
-        bool existingFound = false;
-        for (auto& row : rows) {
-            if (row->attenuverterId == routing.attenuverterNodeID) {
-                row->refresh(routing);
-                existingFound = true;
-                break;
-            }
-        }
-
-        if (!existingFound) {
+        if (hasRow.count(routing.attenuverterNodeID.uid) == 0) {
             auto newRow = std::make_unique<ModRow>(*this, routing.attenuverterNodeID);
-            newRow->populateCombos();
             contentContainer.addAndMakeVisible(*newRow);
             rows.push_back(std::move(newRow));
             componentsChanged = true;
         }
     }
 
-    // Refresh combo items if the number of nodes in graph changed. This must happen BEFORE the
-    // refresh pass below: populateCombos() clears the combo boxes (deselecting them), so a
-    // selection applied first would be wiped and every row's label would go blank until the
-    // next update call.
-    int currentNodeCount = audioEngine.getGraph().getNumNodes();
-    if (currentNodeCount != lastNodeCount) {
+    // A node added or removed, or a module renamed, refreshes the shared lists before the rows read their labels. A
+    // popup a person has open is left alone: the change is picked up on the first tick after it closes, since nothing
+    // is recorded as seen until then.
+    const int currentNodeCount = audioEngine.getGraph().getNumNodes();
+    const bool countChanged = currentNodeCount != lastNodeCount;
+    if (countChanged)
         audioEngine.updateModuleNames();
-        for (auto& row : rows)
-            row->populateCombos();
+    const auto namesSignature = moduleTitlesSignature(audioEngine.getGraph());
+    if ((countChanged || namesSignature != lastNamesSignature) && !anyPopupOpen()) {
+        lists_->invalidate();
         lastNodeCount = currentNodeCount;
+        lastNamesSignature = namesSignature;
     }
 
-    // Assign indices for display
+    // One cable index for the whole tick; every row reads it.
+    const synth::ui::ConnectionIndex cables(audioEngine.getGraph());
     for (int i = 0; i < (int)rows.size(); ++i) {
-        rows[i]->setRowIndex(i);
-        // Find corresponding routing for refresh
-        for (const auto& r : activeRoutings) {
-            if (r.attenuverterNodeID == rows[i]->attenuverterId) {
-                rows[i]->refresh(r);
-                break;
-            }
-        }
+        rows[(size_t)i]->setRowIndex(i);
+        rows[(size_t)i]->refresh(*routingByAttenuverter.at(rows[(size_t)i]->attenuverterId.uid), cables);
     }
 
-    if (componentsChanged) {
+    if (componentsChanged || before) {
         setHoveredRow(-1);
         resized();
         repaint();
+        playRowMotion(std::move(before), startKeys);
     }
+}
+
+bool ModMatrixComponent::anyPopupOpen() const {
+    return std::any_of(rows.begin(), rows.end(), [](const auto& row) { return row->isPopupOpen(); });
 }
 
 void ModMatrixComponent::addModulation() {
     // Just add an unconnected attenuverter node to create an "empty" row
-    audioEngine.addEmptyModRouting();
+    auto add = [this] { audioEngine.addEmptyModRouting(); };
+    if (undoManager)
+        undoManager->recordStructuralChange(audioEngine.getGraph(), add);
+    else
+        add();
     updateRowsFromGraph();
 }
 
@@ -247,6 +504,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(destCombo);
     addAndMakeVisible(amountSlider);
     addAndMakeVisible(amountValueLabel);
+    addAndMakeVisible(curveChip);
 
     bypassToggle = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
     deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
@@ -254,6 +512,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(*deleteButton);
 
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    amountSlider.setWantsKeyboardFocus(true); // juce::Slider turns it off; the amount is a keyboard stop
     amountSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setRange(-1.0, 1.0);
     amountSlider.onValueChange = [this] {
@@ -274,13 +533,29 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 
     sourceCombo.addListener(this);
     destCombo.addListener(this);
+    sourceCombo.onShowPicker = [this] { showPicker(true); };
+    destCombo.onShowPicker = [this] { showPicker(false); };
+    sourceCombo.setComponentID(synth::ui::modmatrix_ids::kSource);
+    destCombo.setComponentID(synth::ui::modmatrix_ids::kDest);
+    amountSlider.setComponentID(synth::ui::modmatrix_ids::kAmount);
+    curveChip.setComponentID(synth::ui::modmatrix_ids::kCurve);
+    synth::ui::mod_matrix_curve::wireChip(curveChip, owner.graphEditor, attenuverterId);
+    sourceCombo.setTooltip("Modulation source. Click to search the modules that can drive this routing.");
+    destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
-        if (owner.undoManager) {
-            owner.undoManager->recordStructuralChange(owner.audioEngine.getGraph(),
-                                                      [this] { owner.audioEngine.removeModRouting(attenuverterId); });
-        } else {
-            owner.audioEngine.removeModRouting(attenuverterId);
-        }
+        // Through the seam so the ports only this routing used go with it; the chain's ports are read before the
+        // cut and swept whatever the auto-delete preference says, as every canvas removal does. Captures by value:
+        // the sweep can rebuild the panel under this row.
+        applyRoutingChange({[&engine = owner.audioEngine, editor = owner.graphEditor, atten = attenuverterId] {
+                               const auto ports = editor != nullptr ? editor->modulationChainPorts(atten)
+                                                                    : std::vector<juce::AudioProcessorGraph::NodeID>{};
+                               engine.removeModRouting(atten);
+                               if (editor != nullptr)
+                                   editor->getMacroController().sweepOneSidedMacroPorts(ports,
+                                                                                        /*ignorePreference=*/true);
+                               return true;
+                           }},
+                           /*slideAttenuverter=*/false);
     };
 
     bypassToggle->setClickingTogglesState(true);
@@ -292,8 +567,10 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
         const auto& colors = lf->getTheme().colors;
         bypassToggle->setColour(juce::DrawableButton::backgroundOnColourId, colors.warning.withAlpha(0.35f));
     }
-    bypassToggle->setComponentID("modBypass");
-    deleteButton->setComponentID("modDelete");
+    bypassToggle->setComponentID(synth::ui::modmatrix_ids::kBypass);
+    deleteButton->setComponentID(synth::ui::modmatrix_ids::kDelete);
+    amountSlider.setTooltip("Modulation amount, from -1 to +1. Up and Down nudge it.");
+    applyRowNames(0);
     applyButtonIcons();
 
     // Attach to attenuverter params
@@ -339,6 +616,7 @@ void ModMatrixComponent::ModRow::resized() {
     destCombo.setBounds(area.removeFromLeft((int)(totalWidth * ModMatrixComponent::kDestColFrac)).reduced(gutter / 2));
     deleteButton->setBounds(area.removeFromRight(30).reduced(gutter / 2));
     bypassToggle->setBounds(area.removeFromRight(30).reduced(gutter / 2));
+    synth::ui::mod_matrix_curve::layoutChip(curveChip, area);
     amountValueLabel.setBounds(area.removeFromRight(36).reduced(gutter / 2));
     amountSlider.setBounds(area.reduced(gutter / 2));
 }
@@ -351,7 +629,7 @@ void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
     juce::Colour rowBg;
     if (isHovered) {
         // Hover: accent at low alpha over the base surface so it works on both even/odd rows.
-        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         rowBg = accentColour.withAlpha(0.10f);
     } else if (ModMatrixComponent::isZebraRow(rowIndex)) {
         // Odd rows: slightly raised surface to distinguish from even rows.
@@ -451,162 +729,260 @@ void ModMatrixComponent::ModRow::parameterGestureChanged(int parameterIndex, boo
     }
 }
 
-void ModMatrixComponent::ModRow::populateCombos() {
-    sourceCombo.clear(juce::dontSendNotification);
-    destCombo.clear(juce::dontSendNotification);
-
-    auto& graph = owner.audioEngine.getGraph();
-    bool useGroups = !owner.isSourceMenuFlat;
-
-    std::map<ModulationCategory, juce::String> categoryNames = {{ModulationCategory::Envelope, "Envelopes"},
-                                                                {ModulationCategory::LFO, "LFOs"},
-                                                                {ModulationCategory::Oscillator, "Oscillators"},
-                                                                {ModulationCategory::Sequencer, "Sequencers"},
-                                                                {ModulationCategory::Filter, "Filters"},
-                                                                {ModulationCategory::FX, "Effects"},
-                                                                {ModulationCategory::Other, "Other"}};
-
-    std::map<ModulationCategory, std::vector<juce::AudioProcessorGraph::Node*>> modulesByCategory;
-
-    for (auto* node : graph.getNodes()) {
-        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
-            modulesByCategory[module->getModulationCategory()].push_back(node);
-        }
-    }
-
-    if (!useGroups) {
-        // Flat list implementation
-        for (auto const& [cat, modules] : modulesByCategory) {
-            for (auto* node : modules) {
-                auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = module->getName();
-
-                for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
-                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
-                    juce::String label = displayName;
-                    if (module->getTotalNumOutputChannels() > 1)
-                        label += " Out " + juce::String(i + 1);
-                    sourceCombo.addItem(label, itemId);
-                }
-
-                auto targets = destinationCandidatesForCombo(module);
-                for (const auto& target : targets) {
-                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                    destCombo.addItem(displayName + ": " + target.name, itemId);
-                }
-            }
-        }
-    } else {
-        // Nested Menu Implementation
-        juce::PopupMenu sourceMenu;
-        juce::PopupMenu destMenu;
-
-        for (auto const& [cat, modules] : modulesByCategory) {
-            juce::PopupMenu catSourceSub;
-            juce::PopupMenu catDestSub;
-            int sourceItems = 0;
-            int destItems = 0;
-
-            for (auto* node : modules) {
-                auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = module->getName();
-
-                if (module->getTotalNumOutputChannels() > 0) {
-                    if (module->getTotalNumOutputChannels() == 1) {
-                        int itemId = (int)((node->nodeID.uid << 8) | 0);
-                        catSourceSub.addItem(itemId, displayName);
-                        sourceCombo.addItem(displayName, itemId);
-                    } else {
-                        juce::PopupMenu instSourceSub;
-                        for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
-                            int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
-                            // The closed-combobox label is resolved purely from this leaf item's own
-                            // text (JUCE never concatenates ancestor submenu titles), so the module
-                            // name must live here too, or a multi-output module's box shows a bare
-                            // "Out N" with no way to tell which module it is.
-                            instSourceSub.addItem(itemId, displayName + " - Out " + juce::String(i + 1));
-                            sourceCombo.addItem(displayName + " Out " + juce::String(i + 1), itemId);
-                        }
-                        catSourceSub.addSubMenu(displayName, instSourceSub);
-                    }
-                    sourceItems++;
-                }
-
-                auto targets = destinationCandidatesForCombo(module);
-                if (!targets.empty()) {
-                    juce::PopupMenu instDestSub;
-                    for (const auto& target : targets) {
-                        int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                        // Same fix as the source leaves above: the closed combo box's label comes
-                        // only from this item's own text, never from the submenu title, so the
-                        // module name has to be baked in here too.
-                        instDestSub.addItem(itemId, displayName + " - " + target.name);
-                        destCombo.addItem(displayName + ": " + target.name, itemId);
-                    }
-                    catDestSub.addSubMenu(displayName, instDestSub);
-                    destItems++;
-                }
-            }
-
-            if (sourceItems > 0)
-                sourceMenu.addSubMenu(categoryNames[cat], catSourceSub);
-            if (destItems > 0)
-                destMenu.addSubMenu(categoryNames[cat], catDestSub);
-        }
-
-        *sourceCombo.getRootMenu() = sourceMenu;
-        *destCombo.getRootMenu() = destMenu;
-    }
+void ModMatrixComponent::ModRow::applyRowNames(int index) {
+    const auto prefix = "Routing " + juce::String(index + 1) + " ";
+    sourceCombo.setTitle(prefix + "source");
+    destCombo.setTitle(prefix + "destination");
+    amountSlider.setTitle(prefix + "amount");
+    bypassToggle->setTitle(prefix + "bypass");
+    synth::ui::mod_matrix_curve::nameChip(curveChip, index);
+    deleteButton->setTitle("Remove routing " + juce::String(index + 1));
 }
 
-void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info) {
-    int srcId = (int)((info.sourceNodeID.uid << 8) | (uint32_t)info.sourceChannelIndex);
-    sourceCombo.setSelectedId(srcId, juce::dontSendNotification);
-    int destId = (int)((info.destNodeID.uid << 8) | (uint32_t)info.destChannelIndex);
-    destCombo.setSelectedId(destId, juce::dontSendNotification);
+namespace {
+int selectedRawId(juce::ComboBox& combo) { return (int)combo.getSelectedIdAsValue().getValue(); }
+
+// The combo holds one row, the selected one: its closed label and all a screen reader needs. Id 0 is no selection.
+void showSelection(juce::ComboBox& combo, int id, const juce::String& label) {
+    if (id == 0 || label.isEmpty()) {
+        if (combo.getNumItems() > 0 || selectedRawId(combo) != 0)
+            combo.clear(juce::dontSendNotification);
+        return;
+    }
+    if (combo.getNumItems() == 1 && combo.getItemId(0) == id && combo.getItemText(0) == label &&
+        selectedRawId(combo) == id)
+        return;
+    combo.clear(juce::dontSendNotification);
+    combo.addItem(label, id);
+    combo.setSelectedId(id, juce::dontSendNotification);
+}
+} // namespace
+
+// Opens the searchable picker over the row's combo. A pick selects the combo's id with a synchronous
+// notification, so it lands in comboBoxChanged exactly like a menu choice would (and through the same
+// macro-port routing). One picker per combo at a time.
+void ModMatrixComponent::ModRow::showPicker(bool forSource) {
+    auto& combo = forSource ? sourceCombo : destCombo;
+    auto& open = forSource ? sourcePicker : destPicker;
+    if (open != nullptr)
+        return;
+
+    // Destinations also list every plugin parameter, modulated or not, always in the same section.
+    auto items = forSource ? owner.lists_->sources() : owner.lists_->destinations();
+    int selected = selectedRawId(combo);
+    // A source no longer listed keeps the row its closed box shows (see refresh).
+    if (forSource && selected != 0 && owner.lists_->sourceLabel(selected).isEmpty())
+        items.push_back({selected, {}, combo.getText()});
+    auto& graph = owner.audioEngine.getGraph();
+    const auto hosted =
+        forSource ? std::map<int, synth::ui::HostedDestination>{} : synth::ui::hostedDestinations(graph);
+    for (const auto& [id, dest] : hosted) {
+        items.push_back({id, "Plugins", dest.label, {}, dest.boundChannel >= 0 ? "Modulated" : ""});
+        if (dest.boundChannel >= 0 && selected == (int)((dest.node.uid << 8) | (uint32_t)dest.boundChannel))
+            selected = id;
+    }
+    juce::Component::SafePointer<ModRow> safeRow(this);
+    juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
+    // A row with a canvas behind it can make a source; a bare panel has nowhere to put the module.
+    if (forSource && owner.graphEditor != nullptr)
+        for (auto& item : synth::ui::createSourceItems())
+            items.push_back(std::move(item));
+    auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
+        forSource ? "source" : "destination", std::move(items), selected,
+        [safeCombo, safeRow, hosted, forSource](int id) {
+            if (safeCombo == nullptr || safeRow == nullptr)
+                return;
+            if (const auto create = synth::ui::createSourcePickFor(id); create && forSource)
+                safeRow->pickNewSource(*create);
+            else if (const auto it = hosted.find(id); it != hosted.end())
+                safeRow->pickHostedDestination(it->second);
+            else
+                safeCombo->setSelectedId(id, juce::sendNotificationSync);
+        });
+    open = picker.get();
+    if (owner.pickerLauncher)
+        owner.pickerLauncher(std::move(picker), combo.getScreenBounds());
+    else
+        synth::ui::launchPopover(std::move(picker), combo.getScreenBounds(), &combo, {.trigger = &combo});
+}
+
+// A routing that crosses a macro border runs through ports only it uses; the row names the real modules
+// behind them (the LFO, not "In 1"), so what a person picked is what they read back and can search for.
+void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info,
+                                         const synth::ConnectionIndex& cables) {
+    ++graph_editor_paint::workCounters().modRowRefreshes;
+    Endpoint source{info.sourceNodeID, info.sourceChannelIndex};
+    Endpoint dest{info.destNodeID, info.destChannelIndex};
+    if (auto* editor = owner.graphEditor) {
+        const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
+        if (const auto real = realEndpointBehindPorts(cables, attenuverterId, /*incoming=*/true, isPort); real.valid())
+            source = real;
+        if (const auto real = realEndpointBehindPorts(cables, attenuverterId, /*incoming=*/false, isPort); real.valid())
+            dest = real;
+    }
+    // A routing saved from a raw channel that is no longer listed (an LFO's hidden pass-through, in a
+    // project from before the list followed the card's jacks) keeps a row of its own, so the box never
+    // goes blank and the routing stays editable.
+    const int sourceId = source.valid() ? (int)((source.node.uid << 8) | (uint32_t)source.channel) : 0;
+    auto sourceLabel = owner.lists_->sourceLabel(sourceId);
+    if (sourceLabel.isEmpty() && source.valid())
+        if (auto* node = owner.audioEngine.getGraph().getNodeForId(source.node))
+            sourceLabel = synth::moduleTitle(*node) + " - Out " + juce::String(source.channel + 1);
+    showSelection(sourceCombo, sourceId, sourceLabel);
+    const int destId = dest.valid() ? (int)((dest.node.uid << 8) | (uint32_t)dest.channel) : 0;
+    showSelection(destCombo, destId, owner.lists_->destinationLabel(destId));
+    curveChip.refresh();
 }
 
 void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {
-    if (comboBox == &sourceCombo || comboBox == &destCombo) {
-        uint32_t srcEncoded = (uint32_t)sourceCombo.getSelectedId();
-        uint32_t destEncoded = (uint32_t)destCombo.getSelectedId();
+    if (comboBox != &sourceCombo && comboBox != &destCombo)
+        return;
+    // By raw id: a pick is usually not the one row the combo holds yet.
+    const auto decode = [](juce::ComboBox& combo) {
+        const auto encoded = (juce::uint32)selectedRawId(combo);
+        return Endpoint{NodeID(encoded >> 8), (int)(encoded & 0xFF)};
+    };
+    const auto source = decode(sourceCombo);
+    const auto dest = decode(destCombo);
+    const int picked = selectedRawId(*comboBox);
+    if (const auto label =
+            comboBox == &sourceCombo ? owner.lists_->sourceLabel(picked) : owner.lists_->destinationLabel(picked);
+        label.isNotEmpty())
+        showSelection(*comboBox, picked, label);
+    if (source.valid() || dest.valid())
+        reroute(comboBox == &sourceCombo, source, dest);
+}
 
-        uint32_t srcNodeId = srcEncoded >> 8;
-        int srcChannel = (int)(srcEncoded & 0xFF);
-
-        uint32_t dstNodeId = destEncoded >> 8;
-        int dstChannel = (int)(destEncoded & 0xFF);
-
-        if (srcNodeId != 0 || dstNodeId != 0) {
-            auto doReroute = [this, srcNodeId, srcChannel, dstNodeId, dstChannel] {
-                auto& graph = owner.audioEngine.getGraph();
-
-                for (auto& conn : graph.getConnections()) {
-                    if (conn.destination.nodeID == attenuverterId && conn.destination.channelIndex == 0) {
-                        graph.removeConnection(conn);
-                        break;
-                    }
-                }
-                if (srcNodeId != 0)
-                    graph.addConnection(
-                        {{juce::AudioProcessorGraph::NodeID(srcNodeId), srcChannel}, {attenuverterId, 0}});
-
-                for (auto& conn : graph.getConnections()) {
-                    if (conn.source.nodeID == attenuverterId && conn.source.channelIndex == 0) {
-                        graph.removeConnection(conn);
-                        break;
-                    }
-                }
-                if (dstNodeId != 0)
-                    graph.addConnection(
-                        {{attenuverterId, 0}, {juce::AudioProcessorGraph::NodeID(dstNodeId), dstChannel}});
-            };
-
-            if (owner.undoManager) {
-                owner.undoManager->recordStructuralChange(owner.audioEngine.getGraph(), doReroute);
-            } else {
-                doReroute();
-            }
-        }
+// The same binding a cable dropped on the card makes: the knob shows and the slot is claimed, with the routing, as one
+// undo step.
+void ModMatrixComponent::ModRow::pickHostedDestination(const synth::ui::HostedDestination& dest) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    if (!synth::ui::canClaimHostedDestination(graph, dest)) {
+        if (editor != nullptr && editor->onStatusMessage)
+            editor->onStatusMessage("This plugin has no free modulation slot");
+        return;
     }
+    auto landed = std::make_shared<Endpoint>();
+    const auto claim = [&graph, editor, dest, landed] {
+        const int channel = dest.paramId.isEmpty() ? dest.boundChannel
+                            : editor != nullptr    ? synth::ui::bindHostedModTarget(*editor, dest.node, dest.paramId)
+                                                   : synth::ui::claimHostedDestination(graph, dest);
+        *landed = channel >= 0 ? Endpoint{dest.node, channel} : Endpoint{};
+        return *landed;
+    };
+    const auto rawSource = (juce::uint32)selectedRawId(sourceCombo);
+    juce::Component::SafePointer<ModRow> self(this);
+    reroute(false, Endpoint{NodeID(rawSource >> 8), (int)(rawSource & 0xFF)}, Endpoint{}, claim);
+    if (self != nullptr && landed->valid()) {
+        const int id = (int)((landed->node.uid << 8) | (uint32_t)landed->channel);
+        showSelection(self->destCombo, id, self->owner.lists_->destinationLabel(id));
+    }
+}
+
+// A new module of the picked type becomes the row's source. The module and the re-pointing share one undo group, so
+// one Cmd+Z removes the module and puts the row back.
+void ModMatrixComponent::ModRow::pickNewSource(const synth::ui::CreateSourcePick& pick) {
+    auto* editor = owner.graphEditor;
+    if (editor == nullptr)
+        return;
+    std::optional<AppUndoManager::ScopedUndoGroup> group;
+    if (owner.undoManager != nullptr)
+        group.emplace(*owner.undoManager);
+    const auto created = synth::ui::createSourceModule(*editor, owner.undoManager, pick);
+    if (created.uid == 0)
+        return;
+    const auto rawDest = (juce::uint32)selectedRawId(destCombo);
+    reroute(true, Endpoint{created, pick.channel}, Endpoint{NodeID(rawDest >> 8), (int)(rawDest & 0xFF)});
+}
+
+void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, Endpoint dest,
+                                         std::function<Endpoint()> claimDest) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    const bool throughPorts = editor != nullptr && editor->getAutoCreateMacroPortsOnDragEnabled();
+
+    if (throughPorts) {
+        // The side the user did not touch may sit behind a port this routing alone uses, and the
+        // combo shows that port. Re-point from the real module behind it, so the old port goes when it
+        // is no longer needed and a fresh one is minted where the new path needs it.
+        const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
+        const auto kept = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/!sourceChanged, isPort);
+        if (kept.valid())
+            (sourceChanged ? dest : source) = kept;
+    }
+
+    // Two steps, because the seam only routes edges that are NEW across the call: tearing the old
+    // edges down first lets it sweep the ports they leave idle, and re-adding both ends afterwards
+    // makes the untouched end a fresh edge too, so it gets a port if the new path needs one.
+    // By value, never `this`: nothing here may reach back into the row once the change has started.
+    const auto atten = attenuverterId;
+    const bool claiming = (bool)claimDest;
+    auto destCell = std::make_shared<Endpoint>(dest);
+    const auto removeEdges = [atten, &graph, claiming, destCell] {
+        if (claiming && !destCell->valid())
+            return true;
+        if (auto edge = attenuverterEdge(graph, atten, true))
+            graph.removeConnection(*edge);
+        if (auto edge = attenuverterEdge(graph, atten, false))
+            graph.removeConnection(*edge);
+        return true;
+    };
+    const auto addEdges = [atten, &graph, source, claiming, destCell] {
+        if (claiming && !destCell->valid())
+            return true;
+        if (source.valid())
+            graph.addConnection({{source.node, source.channel}, {atten, 0}});
+        if (destCell->valid())
+            graph.addConnection({{atten, 0}, {destCell->node, destCell->channel}});
+        return true;
+    };
+    std::vector<std::function<bool()>> mutations;
+    if (claiming)
+        mutations.push_back([destCell, claimDest = std::move(claimDest)] {
+            *destCell = claimDest();
+            return destCell->valid();
+        });
+    mutations.push_back(removeEdges);
+    mutations.push_back(addEdges);
+    applyRoutingChange(mutations, /*slideAttenuverter=*/throughPorts);
+}
+
+// With a canvas behind the panel, the edit goes through the macro-port seam the mixer sends use: the edge
+// and every port it mints or strands are ONE undo step, and the canvas relays out afterwards. A bare panel
+// (headless unit tests) has no macros to honour and does a plain graph edit.
+void ModMatrixComponent::ModRow::applyRoutingChange(const std::vector<std::function<bool()>>& mutations,
+                                                    bool slideAttenuverter) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    if (editor == nullptr) {
+        const auto runAll = [&] {
+            for (const auto& mutation : mutations)
+                mutation();
+        };
+        if (owner.undoManager)
+            owner.undoManager->recordStructuralChange(graph, runAll);
+        else
+            runAll();
+        return;
+    }
+
+    const bool autoPorts = editor->getAutoCreateMacroPortsOnDragEnabled();
+    const auto id = attenuverterId;
+    // The panel outlives its rows; this row may not (a port splice clears the panel), so the depth guard
+    // lives on the panel and only locals are touched from here on.
+    auto& panel = owner;
+    ++panel.routingChangeDepth;
+    const juce::ScopeGuard leave{[&panel] { --panel.routingChangeDepth; }};
+    auto step = [&] {
+        for (const auto& mutation : mutations)
+            editor->getMacroController().applyProgrammaticConnectionChange(autoPorts, mutation);
+        if (slideAttenuverter)
+            slideAttenuverterPastInlets(graph, id);
+        editor->updateComponents();
+    };
+    if (owner.undoManager)
+        owner.undoManager->recordGraphAndMacroChange(graph, editor->getMacros(), step);
+    else
+        step();
 }

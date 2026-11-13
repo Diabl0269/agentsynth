@@ -18,6 +18,10 @@ There are two ways timeline data could reach the app, and exactly one of them is
 | The **patch grammar** — a `"timeline"` key inside a patch suggestion | **Closed, permanently** | `validatePatch(trusted=false)` refuses it (`TimelineNotAllowed`, see [reserved keys](patch-format.md#reserved-keys-and-forward-compatibility)). A patch is applied to the graph; a timeline is not part of a graph. |
 | The **tools** — the discrete app-side timeline operations (add-track, place-clips, write-lane, place-midi-clip) | **Open, guarded** | Each payload goes through `validateTimeline` before it touches `TimelineDoc`. |
 
+The one tool that builds graph-side, `addInstrumentTrack`, binds only the `Track In` it creates
+itself and runs the app's own track build; `Track In` stays non-authorable in patches (see
+[timeline ops](timeline-ops.md#addinstrumenttrack)).
+
 The open door is a separate guarded entrance, *not* a relaxation of the patch path. Pinned by
 `TimelineValidatorTest.PatchGrammarStillRefusesTimelineData`, which takes a document this validator
 accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
@@ -120,6 +124,8 @@ because the mechanism next to it enforces it, not because a prompt asks nicely.
 |---|---|---|
 | MIDI notes | `placeClips` note lists, or `.mid` blobs via `placeMidiClip` | note caps, pitch/velocity/channel ranges REJECTED not clamped; blob at most 256 KiB, PPQ-only SMF parsed by `MidiClipFile`, a format that structurally cannot carry a path, a plugin id, or code |
 | Automation lanes | `writeLane` | values validated against the **live** parameter's range intersected with the lane snapshot; `(nodeUuid, paramId)` must resolve against the live graph, so untrusted input can never author an orphan |
+| Tempo and markers | `setTempo`, `addMarker` | `bpm` 40-220 and marker names 1-40 characters, beats within `kMaxPpqUntrusted`, all REJECTED not clamped; closed objects (no colour, no time signature); the tempo only ever changes through a host inside the batch's one undo step |
+| Sections | `makeSection`, `placeSection` | names 1-40 characters, beats within `kMaxPpqUntrusted`, closed objects, REJECTED not clamped; a name made twice, an unknown name, an overlap and the section/placement caps reject the batch; no colour field (the palette picks) |
 | Doc-only tracks | `addTrack`, kinds `midi` and `automation` only | unbound: wiring a Track In or Track Audio node stays a user gesture |
 
 **What AI output may never touch, and why:**

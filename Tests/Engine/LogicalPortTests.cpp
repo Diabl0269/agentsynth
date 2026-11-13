@@ -301,7 +301,7 @@ TEST(LogicalPortTests, DualIOExposesSeparateLeftRightJacks) {
     setDualIOParam(delay, true);
 
     // Left + Right, then the three CV jacks (Time/Feedback/Mix) behind them.
-    EXPECT_EQ(delay.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 7);
     auto left = delay.mapInputChannel(0);
     auto right = delay.mapInputChannel(1);
     EXPECT_EQ(left.visibleJackIndex, 0);
@@ -322,4 +322,13 @@ TEST(LogicalPortTests, DistortionCvJacksShiftWhenStereoCollapses) {
     setDualIOParam(dist, true);
     drive = dist.mapInputChannel(2);
     EXPECT_EQ(drive.visibleJackIndex, 2);
+}
+
+// Regression test for FRO794: the Level jack's first head was the legacy alias raw 1, which is no modulation
+// target, so a source dropped on the Level knob wired a plain cable the card never showed.
+TEST(LogicalPortTests, NoiseCVJacksHeadOnTheirModulationTargetChannels) {
+    NoiseModule noise;
+    EXPECT_EQ(noise.getJackTargets(0, true).front().rawHeadChannel, 8);
+    EXPECT_EQ(noise.getJackTargets(1, true).front().rawHeadChannel, 9);
+    EXPECT_EQ(noise.getJackTargets(1, true).size(), 1u);
 }

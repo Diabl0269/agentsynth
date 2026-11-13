@@ -118,6 +118,39 @@ TEST_F(GraphEditorTest, ModuleTitleRenameIsUndoable) {
     EXPECT_EQ(editor.getModuleDisplayName(liveId), "First Name") << "undo restores the previous title";
 }
 
+// Regression test: the first rename of a card (no title before it) left no visible undo step, because the snapshot
+// restore skipped a node whose snapshot carried no "displayName" instead of clearing the title it had gained.
+TEST_F(GraphEditorTest, FirstModuleTitleRenameThroughTheCardUndoesAndRedoes) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    const auto numbered = comp->cardTitle();
+
+    comp->beginTitleRename();
+    auto* ed = dynamic_cast<juce::TextEditor*>(comp->findChildWithID("moduleTitleRenameEditor"));
+    ASSERT_NE(ed, nullptr);
+    ed->setText("Shimmer", juce::dontSendNotification);
+    comp->finishTitleRename(true);
+    ASSERT_EQ(graph.getNodes().size(), 1);
+    const auto liveId = graph.getNodes().getFirst()->nodeID;
+    ASSERT_EQ(editor.getModuleDisplayName(liveId), "Shimmer");
+
+    ASSERT_TRUE(undoMgr.undo());
+    EXPECT_EQ(editor.getModuleDisplayName(graph.getNodes().getFirst()->nodeID), "") << "undo clears the first title";
+    ASSERT_TRUE(undoMgr.redo());
+    EXPECT_EQ(editor.getModuleDisplayName(graph.getNodes().getFirst()->nodeID), "Shimmer") << "redo re-applies it";
+    (void)numbered;
+}
+
 TEST_F(GraphEditorTest, ModuleTitleRenameDoesNotArmABodyDrag) {
     // The double-click must be intercepted BEFORE the drag is armed, or bodyDragActive stays set
     // under an open editor and the next stray mouseDrag walks the card off under the cursor.

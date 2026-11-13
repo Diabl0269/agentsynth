@@ -119,6 +119,7 @@ bool TimelineDoc::resizeClip(ClipId id, double newLengthBeats) {
 
     return applyMutation([&] {
         clip->lengthBeats = newLengthBeats; // length doesn't participate in the clip ordering
+        syncLinkedClips(*clip);             // a linked clip's length is shared content
         return true;
     });
 }
@@ -156,6 +157,197 @@ bool TimelineDoc::setClipMuted(ClipId id, bool muted) {
     });
 }
 
+bool TimelineDoc::setClipStepsPerBar(ClipId id, int stepsPerBar) {
+    if (!Clip::isValidStepsPerBar(stepsPerBar))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->stepsPerBar == stepsPerBar)
+        return true;
+
+    return applyMutation([&] {
+        clip->stepsPerBar = stepsPerBar;
+        syncLinkedClips(*clip); // the drum grid's resolution is shared content
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipSwing(ClipId id, double swing) {
+    if (!std::isfinite(swing) || !Clip::isValidSwing(swing))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->swing == swing)
+        return true;
+
+    return applyMutation([&] {
+        clip->swing = swing;
+        syncLinkedClips(*clip); // swing is shared content, like the grid's resolution
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipHumanise(ClipId id, double amount) {
+    if (!std::isfinite(amount) || !Clip::isValidHumanise(amount))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->humanise == amount)
+        return true;
+
+    return applyMutation([&] {
+        clip->humanise = amount;
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
+namespace {
+// The drum row for `pitch`, inserted in pitch order when missing (a fresh row follows the clip).
+Clip::DrumRow& drumRowFor(Clip& clip, int pitch) {
+    auto it = std::lower_bound(clip.drumRows.begin(), clip.drumRows.end(), pitch,
+                               [](const Clip::DrumRow& row, int p) { return row.pitch < p; });
+    if (it == clip.drumRows.end() || it->pitch != pitch) {
+        Clip::DrumRow row;
+        row.pitch = pitch;
+        it = clip.drumRows.insert(it, row);
+    }
+    return *it;
+}
+
+// Drops the entry for `pitch` once both of its settings are back to following the clip.
+void pruneDrumRow(Clip& clip, int pitch) {
+    const auto it = std::find_if(clip.drumRows.begin(), clip.drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if (it != clip.drumRows.end() && it->lengthSteps == 0 && it->swing < 0.0)
+        clip.drumRows.erase(it);
+}
+} // namespace
+
+bool TimelineDoc::setClipRowLength(ClipId id, int pitch, int lengthSteps) {
+    if (pitch < 0 || pitch > 127 || !Clip::isValidRowLength(lengthSteps))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const auto it = std::find_if(clip->drumRows.begin(), clip->drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if ((it == clip->drumRows.end() ? 0 : it->lengthSteps) == lengthSteps)
+        return true;
+
+    return applyMutation([&] {
+        drumRowFor(*clip, pitch).lengthSteps = lengthSteps;
+        pruneDrumRow(*clip, pitch);
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipRowSwing(ClipId id, int pitch, double swing) {
+    if (pitch < 0 || pitch > 127 || !std::isfinite(swing))
+        return false;
+    if (swing >= 0.0 && !Clip::isValidSwing(swing))
+        return false;
+    if (swing < 0.0)
+        swing = -1.0;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const auto it = std::find_if(clip->drumRows.begin(), clip->drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if ((it == clip->drumRows.end() ? -1.0 : it->swing) == swing)
+        return true;
+
+    return applyMutation([&] {
+        drumRowFor(*clip, pitch).swing = swing;
+        pruneDrumRow(*clip, pitch);
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible) {
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    scale = normaliseClipScale(scale);
+    if (clip->scale == scale && clip->scaleVisible == visible)
+        return true;
+
+    // Not synced across a link group: the scale is how one piano roll views the clip, not its content.
+    return applyMutation([&] {
+        clip->scale = scale;
+        clip->scaleVisible = visible;
+        return true;
+    });
+}
+
+// Clamped to 0..127 and swapped if reversed; nullopt clears it. Not synced across a link group, like the scale.
+bool TimelineDoc::setClipNoteRange(ClipId id, std::optional<std::pair<int, int>> range) {
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    range = detail::normaliseNoteRange(range);
+    if (clip->noteRange == range)
+        return true;
+    return applyMutation([&] {
+        clip->noteRange = range;
+        return true;
+    });
+}
+
+namespace {
+// Adds or removes `pitch` in a sorted, unique list. Returns false when nothing changed.
+bool setPitchMembership(std::vector<int>& list, int pitch, bool member) {
+    const auto it = std::lower_bound(list.begin(), list.end(), pitch);
+    const bool present = it != list.end() && *it == pitch;
+    if (present == member)
+        return false;
+    if (member)
+        list.insert(it, pitch);
+    else
+        list.erase(it);
+    return true;
+}
+} // namespace
+
+bool TimelineDoc::setClipPitchMuted(ClipId id, int pitch, bool muted) {
+    if (pitch < 0 || pitch > 127)
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const bool present = std::binary_search(clip->mutedPitches.begin(), clip->mutedPitches.end(), pitch);
+    if (present == muted)
+        return true;
+
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->mutedPitches, pitch, muted);
+        syncLinkedClips(*clip);
+        return changed;
+    });
+}
+
+bool TimelineDoc::setClipPitchSoloed(ClipId id, int pitch, bool soloed) {
+    if (pitch < 0 || pitch > 127)
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const bool present = std::binary_search(clip->soloPitches.begin(), clip->soloPitches.end(), pitch);
+    if (present == soloed)
+        return true;
+
+    return applyMutation([&] {
+        const bool changed = setPitchMembership(clip->soloPitches, pitch, soloed);
+        syncLinkedClips(*clip);
+        return changed;
+    });
+}
+
 std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) { return splitClipImpl(id, atBeat, 0.0); }
 
 // `secondsPerBeat` 0 is splitClip's documented behaviour: the right half's sourceStartSeconds is
@@ -187,6 +379,9 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
 
         clip->notes = std::move(leftNotes);
         clip->lengthBeats = atBeat;
+        // Neither half is the content the group shares any more, so both leave it (the right half
+        // starts unlinked); a member left alone is unlinked by dissolveLoneLinkGroups.
+        clip->linkGroup = 0;
 
         Clip right;
         right.id = ClipId{nextClipId++};
@@ -209,6 +404,16 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         // own muted flag rides along in the struct copies above, including the straddling note's
         // two halves.
         right.muted = clip->muted;
+        right.stepsPerBar = clip->stepsPerBar;
+        right.swing = clip->swing;
+        right.humanise = clip->humanise;
+        right.drumRows = clip->drumRows;
+        right.mutedPitches = clip->mutedPitches;
+        right.soloPitches = clip->soloPitches;
+        right.scale = clip->scale;
+        right.scaleVisible = clip->scaleVisible;
+        right.noteRange = clip->noteRange;
+        right.stretchOrigin = clip->stretchOrigin;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -262,6 +467,8 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
         // untouched — the survivor's state is the one that survives — while each merged note keeps
         // its own muted flag through the struct copies above.
         clipA->fadeOutBeats = clipB->fadeOutBeats;
+        // The glued clip is new content, so it leaves its link group (b's group loses b with it).
+        clipA->linkGroup = 0;
 
         // Erase b last: clipA and clipB alias the same vector, but nothing above dereferences
         // clipA or clipB again after this.
@@ -270,16 +477,24 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
     });
 }
 
-ClipId TimelineDoc::duplicateClip(ClipId id) {
+ClipId TimelineDoc::duplicateClip(ClipId id) { return duplicateClipImpl(id, false); }
+
+// `linked` is duplicateClipLinked: the copy joins the source's link group, which is created (from
+// the clip-id counter, see TimelineDocLinkedClips.cpp) when the source is not linked yet. Audio
+// clips are never linked, so a linked duplicate of one is refused.
+ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
     Track* owner = nullptr;
     auto* clip = findClip(id, &owner);
-    if (clip == nullptr)
+    if (clip == nullptr || (linked && clip->assetRef.isNotEmpty()))
         return {};
     if (static_cast<int>(owner->clips.size()) >= kMaxClipsPerTrack)
         return {};
 
     return applyMutation([&] {
+        if (linked && clip->linkGroup == 0)
+            clip->linkGroup = nextClipId++;
         Clip dup;
+        dup.linkGroup = linked ? clip->linkGroup : 0;
         dup.id = ClipId{nextClipId++};
         dup.name = clip->name;
         dup.startBeat = clip->startBeat + clip->lengthBeats;
@@ -294,6 +509,16 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         // Copied field by field rather than by struct assignment (the ids must not be), so `muted`
         // has to be listed here explicitly — a duplicate of a muted clip is muted.
         dup.muted = clip->muted;
+        dup.stepsPerBar = clip->stepsPerBar;
+        dup.swing = clip->swing;
+        dup.humanise = clip->humanise;
+        dup.drumRows = clip->drumRows;
+        dup.mutedPitches = clip->mutedPitches;
+        dup.soloPitches = clip->soloPitches;
+        dup.scale = clip->scale;
+        dup.scaleVisible = clip->scaleVisible;
+        dup.noteRange = clip->noteRange;
+        dup.stretchOrigin = clip->stretchOrigin;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;
@@ -321,8 +546,25 @@ bool TimelineDoc::setClipAsset(ClipId id, const juce::String& assetRef, double s
         return true; // already there: no revision bump, no notification
 
     return applyMutation([&] {
+        // A clip pointed at another asset no longer plays what the origin was stretched into.
+        if (clip->assetRef != assetRef)
+            clip->stretchOrigin = std::nullopt;
         clip->assetRef = assetRef;
         clip->sourceStartSeconds = sourceStartSeconds;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipStretchOrigin(ClipId id, const std::optional<Clip::StretchOrigin>& origin) {
+    if (origin && !detail::isValidStretchOrigin(*origin))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->stretchOrigin == origin)
+        return true;
+    return applyMutation([&] {
+        clip->stretchOrigin = origin;
         return true;
     });
 }

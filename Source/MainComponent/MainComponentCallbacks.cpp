@@ -5,38 +5,31 @@
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentInternal.h"
+#include "MainComponentShortcutHints.h"
+#include "PatchSaveLocation.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MeterColourStops.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Theme/ControlStyleOverride.h"
 #include <cmath>
 
 namespace {
+constexpr const char* kControlStyleSeenProperty =
+    "controlStyleByTypeSeen"; // GraphEditor property: the setting text its cards last saw
 
 // The file filter both patch dialogs use. A `.agsproj` project bundle only exists in a build that
 // has the timeline compiled in — offering it otherwise would let a user save a "project" whose
 // timeline half can never be non-empty.
 constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
-// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default.
-// Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
-// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
-// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
-// asset policy.
-constexpr const char* kExportsFolderName = "Exports";
-constexpr const char* kPatchesFolderName = "Patches";
-// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
-// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
-// other save/open dialog defaults to.
-juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
-    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
-        auto dir = currentBundleDir.getChildFile(subFolderName);
-        dir.createDirectory();
-        return dir;
-    }
-    return synth::ProjectBundle::getDefaultProjectsDirectory();
-}
-
 } // namespace
+
+using detail::kExportsFolderName;
+using detail::resolveExportSubdirectory;
 
 /** Pushes the saved "split L/R jacks" preference onto the patch the app just opened with.
  *  Must run AFTER AudioEngine::initialise() has built it — the preset loader constructs its
@@ -116,6 +109,11 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
             isDirty_ = nowDirty;
             notifyDocumentTitleChanged();
         }
+        // Every recorded edit lands here, including a cable patched on the canvas, which rebuilds no
+        // components and so never reaches onGraphStructureChanged: a lane's modulator rows follow it,
+        // and so do the mixer's inserts (a module patched into a track's chain shows at once).
+        timelinePanel.refreshModulators();
+        bottomDock.rebuildIfStaleMixerViews();
         return;
     }
 
@@ -125,7 +123,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
+        applyTimelineTransportPreferences();
         applyMidiRemotePreferences();
+        applyTelemetryPreference();
+        applyToolbarLabelPreference();
         // A live Preferences placement change applies immediately, no restart --
         // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
         // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
@@ -163,6 +164,24 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
             synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
         bottomDock.getMixerPanel().repaint();
         timelinePanel.repaint();
+        // Knob style: re-read on every write, but only re-skin when it really changed (a knob is
+        // painted into each card's cached image, so a plain repaint of the window is not enough --
+        // sendLookAndFeelChange() re-rasters them, and also reaches a mixer / MIDI Remote panel that
+        // lives in a detached window).
+        const auto knobAppearance = synth::theme::loadKnobAppearance(*appProperties.getUserSettings());
+        if (!(knobAppearance == lookAndFeel->getKnobAppearance())) {
+            lookAndFeel->setKnobAppearance(knobAppearance);
+            if (auto* top = getTopLevelComponent())
+                top->sendLookAndFeelChange();
+            bottomDock.getMixerPanel().sendLookAndFeelChange();
+            bottomDock.getMidiRemotePanel().sendLookAndFeelChange();
+        }
+        // Per-module-type control styles: cards repaint only when the stored text really changed.
+        const auto byType = appProperties.getUserSettings()->getValue(synth::theme::controlStyleByTypeKey());
+        if (graphEditor.getProperties()[kControlStyleSeenProperty].toString() != byType) {
+            graphEditor.getProperties().set(kControlStyleSeenProperty, byType);
+            synth::refreshAllControlStyles(graphEditor);
+        }
         return;
     }
 
@@ -171,6 +190,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
     if (auto* top = getTopLevelComponent())
         top->sendLookAndFeelChange();
+    syncWindowBackground();
     // A detached Timeline/Mixer/MIDI Remote window is its OWN top-level Component -- the
     // sendLookAndFeelChange() above never reaches it, so without this a theme switch made while a
     // panel is detached left its background/header icon on whichever theme was active when it was
@@ -200,6 +220,8 @@ void MainComponent::globalFocusChanged(juce::Component*) {
 }
 
 void MainComponent::timerCallback() {
+    // Cmd-hold shortcut hints: the backstop that notices Cmd on the timer we already run (no timer of its own at rest).
+    synth::ui::sampleMainWindowShortcutHints(shortcutHints_.get(), juce::ModifierKeys::getCurrentModifiersRealtime());
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 
@@ -220,8 +242,8 @@ void MainComponent::timerCallback() {
     // The audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
     // still open when the transport stops (the user hit Space rather than the record button) commits
     // down the same path. Capture itself starts at the Record-on click, not here; the pre-roll is
-    // trimmed at commit time from the tap's own sample-accurate anchor.
-    if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
+    // trimmed at commit time from each capture's own sample-accurate anchor.
+    if (wasTransportPlaying_ && !position.playing && !audioTakes_.empty())
         commitAudioRecording();
 
     // A device/sample-rate change strands whatever take was rolling — unlike the two commit-
@@ -230,10 +252,10 @@ void MainComponent::timerCallback() {
     // once here (exchange-back-to-false, same contract as consumeFeedbackGuardTripped) and routed
     // through the SAME commit choke points a manual Record-off or a transport stop already use — see
     // AudioEngine::handleStreamFormatChange, which is what actually sets the flag, at the moment of
-    // the change. At most one of the two checks below ever fires: recording never runs both an audio
-    // and a MIDI take at once (first-armed-wins — see onRecordToggled).
+    // the change. Both checks can fire: an audio take can run beside MIDI takes on tracks with their
+    // own input (see handleRecordToggle).
     if (audioEngine.consumeFormatChangedDuringCapture()) {
-        if (audioTake_.capturing)
+        if (!audioTakes_.empty())
             commitAudioRecording();
         if (midiRecorder.isRecording())
             commitMidiRecording();
@@ -245,6 +267,8 @@ void MainComponent::timerCallback() {
     // must be allowed to autosave immediately, not wait for the take flag to clear on some later
     // tick, and a take still genuinely in flight must still block it.
     maybeAutosave();
+
+    pollTransportEdits(juce::Time::getMillisecondCounter());
 
     // Polls BounceRunner/StemRunner's progress onto the dialog's progress bar - on the SAME 10 Hz
     // driver as everything else here, rather than a second timer just for this. exportDialog_ is a
@@ -258,6 +282,17 @@ void MainComponent::timerCallback() {
             exportDialog_->reportProgress(stemRunner_->getProgress());
     }
 
+    // A record waiting for Play (Preferences: Record does not start playback) begins its take once the transport
+    // rolls; one cancelled by other means (the indicator went off) is dropped.
+    if (recordPendingPlay_) {
+        if (!timelinePanel.getTransportBar().getRecordButton().getToggleState())
+            recordPendingPlay_ = false;
+        else if (position.playing) {
+            recordPendingPlay_ = false;
+            handleRecordToggle(true);
+        }
+    }
+
     wasTransportPlaying_ = position.playing;
 
     // Clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
@@ -266,47 +301,34 @@ void MainComponent::timerCallback() {
     // tick while recording costs nothing once the pre-roll has already ended. An audio take's
     // pre-roll rides the same rule, ending at its own punch-in beat.
     if ((midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat()) ||
-        (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
+        (!audioTakes_.empty() && position.ppq >= audioTakes_.front().punchInBeat))
         audioEngine.getMetronome().setForcedOn(false);
 
-    // The input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
-    // should be on; none armed -> off. A guard trip (audioEngine.consumeFeedbackGuardTripped(),
-    // consumed exactly once here) latches monitoring off for as long as the SAME arm state
-    // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
-    // that is exactly the false->true edge of "is any Audio track armed" below. See
-    // docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
-    bool anyAudioTrackArmed = false;
-    for (const auto& track : timelineDoc.getTracks()) {
-        if (track.kind == synth::TrackKind::Audio && track.armed) {
-            anyAudioTrackArmed = true;
-            break;
-        }
-    }
-    if (anyAudioTrackArmed && !wasAnyAudioTrackArmed_)
-        feedbackGuardLatched_ = false; // the reset gesture: disarmed, then armed again
-    wasAnyAudioTrackArmed_ = anyAudioTrackArmed;
-
-    if (audioEngine.consumeFeedbackGuardTripped()) {
-        feedbackGuardLatched_ = true;
+    // Live input. Each Audio track monitors its own input in the engine (TrackInputMonitor); what this poll keeps
+    // honest is the "Record is on" flag Auto monitoring reads (handleRecordToggle raises it before the transport
+    // rolls; this lowers it once nothing records any more), and it names every guard trip once: a track whose
+    // input clipped too long, and the hand-patched Audio Input module's engine-wide guard.
+    // See docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
+    audioEngine.setRecordingEngaged(recordPendingPlay_ || isRecordingActive());
+    audioEngine.consumeMonitorGuardTrips([this](std::int64_t trackId) {
+        if (const auto* track = timelineDoc.getTrack(synth::TrackId{trackId}))
+            statusBar.showMessage(track->name + " input muted - sustained clipping");
+    });
+    if (audioEngine.consumeFeedbackGuardTripped())
         statusBar.showMessage("Input muted - sustained clipping (feedback protection)");
-    }
-
-    audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
 
     // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
-    // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
+    // what it did before). This is what starts/stops the playhead's playing-only display-rate strip
     // repaint; see docs/layout/animation.md.
     //
-    // timelinePanel is nested inside bottomDock (the Timeline/Mixer tab
-    // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
-    // dock is open" -- AND bottomDock.isVisible(), composing both local flags without walking up
-    // to a real OS peer, matching bottomDock's own isMixerTabActive() && isVisible() gate for the
-    // meters just below. Deliberately not isShowing(): it additionally requires the ROOT
+    // isTimelineShowing() is the meters' isMixerShowing() shape: the Timeline tab of a showing dock, its
+    // own window, or the main area (on screen whether or not the dock is), composed from local flags
+    // without walking up to a real OS peer. Deliberately not isShowing(): it additionally requires the ROOT
     // component to have a real Desktop peer (juce::Component::isShowing()'s own implementation),
     // which is never true in a headless test -- this codebase's own tests construct MainComponent
     // without ever calling addToDesktop().
-    if (timelinePanel.isVisible() && bottomDock.isVisible()) {
+    if (bottomDock.isTimelineShowing()) {
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
         // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
         // that actually separates "rendered" from "heard".
@@ -314,21 +336,10 @@ void MainComponent::timerCallback() {
         const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
         timelinePanel.updateFromTransport(position, outputLatencySeconds);
 
-        // The clip lane's growing recording strip, on the same poll. Cheap and a no-op when
-        // nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecording() internally
-        // repaints only when new peak buckets actually arrived (see its own comment), never merely
-        // because the transport tick moved.
-        synth::ui::TimelineClipLaneArea::LiveRecordingInfo liveInfo;
-        if (audioTake_.capturing) {
-            if (auto* tap = findMasterRecordTap()) {
-                liveInfo.active = true;
-                liveInfo.track = audioTake_.track;
-                liveInfo.punchBeat = audioTake_.punchInBeat;
-                liveInfo.currentBeat = position.ppq;
-                liveInfo.tap = tap;
-            }
-        }
-        timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
+        // The clip lane's growing recording strips, one per take, on the same poll. Cheap and a
+        // no-op when nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecordings()
+        // repaints only when new peak buckets actually arrived, never merely because the transport moved.
+        updateLiveRecordingStrips(position.ppq);
     }
 
     // The mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
@@ -416,7 +427,37 @@ void MainComponent::installHostedPluginObservers() {
             // are stale for exactly the same reason a runtime change leaves them stale.
             rebuildGraphForLatencyChange();
         };
+        hosted->onModSlotsUnresolved = [this, nodeId = node->nodeID](const juce::StringArray& paramIds) {
+            removeUnresolvedHostedModCables(nodeId, paramIds);
+        };
     }
+}
+
+// The plugin was replaced or updated and some modulated parameters no longer exist. Their cables would drive
+// nothing, so they go, as ONE undo step, and a toast says so with an Undo (putting the old plugin back first makes
+// the restored cables live again). Cables on parameters that still exist were kept by the module itself.
+void MainComponent::removeUnresolvedHostedModCables(juce::AudioProcessorGraph::NodeID nodeId,
+                                                    const juce::StringArray& paramIds) {
+    auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    auto* hosted = node != nullptr ? dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) : nullptr;
+    if (hosted == nullptr)
+        return;
+    std::vector<juce::AudioProcessorGraph::NodeID> doomed;
+    for (const auto& routing : audioEngine.getActiveModRoutings())
+        if (routing.destNodeID == nodeId && paramIds.contains(hosted->modSlotParamId(routing.destChannelIndex)))
+            doomed.push_back(routing.attenuverterNodeID);
+    if (doomed.empty())
+        return;
+
+    undoManager.recordGraphAndMacroChange(audioEngine.getGraph(), graphEditor.getMacros(), [this, &doomed] {
+        for (const auto atten : doomed)
+            audioEngine.removeModRouting(atten);
+    });
+    graphEditor.updateComponents();
+    const int count = (int)doomed.size();
+    toast_->show((count == 1 ? juce::String("Removed 1 mod cable") : "Removed " + juce::String(count) + " mod cables") +
+                     ": the plugin no longer has that parameter",
+                 "Undo", [this] { undoManager.undo(); }, "Put the mod cables back");
 }
 
 /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
@@ -450,6 +491,7 @@ void MainComponent::aiPatchAboutToApply() {
 
 void MainComponent::aiPatchApplied() {
     aiApplyScope.reset();
+    ensureCanvasShowing();
     // The graph is fully applied by the time this fires (on the initial apply AND on undo/redo,
     // which reuse this pair as their restore hooks), so bindings can be reconciled straight away —
     // no need to wait for the async updateComponents() below.
@@ -520,6 +562,7 @@ void MainComponent::loadPresetGuarded(int index, bool isNewDocument) {
             audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
         setCurrentPatchName(presets[(size_t)index].name);
         statusBar.showMessage("Loaded: " + presets[(size_t)index].name);
+        countUsage(synth::telemetry::Feature::PresetLoaded); // a user loaded a factory preset
         hideWelcomeScreen();
     });
 }
@@ -534,6 +577,13 @@ void MainComponent::loadPresetGuarded(int index, bool isNewDocument) {
 // unchanged.
 void MainComponent::openRecentProjectGuarded(const juce::File& file) {
     guardUnsavedChanges("Opening a recent project", [this, file] { openFromFile(file); });
+}
+
+// A project handed to the app from outside (a command-line argument, or the OS opening a file with it).
+// The same guarded path as every other Open, so unsaved changes are asked about first; a successful bundle
+// load hides the welcome screen itself (loadBundleFromFile / loadAutosaveFromFile).
+void MainComponent::openProjectFromCommandLine(const juce::File& bundle) {
+    guardUnsavedChanges("Opening a project", [this, bundle] { openFromFile(bundle); });
 }
 
 // Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
@@ -560,8 +610,7 @@ void MainComponent::openProjectFromFile() {
 // guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
 // picked a file.
 void MainComponent::launchOpenPresetChooser() {
-    fileChooser = std::make_unique<juce::FileChooser>("Load Patch", synth::ProjectBundle::getDefaultProjectsDirectory(),
-                                                      "*.json");
+    fileChooser = std::make_unique<juce::FileChooser>("Load Patch", patchDialogDirectory(), "*.json");
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
@@ -652,13 +701,21 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
 // open.
 void MainComponent::exportPatchOnly(const juce::File& file) {
     graphEditor.savePreset(file);
+    countUsage(synth::telemetry::Feature::PresetSaved); // a user exported a patch file
     statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
+}
+
+// The folder the patch dialogs (Open Patch..., Export Patch Only...) start in, per the "Patch save
+// location" preference (synth::PatchSaveLocation): the open project's Patches folder, the shared
+// one, or the user's own; per-project falls back to the shared folder while no project is saved.
+juce::File MainComponent::patchDialogDirectory() {
+    return synth::PatchSaveLocation::resolveFromSettings(appProperties.getUserSettings(), currentBundleDir_,
+                                                         synth::ProjectBundle::getDefaultProjectsDirectory());
 }
 
 // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
 void MainComponent::promptExportPatchOnly() {
-    const auto suggested =
-        resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");
+    const auto suggested = patchDialogDirectory().getChildFile(currentPatchName_ + ".json");
     fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only", suggested, "*.json");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
@@ -704,12 +761,12 @@ void MainComponent::promptExportAudio() {
     // own comment) — not juce::DialogWindow's default, which cannot tell the two pages apart and
     // would silently orphan a running render.
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
     exportDialog_ = dialog;
 
     dialog->onRequestClose = [window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
     };
     dialog->onCancelRender = [this] {
         if (bounceRunner_ != nullptr)
@@ -784,12 +841,12 @@ void MainComponent::promptExportStems() {
     options.useNativeTitleBar = true;
     options.resizable = false;
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
     exportDialog_ = dialog;
 
     dialog->onRequestClose = [window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
     };
     dialog->onCancelRender = [this] {
         if (stemRunner_ != nullptr)

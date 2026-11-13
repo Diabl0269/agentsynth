@@ -5,16 +5,24 @@
 // TrackHeaderHost query/binding surface in MainComponentTrackHeaderHost.cpp.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
+#include "Mixer/MixerModel/MixerModel.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Timeline/TimelineOps.h"
+#include "Timeline/UniqueTrackName.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
+#include <set>
+#include <vector>
 
 namespace {
 
@@ -30,27 +38,30 @@ constexpr int kChannelCardGapX = 40;
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 
+// `base` made unique against the document's current track names ("Diva", else "Diva 2", "Diva 3"...).
+juce::String uniqueTrackName(const synth::TimelineDoc& doc, const juce::String& base) {
+    std::vector<juce::String> names;
+    for (const auto& track : doc.getTracks())
+        names.push_back(track.name);
+    return synth::uniqueNameAmong(base, names);
+}
+
 } // namespace
 
-void MainComponent::deleteTrack(synth::TrackId track) {
-    const auto* existing = timelineDoc.getTrack(track);
-    if (existing == nullptr)
-        return;
-    const juce::String uuid = existing->bindingUuid;
+MainComponent::TrackGrowInScope::TrackGrowInScope(MainComponent& owner)
+    : owner_(owner) {
+    owner_.timelinePanel.armTrackInsertMotion();
+    owner_.bottomDock.getMixerPanel().armColumnInsertMotion();
+}
 
-    // ONE undo step covering both domains: the track and the node that fed it disappear together,
-    // and come back together.
-    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, uuid] {
-        if (auto* node = findNodeByUuid(uuid)) {
-            // Mirrors GraphEditor::requestDeleteModule: drop the mod-matrix rows before the node
-            // (and the connections into it) go, then reconcile the canvas.
-            graphEditor.getModMatrix().clearRows();
-            audioEngine.getGraph().removeNode(node->nodeID);
-            graphEditor.updateComponents();
-        }
-        timelineDoc.removeTrack(track);
-    });
-    reconcileTimelineAfterGraphChange();
+MainComponent::TrackGrowInScope::~TrackGrowInScope() {
+    owner_.timelinePanel.finishTrackListChange();
+    owner_.bottomDock.getMixerPanel().finishColumnChange();
+}
+
+void MainComponent::TrackGrowInScope::noteOrigin(synth::TrackId copy, synth::TrackId source) const {
+    owner_.timelinePanel.noteDuplicateOrigin(copy, source);
+    owner_.bottomDock.getMixerPanel().noteDuplicateOrigin(copy, source);
 }
 
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
@@ -62,6 +73,7 @@ void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
 }
 
 void MainComponent::addMidiTrack() {
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
 
     // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
@@ -84,136 +96,136 @@ void MainComponent::addMidiTrack() {
     statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
 }
 
+std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::newModuleHook() {
+    return [this](juce::AudioProcessor& processor, const juce::String& moduleType) {
+        graphEditor.applyDualIODefaultTo(processor, moduleType);
+    };
+}
+
+// What addAudioTrack's ONE undo step does, and what the new-track-with-a-clip drop reuses: the track, its binding and
+// colour, and the whole mixer channel. Runs inside a recordGraphTimelineAndMacroChange. Returns the new track, or an
+// invalid id when none was added (the document is at its track limit).
+synth::TrackId MainComponentAudioImport::buildAudioTrackChannel(MainComponent& mc, int index, juce::String& trackName) {
+    const auto tracksBefore = mc.timelineDoc.getTracks().size();
+    // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "Add Track ->
+    // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
+    // (TimelinePanelTrackHeaders.cpp), independent of what's set here
+    // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
+    const juce::String defaultPresetName =
+        mc.appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
+    if (defaultPresetName.isNotEmpty()) {
+        auto preset = synth::TrackPresetManager::loadTrackPreset(
+            synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
+        if (preset.isObject()) {
+            trackName = mc.insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
+            if (trackName.isNotEmpty()) // inserted from the default preset - skip the factory chain below
+                return mc.timelineDoc.getTracks().size() > tracksBefore ? mc.timelineDoc.getTracks().back().id
+                                                                        : synth::TrackId{};
+        }
+        // else: the name resolves to nothing (deleted file) -> fall through to the
+        // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
+        // their default vanished" requirement for v1).
+    }
+
+    // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
+    // kMaxTracks refusal would be left orphaned in the graph.
+    trackName = "Audio " + juce::String(index + 1);
+    const auto trackId = mc.timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
+    if (!trackId.isValid())
+        return {}; // at kMaxTracks: nothing added, no node created, no macro
+
+    // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
+    // straight to the master bus.
+    const juce::String trackAudioUuid = mc.createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
+    if (trackAudioUuid.isEmpty())
+        return trackId;
+    mc.timelineDoc.setTrackBinding(trackId, trackAudioUuid);
+    mc.timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+
+    auto* trackAudioNode = mc.findNodeByUuid(trackAudioUuid);
+    if (trackAudioNode == nullptr)
+        return trackId;
+    const auto trackAudioPosition =
+        juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
+                         static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
+
+    // Lay every card of the expanded chain out left-to-right from the real card widths
+    // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
+    // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
+    // {Track Audio, Gate, EQ, Compressor, Strip} end up boxed into one collapsed macro below,
+    // so only their expanded-state positions matter for not overlapping each other; Master's
+    // position is only used the first time (it is a singleton afterwards) and sits right of
+    // where the collapsed macro card will be.
+    const int gateX = trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
+    const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
+    const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
+    const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
+    // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
+    const synth::DefaultChannelLayout layout{
+        /*gate=*/{gateX, trackAudioPosition.y},
+        /*eq=*/{eqX, trackAudioPosition.y},
+        /*compressor=*/{compressorX, trackAudioPosition.y},
+        /*strip=*/{stripX, trackAudioPosition.y},
+        /*master=*/{masterX, trackAudioPosition.y},
+        /*onNewModule=*/mc.newModuleHook(),
+    };
+
+    const auto channel = synth::buildDefaultAudioChannel(mc.audioEngine.getGraph(), *trackAudioNode, layout);
+    if (channel.stripUuid.isEmpty())
+        return trackId; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
+
+    // Master (and Audio Output) sit in the output dock, derived to the right of everything by
+    // GraphEditor::reflowOutputDock -- run by the updateComponents() / addMacroForMembers below.
+
+    // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
+    // the track. Master is deliberately NOT a member — see this method's own comment above — and the
+    // strip's Master-bound edges move behind the macro's output port right after.
+    mc.graphEditor.getMacroController().addMacroForMembers(
+        {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid}, trackName,
+        trackAudioPosition);
+    mc.graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
+
+    // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
+    // must see every node above still alive to keep the macro's membership.
+    mc.graphEditor.updateComponents();
+    return trackId;
+}
+
 void MainComponent::addAudioTrack() {
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
-    // "+ Track -> Audio Track" creates a WHOLE mixer channel in ONE undo step —
+    // "Add Track -> Audio Track" creates a WHOLE mixer channel in ONE undo step —
     // Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
     // Strip (Stereo) -> Master (Mix), with {Track Audio, Gate, EQ, Compressor, Strip} boxed into one
     // collapsed macro named after the track, plus the track/binding/colour exactly like
     // addMidiTrack()'s single compound step. A single Cmd+Z removes every bit of it.
     //
-    // Master stays OUTSIDE the macro, and the Strip -> Master cable is left a PLAIN graph edge, never
-    // a macro port: synth::spliceMasterNode/synth::ensureMasterNode (Source/Mixer/MasterSplice.h)
-    // classify a re-routed feed as Mix vs Direct by checking whether the connection's SOURCE NODE is
-    // itself a ChannelStripModule. A MacroOutlet sitting between the strip and Master would make the
-    // source node a MacroOutlet instead, defeating that check — which the later "Create channels"
-    // subtask depends on.
+    // Master stays OUTSIDE the macro. Core (buildDefaultAudioChannel) builds the Strip -> Master Mix cables as two
+    // PLAIN edges, because it cannot create macro ports; routeChannelOutputThroughMacroPort then moves them behind
+    // the macro's output port (one stereo jack, or two with the Split Left/Right jacks preference), so the track's
+    // sound visibly leaves through its own card. Master's Mix/Direct classification looks backward through macro
+    // ports (synth::resolveSourceThroughPorts), which is what keeps a strip behind an outlet on Mix.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
-        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
-            // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
-            // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
-            // (TimelinePanelTrackHeaders.cpp), independent of what's set here
-            // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
-            const juce::String defaultPresetName =
-                appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
-            if (defaultPresetName.isNotEmpty()) {
-                auto preset = synth::TrackPresetManager::loadTrackPreset(
-                    synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
-                if (preset.isObject()) {
-                    trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
-                    if (trackName.isNotEmpty())
-                        return; // inserted from the default preset - skip the factory chain below
-                }
-                // else: the name resolves to nothing (deleted file) -> fall through to the
-                // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
-                // their default vanished" requirement for v1).
-            }
-
-            // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
-            // kMaxTracks refusal would be left orphaned in the graph.
-            trackName = "Audio " + juce::String(index + 1);
-            const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
-            if (!trackId.isValid())
-                return; // at kMaxTracks: nothing added, no node created, no macro
-
-            // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
-            // straight to the master bus.
-            const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
-            if (trackAudioUuid.isEmpty())
-                return;
-            timelineDoc.setTrackBinding(trackId, trackAudioUuid);
-            timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
-
-            auto* trackAudioNode = findNodeByUuid(trackAudioUuid);
-            if (trackAudioNode == nullptr)
-                return;
-            const auto trackAudioPosition =
-                juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
-                                 static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
-
-            // Lay every card of the expanded chain out left-to-right from the real card widths
-            // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
-            // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
-            // {Track Audio, Gate, EQ, Compressor, Strip} end up boxed into one collapsed macro below,
-            // so only their expanded-state positions matter for not overlapping each other; Master's
-            // position is only used the first time (it is a singleton afterwards) and sits right of
-            // where the collapsed macro card will be.
-            const int gateX =
-                trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
-            const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
-            const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
-            const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
-            const synth::DefaultChannelLayout layout{
-                /*gate=*/{gateX, trackAudioPosition.y},
-                /*eq=*/{eqX, trackAudioPosition.y},
-                /*compressor=*/{compressorX, trackAudioPosition.y},
-                /*strip=*/{stripX, trackAudioPosition.y},
-                /*master=*/{masterX, trackAudioPosition.y},
-            };
-
-            // Know BEFORE building the chain whether this call is the one
-            // that splices Master for the first time — that's the only time a bare "Audio Output"
-            // (the newPatch seed, or wherever the user first dropped one) is worth relocating below.
-            const bool masterExistedBefore = synth::findMasterNode(audioEngine.getGraph()) != nullptr;
-
-            const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
-            if (channel.stripUuid.isEmpty())
-                return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
-
-            // On the very first channel, Master lands right of this chain (masterX above) but a bare
-            // Audio Output still sits wherever it started — the newPatch seed's canvas origin, or
-            // wherever the user first dropped one — so the finished chain would cable back across the
-            // whole canvas to reach it. Move it to terminate the row instead: Track Audio -> Gate ->
-            // EQ -> Compressor -> Strip -> Master -> Audio Output, left to right. Only done once; after
-            // Master exists, the canvas is already arranged and nothing here should reshuffle it.
-            if (!masterExistedBefore && channel.master != nullptr) {
-                const int outputX = masterX + GraphEditor::estimateModuleSize("Master").x + kChannelCardGapX;
-                for (auto* node : audioEngine.getGraph().getNodes()) {
-                    if (node != nullptr && node->getProcessor() != nullptr &&
-                        node->getProcessor()->getName() == "Audio Output") {
-                        node->properties.set("x", outputX);
-                        node->properties.set("y", trackAudioPosition.y);
-                    }
-                }
-            }
-
-            // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
-            // the track. Master is deliberately NOT a member — see this method's own comment above.
-            graphEditor.getMacroController().addMacroForMembers(
-                {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
-                trackName, trackAudioPosition);
-
-            // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
-            // must see every node above still alive to keep the macro's membership.
-            graphEditor.updateComponents();
-        });
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+        [this, index, &trackName] { MainComponentAudioImport::buildAudioTrackChannel(*this, index, trackName); });
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
 void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
-    // "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
+    // "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
     // -> instrument -> default chain (Gate bypassed -> Parametric EQ bypassed -> Compressor bypassed
     // -> Channel Strip Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of
     // addAudioTrack()'s step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
-    // into one collapsed macro named after the track; Master stays outside it for the same
-    // spliceMasterNode reason addAudioTrack's own
-    // comment explains. A single Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's
-    // own comment for the shared tail this delegates to (also used by addInstrumentPluginTrack).
+    // into one collapsed macro named after the track; Master stays outside it (a shared
+    // singleton) and the strip's Master edges move behind the macro's output port, as in addAudioTrack(). A single
+    // Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's own comment for the shared tail this delegates
+    // to (also used by addInstrumentPluginTrack).
     //
     // This is a TrackKind::Midi track — a Track In feeding exactly one instrument is already what
     // addMidiTrack() produces once a cable is drawn by hand; this flow just draws that cable and
@@ -235,7 +247,9 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
 // is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
 // out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
 // mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
-// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before.
+// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before, except a hosted plugin's track is
+// named after the plugin and numbered only when that name is taken ("Diva", "Diva 2"). The build itself is
+// buildInstrumentTrackBody, shared with the timelineOps host.
 void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                                  const juce::String& trackNamePrefix, bool poly) {
     if (instrumentProcessor == nullptr) {
@@ -246,7 +260,11 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
         return;
     }
 
+    const TrackGrowInScope growIn(*this);
     const int index = (int)timelineDoc.getTracks().size();
+    // A hosted plugin's track is named after the plugin ("Diva", then "Diva 2"); every other instrument keeps
+    // "<prefix> <N>".
+    const bool namedAfterPlugin = dynamic_cast<synth::HostedPluginModule*>(instrumentProcessor.get()) != nullptr;
     juce::String trackName; // set inside the mutation; read afterwards for the status message
     // shared_ptr so the mutate lambda (which recordGraphTimelineAndMacroChange takes by const-ref
     // and must remain copyable as std::function) can carry a move-only juce::AudioProcessor —
@@ -255,7 +273,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
-        [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
+        [this, index, &trackName, trackNamePrefix, poly, stagedInstrument, namedAfterPlugin] {
             // Same default-consulting branch as addAudioTrack's own, before any node is created
             // (including `stagedInstrument`, which is simply discarded unused when a default wins — never
             // added to the graph) (see docs/mixer/track-presets.md#saving-and-setting-a-default).
@@ -271,33 +289,136 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
                 }
             }
 
-            InstrumentChainBuild build;
-            if (!createTrackInForInstrumentChain(index, trackNamePrefix, trackName, build))
-                return;
-            if (!adoptInstrumentNodeForChain(stagedInstrument, index, poly, build))
-                return;
-            buildInstrumentEnvelopeChain(build);
-            if (!buildInstrumentChannelAndMacro(trackName, build))
-                return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
-
-            // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
-            // must see every node above still alive to keep the macro's membership.
-            graphEditor.updateComponents();
+            trackName = namedAfterPlugin ? uniqueTrackName(timelineDoc, trackNamePrefix)
+                                         : trackNamePrefix + " " + juce::String(index + 1);
+            buildInstrumentTrackBody(stagedInstrument, trackName, poly, /*inserts=*/{}, /*envelopeParams=*/{});
         });
 
+    if (namedAfterPlugin)
+        audioEngine.updateModuleNames(); // the new module's "Diva 2" card title, immediately
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
-// buildInstrumentTrackAndChain step 1/4: the track + its Track In node — through the factory like
+// The transaction body of an instrument-track build, shared by the "Add Track -> Instrument" menu
+// (buildInstrumentTrackAndChain, inside its own transaction, after its default-preset lookup) and
+// the timelineOps host (inside TimelineOpsHost::recordBatch, never consulting a preset): Track In
+// -> instrument -> envelope stage -> `inserts` -> channel -> Master, boxed into one macro named
+// `trackName`. Opens no transaction. On a failure partway (kMaxTracks, or a factory/addNode
+// failure) it removes every node it added and the doc track before returning nullopt -- the host
+// contract, and it keeps the menu flow from leaving a half-built chain behind too. Edges it
+// already moved on pre-existing nodes (a reused Master) are not rewound; the enclosing
+// transaction's snapshot still covers them for undo. On success it hands back the uuids it minted
+// for the Track In, the instrument, each insert (in op order) and the envelope's ADSR (empty for a
+// Sampler unless `envelopeShapeType` names a type that has one), for in-response references.
+std::optional<synth::InstrumentTrackBuildResult>
+MainComponent::buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
+                                        const juce::String& trackName, bool poly,
+                                        const std::vector<synth::InstrumentTrackInsert>& inserts,
+                                        const juce::var& envelopeParams, const juce::String& envelopeShapeType) {
+    auto& graph = audioEngine.getGraph();
+    const int index = (int)timelineDoc.getTracks().size();
+    std::set<juce::AudioProcessorGraph::NodeID> nodesBefore;
+    for (auto* node : graph.getNodes())
+        nodesBefore.insert(node->nodeID);
+
+    InstrumentChainBuild build;
+    build.envelopeShapeType = envelopeShapeType;
+    bool built = createTrackInForInstrumentChain(trackName, build) &&
+                 adoptInstrumentNodeForChain(stagedInstrument, index, poly, build);
+    if (built) {
+        buildInstrumentEnvelopeChain(build);
+        applyInstrumentEnvelopeParams(envelopeParams, build);
+        built = buildInstrumentInserts(inserts, build) && buildInstrumentChannelAndMacro(trackName, build);
+    }
+
+    if (!built) {
+        std::vector<juce::AudioProcessorGraph::NodeID> added;
+        for (auto* node : graph.getNodes())
+            if (nodesBefore.count(node->nodeID) == 0)
+                added.push_back(node->nodeID);
+        for (const auto id : added)
+            graph.removeNode(id); // drops its connections too
+        if (build.trackId.isValid())
+            timelineDoc.removeTrack(build.trackId);
+        return std::nullopt;
+    }
+    // Inside the caller's mutation, not after: MacroSet::retainOnly() (run by updateComponents())
+    // must see every node above still alive to keep the macro's membership.
+    graphEditor.updateComponents();
+    return synth::InstrumentTrackBuildResult{build.trackInUuid, build.instrumentUuid, build.insertUuids,
+                                             build.adsrUuid};
+}
+
+// buildInstrumentTrackBody step 3a: the op's "envelope" params onto the ADSR step 3 built (poly or
+// mono -- both record adsrUuid). Through the patch path's untrusted apply, like an insert's params
+// (they were checked by AIStateMapper::validateNodeParams at validation).
+void MainComponent::applyInstrumentEnvelopeParams(const juce::var& envelopeParams, const InstrumentChainBuild& build) {
+    auto* paramsObj = envelopeParams.getDynamicObject();
+    if (paramsObj == nullptr || build.adsrUuid.isEmpty())
+        return;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == build.adsrUuid) {
+            synth::AIStateMapper::applyUntrustedParams(node->getProcessor(), paramsObj);
+            return;
+        }
+}
+
+// buildInstrumentTrackBody step 3b: each effect insert a timelineOps op asked for, in order, after
+// the envelope stage and before the channel's Gate. Created through the factory, the jacks
+// preference applied like the instrument's, then the op's params through the patch path's own
+// untrusted apply (they were checked by AIStateMapper::validateNodeParams at validation). Wires
+// the previous stage's L (ch0) and R (`sourceRightChannel`) into the insert's ch0 and its own right
+// leg; a mono insert takes L only and feeds both legs onward from ch0. False on a factory/addNode
+// failure (the caller cleans up).
+bool MainComponent::buildInstrumentInserts(const std::vector<synth::InstrumentTrackInsert>& inserts,
+                                           InstrumentChainBuild& build) {
+    auto& graph = audioEngine.getGraph();
+    for (const auto& insert : inserts) {
+        auto processor = synth::AIStateMapper::createModule(insert.type);
+        if (processor == nullptr)
+            return false;
+        newModuleHook()(*processor, insert.type);
+        if (auto* paramsObj = insert.params.getDynamicObject())
+            synth::AIStateMapper::applyUntrustedParams(processor.get(), paramsObj);
+        synth::AIStateMapper::applyUntrustedState(processor.get(), insert.state);
+
+        auto nodePtr = graph.addNode(std::move(processor));
+        if (nodePtr == nullptr)
+            return false;
+        auto* node = nodePtr.get();
+        const juce::String uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module != nullptr)
+            module->setNodeUuid(uuid);
+        const juce::Point<int> position{build.chainSourcePosition.x +
+                                            GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX,
+                                        build.chainSourcePosition.y};
+        node->properties.set("x", position.x);
+        node->properties.set("y", position.y);
+
+        const int inputRight = module != nullptr ? module->rightAudioLegChannel() : 1;
+        graph.addConnection({{build.chainSource->nodeID, 0}, {node->nodeID, 0}});
+        if (inputRight >= 0)
+            graph.addConnection({{build.chainSource->nodeID, build.sourceRightChannel}, {node->nodeID, inputRight}});
+
+        build.insertUuids.push_back(uuid);
+        build.chainSource = node;
+        build.sourceRightChannel = inputRight >= 0 ? inputRight : 0;
+        build.chainSourceType = insert.type;
+        build.chainSourcePosition = position;
+    }
+    return true;
+}
+
+// buildInstrumentTrackBody step 1/4: the track + its Track In node — through the factory like
 // createTrackInNode() — inlined rather than reused because that method auto-wires to "the sole
 // existing instrument" and calls updateComponents() itself, neither of which fits this compound
 // build (this wires the instrument THIS call creates, and updateComponents() runs once at the
 // end). Returns false exactly where the original inline body would have returned (at kMaxTracks,
-// or a factory/addNode failure) — no track, no node, no undo entry.
-bool MainComponent::createTrackInForInstrumentChain(int index, const juce::String& trackNamePrefix,
-                                                    juce::String& trackName, InstrumentChainBuild& build) {
-    trackName = trackNamePrefix + " " + juce::String(index + 1);
+// or a factory/addNode failure); buildInstrumentTrackBody removes whatever was created.
+bool MainComponent::createTrackInForInstrumentChain(const juce::String& trackName, InstrumentChainBuild& build) {
     build.trackId = timelineDoc.addTrack(synth::TrackKind::Midi, trackName);
     if (!build.trackId.isValid())
         return false; // at kMaxTracks: nothing added, no node created, no macro
@@ -321,7 +442,7 @@ bool MainComponent::createTrackInForInstrumentChain(int index, const juce::Strin
     return true;
 }
 
-// buildInstrumentTrackAndChain step 2/4: adopts the caller's already-created (and, for a hosted
+// buildInstrumentTrackBody step 2/4: adopts the caller's already-created (and, for a hosted
 // plugin, already-loaded) instrument processor into the live graph HERE, inside this undo
 // transaction, so Cmd+Z removes it along with everything else; wires Track In -> instrument MIDI;
 // and seeds `chainSource`/`sourceRightChannel`/`chainSourceType`/`chainSourcePosition` at "the
@@ -334,6 +455,10 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
         return false; // moved exactly once above; defensive, mirrors addModuleAtCanvasPosition's own guard
     auto& graph = audioEngine.getGraph();
     const int instrumentX = build.trackInPosition.x + build.trackInSize.x + kChannelCardGapX;
+    // The instrument is user-facing, so it follows the left/right jacks preference like a library
+    // drop does (a hosted plugin's dualIO only changes its jacks once it publishes a 2-in or 2-out instance). Before
+    // addNode and before any wiring below reads the module's right-leg channel.
+    newModuleHook()(**stagedInstrument, (*stagedInstrument)->getName());
     auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
     if (instrumentNodePtr == nullptr)
         return false;
@@ -357,14 +482,16 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     timelineDoc.setTrackColour(build.trackId, synth::ui::trackPaletteColour(index).getARGB());
 
     // Track In -> instrument, MIDI. Unambiguous by construction: this instrument was just
-    // created for this track alone.
-    graph.addConnection({{build.trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-                         {build.instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+    // created for this track alone. Skipped for an instrument that takes no MIDI (Noise): it sounds
+    // continuously, and the ADSR + VCA ahead of the channel, gated by Track In's MIDI, shape it.
+    if (build.instrumentNode->getProcessor()->acceptsMidi())
+        graph.addConnection({{build.trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {build.instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
 
     build.chainSource = build.instrumentNode;
     build.sourceRightChannel = 1;
     if (auto* instrumentModule = dynamic_cast<ModuleBase*>(build.instrumentNode->getProcessor()))
-        build.sourceRightChannel = instrumentModule->rightAudioLegChannel();
+        build.sourceRightChannel = std::max(0, instrumentModule->rightAudioLegChannel()); // mono source: L feeds both
     build.chainSourceType = build.instrumentModuleType;
     build.chainSourcePosition =
         juce::Point<int>(static_cast<int>(build.chainSource->properties.getWithDefault("x", 0)),
@@ -372,14 +499,22 @@ bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<
     return true;
 }
 
-// buildInstrumentTrackAndChain step 3/4: the optional envelope stage(s) ahead of the channel
+// buildInstrumentTrackBody step 3/4: the optional envelope stage(s) ahead of the channel
 // build, advancing `chainSource`/`sourceRightChannel`/`chainSourceType`/`chainSourcePosition` past
 // whatever got inserted. Never fails outright — an insertion helper returning null just leaves the
 // chain source where step 2 left it.
 void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     auto& graph = audioEngine.getGraph();
-    const bool isOscOrWavetable =
-        build.instrumentModuleType == "Oscillator" || build.instrumentModuleType == "Wavetable";
+    const bool isOscOrWavetable = synth::TimelineOps::instrumentSupportsPolyTrack(build.instrumentModuleType);
+    // An authorable instrument that does not shape its own amplitude (Oscillator, Wavetable, Noise) gets an
+    // ADSR + VCA. A hosted plugin is not in that list: it has its own envelope.
+    // A track built for a stand-in's role (a core sound on a Sampler) gets the envelope stage that stand-in would.
+    const juce::String& shapeType =
+        build.envelopeShapeType.isNotEmpty() ? build.envelopeShapeType : build.instrumentModuleType;
+    const bool needsRawEnvelope = std::any_of(synth::TimelineOps::kAuthorableInstrumentTypes.begin(),
+                                              synth::TimelineOps::kAuthorableInstrumentTypes.end(),
+                                              [&](const char* type) { return shapeType == type; }) &&
+                                  !synth::TimelineOps::instrumentOwnsItsEnvelope(shapeType);
     const bool instrumentIsPoly = synth::isProcessorPoly(build.instrumentNode->getProcessor());
     const int instrumentX = static_cast<int>(build.instrumentNode->properties.getWithDefault("x", 0));
 
@@ -396,7 +531,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
         const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
             graph, *build.trackInNode, *build.instrumentNode, {polyMidiX, build.trackInPosition.y},
-            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y});
+            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y}, newModuleHook());
         if (polyEnv.vca != nullptr) {
             build.polyMidiUuid = polyEnv.polyMidiUuid;
             build.adsrUuid = polyEnv.adsrUuid;
@@ -436,13 +571,13 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
     // own comment for why). Sampler already has its own one-shot playback envelope and
     // is out of scope. Never reached for a poly Oscillator/Wavetable (handled above).
-    if (isOscOrWavetable) {
+    if (needsRawEnvelope) {
         const int adsrX =
             build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
         const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
         const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
             graph, *build.trackInNode, *build.chainSource, build.sourceRightChannel,
-            {adsrX, build.chainSourcePosition.y}, {vcaX, build.chainSourcePosition.y});
+            {adsrX, build.chainSourcePosition.y}, {vcaX, build.chainSourcePosition.y}, newModuleHook());
         if (envAndVca.vca != nullptr) {
             build.adsrUuid = envAndVca.adsrUuid;
             build.vcaUuid = envAndVca.vcaUuid;
@@ -454,11 +589,11 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     }
 }
 
-// buildInstrumentTrackAndChain step 4/4: the default Gate/EQ/Compressor/Strip channel off
+// buildInstrumentTrackBody step 4/4: the default Gate/EQ/Compressor/Strip channel off
 // `chainSource`, boxed with everything built above into one collapsed macro named after the
-// track. Master is deliberately NOT a macro member — same spliceMasterNode reason addAudioTrack's
-// own comment explains. Returns false exactly where the original inline body would have returned
-// (a factory/addNode failure partway through the channel build).
+// track. Master is deliberately NOT a macro member (a shared singleton); the
+// strip's Master-bound edges move behind the macro's output port, as in addAudioTrack(). Returns false exactly where
+// the original inline body would have returned (a factory/addNode failure partway through the channel build).
 bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build) {
     // Lay every card of the expanded chain out left-to-right from the real card widths, the
     // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
@@ -467,13 +602,16 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
+    // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
     const synth::DefaultChannelLayout layout{
         /*gate=*/{gateX, build.chainSourcePosition.y},
         /*eq=*/{eqX, build.chainSourcePosition.y},
         /*compressor=*/{compressorX, build.chainSourcePosition.y},
         /*strip=*/{stripX, build.chainSourcePosition.y},
         /*master=*/{masterX, build.chainSourcePosition.y},
+        /*onNewModule=*/newModuleHook(),
     };
 
     const auto channel =
@@ -482,9 +620,9 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         return false;
 
     // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
-    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], Gate, EQ, Compressor, Strip} into ONE
-    // collapsed macro named after the track. Master is deliberately NOT a member — same
-    // spliceMasterNode reason addAudioTrack's own comment explains.
+    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], [timelineOps inserts], Gate, EQ, Compressor, Strip} into ONE
+    // collapsed macro named after the track. Master is deliberately NOT a member (a shared
+    // singleton); the strip's Master edges then move behind the macro's output port, as in addAudioTrack().
     std::vector<juce::String> macroMembers{build.trackInUuid, build.instrumentUuid};
     if (!build.voiceMixerUuid.isEmpty())
         macroMembers.push_back(build.voiceMixerUuid);
@@ -494,11 +632,25 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         macroMembers.push_back(build.adsrUuid);
     if (!build.vcaUuid.isEmpty())
         macroMembers.push_back(build.vcaUuid);
+    macroMembers.insert(macroMembers.end(), build.insertUuids.begin(), build.insertUuids.end());
     macroMembers.push_back(channel.gateUuid);
     macroMembers.push_back(channel.eqUuid);
     macroMembers.push_back(channel.compressorUuid);
     macroMembers.push_back(channel.stripUuid);
+    // The chain wires every module's Left AND Right leg, but a module built collapsed (the default
+    // preference) has no Right jack. Left as built, the Oscillator -> VCA and VCA -> Gate Right cables
+    // are invisible and cannot be unplugged: unplugging the one cable the user can see leaves the sound
+    // playing through the hidden one. Same cleanup the Dual I/O toggle runs when a module collapses.
+    // Only the voice-chain modules: the channel (Gate/EQ/Compressor/Strip) keeps its own stereo wiring.
+    std::vector<juce::String> voiceChain{build.instrumentUuid, build.voiceMixerUuid, build.adsrUuid, build.vcaUuid};
+    voiceChain.insert(voiceChain.end(), build.insertUuids.begin(), build.insertUuids.end());
+    for (const auto& uuid : voiceChain)
+        if (uuid.isNotEmpty())
+            if (auto* node = findNodeByUuid(uuid))
+                graphEditor.dropHiddenRightLegConnections(node->nodeID);
+
     graphEditor.getMacroController().addMacroForMembers(macroMembers, trackName, build.trackInPosition);
+    graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
     return true;
 }
 
@@ -521,7 +673,7 @@ bool MainComponent::hasTracksNeedingChannels() const {
     return false;
 }
 
-// The "+ Track" menu's "Create Channels" action for existing projects —
+// The "Add Track" menu's "Create Channels" action for existing projects —
 // docs/mixer/mixer.md#creating-channels-in-an-existing-project says the project itself opens unchanged (no automatic
 // migration on load; this method is never called from anywhere but the explicit menu choice below). Gathers every
 // track's own bound node first (outside the undo transaction — this is a pure read), then wraps
@@ -540,7 +692,7 @@ void MainComponent::createChannelsForExistingTracks() {
             sourceNodeIds.push_back(node->nodeID);
     }
 
-    // No-op, no undo step, when nothing needs a channel (also the "+ Track" menu's own disabled
+    // No-op, no undo step, when nothing needs a channel (also the "Add Track" menu's own disabled
     // condition — see hasTracksNeedingChannels() above) — checked again here rather than trusting
     // the menu's enabled state, since this is also the seam tests drive directly.
     if (!hasTracksNeedingChannels()) {
@@ -644,7 +796,7 @@ void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeI
     statusBar.showMessage(built ? "Duplicated into the channel" : "Could not duplicate into the channel");
 }
 
-// Instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+// Instrument-capable hosted plugins for the "Add Track -> Instrument -> Plugin"
 // submenu — see TrackHeaderHost::getInstrumentPluginOptions's own comment. getKnownPlugins() (full
 // juce::PluginDescription, which carries isInstrument) is read here rather than
 // getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter

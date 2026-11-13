@@ -1,10 +1,12 @@
 // Concern: MixerFader's slider wiring, undo bracket and dB readout. The file holds
 // the taper-based NormalisableRange and the onDragStart/onDragEnd gesture wiring in bind() below.
 #include "MixerFader.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 #include "AppUndoManager.h"
 #include "MixerDbAccessibilityText.h"
 #include "MixerFaderTaper.h"
+#include "UI/Layout/UIAnimation.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -22,7 +24,7 @@ MixerFader::MixerFader() {
     addAndMakeVisible(slider_);
 
     readout_.setJustificationType(juce::Justification::centred);
-    readout_.setFont(juce::Font(juce::FontOptions(10.0f)));
+    readout_.setFont(juce::Font(juce::FontOptions(12.0f)));
     addAndMakeVisible(readout_);
 }
 
@@ -44,13 +46,12 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
     // initial value into the slider under its own (temporary) range.
     attachment_ = std::make_unique<juce::SliderParameterAttachment>(param, slider_);
 
-    // The slider's VALUE stays the param's own dB range (start/end/interval copied field-for-field,
-    // same as before this ticket) -- only convertTo0to1/convertFrom0to1 change, to
-    // faderDbToFraction/faderFractionToDb (MixerFaderTaper.h), so the on-screen THUMB POSITION
-    // follows Cubase's taper while getValue()/setValue() (and therefore the bound parameter) never
-    // leave linear dB. snapToLegalValue keeps the pre-existing 0.1 dB granularity, just re-expressed
-    // as a lambda since the range's own `interval` field is ignored once a custom
-    // snapToLegalValueFunction is supplied (juce::NormalisableRange::snapToLegalValue).
+    // The slider's VALUE stays the param's own dB range (start/end/interval copied field-for-field) -- only
+    // convertTo0to1/convertFrom0to1 change, to faderDbToFraction/faderFractionToDb (MixerFaderTaper.h), so the
+    // on-screen THUMB POSITION follows Cubase's taper while getValue()/setValue() (and therefore the bound parameter)
+    // never leave linear dB. snapToLegalValue keeps the pre-existing 0.1 dB granularity, just re-expressed as a lambda
+    // since the range's own `interval` field is ignored once a custom snapToLegalValueFunction is supplied
+    // (juce::NormalisableRange::snapToLegalValue).
     const auto floatRange = param.getNormalisableRange();
     const double rangeStartDb = (double)floatRange.start;
     const double rangeEndDb = (double)floatRange.end;
@@ -128,6 +129,22 @@ bool MixerFader::nudge(float deltaDb) {
 
 void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
+    setNudgeShortcutText(nudgeShortcutText_);
+    readout_.setTitle(name.isEmpty() ? juce::String("Fader level") : name + " fader level");
+}
+
+juce::String MixerFader::defaultNudgeShortcutText() {
+    return ShortcutManager::keyPressToDisplayString(
+               juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)) +
+           " / " +
+           ShortcutManager::keyPressToDisplayString(
+               juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0));
+}
+
+// The keys nudge the focused channel by 1 dB; the same chord with Alt added nudges 0.1 dB.
+void MixerFader::setNudgeShortcutText(const juce::String& keys) {
+    nudgeShortcutText_ = keys;
+    slider_.setTooltip(formatShortcutHint("Channel level: drag to change (Alt with the keys for 0.1 dB)", keys));
 }
 
 void MixerFader::grabAccessibilityFocus() {
@@ -149,7 +166,9 @@ void MixerFader::parameterGestureChanged(int, bool gestureIsStarting) {
 
 void MixerFader::resized() {
     auto bounds = getLocalBounds();
-    readout_.setBounds(bounds.removeFromBottom(16));
+    bounds.removeFromBottom(kClearBelowReadout);
+    readout_.setBounds(bounds.removeFromBottom(18));
+    bounds.removeFromBottom(kReadoutGap);
     slider_.setBounds(bounds);
 }
 

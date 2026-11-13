@@ -2,7 +2,11 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/IconButton.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Timeline/SongKeyField.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -30,7 +34,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // outcome — see docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step
 // (MidiRecorder wiring entry).
 //
-// No SVG assets: the four transport glyphs (play/stop, record, loop, metronome) are drawn as plain
+// No SVG assets: the transport glyphs (return to start, play/stop, record, loop, metronome) are drawn as plain
 // juce::Path/juce::Rectangle shapes in GlyphButton::paintButton, each inside a centred square with
 // generous inset (see GlyphButton). Record engaged is the one theme-independent colour on the bar —
 // see kRecordRedArgb.
@@ -39,6 +43,9 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // record). `countInCombo_` ("Off"/"1 bar"/"2 bars") is read by MainComponent's record flow at the
 // moment Record is clicked. Both persist themselves via setApplicationProperties.
 namespace synth::ui {
+
+// "Record also starts playback" (default ON): the Settings key, read at use time by the record flow and the tooltip.
+inline constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
 
 class TimelineTransportBar : public juce::Component {
 public:
@@ -51,7 +58,10 @@ public:
 
     // Non-owning; may be null (tests, or before the panel finishes wiring) — every command below
     // is then a no-op, matching TimelineRulerComponent/TimelinePlayheadOverlay's own null contract.
-    void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+    void setTransport(synth::TransportService* transport) noexcept {
+        transport_ = transport;
+        songKeyField_.setTransport(transport);
+    }
     synth::TransportService* getTransport() const noexcept { return transport_; }
 
     // THE drive seam, called from TimelinePanelComponent::updateFromTransport (which is itself
@@ -78,7 +88,7 @@ public:
     // The colour the record glyph is painting in right now — red when engaged, a neutral text
     // colour when idle. The same accessor paintButton() itself uses, so this is the drawn state,
     // not a parallel guess at it.
-    juce::Colour getRecordGlyphColourForTest() const { return recordButton_.glyphColour(); }
+    juce::Colour getRecordGlyphColourForTest() const { return recordButton_.glyphColour(false, false); }
 
     // Metronome + count-in. Non-owning; may be null (tests, or before MainComponent finishes
     // wiring) — the button click is then inert, matching setTransport's null contract. Whichever of
@@ -97,7 +107,16 @@ public:
     // is clicked — never cached by the caller.
     int getCountInBars() const noexcept { return countInBars_; }
 
+    // Return to Start: a click asks the owner to run the app's own `transportReturnToStart` command, so the
+    // button and the command (shortcut, MIDI) can never drift apart. Unset (tests, headless), it just locates
+    // the transport to beat 0. Not a MIDI Learn target: the four glyph buttons above are the only ones.
+    std::function<void()> onReturnToStart;
+
+    // Fired after the Play / Stop button (or Space, which clicks it) starts the transport; not on stop.
+    std::function<void()> onPlayStarted;
+
     // ---- test accessors ----
+    juce::Button& getReturnToStartButton() noexcept { return returnToStartButton_; }
     juce::Button& getMetronomeButton() noexcept { return metronomeButton_; }
     juce::ComboBox& getCountInCombo() noexcept { return countInCombo_; }
 
@@ -113,6 +132,7 @@ public:
     juce::Button& getLoopButton() noexcept { return loopButton_; }
     juce::Label& getBpmLabel() noexcept { return bpmLabel_; }
     juce::Label& getTimeSigLabel() noexcept { return timeSigLabel_; }
+    SongKeyField& getSongKeyField() noexcept { return songKeyField_; }
     juce::String getReadoutTextForTest() const noexcept { return lastReadoutText_; }
     /** How many times the readout's cached string actually changed (and so requested a repaint) —
      *  the test hook that proves the string-diff gate, the same counting idiom
@@ -159,34 +179,24 @@ public:
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- see
      *  MixerColumnComponent::setShowContextMenuHookForTest's comment. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     void mouseDown(const juce::MouseEvent& event) override;
 
 private:
-    // A small juce::Button subclass that draws one of the transport glyphs as a plain path — see
-    // the class comment. getToggleState() selects which visual each glyph shows: play vs stop for
-    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome. Every
-    // glyph is drawn inside a CENTRED SQUARE inset from the button, so a button that isn't square
-    // (however short the strip it is handed) never squashes it.
-    // right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
-    // so a MIDI Learn menu can open on any of the four buttons without also toggling
-    // playback/record/loop/metronome — juce::Button has no isPopupMenu() guard of its own.
-    class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<juce::Button> {
+    // One of the five transport buttons: a synth::ui::IconButton (Framed) whose Glyph names the action
+    // it triggers and picks the drawn glyph. getToggleState() selects the visual: play vs stop for
+    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome.
+    // Right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
+    // so a MIDI Learn menu can open on any of them without also toggling playback/record/loop/metronome.
+    class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<synth::ui::IconButton> {
     public:
-        enum class Glyph { PlayStop, Record, Loop, Metronome };
-        GlyphButton(const juce::String& name, Glyph glyph)
-            : synth::ui::midilearn::RightClickSafeButton<juce::Button>(name)
-            , glyph_(glyph) {}
+        enum class Glyph { PlayStop, Record, Loop, Metronome, ReturnToStart };
+        GlyphButton(const juce::String& name, Glyph glyph);
         Glyph getGlyph() const noexcept { return glyph_; }
-        void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
-
-        // THE colour this glyph is drawn in — paintButton()'s only source, and the record button's
-        // red/idle test seam (see getRecordGlyphColourForTest). Record is the one glyph whose lit
-        // colour is not the theme accent (kRecordRedArgb).
-        juce::Colour glyphColour() const;
 
     private:
         Glyph glyph_;
@@ -212,7 +222,7 @@ private:
     // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     // A juce::Label that turns a vertical drag into a live BPM change: ±1.0 BPM per 4 px, or
@@ -220,7 +230,7 @@ private:
     // drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
     // mouseDown/mouseDrag/mouseUp, so overriding the latter three here does not disturb Label's
     // own editDoubleClick handling.
-    class BpmDragLabel : public juce::Label {
+    class BpmDragLabel : public synth::ui::NonModalLabel {
     public:
         explicit BpmDragLabel(TimelineTransportBar& owner) noexcept
             : owner_(owner) {}
@@ -241,13 +251,15 @@ private:
 
     synth::TransportService* transport_ = nullptr;
 
+    GlyphButton returnToStartButton_{"timelineTransportReturnToStart", GlyphButton::Glyph::ReturnToStart};
     GlyphButton playStopButton_{"timelineTransportPlayStop", GlyphButton::Glyph::PlayStop};
     GlyphButton recordButton_{"timelineTransportRecord", GlyphButton::Glyph::Record};
     GlyphButton loopButton_{"timelineTransportLoop", GlyphButton::Glyph::Loop};
     GlyphButton metronomeButton_{"timelineTransportMetronome", GlyphButton::Glyph::Metronome};
     juce::ComboBox countInCombo_;
     BpmDragLabel bpmLabel_{*this};
-    juce::Label timeSigLabel_;
+    synth::ui::NonModalLabel timeSigLabel_;
+    SongKeyField songKeyField_;
 
     juce::String lastReadoutText_;
     int readoutRepaintCount_ = 0;

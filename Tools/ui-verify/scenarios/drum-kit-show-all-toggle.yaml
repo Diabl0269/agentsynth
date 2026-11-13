@@ -1,0 +1,91 @@
+# The Drum Kit's Show all is a toggle chip: it shows the hidden pads and remembers them, so a second press hides exactly
+# that set again; the drum machine's row menu can hide a pad too.
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit track and its "Beat 1" clip, and opens the track's folded macro card.
+#   2. On the Drum Kit card, hides the cowbell, cymbal and tom (click each pad, press H): "3 hidden" and the Show all chip.
+#   3. Presses the Show all chip: all 8 pads are back, the chip is lit and the caption reads "3 shown again".
+#   4. Presses it again: the same 3 pads leave, the chip is plain again and reads "3 hidden".
+#   5. Opens the drum machine on the clip (Cmd+Shift+T, Tab, Tab, Return) and right-clicks the Snare row: Hide pad
+#      hides it, the row goes.
+# Pad centres are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall, two rows of four.
+record: true
+motion: true                                                        # the pads slide and the chip fades, on film
+save_project: fro1394 show all toggle
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - click: {id: "macroCard:Drum Kit 1", x: 262, y: 18}            # the card's open chevron
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Drum Kit 1", collapsed: false}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 8, visiblePads: 8}
+  - click: {id: "card:Drum Kit > drumPads", x: 225, y: 70}          # pad 8, the cowbell
+  - wait: {}
+  - key: {keys: h}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 160, y: 70}          # pad 7, the cymbal
+  - wait: {}
+  - key: {keys: h}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 70}           # pad 6, the tom
+  - wait: {}
+  - key: {keys: h}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "3 hidden"}}
+  - screenshot: {id: "card:Drum Kit", name: three-hidden}
+  - glide: {name: show-all-frames, frames: 14, do: {click: {id: "card:Drum Kit > Show all hidden pads"}}}
+  - wait: {}
+  - mark: {check: 1, name: show-all-returns}
+  # The pointer walks over the pads after the mark, so the clip shows the result as well as the press.
+  - hover: {id: "card:Drum Kit > drumPads", x: 30, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 95, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 160, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 225, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 30, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 95, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 160, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 225, y: 70}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "3 shown again"}}
+  - expect: {id: "card:Drum Kit > Show all hidden pads", toggleState: true}
+  - glide: {name: hide-again-frames, frames: 14, do: {click: {id: "card:Drum Kit > Show all hidden pads"}}}
+  - wait: {}
+  - mark: {check: 2, name: hide-again}
+  # The pointer walks over the pads after the mark, so the clip shows the result as well as the press.
+  - hover: {id: "card:Drum Kit > drumPads", x: 30, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 95, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 160, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 225, y: 22}
+  - hover: {id: "card:Drum Kit > drumPads", x: 30, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 95, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 160, y: 70}
+  - hover: {id: "card:Drum Kit > drumPads", x: 225, y: 70}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "3 hidden"}}
+  - expect: {id: "card:Drum Kit > Show all hidden pads", toggleState: false}
+  - key: {keys: cmd+shift+t}                                        # focus the timeline
+  - wait: {}
+  - key: {keys: tab}                                                # the Drum Kit track's row
+  - key: {keys: tab}                                                # its "Beat 1" clip
+  - wait: {}
+  - key: {keys: return}                                             # the drum machine opens on the clip
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - getState: {id: drumShowAll}
+  - click: {id: drumRowName38, button: right}                       # the Snare row
+  - wait: {settleMs: 500}                                           # the menu fades in before it takes keys
+  - screenshot: {id: menu, name: row-menu}
+  # Arrow keys reach the popup: Length, Swing (Reset is greyed with nothing set), then Hide pad.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - glide: {name: clip-editor-hide-frames, frames: 14, do: {key: {keys: return}}}
+  - hover: {id: "macroCard:Drum Kit 1", x: 140, y: 6}                # off the rows, so no tooltip covers them
+  - wait: {}
+  - mark: {check: 3, name: clip-editor-hide}
+  # Then the pointer goes back to the rows that are left and the Clap row's tooltip fades in, on film.
+  - glide: {name: rows-left-frames, frames: 14, do: {hover: {id: drumRowLabels, x: 40, y: 34}}}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "4 hidden"}, within_ms: 1500}
+  - expect: {id: drumShowAll, enabled: true, toggleState: false}

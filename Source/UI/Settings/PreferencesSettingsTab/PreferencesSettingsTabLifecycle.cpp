@@ -1,6 +1,8 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PopupHost.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
@@ -13,11 +15,6 @@ namespace {
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
-// Height for a muted hint label under a preference row enough for TWO lines at the
-// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed
-// (a one-line height would squeeze it, and neither hint's text is short enough to be one line at
-// the tab's real width).
-constexpr int kHintHeight = 32;
 } // namespace
 
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -66,6 +63,15 @@ GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juc
     return GraphEditor::MacroAutoPortPreference::Unset;
 }
 
+int comboIdFromSideBySide(SmartConnectionEngine::SideBySideMode mode) {
+    return mode == SmartConnectionEngine::SideBySideMode::OnlyWithCtrl ? 2 : 1;
+}
+
+SmartConnectionEngine::SideBySideMode sideBySideFromComboId(int id) {
+    return id == 2 ? SmartConnectionEngine::SideBySideMode::OnlyWithCtrl
+                   : SmartConnectionEngine::SideBySideMode::Always;
+}
+
 GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     switch (id) {
     case 1:
@@ -81,22 +87,6 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
     : appProperties(props) {
-    // Without this, searchField below — a juce::TextEditor, and the first
-    // focus-wanting descendant in this tab — auto-grabs keyboard focus the moment the Settings
-    // DialogWindow's peer first gains OS focus. ComponentPeer::handleFocusGain() calls
-    // grabKeyboardFocus() on the window's root component whenever a brand-new peer is shown with
-    // nothing previously focused; since PreferencesSettingsTab itself didn't want focus, that call
-    // fell through to KeyboardFocusTraverser::getDefaultComponent(), which returns the first
-    // wants-focus child it finds in traversal order — searchField, purely because it happens to be
-    // the first text field added. Declaring the TAB ITSELF as a focus target intercepts that
-    // traversal one level up: takeKeyboardFocus() short-circuits onto the first component that
-    // wants focus without descending further, so the tab (inert, no visible caret) absorbs the
-    // opening grab instead of the search field. Exact same fix, same reason, as
-    // ShortcutsSettingsTab's own setWantsKeyboardFocus(true) for its sibling search box — see that
-    // constructor. Does NOT affect clicking directly into the field: TextEditor's own
-    // wantsKeyboardFocus is untouched, so a click still focuses it normally.
-    setWantsKeyboardFocus(true);
-
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
@@ -112,6 +102,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     searchField.setIndents(6, 0);
     searchField.setFont(juce::Font(juce::FontOptions(13.0f)));
     searchField.setTextToShowWhenEmpty("Filter preferences...", findColour(juce::Label::textColourId).withAlpha(0.5f));
+    searchField.setTitle("Filter preferences");
     searchField.setTooltip("Filters the rows below by name or description as you type.");
     searchField.onTextChange = [this] { applySearchFilter(searchField.getText()); };
     searchField.onEscapeKey = [this] {
@@ -130,30 +121,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(contentViewport);
     contentViewport.setViewedComponent(&contentHost, false);
     contentViewport.setScrollBarsShown(true, false);
+    contentViewport.setWantsKeyboardFocus(false);
 
-    contentHost.addAndMakeVisible(smartConnectionLabel);
-    smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
-    smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
-
-    contentHost.addAndMakeVisible(smartConnectionCombo);
-    smartConnectionCombo.addItem("Off", 1);
-    smartConnectionCombo.addItem("New modules only", 2);
-    smartConnectionCombo.addItem("When main I/O is free", 3);
-    smartConnectionCombo.addItem("All module moves", 4);
-    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
-    // is the Control key on every platform, macOS included, precisely because Cmd already means
-    // additive selection there.
-    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
-                                    "Hold Ctrl while dragging to insert the module into an existing "
-                                    "cable instead of adding a new one.");
-    {
-        const auto mode = GraphEditor::smartConnectionModeFromString(
-            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
-        smartConnectionCombo.setSelectedId(comboIdFromMode(mode), juce::dontSendNotification);
-    }
-    smartConnectionCombo.onChange = [this] {
-        persistSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
-    };
+    setupSmartConnectionControls();
 
     contentHost.addAndMakeVisible(doubleClickDisconnectToggle);
     doubleClickDisconnectToggle.setToggleState(
@@ -164,11 +134,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
 
-    contentHost.addAndMakeVisible(alignmentGuideToggle);
-    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
-                                        juce::dontSendNotification);
-    alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
-    alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
+    setupCanvasDisplayToggles();
 
     contentHost.addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
@@ -185,8 +151,8 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
         "each module type. Applies to modules created after the change, same as the toggle.");
     perModuleDefaultsButton.onClick = [this] {
-        auto popup = buildDualIOPerModuleDefaultsPopup();
-        juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
+        synth::ui::launchPopover(buildDualIOPerModuleDefaultsPopup(), perModuleDefaultsButton.getScreenBounds(),
+                                 nullptr, {.trigger = &perModuleDefaultsButton});
     };
 
     contentHost.addAndMakeVisible(macroAutoPortLabel_);
@@ -194,6 +160,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     macroAutoPortLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(macroAutoPortCombo_);
+    macroAutoPortCombo_.setTitle("Macro auto-ports");
     macroAutoPortCombo_.addItem("Always ask", 1);
     macroAutoPortCombo_.addItem("Auto-create ports", 2);
     macroAutoPortCombo_.addItem("Leave cables as is", 3);
@@ -236,18 +203,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 
-    contentHost.addAndMakeVisible(doubleClickSpansLocatorsToggle);
-    // DEFAULT TRUE, same idiom as the rows above.
-    doubleClickSpansLocatorsToggle.setToggleState(
-        appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
-        juce::dontSendNotification);
-    doubleClickSpansLocatorsToggle.setTooltip(
-        "When on (the default), double-clicking empty lane space INSIDE the loop locators creates a clip spanning "
-        "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
-        "get one bar.");
-    doubleClickSpansLocatorsToggle.onClick = [this] {
-        persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
-    };
+    initTimelineEditingToggles();
 
     contentHost.addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
@@ -314,6 +270,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveIntervalLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(autosaveIntervalEditor);
+    autosaveIntervalEditor.setTitle("Autosave interval in minutes");
     autosaveIntervalEditor.setMultiLine(false);
     autosaveIntervalEditor.setReturnKeyStartsNewLine(false);
     autosaveIntervalEditor.setSelectAllWhenFocused(true);
@@ -346,6 +303,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveBackupCountLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(autosaveBackupCountEditor);
+    autosaveBackupCountEditor.setTitle("Autosave backups to keep");
     autosaveBackupCountEditor.setMultiLine(false);
     autosaveBackupCountEditor.setReturnKeyStartsNewLine(false);
     autosaveBackupCountEditor.setSelectAllWhenFocused(true);
@@ -382,9 +340,11 @@ void PreferencesSettingsTab::paint(juce::Graphics& g) {
 void PreferencesSettingsTab::paintContent(juce::Graphics& g) {
     // Group separators. Drawn from the text colour at low alpha rather than a theme token so the
     // rule stays legible on both light and dark themes without needing one of its own.
-    g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
-    for (const auto& divider : dividerBounds)
-        g.fillRect(divider);
+    const auto ruleColour = findColour(juce::Label::textColourId).withAlpha(kDividerAlpha);
+    for (size_t i = 0; i < dividerBounds.size(); ++i) {
+        g.setColour(i < dividerAlphas_.size() ? ruleColour.withMultipliedAlpha(dividerAlphas_[i]) : ruleColour);
+        g.fillRect(dividerBounds[i]);
+    }
 }
 
 void PreferencesSettingsTab::resized() {
@@ -395,25 +355,47 @@ void PreferencesSettingsTab::resized() {
     // Shortcuts tab keeps its own title/search/collapse strip out of its scrolled region.
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
-    searchField.setBounds(bounds.removeFromTop(26));
-    bounds.removeFromTop(12);
+    auto pickerRow = bounds.removeFromTop(26);
+    // Picker row: the drop-down takes exactly the width its longest entry needs, so the filter field
+    // gets the rest and can show its whole hint at the Settings window's minimum width.
+    categoryCombo.setBounds(
+        pickerRow.removeFromLeft(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(categoryCombo)));
+    pickerRow.removeFromLeft(8);
+    searchField.setBounds(pickerRow);
+    bounds.removeFromTop(8);
+    // The All view (with no filter) has one fold-all strip, pinned top-right of the rows; every other
+    // view gives that height back.
+    steerSectionChrome(sectionHeadersActive());
+    if (foldAllFade_->isShown() || foldAllFade_->isFading()) {
+        // A strip that is fading in or out takes `progress()` of its height, so the rows below slide.
+        foldAllButton.setAllFolded(areAllSectionsCollapsed());
+        foldAllButton.setBounds(bounds.removeFromTop(
+            juce::roundToInt((float)synth::ui::FoldAllButton::kStripHeight * foldAllFade_->progress())));
+    }
+    bounds.removeFromTop(4);
 
     // Everything below is scrolled content: the viewport clips it and shows a vertical scrollbar
     // when it overflows. Rows are laid out to the viewport width minus its scrollbar
     // gutter, so a control never runs under the thumb; reserving the gutter unconditionally
     // keeps the layout independent of whether the bar shows this very pass.
     contentViewport.setBounds(bounds);
-    layoutContent(juce::jmax(0, contentViewport.getWidth() - contentViewport.getScrollBarThickness()));
+    const int contentWidth = juce::jmax(0, contentViewport.getWidth() - contentViewport.getScrollBarThickness());
+    std::fill(std::begin(sectionStartY), std::end(sectionStartY), -1);
+    layoutContent(contentWidth);
+    placeSectionHeaders(contentWidth);
+    squashFadingGroups();
 }
 
 void PreferencesSettingsTab::layoutContent(int contentWidth) {
     dividerBounds.clear();
+    laidOutGroups_.clear();
 
     // ---- Live filter -----------------------------------------------------------------------
     //
-    // Each of the groups below is a row for filtering purposes: a group matches when ANY of its
-    // components button/label/tooltip text contains the query (case-insensitive); an empty query
-    // matches everything, so an untouched search field reproduces the usual bounds.
+    // Each of the groups below is a row for filtering purposes: a group matches when every word of the
+    // query occurs in its components' button/label/tooltip text (synth::ui::searchMatches). A query searches
+    // EVERY category; an empty query shows only the selected category's groups (each layout unit
+    // sets layoutCategory before its groups, so groupMatches can tell whose turn it is).
     const juce::String query = searchQuery;
 
     auto textOf = [](juce::Component& c) {
@@ -430,18 +412,22 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             s << t->getTooltip() << " ";
         return s;
     };
-    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+    auto groupTarget = [&](std::initializer_list<juce::Component*> comps) {
         if (query.isEmpty())
-            return true;
+            return categoryShown(layoutCategory);
+        // One haystack per group, so every word of a multi-word query may land on a different control.
+        juce::String haystack;
         for (auto* c : comps)
-            if (textOf(*c).containsIgnoreCase(query))
-                return true;
-        return false;
+            haystack << textOf(*c) << " ";
+        return synth::ui::searchMatches(haystack, query);
     };
-    auto setGroupVisible = [](std::initializer_list<juce::Component*> comps, bool visible) {
-        for (auto* c : comps)
-            c->setVisible(visible);
+    // A group that is going away keeps its slot (and its components) while it fades; fadeGroup answers true for it.
+    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+        return fadeGroup(comps, groupTarget(comps));
     };
+    // The fades own visibility now (fadeGroup, called from groupMatches above); the closure stays so the layout
+    // units keep their one shape.
+    auto setGroupVisible = [](std::initializer_list<juce::Component*>, bool) {};
     // Each group is laid out top-down in CONTENT coordinates, accumulating a running y; the
     // host's total height (set at the end) is whatever the visible groups need, and the viewport
     // scrolls when that exceeds the visible area. addDivider reserves a hairline between two
@@ -459,169 +445,11 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         if (visible)
             pendingDivider = false;
     };
-    // Group 1: smart connections
-    {
-        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
-        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
-            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
-            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 2: double-click disconnect
-    {
-        const bool visible = groupMatches({&doubleClickDisconnectToggle});
-        setGroupVisible({&doubleClickDisconnectToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 3: alignment guides
-    {
-        const bool visible = groupMatches({&alignmentGuideToggle});
-        setGroupVisible({&alignmentGuideToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4: Dual I/O (one line, one row - see the toggle's declaration comment).
-    {
-        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
-        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> dualIORow(0, y, contentWidth, 24);
-            perModuleDefaultsButton.changeWidthToFitText(24);
-            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
-            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
-            dualIORow.removeFromRight(12);
-            defaultDualIOToggle.setBounds(dualIORow);
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4b: macro auto-port preference.
-    {
-        const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
-        setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> row(0, y, contentWidth, 24);
-            macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
-            macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4c: macro toggles (auto-create/auto-delete, drag without Cmd).
-    pendingDivider =
-        layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
-
-    // Group 4d: mixer auto-create-channel-on-connect toggle.
-    {
-        const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
-        setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            mixerAutoCreateChannelOnConnectToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 5: the two loop-locator toggles (no divider between them).
-    {
-        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
-        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
-            y += 34;
-            doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 6: the two wheel-direction toggles + their hints.
-    {
-        const bool visible = groupMatches(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
-        setGroupVisible(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
-            visible);
-        beginGroup(visible);
-        if (visible) {
-            naturalScrollingToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-            // Indented under the toggle it explains, so the hint reads as a caption.
-            naturalScrollingHint.setBounds({24, y, contentWidth - 24, kHintHeight});
-            y += kHintHeight + 10;
-            zoomScrollUpZoomsInToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-            zoomScrollUpZoomsInHint.setBounds({24, y, contentWidth - 24, kHintHeight});
-            y += kHintHeight;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 7: piano roll key labels
-    {
-        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
-        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 8: autosave.
-    {
-        const std::initializer_list<juce::Component*> autosaveComps = {
-            &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
-            &autosaveIntervalUnitLabel,   &autosaveBackupCountLabel, &autosaveBackupCountEditor,
-            &autosaveBackupCountUnitLabel};
-        const bool visible = groupMatches(autosaveComps);
-        setGroupVisible(autosaveComps, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> row(0, y, contentWidth, 24);
-            autosaveEnabledToggle.setBounds(row.removeFromLeft(90));
-            row.removeFromLeft(16);
-            autosaveIntervalLabel.setBounds(row.removeFromLeft(40));
-            row.removeFromLeft(4);
-            autosaveIntervalEditor.setBounds(row.removeFromLeft(36));
-            row.removeFromLeft(4);
-            autosaveIntervalUnitLabel.setBounds(row.removeFromLeft(30));
-            row.removeFromLeft(16);
-            autosaveBackupCountLabel.setBounds(row.removeFromLeft(40));
-            row.removeFromLeft(4);
-            autosaveBackupCountEditor.setBounds(row.removeFromLeft(36));
-            row.removeFromLeft(4);
-            autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-    // Group 9; chains Group 10 itself -- see that function.
-    layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
+    layoutGraphGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    layoutTimelineGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    layoutAutosaveGroup(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    // Mixer rows, then the chain they head (placement, panel-detach mode, MIDI Remote).
+    layoutMixerGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
     // Size the content host to whatever the visible groups consumed; the viewport scrolls it.
     // Width spans the full viewport so the dividers reach the edges; the scrollbar
     // gutter is already excluded from contentWidth.
@@ -631,6 +459,8 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
 
 void PreferencesSettingsTab::applySearchFilter(const juce::String& query) {
     searchQuery = query.trim();
+    // A query searches every category, so the picker has nothing to say until it is cleared.
+    categoryCombo.setEnabled(searchQuery.isEmpty());
     resized();
     repaint();
 }
@@ -648,9 +478,12 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     if (graphEditor == nullptr)
         return;
     graphEditor->getSmartConnections().setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
+    graphEditor->getSmartConnections().setSideBySideMode(sideBySideFromComboId(sideBySideCombo_.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setReconnectChainOnDeleteEnabled(reconnectChainOnDeleteToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
+    graphEditor->cablesOnTop = cablesOnTopToggle.getToggleState();
+    graphEditor->showCurvesOnCables = showCurvesOnCablesToggle.getToggleState();
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
     graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
@@ -658,5 +491,8 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     graphEditor->setSpliceCableOnMacroPortDeleteEnabled(macroSpliceCableOnPortDeleteToggle.getToggleState());
     graphEditor->setMacroDragWithoutCmdEnabled(macroDragWithoutCmdToggle.getToggleState());
+    graphEditor->setMoveMacroOnHullDragEnabled(moveMacroOnHullDragToggle.getToggleState());
+    graphEditor->getMacroController().setPackMacrosOnCollapse(packMacrosOnCollapseToggle.getToggleState());
+    graphEditor->getMacroController().setTidyCanvasOnPack(tidyCanvasOnPackToggle.getToggleState());
     graphEditor->setAutoCreateChannelOnConnectEnabled(mixerAutoCreateChannelOnConnectToggle.getToggleState());
 }

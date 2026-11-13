@@ -10,22 +10,25 @@ collapse it drives, and random note generation. The roll itself is [piano-roll](
 "Scale" chip and hidden by default.
 
 **It holds no reference to the roll, the doc, or any undo manager.** Every user action travels OUT
-through a `std::function` callback (`onScaleChanged`, `onPitchVisibilityChanged`,
-`onQuantizePitches`, `onGenerate`) and every piece of state the roll needs to push back IN —
+through a `std::function` callback (`onScaleChanged` for an own key, `onFollowSongKey`,
+`onPitchVisibilityChanged`, `onGenerate`) and every piece of state the roll needs to push back IN —
 switching clips, restoring a remembered scale — travels IN through `setSelection()`. That is the
 same "panel owns presentation, owner owns the doc" split `PianoRollComponent` itself follows for
 `TimelineViewState`.
 
 Contents, top to bottom:
 
-- a **Root** combo (C…B) and a **Scale** combo — "No scale" first, then every entry from
-  `synth::builtInScalePresets()` in order (Major, Natural/Harmonic/Melodic Minor, Dorian,
-  Phrygian, Lydian, Mixolydian, Locrian, Major/Minor Pentatonic, Blues, Whole Tone, Chromatic),
-  then the user's saved scales, then "Edit custom scales..." which reveals a 12-toggle pitch-class
-  plus name plus Save editor rather than being itself a scale choice;
+- a **Key** field (`KeyField`) that reads **Song key · D Dorian** in the muted text colour while the clip follows
+  the song key, or the clip's own key ("A Phrygian") otherwise. It opens the shared key picker
+  ([song-key](song-key.md#the-key-picker)) with a **Follow song key** row on top and no "No key" button: a clip's own
+  key is always a key, and a clip with no key is one following a song that has none. The user's saved scales are in
+  its **Your scales** group;
+- a **Custom scales...** button that shows or hides the 12-toggle pitch-class plus name plus Save editor; saving makes
+  the new scale the clip's own key at the current root;
 - a **"Show only scale notes"** toggle — the same flag the roll's funnel chip drives, see **Show
   Only Scale Notes has one writer**;
-- a **Min/Max note range** pair plus a **Generate** button with an **"Add to existing"** toggle
+- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a keyboard strip that scrolls over every note, drag an edge to add or remove notes, drag the middle to move the range, click empty keys to move it there; it follows the panel's scale, and its root: a change of root moves both ends by the nearest step,
+`synth::rangeFollowingRoot`, so C2 to C5, the default, reads D2 to D5 in D) plus a **Generate** button with an **"Add to existing"** toggle
   under it. The toggle sits under the button rather than beside it because at `kScalePanelWidth` a
   button-plus-checkbox row truncates the label the button's meaning depends on.
 
@@ -53,14 +56,20 @@ narrowing the controls. No horizontal bar is shown — the width is fixed and ne
 
 The custom-scale editor's show/hide (`showCustomEditor`, fired by selecting the "Edit custom
 scales..." row) toggles `customEditorVisible_` and calls `resized()`, so hiding it reclaims the
-height it used and re-decides whether the panel still overflows — no stale scrollbar. The panel's
+height it used and re-decides whether the panel still overflows — no stale scrollbar. The editor's
+twelve keys, name field and Save button live in one `customBlock_` that fades in and out
+(`FadeVisibility`, [animation](../layout/animation.md#fading-things-in-and-out)); the block is as tall as the fade
+has got (`customBlockHeight()`, mirrored by `contentNaturalHeight()`), lays its rows out at full size from its top
+and clips them, so the controls under it slide with the fade instead of jumping or overlapping. The panel's
 background and right-edge hairline stay painted on the panel itself, behind the (transparent)
 viewport, so nothing visually changes when scrolling is not needed.
 
 ## The scale engine
 
-`Source/Timeline/MusicalScale.h` is deliberately header-only and free of any UI or
-`TimelineDoc`-mutation dependency.
+`Source/Music/MusicalScale.h` is deliberately header-only and free of any UI, Timeline or module
+dependency (only `juce_core`); the piano roll and both sequencers share it. Only
+`generateRandomNotes` needs `MidiNote`, so it lives in `Source/Timeline/ScaleNoteGenerator.h` as a
+thin wrapper over the shared `pickPitches`.
 
 `synth::MusicalScale` is a root pitch class (0=C…11=B) plus a 12-bit, root-RELATIVE interval mask —
 bit *i* set means "root + i semitones, mod 12, is in the scale", so the same mask value describes a
@@ -84,19 +93,60 @@ follows ([`layout/colour-overrides.md`](../layout/colour-overrides.md#note-colou
 never reaches disk — the same null-degrades-gracefully contract every other timeline
 sub-component's setter follows.
 
-Tests: `Tests/Timeline/MusicalScaleTests.cpp`.
+Beyond what the piano roll uses, the same header carries the helpers the sequencers need:
+`notesPerOctave`, `stepBy` (move N scale notes), `degreeOf`, `snapTable` (a 128-entry audio-thread
+lookup), `makeScaleFromMask`, `pickPitches`, and in-scale chords (`chordInScale`,
+`chordFromIntervals`, `chordName`, `romanNumeral`). See
+[sequencer-design](../modules/sequencer-design.md#shared-scale-engine).
 
-## Per-clip scale memory
+Tests: `Tests/Music/MusicalScaleTests.cpp` and `Tests/Music/MusicalScaleChordTests.cpp`.
 
-`PianoRollComponent` keeps `clipScaleMemory_`, a `std::map<ClipId, {scale, pitchVisibilityOn}>`,
-populated only as clips get their scale touched.
+## Following the song key or its own
 
-**It is deliberately NOT persisted to disk.** A scale choice is a per-editing-session aid, not
-document state that would need its own undo/redo or bundle-format entry.
+A clip with no scale of its own follows the song key ([song-key](song-key.md)); new MIDI clips and clips in older
+projects with no scale follow, and a clip that already had a scale keeps it as its own key. `synth::resolveClipKey`
+(`Source/Timeline/ClipKey.h`) answers "which key does this clip use" for every caller: the roll's
+`activeScaleForOpenClip()` is that resolved key, and highlighting, snapping new notes, Generate, quantise and the range
+picker all read it. Writes never do: picking a key, the filter toggle and undo write `Clip::scale`, the own key, so
+toggling "Show only scale notes" on a follower leaves it following. Choosing **Follow song key** clears the own key.
 
-`openClip()` calls `restoreScaleMemoryForOpenClip()`, which pushes whatever this clip remembers —
-or "No scale" for a clip never opened before — back into the panel and the roll's own scale
-context, rebuilding `visiblePitches_` against it.
+The song key reaches the roll through the timeline's 10 Hz transport poll (`PianoRollComponent::refreshSongKey()`): a
+following clip whose shown key differs from the song key is re-shown, so its highlighting moves when the song key
+changes. Nothing plays differently and no written note moves; only new notes snap.
+
+**Snapping new notes.** A note drawn or double-clicked into a clip with a key lands on the nearest note of that key
+(ties go down, `MusicalScale::snapPitch`). Holding Cmd places it where the pointer is. Moves, pastes, Generate's own
+picks and the notes already in the clip never snap.
+
+## The scale is saved on the clip
+
+A clip owns its scale: `Clip::scale` (a root note plus the scale's notes and name; empty means it follows the song
+key) and `Clip::scaleVisible` (the "Show only scale notes" flag). They are saved in the
+project, so a clip opens on the scale it was left on after a restart. In the project file they are
+two optional clip keys, `"scale": {"root", "mask", "name"}` and `"scaleVisible": true`, left out when
+unset (the file version stays 1). A missing or unreadable scale loads as following the song key and never stops the
+project loading; a root outside C to B is pulled into range and an empty mask means no scale. A scale
+belongs to one clip: duplicating, splitting and copy/paste carry it, linked clips do not share it.
+
+The piano roll keeps no copy. Every change goes through `PianoRollComponent::commitClipScale()`, which
+calls `TimelineDoc::setClipScale()` as one undo step. It has to be an undo step: timeline undo restores
+the whole document, so a scale change made outside the undo stack would be silently reverted by undoing an
+earlier note edit. The same step marks the project changed, so autosave and the unsaved-changes prompt
+see it. `openClip()` calls `restoreScaleForOpenClip()`, which shows the clip's saved scale in the panel
+and the roll's own scale context, rebuilding `visiblePitches_` against it; `refreshFromDoc()` does the
+same after an undo, but only when the panel disagrees with the clip (re-showing it also closes the
+custom-scale editor).
+
+## The note range is saved and undoable
+
+The band of the Note range picker is saved on the clip as `Clip::noteRange` (lowest and highest note), written as an
+optional `"noteRange": {"low", "high"}` next to `"scale"`; a project without it loads unchanged and shows C2 to C5 (moved
+to the key's root). Like the scale it is carried by duplicate, split and copy/paste and is not shared by linked clips.
+The picker's `onGestureEnd` reaches `PianoRollComponent::commitClipNoteRange()`: one drag, or one key step, is one undo
+step. `restoreScaleForOpenClip()` shows the saved range (or the defaults), and `refreshFromDoc()` re-shows it after an
+undo or redo. Picking an own key with a saved range writes the band as it moved for the new root inside the same undo
+step as the key, so one Cmd+Z gives back both; a clip with no saved range gets none. Following the song key, and a song
+key change while the clip follows it, write no range: a saved range stays where it was saved.
 
 ## Pitch-visibility row collapse
 
@@ -119,11 +169,11 @@ instead of the next drawn one. `firstVisiblePitch_` is re-clamped to the nearest
 
 The roll's header chip, `Option+S` and the panel's checkbox are three views of one flag, and all
 three route through `PianoRollComponent::toggleScaleFilter()`. It writes the open clip's
-`ClipScaleMemory`, pushes the scale context, and reflects the new value back into the panel via
+scale through `commitClipScale()`, pushes the scale context, and reflects the new value back into the panel via
 `setSelection()`, which fires no callback by contract — it is a reflection, not an edit — so it
 cannot loop back in.
 
-The flag is remembered per clip alongside the scale, and is deliberately NOT gated on a scale being
+The flag is saved per clip alongside the scale, and is deliberately NOT gated on a scale being
 chosen: arming it first and picking the scale second is a real order of operations.
 `isRowFilterActive()` (the flag AND a real scale) is the separate question anything behavioural
 asks.
@@ -143,10 +193,12 @@ behaviour is preserved **by construction** rather than by a parallel code path t
 The octave actions stay on `transposeSelectedNotes(±12)`: an octave is twelve semitones by
 definition, not twelve degrees.
 
-## Quantise pitches to the scale
+## Fit to key
 
-Reached from the roll's **Quantise Pitches** chip or `Option+Shift+Q`, and from nowhere else — one
-door, so nothing can disagree about its own enabled state.
+Reached from the roll's **Fit notes to key** chip or `Option+Shift+Q`, and from the clip's right-click menu in the
+timeline (**Fit to key**, every note of the clip, greyed with no key or no notes). Both share the helpers in
+`Source/Timeline/FitToKey.h`. Several clips at once (**Fit all clips to key** in the menu, the Song key picker's **Fit project to key**) go through `Source/Timeline/FitClipsToKey.h`; see [song key](song-key.md#fit-project-to-key). The roll's chip is the only door in the roll, so nothing can disagree about its own
+enabled state.
 
 Both entry points go through `quantisePitchesToActiveScale()`, which resolves the clip's scale via
 `activeScaleForOpenClip()` and defers to `quantisePitchesToScale(scale)`. That snaps every note's
@@ -165,7 +217,7 @@ which reads the RAW snap division regardless of the snap on/off toggle
 `isQuantiseEnabled` documents), falling back to a sixteenth (0.25 beats) when that division is Off
 or 0, since generation always needs a concrete grid step to place notes on.
 
-`synth::generateRandomNotes` (`MusicalScale.h`) then places one note per grid step from beat 0
+`synth::generateRandomNotes` (`Timeline/ScaleNoteGenerator.h`) then places one note per grid step from beat 0
 until the step's start would fall at or past the clip's length, picking a pitch uniformly among the
 in-scale pitches inside `[minPitch, maxPitch]` — every pitch in range when the scale is null or
 chromatic. If no candidate pitch exists in that range at all, it returns an empty note list rather

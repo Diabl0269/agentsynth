@@ -14,7 +14,79 @@
 
 TEST(TimelinePanelComponentTest, AddTrackButtonCarriesATooltip) {
     synth::ui::TimelinePanelComponent panel;
-    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a MIDI or Audio track");
+    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a track, module, preset or marker");
+}
+
+// ============================================================================
+// Toolbar buttons: icon chips with the name beside them, "Show button labels"
+// ============================================================================
+
+TEST(TimelinePanelToolbarButtonsTest, AddTrackAndSnapShowTheirNameBesideTheIconAndFitTheirBars) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 300);
+    auto& addTrack = panel.getAddTrackButton();
+    auto& snap = panel.getSnapToggleButton();
+
+    EXPECT_EQ(addTrack.getButtonText(), "Add");
+    EXPECT_EQ(snap.getButtonText(), "Snap");
+    for (auto* b : std::initializer_list<synth::ui::ToolbarButton*>{&addTrack, &snap}) {
+        EXPECT_TRUE(b->isInline()) << b->getName();
+        EXPECT_EQ(b->getTitle(), b->getName());
+        EXPECT_GE(b->getWidth(), b->getPreferredWidth()) << b->getName() << " has room for its caption";
+        const auto chip = synth::theme::toolbarChipBounds(*b);
+        EXPECT_LE(chip.getBottom(), (float)b->getHeight()) << "chip and caption share one row";
+        EXPECT_LT(chip.getRight(), (float)b->getWidth());
+    }
+    EXPECT_EQ(panel.getTransportBarBounds().getHeight(), 34);
+    EXPECT_LE(snap.getHeight(), 34);
+    const int stripHeight = panel.getTrackHeaderViewport().getY() - panel.getTrackHeaderBounds().getY();
+    EXPECT_EQ(stripHeight, 24 + 30) << "the Add Track strip is as tall as the Sections strip plus the ruler";
+    EXPECT_LE(addTrack.getHeight(), stripHeight);
+    EXPECT_TRUE(juce::Rectangle<int>(0, 0, panel.getTrackHeaderBounds().getWidth(), stripHeight)
+                    .contains(addTrack.getBounds().translated(-panel.getTrackHeaderBounds().getX(),
+                                                              -panel.getTrackHeaderBounds().getY())));
+}
+
+TEST(TimelinePanelToolbarButtonsTest, WithLabelsOffTheButtonsAreIconsOnlyAndTheBarsKeepTheirHeights) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 300);
+    const int labelledSnapWidth = panel.getSnapToggleButton().getWidth();
+    panel.setToolbarLabelsShown(false);
+
+    auto& addTrack = panel.getAddTrackButton();
+    auto& snap = panel.getSnapToggleButton();
+    EXPECT_TRUE(addTrack.getButtonText().isEmpty());
+    EXPECT_TRUE(snap.getButtonText().isEmpty());
+    EXPECT_EQ(addTrack.getTitle(), "Add") << "the screen-reader name stays the full name";
+    EXPECT_EQ(snap.getTitle(), "Snap");
+    EXPECT_TRUE(addTrack.getTooltip().containsIgnoreCase("Add a track")) << addTrack.getTooltip();
+    EXPECT_TRUE(snap.getTooltip().containsIgnoreCase("Snap on/off")) << snap.getTooltip();
+    EXPECT_TRUE(snap.getTooltip().contains("(j)")) << "the shortcut stays in the tooltip";
+    EXPECT_LT(snap.getWidth(), labelledSnapWidth);
+    EXPECT_EQ(panel.getTransportBarBounds().getHeight(), 34);
+    EXPECT_LE(snap.getHeight(), 34);
+    EXPECT_EQ(panel.getTrackHeaderViewport().getY() - panel.getTrackHeaderBounds().getY(), 24 + 30);
+
+    panel.setToolbarLabelsShown(true);
+    EXPECT_EQ(panel.getSnapToggleButton().getButtonText(), "Snap");
+    EXPECT_EQ(panel.getSnapToggleButton().getWidth(), labelledSnapWidth);
+}
+
+TEST(TimelinePanelToolbarButtonsTest, TheSnapSwitchIsLitWhileSnappingIsOnInBothModes) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 300);
+    auto& snap = panel.getSnapToggleButton();
+    for (const bool labels : {true, false}) {
+        panel.setToolbarLabelsShown(labels);
+        panel.getViewState().snapEnabled = true;
+        snap.onClick(); // off
+        EXPECT_FALSE(snap.getToggleState());
+        EXPECT_EQ(snap.getLitAmount(), 0.0f);
+        snap.onClick(); // on
+        EXPECT_TRUE(snap.getToggleState());
+        EXPECT_EQ(snap.getLitAmount(), 1.0f);
+        EXPECT_EQ(snap.getTitle(), "Snap");
+    }
 }
 
 // Nothing inside the panel assumes the default height: at 2x, every extra pixel goes to the lanes.
@@ -35,7 +107,8 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     // The clip lanes still fill the lanes region below the 30 px ruler — the rect the grid is
     // painted into, so clips stay aligned with it at any height. (30, up from 24: the strip now
     // tiles a numbers row and a marker band — see Theme::Metrics::timelineRulerHeight.)
-    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(30));
+    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(24 + 30))
+        << "the 24 px Sections strip, then the ruler";
     // The ROLL shares the same rect, except for how much of the ruler band it claims: it owns the
     // vertical run above the ruler when its chip toolbar is showing, so that top edge belongs to
     // PianoRollComponent's own layout and is asserted in its own tests. What must hold HERE is that
@@ -45,7 +118,7 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(roll.getWidth(), lanes.getWidth());
     EXPECT_EQ(roll.getBottom(), lanes.getBottom());
     EXPECT_GE(roll.getY(), lanes.getY());
-    EXPECT_LE(roll.getY(), lanes.getY() + 30);
+    EXPECT_LE(roll.getY(), lanes.getY() + 24 + 30);
     // The header list fills the taller viewport even with no tracks (no gap under the last row).
     ASSERT_NE(panel.getTrackHeaderViewport().getViewedComponent(), nullptr);
     EXPECT_GE(panel.getTrackHeaderViewport().getViewedComponent()->getHeight(),

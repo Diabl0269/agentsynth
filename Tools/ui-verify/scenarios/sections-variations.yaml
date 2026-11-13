@@ -1,0 +1,124 @@
+# Sections: a repeat of a section gets its own take of one part. Right-clicking the lead clip in the second Verse and
+# choosing "New variation of this part" makes variation B that owns the lead: editing the lead there leaves the first
+# Verse's lead alone, editing the drums in either Verse still reaches both, and the letter chip on each block switches
+# a repeat, adds a copy, or plays one variation in every repeat.
+#
+# What a user does: starts a new project with two tracks (lead and drums), each with a one-bar clip, drags across bars 1-2
+# of the Sections strip to make "Verse", names it and places it again after itself (Cmd+D). Every block shows an "A" chip.
+# In the second Verse they right-click the lead clip and pick "New variation of this part": the chip reads B and a toast
+# says the lead is its own now. Shortening the lead clip there leaves the first Verse's lead at a full bar; shortening a
+# drum clip in the second Verse shortens it in the first too. The second Verse's chip menu picks A (the lead is back to
+# A's, a full bar), then B again, then "New variation (copy of B)" (C), then "Play C in every Verse" (both blocks read C).
+record: true
+save_project: sections-variations
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - type: {text: osc}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - type: {text: osc}
+  - key: {keys: return}
+  - wait: {}
+  # One bar of lead (row 1) and one bar of drums (row 2); the double-click opens the piano roll, Esc leaves it.
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 84, clicks: 2}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - screenshot: {name: 1-two-clips}
+  # Make "Verse" over bars 1-2 (192 px) and place it again after itself.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 100, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - type: {text: "Verse"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Verse:0.000:8.000:1/2;Verse:8.000:8.000:2/2", variations: "A;A", within_ms: 2000}
+  - screenshot: {name: 2-two-verses-chips-a}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000;Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  # Right-click the lead clip in the second Verse (bar 3, row 1).
+  - click: {id: timelineClipLaneArea, x: 240, y: 28, button: right}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: 3-clip-menu}
+  # Arrows reach the popup: Split at pointer, (Glue is greyed), Duplicate, Duplicate linked, New variation of this part.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, variations: "A*;B*", within_ms: 2000}
+  - screenshot: {name: 4-new-variation-chip-b-and-toast}
+  # Shorten the lead clip in the second Verse by one beat (right edge at beat 12 = x 287): the first Verse's lead stays.
+  - mouseDown: {id: timelineClipLaneArea, x: 287, y: 28}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 275, y: 28}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 263, y: 28}
+  - mouseUp: {id: timelineClipLaneArea, x: 263, y: 28}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:3.000;Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  - screenshot: {name: 5-lead-edit-stays-in-second-verse}
+  # The same edit to a drum clip in the second Verse reaches the first Verse too: the drums are shared.
+  - mouseDown: {id: timelineClipLaneArea, x: 287, y: 84}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 275, y: 84}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 263, y: 84}
+  - mouseUp: {id: timelineClipLaneArea, x: 263, y: 84}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:3.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  - screenshot: {name: 6-drum-edit-reached-first-verse}
+  # The second Verse's chip (right end of its block) opens the variation menu: pick A, the lead goes back to A's.
+  - click: {id: timelineSectionStrip, x: 372, y: 12}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: 7-chip-menu}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, variations: "A*;A*", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  - screenshot: {name: 8-chip-a-lead-back-to-a}
+  # B again: the second Verse's lead is the shortened one again.
+  - click: {id: timelineSectionStrip, x: 372, y: 12}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, variations: "A*;B*", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:3.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  # New variation (copy of B): C, a full copy that the second Verse now plays.
+  - click: {id: timelineSectionStrip, x: 372, y: 12}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, variations: "A*;C*", sectionVariationCount: 3, within_ms: 2000}
+  - screenshot: {name: 9-new-variation-c}
+  # Play C in every Verse.
+  - click: {id: timelineSectionStrip, x: 372, y: 12}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: 10-chip-menu-three-variations}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, variations: "C*;C*", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  - screenshot: {name: 11-play-c-everywhere}

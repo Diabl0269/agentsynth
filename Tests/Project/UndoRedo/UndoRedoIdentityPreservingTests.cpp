@@ -2,6 +2,7 @@
 // A structural undo used to destroy and re-create EVERY node, losing all module runtime state
 // and blocking the audio callback while it did so; the restore now diffs the snapshot against
 // the live graph, so these tests are about IDENTITY, not just the graph ending up the right shape.
+#include "../../TestWait.h"
 #include "UndoRedoTestFixture.h"
 
 namespace {
@@ -68,8 +69,6 @@ public:
     int count = 0;
 };
 
-void pumpMessageLoop(int ms = 30) { juce::MessageManager::getInstance()->runDispatchLoopUntil(ms); }
-
 /** ModuleBase stand-in that records how often its non-parameter state is written. */
 class ExtraStateProbeModule : public ModuleBase {
 public:
@@ -77,7 +76,7 @@ public:
         : ModuleBase("Oscillator", 1, 1) {}
 
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Oscillator; }
 
     juce::var getExtraState() const override {
@@ -153,16 +152,16 @@ TEST_F(UndoRedoTest, ParamOnlyUndoPerformsNoTopologyOperations) {
     const auto connectionsBefore = captureIdentity(graph).connections;
 
     // Drain anything the setup queued, then start listening.
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
     TopologyChangeCounter counter;
     graph.addChangeListener(&counter);
 
     ASSERT_TRUE(undoManager.undo());
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(counter.count, 0) << "a parameter-only undo must not touch graph topology";
 
     ASSERT_TRUE(undoManager.redo());
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(counter.count, 0) << "a parameter-only redo must not touch graph topology";
 
     EXPECT_EQ(graph.getNumNodes(), 2);

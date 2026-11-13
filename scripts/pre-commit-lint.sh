@@ -1,6 +1,6 @@
 #!/bin/bash
 # Pre-commit hook: clang-format lint on staged C/C++ sources, plus the file-size, function-size,
-# header-comment-placement, comment-provenance and docs-integrity guards.
+# header-comment-placement, comment-provenance, fixed-wait and docs-integrity guards.
 #
 # Mirrors the CI "Lint" job's clang-format --dry-run --Werror over Source/ and Tests/, but scoped
 # to the files staged for THIS commit, so it runs fast and catches formatting before it ever
@@ -71,6 +71,16 @@ if ! bash "$repo_root/scripts/check-file-sizes.sh"; then
     exit 1
 fi
 
+# --- Unity-clash guard: whole tree. A name declared in an anonymous namespace in two sources of one
+# Windows unity group fails only the Windows build, so catch it here.
+if ! bash "$repo_root/scripts/check-unity-clashes.sh"; then
+    echo "" >&2
+    echo "pre-commit: unity-clash guard failed (see above)." >&2
+    echo "  Rename the name in one of the two files (docs/development/ci-pipeline.md, \"Unity groups on Windows\")." >&2
+    echo "  Bypass:   git commit --no-verify" >&2
+    exit 1
+fi
+
 # --- Function-size guard: whole tree, same deal as the file-size guard above (FRO78).
 if ! bash "$repo_root/scripts/check-function-sizes.sh"; then
     echo "" >&2
@@ -95,6 +105,15 @@ if ! bash "$repo_root/scripts/check-comment-provenance.sh"; then
     echo "" >&2
     echo "pre-commit: comment-provenance guard failed (see above)." >&2
     echo "  Rewrite the comment to state the behaviour or reason without the ticket id / date (docs/development/comment-provenance-guard.md), or run --update if it legitimately shrank." >&2
+    echo "  Bypass:   git commit --no-verify" >&2
+    exit 1
+fi
+
+# --- Fixed-wait guard: whole tree. Any Tests/ edit can add a fixed pump followed by an assertion.
+if ! bash "$repo_root/scripts/check-fixed-waits.sh"; then
+    echo "" >&2
+    echo "pre-commit: fixed-wait guard failed (see above)." >&2
+    echo "  Poll for the condition with waitUntil() from Tests/TestWait.h (docs/development/testing.md, \"Waiting for async work\")." >&2
     echo "  Bypass:   git commit --no-verify" >&2
     exit 1
 fi

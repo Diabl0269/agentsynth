@@ -44,8 +44,11 @@ target_compile_definitions(JuceModules PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 
 # JUCE switches the module code itself is compiled with, PUBLIC so every consumer's headers agree.
 # No embedded web browser; host third-party VST3 (and AU on macOS) plugins with JUCE's built-in
-# hosting (TL7-1/TL7-2, see the comment beside Core in the root CMakeLists.txt).
-target_compile_definitions(JuceModules PUBLIC JUCE_WEB_BROWSER=0 JUCE_PLUGINHOST_VST3=1)
+# hosting (TL7-1/TL7-2, see the comment beside Core in the root CMakeLists.txt). JUCE's LAME
+# format class (a wrapper that runs the user's installed `lame`, no encoder is bundled) backs MP3
+# export.
+target_compile_definitions(JuceModules PUBLIC JUCE_WEB_BROWSER=0 JUCE_PLUGINHOST_VST3=1
+                                              JUCE_USE_LAME_AUDIO_FORMAT=1)
 if(APPLE)
     target_compile_definitions(JuceModules PUBLIC JUCE_PLUGINHOST_AU=1)
 endif()

@@ -9,6 +9,12 @@
 
 #include "Modules/ModuleBase.h"
 #include "ProjectBundle.h"
+#include <map>
+
+class GraphEditor;
+// Bulk duplicate (MainComponentTrackDuplicate.cpp): builds the cards of every copied node once, then glides each out
+// of its original. `copies` maps an original's node uid to its copy.
+void showDuplicatedTrackCards(GraphEditor& editor, const std::map<int, juce::AudioProcessorGraph::NodeID>& copies);
 
 namespace detail {
 
@@ -37,6 +43,10 @@ inline juce::String peaksRefForAssetRef(const juce::String& assetRef) {
 // policy. Used by both MainComponentFileIO.cpp (saveToFile) and MainComponentTimeline.cpp
 // (chooseTakeFiles, promptRelinkClipAsset, relinkClipAsset, importAudioFileToClip).
 inline constexpr const char* kRecordingsFolderName = "Recordings";
+// Floor on a committed audio clip's length, so a take stopped the instant it started still produces a clip the
+// model accepts (addClip requires a strictly positive length). Same value and reasoning as
+// synth::MidiRecorder::kMinNoteLengthBeats.
+inline constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
 // The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
 //
@@ -55,6 +65,46 @@ inline bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
         return false;
 
     return isMidiInstrumentType(module->getModuleType());
+}
+
+// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default.
+// Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
+// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
+// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
+// asset policy.
+inline constexpr const char* kExportsFolderName = "Exports";
+// The folder a "Export Audio..." dialog starts in: <bundle>/<subFolderName>
+// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
+// other save/open dialog defaults to.
+inline juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
+    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
+        auto dir = currentBundleDir.getChildFile(subFolderName);
+        dir.createDirectory();
+        return dir;
+    }
+    return synth::ProjectBundle::getDefaultProjectsDirectory();
+}
+
+// A node's uuid, or a synthetic key from its graph id when it has none: macro port nodes are plain graph
+// nodes and the track-ownership walk must pass through them whether or not they carry a uuid. The key the
+// ownership map (MainComponent::resolveAutomationOwners) is built with, so anything asking "who owns this
+// node" must use it too. Used by MainComponentAutomationOwner.cpp and MainComponentAutomationLanes.cpp.
+inline juce::String ownershipKey(const juce::AudioProcessorGraph::Node& node) {
+    const juce::String uuid = node.properties["uuid"].toString();
+    return uuid.isNotEmpty() ? uuid : "node#" + juce::String(static_cast<int>(node.nodeID.uid));
+}
+
+// Scrolls a lane's row into view once the Timeline has its settled size: a dock opened just now is still sliding, and
+// the scroll aims at the view's height. A dock closed again before the slide lands leaves nothing to scroll.
+// `owner` guards the captured references.
+template <class Slide, class Panel>
+void showLaneWhenSettled(Slide& slide, Panel& panel, const bool& dockVisible, synth::LaneId lane,
+                         juce::Component& owner) {
+    slide.whenSettled([safe = juce::Component::SafePointer<juce::Component>(&owner), &panel, &dockVisible, lane,
+                       sliding = slide.isMoving()] {
+        if (safe != nullptr && (!sliding || dockVisible))
+            panel.showAutomationLane(lane);
+    });
 }
 
 } // namespace detail

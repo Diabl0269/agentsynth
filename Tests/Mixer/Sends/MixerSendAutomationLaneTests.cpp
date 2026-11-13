@@ -18,6 +18,7 @@
 //   4. RemovingTheSlotLeavesTheLaneBoundNotOrphaned -- sends-and-buses.md's claim that a removed
 //      slot's lane is left alone (the parameter itself never goes away) rather than orphaned.
 
+#include "../../UI/Layout/BottomDockActiveTabResetGuard.h"
 #include "../../UI/MidiRemote/MidiRemoteMockProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -81,6 +82,7 @@ collectAddLaneOptions(const synth::ui::TimelinePanelComponent& panel) {
 } // namespace
 
 TEST(MixerSendAutomationLaneTest, PickerOffersOnlyActiveSends) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
 
@@ -122,6 +124,7 @@ TEST(MixerSendAutomationLaneTest, PickerOffersOnlyActiveSends) {
 }
 
 TEST(MixerSendAutomationLaneTest, PickerDropsOnlyTheRemovedSlot) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
 
@@ -152,6 +155,7 @@ TEST(MixerSendAutomationLaneTest, PickerDropsOnlyTheRemovedSlot) {
 }
 
 TEST(MixerSendAutomationLaneTest, ChoosingTheEntryCreatesABoundLane) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
 
@@ -183,7 +187,8 @@ TEST(MixerSendAutomationLaneTest, ChoosingTheEntryCreatesABoundLane) {
         << "a real RangedAudioParameter's range, not the hosted-plugin {0, 1} convention";
     EXPECT_FLOAT_EQ(lane->range.maxValue, sendParam->getNormalisableRange().end);
 
-    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(doc.getTrackForLane(lane->id)->id))
+        << "the new lane's track folds open to show it";
     EXPECT_EQ(panel.getSelectedAutomationLane(), lane->id);
 
     // The lane already exists: re-collecting the picker must no longer offer an "Add lane..." entry
@@ -213,6 +218,7 @@ TEST(MixerSendAutomationLaneTest, ChoosingTheEntryCreatesABoundLane) {
 }
 
 TEST(MixerSendAutomationLaneTest, PickerNamesABoxedBusByItsMacroName) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
 

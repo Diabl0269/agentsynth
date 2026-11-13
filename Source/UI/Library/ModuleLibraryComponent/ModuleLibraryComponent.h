@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Plugin/Hosting/HostedPluginBackend.h"
-#include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -15,10 +17,16 @@
 #include <set>
 #include <vector>
 
+class ShortcutManager;
+namespace synth::ui {
+struct AddListLibraryRow;
+}
+
 class ModuleLibraryComponent
     : public juce::Component
     , public juce::DragAndDropContainer
     , public juce::SettableTooltipClient
+    , public synth::ui::KeyboardContextMenuProvider
     , private juce::ScrollBar::Listener
     , private juce::KeyListener {
 public:
@@ -56,12 +64,6 @@ public:
     static constexpr int kHelpButtonSize = 18;
     static constexpr int kHelpButtonMargin = 6;
 
-    /** Inclusive [start, start+length) range of a case-insensitive query hit inside a label. */
-    struct HighlightSpan {
-        int start = 0;
-        int length = 0;
-    };
-
     static constexpr const char* kSnippetsHeader = "Snippets";
     static constexpr const char* kPluginsHeader = "Plugins";
     /** The one row the Plugins section always has: the scan trigger, and — when nothing has been
@@ -85,17 +87,10 @@ public:
     /** Invoked when the user picks "Delete Snippet" from a snippet row's context menu. */
     std::function<void(const juce::String&)> onSnippetDeleteRequested;
 
-    // -------------------------------------------------------------------------
-    // Search
-    // -------------------------------------------------------------------------
+    // ---- Search ----
 
     /** Trimmed query: empty means the library is unfiltered. */
     static juce::String normalisedSearchQuery(const juce::String& raw) { return raw.trim(); }
-
-    static bool textMatchesQuery(const juce::String& text, const juce::String& query);
-
-    /** Non-overlapping case-insensitive hits of `query` inside `text`, in left-to-right order. */
-    static std::vector<HighlightSpan> highlightSpansFor(const juce::String& text, const juce::String& query);
 
     void setSearchText(const juce::String& text);
 
@@ -103,11 +98,7 @@ public:
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
-    /** Grabs keyboard focus on the search field specifically — the destination
-     *  `AppCommands::focusLibrarySearch` (Cmd+F) needs, distinct from `FocusRegionRegistry`'s
-     *  region-root focus (Cmd+Shift+L lands on `this`, not the search field; see FocusRegion.h /
-     *  docs/control/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
-     *  opening the Library first if it is closed, mirroring every other direct-focus shortcut. */
+    /** Focuses the search field itself (Cmd+F, `AppCommands::focusLibrarySearch`), not the region root. */
     void focusSearchField() { searchEditor.grabKeyboardFocus(); }
 
     // -------------------------------------------------------------------------
@@ -152,6 +143,11 @@ public:
      *  Module/Snippet row. No-op for anything else. Public so the behaviour is reachable without
      *  synthesising mouse events — this is also what keyPressed()'s Enter-to-insert calls. */
     void activateRow(int index);
+
+    /** The Add list's rows (see the definition). */
+    std::vector<synth::ui::AddListLibraryRow> getAddListRows() const;
+    /** Does for `row` what Return on it does; false when it is gone. */
+    bool activateAddListRow(const synth::ui::AddListLibraryRow& row);
 
     /** The identity a Plugin row stands for; an invalid identity for any other row. */
     synth::PluginIdentity getPluginIdentity(int index) const;
@@ -288,7 +284,7 @@ public:
     // The library is one painted component rather than a Viewport + inner content: rows are drawn
     // from a single buildRows() pass, and a Viewport would mean splitting that (plus the tooltip
     // client and the drag source) across two components. Instead the rows are drawn through a
-    // scrollOffset and a juce::ScrollBar drives it. The search field and COLLAPSE ALL strip stay
+    // scrollOffset and a juce::ScrollBar drives it. The search field and Collapse all strip stay
     // pinned, so the two controls that change which rows are on screen never scroll out of reach.
     // -------------------------------------------------------------------------
 
@@ -353,6 +349,13 @@ public:
     // -------------------------------------------------------------------------
 
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Opens the keyboard-focused row's right-click menu at that row. Only snippet rows have one
+     *  (Delete Snippet); false for any other row or with no row focused. */
+    bool showContextMenuForKeyboardFocus() override;
+    /** Replaces showing the real snippet-row menu (which never opens headlessly) with a capture of it. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ = std::move(hook);
+    }
 
 private:
     /** The KeyListener half of the scheme above — see the class comment. Only Up/Down/Return are
@@ -438,6 +441,13 @@ public:
     /** The entry index Up/Down keyboard navigation has landed on, or -1. */
     int getKeyboardFocusedIndex() const noexcept { return keyboardFocusedIndex; }
 
+    /** What a screen reader reads for the list: the keyboard-focused row as "Oscillator, 3 of 12,
+     *  Sources" (position among the visible rows of its section), a header as "Sources, section,
+     *  expanded, 12 items", or the visible row count when nothing is focused. */
+    juce::String getAccessibilityValueText() const;
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
     /** Test seam: drives the same state moveKeyboardFocus()/keyPressed() would, without a
      *  real native peer — see FocusRegion.h's own comment on why this test suite can never create
      *  one for grabKeyboardFocus() to require. Clamped exactly like a real navigation move so a test
@@ -480,7 +490,7 @@ public:
     int getEntryIndexAtComponentY(int y) const;
 
     /** Bounds (component space) of the small "?" help button on the collapse-all strip, left of
-     *  the COLLAPSE ALL / EXPAND ALL label. paint() and the mouse handlers share this one rect so
+     *  the Collapse all / Expand all label. paint() and the mouse handlers share this one rect so
      *  the drawn button and the clickable button can never drift apart. */
     static juce::Rectangle<int> getHelpButtonBounds() noexcept;
 
@@ -583,8 +593,11 @@ private:
 
     /** Hides and detaches the popup from whichever host currently shows it, and resets pin state
      *  so the next "?" click (or setHelpPopoverPinned(true)) starts clean. The popup object itself
-     *  survives — closing is not the same as never having opened it. */
+     *  survives — closing is not the same as never having opened it. The call-out fades out through
+     *  PopupMotion::dismiss and the pinned panel through a FadeVisibility; off screen both land at once. */
     void closeHelpPopover();
+    /** The close itself, once the popup has faded out (at once when it is not on screen). */
+    void finishHelpPopoverClose();
 
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
 
@@ -646,16 +659,6 @@ private:
 
     void applySearchEditorColours();
 
-    static void drawHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
-                                    juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
-                                    juce::Colour highlightFill, juce::Colour highlightText);
-
-    /** @param progress 0 = open (pointing down) .. 1 = folded (pointing right). Drawn as the open
-     *  triangle rotated by -90° * progress: for a square area the endpoints are exactly the two
-     *  shapes this used to switch between, so 0 and 1 look identical to the old two-state version
-     *  while everything in between is a real rotation. */
-    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress, juce::Colour colour);
-
 public:
     /** Maps a category header string to its Icon enum value. Public (rather than the private
      *  section every other static paint helper here lives in) so IconLibrary/ModuleLibrary tests
@@ -678,6 +681,19 @@ private:
     // clamps hoveredIndex (clampHoverToVisibleRow's call sites) so a snippet save, plugin scan, or
     // collapse animation completing can never leave it pointing at a row that is no longer visible.
     int keyboardFocusedIndex = -1;
+    juce::String announcedValueText; // last getAccessibilityValueText() handed to the peer
+
+    /** Posts a value-changed event when the spoken text differs from the last one announced. */
+    void refreshAccessibilityValue();
+
+    /** Shown when no row or chrome control is hovered, so the list always has a tooltip. */
+    static constexpr const char* kDefaultTooltip =
+        "Module library. Arrow keys move between modules, Enter adds the focused one.";
+
+    /** Builds and shows the right-click menu of snippet row `index`; `screenAnchor` (screen
+     *  coordinates) places it at the row instead of at the mouse. */
+    void showSnippetContextMenu(int index, std::optional<juce::Rectangle<int>> screenAnchor = {});
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_; // empty = show the real menu
     int pressedIndex = -1;          // row whose click is pending a mouseUp (Action / Plugin rows only)
     bool topStripHovered = false;   // hover state for the collapse-all chrome
     bool helpButtonHovered = false; // hover state for the "?" help button sharing that row
@@ -705,5 +721,6 @@ private:
     // (reverse declaration order) — it holds a non-owning `Component&` to *helpPopup_, so tearing
     // it down after would leave a dangling reference for the instant before its own destructor ran.
     std::unique_ptr<synth::ui::ModuleLibraryHelpPopup> helpPopup_;
+    std::unique_ptr<synth::ui::FadeVisibility> helpFade_; // fades the pinned (floating) popup in and out
     std::unique_ptr<juce::CallOutBox> helpCallOutBox_;
 };

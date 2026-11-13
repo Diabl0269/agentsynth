@@ -1,4 +1,6 @@
 #include "ArrangementContext.h"
+#include "AudioEngine/ModuleTitle.h"
+#include <algorithm>
 #include <cmath>
 #include <unordered_map>
 
@@ -65,7 +67,7 @@ std::unordered_map<juce::String, juce::String> buildDisplayNameByUuid(const juce
             continue;
         const juce::String uuid = node->properties["uuid"].toString();
         if (uuid.isNotEmpty())
-            byUuid[uuid] = node->getProcessor()->getName();
+            byUuid[uuid] = synth::moduleTitle(*node);
     }
     return byUuid;
 }
@@ -117,7 +119,9 @@ juce::String buildTrackBlock(const Track& track, const std::unordered_map<juce::
             juce::StringArray windows;
             int totalNotes = 0;
             for (const auto& clip : track.clips) {
-                windows.add(formatNumber(clip.startBeat) + "-" + formatNumber(clip.startBeat + clip.lengthBeats));
+                // A linked clip shares its notes with its copies, so editing one edits them all.
+                windows.add(formatNumber(clip.startBeat) + "-" + formatNumber(clip.startBeat + clip.lengthBeats) +
+                            (clip.linkGroup != 0 ? " (linked)" : ""));
                 totalNotes += static_cast<int>(clip.notes.size());
             }
             const juce::String clipWord = track.clips.size() == 1 ? " clip @ " : " clips @ ";
@@ -145,17 +149,83 @@ juce::String buildHeader(std::size_t trackCount, const TransportService::Positio
            juce::String(transport.timeSigDenominator) + ", loop " + loopPart;
 }
 
+// The markers on one line, "Markers (beats): "Intro" @ 0, "Drop" @ 8", so a later edit can refer to a section by
+// name. Whole markers only, up to half the budget, with a "+K more" tail, so a heavily marked project cannot push
+// every track out. A name is user- or model-authored text: line breaks become spaces so it stays one line.
+juce::String buildMarkersLine(const std::vector<Marker>& markers, int maxChars) {
+    if (markers.empty())
+        return {};
+    const juce::String prefix = "Markers (beats): ";
+    juce::String line = prefix;
+    int included = 0;
+    for (const auto& marker : markers) {
+        const juce::String name = marker.text.replaceCharacters("\r\n", "  ");
+        const juce::String item = "\"" + name + "\" @ " + formatNumber(marker.beat);
+        const juce::String candidate = line + (included > 0 ? ", " : "") + item;
+        if (included > 0 && candidate.length() > maxChars / 2)
+            break;
+        line = candidate;
+        ++included;
+    }
+    const int remaining = static_cast<int>(markers.size()) - included;
+    if (remaining > 0)
+        line += ", +" + juce::String(remaining) + " more";
+    return line;
+}
+
+// The sections on one line, `Sections (bars): "Intro" 1-4; "Verse" 5-12 (1 of 2)`: one entry per placement, with
+// "(k of n)" when the section plays more than once. Whole entries only, up to a quarter of the budget, with a "+K
+// more" tail. A beat counts in quarter notes; a bar is the time signature's numerator over its denominator.
+juce::String buildSectionsLine(const TimelineDoc& doc, const TransportService::PositionSnapshot& transport,
+                               int maxChars) {
+    const auto& placements = doc.getPlacements();
+    if (placements.empty())
+        return {};
+    const double barBeats = transport.timeSigDenominator > 0
+                                ? 4.0 * static_cast<double>(transport.timeSigNumerator) / transport.timeSigDenominator
+                                : 4.0;
+    const juce::String prefix = "Sections (bars): ";
+    juce::String line = prefix;
+    int included = 0;
+    for (const auto& placement : placements) {
+        const auto* section = doc.getSection(placement.section);
+        if (section == nullptr)
+            continue;
+        const int first = static_cast<int>(std::floor(placement.startBeat / barBeats + 1e-9)) + 1;
+        const int last = std::max(
+            first, static_cast<int>(std::ceil((placement.startBeat + section->lengthBeats) / barBeats - 1e-9)));
+        const int total = static_cast<int>(doc.placementsOf(section->id).size());
+        juce::String item = "\"" + section->name.replaceCharacters("\r\n", "  ") + "\" " + juce::String(first) + "-" +
+                            juce::String(last);
+        if (total > 1)
+            item += " (" + juce::String(doc.placementOrdinal(placement.id)) + " of " + juce::String(total) + ")";
+        const juce::String candidate = line + (included > 0 ? "; " : "") + item;
+        if (included > 0 && candidate.length() > maxChars / 4)
+            break;
+        line = candidate;
+        ++included;
+    }
+    const int remaining = static_cast<int>(placements.size()) - included;
+    if (remaining > 0)
+        line += "; +" + juce::String(remaining) + " more";
+    return line;
+}
+
 } // namespace
 
 juce::String ArrangementContext::summarize(const TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
                                            const TransportService::PositionSnapshot& transport, int maxChars) {
-    if (doc.isEmpty())
+    if (doc.isEmpty() && doc.getMarkers().empty() && doc.getPlacements().empty())
         return {};
 
     const auto& tracks = doc.getTracks();
     const auto byUuid = buildDisplayNameByUuid(graph);
 
     juce::String result = buildHeader(tracks.size(), transport);
+    if (const auto markers = buildMarkersLine(doc.getMarkers(), maxChars); markers.isNotEmpty())
+        result += "\n" + markers;
+    if (const auto sections = buildSectionsLine(doc, transport, maxChars); sections.isNotEmpty())
+        result += "\n" + sections;
 
     int includedTracks = 0;
     for (const auto& track : tracks) {

@@ -4,6 +4,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace synth {
@@ -59,14 +60,21 @@ struct MacroPort {
  *  lifetime of one loaded graph and is meaningless once serialised (Source/CLAUDE.md's
  *  uuid-mirroring invariant).
  *
- *  Flat model: a node already in a macro cannot be grouped into a second one. Nested macros are
- *  out of scope — see GraphEditor::groupSelectionIntoMacro, which refuses (with a
- *  status message, not a silent no-op) rather than doing something ad hoc. */
+ *  Nesting is modelled by `parentId` (empty = top level); GraphEditor::groupSelectionIntoMacro
+ *  nests when the selection's units share one container (docs/macros/menu-and-membership.md). `members`
+ *  stays the DIRECT members only: a uuid appears in exactly one macro's `members` (its innermost
+ *  owner), and a child macro's members belong to its ancestors only transitively — see
+ *  MacroSet::descendantMembers. A macro is valid if it has direct members OR children. */
 struct Macro {
     juce::String id; // opaque, unique within a MacroSet — never mirrored into a processor
     juce::String name;
     juce::Colour colour{0xff5a7dff};
     bool collapsed = false;
+
+    // The id of the macro that directly contains this one; empty = top level (also what every
+    // older save parses as). At most one parent; MacroSet::setParent/fromVar reject cycles and
+    // unknown parents.
+    juce::String parentId;
 
     // The collapsed card's own canvas rectangle. Authoritative ONLY while collapsed: a card is
     // deliberately small and independent of however far-flung its (hidden) members are, and
@@ -76,6 +84,25 @@ struct Macro {
     juce::Rectangle<int> bounds;
 
     std::vector<juce::String> members; // node uuids
+
+    /** One neighbour pushed clear when this macro grew (docs/layout/layout.md#making-room-when-something-grows).
+     *  `unitKey` is the layout unit ("n:<nodeUid>" / "m:<macroId>"), `delta` how far it was pushed and `landedAt` its
+     *  top-left afterwards, so collapsing (or deleting a port) can tell whether the user has moved it since. */
+    struct DisplacedNeighbour {
+        juce::String unitKey;
+        juce::Point<int> delta;
+        juce::Point<int> landedAt;
+    };
+    /** Transient, in push order: NEVER written to or read from a project file, and lost across an undo/redo snapshot
+     *  restore (snapshots go through toVar/fromVar). Cleared once the neighbours have been offered their way back. */
+    std::vector<DisplacedNeighbour> displaced;
+
+    /** Transient like `displaced`: what expanding did to the card, so collapsing can put it back exactly. `expandNudge`
+     *  is the translation that pulled the hull into the canvas (zero if none), `preExpandCardOrigin` the card's
+     *  top-left before the expand. Only meaningful while `hasExpandRecord`. */
+    bool hasExpandRecord = false;
+    juce::Point<int> expandNudge;
+    juce::Point<int> preExpandCardOrigin;
 
     // Named jacks on this macro's boundary. Every port's nodeUuid MUST also appear in
     // `members` — an inlet/outlet is a member like any other node (docs/macros/ports.md#node-types) — and
@@ -125,8 +152,9 @@ public:
     Macro* find(const juce::String& macroId);
     const Macro* find(const juce::String& macroId) const;
 
-    /** The macro `memberUuid` belongs to, or nullptr if it is in none (flat model — at most
-     *  one macro can ever claim a given member). */
+    /** The macro that lists `memberUuid` as a DIRECT member (its innermost owner), or nullptr if
+     *  it is in none — at most one macro can ever claim a given member. Use outermostOf() for the
+     *  top of its ancestor chain. */
     Macro* findByMember(const juce::String& memberUuid);
     const Macro* findByMember(const juce::String& memberUuid) const;
 
@@ -142,12 +170,24 @@ public:
      *  another mutator. */
     juce::String add(Macro macro);
 
-    /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
-     *  purely a metadata change, same as every other MacroSet mutator. GraphEditor::
-     *  ungroupSelection() (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port) is
-     * the caller that gives "ungroup" its full user-facing meaning: it splices every one of the macro's PORT nodes back
-     * out (GraphEditor::spliceOutMacroPort) — removing them and reconnecting the cable each proxied — before ever
-     * calling this, so by the time `remove()` runs, only ordinary member nodes (untouched, exactly as this method's own
+    // Hierarchy queries (nesting via Macro::parentId); semantics documented in MacroSet.cpp.
+    juce::String parentOf(const juce::String& macroId) const;
+    std::vector<juce::String> childrenOf(const juce::String& macroId) const;
+    int depth(const juce::String& macroId) const;
+    std::vector<juce::String> ancestorChain(const juce::String& macroId) const; // inner -> outer
+    std::set<juce::String> descendantMembers(const juce::String& macroId) const;
+    juce::String outermostOf(const juce::String& uuid) const;
+    juce::String outermostCollapsedAncestorOf(const juce::String& uuid) const;
+    bool isEffectivelyCollapsed(const juce::String& macroId) const;
+    bool isVisible(const juce::String& macroId) const;
+    bool setParent(const juce::String& macroId, const juce::String& parentId);
+
+    /** Removes the macro; its children are re-parented to its own parent (or top level). Does NOT touch its former
+     * members' graph nodes itself — this call is purely a metadata change, same as every other MacroSet mutator.
+     * GraphEditor:: ungroupSelection() (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port) is the caller
+     * that gives "ungroup" its full user-facing meaning: it splices every one of the macro's PORT nodes back out
+     * (GraphEditor::spliceOutMacroPort) — removing them and reconnecting the cable each proxied — before ever calling
+     * this, so by the time `remove()` runs, only ordinary member nodes (untouched, exactly as this method's own
      * contract says) are left. */
     bool remove(const juce::String& macroId);
 
@@ -158,18 +198,22 @@ public:
      *  its own findByMember() check before ever touching MacroSet. */
     bool addMember(const juce::String& macroId, const juce::String& memberUuid);
 
+    /** False (no-op) if `oldUuid` is in no macro or `newUuid` is empty. */
+    bool replaceMember(const juce::String& oldUuid, const juce::String& newUuid);
+
     /** Removes `memberUuid` from whichever macro contains it (no-op if it is in none), also
      *  dropping any port that fronted it — a port's nodeUuid is always a member, so this
      *  keeps that invariant true after a single-member removal too, not only after retainOnly().
-     *  A macro left with zero members afterwards is dissolved outright — an empty macro is not a
-     *  meaningful state to leave on screen.
+     *  A macro left with no direct members AND no children is dissolved outright, and so on up the
+     *  parent chain (a parent emptied by losing its last child dissolves too).
      *  @return the id of the macro that was touched (dissolved or just shrunk), or an empty
      *          string if `memberUuid` was in no macro. */
     juce::String removeMemberEverywhere(const juce::String& memberUuid);
 
     /** Drops every member uuid that isn't in `aliveMemberUuids`, and with it any port
      *  whose node died — a port whose node is gone is not a representable state, the same way a
-     *  macro with zero members isn't. Dissolves any macro left with no members. Call after any
+     *  macro with zero members isn't. Dissolves any macro left with no members and no children (bottom-up,
+     *  until nothing changes; each dissolve re-parents per remove()). Call after any
      *  graph mutation that can remove nodes — the MacroSet analogue of SelectionModel::retainOnly
      *  / TimelineReconciler::reconcile.
      *  @return true if anything was dropped or dissolved. */
@@ -187,6 +231,9 @@ public:
     bool fromVar(const juce::var& state);
 
 private:
+    /** Dissolves every macro with no direct members and no children, repeating until stable. */
+    bool dissolveEmpty();
+
     std::vector<Macro> macros_;
 };
 

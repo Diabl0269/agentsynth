@@ -1,0 +1,45 @@
+# The drum machine step-grid editor and its panel hosting, appended to AppUI's source list (kept out of
+# AppUISources.cmake to stay under the file-size cap).
+list(APPEND APPUI_SOURCES
+    Source/UI/Layout/EditorTabWalk.h # the Tab walk of the drum machine and the piano roll
+    Source/UI/Layout/EditorTabWalk.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelDrumMachine.cpp
+    Source/MainComponent/MainComponentDrumMachine.cpp
+    Source/UI/Timeline/TrackDrumMachineButton.h
+    Source/UI/Timeline/TrackDrumMachineButton.cpp
+    Source/UI/DrumMachine/DrumGrid.h
+    Source/UI/DrumMachine/DrumLanes.h
+    Source/UI/DrumMachine/DrumLanes.cpp
+    Source/UI/DrumMachine/DrumRowLabels.h
+    Source/UI/DrumMachine/DrumRowLabels.cpp
+    Source/UI/DrumMachine/DrumIdeas.h
+    Source/UI/DrumMachine/DrumIdeas.cpp
+    Source/UI/DrumMachine/DrumIdeasPanel.h
+    Source/UI/DrumMachine/DrumIdeasPanel.cpp
+    Source/UI/DrumMachine/DrumCellMarks.h
+    Source/UI/DrumMachine/DrumLaneSpec.h
+    Source/UI/DrumMachine/DrumLaneSpec.cpp
+    Source/UI/DrumMachine/DrumHitLane.h
+    Source/UI/DrumMachine/DrumHitLane.cpp
+    Source/UI/DrumMachine/DrumMachineComponent.h
+    Source/UI/DrumMachine/DrumMachineHost.h
+    Source/UI/DrumMachine/DrumMachineComponent.cpp
+    Source/UI/DrumMachine/DrumMachineGeometry.cpp
+    Source/UI/DrumMachine/DrumMachineGroove.cpp
+    Source/UI/DrumMachine/DrumMachineLanes.cpp
+    Source/UI/DrumMachine/DrumMachineKit.cpp
+    Source/UI/DrumMachine/DrumMachineMarks.cpp
+    Source/UI/DrumMachine/DrumMachineIdeas.cpp
+    Source/UI/DrumMachine/DrumMachineEdit.cpp
+    Source/UI/DrumMachine/DrumMachineMotion.cpp
+    Source/UI/DrumMachine/DrumMachinePainting.cpp
+    Source/UI/DrumMachine/DrumMachineMouse.cpp
+    Source/UI/DrumMachine/DrumMachineEdgeScroll.cpp
+    Source/UI/DrumMachine/DrumMachineStroke.cpp
+    Source/UI/DrumMachine/DrumMachineKeys.cpp
+    Source/UI/DrumMachine/DrumMachinePreview.cpp
+    Source/UI/DrumMachine/DrumMachineAccessibility.cpp
+    Source/UI/DrumMachine/DrumMachineRowLength.cpp
+    Source/UI/DrumMachine/DrumMachineEdges.cpp
+    Source/UI/DrumMachine/DrumMachineRowMenu.cpp
+)

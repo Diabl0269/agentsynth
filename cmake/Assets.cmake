@@ -21,6 +21,8 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexSans-SemiBold.ttf
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexMono-Regular.ttf
     ${CMAKE_SOURCE_DIR}/assets/fonts/IBMPlexMono-Medium.ttf
+    # Brand mark drawn on the Welcome card (256 px covers 2x at 96 pt). BinaryData symbol: agentsynthlogo256_png.
+    ${CMAKE_SOURCE_DIR}/assets/brand/agentsynth-logo-256.png
     # Icons (23 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
     ${CMAKE_SOURCE_DIR}/assets/icons/transport-play.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/transport-stop.svg
@@ -79,6 +81,32 @@ juce_add_binary_data(Assets SOURCES
     # The Range edit tool (EditTool::Range), appended after the other tool glyphs. BinaryData
     # symbol: toolrange_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/tool-range.svg
+    # The mixer header's "plays into this channel" badge (arrow into a bracket). BinaryData symbol:
+    # mixersources_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-sources.svg
+    # The toolbar's Hide/Show panel glyph (a window with its bottom panel filled). BinaryData
+    # symbol: togglepanel_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toggle-panel.svg
+    # The mixer insert list's split row (a line forking into two). BinaryData symbol: mixersplit_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-split.svg
+    # The detached panel's dock-back button (an arrow into a window). BinaryData symbol: actiondockback_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/action-dock-back.svg
+    # The Timeline and Mixer toolbar buttons' multi-role glyphs. BinaryData symbols: toolbaraddtrack_svg,
+    # toolbarsnap_svg, mixerinserts_svg, mixersends_svg, mixereq_svg, mixerresetmeters_svg, mixeraddbus_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-add-track.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-snap.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-inserts.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-sends.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-eq.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-reset-meters.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-add-bus.svg
+    # The top bar's Search button (a magnifier). BinaryData symbol: toolbarsearch_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-search.svg
+    # The Timeline bar's clip sizing control, one glyph per mode. BinaryData symbols: toolbarsizingtrim_svg,
+    # toolbarsizingcarry_svg, toolbarsizingstretch_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-trim.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-carry.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-sizing-stretch.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

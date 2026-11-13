@@ -264,6 +264,24 @@ TEST(CurveEditorInteractionTest, RealDoubleClickAddsAPointInFreeMode) {
     EXPECT_EQ(comp.getModel().getNumNodes(), 4);
 }
 
+TEST(CurveEditorInteractionTest, RealDoubleClickAddsNothingOnceTheCurveIsFull) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    CurveModel model(CurveMode::Free);
+    std::vector<CurveNode> nodes((size_t)CurveModel::kMaxNodes);
+    for (int i = 0; i < CurveModel::kMaxNodes; ++i)
+        nodes[(size_t)i] = CurveNode{(double)i / (CurveModel::kMaxNodes - 1), 0.5f, true, true};
+    model.setNodes(nodes);
+    comp.setModel(model);
+    int gestures = 0;
+    comp.onGestureStart = [&] { ++gestures; };
+
+    comp.mouseDoubleClick(curveDoubleClick(comp, {(float)kWidth * 0.5f, (float)kHeight * 0.1f})); // flat: no handles
+
+    EXPECT_EQ(comp.getModel().getNumNodes(), CurveModel::kMaxNodes);
+    EXPECT_EQ(gestures, 0) << "a refused add opens no undo gesture";
+}
+
 TEST(CurveEditorInteractionTest, RealDoubleClickOnANodeRemovesItInFreeMode) {
     CurveEditorComponent comp;
     comp.setSize(kWidth, kHeight);

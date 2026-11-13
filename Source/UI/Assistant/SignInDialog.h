@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AccountService.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -32,6 +33,10 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
 
+    // Escape cancels the sign-in and closes the dialog, exactly like the Cancel button; Return
+    // opens the verification page, like the "Open in Browser" button.
+    bool keyPressed(const juce::KeyPress& key) override;
+
     // Called by AccountRow whenever AccountService::onStateChanged fires, so the dialog reflects
     // the live snapshot (code arrives, polling succeeds/fails, sign-in completes) without owning
     // the callback slot itself.
@@ -40,6 +45,7 @@ public:
 private:
     void updateFromSnapshot(const AccountSnapshot& snapshot);
     void closeDialog();
+    void cancelAndClose();
 
     AccountService& accountService;
 
@@ -53,7 +59,14 @@ private:
     juce::Label statusLabel;
     juce::TextButton cancelButton;
 
+    // Last, so it is destroyed before the controls it listens on.
+    synth::ui::ArrowKeyNavigation arrowKeys_{*this};
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SignInDialog)
 };
+
+/** Opens the sign-in dialog in a window centred on `centreAround`. The caller starts the sign-in flow
+    (AccountService::beginSignIn) first. The returned pointer clears itself when the window goes. */
+juce::Component::SafePointer<SignInDialog> launchSignInDialog(AccountService& service, juce::Component& centreAround);
 
 } // namespace synth

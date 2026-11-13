@@ -154,7 +154,7 @@ TEST_F(NoiseModuleTest, CVModulationMonoAndPoly) {
         monoBuffer.setSample(8, i, 0.5f); // Color CV = +0.5
 
     module->processBlock(monoBuffer, midiMessages);
-    EXPECT_TRUE(std::abs(monoBuffer.getSample(0, 0)) > 0.0001f);
+    EXPECT_TRUE(monoBuffer.getMagnitude(0, 0, 512) > 0.0001f); // any one random sample can land near zero
 
     // Poly CV on channel 8
     auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[4]);
@@ -166,7 +166,7 @@ TEST_F(NoiseModuleTest, CVModulationMonoAndPoly) {
         polyBuffer.setSample(8, i, -0.5f); // Color CV = -0.5
 
     module->processBlock(polyBuffer, midiMessages);
-    EXPECT_TRUE(std::abs(polyBuffer.getSample(0, 0)) > 0.0001f);
+    EXPECT_TRUE(polyBuffer.getMagnitude(0, 0, 512) > 0.0001f);
 }
 
 class NoiseModuleMuteBypassTest
@@ -196,3 +196,18 @@ TEST_P(NoiseModuleMuteBypassTest, OutputIsSilentWhenMutedOrBypassed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(MuteAndBypass, NoiseModuleMuteBypassTest, ::testing::Values(true, false));
+
+// Regression test for FRO750: a Level CV that idles at 0 and starts in the second half of a block
+// was read as an unpatched jack, so the block ignored it.
+TEST_F(NoiseModuleTest, LevelCVThatStartsMidBlockActsWithinThatBlock) {
+    juce::MidiBuffer midiMessages;
+    juce::AudioBuffer<float> buffer(10, 512);
+    buffer.clear();
+    for (int i = 256; i < 512; ++i)
+        buffer.setSample(9, i, -1.0f); // Level CV: silent for the first half, fully closed after
+
+    module->processBlock(buffer, midiMessages);
+
+    EXPECT_GT(buffer.getMagnitude(0, 0, 256), 0.1f);
+    EXPECT_EQ(buffer.getMagnitude(0, 264, 248), 0.0f);
+}

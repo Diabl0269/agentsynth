@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Transport/BounceExporter.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -10,8 +12,26 @@ namespace synth::ui {
 // A juce::Slider whose text box accepts a value past the drag range instead of silently clamping
 // it away: typing a tail longer than the slider currently spans grows the range to fit. Dragging
 // still tops out at whatever the last-grown maximum is - only the text box can extend it further.
+//
+// Keyboard: the slider itself is a Tab stop (arrow keys, Home and End move it), and so is its editable
+// value box, which keeps typing a value reachable; call nameValueBox() after setTitle() to name that box.
 class ExpandingRangeSlider : public juce::Slider {
 public:
+    ExpandingRangeSlider() { setWantsKeyboardFocus(true); }
+
+    // Titles the value box "<slider title> value". Re-applied whenever the look and feel changes,
+    // because the slider rebuilds its value box then.
+    void nameValueBox() {
+        for (auto* child : getChildren())
+            if (auto* box = dynamic_cast<juce::Label*>(child))
+                box->setTitle(getTitle() + " value");
+    }
+
+    void lookAndFeelChanged() override {
+        juce::Slider::lookAndFeelChanged();
+        nameValueBox();
+    }
+
     double getValueFromText(const juce::String& text) override {
         const double typed = text.retainCharacters("0123456789.-").getDoubleValue();
         if (typed > getMaximum())
@@ -65,6 +85,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    // Return presses Export on the options page and does nothing on the progress page.
     // Escape triggers whichever cancel/close action the
     // currently-visible page shows (onRequestClose on the options page, onCancelRender on the
     // progress page — NOT onRequestClose there, since that would just hide the window while a
@@ -92,6 +113,10 @@ public:
     std::function<void(std::function<void(int)> onChoice)> collisionPromptForTest;
 
     // MESSAGE THREAD. Called by the owner to drive the progress page.
+    // Where the user's `lame` encoder is (see Transport/LameLocator.h); the MP3 choice is enabled
+    // only when this is an existing file. The constructor looks it up; tests inject their own.
+    void setLameExecutable(const juce::File& lameExecutable);
+
     void showProgressPage();
     void reportProgress(double fraction);
     // Stem export has no BounceResult (StemExporter reports StemResult) - both funnel into the same
@@ -104,6 +129,8 @@ public:
     BounceOptions getOptionsForTest() const;
     juce::File getDestinationForTest() const { return destination_; }
     void setFormatForTest(BounceFormat format);
+    void setMp3BitrateForTest(int kbps);
+    bool isMp3AvailableForTest() const { return lameExecutable_.existsAsFile(); }
     void setBitDepthForTest(int bitDepth);
     void setSampleRateForTest(double sampleRate);
     void setUseSelectionForTest(bool useSelection);
@@ -114,6 +141,11 @@ public:
     void setTailUnitBarsForTest(bool bars);
     void setTailValueForTest(double value);
     void simulateEscapeKeyForTest() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
+    // The parts that fade (docs/layout/animation.md, "Fading things in and out").
+    juce::Component& getBitDepthBoxForTest() noexcept { return bitDepthBox_; }
+    juce::Component& getBitrateBoxForTest() noexcept { return bitrateBox_; }
+    juce::Component& getOptionsPageForTest() noexcept { return optionsPage_; }
+    juce::Component& getProgressPageForTest() noexcept { return progressPage_; }
     // TextEditor::escapePressed() posts an async command message in real use (never delivered in
     // a headless test with no message loop), so this drives the wired fileNameEditor_.onEscapeKey
     // lambda directly instead — same idiom simulateEscapeKeyForTest above uses for keyPressed().
@@ -123,7 +155,13 @@ private:
     // The one place Escape (from keyPressed() above, or fileNameEditor_'s own onEscapeKey) routes
     // to — page-aware, per the keyPressed() comment.
     void handleEscapeRequested();
+    // Return presses Export while the options page shows and Export is enabled.
+    void handleReturnRequested();
+    // Screen-reader names and tooltips for every control that has no visible text of its own.
+    void nameControlsForAccessibility();
+    BounceFormat selectedFormat() const;
     void updateBitDepthChoicesForFormat();
+    void updateFormatDependentRows();
     void chooseDestinationFolder();
     void updateFileNameFromEditor();
     void currentRange(double& startBeat, double& endBeat) const;
@@ -151,6 +189,10 @@ private:
     juce::ComboBox sampleRateBox_;
     juce::Label bitDepthLabel_{"bitDepthLabel", "Bit depth"};
     juce::ComboBox bitDepthBox_;
+    // MP3 has no bit depth, so this row takes the bit-depth row's place while MP3 is selected.
+    juce::Label bitrateLabel_{"bitrateLabel", "Bitrate"};
+    juce::ComboBox bitrateBox_;
+    juce::File lameExecutable_;
     juce::Label tailLabel_{"tailLabel", "Tail"};
     ExpandingRangeSlider tailSlider_;
     juce::ComboBox tailUnitBox_; // Seconds / Bars - the slider/text range converts, tailSeconds is what ships
@@ -165,6 +207,9 @@ private:
     juce::TextButton exportButton_{"Export"};
     juce::TextButton cancelButton_{"Cancel"};
     std::unique_ptr<juce::FileChooser> fileChooser_;
+    // Bit depth and bitrate share one slot: the one that is not wanted fades out as the other fades in.
+    synth::ui::FadeVisibility bitDepthFade_{&bitDepthLabel_, &bitDepthBox_};
+    synth::ui::FadeVisibility bitrateFade_{&bitrateLabel_, &bitrateBox_};
 
     // ---- Progress page ----
     juce::Component progressPage_;
@@ -172,6 +217,13 @@ private:
     double progressValue_ = 0.0;
     juce::ProgressBar progressBar_{progressValue_};
     juce::TextButton progressCancelButton_{"Cancel"};
+    // The options page and the progress page cross-fade (same bounds). Which page is up is read from these
+    // (isShown), not from the pages' visibility, which lags a fade-out.
+    synth::ui::FadeVisibility optionsPageFade_{&optionsPage_};
+    synth::ui::FadeVisibility progressPageFade_{&progressPage_};
+
+    // Last, so it is destroyed before the controls it listens on.
+    synth::ui::ArrowKeyNavigation arrowKeys_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ExportAudioDialog)
 };

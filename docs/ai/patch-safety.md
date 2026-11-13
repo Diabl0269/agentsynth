@@ -56,6 +56,14 @@ inlet and outlet jacks (`Macro In`, `Macro Out`, `Macro MIDI In`, `Macro MIDI Ou
 membership is keyed by a uuid a provider cannot supply; and the mixer's `Channel Strip` and
 `Master`, which the app builds around rather than the model writing directly.
 
+**Node `state` stays trusted-only, with two opt-ins.** Model output never reaches a module's
+`setExtraState()` (a `Sampler` reads its state as a file path). The exceptions are the `LFO`'s drawn
+Custom curve and the `Filter`'s Custom shapes, which reach `setUntrustedExtraState()` instead: each is
+only bounded numbers (clamped points; for the Filter also at most 16 shapes, 3 map values each, and a
+name cut to 24 characters of letters, digits, space and `-`; of its per-note settings only the mode, one of four
+names, and a smoothness clamped to 0..1, never the key map), so it cannot name a file or resource. A new module may opt in the same way only when
+its state is pure, clamped data; see [patch format](patch-format.md#per-node-state).
+
 **The deny set is enforced by the validator, not just by the schema.**
 `validatePatch(..., trusted=false)` rejects any node whose type is in `kNonAuthorableModuleTypes`
 with `PatchValidationError::InternalModuleNotAllowed`. Leaving it to the schema enum alone would
@@ -97,6 +105,14 @@ and create a *second* node, rebinding `idMap[id]` to it — every later connecti
 the same patch that meant the original node would silently re-point at the new one. Ids the same
 patch also `remove` are exempt: removals run first, so re-using such an id names a genuinely new
 node. The trusted path is unaffected by design.
+
+**An edit plan widens the namespace without loosening it.** A merge patch inside an [edit
+plan](timeline-ops.md#one-edit-plan) is validated with a `PatchIdScope`: the `instrumentId` and
+insert ids an earlier step built become addressable, the uids of every node that step created
+become unaddressable, and a patch node reusing a bound id is `DuplicateNodeId`. Every check above
+still runs; the scope only changes which ids exist. A modulation's destination is likewise
+`destPort` or `destParam`, at least one and agreeing when both are given
+([patch format](patch-format.md#a-modulations-destination-destport-or-destparam)).
 
 ### Repair, one rule only
 

@@ -1,0 +1,28 @@
+# A lane dot dragged to the edge of the view stopped there; now the view scrolls along and the dot stays under the
+# pointer.
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 52, near the right edge of the view
+# (fixture lane-edge.agsproj), drags the dot to the right edge and keeps the pointer there: the view scrolls, faster
+# nearer the edge, and the dot stays under the pointer. Lets go, and one Cmd+Z puts it back.
+record: true
+motion: true
+save_project: lane-drag-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1}
+  - mouseDown: {id: automationLaneState, x: 1248, y: 65}
+  - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 65}
+  - glide: {name: mouse-edge-follows, frames: 16, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1396, y: 65}}}
+  - mark: {check: 1, name: dot-under-pointer-after-edge-drag}  # still held at the edge: the clip holds the scroll
+  - mouseUp: {id: automationLaneState, x: 1396, y: 65}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, dragging: false}
+  - screenshot: {name: after-drag}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - mark: {check: 2, name: one-undo-after-edge-drag}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1}
+  - screenshot: {name: drag-undone}

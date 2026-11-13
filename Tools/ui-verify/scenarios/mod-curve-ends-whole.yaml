@@ -1,0 +1,25 @@
+# The modulation curve box and its Enlarge window draw the curve edge to edge with both end dots whole, not cut by the box.
+#
+# What a user does:
+#   1. Opens the Mod Matrix and clicks the Curve chip on a routing's row: the box opens.
+#   2. Looks at the first and last dot of the line.
+#   3. Clicks Enlarge: the window shows the same, bigger.
+record: true
+save_project: fro1445-ends-whole
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - mark: {check: 1, name: box-ends-whole}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - mark: {check: 2, name: window-ends-whole}
+  - key: {keys: escape, target: modCurveWindow}
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}

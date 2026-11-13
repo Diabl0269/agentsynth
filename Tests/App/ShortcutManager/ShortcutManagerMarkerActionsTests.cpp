@@ -6,6 +6,7 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
 #include "Transport/MarkerJump.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

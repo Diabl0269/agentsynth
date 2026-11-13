@@ -17,87 +17,33 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorPaintMemo.h"
+#include <utility>
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "CanvasAccessibilityClip.h"
+#include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
+#include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
-// Returns an estimated (w, h) footprint for a module type name.
-// Used when the component does not yet exist (e.g. on drag-drop before layout).
-// Heights match the real component sizes so the library-drag ghost preview is accurate.
-// The final drop placement uses the real component size via finalizeModuleDrag() — the
-// estimate is only used for the live ghost preview.
-// Heights are measured from the real components, not guessed — see
-// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents, which constructs every type and
-// fails if this table drifts from what layoutDefaultContent() actually produces.
-// Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
-// real component exists. Public so a test can hold it to the real component sizes — see
-// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
-// Split out of GraphEditor::estimateModuleSize (see its own comment below for why) purely
-// so that method can carry the explanation beside its one-line body instead of above this
-// ~30-branch table.
-static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName) {
-    if (typeName == "Oscillator")
-        return {280, 433}; // +96: an Audio R output jack row and the Pan knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Filter")
-        // +1 knob row: the Level knob took it from 3 sliders to 4.
-        // +20: the Audio L/R input pair adds a jack row to the port gutter.
-        // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 383};
-    if (typeName == "LFO")
-        // +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
-        // with the mono CV output already there — see ModuleComponentTest.
-        // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
-        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "VCA")
-        return {280, 233}; // +20: the Audio L/R input pair adds a jack row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        // Five rotary knobs (attack/hold/decay/sustain/release) now flow through the
-        // generic 3-per-row knob grid (3+2, same shape as every other module), the three curve
-        // params moved onto the collapsed-by-default envelope graph's bend handles, and a
-        // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
-        // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
-        // +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
-        // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
-        // -100 -- those five jacks all resolve to a bound generic rotary knob now, so
-        // each draws no gutter row at all (isInputJackKnobBound). Threshold keeps its jack (it has
-        // no generic slider, see the comment on estimateModuleSize below), so it's still 1 row.
-        // (No Attack/Decay/Release Curve CV jacks here -- those three curve amounts have no knob
-        // to land on, so adding a jack for them would just be a knob-less gutter jack, the exact
-        // shape knob-bound jacks exist to remove; see docs/modules/modulation.md.)
-        return {280, 389};
-    if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
-        return {synth::LayoutUtil::kDoubleWidth, 406};
-    if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
-        return {synth::LayoutUtil::kDoubleWidth, 406};
+// Sizes of the cards whose body is NOT drawn from layout data (the bespoke cards, the I/O nodes, a
+// hosted plugin and the macro-port widgets), for estimateModuleSize below. Every other card is
+// measured from its card-body plan. Each entry is pinned to the real card by
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents or the test its comment names.
+static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
-        return {synth::LayoutUtil::kDoubleWidth, 150};
-    if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        // +48 (one combo row) for the Voice Steal selector, then +26 (one toggle row)
-        // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
-        return {280, 185};
-    if (typeName == "Distortion")
-        return {280, 283}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Ring Modulator")
-        return {280, 331}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Delay")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +60: Time/Feedback/Mix CV jacks finally exist (4 port rows)
-    if (typeName == "Reverb")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +100: Size/Damping/Wet/Dry/Width CV jacks finally exist (6 port rows)
+        // The keys under a 24 px Octave stepper row; pinned to the real card (ModuleComponentMidiKeyboardCard.cpp).
+        return {synth::LayoutUtil::kDoubleWidth, 160};
+    if (typeName == "PolyMidi")
+        return {280, 185}; // an alias with no factory entry, so not measurable; "Poly MIDI" is measured
     if (typeName == "AudioInput" || typeName == "Audio Input")
         // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
         // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
@@ -110,135 +56,39 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
-    if (typeName == "Noise")
-        return {280, 261}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Envelope Follower")
-        // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 235};
-    if (typeName == "Math")
-        return {280, 239}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Sample & Hold")
-        return {280, 451}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Comparator")
-        return {280, 185}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Macros")
-        // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
-        return {synth::LayoutUtil::kSingleWidth,
-                synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
-    if (typeName == "Sampler")
-        return {280, 545}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Wavetable")
-        // Double-width. The 16 CV jacks run in two left-hand columns and the 23
-        // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
-        // the gutter nor the control count sets the height on its own.
-        return {synth::LayoutUtil::kDoubleWidth, 565};
-    if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
-        // +60: every continuous parameter has a CV jack now (Audio + 5 CV = 6 port rows), and
-        // the port gutter, not the 2-row knob grid, sets the height.
-        return {280, 237};
-    if (typeName == "Bitcrusher")
-        return {280, 263}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Pitch Shifter")
-        return {280, 387}; // Dual I/O off: one Audio jack + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +40: Fine and Window CV jacks (Audio + 6 CV = 7 port rows)
     if (typeName == "Parametric EQ")
-        // Double-width card: a 150px response curve set between the port-label gutters, then a
-        // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
-        return {synth::LayoutUtil::kDoubleWidth, 592};
-    if (typeName == "Compressor")
-        return {280, 257}; // Audio + 5 CV + Key = 7 port rows set it (+20 for the Key jack)
-    if (typeName == "Limiter")
-        return {280, 161}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
-    if (typeName == "Gate")
-        // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
-        // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
-        // Audio + 5 CV + Key = 7 port rows set it, as for Compressor (+20 for the Key jack).
-        return {280, 257};
-    if (typeName == "Voice Mixer")
-        return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        // Double-width card: a 150px response curve set between the port-label gutters, a one-row band strip (a
+        // fresh EQ has every band off), the selected band's row and the Output trim row. Mirrors parametricEQHeight().
+        return {synth::LayoutUtil::kDoubleWidth, 432};
     if (typeName == "External MIDI")
-        return {280, 146}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Track In")
-        // Param-less card (only the inherited bypass, which lives in the header), no jacks: the
-        // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
-        // add-track flow places it — so this only ever feeds a programmatic size query.
-        return {280, 100};
-    if (typeName == "Rec Tap")
-        // Like Track In it has no body controls (only the inherited bypass, which lives in the
-        // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
-        // the height. Also library-less: the record flow places it. Measured against the real card
-        // by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 131};
-    if (typeName == "Track Audio")
-        // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
-        // only. Library-less like the other two internal nodes: the add-track flow places it.
-        // Measured against the real card by
-        // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 131};
-    if (typeName == "Channel Strip")
-        // gain + pan + the four send levels + the four send pans, below up to 2 input jacks a side
-        // (Stereo shape, what MainComponent::addAudioTrack always builds — width doesn't move with
-        // shape, only the Mono/Stereo jack-row count would, and this card's height already covers
-        // both). Height: 181 for gain + pan alone, +76 for the send levels (sendNLevel exists
-        // unconditionally, so the card always shows all four), +152 for the send pans (sendNPan
-        // likewise — four more generic-knob-grid rows) = 409. The send OUTPUT jacks appear only for
-        // active slots and sit in the right-hand gutter, which the control rows already outgrow.
-        // Internal-only like Track Audio/Rec Tap: library-less, no replace-menu entry. Measured
-        // against the real card by ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
-        return {280, 409};
-    if (typeName == "Master")
-        // gain slider only, 4 input jacks (Mix L/R, Direct L/R) a side setting the port gutter.
-        // Internal-only, singleton, library-less. Measured against the real card by
-        // ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
-        return {280, 221};
+        return {280, 146};
     if (typeName == "Hosted Plugin")
-        // Bypass and mute live in the header; a bare card's body is the Open Editor / Choose knobs
+        // Bypass and mute live in the header; a bare card's body is the Open Editor / Edit Layout...
         // button row, one jack a side while empty. The card grows with the loaded plugin's real port count,
         // like the Macro bank and Audio Input; the estimate is the resting size, and
         // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
         // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        // +4: the button row has a 6px gap below it.
         return {280, 135};
-    if (typeName == "Macro In" || typeName == "Macro Out")
-        // Not a full module card — a small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono
-        // by default (one jack row) — the port-creation flow grows it to two rows for Stereo via the ordinary
-        // component re-layout, same as any other jack-count change. Library-less (the "Configure I/O" modal places
-        // it). Measured against the real card by
-        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate (see
-        // docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed and
-        // docs/macros/configure-io.md#adding-a-port).
-        return {ModuleComponent::kMacroPortWidgetWidth,
-                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
-    if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
-        // One MIDI jack row, no audio jacks and no body controls — same compact widget, always
-        // one row (MIDI has no Mono/Stereo/Poly-N shape to grow). Measured against the real card
-        // by MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {ModuleComponent::kMacroPortWidgetWidth,
-                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
+    if (typeName == "Macro In" || typeName == "Macro Out" || typeName == "Macro MIDI In" ||
+        typeName == "Macro MIDI Out")
+        // A docked port widget is one 16px sidebar row (two for Stereo, which grows through the ordinary component
+        // re-layout) and takes the strip's width when docked, so this is a NOMINAL size: the same first-layout default
+        // ModuleComponent::layoutMacroPortWidget uses, before the dock sets the real width. Library-less (the
+        // "Configure I/O" modal places it).
+        return {detail::kMacroCardStripWidth, detail::kMacroPortRowHeight};
     return {280, 360};
 }
 
+// A card whose body is drawn from layout data is measured from its card-body plan (the same plan and
+// layout walk the real card uses, including which parameters become rotary knobs and so which CV
+// jacks are knob-bound and draw no gutter row); only the bespoke cards read the table above.
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents builds a REAL ModuleComponent per
+// library type and holds both paths to it.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
-    // A jack whose target resolves to a bound, GENERIC ROTARY knob
-    // (ModuleComponent::isInputJackKnobBound's live rule) draws no gutter row at all, so a
-    // continuous parameter with a CV jack does not always cost the jack column a row. Replicating
-    // that rule exactly here (without a live ModuleComponent to ask) would need the SAME
-    // slider-style/exclusion knowledge only createControls() has (a choice/bool-bound target like
-    // Oscillator's "Waveform" gets a combo, never a rotary; ADSR's Threshold/curve targets have
-    // bound float parameters but no generic slider at all, see ModuleComponent.cpp's
-    // shouldSkipGenericFloatSlider) -- an approximation here would only trade one hand-kept table
-    // (this one) for a second, subtly different one.
-    // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents (which builds a REAL
-    // ModuleComponent per library type and measures it) is what actually keeps this table honest;
-    // it catches any height change below when the table is updated by hand.
-    // it catches any height change below when the table is updated by hand.
-    return estimateModuleSizeBaseTable(typeName);
+    if (const auto measured = synth::measureDataDrivenCardSize(typeName))
+        return *measured;
+    return bespokeCardSizeTable(typeName);
 }
 
 // ---- DragAndDropTarget / FileDragAndDropTarget overrides ----------------------------------
@@ -246,11 +96,13 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
 // identity, so the actual override must stay a GraphEditor member, but everything it does is one
 // call into the controller.
 bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetails) {
-    return dragDropController_.isInterestedInDragSource(dragSourceDetails);
+    // While a project is still loading nothing can be dropped onto the canvas (edits wait).
+    return !getLoadReveal().isBlockingEdits() && dragDropController_.isInterestedInDragSource(dragSourceDetails);
 }
 
 void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     dragDropController_.itemDragEnter(dragSourceDetails);
+    edgeScroll_->beginLibraryDrag(dragSourceDetails);
 }
 
 void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
@@ -258,10 +110,12 @@ void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
 }
 
 void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
+    edgeScroll_->end();
     dragDropController_.itemDragExit(dragSourceDetails);
 }
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
+    edgeScroll_->end();
     dragDropController_.itemDropped(dragSourceDetails);
 }
 
@@ -287,7 +141,7 @@ bool GraphEditor::graphHasModuleNamed(juce::AudioProcessorGraph& graph, const ju
 // =============================================================================
 
 bool GraphEditor::isInterestedInFileDrag(const juce::StringArray& files) {
-    return dragDropController_.isInterestedInFileDrag(files);
+    return !getLoadReveal().isBlockingEdits() && dragDropController_.isInterestedInFileDrag(files);
 }
 
 void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
@@ -315,6 +169,7 @@ void GraphEditor::addHostedPluginAtCanvasPosition(const synth::PluginIdentity& i
         if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&processor))
             hosted->loadPlugin(identity);
     });
+    audioEngine.updateModuleNames(); // a second Diva reads "Diva 2" immediately, not on the next tick
 }
 
 // Canvas coordinates of the middle of the current view — where a clicked (rather than dragged)
@@ -342,10 +197,22 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     // graph and each one sums into the same device buffer, so a second instance would double the
     // signal rather than address another output — and every node lookup in the app (auto-connect,
     // PatchEval, auto-arrange) takes the first match and stops. Adding a duplicate is a no-op.
+    if (getLoadReveal().refuseEdit()) // a library click while a project is still loading waits
+        return;
     if (isSingletonIOModule(name) && graphHasModuleNamed(audioEngine.getGraph(), name))
         return;
 
     auto newProcessor = synth::AIStateMapper::createModule(name);
+    // A drop into the gap a drag opened between two cards (or a keyboard insert after the selected card): the gap goes
+    // home before the undo record and land() re-makes it inside, so the whole insert is one step (InsertGap.h).
+    std::optional<InsertGap::Commit> insert;
+    if (newProcessor && (macroController_.insertGap().isOpen() || macroController_.insertGap().hasPending()))
+        insert.emplace(macroController_.insertGap());
+    const bool inserting = macroController_.insertGap().isCommitting();
+
+    // The new card is about to join joinMacroId, so that hull is not an obstacle to placing it (resolvePlacement).
+    juce::ScopedValueSetter<juce::String> joinScope(macroDragJoinId_,
+                                                    joinMacroId.isNotEmpty() ? joinMacroId : macroDragJoinId_);
 
     if (newProcessor) {
         applyDefaultDualIOForNewModule(*newProcessor, name);
@@ -356,12 +223,17 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
         // Use estimate for an initial snapped position; finalizeModuleDrag will re-resolve
         // using the real component size after updateComponents() creates the component.
         auto estSize = estimateModuleSize(name);
-        auto initialPlaced = resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+        // A card joining an open macro lands where it was dropped; the macro then makes room (below).
+        const bool joining = joinMacroId.isNotEmpty();
+        auto initialPlaced = inserting ? macroController_.insertGap().pendingSlot()
+                             : joining
+                                 ? synth::LayoutUtil::snap({juce::jmax(0, dropPos.x), juce::jmax(0, dropPos.y)})
+                                 : resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
 
         // finalizeNewDrop: locate the newly created ModuleComponent, compute its
         // real final position (snapped + anti-overlapped using actual dimensions),
         // then animate it from the raw drop point to the settled position.
-        auto finalizeNewDrop = [this, initialPlaced](juce::AudioProcessorGraph::NodeID newNodeId) {
+        auto finalizeNewDrop = [this, initialPlaced, joining, inserting](juce::AudioProcessorGraph::NodeID newNodeId) {
             ModuleComponent* newComp = nullptr;
             for (auto* comp : content.getModules()) {
                 if (comp != nullptr && comp->getNodeId() == newNodeId) {
@@ -372,13 +244,39 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             if (newComp == nullptr)
                 return;
 
-            // Compute final position using the real component size.
-            auto toPos = resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
-                                          newComp->getNodeId());
+            // Compute final position using the real component size. An insert makes its gap for that size and lands
+            // in it, growing in with the small bounce.
+            const auto inGap = inserting ? macroController_.insertGap().land(
+                                               newNodeId, juce::Point<int>(newComp->getWidth(), newComp->getHeight()))
+                                         : std::nullopt;
+            auto toPos = inGap     ? *inGap
+                         : joining ? newComp->getPosition()
+                                   : resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
+                                                      newComp->getNodeId());
+            if (inGap)
+                cardGlide_.noteEnter(newComp, newNodeId.uid);
 
             // Animate from the estimated initial-placed position to the real final position.
             // If they are identical, animateDropLanding is a no-op (just settles in place).
             animateDropLanding(newComp, initialPlaced, toPos);
+
+            // A drop that snapped into a connection settles from where the cursor aimed to its slot (the Scope in
+            // placeNode glides it; geometry stays final).
+            const auto aim = dragDropController_.getDragPreviewAim();
+            if (!joining && !inGap && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
+                aim.getPosition() != toPos)
+                cardGlide_.noteStartRect(newComp, newNodeId.uid,
+                                         {aim.getX(), aim.getY(), newComp->getWidth(), newComp->getHeight()});
+            // A card that lands where it was placed, with nothing to travel (Return on a library row, a double click),
+            // grows in at its slot like one an insert makes; a drop that travels keeps its landing glide.
+            else if (!joining && !inGap && initialPlaced == toPos)
+                cardGlide_.noteEnter(newComp, newNodeId.uid);
+
+            // The nearest free spot can be well away from the pointer (a crowded macro hull has none beside it), and
+            // a card that landed below the window would look like the drop did nothing: bring it into view.
+            const auto landed = juce::Rectangle<int>(toPos.x, toPos.y, newComp->getWidth(), newComp->getHeight());
+            if (!getVisibleCanvasRect().contains(landed.getCentre().toFloat()))
+                flyViewTo(landed.getCentre().toFloat());
 
             // Persist the final position immediately so it survives reload even if the
             // animation is still in-flight when the user saves.
@@ -386,18 +284,23 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 
             // Auto-wire any smart-connection previews the user saw while dragging. Already inside
             // a structural undo transaction when one is open, so do not nest another.
+            const auto cablesBefore = snapshotCablesForRetract();
             smartConnections_.applySmartSuggestions(newNodeId, /*recordUndo=*/false);
+            morphCablesSince(cablesBefore); // an insert on a cable splits it in two, running to the new card
         };
 
         // Shared by the undo and no-undo paths; the node is handed over through a shared_ptr so the
         // lambda stays copyable (std::function requires it).
         auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-        auto placeNode = [this, proc, initialPlaced, finalizeNewDrop, joinMacroId] {
+        auto placeNode = [this, proc, initialPlaced, finalizeNewDrop, joinMacroId, name] {
             if (!*proc)
                 return;
             auto node = audioEngine.getGraph().addNode(std::move(*proc));
             if (!node)
                 return;
+            if (onModuleAdded) // a user dropped or inserted this module from the library (usage statistics)
+                onModuleAdded(name);
+            CardGlideAnimator::Scope glide(cardGlide_); // a snapped drop settles into place, see finalizeNewDrop
             node->properties.set("x", initialPlaced.x);
             node->properties.set("y", initialPlaced.y);
             const auto newNodeId = node->nodeID;
@@ -405,11 +308,17 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
                 joinMacroId.isNotEmpty() ? synth::AIStateMapper::ensureNodeUuid(node.get()) : juce::String();
             updateComponents();
             finalizeNewDrop(newNodeId);
-            if (uuid.isNotEmpty())
+            if (uuid.isNotEmpty()) {
                 macroController_.addSelectionToMacro(joinMacroId, {uuid}, /*recordUndo=*/false);
+                // The card sits where it was dropped: members it overlaps are pushed aside (and the hull grows),
+                // inside this same undo record, gliding like any other push.
+                macroController_.makeRoomFor("n:" + juce::String(static_cast<juce::int64>(newNodeId.uid)));
+            }
+            reflowOutputDock(); // the drop may sit right of the dock: the dock moves, inside this undo step
         };
 
-        if (undoManager && joinMacroId.isNotEmpty())
+        // An insert can push collapsed macro cards, whose place lives in the macros: record those too.
+        if (undoManager && (joinMacroId.isNotEmpty() || inserting))
             undoManager->recordGraphAndMacroChange(graph, macros, placeNode);
         else if (undoManager)
             undoManager->recordStructuralChange(graph, placeNode);
@@ -437,11 +346,24 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
     if (mb == nullptr)
         return;
 
+    // A raw channel is hidden when no visible jack owns it. Jack index == raw channel only holds for a module whose
+    // jacks are a prefix of its channels (Audio Input); a Hosted Plugin can hide the middle of its outputs.
     const int visible = mb->getVisibleOutputPortCount();
+    std::vector<bool> reachable((size_t)juce::jmax(0, mb->getTotalNumOutputChannels()), false);
+    for (int jack = 0; jack < visible; ++jack)
+        for (const auto& t : mb->getJackTargets(jack, /*isInput=*/false))
+            for (int v = 0; v < t.voiceSpan; ++v) {
+                const int raw = t.rawHeadChannel + v * t.rawStride;
+                if (raw >= 0 && raw < (int)reachable.size())
+                    reachable[(size_t)raw] = true;
+            }
     std::vector<juce::AudioProcessorGraph::Connection> toRemove;
 
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+        if (c.source.nodeID != nodeId || c.source.isMIDI())
+            continue;
+        if (c.source.channelIndex >= 0 && c.source.channelIndex < (int)reachable.size() &&
+            reachable[(size_t)c.source.channelIndex])
             continue;
 
         if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
@@ -459,11 +381,20 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
                                                juce::AudioProcessorGraph::NodeID selfId) {
-    std::vector<synth::LayoutUtil::Box> boxes;
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr)
-            continue;
-        boxes.push_back({comp->getNodeId(), comp->getBounds()});
+    // Layout units, not raw components (hidden members of collapsed macros are not obstacles; collapsed cards and
+    // open hulls are). macroDragJoinId_ is the macro this placement is about to join: landing inside it is the point.
+    auto boxes = macroController_.placementBlockers(
+        selfId.uid != 0 ? std::vector{selfId} : std::vector<juce::AudioProcessorGraph::NodeID>{}, macroDragJoinId_);
+    // A card held past the canvas origin drops with the rest of the patch slid out of its way (slidePatchForEdgeDrop):
+    // the preview looks for room among the neighbours where they will be, the drop among them where they are.
+    if (const auto slide = edgeDrag_.pendingOvershoot(); !slide.isOrigin())
+        for (auto& box : boxes)
+            box.rect.translate(slide.x, slide.y);
+    // A card in an open macro (one that joined it as it was dragged included) keeps the macro's hull on the canvas
+    // itself, so the drop does not slide the whole macro, card and all, to somewhere the preview never showed.
+    if (selfId.uid != 0 && macroController_.isMemberOfOpenMacro(selfId)) {
+        const auto floor = MacroGroupController::memberCardFloor();
+        desired = {juce::jmax(desired.x, floor.x), juce::jmax(desired.y, floor.y)};
     }
     auto snapped = synth::LayoutUtil::snap(desired);
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
@@ -480,14 +411,16 @@ juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
     int bottom = synth::LayoutUtil::kArrangeOriginY;
     bool any = false;
 
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr)
-            continue;
-        const auto bounds = comp->getBounds();
+    for (const auto& box : macroController_.placementBlockers({})) {
+        const auto& bounds = box.rect;
         left = any ? std::min(left, bounds.getX()) : bounds.getX();
         bottom = any ? std::max(bottom, bounds.getBottom()) : bounds.getBottom();
         any = true;
     }
+
+    // The head ends up boxed in a channel macro, whose open hull reaches kMacroHullSideOutset left of it: floor x so
+    // that hull opens at x >= 0 rather than being nudged (or clipped) at the canvas edge.
+    left = std::max(left, synth::LayoutUtil::kMacroHullSideOutset);
 
     const juce::Point<int> desired(left, any ? bottom + synth::LayoutUtil::kArrangeOriginY
                                              : synth::LayoutUtil::kArrangeOriginY);
@@ -510,9 +443,28 @@ juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoin
 }
 
 void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (module == nullptr)
         return;
-    auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
+    if (isOutputDockNode(module->getNodeId())) {
+        finalizeOutputDockDrag(module); // vertical only; x stays derived
+        return;
+    }
+    // The released card settles from where it was held into its snapped slot (and the patch's make-room pushes glide
+    // too) instead of jumping; geometry is final at once. Nothing glides when the card was already on its slot.
+    CardGlideAnimator::Scope glide(cardGlide_);
+    // Released over the gap it opened between two cards: the gap is made again here, inside the drop's undo record
+    // (ModuleComponent::mouseUp holds the InsertGap::Commit), and the card settles into it.
+    auto& gap = macroController_.insertGap();
+    const auto landed = gap.isCommitting()
+                            ? gap.land(module->getNodeId(), juce::Point<int>(module->getWidth(), module->getHeight()))
+                            : std::nullopt;
+    if (!landed)
+        slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
+    auto clear =
+        landed ? *landed
+               : resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
     module->setTopLeftPosition(clear);
     // Persist the snapped/cleared position to graph node properties so it survives reload.
     updateModulePosition(module);
@@ -530,15 +482,50 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
     // same two conditions, read through the engine instead of GraphEditor's own former fields.
     if (smartConnections_.shouldOfferSmartConnections(dragDropController_.buildDragPreviewState()) &&
-        smartConnections_.getSmartSuggestionCount() > 0)
+        smartConnections_.getSmartSuggestionCount() > 0) {
+        const auto cablesBefore = snapshotCablesForRetract();
         smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
+        morphCablesSince(cablesBefore);
+    }
 
     // A single-module drag can land the module fully outside the visible rect (drag it
     // under the bottom dock, or past the edge while zoomed in) without any pan/zoom of its own.
     detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
+    reflowOutputDock(); // the released module may now be the rightmost thing on the canvas
     repaintCanvas();
 }
+
+// The membership half of a reparent drop, across nesting levels. The module leaves its current macro one
+// level at a time (each step builds its own port plan against the graph as it then stands, see the
+// TRANSFER ORDERING note below) until it sits directly in `joinId`, or in no macro when `joinId` is empty:
+// so pulling a child's member out of both the child and its parent is one gesture. Stepping down into a
+// macro nested below the module's owner needs no leave at all (the owner's boundary is unchanged): the
+// module just moves to that descendant. `leaveId` is only a sanity gate: the walk starts from the
+// module's real owner.
+namespace {
+void applyMacroMembershipChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                MacroGroupController& controller, const juce::String& uuid, const juce::String& leaveId,
+                                const juce::String& joinId) {
+    if (leaveId.isEmpty() && joinId.isEmpty())
+        return; // nothing to change: no scope, so no pointless rebuild (the drop after a live crossing)
+    const synth::GraphRebuildScope rebuildScope{graph}; // one render-sequence rebuild for the whole membership walk
+    if (leaveId.isNotEmpty()) {
+        for (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->id != joinId;
+             owner = macros.findByMember(uuid)) {
+            const auto chain = joinId.isNotEmpty() ? macros.ancestorChain(joinId) : std::vector<juce::String>();
+            if (std::find(chain.begin(), chain.end(), owner->id) != chain.end()) {
+                auto* live = macros.find(owner->id);
+                live->members.erase(std::remove(live->members.begin(), live->members.end(), uuid), live->members.end());
+                break;
+            }
+            controller.removeSelectionFromMacro(owner->id, {uuid}, /*recordUndo=*/false);
+        }
+    }
+    if (joinId.isNotEmpty())
+        controller.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
+}
+} // namespace
 
 // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) -----------------------------
 //
@@ -553,63 +540,197 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
 void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId,
                                            juce::Point<int> canvasCentre) {
     // Set unconditionally, BEFORE the candidate early-return below, so paintedMacroHullBounds
-    // already excludes the dragged module from its own macro's hull from the very first tick of the
-    // drag — not only once the drag actually crosses into LEAVE-candidate territory. That first
-    // stretch (still inside the excluding hull, no candidate yet) is exactly the phase where a live
-    // union would otherwise keep inflating around the module being pulled out.
+    // holds the dragged module's macro borders from the very first tick of the drag, not only once
+    // the drag crosses into LEAVE-candidate territory.
     const bool nodeChanged = draggedNodeId != macroDragDraggedNodeId_;
     macroDragDraggedNodeId_ = draggedNodeId;
+    // A drag with no press-time snapshot (the module was never pressed through ModuleComponent) freezes now.
+    if (!macroController_.hasFrozenDragHulls())
+        macroController_.freezeHullsForDrag(draggedNodeId);
 
     const auto targets = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
     if (targets.leave == macroDragLeaveId_ && targets.join == macroDragJoinId_ && !nodeChanged)
         return;
+    if ((targets.leave.isNotEmpty() || targets.join.isNotEmpty()) &&
+        canApplyMembershipLive(draggedNodeId, targets.leave)) {
+        applyMembershipLive(draggedNodeId, targets.leave, targets.join);
+        // The ghost was placed before this crossing, against the old macros: place it again against the new ones.
+        dragDropController_.replaceGhostAfterCrossing();
+        return;
+    }
+    const auto hullsBefore = snapshotPaintedHulls();
     macroDragLeaveId_ = targets.leave;
     macroDragJoinId_ = targets.join;
+    glideHullsFrom(hullsBefore);
     repaintCanvas();
 }
 
-void GraphEditor::clearMacroDragCandidate() {
+// A crossing is applied the moment it happens, so the cables are already re-routed through (or away from) the
+// macro's ports when the mouse is released and nothing moves on the drop. Not for a group drag, and not when
+// leaving would empty the macro: that dissolves it, and the module could not drag back in, so that one still
+// waits for the drop.
+bool GraphEditor::canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                         const juce::String& leaveId) const {
+    if (getSelectionCount() > 1)
+        return false;
+    if (leaveId.isEmpty())
+        return true;
+    const auto uuid = macroController_.nodeUuidFor(draggedNodeId);
+    const auto* owner = macros.findByMember(uuid);
+    if (owner == nullptr)
+        return true;
+    for (const auto& member : owner->members)
+        if (member != uuid && !owner->memberIsPort(member))
+            return true;
+    return !macros.childrenOf(owner->id).empty();
+}
+
+// The macros as they stood at press are kept the first time, so the drop records the whole gesture as one undo
+// step however many times it crossed. The borders are re-frozen for the new membership: the macro the module
+// just joined now holds it in until its centre leaves that border, so a module on the edge does not flicker in
+// and out.
+void GraphEditor::applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
+                                      const juce::String& joinId) {
+    if (!liveMembershipChanged_) {
+        macrosBeforeLiveDrag_ = macros.toVar();
+        liveMembershipPressOwner_ = currentOwnerOfDraggedModule();
+        liveMembershipChanged_ = true;
+    }
+    const auto hullsBefore = snapshotPaintedHulls();
+    const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
+    applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_,
+                               macroController_.nodeUuidFor(draggedNodeId), leaveId, joinId);
+    macroController_.setMakeRoomDeferred(false);
+    liveMembershipAway_ = currentOwnerOfDraggedModule() != liveMembershipPressOwner_;
+    macroController_.clearFrozenDragHulls();
+    macroController_.freezeHullsForDrag(draggedNodeId);
+    macroDragLeaveId_.clear();
+    macroDragJoinId_.clear();
+    macroDragDraggedNodeId_ = draggedNodeId;
+    armMacroCrossingAnimation(cablesBefore, draggedNodeId.uid, {});
+    glideHullsFrom(hullsBefore);
+    repaintCanvas();
+}
+
+bool GraphEditor::hasMacroDragCandidate() const {
+    return macroDragLeaveId_.isNotEmpty() || macroDragJoinId_.isNotEmpty() || liveMembershipAway_;
+}
+
+juce::String GraphEditor::getMacroDragLiveOwnerId() const {
+    return liveMembershipAway_ ? currentOwnerOfDraggedModule() : juce::String();
+}
+
+juce::String GraphEditor::currentOwnerOfDraggedModule() const {
+    const auto* owner = macroController_.macroForNode(macroDragDraggedNodeId_);
+    return owner != nullptr ? owner->id : juce::String();
+}
+
+// A drag that stops being a reparent drag (Cmd released with the drag-without-Cmd preference off) is a plain
+// move again, so a crossing it already applied is put back. The undo record still happens on the drop: the
+// round trip can mint fresh port nodes.
+void GraphEditor::revertLiveMembership() {
+    const auto draggedNodeId = macroDragDraggedNodeId_;
+    const auto current = currentOwnerOfDraggedModule();
+    if (!liveMembershipChanged_ || current == liveMembershipPressOwner_)
+        return;
+    const auto hullsBefore = snapshotPaintedHulls();
+    const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
+    applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_,
+                               macroController_.nodeUuidFor(draggedNodeId), current, liveMembershipPressOwner_);
+    macroController_.setMakeRoomDeferred(false);
+    liveMembershipAway_ = false;
+    macroController_.clearFrozenDragHulls();
+    macroController_.freezeHullsForDrag(draggedNodeId);
+    armMacroCrossingAnimation(cablesBefore, draggedNodeId.uid, {});
+    glideHullsFrom(hullsBefore);
+}
+
+// A drag that changed membership live but ended without the drop finalize (cancelled mid-gesture) still records
+// its change as one undo step.
+void GraphEditor::recordUnfinishedLiveMembershipChange() {
+    if (!liveMembershipChanged_)
+        return;
+    liveMembershipChanged_ = false;
+    liveMembershipAway_ = false;
+    const auto macrosBefore = std::exchange(macrosBeforeLiveDrag_, juce::var());
+    if (undoManager != nullptr)
+        undoManager->recordGraphAndMacroChange(
+            audioEngine.getGraph(), macros,
+            [this] {
+                for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                    macroController_.makeRoomFor(grower);
+            },
+            undoManager->takeCapturedGraphBeforeState(), macrosBefore);
+}
+
+void GraphEditor::beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId) {
+    macroController_.freezeHullsForDrag(draggedNodeId);
+}
+
+void GraphEditor::clearMacroDragCandidate(bool keepFrozenBorders) {
+    if (keepFrozenBorders)
+        revertLiveMembership();
+    else
+        recordUnfinishedLiveMembershipChange();
     const bool nodeWasSet = macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{};
-    if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet)
+    const bool froze = !keepFrozenBorders && macroController_.hasFrozenDragHulls();
+    const auto hullsBefore = snapshotPaintedHulls(); // a border held still at press glides to its live bounds
+    if (!keepFrozenBorders)
+        macroController_.clearFrozenDragHulls();
+    if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet && !froze)
         return;
     macroDragLeaveId_.clear();
     macroDragJoinId_.clear();
     macroDragDraggedNodeId_ = {};
+    glideHullsFrom(hullsBefore);
     repaintCanvas();
 }
 
-// macroHullBounds(macroId), except while a reparent drag is pulling one of macroId's OWN members
-// out: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away from the
-// module instead of the live union chasing it. Paint-only. Only the macro the dragged module is
-// CURRENTLY a member of (the one a LEAVE would remove it from) gets the excluding hull. A macro it
-// might JOIN is by construction not its current macro (a transfer joins a DIFFERENT one, per
-// macroDragJoinOrLeaveTarget), so the dragged module contributes nothing to that hull and it keeps
-// its live bounds.
-juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
+// The border drawn for macroId (and read by its chip, buttons and strips) once any glide has settled
+// (paintedMacroHullBounds adds the glide). Normally the live
+// hull. While a reparent drag moves one of macroId's OWN members (macroId is that member's macro
+// or one of its ancestors) the live union would chase the dragged card, so instead: the border
+// frozen at press while the drag is still staying inside (macroDragLeaveId_ empty), and the hull
+// without that member once a LEAVE is armed, so the macro visibly lets go of it. A macro the drag
+// might JOIN holds none of the dragged module, so it keeps its live bounds. Without a frozen
+// snapshot (a drag that never went through a press) the excluding hull is painted from the first tick. The live hull
+// is measured once per layout generation (CanvasMemo): measuring every border on every paint and tick made each frame
+// of a canvas with many open macros cost in proportion to the patch, though nothing had moved.
+juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
-        if (ownMacro != nullptr && ownMacro->id == macroId) {
+        const auto ancestors = ownMacro != nullptr ? macros.ancestorChain(ownMacro->id) : std::vector<juce::String>();
+        if (ownMacro != nullptr &&
+            (ownMacro->id == macroId || std::find(ancestors.begin(), ancestors.end(), macroId) != ancestors.end())) {
+            if (macroDragLeaveId_.isEmpty())
+                if (const auto frozen = macroController_.frozenDragHull(macroId); !frozen.isEmpty())
+                    return frozen;
             const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
     }
-    return macroController_.macroHullBounds(macroId);
+    // A whole macro dragged by its card or chip: its parent and ancestors stay where they were at press until the drop
+    // (leaving or not), so the border never follows the macro out; the drop glides them to their new bounds.
+    if (const auto& unit = macroController_.draggedMacroUnit(); unit.isNotEmpty())
+        if (const auto frozen = macroController_.frozenDragHull(macroId); !frozen.isEmpty())
+            return frozen;
+    // A group drag holds the border of every macro the group is in, the same way, so it reads as where it will drop.
+    if (const auto held = macroController_.groupDragHeldHull(macroId); !held.isEmpty())
+        return held;
+    if (const auto stored = canvasMemo_->hull(macroId))
+        return *stored;
+    ++graph_editor_paint::workCounters().hullComputations;
+    const auto hull = macroController_.macroHullBounds(macroId);
+    canvasMemo_->storeHull(macroId, hull);
+    return hull;
 }
 
-// Whether a library drop should join a macro: Cmd held (the same modifier a canvas module drag
-// uses), or the drag-without-Cmd preference on. THE one place the drop-side modifier is read, so a
-// platform where JUCE's realtime modifier state is not live during a drag-and-drop has exactly one
-// function to change; tests drive the Cmd half through setMacroJoinCommandOverrideForTests.
-bool GraphEditor::isMacroJoinModifierDown() const {
-    const bool cmdDown = macroJoinCommandOverride_.has_value()
-                             ? *macroJoinCommandOverride_
-                             : juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
-    return cmdDown || macroDragWithoutCmdEnabled;
-}
-
+// The macro a library drop joins: the innermost expanded hull under the pointer (macroHullAt), with no modifier. A
+// library drop has nothing to disambiguate (unlike moving an existing card out of or between macros), so neither Cmd
+// nor the drag-without-Cmd preference is read.
 juce::String GraphEditor::macroJoinTargetAt(juce::Point<int> canvasCentre) const {
-    if (!isMacroJoinModifierDown())
-        return {};
     return macroController_.macroHullAt(canvasCentre);
 }
 
@@ -664,38 +785,53 @@ void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
 // join still works because it only ever looks B up by id, lazily, inside its own call.
 void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId,
                                               const juce::String& joinId) {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (module == nullptr)
         return;
 
     const juce::String uuid = macroController_.nodeUuidFor(module->getNodeId());
     auto& graph = audioEngine.getGraph();
     const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
+    // A drag that already changed membership as it crossed records against the macros as they were at press.
+    const juce::var macrosBeforeOverride = liveMembershipChanged_ ? macrosBeforeLiveDrag_ : juce::var();
+    const bool movedLive = liveMembershipAway_;
+    liveMembershipChanged_ = false;
+    liveMembershipAway_ = false;
+    macrosBeforeLiveDrag_ = juce::var();
 
     // Snapshot the pre-mutation cable geometry and the dragged module's own bounds now,
     // while `module` is still known-good — doFinalize's macroController_ calls are free to add or
     // remove macro-port components (see this method's own header comment above), so both are
     // captured up front rather than read off `module` once the splice has already run. A plain
     // drag (no leave/join candidate) skips the snapshot entirely — nothing to diff, nothing to
-    // animate, and MacroCrossingAnimator::arm() is never even called.
-    const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty();
+    // animate, and MacroCrossingAnimator::arm() is never even called. A crossing applied mid-drag already slid
+    // its cables; the drop only flashes the module where it lands.
+    const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty() || movedLive;
     const auto crossingNodeUid = module->getNodeId().uid;
     const auto crossingFlashBounds = crossedHull ? module->getBounds() : juce::Rectangle<int>();
     const auto cablesBeforeSplice = crossedHull ? rebuildVisibleCables() : std::vector<VisibleCable>();
 
-    auto doFinalize = [this, module, leaveId, joinId, uuid] {
+    auto doFinalize = [this, module, leaveId, joinId, uuid, movedLive] {
         finalizeModuleDrag(module);
-        if (leaveId.isNotEmpty())
-            macroController_.removeSelectionFromMacro(leaveId, {uuid}, /*recordUndo=*/false);
-        if (joinId.isNotEmpty())
-            macroController_.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
+        applyMacroMembershipChange(audioEngine.getGraph(), macros, macroController_, uuid, leaveId, joinId);
+        // The joined border grew around the card where it was dragged; it settles here, so its neighbours make
+        // room for where it really is.
+        if (movedLive) {
+            for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                macroController_.makeRoomFor(grower);
+            if (const auto* owner = macros.findByMember(uuid))
+                macroController_.makeRoomFor("m:" + owner->id);
+        }
     };
 
     if (undoManager)
-        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride);
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride, macrosBeforeOverride);
     else
         doFinalize();
 
-    if (crossedHull)
+    // A slide a mid-drag crossing started is left to finish; arming again would cut it short.
+    if (crossedHull && !(macroCrossingAnim_.isLive() && leaveId.isEmpty() && joinId.isEmpty()))
         armMacroCrossingAnimation(cablesBeforeSplice, crossingNodeUid, crossingFlashBounds);
 
     clearMacroDragCandidate();
@@ -752,9 +888,31 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
 // macroCrossingDriverAnim_, exactly like every other AnimationDriver use in this file.
 void GraphEditor::armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice,
                                             uint32_t crossingNodeUid, juce::Rectangle<int> flashBounds) {
-    if (!macroCrossingAnim_.arm(cablesBeforeSplice, rebuildVisibleCables(), crossingNodeUid, flashBounds))
-        return;
+    if (macroCrossingAnim_.arm(cablesBeforeSplice, rebuildVisibleCables(), crossingNodeUid, flashBounds))
+        startMacroCrossingDriver();
+}
 
+// A cable dropped across a macro boundary or on a folded card has no earlier self to slide from, so each cable it
+// created that ends on a port emerges from the drop point instead (MacroCrossingAnimator::armSlideFrom). Reduce
+// Motion moves nothing: the new cables fade in where they land (the cable-retract grow, an 80 ms fade there).
+// Animations Off falls through to the slide, whose driver lands at once.
+void GraphEditor::armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint) {
+    if (synth::ui::prefersReducedMotion() && !synth::ui::animationsOff()) {
+        repaintCanvas(); // the grow diffs against the cables as they are now
+        retractCablesGoneSince(cablesBeforeDrop, /*growAdded=*/true);
+        return;
+    }
+    const auto isPort = [this](uint32_t uid) {
+        return macroController_.nodeIsMacroPort(juce::AudioProcessorGraph::NodeID{uid});
+    };
+    if (macroCrossingAnim_.armSlideFrom(cablesBeforeDrop, rebuildVisibleCables(), dropPoint, isPort)) {
+        cablesCacheValid = false; // the memo was built before the slide existed
+        startMacroCrossingDriver();
+    }
+}
+
+// The one place macroCrossingDriverAnim_ is started, whichever gesture armed macroCrossingAnim_.
+void GraphEditor::startMacroCrossingDriver() {
     juce::Component::SafePointer<GraphEditor> safeEditor(this);
     macroCrossingDriverAnim_.start(
         vblankUpdater,

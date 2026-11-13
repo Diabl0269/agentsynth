@@ -1,12 +1,39 @@
 // MainComponentSetupTimeline.cpp -- initialiseCommon()'s timeline-panel wiring step
 // (wireTimelinePanel), split by concern into services/shortcuts, the 4-hook TimelineDoc
 // inventory, clip-lane callbacks, and the transport-bar record toggle. Split out of the former
-// single MainComponent.cpp (FRO76) -- see MainComponent::initialiseCommon in MainComponent.cpp.
+// single MainComponent.cpp -- see MainComponent::initialiseCommon in MainComponent.cpp.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
+#include "MainComponentRenderToAudio.h"
+#include "ShortcutManager/AppCommands.h"
+#include "SoundBrowser/KeyAuditionSound.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TrackColourPicker.h"
 #include <algorithm>
+
+namespace {
+
+// The key pickers' default sound plays through the sound preview: after the master, never in a bounce.
+void wireKeyAuditionDefaultSound(AudioEngine& engine, synth::ui::TimelinePanelComponent& panel) {
+    for (auto* auditioner : {&panel.getTransportBar().getSongKeyField().getAuditioner(),
+                             &panel.getPianoRoll().getScaleAssistPanel().getAuditioner()}) {
+        auditioner->playDefaultSound = [&engine](const std::vector<int>& pitches) {
+            synth::soundbrowser::playKeyAuditionSound(engine.getSoundPreview(), pitches);
+        };
+        auditioner->stopDefaultSound = [&engine] { engine.getSoundPreview().stop(); };
+        auditioner->isPlaybackRunning = [&engine] { return engine.getTransport().getPositionSnapshot().playing; };
+    }
+}
+
+} // namespace
 
 void MainComponent::wireTimelinePanel() {
     wireTimelinePanelServicesAndShortcuts();
@@ -34,10 +61,20 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    audioEngine.getTransport().onTimeSignatureChanged = [this] { publishTimelineAndRebindRecorder(); }; // swing steps
+    timelinePanel.getTransportBar().onPlayStarted = [this] {
+        countUsage(synth::telemetry::Feature::TimelineUsed); // Play / Stop button or Space started the timeline
+    };
+    // The cursor glide accumulates with the cursor nudge actions through one shared state.
+    timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
+    wireKeyAuditionDefaultSound(audioEngine, timelinePanel);
+    // Preferences > Animations: the saved choice applies from the first frame (the Preferences tab applies changes).
+    synth::ui::setAnimationMode(synth::ui::animationModeFromString(
+        appProperties.getUserSettings()->getValue(synth::ui::kAnimationModeKey, "follow")));
 
-    // FRO11 (P9-5): the dock's own persisted-tab key, read once and written on every tab click
+    // The dock's own persisted-tab key, read once and written on every tab click
     // (docs/layout/chrome.md's "Panel collapse and persistence" table); the graph-topology-mutated and
     // Direct's "Make channel" callbacks route the mixer's own actions through the SAME funnels
     // every other "Make channel" trigger and every other graph-structural edit already use.
@@ -45,21 +82,21 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     bottomDock.setOnMakeChannelForNode(
         [this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
-    // FRO12 (P9-6): each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
+    // Each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.
     bottomDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", bottomDock.getMidiRemotePanel());
     bottomDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     bottomDock.getMixerHost().setHostedPanelFocusRegion("mixer", bottomDock.getMixerPanel());
-    // FRO333: app-wide shortcuts (Cmd+T, Cmd+1..9) still fire while a detached tab's own window has
+    // App-wide shortcuts (Cmd+J, Cmd+1..9) still fire while a detached tab's own window has
     // focus -- see DetachedPanelWindow::onAppShortcut's own comment on why it can't just reach
     // MainComponent::keyPressed directly.
     auto appShortcutFallback = [this](const juce::KeyPress& key) { return keyPressed(key); };
     bottomDock.getTimelineHost().onAppShortcutFallback = appShortcutFallback;
     bottomDock.getMixerHost().onAppShortcutFallback = appShortcutFallback;
     bottomDock.getMidiRemoteHost().onAppShortcutFallback = appShortcutFallback;
-    // FRO333: keeps isBottomDockVisible in sync with bottomDock.hasAnyVisibleTab() -- see
+    // Keeps isBottomDockVisible in sync with bottomDock.hasAnyVisibleTab() -- see
     // bottomDockAutoHiddenByEmptyTabs_'s own comment (MainComponent.h) for why the reopen half is
     // gated on that flag rather than firing on every "a tab came back" edge.
     bottomDock.onPanelDetachStateChanged = [this] {
@@ -81,7 +118,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
     // settings-file write, see MainComponent::changeListenerCallback's settings branch.
     mixerPlacement_.applyPlacementPreference();
-    // FRO11 crash fix: the mixer's fader/pan bindings are raw pointers into live processor
+    // The mixer's fader/pan bindings are raw pointers into live processor
     // parameters, exactly like ModuleComponent's own -- so they unbind through the SAME seam
     // ModuleComponent already uses (GraphEditor::onBeforeDetachAllModuleComponents, fired at the
     // top of detachAllModuleComponents() -- every graph-replacing path funnels through it,
@@ -91,33 +128,44 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // called from the AFTER-restore hook) AFTER the restore already freed the param --
     // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
     // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
-    // FRO135: a pick-target session also ends here -- its candidates are components this rebuild is
+    // A pick-target session also ends here -- its candidates are components this rebuild is
     // about to free, and a click on one must never assign to a node that no longer exists.
     graphEditor.onBeforeDetachAllModuleComponents = [this] {
         midiLearnController_.cancelPickTarget();
-        // FRO336: unbinds the "both places" mirror view too, when one is open -- Source/UI/CLAUDE.md's
+        // Unbinds the "both places" mirror view too, when one is open -- Source/UI/CLAUDE.md's
         // mixer-unbind invariant applies to every live MixerPanelComponent, not only the docked one.
         bottomDock.unbindAllMixerViews();
     };
-    // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
+    // A restore that frees only some nodes (an undo of a duplicate, a redo of a delete) unbinds only the mixer
+    // columns bound to them; the rest stay bound and the rebuild after the restore keeps them.
+    graphEditor.onBeforeDetachModuleComponentsFor =
+        [this](const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+            midiLearnController_.cancelPickTarget();
+            bottomDock.unbindMixerViewsFor(doomed);
+        };
+    // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, the mixer-reveal hook
     // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip
     // switches tabs and scrolls to the column -- a closed dock has nothing on screen to scroll to yet.
     trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
-        ensureBottomDockOpen();
+        ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::Mixer);
         return bottomDock.revealColumnForStrip(stripId);
     });
 
-    // The user's bindings for the three surfaces that resolve their OWN keys (see
-    // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are
-    // installed together and MUST stay together: with a manager installed, resolution is strict —
-    // an action id missing from ShortcutManager::resetToDefaults() has NO key at all rather than
-    // falling back to its hardcoded default, so installing the manager before registering an id
-    // makes that key silently inert. ShortcutManagerTest's surface-id tripwire pins the id list
-    // these three consult against the defaults table for exactly that reason.
+    trackChannelLink_.setCanvasRevealHook([this] { ensureCanvasShowing(); });
+    bottomDock.getMixerPanel().onRevealCanvas = [this] { ensureCanvasShowing(); };
+    bottomDock.onCanvasBodyChanged = [this] { resized(); };
+    wireMainViewHooks();
+
+    // The user's bindings for the surfaces that resolve their OWN keys (see PianoRollComponent::setShortcutManager
+    // for the strict-resolution contract). They are installed together and MUST stay together: with a manager
+    // installed, an action id missing from ShortcutManager::resetToDefaults() has NO key at all, so installing the
+    // manager before registering an id makes that key silently inert. ShortcutManagerTest's surface-id tripwire pins
+    // the id list these consult against the defaults table.
     timelinePanel.setShortcutManager(&shortcutManager);
     timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
+    timelinePanel.getDrumMachine().setShortcutManager(&shortcutManager);
     timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
-    // FRO18: the mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
+    // The mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
     // "timelineArmFocusedTrack" action ids the track-header row above already binds -- a user's
     // rebind of M/S/R applies to whichever of the two surfaces has focus. Not part of the "MUST
     // stay together" strict-resolution group above: the mixer panel falls back to hardcoded bare
@@ -125,7 +173,9 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // installed" contract every other surface action in this app follows, rather than requiring
     // every id it consults to be pre-registered.
     bottomDock.getMixerPanel().setShortcutManager(&shortcutManager);
-    // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
+    // The canvas's card keys (arrows select, Alt+arrows move, Return enters) -- the same contract.
+    graphEditor.getCardKeyboard().setShortcutManager(&shortcutManager);
+    // Arm reaches the focused strip's linked track through the SAME performTrackEdit
     // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
     // write (that would skip the undo bracket every other track edit goes through). Routed through
     // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
@@ -137,13 +187,59 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         });
     });
 
-    // The dock's top-edge drag (FRO231: one handle for every tab, not the Timeline panel's own)
+    // A mixer track column dropped in a new place reorders the timeline's tracks too (the mixer lists
+    // track strips in timeline order): the same one-undo-step path the track list's own drag uses.
+    // The mixer is rebuilt afterwards because a pure doc edit never reaches the graph reconcile.
+    bottomDock.setOnMoveTrack([this](synth::TrackId id, int newIndex) {
+        performTrackEdit([this, id, newIndex] { timelineDoc.moveTrack(id, newIndex); });
+        bottomDock.rebuildMixer();
+    });
+    // A strip's right-click "Duplicate Track" is the timeline row's action (Cmd+D), copy and mixer channel together.
+    bottomDock.setOnDuplicateTrack([this](synth::TrackId id) { duplicateOneTrack(id, /*focusCopyRow=*/false); });
+
+    // A mixer column's colour dot opens the SAME picker the track's Timeline swatch does (preview with no undo, one
+    // undo step on commit, the track's channel macro following), so a pick recolours the track everywhere. The
+    // mixer re-tints from timelineChanged like it does for a Timeline-side pick.
+    bottomDock.setOnBuildTrackColourPicker([this](synth::TrackId id) {
+        juce::Component::SafePointer<MainComponent> safeThis(this);
+        synth::ui::TrackColourPickerContext context;
+        context.doc = &timelineDoc;
+        context.favourites = appProperties.getUserSettings();
+        context.link = &trackChannelLink_;
+        context.performEdit = [safeThis](const std::function<void()>& mutation) {
+            if (auto* self = safeThis.getComponent())
+                self->performTrackEdit(mutation);
+        };
+        context.isAlive = [safeThis] { return safeThis != nullptr; };
+        return synth::ui::buildTrackColourPicker(context, id);
+    });
+
+    // The dock's top-edge drag (one handle for every tab, not the Timeline panel's own)
     // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
     // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays
     // out live, and persists once the drag ends (not per pixel).
     bottomDock.onResizeHeight = [this](int desiredHeight) { setTimelinePanelHeight(desiredHeight, /*persist=*/false); };
     bottomDock.onResizeHeightCommitted = [this](int desiredHeight) {
         setTimelinePanelHeight(desiredHeight, /*persist=*/true);
+    };
+
+    // A mixer section divider dragged past the fader's minimum grows whichever strip hosts the
+    // mixer through that strip's OWN resize path (the dock's height above, or the Own panel's), so
+    // the clamp and persistence stay in one place. A detached window cannot be grown from here: the
+    // panel scrolls its content instead (docs/mixer/panel.md#shared-sections).
+    auto& mixerPanel = bottomDock.getMixerPanel();
+    // In the main area it fills the space the canvas had: nothing to grow, and the dock's height is not its own.
+    mixerPanel.canGrowHost = [this] {
+        return !bottomDock.getMixerHost().isDetached() &&
+               !bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer);
+    };
+    mixerPanel.growHost = [this](int extraPx, bool commit) {
+        if (bottomDock.isInMainArea(synth::ui::BottomDockComponent::Tab::Mixer))
+            return;
+        if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
+            mixerPlacement_.setOwnPanelHeight(mixerPlacement_.getOwnPanelHeight() + extraPx, commit);
+        else
+            setTimelinePanelHeight(timelinePanelHeight_ + extraPx, commit);
     };
 }
 
@@ -161,6 +257,16 @@ void MainComponent::wireTimelineHookInventory() {
     //     bindings afterwards (both domains — see AppUndoManager::setRestoreHooks).
     //  4. PANEL: the track-header column reads the doc and calls back into us (TrackHeaderHost)
     //     to create, re-bind and delete the Track In nodes its chips name.
+    timelinePanel.getTransportBar().getSongKeyField().auditionMonitor = [this](synth::TrackId track, bool running) {
+        const auto* entry = timelineDoc.getTrack(track);
+        auto* node = entry != nullptr && entry->bindingUuid.isNotEmpty() ? findNodeByUuid(entry->bindingUuid) : nullptr;
+        if (node == nullptr)
+            return;
+        if (running)
+            audioEngine.getAuditionMonitor().begin(node->nodeID);
+        else
+            audioEngine.getAuditionMonitor().end();
+    };
     timelineDoc.addListener(this);
     automationRecorder.attachTo(timelineDoc, undoManager, audioEngine.getTransport());
     audioEngine.setAutomationRecorder(&automationRecorder);
@@ -170,6 +276,18 @@ void MainComponent::wireTimelineHookInventory() {
             if (!programmaticApplyScopes.empty())
                 programmaticApplyScopes.pop_back();
             reconcileTimelineAfterGraphChange();
+        });
+    // 5. TRACK LIST MOTION: a track an undo/redo removes or brings back shrinks away or grows in, on the timeline and
+    // in
+    //    the mixer (the same two calls deleteTrack makes around its own removal).
+    undoManager.setTrackListHooks(
+        [this] {
+            timelinePanel.noteTracksLeaving();
+            bottomDock.getMixerPanel().noteColumnsLeaving();
+        },
+        [this] {
+            timelinePanel.finishTrackListChange();
+            bottomDock.getMixerPanel().finishColumnChange();
         });
     timelinePanel.setTrackHeaderHost(this);
     timelinePanel.setTimelineDoc(&timelineDoc);
@@ -186,6 +304,19 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     timelinePanel.getClipLaneArea().setPeaksResolver([this](const juce::String& assetRef) -> juce::File {
         return audioEngine.getAudioClipStreamer().resolveAssetRef(detail::peaksRefForAssetRef(assetRef));
     });
+    // The audio file's header rate: the waveform's buckets count FILE samples.
+    timelinePanel.getClipLaneArea().setAssetSampleRateResolver([this](const juce::String& assetRef) -> double {
+        const auto file = audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef);
+        return file == juce::File() ? 0.0 : synth::AudioClipStreamer::readFileSampleRate(file);
+    });
+    // The raw samples of a finished asset, read from the same file playback uses: what the waveform draws when a clip
+    // is zoomed in past one peak bucket per pixel.
+    timelinePanel.getClipLaneArea().setAssetSamplesResolver([this](const juce::String& assetRef,
+                                                                   std::int64_t startSample, int numSamples,
+                                                                   juce::AudioBuffer<float>& out) -> bool {
+        const auto file = audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef);
+        return file != juce::File() && synth::PeaksFile::readAudioSamples(file, startSample, numSamples, out);
+    });
     // Same resolution playback uses, answering existence rather than handing back a File —
     // what paints the missing-asset placeholder instead of an (impossible) waveform.
     timelinePanel.getClipLaneArea().setAssetExistsResolver([this](const juce::String& assetRef) -> bool {
@@ -194,12 +325,29 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    // "Render to audio track": the lane area works out the spans; which of those tracks have a mixer channel, and the
+    // render itself, need the graph and the engine, so both are answered here.
+    timelinePanel.getClipLaneArea().renderableTracks = [this](const std::vector<synth::TrackId>& tracks) {
+        return MainComponentRenderToAudio::renderableTracks(*this, tracks);
+    };
+    timelinePanel.getClipLaneArea().onRenderToAudioRequested = [this](std::vector<synth::ui::RenderSpan> spans) {
+        MainComponentRenderToAudio::request(*this, spans);
+    };
     // Same division of labour for the authoring gestures: the lane area decides WHICH audio track
     // and WHICH beat (double-click on an empty audio row, or an OS file drop on one), and this owns
     // the import + clip creation, because only it knows the bundle root.
     timelinePanel.getClipLaneArea().onAudioFileDropped = [this](synth::TrackId track, double startBeat,
                                                                 juce::File file) {
         importAudioFileToClip(track, startBeat, file);
+    };
+    // A Stretch edge drag of an audio clip: only this can render and import the stretched copy.
+    timelinePanel.getClipLaneArea().onAudioClipStretchRequested = [this](synth::ClipId clip, double startBeat,
+                                                                         double lengthBeats) {
+        MainComponentAudioImport::stretchAudioClip(*this, clip, startBeat, lengthBeats);
+    };
+    // A file dropped under the last track makes a new audio track with the clip, in one undo step.
+    timelinePanel.getClipLaneArea().onAudioFileDroppedBelowTracks = [this](double startBeat, juce::File file) {
+        MainComponentAudioImport::addAudioTrackWithClip(*this, startBeat, file);
     };
     // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
     // transport (same division as every other callback above). Whether P also ARMS looping is the
@@ -227,17 +375,28 @@ void MainComponent::wireTimelineRecordToggle() {
     // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
     audioEngine.setMidiCaptureSink(&midiRecorder);
     timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) { handleRecordToggle(wantRecording); };
+    // Return to Start runs the command itself, so the button shares its locate-and-track-nudge behaviour.
+    timelinePanel.getTransportBar().onReturnToStart = [this] {
+        commandManager.invokeDirectly(AppCommands::transportReturnToStart, false);
+    };
 }
 
-// The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle() (FRO76).
+// The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle().
 void MainComponent::handleRecordToggle(bool wantRecording) {
     if (!wantRecording) {
         // Both are no-ops unless their own kind of take is in flight, so Record-off can call
         // them unconditionally and neither path has to know the other exists.
         commitAudioRecording();
         commitMidiRecording();
+        recordPendingPlay_ = false;
+        audioEngine.setRecordingEngaged(false);
+        timelinePanel.getTransportBar().setRecordingState(false); // a waiting record has no take to do it
         return;
     }
+
+    // Raised before anything can start the transport, so an Auto-monitored track never drops its input for the
+    // first blocks of the take; the 10 Hz poll lowers it again if nothing ends up recording.
+    audioEngine.setRecordingEngaged(true);
 
     // Record does NOT require an armed track (see docs/timeline/transport.md#recording) —
     // pressing Record always rolls the transport with the record indicator lit,
@@ -245,49 +404,50 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // identical to Play plus a lit record indicator, plus a transient status-bar notice so the
     // silence isn't mistaken for a bug.
     //
-    // The lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
-    // of each kind the one earlier in the document decides which kind of take this is; there is
-    // deliberately no "record both at once" (two takes, two commits, two undo steps for one
-    // gesture). Automation-kind tracks are not recordable and are skipped.
-    synth::TrackId armedTrack;
-    synth::TrackKind armedKind = synth::TrackKind::Midi;
+    // FIRST-ARMED WINS only among the MIDI tracks that record from every MIDI input (they would all
+    // record the same notes). A MIDI track with its own input records alongside (collectMidiTakeTargets),
+    // and EVERY armed Audio track records from its own input (resolveAudioTakes). Automation tracks are
+    // not recordable. An armed Audio track counts as armed even when it records nothing (no input), so
+    // the status bar names why instead of saying nothing is armed.
+    synth::TrackId firstEveryInputMidi;
+    bool anyAudioArmed = false;
     for (const auto& track : timelineDoc.getTracks()) {
-        if (track.armed && (track.kind == synth::TrackKind::Midi || track.kind == synth::TrackKind::Audio)) {
-            armedTrack = track.id;
-            armedKind = track.kind;
-            break;
-        }
+        if (!track.armed)
+            continue;
+        if (track.kind == synth::TrackKind::Audio)
+            anyAudioArmed = true;
+        else if (!firstEveryInputMidi.isValid() && track.kind == synth::TrackKind::Midi &&
+                 track.recordsEveryMidiInput())
+            firstEveryInputMidi = track.id;
     }
-    const bool anyArmed = armedTrack.isValid();
+    const auto midiTargets = collectMidiTakeTargets(firstEveryInputMidi);
+    const bool anyArmed = anyAudioArmed || !midiTargets.empty();
 
-    // An audio take's tap and its destination files are resolved BEFORE the transport
-    // moves, for the same reason as always — a request that cannot be honoured must not leave
-    // the transport rolling. Only reachable with an armed Audio track; with nothing armed (or a
-    // MIDI track armed) there is no take to resolve here.
-    const bool isAudioTake = anyArmed && (armedKind == synth::TrackKind::Audio);
-    AudioTake take;
-    RecordTapModule* tapModule = nullptr;
-    if (isAudioTake) {
-        auto* tapNode = ensureMasterRecordTap();
-        tapModule = tapNode != nullptr ? dynamic_cast<RecordTapModule*>(tapNode->getProcessor()) : nullptr;
-        if (tapModule == nullptr) {
-            timelinePanel.getTransportBar().setRecordingState(false);
-            statusBar.showMessage("Can't record audio: no Audio Output in the patch");
-            return;
-        }
-        take.track = armedTrack;
-        take.tapNode = tapNode->nodeID;
-        if (!chooseTakeFiles(take)) {
-            timelinePanel.getTransportBar().setRecordingState(false);
-            statusBar.showMessage("Can't record audio: could not create the take file");
-            return;
-        }
-    }
-
-    // Record implies roll (DAW convention): starting a take also starts the transport if it
-    // isn't already running.
+    // "Record also starts playback" (Preferences, default on). Off, from a stop: Record only engages recording and
+    // the transport is left alone. A MIDI take starts at once, since MidiRecorder::captureBlock captures nothing
+    // while the transport is stopped; an audio take's tap would record the stopped input, so it waits (the 10 Hz poll
+    // re-enters here once the transport rolls).
     auto& transport = audioEngine.getTransport();
     const auto snap = transport.getPositionSnapshot();
+    const auto* userSettings = appProperties.getUserSettings();
+    const bool waitForPlay = !snap.playing && userSettings != nullptr &&
+                             !userSettings->getBoolValue(synth::ui::kRecordStartsPlaybackKey, true);
+    if (waitForPlay && anyAudioArmed) {
+        recordPendingPlay_ = true;
+        timelinePanel.getTransportBar().setRecordingState(true);
+        statusBar.showMessage("Record is on - press Play to start the audio take");
+        return;
+    }
+
+    // The audio takes' sources and destination files are resolved BEFORE the transport moves: a
+    // request that cannot be honoured must not leave the transport rolling.
+    std::vector<AudioTake> takes;
+    juce::String audioNotice;
+    if (anyAudioArmed && !resolveAudioTakes(takes, audioNotice))
+        return;
+
+    // Record implies roll (DAW convention): starting a take also starts the transport if it
+    // isn't already running (unless the preference above says otherwise).
 
     // Re-anchor the 10 Hz commit-on-stop poll's edge-detector (timerCallback's
     // wasTransportPlaying_) to what we just read, before starting anything below. When starting
@@ -296,7 +456,7 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // capture start synchronously, right here. A poll tick landing in that gap would otherwise see
     // a stale wasTransportPlaying_==true left over from an earlier roll, the snapshot still
     // reporting not-playing, and the take that just started as "isRecording()==true", and mistake
-    // it for an unrelated take stopping -- cancelling a take it never even saw start (FRO210).
+    // it for an unrelated take stopping -- cancelling a take it never even saw start.
     // Anchoring to snap.playing (false here) closes that gap; anchoring to snap.playing rather than
     // an unconditional false also preserves the mid-roll case just below (Record pressed while
     // already playing, no transport.play() posted) -- there wasTransportPlaying_ must stay true so
@@ -309,7 +469,10 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // gets no pre-roll (the user is already mid-performance) and no forced click, matching
     // today's plain "record implies roll" behaviour exactly.
     double punchInBeat = snap.ppq;
-    if (!snap.playing && countInBars > 0) {
+    if (waitForPlay) {
+        // The transport stays stopped. Punch-in 0 filters nothing, so a locate before Play cannot drop notes.
+        punchInBeat = 0.0;
+    } else if (!snap.playing && countInBars > 0) {
         const double beatsPerBar = (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
         const double preRollStart = std::max(0.0, punchInBeat - (double)countInBars * beatsPerBar);
         transport.locateBeat(preRollStart);
@@ -324,47 +487,43 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         punchInBeat = transport.getPositionSnapshot().ppq;
     }
 
-    if (isAudioTake) {
-        // The capture starts HERE, at record-on — not on the 10 Hz poll, which is what
-        // used to cost a take up to ~100 ms of head. The count-in's pre-roll is therefore
-        // RECORDED, and excluded from the committed clip by a trim (see commitAudioRecording);
-        // the tap itself reports the exact transport sample its frame 0 landed on, so the clip's
-        // placement is sample arithmetic rather than a poll observation.
-        //
-        // Deliberately AFTER the locate/play posted above, not before: those are transport
-        // commands that take effect at the top of a block, and a frame captured before a locate
-        // belongs to the OLD position — which would break the one thing the anchor promises,
-        // that take frame `f` sits at `captureStart + f`. Starting after them can cost at most
-        // the one block that may already be in flight (~10 ms at 512/48k), and that block is
-        // pre-roll, honestly accounted for either way.
-        const double rate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
-        if (!tapModule->startCapture(take.wavFile, take.peaksFile, rate, RecordTapModule::kNumChannels)) {
-            // The tap vanished, or the file could not be opened. Nothing to salvage.
-            timelinePanel.getTransportBar().setRecordingState(false);
-            audioEngine.getMetronome().setForcedOn(false);
-            statusBar.showMessage("Can't record audio: the take file could not be opened");
-            return;
-        }
-        take.punchInBeat = punchInBeat;
-        take.capturing = true;
-        // Frozen NOW, not re-read at commit time — see the AudioTake field comments.
-        take.captureSampleRate = rate;
-        take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
-        take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
-        audioTake_ = take;
-    } else if (anyArmed) {
+    // The captures start HERE, at record-on, after the locate/play above -- see startAudioTakes.
+    if (!takes.empty() && !startAudioTakes(takes, punchInBeat, snap.sampleRate, snap.bpm))
+        return;
+    if (!midiTargets.empty()) {
         // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
         // threshold — captureBlock() drops everything before it, so the pre-roll bars the
         // performer plays along with the click are heard but never committed.
-        midiRecorder.startRecording(armedTrack, punchInBeat);
-    } else {
+        midiRecorder.startRecording(midiTargets, punchInBeat);
+    } else if (!anyArmed) {
         // Nothing armed: the transport is rolling and the indicator is about to light, but no
         // take of either kind starts. Arming a track MID-ROLL does not retroactively start one
         // either — TimelineDoc::setTrackArmed() has no listener watching for this; the user has
         // to stop and press Record again once something is armed.
         statusBar.showMessage("Recording started - no track is armed");
     }
+    if (audioNotice.isNotEmpty())
+        statusBar.showMessage(audioNotice);
 
     // Lit regardless of arming — a bare "record" is still record-on.
     timelinePanel.getTransportBar().setRecordingState(true);
+    countUsage(synth::telemetry::Feature::TimelineUsed); // a take started: every early return above is a refusal
+}
+
+// The MIDI take's targets: the first-armed track that records every input (when the contest above picked a MIDI
+// one), then every armed MIDI track with an input of its own, in document order. A device's lane is reserved here
+// even while the device is unplugged, so the take records it the moment it returns; until then it records
+// nothing, and never falls back to every input.
+std::vector<synth::MidiRecorder::TakeTarget> MainComponent::collectMidiTakeTargets(synth::TrackId firstArmedMidi) {
+    std::vector<synth::MidiRecorder::TakeTarget> targets;
+    if (firstArmedMidi.isValid())
+        targets.push_back({firstArmedMidi, synth::MidiRecorder::kAnySource, 0});
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (!track.armed || track.kind != synth::TrackKind::Midi || track.recordsEveryMidiInput())
+            continue;
+        const int source = track.midiInputId.isEmpty() ? synth::MidiRecorder::kAnySource
+                                                       : audioEngine.getMidiInputSources().sourceFor(track.midiInputId);
+        targets.push_back({track.id, source, track.midiInputChannel});
+    }
+    return targets;
 }

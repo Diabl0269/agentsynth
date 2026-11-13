@@ -5,6 +5,7 @@
 #include "Timeline/MidiRecorder.h"
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 
 namespace {
@@ -131,6 +132,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     juce::AudioBuffer<float> buffer(deviceChannelPointers_.data(), totalChannels, numSamples);
     juce::MidiBuffer midiMessages;
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
+    // Every callback, recording or not, so a lane never holds notes from before a take; renderNextBlock empties
+    // the block again once its passes have read it.
+    midiInputSources_.drainBlock(midiSourcedBlock_, juce::Time::getMillisecondCounterHiRes(), numSamples);
 
     // Collect MIDI from active ExternalMidiModules
     // The ExternalMidiModule is just a processor in the graph.
@@ -226,6 +230,8 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         renderSliced(buffer, midiMessages);
     else
         renderPass(buffer, midiMessages);
+    // Read: a later render with no device callback before it (hosted, a bounce) must not see these again.
+    midiSourcedBlock_.count = 0;
 
     // Audio Output's Right borrows Left, sample-exact, while Right is unpatched --
     // render-time only, never a graph edge (see refreshNormalling()). Right after the render pass
@@ -241,6 +247,13 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // LFOs / envelopes keep advancing.
     if (masterMuted_.load(std::memory_order_relaxed))
         buffer.clear();
+    applyLoadGate(buffer);
+
+    // The Sounds view's preview, summed AFTER the master mute and the load gate so the song's volume, mute and master
+    // effects never reach it. A bounce suspends it (BounceGuards.h). Only the graph's output channels get it. Before
+    // the scrub below, which stays the one place a bad sample is caught.
+    soundPreview_.process(buffer, std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels()),
+                          previewBlockInfo_);
 
     // The LAST write to `buffer` before either caller hands it to hardware or the host --
     // audioDeviceIOCallbackWithContext's `buffer` aliases the device's own output pointers, and
@@ -252,6 +265,28 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // Scoped to the graph's declared OUTPUT channels only, same reasoning as runFeedbackGuard just
     // above: channels past that count are scratch, not something that reaches a listener.
     scrubNonFiniteOutput(buffer, std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels()));
+}
+
+// While a project is opening on screen the gate is closed and the output is silent, the graph still running (the same
+// spot as the master mute). Once it opens the output ramps from silence to full over kLoadGateRampMs, so a patch that
+// starts mid-note does not click in. The gain lives on the audio thread; only the open flag crosses threads.
+void AudioEngine::applyLoadGate(juce::AudioBuffer<float>& buffer) noexcept {
+    constexpr double kLoadGateRampMs = 15.0;
+    if (!loadGateOpen_.load(std::memory_order_acquire)) {
+        buffer.clear();
+        loadGateGain_ = 0.0f;
+        return;
+    }
+    if (loadGateGain_ >= 1.0f)
+        return;
+    const double rate = mainProcessorGraph.getSampleRate() > 0.0 ? mainProcessorGraph.getSampleRate() : 44100.0;
+    const float step = (float)(1000.0 / (kLoadGateRampMs * rate));
+    // The ramp may end mid-block: only its own samples are scaled, the rest of the block is left at full level.
+    const int n = std::min(buffer.getNumSamples(), (int)std::ceil((1.0f - loadGateGain_) / step));
+    const float end = std::min(1.0f, loadGateGain_ + step * (float)n);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        buffer.applyGainRamp(ch, 0, n, loadGateGain_, end);
+    loadGateGain_ = n < buffer.getNumSamples() ? 1.0f : end;
 }
 
 void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset) {
@@ -290,8 +325,11 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Loaded ONCE into a local, here, and used only within this pass — the pointer is borrowed, and
     // the in-flight guard in renderNextBlock is what makes that borrow safe against an owner
     // destroying the recorder (acquire pairs with the setter's publish).
+    // The per-device notes ride along, windowed to this pass's slice of the callback.
     if (auto* recorder = midiCaptureSink_.load(std::memory_order_acquire))
-        recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
+        recorder->captureBlock(
+            midiMessages, transport.getCurrentBlockInfo(),
+            {midiSourcedBlock_.events.data(), midiSourcedBlock_.count, inputSampleOffset, buffer.getNumSamples()});
 
     // Push this pass's automation values into their bound parameters, after the tick (so the
     // beat position is this pass's) and before the graph (so every node reads the automated value
@@ -308,6 +346,9 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Point the playhead at this pass's slice of the captured input before the graph runs, and
     // take it away immediately after — nothing outside a render pass may read those pointers.
     publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
+    // This pass's slice of the same snapshot goes to every input take, anchored where the tap anchors.
+    pushInputTakes(inputSampleOffset, buffer.getNumSamples());
+    publishInputMonitorContext();
 
     // Deliberately OUTSIDE the timeline flag for the same reason as the device-input
     // publish above: whether Audio Input's graph output is gated is an input-path property, not a
@@ -326,6 +367,9 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
                                                 synth::MixerPanLaw::Compensated);
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
+
+    // Every strip slot records what its channel strip just tapped, anchored where pushInputTakes anchored.
+    inputRecorder_.pushStripSlots(buffer.getNumSamples(), transport.getCurrentBlockInfo().blockStartSample);
 
     // The output peak the Master column reads once Master has inserts. Latched HERE -- straight after the graph,
     // before the metronome click -- so it is exactly what left the master chain and never includes the click. One
@@ -347,6 +391,12 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // return. That ordering is deliberate: master mute clears the WHOLE buffer, so it silences the
     // click along with everything else the engine produces, exactly as it silences the graph.
     metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
+
+    // The first pass of the callback fixes where a preview loop aligns to; later slices of the same callback keep it.
+    if (inputSampleOffset == 0) {
+        previewBlockInfo_ = transport.getCurrentBlockInfo();
+        previewBlockInfo_.playing = previewBlockInfo_.playing && transportEnabled_.load(std::memory_order_relaxed);
+    }
 
     // The feedback guard. Post-graph (so it sees exactly what would reach the speakers,
     // metronome click included) and pre-master-mute (renderNextBlock's zero-fill runs after this
@@ -398,6 +448,7 @@ void AudioEngine::runFeedbackGuard(juce::AudioBuffer<float>& buffer, bool monito
     // from some in-block sample: the peak was measured over the whole block, so there is no single
     // sample position to call "the" trip point.
     inputMonitoringEnabled_.store(false, std::memory_order_relaxed);
+    audioInputGuardLatched_.store(true, std::memory_order_relaxed);
     feedbackGuardTripped_.store(true, std::memory_order_relaxed);
     buffer.clear();
     feedbackGuardConsecutiveSamples_ = 0;
@@ -454,6 +505,7 @@ void AudioEngine::captureDeviceInput(const float* const* inputChannelData, int n
     }
 
     deviceInputChannelsThisBlock_ = channels;
+    storeInputPeaks(channels, numSamples);
 }
 
 void AudioEngine::publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept {

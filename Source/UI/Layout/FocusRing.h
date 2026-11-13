@@ -1,0 +1,36 @@
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+namespace synth::theme {
+struct Theme;
+}
+
+namespace synth::ui {
+
+// The ring's stroke width for `theme`: 1.5x the border weight on a dark theme, 2.5x on a light one,
+// where a thin accent line on a white control beside its grey border reads as no ring at all.
+float focusRingThickness(const synth::theme::Theme& theme);
+
+// Strokes the same ring as paintFocusRing without asking whether `comp` holds focus, for a caller that
+// decides that itself (a ring that follows a tracked item rather than the component, or a test with no
+// native window to take focus). `comp` only supplies the theme.
+void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
+                          float cornerRadius = 0.0f);
+
+// Strokes the keyboard-focus ring of a small control: a solid, full-alpha `accent` ring (1.5x the
+// theme's border weight) around `area`, inset by half its thickness so it never clips against the
+// component's own edge. Draws nothing unless `comp` itself holds keyboard focus (descendants do not
+// count). `cornerRadius` 0 draws a square ring. The colour comes from the component's AppLookAndFeel
+// theme, falling back to orange when it has none. Use this for buttons, toggles, knobs and sliders;
+// whole panels use paintFocusRegionOutline (FocusRegion.h), which is softer.
+void paintFocusRing(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
+                    float cornerRadius = 0.0f);
+
+// Whether `comp` paints its focus ring now: it holds keyboard focus, or a test asked every ring to show.
+bool showsFocusRing(const juce::Component& comp);
+
+// Tests: every paintFocusRing paints as if its component held focus (a headless window cannot take focus).
+void setFocusRingsShownForTest(bool shown);
+
+} // namespace synth::ui

@@ -1,14 +1,27 @@
 #pragma once
 
-// The small "<source> · <+NN%>" chip drawn under a knob's value box while its routing is
-// hover-correlated (docs/modules/modulation.md#modulation-rings-on-knobs). Split into a free
-// function so the text formatting is unit-testable with no ModuleComponent/LookAndFeel involved
+// The stack of "<source> · <+NN%>" chips drawn under a knob's value box, one row per modulation source on it,
+// while its routing is hover-correlated or a mod dot readout is up on it
+// (docs/modules/modulation.md#modulation-rings-on-knobs). Split into free
+// functions so the text formatting and the row list are unit-testable with no ModuleComponent/LookAndFeel involved
 // (Tests/UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp) -- same pattern as
 // ModuleComponentModBand.h's modDepthBandRange.
 
+#include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Graph/ModuleComponent/ModChipFade.h"
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <vector>
+
+class GraphEditor;
+class ModuleBase;
+struct ModulationTarget;
 
 namespace synth::ui {
+
+/** Whether `card` draws the chip stack now: its routing is hover-correlated, or a mod dot readout is up on it. */
+bool modHoverChipShows(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card);
 
 /** "<sourceName> <middle-dot> <signed percent>%", e.g. "LFO 1 \xC2\xB7 +63%" / "Env 2 \xC2\xB7 -40%".
  *  amount is the attenuverter's "amount" (or 1.0 for a DirectCV/PolyBus routing), real range -1..1.
@@ -21,5 +34,27 @@ inline juce::String formatModHoverChipText(const juce::String& sourceName, float
     static const juce::String kMiddleDot = juce::String::fromUTF8("\xC2\xB7");
     return sourceName + " " + kMiddleDot + " " + pctStr + "%";
 }
+
+/** The rows for `sources` (bypassed and unnamed ones skipped), at most `maxRows` sources and then one
+ *  "+N more" row. The `chosen` source is bold and always listed: past the cap it takes the last slot. */
+std::vector<ModChipRow> modHoverChipRows(const std::vector<KnobModSource>& sources,
+                                         juce::AudioProcessorGraph::NodeID chosen, int maxRows = 4);
+
+/** Where each row of a stack goes, in card coordinates: `widths` are the rows' widths, centred on `knob` (the control
+ *  they hang under) and kept inside `card`. The stack sits below the knob; when that would run past the card's bottom
+ *  edge it sits above the knob, and when the card is too short for that too it is pushed up to fit. */
+std::vector<juce::Rectangle<float>> modChipRowRects(juce::Rectangle<float> knob, const std::vector<float>& widths,
+                                                    juce::Rectangle<float> card);
+
+/** The rows of `stack` as `card` paints them, in card coordinates, hung under `knob` (the stack's slider's bounds):
+ *  `modChipRowRects` with the rows' widths in the theme's chip font; empty with no rows or no app look and feel. */
+std::vector<juce::Rectangle<float>> modHoverChipRects(const juce::Component& card, const ModChipStack& stack,
+                                                      juce::Rectangle<int> knob);
+
+/** The stack `card` paints now: empty unless its routing is hover-correlated or a dot readout is up on it. A dragged
+ *  source shows the readout's live amount. `mod` is the card's module; `sliderFor` maps one of its modulation targets
+ * to the index of the slider the rows hang under (-1: none). */
+ModChipStack modChipStack(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card, ModuleBase* mod,
+                          const std::function<int(const ModulationTarget&)>& sliderFor);
 
 } // namespace synth::ui

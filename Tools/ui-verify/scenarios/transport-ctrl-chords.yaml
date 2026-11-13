@@ -1,0 +1,29 @@
+# Bug: Ctrl+R (Record) and Ctrl+M (Metronome) did nothing on an install that had saved its settings before the chords
+# existed. The migration that adopts them set its "done" flag but never saved the keys, so the chords worked for one
+# launch and were lost on the next, and the tooltips lost their shortcut hint. Ctrl+R also must not start playback.
+#
+# What a user does:
+#   1. Starts an install whose saved settings hold Record and Metronome as unbound.
+#   2. Opens the bottom panel (Cmd+J) and hovers Record and Metronome: the tooltips name Ctrl + R and Ctrl + M.
+#   3. Quits and starts again: the tooltips still name them (the chords were saved).
+#   4. Presses Ctrl+R: Record arms and playback does not start. Presses Ctrl+M: the metronome turns on.
+settings:
+  shortcutMigration_transportCtrlChords: true      # the first version of the migration already ran here
+  shortcut_transportRecord: "0:0"                  # saved as unbound
+  shortcut_transportToggleMetronome: "0:0"
+steps:
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl + R"}}
+  - expect: {id: timelineTransportMetronome, contains: {tooltip: "Ctrl + M"}}
+  - restart: {}
+  - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl + R"}, within_ms: 3000}
+  - expect: {id: timelineTransportMetronome, contains: {tooltip: "Ctrl + M"}}
+  - key: {keys: ctrl+r}
+  - wait: {}
+  - expect: {id: timelineTransportRecord, toggleState: true}
+  - expect: {id: timelineTransportPlayStop, toggleState: false}
+  - key: {keys: ctrl+m}
+  - wait: {}
+  - expect: {id: timelineTransportMetronome, toggleState: true}
+  - screenshot: {name: transport-ctrl-chords}

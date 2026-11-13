@@ -1,0 +1,483 @@
+// BottomDockTabMotionTests.cpp -- the bottom dock's tabs animate when one leaves the strip (its panel opens in its
+// own window) and when it comes back: the leaving tab shrinks and its neighbours close up, the returning tab opens a
+// gap and grows (docs/layout/animation.md#bottom-dock-tabs). The first group pins the pure placement maths, the
+// second the dock itself: real detach and redock, stepped by hand since no VBlank reaches an off-screen strip.
+// The last group pins the look of a lifted tab.
+#include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
+#include "BottomDockMainAreaFixture.h"
+#include "FadeVisibilityTestGuard.h"
+#include "UI/Layout/BottomDockComponent/BottomDockTabMotion.h"
+#include "UI/Layout/ExitEnterTimeline.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
+#include <algorithm>
+#include <cmath>
+#include <gtest/gtest.h>
+#include <vector>
+
+namespace {
+
+using synth::ui::BottomDockComponent;
+using synth::ui::BottomDockTabMotion;
+using synth::ui::ExitEnterTimeline;
+using Tab = BottomDockComponent::Tab;
+using Tabs = std::vector<Tab>;
+
+const juce::Rectangle<int> kStrip{0, 5, 900, 19};
+
+const BottomDockTabMotion::Placement& of(const std::vector<BottomDockTabMotion::Placement>& placements, Tab tab) {
+    return *std::find_if(placements.begin(), placements.end(), [tab](const auto& p) { return p.tab == tab; });
+}
+
+// The slots run left to right, touching, and fill the strip.
+void expectFillsStrip(const std::vector<BottomDockTabMotion::Placement>& placements, double atMs) {
+    int edge = kStrip.getX();
+    for (const auto& p : placements) {
+        EXPECT_EQ(p.bounds.getX(), edge) << "gap before a slot at " << atMs << " ms";
+        edge = p.bounds.getRight();
+    }
+    EXPECT_EQ(edge, kStrip.getRight()) << "at " << atMs << " ms";
+}
+
+} // namespace
+
+TEST(BottomDockTabMotion, NothingRunsForTheSameSetOrAnEmptyOne) {
+    BottomDockTabMotion motion;
+    EXPECT_FALSE(motion.begin({Tab::Timeline, Tab::Mixer}, {Tab::Timeline, Tab::Mixer}, false));
+    EXPECT_FALSE(motion.begin({Tab::Timeline}, {}, false));
+    EXPECT_FALSE(motion.isRunning());
+    EXPECT_TRUE(motion.placements(kStrip).empty());
+}
+
+TEST(BottomDockTabMotion, ATabThatLeavesShrinksFirstThenItsNeighboursCloseUp) {
+    BottomDockTabMotion motion;
+    ASSERT_TRUE(motion.begin({Tab::Timeline, Tab::Mixer, Tab::MidiRemote}, {Tab::Timeline, Tab::MidiRemote}, false));
+
+    auto at = [&](double ms) {
+        motion.applyAtMs(ms);
+        return motion.placements(kStrip);
+    };
+    auto start = at(0.0);
+    ASSERT_EQ(start.size(), 3u);
+    for (const auto& p : start) {
+        EXPECT_EQ(p.bounds.getWidth(), 300);
+        EXPECT_EQ(p.scale, 1.0f);
+    }
+
+    const auto midExit = at(ExitEnterTimeline::kExitMs * 0.5);
+    EXPECT_GT(of(midExit, Tab::Mixer).scale, 0.0f);
+    EXPECT_LT(of(midExit, Tab::Mixer).scale, 1.0f);
+    EXPECT_EQ(of(midExit, Tab::Mixer).bounds.getWidth(), 300) << "its slot is still open while it shrinks";
+    EXPECT_EQ(of(midExit, Tab::Timeline).bounds.getWidth(), 300);
+    EXPECT_EQ(of(midExit, Tab::Timeline).scale, 1.0f);
+
+    const auto endExit = at(ExitEnterTimeline::kExitMs);
+    EXPECT_EQ(of(endExit, Tab::Mixer).scale, 0.0f);
+    EXPECT_FALSE(of(endExit, Tab::Mixer).visible);
+    EXPECT_EQ(of(endExit, Tab::MidiRemote).bounds.getWidth(), 300) << "nothing has moved yet";
+
+    const auto midGap = at(ExitEnterTimeline::kExitMs + ExitEnterTimeline::kGapMs * 0.5);
+    EXPECT_GT(of(midGap, Tab::Mixer).bounds.getWidth(), 0);
+    EXPECT_LT(of(midGap, Tab::Mixer).bounds.getWidth(), 300);
+    EXPECT_GT(of(midGap, Tab::Timeline).bounds.getWidth(), 300);
+    EXPECT_LT(of(midGap, Tab::Timeline).bounds.getWidth(), 450);
+
+    const auto done = at(motion.totalMs());
+    EXPECT_TRUE(motion.applyAtMs(motion.totalMs()));
+    EXPECT_EQ(of(done, Tab::Mixer).bounds.getWidth(), 0);
+    EXPECT_EQ(of(done, Tab::Timeline).bounds.getWidth(), 450);
+    EXPECT_EQ(of(done, Tab::MidiRemote).bounds.getWidth(), 450);
+}
+
+TEST(BottomDockTabMotion, ATabThatReturnsOpensItsGapThenGrowsInItsOldSlot) {
+    BottomDockTabMotion motion;
+    ASSERT_TRUE(motion.begin({Tab::Timeline, Tab::MidiRemote}, {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}, false));
+    auto at = [&](double ms) {
+        motion.applyAtMs(ms);
+        return motion.placements(kStrip);
+    };
+
+    const auto start = at(0.0);
+    ASSERT_EQ(start.size(), 3u);
+    EXPECT_EQ(start[1].tab, Tab::Mixer) << "between its old neighbours";
+    EXPECT_EQ(start[1].bounds.getWidth(), 0);
+    EXPECT_EQ(start[0].bounds.getWidth(), 450);
+
+    const auto midGap = at(ExitEnterTimeline::kGapMs * 0.5);
+    EXPECT_GT(of(midGap, Tab::Mixer).bounds.getWidth(), 0) << "the neighbours make room";
+    EXPECT_LT(of(midGap, Tab::Timeline).bounds.getWidth(), 450);
+    EXPECT_EQ(of(midGap, Tab::Mixer).scale, 0.0f) << "and nothing grows until the room is there";
+
+    const auto gapDone = at(ExitEnterTimeline::kGapMs);
+    EXPECT_EQ(of(gapDone, Tab::Mixer).bounds.getWidth(), 300);
+    EXPECT_EQ(of(gapDone, Tab::Mixer).scale, 0.0f);
+
+    const auto midGrow = at(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs * 0.5);
+    EXPECT_GT(of(midGrow, Tab::Mixer).scale, 0.0f);
+    EXPECT_LT(of(midGrow, Tab::Mixer).scale, 1.0f);
+    EXPECT_EQ(of(midGrow, Tab::Mixer).bounds.getWidth(), 300);
+
+    const auto done = at(motion.totalMs());
+    EXPECT_EQ(of(done, Tab::Mixer).scale, 1.0f);
+    EXPECT_TRUE(of(done, Tab::Mixer).visible);
+    EXPECT_EQ(motion.totalMs(), ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs) << "no outline phase for a tab";
+}
+
+TEST(BottomDockTabMotion, TheSlotsAlwaysTouchAndFillTheStrip) {
+    for (const auto& change :
+         {std::pair<Tabs, Tabs>{{Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas},
+                                {Tab::Timeline, Tab::MidiRemote, Tab::Canvas}},
+          {{Tab::Timeline, Tab::MidiRemote}, {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}},
+          {{Tab::Timeline, Tab::Mixer, Tab::MidiRemote}, {Tab::Timeline, Tab::Canvas, Tab::MidiRemote}}}) {
+        BottomDockTabMotion motion;
+        ASSERT_TRUE(motion.begin(change.first, change.second, false));
+        for (double ms = 0.0; ms <= motion.totalMs(); ms += 17.0) {
+            motion.applyAtMs(ms);
+            expectFillsStrip(motion.placements(kStrip), ms);
+        }
+    }
+}
+
+TEST(BottomDockTabMotion, ASwapShrinksTheLeavingTabAndGrowsTheArrivingOneInItsSlot) {
+    BottomDockTabMotion motion;
+    ASSERT_TRUE(motion.begin({Tab::Timeline, Tab::Mixer, Tab::MidiRemote},
+                             {Tab::Timeline, Tab::Canvas, Tab::MidiRemote}, false));
+    motion.applyAtMs(0.0);
+    const auto start = motion.placements(kStrip);
+    ASSERT_EQ(start.size(), 4u);
+    EXPECT_EQ(start[1].tab, Tab::Canvas);
+    EXPECT_EQ(start[2].tab, Tab::Mixer);
+    EXPECT_EQ(motion.totalMs(), ExitEnterTimeline::kExitMs + ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs);
+    motion.applyAtMs(motion.totalMs());
+    const auto done = motion.placements(kStrip);
+    EXPECT_EQ(of(done, Tab::Mixer).bounds.getWidth(), 0);
+    EXPECT_EQ(of(done, Tab::Canvas).bounds.getWidth(), 300);
+    EXPECT_EQ(of(done, Tab::Canvas).scale, 1.0f);
+}
+
+TEST(BottomDockTabMotion, ReduceMotionFadesInsteadOfScaling) {
+    BottomDockTabMotion motion;
+    ASSERT_TRUE(motion.begin({Tab::Timeline, Tab::Mixer, Tab::MidiRemote}, {Tab::Timeline, Tab::MidiRemote}, true));
+    motion.applyAtMs(ExitEnterTimeline::kExitMs * 0.5);
+    const auto mid = motion.placements(kStrip);
+    EXPECT_EQ(of(mid, Tab::Mixer).scale, 1.0f);
+    EXPECT_GT(of(mid, Tab::Mixer).alpha, 0.0f);
+    EXPECT_LT(of(mid, Tab::Mixer).alpha, 1.0f);
+    EXPECT_EQ(of(mid, Tab::Timeline).alpha, 1.0f);
+}
+
+TEST(BottomDockTabMotion, FinishingLeavesNothingRunning) {
+    BottomDockTabMotion motion;
+    ASSERT_TRUE(motion.begin({Tab::Timeline, Tab::Mixer}, {Tab::Timeline}, false));
+    EXPECT_EQ(motion.getTarget(), Tabs{Tab::Timeline});
+    motion.finish();
+    EXPECT_FALSE(motion.isRunning());
+    EXPECT_TRUE(motion.placements(kStrip).empty());
+}
+
+// ---- The dock: a real detach and redock -------------------------------------------------------------------
+
+class BottomDockTabMotionDockTest : public BottomDockMainAreaTest {
+protected:
+    void SetUp() override {
+        BottomDockMainAreaTest::SetUp();
+        if (!mc_->isBottomDockConfiguredVisible())
+            mc_->simulateToggleBottomPanelClick();
+        mc_->resized();
+    }
+    juce::Component& tabButton(Tab tab) { return *dock().getSwapIcon(tab).getParentComponent(); }
+    int tabWidth(Tab tab) { return tabButton(tab).getWidth(); }
+};
+
+TEST_F(BottomDockTabMotionDockTest, OffScreenADetachLandsAtOnce) {
+    dock().getMixerHost().setDetached(true);
+
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    EXPECT_FALSE(tabButton(Tab::Mixer).isVisible());
+    EXPECT_EQ(tabWidth(Tab::Timeline), dock().getWidth() / 2);
+}
+
+TEST_F(BottomDockTabMotionDockTest, ADetachedTabShrinksAwayAndItsNeighboursCloseUp) {
+    FadeAnimateGuard guard;
+    const int before = tabWidth(Tab::Timeline);
+
+    dock().getMixerHost().setDetached(true);
+
+    ASSERT_TRUE(dock().isTabMotionRunningForTest());
+    EXPECT_TRUE(tabButton(Tab::Mixer).isVisible()) << "it is still drawn while it shrinks";
+    EXPECT_NEAR(tabWidth(Tab::Timeline), before, 1);
+    EXPECT_FALSE(interceptsClicks(tabButton(Tab::Mixer))) << "a tab on its way out cannot be clicked";
+    EXPECT_TRUE(interceptsClicks(tabButton(Tab::Timeline)));
+
+    dock().stepTabMotionForTest(ExitEnterTimeline::kExitMs * 0.5);
+    EXPECT_FALSE(tabButton(Tab::Mixer).getTransform().isIdentity()) << "shrinking about its centre";
+    EXPECT_NEAR(tabWidth(Tab::Timeline), before, 1);
+
+    dock().stepTabMotionForTest(ExitEnterTimeline::kExitMs + ExitEnterTimeline::kGapMs * 0.5);
+    EXPECT_GT(tabWidth(Tab::Timeline), before) << "the neighbours are closing up";
+    EXPECT_LT(tabWidth(Tab::Timeline), dock().getWidth() / 2);
+
+    dock().stepTabMotionForTest(1.0e6);
+    EXPECT_FALSE(dock().isTabMotionRunningForTest()) << "settled: no more frames";
+    EXPECT_FALSE(tabButton(Tab::Mixer).isVisible());
+    EXPECT_TRUE(tabButton(Tab::Mixer).getTransform().isIdentity());
+    EXPECT_EQ(tabButton(Tab::Mixer).getAlpha(), 1.0f);
+    EXPECT_TRUE(interceptsClicks(tabButton(Tab::Mixer))) << "back to normal for the day it returns";
+    EXPECT_EQ(tabWidth(Tab::Timeline), dock().getWidth() / 2);
+    EXPECT_EQ(tabButton(Tab::MidiRemote).getRight(), dock().getWidth());
+}
+
+TEST_F(BottomDockTabMotionDockTest, AClosedWindowGrowsTheTabBackInItsOldSlotAndTheNeighboursOpenAGap) {
+    dock().getMixerHost().setDetached(true);
+    ASSERT_FALSE(dock().isTabMotionRunningForTest());
+    FadeAnimateGuard guard;
+
+    dock().getMixerHost().getDetachedWindowForTest()->closeButtonPressed();
+
+    ASSERT_FALSE(dock().getMixerHost().isDetached());
+    ASSERT_TRUE(dock().isTabMotionRunningForTest());
+    EXPECT_EQ(tabWidth(Tab::Mixer), 0) << "its slot starts closed";
+    EXPECT_NEAR(tabWidth(Tab::Timeline), dock().getWidth() / 2, 1);
+
+    dock().stepTabMotionForTest(ExitEnterTimeline::kGapMs * 0.5);
+    EXPECT_GT(tabWidth(Tab::Mixer), 0);
+    EXPECT_LT(tabWidth(Tab::Timeline), dock().getWidth() / 2) << "the neighbours make room";
+    EXPECT_LT(tabButton(Tab::Timeline).getX(), tabButton(Tab::Mixer).getX());
+    EXPECT_LT(tabButton(Tab::Mixer).getX(), tabButton(Tab::MidiRemote).getX()) << "in its old place";
+
+    dock().stepTabMotionForTest(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs * 0.5);
+    EXPECT_TRUE(tabButton(Tab::Mixer).isVisible());
+    EXPECT_FALSE(tabButton(Tab::Mixer).getTransform().isIdentity()) << "growing";
+
+    dock().stepTabMotionForTest(1.0e6);
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    EXPECT_TRUE(tabButton(Tab::Mixer).getTransform().isIdentity());
+    EXPECT_NEAR(tabWidth(Tab::Mixer), dock().getWidth() / 3, 1);
+    EXPECT_EQ(tabButton(Tab::MidiRemote).getRight(), dock().getWidth());
+}
+
+TEST_F(BottomDockTabMotionDockTest, TheRealIconStartsTheSameMotion) {
+    FadeAnimateGuard guard;
+    dock().getDetachIcon(Tab::Timeline)->onClick();
+    EXPECT_TRUE(dock().isTabMotionRunningForTest());
+    EXPECT_TRUE(dock().getTimelineHost().isDetached());
+}
+
+TEST_F(BottomDockTabMotionDockTest, UnderReduceMotionTheTabFadesWithoutScaling) {
+    FadeAnimateGuard guard(synth::ui::AnimationMode::reduced);
+    dock().getMixerHost().setDetached(true);
+    ASSERT_TRUE(dock().isTabMotionRunningForTest());
+
+    dock().stepTabMotionForTest(ExitEnterTimeline::kExitMs * 0.5);
+    EXPECT_TRUE(tabButton(Tab::Mixer).getTransform().isIdentity());
+    EXPECT_LT(tabButton(Tab::Mixer).getAlpha(), 1.0f);
+    EXPECT_GT(tabButton(Tab::Mixer).getAlpha(), 0.0f);
+}
+
+TEST_F(BottomDockTabMotionDockTest, WithAnimationsOffTheChangeIsInstant) {
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    dock().getMixerHost().setDetached(true);
+
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    EXPECT_FALSE(tabButton(Tab::Mixer).isVisible());
+    EXPECT_EQ(tabWidth(Tab::Timeline), dock().getWidth() / 2);
+}
+
+TEST_F(BottomDockTabMotionDockTest, ASecondChangeMidMotionLandsTheFirstAndMovesOn) {
+    FadeAnimateGuard guard;
+    dock().getMixerHost().setDetached(true);
+    dock().stepTabMotionForTest(ExitEnterTimeline::kExitMs * 0.5);
+
+    dock().getMidiRemoteHost().setDetached(true);
+
+    ASSERT_TRUE(dock().isTabMotionRunningForTest());
+    EXPECT_FALSE(tabButton(Tab::Mixer).isVisible()) << "the first one has landed";
+    dock().stepTabMotionForTest(1.0e6);
+    EXPECT_EQ(tabWidth(Tab::Timeline), dock().getWidth());
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+}
+
+TEST_F(BottomDockTabMotionDockTest, ASwapToTheMainAreaPlaysTheSameMotion) {
+    FadeAnimateGuard guard;
+    ASSERT_TRUE(dock().swapTabToMain(Tab::Mixer));
+
+    ASSERT_TRUE(dock().isTabMotionRunningForTest());
+    EXPECT_TRUE(tabButton(Tab::Mixer).isVisible()) << "the Mixer's tab shrinks away";
+    dock().stepTabMotionForTest(1.0e6);
+    EXPECT_FALSE(tabButton(Tab::Mixer).isVisible());
+    EXPECT_TRUE(tabButton(Tab::Canvas).isVisible()) << "and the Canvas tab has grown in";
+    // The canvas buttons take the strip row's right end while the canvas is a tab; the tabs share the rest.
+    EXPECT_NEAR(tabWidth(Tab::Canvas), (dock().getWidth() - dock().getStripAccessoryBounds().getWidth()) / 3, 1);
+}
+
+// ---- A dropped tab glides from the mouse to its slot; the old order never flashes back (the drop's rebuild
+// reads a pure reorder as a changed tab set and used to start a tab motion that re-placed the old order) ------
+
+TEST_F(BottomDockTabMotionDockTest, ADroppedTabGlidesFromWhereItWasLetGoAndNoTabMotionPutsTheOldOrderBack) {
+    FadeAnimateGuard guard;
+    double now = 0.0;
+    dock().setReorderAnimationForTest(true, [&now] { return now; });
+    auto* grabbed = &tabButton(Tab::Timeline); // dragged to the far end
+    const int lastCentre = tabButton(Tab::MidiRemote).getBounds().getCentreX();
+
+    grabbed->mouseDown(makeClickEvent(*grabbed, {10.0f, 8.0f}));
+    grabbed->mouseDrag(makeDragEvent(*grabbed, {10.0f + 40.0f, 8.0f}, {10.0f, 8.0f}));
+    const float far = static_cast<float>(lastCentre - grabbed->getX());
+    now = 500.0; // the neighbours have made room
+    grabbed->mouseDrag(makeDragEvent(*grabbed, {far, 8.0f}, {10.0f, 8.0f}));
+    now = 1000.0;
+    dock().stepReorderFrameForTest();
+    const int oldMixerSlot = tabWidth(Tab::Timeline); // the slots at rest: Timeline, Mixer, Controllers
+    const int mixerBefore = tabButton(Tab::Mixer).getX();
+    ASSERT_LT(mixerBefore, oldMixerSlot) << "the Mixer tab made room, left of its old slot";
+
+    grabbed->mouseUp(makeClickEvent(*grabbed, {far, 8.0f}));
+
+    EXPECT_FALSE(dock().isTabMotionRunningForTest()) << "a reorder is not a change of the tab set";
+    EXPECT_EQ(tabButton(Tab::Mixer).getX(), mixerBefore) << "first frame after the drop: no jump back to the old slot";
+    EXPECT_EQ(dock().getTabOrderForTest(), (Tabs{Tab::Mixer, Tab::MidiRemote, Tab::Timeline, Tab::Canvas}));
+
+    now = 1000.0 + 70.0;
+    dock().stepReorderFrameForTest();
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    now = 1000.0 + 500.0;
+    dock().stepReorderFrameForTest();
+    EXPECT_EQ(tabButton(Tab::Mixer).getX(), 0);
+    EXPECT_EQ(tabButton(Tab::MidiRemote).getX(), tabButton(Tab::Mixer).getRight());
+    EXPECT_EQ(tabButton(Tab::Timeline).getX(), tabButton(Tab::MidiRemote).getRight());
+}
+
+TEST_F(BottomDockTabMotionDockTest, ARealChangeOfTheTabSetStillRunsTabMotionAfterAReorder) {
+    FadeAnimateGuard guard;
+    dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote);
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    dock().getMixerHost().setDetached(true);
+    EXPECT_TRUE(dock().isTabMotionRunningForTest());
+    dock().stepTabMotionForTest(1.0e6);
+    dock().getMixerHost().setDetached(false);
+    EXPECT_TRUE(dock().isTabMotionRunningForTest()) << "a tab coming back";
+}
+
+// A dock tab you drag keeps its own look: the active tab wears the look-and-feel's toggled-on fill and text through
+// the lift, the drag and the drop's glide, an inactive tab keeps the raised inactive look. Painted for real (software
+// image, so Windows reads pixels too) under every theme.
+namespace {
+
+int distance(juce::Colour a, juce::Colour b) {
+    return std::abs(a.getRed() - b.getRed()) + std::abs(a.getGreen() - b.getGreen()) +
+           std::abs(a.getBlue() - b.getBlue());
+}
+
+class BottomDockLiftedTabLookTest : public BottomDockMainAreaTest {
+protected:
+    void SetUp() override {
+        BottomDockMainAreaTest::SetUp();
+        if (!mc_->isBottomDockConfiguredVisible())
+            mc_->simulateToggleBottomPanelClick();
+        mc_->resized();
+    }
+    void TearDown() override {
+        mc_->setLookAndFeel(nullptr);
+        // Opening the dock persists "bottomDockVisible" in the shared settings; later tests expect it hidden.
+        if (auto* settings = mc_->getAppPropertiesForTest().getUserSettings()) {
+            settings->removeValue("bottomDockVisible");
+            settings->saveIfNeeded();
+        }
+        BottomDockMainAreaTest::TearDown();
+    }
+    juce::Component& tabButton(Tab tab) { return *dock().getSwapIcon(tab).getParentComponent(); }
+
+    juce::Image paintDock() {
+        juce::Image img(juce::Image::ARGB, dock().getWidth(), dock().getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(img);
+        dock().paintEntireComponent(g, false);
+        return img;
+    }
+
+    // Sampled inside the lifted tab's body (left of the label) and over its label; the tab is where the animator
+    // draws it (dock coordinates), raised by the lift.
+    struct Samples {
+        juce::Colour body;
+        juce::Colour label; // the pixel in the label band furthest from the body
+    };
+    Samples sample(Tab tab, const juce::Image& img) {
+        auto& button = tabButton(tab);
+        const int left = static_cast<int>(std::lround(dock().getLiftedTabLeftForTest()));
+        const int top = button.getY() - 4; // raised by the lift
+        Samples s;
+        s.body = img.getPixelAt(left + 3, button.getY() + button.getHeight() / 2 - 2);
+        int best = -1;
+        for (int x = left + button.getWidth() / 4; x < left + 3 * button.getWidth() / 4; ++x)
+            for (int y = top + 3; y < top + button.getHeight() - 3; ++y) {
+                const auto px = img.getPixelAt(x, y);
+                if (distance(px, s.body) > best) {
+                    best = distance(px, s.body);
+                    s.label = px;
+                }
+            }
+        return s;
+    }
+
+    // A drop persists the new tab order in the shared settings file; put the original back so later tests see it.
+    void restoreOrder(const std::vector<Tab>& original) {
+        for (size_t i = 0; i < original.size(); ++i) {
+            const auto order = dock().getTabOrderForTest();
+            if (order[i] == original[i])
+                continue;
+            dock().reorderTabsForTest(order[i], original[i]);
+        }
+    }
+
+    // Picks the tab up and drags it a little way so it is lifted at full lift.
+    void liftAndDrag(Tab tab, double& now) {
+        auto* grabbed = &tabButton(tab);
+        grabbed->mouseDown(makeClickEvent(*grabbed, {10.0f, 8.0f}));
+        grabbed->mouseDrag(makeDragEvent(*grabbed, {10.0f + 40.0f, 8.0f}, {10.0f, 8.0f}));
+        now = 500.0;
+        grabbed->mouseDrag(makeDragEvent(*grabbed, {50.0f, 8.0f}, {10.0f, 8.0f}));
+        now = 1000.0;
+        dock().stepReorderFrameForTest();
+    }
+};
+
+} // namespace
+
+TEST_F(BottomDockLiftedTabLookTest, TheLiftedActiveTabKeepsTheActiveFillAndTextAndAnInactiveOneKeepsTheInactiveLook) {
+    FadeAnimateGuard guard;
+    const auto originalOrder = dock().getTabOrderForTest();
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lookAndFeel;
+        lookAndFeel.applyTheme(theme);
+        mc_->setLookAndFeel(&lookAndFeel);
+        mc_->resized();
+        const auto& c = theme.colors;
+        for (const bool dragActive : {true, false}) {
+            dock().setActiveTab(Tab::Timeline);
+            double now = 0.0;
+            dock().setReorderAnimationForTest(true, [&now] { return now; });
+            const Tab dragged = dragActive ? Tab::Timeline : Tab::Mixer;
+            liftAndDrag(dragged, now);
+
+            const auto s = sample(dragged, paintDock());
+            const auto wantFill = dragActive ? c.accent : c.surfaceHi;
+            const auto otherFill = dragActive ? c.surfaceHi : c.accent;
+            const std::string what = theme.name.toStdString() + (dragActive ? " active tab" : " inactive tab");
+            EXPECT_LT(distance(s.body, wantFill), distance(s.body, otherFill)) << what << " fill while dragged";
+            EXPECT_LT(distance(s.body, wantFill), 60) << what << " fill is the look-and-feel's";
+            const auto wantText = dragActive ? c.bg0 : c.textPrimary;
+            EXPECT_LT(distance(s.label, wantText), distance(s.label, s.body)) << what << " text while dragged";
+
+            tabButton(dragged).mouseUp(makeClickEvent(tabButton(dragged), {50.0f, 8.0f}));
+            now = 1000.0 + 70.0;
+            dock().stepReorderFrameForTest(); // a frame of the drop's glide
+            const auto settle = sample(dragged, paintDock());
+            EXPECT_LT(distance(settle.body, wantFill), distance(settle.body, otherFill))
+                << what << " fill in the glide";
+            EXPECT_LT(distance(settle.label, wantText), distance(settle.label, settle.body))
+                << what << " text in the glide";
+            now = 1.0e6;
+            dock().stepReorderFrameForTest();
+            restoreOrder(originalOrder);
+        }
+    }
+}

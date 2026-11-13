@@ -9,6 +9,7 @@
 
 #include "AIStateMapperInternal.h"
 
+#include <array>
 #include <cmath>
 #include <map>
 #include <set>
@@ -81,6 +82,215 @@ PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* roo
                 "app-authored per-project setting, not accepted from a patch suggestion. Remove it and resend "
                 "only nodes, connections and modulations."};
 
+    if (rootObj->hasProperty("mixerView"))
+        return {false, PatchValidationError::MixerViewNotAllowed,
+                "Patch suggestions must not contain a \"mixerView\" property - which mixer channels are pinned or "
+                "hidden is app-authored project data, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
+    if (rootObj->hasProperty("view"))
+        return {false, PatchValidationError::ViewNotAllowed,
+                "Patch suggestions must not contain a \"view\" property - the canvas zoom and pan are "
+                "app-authored project data, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
+    return {};
+}
+
+// Merge mode: the ids a patch may reference that already exist, and the processor behind each. A
+// scope's hidden and bound nodes are left out of the raw-uid namespace, and each bound node is added
+// under its plan id instead (see PatchIdScope). Ids the patch also removes are excluded from
+// `liveNodesById` — apply processes "remove" first, so re-using such an id creates a genuinely new
+// node and aliases nothing.
+void collectMergeTargets(const juce::AudioProcessorGraph& graph, const juce::Array<juce::var>* removeList,
+                         const PatchIdScope* scope, std::set<juce::uint32>& knownIds,
+                         std::map<juce::uint32, juce::AudioProcessor*>& liveNodesById) {
+    std::set<juce::uint32> removedIds;
+    if (removeList) {
+        for (const auto& idVar : *removeList) {
+            juce::uint32 removedId = 0;
+            if (!detail::extractUnsignedInt(idVar, removedId))
+                continue;
+            if (scope != nullptr)
+                if (auto bound = scope->boundIds.find(removedId); bound != scope->boundIds.end())
+                    removedId = bound->second.uid;
+            removedIds.insert(removedId);
+        }
+    }
+
+    for (auto* node : graph.getNodes()) {
+        if (detail::scopeHidesNode(scope, node->nodeID))
+            continue;
+        knownIds.insert(node->nodeID.uid);
+        if (removedIds.count(node->nodeID.uid) == 0)
+            liveNodesById[node->nodeID.uid] = node->getProcessor();
+    }
+    if (scope == nullptr)
+        return;
+    for (const auto& [planId, nodeId] : scope->boundIds) {
+        knownIds.insert(planId);
+        if (auto* node = graph.getNodeForId(nodeId); node != nullptr && removedIds.count(nodeId.uid) == 0)
+            liveNodesById[planId] = node->getProcessor();
+    }
+}
+
+// The processor a modulation's destination id denotes, for resolving "destParam". A node that
+// exists (an existing node, including one a merge patch edits in place, or one an earlier plan step
+// built) is asked directly; a node only this patch creates is instantiated from its declared type
+// with its params applied untrusted, exactly as apply will, once per id.
+class ModulationDestLookup {
+public:
+    ModulationDestLookup(const std::map<juce::uint32, juce::AudioProcessor*>& live, const juce::Array<juce::var>* nodes)
+        : live_(live)
+        , nodes_(nodes) {}
+
+    juce::AudioProcessor* processorFor(juce::uint32 id) {
+        if (auto it = live_.find(id); it != live_.end())
+            return it->second;
+        if (auto it = probes_.find(id); it != probes_.end())
+            return it->second.get();
+        if (nodes_ == nullptr)
+            return nullptr;
+        for (const auto& nVar : *nodes_) {
+            auto* nObj = nVar.getDynamicObject();
+            juce::uint32 nodeId = 0;
+            if (nObj == nullptr || !detail::extractUnsignedInt(nObj->getProperty("id"), nodeId) || nodeId != id)
+                continue;
+            auto probe = AIStateMapper::createModule(nObj->getProperty("type").toString());
+            if (probe == nullptr)
+                return nullptr;
+            if (auto* params = nObj->getProperty("params").getDynamicObject())
+                AIStateMapper::applyUntrustedParams(probe.get(), params);
+            auto* raw = probe.get();
+            probes_[id] = std::move(probe);
+            return raw;
+        }
+        return nullptr;
+    }
+
+private:
+    const std::map<juce::uint32, juce::AudioProcessor*>& live_;
+    const juce::Array<juce::var>* nodes_;
+    std::map<juce::uint32, std::unique_ptr<juce::AudioProcessor>> probes_;
+};
+
+// The parameter ids `module` can be modulated on, for a rejection the model can act on.
+juce::String describeModulatableParams(ModuleBase& module) {
+    juce::StringArray ids;
+    for (const auto& target : module.getModulationTargets())
+        if (const auto* param = module.parameterForModTarget(target);
+            param != nullptr && detail::modelVisibleParam(module, const_cast<juce::RangedAudioParameter*>(param)))
+            ids.addIfNotAlreadyThere(param->paramID);
+    return ids.isEmpty() ? juce::String("none") : ids.joinIntoString(", ");
+}
+
+// A modulation names its destination channel by "destPort", by "destParam" (a parameter id,
+// resolved through ModuleBase::modulationChannelForParam - the canvas modulator picker's own rule),
+// or by both when they agree. Neither is a rejection: a missing "destPort" used to be read as port 0,
+// which on most modules is the AUDIO input, so a model that forgot it silently modulated the wrong
+// thing.
+PatchValidationResult checkModulationDestination(const juce::DynamicObject& mObj, juce::uint32 dest,
+                                                 ModulationDestLookup& lookup) {
+    const bool hasPort = mObj.hasProperty("destPort");
+    const bool hasParam = mObj.hasProperty("destParam");
+    if (!hasPort && !hasParam)
+        return {false, PatchValidationError::ModulationInvalidPort,
+                "Modulation onto node " + juce::String(dest) +
+                    " names no destination. One of \"destParam\" (the parameter id to modulate, e.g. \"cutoff\") "
+                    "or \"destPort\" is required."};
+
+    int destPort = -1;
+    if (hasPort) {
+        // Modulation ports are always real audio/CV channels, never MIDI — reject the -1
+        // sentinel here even though it's legal for plain connections.
+        destPort = static_cast<int>(mObj.getProperty("destPort"));
+        if (destPort < 0 || !isValidPatchPort(destPort))
+            return {false, PatchValidationError::ModulationInvalidPort, "Modulation destPort out of range."};
+    }
+    if (!hasParam)
+        return {};
+
+    const juce::var paramVar = mObj.getProperty("destParam");
+    if (!paramVar.isString() || paramVar.toString().isEmpty())
+        return {false, PatchValidationError::ModulationInvalidPort,
+                "Modulation \"destParam\" must be a non-empty parameter id string."};
+    const juce::String paramId = paramVar.toString();
+    auto* module = dynamic_cast<ModuleBase*>(lookup.processorFor(dest));
+    int resolved = module != nullptr ? module->modulationChannelForParam(paramId) : -1;
+    if (resolved >= 0 && dynamic_cast<DrumKitModule*>(module) != nullptr && resolved >= DrumKitModule::kPadModSlotBase)
+        resolved = -1; // a jack the model may not name (a Drum Kit's pad cable)
+    if (resolved < 0)
+        return {false, PatchValidationError::ModulationInvalidPort,
+                "Modulation destParam \"" + paramId + "\" is not a parameter node " + juce::String(dest) +
+                    " can be modulated on. Its modulatable parameters are: " +
+                    (module != nullptr ? describeModulatableParams(*module) : juce::String("none")) + "."};
+    if (hasPort && destPort != resolved)
+        return {false, PatchValidationError::ModulationInvalidPort,
+                "Modulation onto node " + juce::String(dest) + " gives destPort " + juce::String(destPort) +
+                    " and destParam \"" + paramId + "\", which is port " + juce::String(resolved) +
+                    ". They disagree; give only \"destParam\"."};
+    return {};
+}
+
+PatchValidationResult checkModulationEntries(const juce::Array<juce::var>& modList,
+                                             const std::set<juce::uint32>& knownIds, ModulationDestLookup& lookup) {
+    for (const auto& mVar : modList) {
+        auto* mObj = mVar.getDynamicObject();
+        if (!mObj)
+            return {false, PatchValidationError::ModulationEntryInvalid, "Modulation entry is not an object."};
+
+        juce::uint32 source = 0, dest = 0;
+        if (!detail::extractUnsignedInt(mObj->getProperty("source"), source) || knownIds.count(source) == 0)
+            return {false, PatchValidationError::ModulationUnknownNode,
+                    "Modulation references unknown source node id " + describeId(mObj->getProperty("source")) + ". " +
+                        describeKnownIds(knownIds)};
+        if (!detail::extractUnsignedInt(mObj->getProperty("dest"), dest) || knownIds.count(dest) == 0)
+            return {false, PatchValidationError::ModulationUnknownNode,
+                    "Modulation references unknown destination node id " + describeId(mObj->getProperty("dest")) +
+                        ". " + describeKnownIds(knownIds)};
+        if (source == dest)
+            return {false, PatchValidationError::ModulationSelfCycle,
+                    "Modulation would create a self-cycle (source == dest == " + juce::String(source) + ")."};
+
+        if (const auto destination = checkModulationDestination(*mObj, dest, lookup); !destination.ok)
+            return destination;
+
+        if (mObj->hasProperty("sourcePort")) {
+            int sourcePort = static_cast<int>(mObj->getProperty("sourcePort"));
+            if (sourcePort < 0 || !isValidPatchPort(sourcePort))
+                return {false, PatchValidationError::ModulationInvalidPort, "Modulation sourcePort out of range."};
+        }
+    }
+    return {};
+}
+
+// The top-level lists' size bounds, in validatePatch's order: nodes, connections, modulations, remove,
+// removeModulations. A model's patch gets the model bounds; the app's own data (allowInternalModuleTypes: a project,
+// a plugin session, a snippet) the much larger app-data bounds, which only stop a tampered file.
+PatchValidationResult checkListSizes(const std::array<const juce::Array<juce::var>*, 5>& lists, bool appData) {
+    struct Bound {
+        int model, app;
+        PatchValidationError error;
+        const char* noun;
+    };
+    static constexpr std::array<Bound, 5> bounds{{
+        {AIStateMapper::kMaxNodes, AIStateMapper::kMaxAppDataNodes, PatchValidationError::TooManyNodes, "nodes"},
+        {AIStateMapper::kMaxConnections, AIStateMapper::kMaxAppDataConnections,
+         PatchValidationError::TooManyConnections, "connections"},
+        {AIStateMapper::kMaxModulations, AIStateMapper::kMaxAppDataModulations,
+         PatchValidationError::TooManyModulations, "modulations"},
+        {AIStateMapper::kMaxRemovals, AIStateMapper::kMaxAppDataRemovals, PatchValidationError::TooManyRemovals,
+         "removals"},
+        {AIStateMapper::kMaxRemoveModulations, AIStateMapper::kMaxAppDataRemovals,
+         PatchValidationError::TooManyRemoveModulations, "modulation removals"},
+    }};
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        const int limit = appData ? bounds[i].app : bounds[i].model;
+        if (lists[i] != nullptr && lists[i]->size() > limit)
+            return {false, bounds[i].error,
+                    "Patch has " + juce::String(lists[i]->size()) + " " + bounds[i].noun + ", exceeding the limit of " +
+                        juce::String(limit) + "."};
+    }
     return {};
 }
 
@@ -162,6 +372,10 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "InternalModuleNotAllowed";
     case PatchValidationError::MixerPanLawNotAllowed:
         return "MixerPanLawNotAllowed";
+    case PatchValidationError::MixerViewNotAllowed:
+        return "MixerViewNotAllowed";
+    case PatchValidationError::ViewNotAllowed:
+        return "ViewNotAllowed";
     }
     return "Unknown";
 }
@@ -183,11 +397,15 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
     for (const auto& entry : paramsObj->getProperties()) {
         const juce::String key = entry.name.toString();
         if (knownParamIds.count(key) == 0) {
+            // A parameter the module dropped but still adopts (adoptLegacyParams): old saves and patches use it.
+            if (const auto* module = dynamic_cast<const ModuleBase*>(processor); module && module->isLegacyParamId(key))
+                continue;
             // Name the real parameter IDs, not just that one was wrong — same reasoning as
             // describeKnownIds() above: a retry that can't see the valid options re-rolls blind.
             juce::StringArray ids;
             for (const auto& id : knownParamIds)
-                ids.add(id);
+                if (!detail::isUnexposedParam(*processor, id)) // known, so it loads, but never named to the model
+                    ids.add(id);
             return {false, PatchValidationError::UnknownParameterKey,
                     "Unknown parameter \"" + key +
                         "\" - it doesn't match any real parameter on this module and would be silently ignored, "
@@ -216,6 +434,13 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
                     return {false, PatchValidationError::InvalidParameterValue,
                             "Non-finite value for parameter \"" + p->paramID + "\"."};
                 }
+                // An index the list does not have would be clamped to its first or last entry: say so instead.
+                const double index = static_cast<double>(jsonValue);
+                if (index < -0.5 || index > choice->choices.size() - 0.5) {
+                    return {false, PatchValidationError::InvalidChoiceValue,
+                            "Choice index " + juce::String(index) + " is out of range for parameter \"" + p->paramID +
+                                "\" (0 to " + juce::String(choice->choices.size() - 1) + ")."};
+                }
             } else {
                 return {false, PatchValidationError::InvalidParameterValue,
                         "Invalid value for choice parameter \"" + p->paramID + "\"."};
@@ -237,7 +462,8 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
 }
 
 PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                                   bool clearExisting, bool trusted, bool allowInternalModuleTypes) {
+                                                   bool clearExisting, bool trusted, bool allowInternalModuleTypes,
+                                                   const PatchIdScope* scope) {
     if (!json.isObject())
         return {false, PatchValidationError::NotAnObject, "Root is not an object."};
     auto* rootObj = json.getDynamicObject();
@@ -293,52 +519,22 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     if (const auto reserved = checkReservedKeysNotAllowed(rootObj); !reserved.ok)
         return reserved;
 
-    if (nodesList && nodesList->size() > kMaxNodes)
-        return {false, PatchValidationError::TooManyNodes,
-                "Patch has " + juce::String(nodesList->size()) + " nodes, exceeding the limit of " +
-                    juce::String(kMaxNodes) + "."};
-    if (connList && connList->size() > kMaxConnections)
-        return {false, PatchValidationError::TooManyConnections,
-                "Patch has " + juce::String(connList->size()) + " connections, exceeding the limit of " +
-                    juce::String(kMaxConnections) + "."};
-    if (modList && modList->size() > kMaxModulations)
-        return {false, PatchValidationError::TooManyModulations,
-                "Patch has " + juce::String(modList->size()) + " modulations, exceeding the limit of " +
-                    juce::String(kMaxModulations) + "."};
-    if (removeList && removeList->size() > kMaxRemovals)
-        return {false, PatchValidationError::TooManyRemovals,
-                "Patch has " + juce::String(removeList->size()) + " removals, exceeding the limit of " +
-                    juce::String(kMaxRemovals) + "."};
-    if (removeModList && removeModList->size() > kMaxRemoveModulations)
-        return {false, PatchValidationError::TooManyRemoveModulations,
-                "Patch has " + juce::String(removeModList->size()) + " modulation removals, exceeding the limit of " +
-                    juce::String(kMaxRemoveModulations) + "."};
+    if (const auto sizes =
+            checkListSizes({nodesList, connList, modList, removeList, removeModList}, allowInternalModuleTypes);
+        !sizes.ok)
+        return sizes;
 
     // Ids this patch may legally reference: nodes it creates, plus (in merge mode) nodes that
-    // already exist in the live graph. Populated fully before any connection/modulation is
-    // checked, and nothing here mutates the graph — that only happens after validation passes.
+    // already exist in the live graph and any plan ids the scope binds. Populated fully before any
+    // connection/modulation is checked, and nothing here mutates the graph. `liveNodesById` is the
+    // node each patch id would land on, so a patch node that reuses an existing id for a DIFFERENT
+    // module can be rejected before anything is touched (see below).
+    if (clearExisting)
+        scope = nullptr;
     std::set<juce::uint32> knownIds;
-    // Merge mode only: the live node each patch id would land on, so a patch node that reuses an
-    // existing id for a DIFFERENT module can be rejected before anything is touched (see below).
-    // Ids the patch also removes are excluded — apply processes "remove" first, so re-using such
-    // an id creates a genuinely new node and aliases nothing.
     std::map<juce::uint32, juce::AudioProcessor*> liveNodesById;
-    if (!clearExisting) {
-        std::set<juce::uint32> removedIds;
-        if (removeList) {
-            for (const auto& idVar : *removeList) {
-                juce::uint32 removedId = 0;
-                if (detail::extractUnsignedInt(idVar, removedId))
-                    removedIds.insert(removedId);
-            }
-        }
-
-        for (auto* node : graph.getNodes()) {
-            knownIds.insert(node->nodeID.uid);
-            if (removedIds.count(node->nodeID.uid) == 0)
-                liveNodesById[node->nodeID.uid] = node->getProcessor();
-        }
-    }
+    if (!clearExisting)
+        collectMergeTargets(graph, removeList, scope, knownIds, liveNodesById);
 
     std::set<juce::uint32> patchNodeIds;
     if (nodesList) {
@@ -367,6 +563,11 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             if (patchNodeIds.count(nodeId) > 0)
                 return {false, PatchValidationError::DuplicateNodeId,
                         "Duplicate node id " + juce::String(nodeId) + " within patch."};
+            if (scope != nullptr && scope->boundIds.count(nodeId) > 0)
+                return {false, PatchValidationError::DuplicateNodeId,
+                        "Node id " + juce::String(nodeId) +
+                            " is already an instrumentId, envelope id or insert id of an addInstrumentTrack op. "
+                            "Every id in the response must be distinct."};
             patchNodeIds.insert(nodeId);
 
             // Internal-only types are refused here, on the validator itself, rather than being
@@ -441,36 +642,9 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     }
 
     if (modList) {
-        for (const auto& mVar : *modList) {
-            auto* mObj = mVar.getDynamicObject();
-            if (!mObj)
-                return {false, PatchValidationError::ModulationEntryInvalid, "Modulation entry is not an object."};
-
-            juce::uint32 source = 0, dest = 0;
-            if (!detail::extractUnsignedInt(mObj->getProperty("source"), source) || knownIds.count(source) == 0)
-                return {false, PatchValidationError::ModulationUnknownNode,
-                        "Modulation references unknown source node id " + describeId(mObj->getProperty("source")) +
-                            ". " + describeKnownIds(knownIds)};
-            if (!detail::extractUnsignedInt(mObj->getProperty("dest"), dest) || knownIds.count(dest) == 0)
-                return {false, PatchValidationError::ModulationUnknownNode,
-                        "Modulation references unknown destination node id " + describeId(mObj->getProperty("dest")) +
-                            ". " + describeKnownIds(knownIds)};
-            if (source == dest)
-                return {false, PatchValidationError::ModulationSelfCycle,
-                        "Modulation would create a self-cycle (source == dest == " + juce::String(source) + ")."};
-
-            // Modulation ports are always real audio/CV channels, never MIDI — reject the -1
-            // sentinel here even though it's legal for plain connections.
-            int destPort = static_cast<int>(mObj->getProperty("destPort"));
-            if (destPort < 0 || !isValidPatchPort(destPort))
-                return {false, PatchValidationError::ModulationInvalidPort, "Modulation destPort out of range."};
-
-            if (mObj->hasProperty("sourcePort")) {
-                int sourcePort = static_cast<int>(mObj->getProperty("sourcePort"));
-                if (sourcePort < 0 || !isValidPatchPort(sourcePort))
-                    return {false, PatchValidationError::ModulationInvalidPort, "Modulation sourcePort out of range."};
-            }
-        }
+        ModulationDestLookup lookup(liveNodesById, nodesList);
+        if (const auto modulations = checkModulationEntries(*modList, knownIds, lookup); !modulations.ok)
+            return modulations;
     }
 
     if (removeList) {

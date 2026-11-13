@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // The Settings "Feedback" tab — a general, free-text feedback entry point that isn't tied
-// to any one AI-generated patch (that's PatchCard's thumbs up/down). It additionally
+// to any one AI-generated patch (that's the edit-plan card's thumbs up/down). It additionally
 // syncs each submission to the server, fire-and-forget, whenever an `accountService` is attached
 // (not Pro-gated). The sync fires whether or not the user is
 // signed in — authenticated via the account's access token when signed in, anonymous via this

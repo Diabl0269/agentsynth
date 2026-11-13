@@ -1,0 +1,133 @@
+#pragma once
+
+// The on-card layout editor's geometry as pure functions over rectangles in card pixels, so snapping and
+// pushing are unit-testable with no component: where a dragged control lands against its neighbours'
+// lines, and where the neighbours go when it is dropped on them. docs/layout/module-card-layout.md#editing-a-layout.
+
+#include <juce_core/juce_core.h>
+#include <juce_graphics/juce_graphics.h>
+#include <vector>
+
+namespace synth::ui::oncard {
+
+/** The clear space controls keep from each other, and how close a line must come to pull a drag in. */
+inline constexpr int kControlGap = 8;
+inline constexpr int kSnapDistance = 4;
+/** The arrow-key step, and the Shift step. */
+inline constexpr int kNudgeStep = 1;
+inline constexpr int kNudgeBigStep = 8;
+
+/** An alignment line: `position` is its x (vertical) or y, spanning `from`..`to` on the other axis. */
+struct Guide {
+    bool vertical = true;
+    int position = 0;
+    int from = 0;
+    int to = 0;
+
+    bool operator==(const Guide& other) const noexcept {
+        return vertical == other.vertical && position == other.position && from == other.from && to == other.to;
+    }
+};
+
+struct SnapResult {
+    juce::Rectangle<int> rect;
+    std::vector<Guide> guides;
+};
+
+/** Where a section's controls may sit: x within [minX, maxX], y from `top` down (a drop below the
+ *  section grows it). */
+struct Limits {
+    int minX = 0;
+    int maxX = 0;
+    int top = 0;
+};
+
+/** `dragged` pulled up to 4 px onto any left/centre/right (x) and top/centre/bottom (y) line of
+ *  `others`, with a guide for each axis that snapped. `enabled` false (Cmd held) places it freely. */
+SnapResult snapDraggedRect(juce::Rectangle<int> dragged, const std::vector<juce::Rectangle<int>>& others, bool enabled);
+
+/** `rect` moved inside `limits` (kept whole inside x, never above the top). */
+juce::Rectangle<int> clampToLimits(juce::Rectangle<int> rect, const Limits& limits);
+
+/** The rects of `others`, same order, after the control that stood at `start` is dropped at `dropped`:
+ *  a cell closer than the gap to the dropped one (or to one already pushed) goes the shortest way out
+ *  among left, right, up and down that stays inside `limits` and clear of every fixed cell, else below
+ *  everything. A cell that already abutted `start` stays put unless the drop truly overlaps it, so
+ *  moving a control one pixel does not shove the flush rows around it. */
+std::vector<juce::Rectangle<int>> pushAside(juce::Rectangle<int> dropped, juce::Rectangle<int> start,
+                                            const std::vector<juce::Rectangle<int>>& others, const Limits& limits);
+
+/** `cells` (after a push) with every cell that stands away from its home put back there when the home is
+ *  free: not too close to `dropped` or to any other cell as it stands. Where the layout first put the cells
+ *  (`origins`, and `droppedOrigin` for the dropped one) it may have left less than the gap between them: a
+ *  cell returning to its origin keeps that spacing to a neighbour that stands at its own. Cells returning
+ *  can free or block each other, so it repeats until none more can. */
+std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             const std::vector<juce::Rectangle<int>>& origins,
+                                             juce::Rectangle<int> dropped, juce::Rectangle<int> droppedOrigin);
+
+/** The top-left for a new control of `size` in a group whose cells stand at `occupied`: inside `limits`,
+ *  kControlGap clear of every one of them, the highest such place and then the leftmost. Always found:
+ *  with no room beside or among them it lands below them all. */
+juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,
+                              const Limits& limits);
+
+/** Where a drop leaves the other cells of a group, by rows. */
+struct RowDrop {
+    std::vector<juce::Rectangle<int>> others; ///< The input cells, same order, after the drop.
+    juce::Rectangle<int> dropped;             ///< Where the dropped cell lands (its top on its row's top).
+    int newRowAt = -1; ///< The y of the new row a drop below the last row starts; -1 when it joins a row.
+};
+
+/** The rows of `cells` as indices: cells whose vertical extents overlap (one after the other, down the
+ *  group) are one row, each row ordered by x, rows top to bottom. */
+std::vector<std::vector<int>> rowsOf(const std::vector<juce::Rectangle<int>>& cells);
+
+/** What a drop knows besides the cells it lands among: where the dropped control stood in this group before it
+ *  was picked up (empty when it came from elsewhere), where it stood when the editor opened (`origin`, empty when
+ *  unknown: a control that began on a row keeps that row's flush spacing, one from elsewhere gets the gap), and,
+ *  for each of the other cells, where it would stand but for being displaced (empty `homes`: none is displaced). */
+struct DropContext {
+    juce::Rectangle<int> vacated;
+    juce::Rectangle<int> origin;
+    std::vector<juce::Rectangle<int>> homes;
+};
+
+/** `dropped` let go among `others` with the pointer at `probe`: it joins the row the probe's y is in (below the
+ *  last row, between two rows or above the first it starts a new one there), at the index the probe's x gives
+ *  among that row's cells, its top on the row's top. A displaced cell whose home is on that row comes back to it
+ *  when the row has the width for it. The row is then
+ *  swept left to right (a cell never closer than the gap to the one before), from `limits.maxX` back leftwards
+ *  if that runs out of room, and the trailing cells that still do not fit wrap into a new row below. Rows
+ *  that now collide with it move down, and a row the move left empty (where `context.vacated` stood, or where a
+ *  returning cell stood) closes up: the rows below it move up to take its place, and no others move. Nothing
+ *  overlaps and everything is inside `limits` afterwards. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, juce::Point<int> probe,
+                    const std::vector<juce::Rectangle<int>>& others, const Limits& limits,
+                    const DropContext& context = {});
+
+/** `cells` after a control left the group from `vacated`: every cell standing off its home goes back when the home
+ *  is free (a control the leaver had pushed aside returns), then a row the leaver left empty closes up. Cells and
+ *  `homes` are index-aligned; an empty home keeps its cell where it is. */
+std::vector<juce::Rectangle<int>> leaveGroup(const std::vector<juce::Rectangle<int>>& cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             juce::Rectangle<int> vacated);
+
+/** The same with the probe at the dropped cell's centre. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, const std::vector<juce::Rectangle<int>>& others,
+                    const Limits& limits);
+
+/** `cells` after cell `changed` took a new size (it stood at `before`): the cells right of it that abutted its old
+ *  right edge follow it, then its row is swept and wrapped as in `dropIntoRow`, so width a smaller control freed
+ *  is reused and a bigger one pushes its row along. */
+std::vector<juce::Rectangle<int>> repackRow(const std::vector<juce::Rectangle<int>>& cells, size_t changed,
+                                            juce::Rectangle<int> before, const Limits& limits);
+
+/** What a screen reader hears after a move: "Cutoff moved right 8", or "Cutoff moved right 60, down 12". */
+juce::String describeMove(const juce::String& caption, int dx, int dy);
+
+/** True when `a` and `b` are closer than the gap (overlapping included). */
+bool tooClose(juce::Rectangle<int> a, juce::Rectangle<int> b);
+
+} // namespace synth::ui::oncard

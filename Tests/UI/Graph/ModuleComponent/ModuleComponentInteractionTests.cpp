@@ -47,7 +47,7 @@ TEST_F(ModuleComponentTest, TimerCallbackDoesNotCrash) {
     EXPECT_NO_THROW(moduleComponent.timerCallback());
 }
 
-// §1.5: bypass/mute/delete are DrawableButtons at the correct header bounds.
+// docs/layout/module-card.md#header-buttons: bypass/mute/delete are DrawableButtons at the correct header bounds.
 TEST_F(ModuleComponentTest, HeaderButtonsAreDrawableButtons) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -143,7 +143,8 @@ TEST_F(ModuleComponentTest, DualIOHeaderButtonOnEveryStereoCapableModule) {
     }
 }
 
-// §1.5: clicking the delete button removes the node from the graph via requestDeleteModule.
+// docs/layout/module-card.md#header-buttons: clicking the delete button removes the node from the graph via
+// requestDeleteModule.
 TEST_F(ModuleComponentTest, DeleteButtonTriggersRemoval) {
     AudioEngine engine;
     GraphEditor editor(engine);

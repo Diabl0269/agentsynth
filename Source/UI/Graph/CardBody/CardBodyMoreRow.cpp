@@ -1,0 +1,222 @@
+// CardBodyMoreRow.cpp -- the folded More row at the bottom of a card: every parameter the layout hides or
+// does not place. It exists only when something is hidden. Unfolding or folding changes the card's
+// height, so the card re-measures and the canvas makes room (or gives it back); a modulation cable
+// dragged over the folded row unfolds it, so a hidden parameter can still take a new cable.
+// docs/layout/module-card.md#the-more-row.
+#include "CardBody.h"
+#include "CardBodyMoreButton.h"
+#include "UI/Graph/CardOutline.h"
+#include "UI/Graph/GraphEditor/CableEndGlide.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+namespace synth {
+
+namespace {
+constexpr int kCableFoldGraceMs = 120;
+}
+
+CardMoreButton::CardMoreButton(int hiddenCount)
+    : juce::TextButton("More controls (" + juce::String(hiddenCount) + ")") {
+    setComponentID("cardMoreRow");
+    setTitle(getButtonText());
+    setWantsKeyboardFocus(true);
+    setUnfolded(false);
+}
+
+void CardMoreButton::setUnfolded(bool unfolded) {
+    setTooltip(unfolded ? "Hide the controls this card's layout keeps out of view (Return or Space)"
+                        : "Show the controls this card's layout keeps out of view (Return or Space)");
+}
+
+// Return and Space toggle at once rather than through juce::Button's posted click, so a keyboard
+// toggle and its re-layout land in the same message-loop turn as the key.
+bool CardMoreButton::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey) {
+        if (onToggle)
+            onToggle();
+        return true;
+    }
+    return juce::TextButton::keyPressed(key);
+}
+
+void CardMoreButton::clicked() {
+    if (onToggle)
+        onToggle();
+}
+
+void CardMoreButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
+    juce::TextButton::paintButton(g, highlighted, down);
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
+}
+
+void CardMoreButton::focusGained(FocusChangeType cause) {
+    juce::TextButton::focusGained(cause);
+    repaint();
+}
+
+void CardMoreButton::focusLost(FocusChangeType cause) {
+    juce::TextButton::focusLost(cause);
+    repaint();
+}
+
+// Built after every parameter widget, so it is the last child and the last Tab stop on the card body.
+void CardBody::createMoreButton() {
+    moreButton_ = std::make_unique<CardMoreButton>((int)plan_.more.size());
+    moreButton_->onToggle = [this] { setMoreUnfolded(!moreUnfolded_); }; // clears the cable's claim on the row
+    foldGrace_.onExpire = [this] {
+        if (moreOpenedByDrag_)
+            applyMoreUnfolded(false, /*peek=*/true);
+    };
+    card_.addAndMakeVisible(*moreButton_);
+}
+
+juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
+
+// A discrete event, never per value change: the card re-measures and the canvas pushes neighbours
+// clear (or returns them) the same way any other card growth does. The row's controls fade and the card's height
+// follows (CardBlockFade); the row is clipped by the card's bottom edge while it grows.
+void CardBody::setMoreUnfolded(bool unfolded) { applyMoreUnfolded(unfolded, /*peek=*/false); }
+
+// The row opens or folds with the step while the cards the step restores are already placed: a peek skips make-room;
+// an opened row hands the neighbours back to the person's rules at once.
+void CardBody::setMoreUnfoldedByHistory(bool unfolded) {
+    applyMoreUnfolded(unfolded, /*peek=*/true);
+    if (unfolded)
+        peekHoldsNeighbours_ = false;
+}
+
+// The open More area (its button and the controls under it) carries a low-alpha accent wash and a hairline in the
+// theme's accent, fading with the row (moreFade_), so it is clear the person is working inside it. The card
+// image's border and selection glow are untouched.
+void CardBody::paintMoreHighlight(juce::Graphics& g) const {
+    if (!hasMoreRow() || moreButton_ == nullptr)
+        return;
+    const float shown = moreFade_.isAttached() ? moreFade_.fraction() : (moreUnfolded_ ? 1.0f : 0.0f);
+    if (shown <= 0.01f)
+        return;
+    const auto& theme = synth::theme::themeOf(card_);
+    const auto body = synth::ui::cardBodyRect(card_.getLocalBounds().toFloat());
+    auto area = body.withTop((float)moreButton_->getY() - 3.0f).reduced(3.0f, 0.0f);
+    area.removeFromBottom(3.0f);
+    area = area.getIntersection(body);
+    if (area.isEmpty())
+        return;
+    g.setColour(theme.colors.accent.withAlpha(0.08f * shown));
+    g.fillRoundedRectangle(area, 6.0f);
+    g.setColour(theme.colors.accent.withAlpha(0.35f * shown));
+    g.drawRoundedRectangle(area.reduced(0.5f), 6.0f, 1.0f);
+}
+
+// `peek` is a cable's doing (opening the row, or folding what it opened): the row then grows over its neighbours
+// without making room, so a live cable never moves a card it may still land on. Any other caller is the person's
+// and ends the peek, so the card makes room as usual.
+void CardBody::applyMoreUnfolded(bool unfolded, bool peek) {
+    if (!hasMoreRow() || unfolded == moreUnfolded_)
+        return;
+    if (moreFade_.isAttached())
+        if (auto* memo = graph_editor_paint::CanvasMemo::of(card_.owner))
+            memo->cableEndGlide().begin(card_, unfolded); // records the cable ends before the row changes
+    moreUnfolded_ = unfolded;
+    moreOpenedByDrag_ = false;   // any other change is the person's or already settled
+    peekHoldsNeighbours_ = peek; // set before the resize below, which must already skip make-room
+    foldGrace_.stopTimer();
+    if (!moreFade_.isAttached()) {
+        applyVisibility();
+        card_.updateLayout();
+        finishMoreResize();
+        card_.repaint();
+        return;
+    }
+    startingMore_ = true; // applyVisibility leaves the row's controls to their fade
+    applyVisibility();
+    startingMore_ = false;
+    moreFade_.setShown(unfolded, settlingFootprint_, [this] { card_.updateLayout(); }, [this] { finishMoreResize(); });
+    card_.repaint();
+}
+
+// The card has its new height. A peek only re-anchors the cable ends (the row overlaps its neighbours, nothing
+// moves) and ends once the row is folded again; otherwise the canvas makes room or gives it back.
+void CardBody::finishMoreResize() {
+    if (!peekHoldsNeighbours_) {
+        card_.owner.handleModuleResized(&card_);
+        return;
+    }
+    if (!moreUnfolded_)
+        peekHoldsNeighbours_ = false;
+    card_.owner.notifyModuleContentChanged();
+}
+
+bool CardBody::unfoldForCableDragAt(juce::Point<int> cardLocal) {
+    if (moreButton_ == nullptr || moreUnfolded_ || !moreButton_->isVisible() ||
+        !moreButton_->getBounds().contains(cardLocal))
+        return false;
+    applyMoreUnfolded(true, /*peek=*/true);
+    moreOpenedByDrag_ = true; // after the unfold, which clears it as it does for any other change
+    card_.toFront(false);     // the revealed controls draw over the neighbour they overlap
+    return true;
+}
+
+// The editor reports where the cable is on every move; the grace timer is the only clock, so a cable that leaves
+// and then stops still folds the row once the grace ends. While the row opens the card can be shorter than it was
+// (the hidden controls' jacks leave the gutter before the row has grown), so a cable that has not moved is not leaving.
+void CardBody::cableDragMoved(bool inside) {
+    if (!moreOpenedByDrag_)
+        return;
+    if (inside || moreFade_.isFading())
+        foldGrace_.stopTimer();
+    else if (!foldGrace_.isTimerRunning())
+        foldGrace_.startTimer(kCableFoldGraceMs);
+}
+
+void CardBody::cableDragEnded(bool keepOpen) {
+    foldGrace_.stopTimer();
+    if (!moreOpenedByDrag_)
+        return;
+    if (keepOpen) {
+        moreOpenedByDrag_ = false;
+        peekHoldsNeighbours_ = false; // the cable landed on a revealed control: the neighbours make room now
+        card_.owner.handleModuleResized(&card_);
+    } else
+        applyMoreUnfolded(false, /*peek=*/true);
+}
+
+// The row's state flips when it is toggled, but its controls stay visible until the fade has ended; a cable that
+// lands on one answers for the settled state at once, so its end glides to the More button over the fade.
+bool CardBody::isFoldingAway(const juce::Component& widget) const {
+    if (moreUnfolded_ || !moreFade_.isFading())
+        return false;
+    for (int i : plan_.more)
+        if (plan_.items[(size_t)i].widget == &widget)
+            return true;
+    return false;
+}
+
+bool CardBody::moreRowWidgetAt(juce::Point<int> cardLocal) const {
+    for (int i : plan_.more)
+        if (auto* widget = plan_.items[(size_t)i].widget;
+            widget != nullptr && widget->isVisible() && widget->getBounds().contains(cardLocal))
+            return true;
+    return false;
+}
+
+int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) const {
+    if (!hasMoreRow())
+        return y;
+    if (apply && moreButton_ != nullptr)
+        moreButton_->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
+    y += cardbody::kRowHeight + 2;
+    if (moreUnfolded_ || moreFade_.isFading()) {
+        // The controls sit at their full size and the card's bottom edge clips them while the row opens or closes.
+        if (apply)
+            layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, true);
+        const int full = layoutItems(plan_.more, CardSection::kDefaultColumns, y, g, false) - y;
+        y += moreFade_.isAttached() ? moreFade_.height(full, settlingFootprint_) : full;
+    }
+    return y;
+}
+
+} // namespace synth

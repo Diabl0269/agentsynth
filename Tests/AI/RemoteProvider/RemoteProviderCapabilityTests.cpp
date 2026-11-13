@@ -67,6 +67,28 @@ TEST_F(RemoteProviderTest, CapabilityRequestHitsNamedEndpointWithCallerBodyPlusP
     EXPECT_EQ(obj->getProperty("availableTracks").getArray()->size(), 0);
 }
 
+TEST_F(RemoteProviderTest, HostWithTrailingSlashStillBuildsSingleSlashUrls) {
+    juce::String capturedUrl;
+    auto performer = [&](const juce::String& url, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedUrl = url;
+        return makeSuccess(R"({"data":{"timelineOps":[]}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost + "//", performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendCapabilityRequest("timeline.generate", makeCapabilityBody(),
+                                   [&callback](const synth::AIProvider::AIResponse& r) { callback(r); });
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(provider.getHostForTesting(), kMockHost);
+    EXPECT_EQ(capturedUrl, kMockHost + "/v1/capability/timeline.generate");
+}
+
 TEST_F(RemoteProviderTest, CapabilityRequestCarriesSameIdentityHeadersAsPatchPath) {
     juce::StringPairArray capturedHeaders;
 

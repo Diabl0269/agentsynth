@@ -1,0 +1,52 @@
+# FRO1493: Cmd+Z and Cmd+Shift+Z run the app's undo and redo while a popover of the main window is open. Such a popover
+# is a window of its own, so a key it did not use used to die there.
+#
+# What a user does:
+#   1. Starts a project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks the strip's colour dot: the colour picker opens. Cmd+Z takes the track back (the add is the last step):
+#      the strip is gone and the picker, which was showing that track, closes without applying anything.
+#      Cmd+Shift+Z brings the track back.
+#   3. Opens the Controllers tab and the "+ Add controller" popover. Cmd+Z takes the track back again and the popover,
+#      which shows nothing from the project, stays open.
+# Test mode has no audio device, so the transport never starts here: PopoverRelayTests checks Space reaches the app.
+record: true
+save_project: main-popover-undo
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: "Oscillator 1 colour", exists: true}
+  - screenshot: {name: 1-track-in-mixer}
+  - click: {id: "Oscillator 1 colour"}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - screenshot: {name: 2-colour-picker-open}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "Oscillator 1 colour", exists: false, within_ms: 2000}   # the app ran undo: the track is gone
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}       # and the picker of that track closed cleanly
+  - screenshot: {name: 3-after-cmd-z-track-gone-picker-closed}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: "Oscillator 1 colour", exists: true, within_ms: 2000}    # redo brought the track back
+  - screenshot: {name: 4-after-cmd-shift-z-track-back}
+  - click: {id: Controllers}
+  - wait: {}
+  - click: {id: addControllerButton}
+  - expect: {id: addControllerDeviceCombo, showing: true, within_ms: 2000}
+  - screenshot: {name: 5-add-controller-open}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: addControllerDeviceCombo, showing: true}                 # the popover stays open
+  - screenshot: {name: 6-popover-still-open-after-cmd-z}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: "Oscillator 1 colour", exists: false, within_ms: 2000}   # the Cmd+Z in the popover undid the add
+  - screenshot: {name: 7-mixer-track-gone}

@@ -1,20 +1,29 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "ChorusCentreGlide.h"
+#include "Modules/ParameterText.h"
 #include <juce_dsp/juce_dsp.h>
 
 class FlangerModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 7;
+    static constexpr int kPanCvChannel = 8;
+
     FlangerModule()
-        : ModuleBase("Flanger", 7, 2) { // 2 audio + 5 CV (Rate, Depth, Centre Delay, Feedback, Mix)
+        : ModuleBase("Flanger", 9, 2) { // 2 audio + 7 CV (Rate, Depth, Centre Delay, Feedback, Mix, Level, Pan)
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.05f, 5.0f, 0.3f));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 1.0f, 0.7f));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.7f, synth::fractionPercentAttributes()));
         addParameter(centreDelayParam =
                          new juce::AudioParameterFloat("centreDelay", "Centre Delay (ms)", 1.0f, 5.0f, 2.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.5f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
-        addOutputLevelParameter();
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.5f, synth::fractionPercentAttributes()));
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -23,6 +32,7 @@ public:
         spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
         spec.numChannels = 2;
         flanger.prepare(spec);
+        lineStale_ = false;
         flanger.reset();
 
         smoothedRate.reset(sampleRate, 0.05);
@@ -37,7 +47,7 @@ public:
         prepareOutputLevel(sampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow Left into Right's raw channel, sample-exact, while Dual I/O is
         // split and only Left is patched. Must run before the bypass/mute branches below so
         // both see a filled Right leg exactly as if the user had cabled it.
@@ -47,14 +57,23 @@ public:
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
                 buffer.clear(ch, 0, buffer.getNumSamples());
+            lineStale_ = true; // the delay line is not run while bypassed
             return;
         }
         if (isMuted()) {
             buffer.clear();
+            lineStale_ = true;
             return;
         }
 
         juce::ignoreUnused(midiMessages);
+        if (lineStale_) {
+            // Resume from silence: the line still holds what it heard before the bypass or mute. Mix
+            // restarts from 0 and ramps up (juce::dsp::Chorus ramps it), so the first echoes fade in.
+            flanger.setMix(0.0f);
+            flanger.reset();
+            lineStale_ = false;
+        }
 
         const int numSamples = buffer.getNumSamples();
         if (numSamples == 0 || buffer.getNumChannels() < 2)
@@ -92,9 +111,11 @@ public:
         flanger.setDepth(depth);
         // Centre Delay / Feedback / Mix CV (ch4-6) follows the normalised convention
         // (docs/modules/modulation.md#cv-in-normalised-units): +1.0 sweeps the knob to its maximum.
-        // Read once per block like Rate/Depth above — all three land in juce::dsp::Chorus setters.
-        flanger.setCentreDelay(std::max(
-            1.0f, modulateNormalised(*centreDelayParam, smoothedCentreDelay.getCurrentValue(), blockCV(buffer, 4))));
+        // Read once per block like Rate/Depth above — all three land in juce::dsp::Chorus setters
+        // (Centre Delay then glides per sample while its smoother runs, below).
+        const float centreCv = blockCV(buffer, 4);
+        flanger.setCentreDelay(
+            std::max(1.0f, modulateNormalised(*centreDelayParam, smoothedCentreDelay.getCurrentValue(), centreCv)));
         // Feedback and Mix are already ramped inside juce::dsp::Chorus (a per-channel
         // SmoothedValue and a DryWetMixer), so smoothing them again here would only add lag.
         flanger.setFeedback(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 5)));
@@ -102,8 +123,10 @@ public:
 
         juce::dsp::AudioBlock<float> fullBlock(buffer);
         juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
-        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
-        flanger.process(context);
+        // A gliding Centre Delay is applied a couple of samples at a time (see processWithCentreGlide).
+        synth::processWithCentreGlide(flanger, audioBlock, smoothedCentreDelay, [&](float centre) {
+            flanger.setCentreDelay(std::max(1.0f, modulateNormalised(*centreDelayParam, centre, centreCv)));
+        });
 
         applyOutputLevel(buffer, 2);
 
@@ -113,30 +136,31 @@ public:
 
         smoothedRate.skip(numSamples);
         smoothedDepth.skip(numSamples);
-        smoothedCentreDelay.skip(numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Rate", "Depth", "Centre Delay", "Feedback", "Mix"};
-        return stereoInputLabel(i, 5, cv);
+        const juce::String cv[] = {"Rate", "Depth", "Centre Delay", "Feedback", "Mix", "Level", "Pan"};
+        return stereoInputLabel(i, 7, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(7); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 7); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Rate" is the
-    // jack label, "Rate (Hz)" the knob) so the card rings it and accepts a cable dropped on it.
+    // Level and Pan are appended last and reached through their knobs; paramId binds each jack to its knob ("Rate" is
+    // the jack label, "Rate (Hz)" the knob) so the card rings it and accepts a cable dropped on it.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Rate", 2, "rate"},
                 {"Depth", 3, "depth"},
                 {"Centre Delay", 4, "centreDelay"},
                 {"Feedback", 5, "feedback"},
-                {"Mix", 6, "mix"}};
+                {"Mix", 6, "mix"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
@@ -147,6 +171,7 @@ public:
 
 private:
     juce::dsp::Chorus<float> flanger;
+    bool lineStale_ = false; // bypassed or muted since the delay line last ran
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRate;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;

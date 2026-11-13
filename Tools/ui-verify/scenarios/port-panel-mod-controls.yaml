@@ -1,0 +1,43 @@
+# The port connections panel shows a modulation cable with the same controls as the mod dot: an amount bar, a typed
+# percent and a curve chip (it used to show a bare name and a remove button).
+#
+# What a user does:
+#   1. Opens a project where LFO 1 modulates the VCA's Gain and the Filter's Cutoff, and LFO 2 also modulates Gain.
+#   2. Clicks LFO 1's CV output jack: the panel lists both destinations, each with an amount bar, a percent and a curve chip.
+#   3. Drags the first row's bar: the percent follows; clicking away and pressing Undo once puts it back (+50%).
+#   4. Presses Tab: focus reaches each row's amount bar, percent, curve chip and show-in-timeline button in turn.
+#   5. Clicks the VCA's CV input jack: the same controls, one row per LFO.
+motion: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/port-panel-mod.agsproj"}
+  - wait: {}
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - mark: {check: 1, name: source-jack-rows}
+  # the bar sits on the row's one line; +50% is three quarters along it
+  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 168, fromY: 45, toX: 150, toY: 45}
+  - wait: {}
+  - mark: {check: 2, name: amount-dragged}
+  - click: {id: "card:VCA", x: 150, y: 12, instant: "the focus ring moves to the canvas panel"}   # click away: the panel closes
+  - wait: {}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - mark: {check: 3, name: undo-one-step}
+  - key: {keys: tab}   # Disconnect all
+  - key: {keys: tab}   # the first row's amount bar
+  - mark: {check: 4, name: tab-reaches-amount-bar}
+  - key: {keys: tab}
+  - mark: {check: 4, name: tab-reaches-percent}
+  - key: {keys: tab}
+  - mark: {check: 4, name: tab-reaches-curve-chip}
+  - key: {keys: tab}
+  - mark: {check: 4, name: tab-reaches-show-in-timeline}
+  - click: {id: "card:VCA", x: 8, y: 78}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - mark: {check: 5, name: destination-jack-rows}

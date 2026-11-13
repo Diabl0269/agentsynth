@@ -78,13 +78,51 @@ one un-toggles the rest, and each carries a tooltip with the digit (`"Split (3)"
 
 Laid out left-to-right in `kAllEditTools` order (1, 2, 3, 4, 5, 7, 8) immediately left of the snap
 combo and toggle in the transport bar: both are "how the next edit behaves" chrome, so they read as
-one group without pushing the transport controls off their left-aligned home.
+one group without pushing the transport controls off their left-aligned home. While Draw is the active
+tool, the Draw shape buttons slide out between the Draw button and the follow-playhead toggle
+([automation](automation.md#draw-shapes-and-the-lane-range)).
 
 `applyToolStripTheme()` (constructor plus `lookAndFeelChanged()`) re-applies each icon from
-`AppLookAndFeel::getIcon` and sets the active-tool highlight as a **background colour**
-(`colors.toolActive`), not a different icon tint — the glyph reads the same lit or not; see
+`AppLookAndFeel::getIcon`. The active-tool highlight is a **background**, not a different icon tint: the look-and-feel's
+`drawButtonBackground` paints the lit fill (the button-on colour, the theme accent) at paint time, so it follows the theme
+with no per-button colour to refresh — the glyph reads the same lit or not; see
 [`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
 library.
+The Draw button is the exception that paints its own glyph (the current shape's icon, then a corner chevron from
+`paintComboChevron`, both in the theme's primary ink, or the best-contrasting theme ink while lit). Its background is the same `drawButtonBackground` call (button / button-on colours) the other
+tool buttons go through, so its lit and unlit fills equal theirs in every built-in theme. (It used to fill from
+`colors.toolActive`, a literal the built-in themes do not override, which is why it stayed blue after a theme switch.)
+
+## The Sizing field
+
+`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `ToolbarButton` (Edit group,
+`ToolbarButtonLayout::Inline`) like Add Track and Snap, so it has their chip, caption, hover tween and focus ring. Its
+icon is the mode: `Icon::ClipSizingTrim` (a clip edge cutting a note, the part past it faded), `ClipSizingCarry` (one
+arrow over the notes and the edge: they travel together) and `ClipSizingStretch` (a spring pulled between two edges),
+the way Cubase badges its sizing modes on the selection tool. With "Show button labels" on (`setToolbarLabelsShown`) the
+caption is the short mode name ("Trim", "Carry", "Stretch"); off, the button is the chip alone. Either way its width is
+`getFixedWidth()`: the widest caption's width (just the chip with labels off), so choosing a mode never resizes it or moves its
+neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off. A small notch in the chip's lower-right corner (a ~5 px triangle, accent mixed 70% toward the text colour, clipped inside the chip's rounded border, painted in `ClipSizingButton::paintButton`) marks the menu; it never touches the glyph, which keeps its full size and centred place, and it is the same with labels off.
+A click (or Enter while it has focus; Space stays transport play/stop) opens a menu of the three modes, each its full name and one short
+clause on what it does to the clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
+so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
+at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select
+key pressed again while Select is the tool steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it
+follows a rebind of `timelineToolSelect`. The choice is the user setting `timelineClipSizingMode` and is pushed into the
+clip lanes ([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses; its
+screen-reader title is "Clip sizing" and its description the full mode name (VoiceOver reads "Clip sizing, Carry contents"),
+and its tooltip (the only name with labels off) starts "Clip sizing: <full mode name>", explains Option and ends with the Select key that steps it (`(1)` by default,
+`setStepKeyHint`). Test mode reads `sizingMode`, `glyph`, `caption` and `fieldWidth` from its 1x1 child `timelineClipSizingState` (scenario
+`clip-sizing-field.yaml`); `ThemeSweepGlyphs` checks the icons in every theme.
+
+Both bars are built of `ToolbarButton`s: `TimelineTopBarRingTests` walks the Timeline transport row and the
+Mixer toolbar and fails on any visible `juce::TextButton` outside a short allow-list of controls that are not toolbar
+buttons. The follow-playhead button and the edit tools are icon-only `DrawableButton`s with their own painting (the
+follow button's right-click mode menu, the tools' lit fill), left as they are.
+
+## Range menu
+
+Right-clicking inside a Range tool selection opens its menu: **Split at range edges**, **Delete range**, **Delete range and close gap**, **Make section** (Shift+Cmd+J, `timelineMakeSection`; see [sections](sections.md)) and **Render to audio track** (Shift+Cmd+R, `timelineRenderToAudioTrack`, rebindable; greyed with "(no mixer channel)" in its text when no covered track reaches a mixer channel). The render is described in [`render-to-audio.md`](render-to-audio.md).
 
 ## Tool cursors
 
@@ -108,5 +146,17 @@ non-Select tool is active".
 Both `TimelineClipLaneArea` and `PianoRollComponent` cache one cursor per tool
 (`rebuildToolCursors()`), rebuilt only on a theme change — never per mouse-move, since building one
 renders an icon into an `Image`.
+
+Under Draw the piano roll's velocity strip shows that same pen cursor over its own area, because a child
+does not inherit its parent's cursor.
+
+The automation lane block follows the clip lanes for the tools that act on a lane: Draw (the pen), Range (the
+range cursor) and Erase (the eraser, which deletes points). Every lane editor (`AutomationLaneEditor::getMouseCursor()`)
+and every modulator amount band (`ModulatorBand::getMouseCursor()`, which takes the press itself while the
+modulator has no amount lane) show it over their own area, built lazily from the themed icon by
+`LaneToolCursors` (`UI/Timeline/AutomationLanes/LaneToolCursors.h`) and dropped on a theme change. Select keeps
+the arrow, and Split, Glue and Mute keep it too since they do nothing on a lane. The lane header and the modulator row
+header are not tool surfaces and keep their own cursors. A new tool or lane surface is one more row in
+`AutomationLanesCursorTest` (the guard for this gap).
 
 Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.

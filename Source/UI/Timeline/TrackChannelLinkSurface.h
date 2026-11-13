@@ -2,7 +2,9 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include <functional>
 #include <memory>
+#include <optional>
 
 // TrackChannelLinkSurface.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything a track
 // header needs from the app about the CHANNEL its track plays into.
@@ -44,6 +46,13 @@ struct TrackChannelLinkSurface {
 
     virtual ChannelInfo getChannelInfo(synth::TrackId track) const = 0;
 
+    /** Brackets a loop that refreshes MANY headers against an unchanged graph (a timeline rebuild): while at least one
+     *  batch is open, getChannelInfo() answers from ONE node-to-channel map built on first use instead of walking the
+     *  graph per track. Nothing inside a batch may edit the graph or the doc. Non-pure no-ops so stubs keep
+     *  compiling; use ChannelLinkBatch rather than calling these directly. */
+    virtual void beginChannelLinkBatch() {}
+    virtual void endChannelLinkBatch() {}
+
     /** JUST the chip meter's level, for the shared 15 Hz tick. Deliberately not getChannelInfo():
      *  that re-derives the whole link from the live graph (a node scan plus two BFS walks over a
      *  fresh copy of every connection), which is fine per click and far too much per frame per row.
@@ -58,15 +67,15 @@ struct TrackChannelLinkSurface {
      * ordinary track-only rename, byte-for-byte as before. */
     virtual bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) = 0;
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks (b): a colour picker whose live preview writes the track
-     * colour AND the channel macro's colour on every drag frame with no undo step, whose cancel restores both, and
-     * whose commit is ONE undo step covering both. Null when the track is not linked or its strip is not boxed in a
-     *  macro -- the caller falls back to its ordinary single-target picker. `favourites` is the
-     *  picker's favourites shelf store (the header already resolves it through
-     *  TrackHeaderHost::getAppProperties), passed in rather than re-derived so both pickers persist
-     *  to the same place; null for an in-memory-only picker. */
-    virtual std::unique_ptr<ColourPickerPopup> buildLinkedChannelColourPicker(synth::TrackId track,
-                                                                              juce::PropertiesFile* favourites) = 0;
+    /** docs/mixer/mixer.md#a-track-and-its-macro-share-a-colour: a colour picker whose live preview writes the track
+     * colour AND the colour of the channel macro the track's instrument sits in on every drag frame with no undo
+     * step, whose cancel restores both, and whose commit is ONE undo step covering both. Null when the track has no
+     * macro, or is not that macro's owning track (the first track in timeline order that plays it) -- the caller
+     * falls back to its ordinary single-target picker. `favourites` is the picker's favourites shelf store (the
+     * header already resolves it through TrackHeaderHost::getAppProperties), passed in rather than re-derived so both
+     * pickers persist to the same place; null for an in-memory-only picker. */
+    virtual std::unique_ptr<ColourPickerPopup> buildOwnedMacroColourPicker(synth::TrackId track,
+                                                                           juce::PropertiesFile* favourites) = 0;
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks (c): for a LINKED track, toggles the channel strip's own
      * mute parameter / solo flag as ONE undo step and returns true; the track's doc mute/solo stay false, so there is
@@ -76,11 +85,56 @@ struct TrackChannelLinkSurface {
     virtual bool toggleLinkedChannelMuted(synth::TrackId track) = 0;
     virtual bool toggleLinkedChannelSoloed(synth::TrackId track) = 0;
 
+    /** The mute / solo a LINKED track's channel strip holds right now; nullopt for a track that is not linked (its
+     *  state is on the doc). Lets a bulk M/S click make every selected track end in the clicked track's state. */
+    virtual std::optional<bool> linkedChannelMuted(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+    virtual std::optional<bool> linkedChannelSoloed(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+
+    /** The colour of the channel macro `track` owns (the first track in timeline order that plays it), or nullopt when
+     *  it owns none. With setOwnedMacroColour and recordColourEdit it lets one pick recolour several tracks AND the
+     *  macros they own, as buildOwnedMacroColourPicker does for one. */
+    virtual std::optional<juce::Colour> ownedMacroColour(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return std::nullopt;
+    }
+    /** Writes the owned macro's colour with no undo step; a no-op for a track that owns none. */
+    virtual void setOwnedMacroColour(synth::TrackId track, juce::Colour colour) { juce::ignoreUnused(track, colour); }
+    /** Runs `mutation` as ONE graph + timeline + macro undo step; false (nothing run) when this surface has no undo. */
+    virtual bool recordColourEdit(const std::function<void()>& mutation) {
+        juce::ignoreUnused(mutation);
+        return false;
+    }
+
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's channel chip click: scrolls the channel into view and
      * selects it (the Locate Master contract), so a chip on a MIDI track is how the user finds where its audio went.
      * When the mixer panel exists this override opens/focuses that column instead, with no change to
      * the chip or the header. */
     virtual void revealChannelForTrack(synth::TrackId track) = 0;
+};
+
+/** RAII scope for TrackChannelLinkSurface::beginChannelLinkBatch; a null surface is a no-op. */
+class ChannelLinkBatch {
+public:
+    explicit ChannelLinkBatch(TrackChannelLinkSurface* surface)
+        : surface_(surface) {
+        if (surface_ != nullptr)
+            surface_->beginChannelLinkBatch();
+    }
+    ~ChannelLinkBatch() {
+        if (surface_ != nullptr)
+            surface_->endChannelLinkBatch();
+    }
+    ChannelLinkBatch(const ChannelLinkBatch&) = delete;
+    ChannelLinkBatch& operator=(const ChannelLinkBatch&) = delete;
+
+private:
+    TrackChannelLinkSurface* surface_;
 };
 
 } // namespace synth::ui

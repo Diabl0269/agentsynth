@@ -32,8 +32,14 @@ struct BlockTimeInfo {
 
     // Block-relative sample index at which the position wraps back to loopStartPpq,
     // or -1 if this block doesn't wrap. A wrap landing exactly on the block boundary
-    // is reported as -1 (the next block simply starts at loopStartPpq).
+    // is reported as -1 (the next block simply starts at loopStartPpq) and sets
+    // wrapsAtBlockEnd instead.
     int loopWrapSample = -1;
+
+    // True when the loop end falls exactly at the end of this block: the transport has already
+    // folded back to loopStartPpq, so the block covers [startPpq, loopEndPpq) in full and there is
+    // no second range. Mutually exclusive with loopWrapSample >= 0.
+    bool wrapsAtBlockEnd = false;
 
     double beatsPerSample() const noexcept { return bpm / (60.0 * sampleRate); }
 };

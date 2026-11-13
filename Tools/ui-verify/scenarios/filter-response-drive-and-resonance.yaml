@@ -1,0 +1,136 @@
+# Bug: the Filter card's Show Response curve ignored Drive, and followed only Cutoff's modulation, so it stayed still
+# while Resonance, Drive and Custom's Morph X/Y, Shift and Depth moved the sound.
+#
+# What a user does: adds a Filter, opens Show Response, turns Drive up (the whole curve lifts by the ladder's level
+# change), then turns Resonance up (the peak grows). Test mode runs no audio device, so modulation by a cable is
+# checked by FrequencyResponseModulationTests, not here; the view reads knob plus CV, so a knob turn shows at once.
+record: true
+save_project: filter-response-drive
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 300, fromY: 600, toX: 300, toY: 250}   # pan up: the card's foot was below the window
+  - wait: {}
+  - screenshot: {name: filter-added}
+  - click: {id: Show Response}
+  - wait: {settleMs: 600}
+  - expect: {id: Filter response, showing: true, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: response-drive-1}
+  - click: {id: "card:Filter > Drive"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {settleMs: 400}
+  - expect: {id: "card:Filter > Drive", value: 5.049999713897705}
+  - screenshot: {id: "card:Filter", name: response-drive-up}
+  - click: {id: "card:Filter > Resonance"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {settleMs: 400}
+  - getState: {id: "card:Filter > Resonance"}
+  - screenshot: {id: "card:Filter", name: response-resonance-up}

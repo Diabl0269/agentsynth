@@ -63,12 +63,20 @@ public:
      *  that nothing crashed. */
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
+    /** Space the fader leaves free under its level readout, so the readout sits one caption gap (6 px) above the mute
+     *  button that is inset 2 px in the row under the fader (MixerSectionLayout::kFaderToButtonsGap says the same). */
+    static constexpr int kClearBelowReadout = 4;
+    /** The pixel kept between the slider and the readout under it. */
+    static constexpr int kReadoutGap = 1;
+
     juce::Slider& getSlider() noexcept { return slider_; }
     const juce::Slider& getSlider() const noexcept { return slider_; }
 
     /** "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
      *  ahead of the slider's own value text below. */
     void setChannelName(const juce::String& name);
+    /** The nudge keys the tooltip names ("Shift + Up / Shift + Down"). */
+    void setNudgeShortcutText(const juce::String& keys);
 
     /** Moves REAL accessibility focus (not keyboard focus) to the fader slider's
      *  handler when the column it belongs to becomes the panel's keyboard-walked focus. Safe to
@@ -84,10 +92,13 @@ public:
     void resized() override;
 
 private:
+    /** Shift+Up / Shift+Down as the platform prints them: the tooltip text before a panel names the bound keys. */
+    static juce::String defaultNudgeShortcutText();
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
     MixerFaderSlider slider_;
+    juce::String nudgeShortcutText_ = defaultNudgeShortcutText();
     juce::Label readout_;
     std::unique_ptr<juce::SliderParameterAttachment> attachment_;
 

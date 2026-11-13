@@ -1,6 +1,51 @@
 // ModuleLibraryPainting.cpp -- paint(): rows, pinned chrome and the search-highlight /
 // chevron / category-icon drawing helpers it calls.
 #include "ModuleLibraryComponent.h"
+#include "ModuleLibrarySnippetRow.h"
+#include "UI/Chrome/Badge/Badge.h"
+#include <cmath>
+
+namespace synth::ui {
+SnippetRowRects snippetRowRects(int contentWidth, int rowY, int rowHeight, int countTextWidth) {
+    constexpr int kLabelLeft = 20;
+    constexpr int kGap = 6;
+    const int badgeW = badgeWidth(BadgeKind::Yours);
+    const int badgeLeft = contentWidth - kSnippetRowRightMargin - badgeW;
+    const int countLeft = badgeLeft - kGap - countTextWidth;
+    SnippetRowRects r;
+    r.badge = {badgeLeft, rowY + (rowHeight - kBadgeHeight) / 2, badgeW, kBadgeHeight};
+    r.count = {countLeft, rowY, countTextWidth, rowHeight};
+    r.label = {kLabelLeft, rowY, juce::jmax(0, countLeft - kGap - kLabelLeft), rowHeight};
+    return r;
+}
+} // namespace synth::ui
+
+namespace {
+juce::Font snippetCountFont() { return juce::Font(juce::FontOptions(12.0f)); }
+
+struct RowLook {
+    juce::Font font;
+    juce::Colour label, muted, accent;
+};
+struct RowSpan {
+    int contentWidth, y, height;
+};
+
+// The name, the "(n)" count left of the Yours badge, and the badge at the row's right margin.
+void paintSnippetRow(juce::Graphics& g, const synth::theme::Theme& theme, const juce::String& name, int moduleCount,
+                     const juce::String& query, RowSpan span, const RowLook& look) {
+    const auto countText = "(" + juce::String(moduleCount) + ")";
+    const auto r = synth::ui::snippetRowRects(
+        span.contentWidth, span.y, span.height,
+        (int)std::ceil(juce::GlyphArrangement::getStringWidth(snippetCountFont(), countText)));
+    synth::ui::drawSearchHighlightedText(g, name, query, r.label, look.font, look.label, look.accent.withAlpha(0.28f),
+                                         look.accent);
+    synth::ui::paintBadge(g, theme, synth::ui::BadgeKind::Yours, r.badge.toFloat());
+    g.setColour(look.muted);
+    g.setFont(snippetCountFont());
+    g.drawText(countText, r.count, juce::Justification::centredRight);
+}
+} // namespace
 
 void ModuleLibraryComponent::paint(juce::Graphics& g) {
     // Resolve theme tokens from the active LnF; fall back to plain colors when our LnF
@@ -52,23 +97,25 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                 // the same progress value as the fold, so the two read as one motion. Search
                 // forces matching sections open, so the chevron matches that layout.
                 const float chevronProgress = isSearchActive() ? 0.0f : getSectionProgress(entry.text);
-                drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f), chevronProgress,
-                            headerColour);
+                synth::theme::paintDisclosureChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f),
+                                                     1.0f - chevronProgress, synth::theme::themeOf(*this), false);
 
                 // Category icon at x=20 (null-guarded — no-op when LnF absent).
                 synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
                 const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
 
                 const juce::Font headerFont(juce::FontOptions(12.0f));
-                const juce::String headerLabel = entry.text.toUpperCase();
+                const juce::String headerLabel = entry.text;
                 if (icon != nullptr) {
                     icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
                                      juce::RectanglePlacement::centred, 1.0f);
-                    drawHighlightedText(g, headerLabel, query, {40, row.y, contentWidth - 50, 20}, headerFont,
-                                        headerColour, accentColour.withAlpha(0.28f), accentColour);
+                    synth::ui::drawSearchHighlightedText(g, headerLabel, query, {40, row.y, contentWidth - 50, 20},
+                                                         headerFont, headerColour, accentColour.withAlpha(0.28f),
+                                                         accentColour);
                 } else {
-                    drawHighlightedText(g, headerLabel, query, {20, row.y, contentWidth - 30, 20}, headerFont,
-                                        headerColour, accentColour.withAlpha(0.28f), accentColour);
+                    synth::ui::drawSearchHighlightedText(g, headerLabel, query, {20, row.y, contentWidth - 30, 20},
+                                                         headerFont, headerColour, accentColour.withAlpha(0.28f),
+                                                         accentColour);
                 }
                 continue;
             }
@@ -85,8 +132,9 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
 
             if (entry.kind == RowKind::EmptyHint) {
                 const juce::Font hintFont(juce::FontOptions(13.0f));
-                drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 40, kItemHeight - 4}, hintFont,
-                                    mutedColour.withAlpha(0.7f), accentColour.withAlpha(0.28f), accentColour);
+                synth::ui::drawSearchHighlightedText(
+                    g, entry.text, query, {20, row.y, contentWidth - 40, kItemHeight - 4}, hintFont,
+                    mutedColour.withAlpha(0.7f), accentColour.withAlpha(0.28f), accentColour);
                 continue;
             }
 
@@ -98,12 +146,11 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             if (entry.kind == RowKind::SubHeader) {
                 const float chevronProgress =
                     isSearchActive() ? 0.0f : getSectionProgress(subsectionKey(entry.section, entry.text));
-                drawChevron(g, juce::Rectangle<float>(20.0f, (float)row.y + 8.0f, 6.0f, 6.0f), chevronProgress,
-                            mutedColour.withAlpha(0.6f));
+                synth::theme::paintDisclosureChevron(g, juce::Rectangle<float>(20.0f, (float)row.y + 8.0f, 6.0f, 6.0f),
+                                                     1.0f - chevronProgress, synth::theme::themeOf(*this), false);
                 g.setColour(mutedColour.withAlpha(0.6f));
                 g.setFont(juce::Font(juce::FontOptions(10.5f)));
-                g.drawText(entry.text.toUpperCase(), 32, row.y, contentWidth - 44, kItemHeight - 4,
-                           juce::Justification::centredLeft);
+                g.drawText(entry.text, 32, row.y, contentWidth - 44, kItemHeight - 4, juce::Justification::centredLeft);
                 continue;
             }
 
@@ -132,15 +179,16 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             // Greyed out = already in the patch and not addable again.
             const juce::Colour labelColour = enabled ? itemColour : mutedColour.withAlpha(0.5f);
             const juce::Font itemFont(juce::FontOptions(16.0f));
-            drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 60, kItemHeight - 4}, itemFont,
-                                labelColour, accentColour.withAlpha(0.28f), accentColour);
-
             if (entry.kind == RowKind::Snippet) {
-                g.setColour(mutedColour);
-                g.setFont(juce::Font(juce::FontOptions(12.0f)));
-                g.drawText("(" + juce::String(entry.moduleCount) + ")", contentWidth - 44, row.y, 34, kItemHeight - 4,
-                           juce::Justification::centredRight);
-            } else if (entry.kind == RowKind::Plugin) {
+                paintSnippetRow(g, synth::theme::themeOf(*this), entry.text, entry.moduleCount, query,
+                                {contentWidth, row.y, kItemHeight - 4},
+                                {itemFont, labelColour, mutedColour, accentColour});
+            } else {
+                synth::ui::drawSearchHighlightedText(g, entry.text, query,
+                                                     {20, row.y, contentWidth - 60, kItemHeight - 4}, itemFont,
+                                                     labelColour, accentColour.withAlpha(0.28f), accentColour);
+            }
+            if (entry.kind == RowKind::Plugin) {
                 // The format tag is load-bearing, not decoration: the same plugin often ships as
                 // both VST3 and AU, and the two are different entries with different state.
                 g.setColour(mutedColour);
@@ -175,7 +223,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
         g.setColour(bgColour);
         g.fillRect(0, kSearchHeight, getWidth(), kTopStripHeight);
 
-        // "?" help button, left of the COLLAPSE ALL / EXPAND ALL label — paint() and the mouse
+        // "?" help button, left of the Collapse all / Expand all label — paint() and the mouse
         // handlers share getHelpButtonBounds() so the drawn button and the clickable button can
         // never drift apart (the same reason cable paint/hit-test share one enumeration
         // elsewhere in this app — see GraphEditor::buildVisibleCables).
@@ -192,56 +240,10 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
 
         g.setColour(topStripHovered ? accentColour : mutedColour);
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10 + kHelpButtonSize + kHelpButtonMargin,
+        g.drawText(allCollapsed ? "Expand all" : "Collapse all", 10 + kHelpButtonSize + kHelpButtonMargin,
                    kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
                    juce::Justification::centredRight);
     }
-}
-
-void ModuleLibraryComponent::drawHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
-                                                 juce::Rectangle<int> bounds, const juce::Font& font,
-                                                 juce::Colour normal, juce::Colour highlightFill,
-                                                 juce::Colour highlightText) {
-    g.setFont(font);
-    const auto spans = highlightSpansFor(text, query);
-    if (spans.empty()) {
-        g.setColour(normal);
-        g.drawText(text, bounds, juce::Justification::centredLeft, true);
-        return;
-    }
-
-    const float baseX = (float)bounds.getX();
-    for (const auto& span : spans) {
-        const float preW = font.getStringWidthFloat(text.substring(0, span.start));
-        const float matchW = font.getStringWidthFloat(text.substring(span.start, span.start + span.length));
-        g.setColour(highlightFill);
-        g.fillRoundedRectangle(baseX + preW - 1.0f, (float)bounds.getY() + 4.0f, matchW + 2.0f,
-                               juce::jmax(8.0f, (float)bounds.getHeight() - 8.0f), 2.0f);
-    }
-
-    juce::AttributedString as;
-    as.setJustification(juce::Justification::centredLeft);
-    as.setWordWrap(juce::AttributedString::none);
-    int pos = 0;
-    for (const auto& span : spans) {
-        if (span.start > pos)
-            as.append(text.substring(pos, span.start), font, normal);
-        as.append(text.substring(span.start, span.start + span.length), font, highlightText);
-        pos = span.start + span.length;
-    }
-    if (pos < text.length())
-        as.append(text.substring(pos), font, normal);
-    as.draw(g, bounds.toFloat());
-}
-
-void ModuleLibraryComponent::drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress,
-                                         juce::Colour colour) {
-    juce::Path p;
-    p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
-    p.applyTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi * progress, area.getCentreX(),
-                                                     area.getCentreY()));
-    g.setColour(colour);
-    g.fillPath(p);
 }
 
 synth::theme::Icon ModuleLibraryComponent::categoryIconForHeader(const juce::String& header) {

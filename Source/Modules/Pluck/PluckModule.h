@@ -1,0 +1,116 @@
+#pragma once
+
+#include <optional>
+
+#include "Modules/ModTargetList.h"
+#include "Modules/ModuleBase.h"
+#include "Modules/VoiceCountSource.h"
+#include "PluckVoices.h"
+#include <array>
+#include <atomic>
+
+/**
+ * Plucked-string instrument: an extended Karplus-Strong string with eight voices (guitar, harp, koto).
+ * Each note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, plus Tune and Fine); velocity sets
+ * the loudness and, by Velocity brightness, how hard and bright the pluck is. Note-Off damps the string over
+ * the Release time. When all eight strings are busy the oldest is taken over.
+ *
+ * Decay, Decay tracking, Brightness, Pick position, Pick hardness, Stiffness, Tune and Fine are read when a note
+ * starts; Release when it ends. Level and Body are live. Every knob takes a cable (kModTargets), read at the same
+ * moment as the knob. No ADSR or VCA is needed in front of it. Output is mono-summed
+ * onto a stereo pair (Declared, ships SPLIT like the Drum Kit). The algorithm and the formulas are in
+ * docs/modules/pluck-mallet.md.
+ */
+class PluckModule
+    : public ModuleBase
+    , public synth::VoiceCountSource {
+public:
+    static constexpr int kNumChannels = 2;
+    /** Every knob's cable, channel = index. Append only: saved cables keep their channel. */
+    static constexpr std::array<synth::ModTargetSpec, 12> kModTargets{{
+        {"level", synth::ModRead::Live},
+        {"body", synth::ModRead::Live},
+        {"tune", synth::ModRead::NoteOn},
+        {"fine", synth::ModRead::NoteOn},
+        {"decay", synth::ModRead::NoteOn},
+        {"decayTrack", synth::ModRead::NoteOn},
+        {"brightness", synth::ModRead::NoteOn},
+        {"pickPosition", synth::ModRead::NoteOn},
+        {"pickHardness", synth::ModRead::NoteOn},
+        {"stiffness", synth::ModRead::NoteOn},
+        {"release", synth::ModRead::NoteOff},
+        {"velBright", synth::ModRead::NoteOn},
+    }};
+    static constexpr int kLevelCvChannel = 0;             // the Level knob's cable; no gutter jack
+    static constexpr int kBodyCvChannel = 1;              // the Body knob's cable; no gutter jack
+    static constexpr double kDecayReferenceHz = 130.8128; // C3: where Decay is exactly the T60
+
+    PluckModule();
+
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+
+    juce::String getOutputPortLabel(int i) const override {
+        return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
+    }
+    int getVisibleInputPortCount() const override { return 0; }
+    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
+    LogicalPort mapInputChannel(int raw) const override { return mods_.portOf(raw); }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
+    ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
+    ModuleType getModuleType() const override { return ModuleType::Pluck; }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
+
+    /** Strings still sounding (held or ringing out); exposed for tests. */
+    int activeVoiceCount() const noexcept;
+
+    /** Strings/bars whose key is still down: what the status bar shows (a tail fading out is not counted). */
+    int heldVoiceCount() const noexcept;
+
+    int displayVoiceCount() const noexcept override { return publishedVoices_.load(std::memory_order_relaxed); }
+
+private:
+    std::atomic<int> publishedVoices_{0}; // heldVoiceCount() as of the end of the last block
+    juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
+                                        float skew = 1.0f,
+                                        std::optional<juce::AudioParameterFloatAttributes> attributes = std::nullopt);
+    void noteOn(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample);
+    void noteOff(int note, const juce::AudioBuffer<float>& cv, int sample);
+    void stopAll() noexcept;
+    float renderSample() noexcept;
+
+    /** One resonant bandpass of the body (peak gain 1 at its centre). */
+    struct BodyBand {
+        double b0 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+        void set(double hz, double q, double sampleRate) noexcept;
+        double process(double x) noexcept;
+        void reset() noexcept { z1 = z2 = 0.0; }
+    };
+
+    juce::AudioParameterFloat* tuneParam = nullptr;
+    juce::AudioParameterFloat* fineParam = nullptr;
+    juce::AudioParameterFloat* decayParam = nullptr;
+    juce::AudioParameterFloat* decayTrackParam = nullptr;
+    juce::AudioParameterFloat* brightnessParam = nullptr;
+    juce::AudioParameterFloat* pickPositionParam = nullptr;
+    juce::AudioParameterFloat* pickHardnessParam = nullptr;
+    juce::AudioParameterFloat* bodyParam = nullptr;
+    juce::AudioParameterFloat* stiffnessParam = nullptr;
+    juce::AudioParameterFloat* releaseParam = nullptr;
+    juce::AudioParameterFloat* velBrightParam = nullptr;
+    juce::AudioParameterFloat* levelParam = nullptr;
+    synth::ModTargetList mods_{kModTargets};
+
+    static constexpr int kNumBodyBands = 3;
+
+    double sampleRate_ = 44100.0;
+    std::uint32_t noteCounter_ = 0;
+    int bodyTail_ = 0; // samples left before the body resonators are considered silent
+    synth::drums::NoiseSource noise_;
+    std::array<synth::pluck::PluckVoice, synth::pluck::kNumVoices> voices_;
+    std::array<BodyBand, kNumBodyBands> body_;
+    juce::SmoothedValue<float> smoothedLevel_, smoothedBody_;
+};

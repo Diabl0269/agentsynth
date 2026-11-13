@@ -121,7 +121,51 @@ void HostedPluginBackend::createInstanceAsync(const PluginIdentity& identity, do
         return;
     }
 
+    if (isSkippedForNextLoad(description)) {
+        failAsync(std::move(callback),
+                  identity.name + " is switched off for this open: Agent Synth quit inside it last time.");
+        return;
+    }
+
     createInstanceAsync(description, sampleRate, blockSize, std::move(callback));
+}
+
+void HostedPluginBackend::skipPluginForNextLoad(const juce::String& name, const juce::String& bundlePath) {
+    skippedPlugins_.push_back({name, bundlePath});
+}
+
+namespace {
+// A VST3's fileOrIdentifier is its bundle path; an AudioUnit's is not a path, so the bundle's
+// name (which is the plugin's name for both) is the second way in.
+bool descriptionMatchesSkip(const juce::PluginDescription& description, const juce::String& name,
+                            const juce::String& bundlePath) {
+    if (description.fileOrIdentifier.isNotEmpty() && juce::File(description.fileOrIdentifier) == juce::File(bundlePath))
+        return true;
+    return description.name.equalsIgnoreCase(name);
+}
+} // namespace
+
+bool HostedPluginBackend::isSkippedForNextLoad(const juce::PluginDescription& description) const {
+    for (const auto& skipped : skippedPlugins_)
+        if (descriptionMatchesSkip(description, skipped.name, skipped.bundlePath))
+            return true;
+    return false;
+}
+
+// The same question for an identity: false when it does not resolve.
+bool HostedPluginBackend::isSkippedForNextLoad(const PluginIdentity& identity) const {
+    juce::PluginDescription description;
+    return !skippedPlugins_.empty() && resolveIdentity(identity, description) && isSkippedForNextLoad(description);
+}
+
+// Ends the skip for just the plugin `identity` resolves to; other plugins stay skipped.
+void HostedPluginBackend::clearSkipFor(const PluginIdentity& identity) {
+    juce::PluginDescription description;
+    if (skippedPlugins_.empty() || !resolveIdentity(identity, description))
+        return;
+    std::erase_if(skippedPlugins_, [&](const SkippedPlugin& skipped) {
+        return descriptionMatchesSkip(description, skipped.name, skipped.bundlePath);
+    });
 }
 
 //==============================================================================

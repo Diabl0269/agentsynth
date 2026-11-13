@@ -175,12 +175,37 @@ public:
         juce::String transportError;
     };
 
+    /** Result of DELETE /v1/account. 204 is success and carries no body. A refusal carries the
+        server's `error.code` / `error.message`; kSubscriptionActive is the 409 "cancel the
+        subscription first" code. */
+    struct DeleteAccountResult {
+        static constexpr const char* kSubscriptionActive = "SUBSCRIPTION_ACTIVE";
+
+        bool ok = false;
+        int httpStatus = 0; // 0 when the request never completed
+        juce::String errorCode;
+        juce::String errorMessage;
+        juce::String transportError;
+
+        bool isSubscriptionActive() const { return httpStatus == 409 && errorCode == kSubscriptionActive; }
+        bool isUnauthorised() const { return httpStatus == 401; }
+    };
+
+    /** Result of POST /v1/exit-survey. `ok` is the whole story. */
+    struct SubmitExitSurveyResult {
+        bool ok = false;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
     // Test-specific constructor to inject a fake HTTP transport (no real sockets). `deviceId`
     // defaults to empty (omitted from requests) so existing 3-arg call sites keep compiling.
     AuthClient(juce::String host, juce::String clientId, HttpPerformer performer, juce::String deviceId = "");
+
+    /** The platform transport (libcurl, or WinHTTP on Windows) the production constructor installs. */
+    static HttpPerformer defaultHttpPerformer();
 
     /** POST /v1/auth/device/code — starts a device-code flow. */
     DeviceCodeResult requestDeviceCode(const std::atomic<bool>& cancelled) const;
@@ -203,7 +228,7 @@ public:
                                                                  const std::atomic<bool>& cancelled) const;
 
     /** PUT /v1/prompt-learning with `Authorization: Bearer <accessToken>` and a JSON
-        `{"opted_in": optedIn}` body (P6-7). Toggling to false purges the server's accumulated
+        `{"opted_in": optedIn}` body. Toggling to false purges the server's accumulated
         samples for this user; that purge is a server-side concern, nothing further for the client
         to do. */
     PromptLearningPreferenceResult setPromptLearningPreference(const juce::String& accessToken, bool optedIn,
@@ -229,7 +254,7 @@ public:
 
     /** POST /v1/conversations/:conversationId/messages/:messageId/feedback with
         `Authorization: Bearer <accessToken>` and a JSON `{"rating": rating, "comment"?: comment}`
-        body (P6-9). `rating` is "up" or "down"; `comment` is omitted from the body entirely when
+        body. `rating` is "up" or "down"; `comment` is omitted from the body entirely when
         empty, same convention as PatchFeedbackStore::record()'s local log. Server-side this is
         Pro-gated (403 for a non-Pro account) and returns 404 when the conversation/message id is
         wrong or not owned by this user — this client has no plan awareness of its own (same as
@@ -240,16 +265,27 @@ public:
                                                       const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/feedback with a JSON `{"category": category, "text": text}` body.
-        `category` is "bug", "feature", or "other". Unlike submitMessageFeedback (P6-9), the server
+        `category` is "bug", "feature", or "other". Unlike submitMessageFeedback, the server
         does NOT plan-gate this -- any account, signed in or not, may submit general feedback.
         `Authorization: Bearer <accessToken>` is set only when `accessToken` is non-empty; the
         `X-Device-Id` header is always set from this AuthClient's own device id (see `deviceId`
         below) when non-empty, so a signed-out caller still gets attributed feedback via the
-        device's stable anonymous id (P6-17). Callers pass an empty `accessToken` to submit
+        device's stable anonymous id. Callers pass an empty `accessToken` to submit
         anonymously. */
     SubmitGeneralFeedbackResult submitGeneralFeedback(const juce::String& accessToken, const juce::String& category,
                                                       const juce::String& text,
                                                       const std::atomic<bool>& cancelled) const;
+
+    /** DELETE /v1/account with `Authorization: Bearer <accessToken>`. Removes the signed-in account
+        and everything it owns; the caller signs out locally on success. */
+    DeleteAccountResult deleteAccount(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
+
+    /** POST /v1/exit-survey with `Authorization: Bearer <accessToken>` and a JSON
+        `{"kind": kind, "reasons": [...], "comment"?: comment}` body. `kind` is "cancel" or "delete";
+        `comment` is omitted when empty. */
+    SubmitExitSurveyResult submitExitSurvey(const juce::String& accessToken, const juce::String& kind,
+                                            const std::vector<juce::String>& reasons, const juce::String& comment,
+                                            const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,
         so the return value only reflects whether the transport succeeded — callers are not

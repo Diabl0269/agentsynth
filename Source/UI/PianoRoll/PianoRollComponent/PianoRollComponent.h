@@ -1,13 +1,17 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
 #include "PianoRollTypes.h"
-#include "Timeline/MusicalScale.h"
+#include "Timeline/ClipKey.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
+#include "UI/PianoRoll/VelocityLane/VelocityLaneSlide.h"
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/FollowPlayhead.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
@@ -15,6 +19,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -46,6 +51,10 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // See docs/timeline/piano-roll.md#select-tool-gestures for the gesture table.
 namespace synth::ui {
+
+class PianoRollVelocityLane; // UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
+class PianoRollHeaderChip;   // PianoRollHeaderChip.h
+class EditorTabWalk;         // UI/Layout/EditorTabWalk.h
 
 class PianoRollComponent
     : public juce::Component
@@ -79,6 +88,8 @@ public:
     // stroke across the ruler and the roll.
     // canvasTop()/setRulerBandHeight()/getRulerBandHeight() — see PianoRollEditTools.cpp.
     int canvasTop() const noexcept;
+    // The y where the note canvas ends: the component's bottom, less the velocity strip when shown.
+    int canvasBottom() const noexcept;
     void setRulerBandHeight(int heightPx);
     int getRulerBandHeight() const noexcept;
 
@@ -101,6 +112,8 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    // Pressing/releasing Option mid-drag toggles copy <-> move; see PianoRollCopyDrag.cpp.
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     // Cmd+wheel        -> horizontal zoom around the beat under the cursor
     // Cmd+Shift+wheel  -> vertical zoom (pixels per semitone) around the pitch under the cursor
@@ -110,8 +123,9 @@ public:
     // TimelineViewState must not move when the wheel lands here. See PianoRollMouse.cpp for the
     // full per-branch contract.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
-    // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
-    // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
+    // Trackpad pinch: plain = horizontal and vertical zoom around the pinch point, Shift or Option =
+    // vertical only, Cmd = horizontal only — the same mapping TimelinePanelComponent::mouseMagnify
+    // binds for the lanes.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
     // Hover-only work: the Split tool's cut-position preview and the Select tool's resize-zone
     // cursor — see PianoRollMouse.cpp for the state-change gating that keeps this free while idle.
@@ -128,23 +142,35 @@ public:
     // on, the same TimelineClipLaneArea contract.
     bool keyPressed(const juce::KeyPress& key) override;
 
+    // ---- Focused note and screen reader (PianoRollAccessibility.cpp) ----
+
+    // The focused note is the one note the selection holds (what Alt+Left/Right land on); invalid
+    // when nothing, or more than one note, is selected. It is outlined with the accent focus ring
+    // while the roll holds keyboard focus.
+    synth::NoteId getFocusedNote() const noexcept;
+    // What a screen reader says for the grid: the focused note ("C4, bar 2 beat 1, length 1/8,
+    // velocity 100"), else the clip's name and note count. Empty while no clip is open.
+    juce::String getAccessibilityValueText() const;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    void focusGained(juce::Component::FocusChangeType) override;
+    void focusLost(juce::Component::FocusChangeType) override;
+
     // juce::TooltipClient — the "Q" button's tooltip (the header's buttons are drawn shapes, not
     // child juce::Buttons, so the tooltip is resolved by position).
     juce::String getTooltip() override;
     juce::String getTooltipFor(juce::Point<int> pos) const;
 
-    // Non-owning; may be null. Same degrade-gracefully contract as every other timeline
-    // sub-component's setter.
+    // Non-owning; may be null (same degrade-gracefully contract as every timeline sub-component's setter).
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept;
     synth::TimelineDoc* getTimelineDoc() const noexcept;
     void setUndoManager(AppUndoManager* undoManager) noexcept;
     AppUndoManager* getUndoManager() const noexcept;
-    // Only consulted for Snap::Bar's beatsPerBar, same reasoning as
-    // TimelineClipLaneArea::setTransport.
+    // Snap::Bar's beatsPerBar (as in TimelineClipLaneArea::setTransport) and the song key a following clip uses.
     void setTransport(synth::TransportService* transport) noexcept;
+    // Message thread, cheap: re-shows a following clip's key when the song key changed (the transport poll).
+    void refreshSongKey();
 
-    // The user's keyboard bindings for this surface's OWN keys — see PianoRollZoom.cpp for the full
-    // resolution contract.
+    // The user's bindings for this surface's own keys (resolution contract: PianoRollZoom.cpp).
     void setShortcutManager(const ShortcutManager* manager) noexcept;
     const ShortcutManager* getShortcutManager() const noexcept;
 
@@ -191,6 +217,8 @@ public:
     synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept;
     const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept;
     void toggleScalePanel();
+    /** The scale panel is on its way in or fully shown, with a clip open in the roll. */
+    bool isScalePanelShowing() const noexcept { return isOpen() && scalePanelVisible_; }
     juce::Rectangle<int> getScaleButtonBounds() const noexcept;
 
     // quantisePitchesToScale/quantisePitchesToActiveScale/isPitchQuantiseEnabled — see
@@ -208,6 +236,28 @@ public:
     // contract (addToExisting replace-vs-overlay semantics, grid-step/scale resolution).
     void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch, juce::Random& rng,
                                      bool addToExisting = false);
+
+    // ---- Velocity strip (PianoRollVelocity.cpp) ----
+
+    // Shown by default; persisted through the properties file when one is set.
+    void setVelocityLaneVisible(bool visible, bool animate = true); // slides unless animate is false
+    bool isVelocityLaneVisible() const noexcept;
+    void toggleVelocityLane();
+    // The strip's remembered height before layout's own clamp; dragged on its top edge, persisted.
+    int getVelocityLaneHeight() const noexcept;
+    // Adds a random offset in [-range, +range] to each selected note (all notes when none is
+    // selected), clamped to [1, 127]; one undo step.
+    void humanizeVelocities(int range);
+    void setHumanizeRandomSeed(juce::int64 seed);
+    // Sets the selected notes (all when none is selected) to the typed 1..127 value, one undo step;
+    // false (and the box reverts) for anything else.
+    bool applyVelocityValueText(const juce::String& text);
+    PianoRollVelocityLane& getVelocityLane() noexcept;
+    juce::TextEditor& getVelocityValueBox() noexcept;
+    juce::Rectangle<int> getVelocityChipBounds() const noexcept;
+    juce::Rectangle<int> getVelocityGroupBounds() const noexcept;   // frame round chips, caption and box
+    juce::Rectangle<int> getVelocityCaptionBounds() const noexcept; // the "Set" text before the box
+    juce::Rectangle<int> getHumanizeChipBounds() const noexcept;
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
@@ -242,12 +292,19 @@ public:
     bool isOpen() const noexcept;
     synth::ClipId getClipId() const noexcept;
 
-    // Fired when the roll asks to be closed (back button, Escape, or the edited clip disappearing)
-    // — not fired by a direct closeRoll() call. See PianoRollComponent.cpp (refreshFromDoc).
+    // Fired when the roll asks to be closed (back button, Escape, clip gone), not by a direct closeRoll().
     std::function<void()> onCloseRequested;
+    // Fired just before requestClose() empties the roll, so the owner can picture it as it was.
+    std::function<void()> onAboutToClose;
+    // The "Drum machine" chip, shown while the open clip is on a Drum Kit track (setDrumKitTrack), was pressed.
+    std::function<void(synth::ClipId)> onDrumMachineRequested;
+    void setDrumKitTrack(bool isDrumKit);
 
-    // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
-    std::function<void()> onSnapToggled;
+    // Fired by P with notes selected: the selection's [start, end] in absolute beats.
+    std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+
+    std::function<void()> onSnapToggled; // after toggleSnap() flips the shared snap flag (ClipboardAndKeys.cpp)
+    std::function<void(bool enabled)> onSnapKeyToggled; // J only (not the Q button), after onSnapToggled
 
     // Fired whenever the roll's OWN horizontal mapping changed — see PianoRollComponent.cpp.
     std::function<void()> onHorizontalViewChanged;
@@ -277,27 +334,20 @@ public:
     bool isScaleFilterOn() const noexcept;
     bool isRowFilterActive() const noexcept;
 
-    // ---- Follow playhead ----
-
-    // When on, setPlayheadBeat page-flips the roll's own horizontal view rather than letting it
-    // scroll off the edge — see PianoRollPainting.cpp (setPlayheadBeat) and PianoRollMouse.cpp
-    // (autoScrollTick, which this gates against) for the full contract.
+    // ---- Follow playhead ---- the contract is in PianoRollPainting.cpp (setPlayheadBeat).
     void setFollowPlayhead(bool follow) noexcept;
+    void setFollowStyle(FollowMode mode, int pointPercent) noexcept;
     bool isFollowPlayhead() const noexcept;
 
     // THE refresh seam, called on every doc mutation — see PianoRollComponent.cpp.
     void refreshFromDoc();
-
     // ---- The roll's OWN horizontal mapping ----
-
     // Absolute beat <-> this component's x — see PianoRollComponent.cpp.
     double beatToX(double absBeat) const noexcept;
     double xToBeat(double x) const noexcept;
-
     double getPixelsPerBeat() const noexcept;
     double getFirstVisibleBeat() const noexcept;
     double getPixelsPerSemitone() const noexcept;
-
     // Pins the horizontal mapping directly — see PianoRollComponent.cpp.
     void setHorizontalView(double pixelsPerBeat, double firstVisibleBeat);
     void setPixelsPerSemitone(double pixelsPerSemitone);
@@ -312,9 +362,8 @@ public:
     int getPlayheadLineX() const noexcept;
     bool hasPlayheadPosition() const noexcept;
 
-    // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest); each
-    // one's contract is documented next to its out-of-line definition in the matching
-    // PianoRoll<Concern>.cpp unit ----
+    // ---- Test hooks; each one's contract is beside its definition in the matching PianoRoll<Concern>.cpp ----
+    synth::ui::EditorTabWalk& getTabWalkForTest() noexcept { return *tabWalk_; }
     juce::Rectangle<int> getBackButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantiseButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantiseLengthButtonBounds() const noexcept;
@@ -329,8 +378,10 @@ public:
     double getMaxTopRowPositionForTest() const noexcept;
     bool isMarqueeActiveForTest() const noexcept;
     NoteSelectionModel& getSelectionForTest() noexcept;
-
     void tickAutoScrollForTest();
+    bool isCopyDragForTest() const noexcept;
+    std::vector<pianoroll::NoteGeometry> getCopyGhostsForTest() const;
+    pianoroll::NoteGeometry getShownGeometryForTest(synth::NoteId id) const;
     bool isAutoScrollTimerRunningForTest() const noexcept;
 
     const std::vector<int>& getVisiblePitchesForTest() const noexcept;
@@ -361,6 +412,8 @@ public:
     float getScalePanelAnimFromForTest() const noexcept;
     bool isScalePanelAnimatingForTest() const noexcept;
     bool isScalePanelTargetVisibleForTest() const noexcept;
+    synth::ui::VelocityLaneSlide& velocityLaneSlideForTest() noexcept;
+    void setVelocityLaneSlideProgressForTest(float progress);
 
     int getAuditionPitchForTest() const noexcept;
     bool isAuditionActiveForTest() const noexcept;
@@ -372,11 +425,28 @@ public:
     double getLastExtendPromptLengthForTest() const noexcept;
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // Six header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
-    // Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions.
-    enum class HeaderButtonId { None, Back, Quantise, QuantiseLength, QuantisePitches, Scale, ScaleFilter };
+    // Header chips: Back ("Clips"), DrumMachine (Drum Kit tracks only, right after Back), Quantise, QuantiseLength,
+    // QuantisePitches, Scale, ScaleFilter, Velocity, Humanize. Scale, ScaleFilter and Velocity paint lit when on.
+    enum class HeaderButtonId {
+        None,
+        Back,
+        Quantise,
+        QuantiseLength,
+        QuantisePitches,
+        Scale,
+        ScaleFilter,
+        Velocity,
+        Humanize,
+        DrumMachine
+    };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
+    /** A header chip's current bounds in this component's coordinates (empty before the first layout). */
+    juce::Rectangle<int> getHeaderChipBounds(HeaderButtonId which) const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
+    /** The keyboard/screen-reader button over a header chip (null for None). */
+    juce::Button* getHeaderChipButtonForTest(HeaderButtonId which) noexcept;
+    /** Paints the focused-note ring as if the roll held keyboard focus (no native window headless). */
+    void setFocusRingForcedForTest(bool forced) noexcept;
 
 protected:
     // Paint-count seams for tests (the local playhead line, the Split-tool hover preview, and the
@@ -441,16 +511,25 @@ private:
 
     // createNoteAt/computeNewNoteAnchor/commitNewNote/beginMoveOrResize/beginVelocityScrub/
     // beginMarquee/updateMarquee/endMarquee — gesture-start helpers; see PianoRollEditTools.cpp for
-    // the full contract of each (snap-vs-floor anchor rules, the one-undo-step shape).
+    // the full contract of each (the one-undo-step shape). A new note starts at the left line of the
+    // grid cell under `pos` and is one division long; Snap Off starts exactly at `pos`.
     void createNoteAt(juce::Point<int> pos);
-    bool computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut, double& lengthOut,
-                              int& pitchOut) const;
+    bool computeNewNoteAnchor(juce::Point<int> pos, double& startOut, double& lengthOut, int& pitchOut) const;
     void commitNewNote(double startBeat, double lengthBeats, int pitch);
     void beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos);
     void beginVelocityScrub(juce::Point<int> pos);
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
+
+    // ---- Option+drag copy (PianoRollCopyDrag.cpp) ---- message thread only.
+    void setCopyDrag(bool copy);
+    void updateMoveCursor(); // grab/copy while a move drag is live, else back to the tool cursor
+    void commitCopyDrag();
+    bool cancelNoteDrag(); // Esc: true when any note drag was in flight and is now abandoned
+    void startGhostSettle(bool dropped);
+    void clearGhostSettle();
+    void paintCopyGhosts(juce::Graphics& g);
 
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ---- updateDragPreviewFromLastPointer/
     // updateAutoScrollArming — see PianoRollMouse.cpp for the full contract.
@@ -482,6 +561,17 @@ private:
     // PianoRollPainting.cpp for the full contract.
     juce::Rectangle<int> headerButtonBoundsFor(HeaderButtonId which) const noexcept;
     void updateHeaderButtonHover(juce::Point<int> pos);
+    HeaderButtonId headerButtonAt(juce::Point<int> pos) const noexcept;
+    // The one action a chip performs, shared by a click and by its keyboard button.
+    void activateHeaderButton(HeaderButtonId which);
+    juce::String headerTooltipText(HeaderButtonId which) const;
+    // The keyboard/screen-reader buttons over the painted chips (PianoRollAccessibility.cpp).
+    void initHeaderChips();
+    void layoutHeaderChips();
+    void syncHeaderChipStates();
+    // Announces the grid's value text when it changed since the last announcement.
+    void refreshAccessibilityValue();
+    void paintFocusedNoteRing(juce::Graphics& g);
 
     // ---- Clipboard plumbing ---- see PianoRollClipboardAndKeys.cpp for the full contract of each
     // (anchor-block rules, clip-window clamp, one-undo-step shape).
@@ -492,6 +582,7 @@ private:
 
     // ---- Arrow-key editing ---- see PianoRollClipboardAndKeys.cpp for the full contract
     // (shared-delta clamping, row-vs-semitone stepping).
+    bool loopSelectedNotes();
     bool nudgeSelectedNotes(int direction);
     bool transposeSelectedNotes(int semitones);
     bool transposeSelectedNotesByRow(int rowDelta);
@@ -512,6 +603,7 @@ private:
     juce::String quantisePitchTooltipText() const;
     juce::String scaleTooltipText() const;
     juce::String scaleFilterTooltipText() const;
+    juce::String velocityTooltipText() const;
 
     // ---- Header chip glyphs (drawn vector paths — see paintHeader, PianoRollPainting.cpp) ----
     static void drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
@@ -547,9 +639,26 @@ private:
     void setScalePanelVisible(bool visible, bool animate = true);
     void applyScalePanelOpenProgress(float progress);
     void finishScalePanelAnimation();
+    synth::ResolvedClipKey resolvedKeyForOpenClip() const;
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
-    void pushScaleContextFromMemory();
-    void restoreScaleMemoryForOpenClip();
+    void pushScaleContextFromClip();
+    void restoreScaleForOpenClip();
+    void commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn, bool carryRange = false);
+
+    // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
+    void initVelocityControls();
+    int velocityLaneHeightPx() const noexcept; // the animated band the grid gives up
+    int velocityLaneFullHeightPx() const noexcept;
+    void setVelocityLaneHeight(int height);
+    int clampedVelocityLaneHeight(int desiredHeight) const noexcept;
+    void onVelocityLaneResized(int desiredHeight);
+    void onVelocityLaneResizeCommitted(int desiredHeight);
+    void layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas);
+    void commitVelocities(const std::vector<std::pair<synth::NoteId, int>>& targets);
+    std::vector<synth::NoteId> velocityTargetIds() const;
+    void syncVelocityValueBox();
+    void showHumanizeMenu();
+    void clearVelocityPreview();
 
     // ---- Keys-column audition ---- see PianoRollAudition.cpp for the full contract.
     bool isKeysColumnPoint(juce::Point<int> pos) const noexcept;
@@ -584,13 +693,11 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
-    // Non-owning, may stay null (see setShortcutManager). const because the roll only ever READS
-    // bindings — rebinding is the Settings window's job.
+    // Non-owning, may stay null; read only (rebinding is the Settings window's job).
     const ShortcutManager* shortcuts_ = nullptr;
     // App-level scroll-direction preference; false == natural == the juce::Viewport convention.
     bool scrollInverted_ = false;
-    // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
-    // scrollInverted_ — see setZoomScrollInverted.
+    // App-level ZOOM-direction preference (false: wheel up zooms in); see setZoomScrollInverted.
     bool zoomScrollInverted_ = false;
     synth::ClipId clipId_;
     NoteSelectionModel selection_;
@@ -687,6 +794,12 @@ private:
     // ignores it for a resize (one modifier, one meaning — "do this smoothly"). Latched at mouse-down
     // for the same reason resizeUnquantized_ is.
     bool moveUnquantized_ = false;
+    // Move drag currently placing COPIES (Option held now, re-read every drag event).
+    bool copyDrag_ = false;
+    bool dragCursorShown_ = false; // the grab/copy cursor is up and must be restored on release
+    // Post-drop / post-cancel ghost tween; runs on scalePanelVblankUpdater_ (created lazily).
+    std::optional<pianoroll::GhostSettle> ghostSettle_;
+    synth::ui::AnimationDriver ghostAnim_;
     // Cmd+CLICK on a note is an additive-select TOGGLE, but Cmd+DRAG is an unsnapped move — and at
     // mouse-down the two are indistinguishable. So the note is ADDED immediately (the drag needs it in
     // the selection) and, if the gesture turns out not to have moved anything, mouse-up undoes that:
@@ -749,6 +862,8 @@ private:
     bool hasPlayheadX_ = false;
     // See setFollowPlayhead. Off by default.
     bool followPlayhead_ = false;
+    FollowMode followMode_ = FollowMode::Page;
+    int followPointPercent_ = kDefaultFollowPointPercent;
     // Follow's auto-page branch (setPlayheadBeat) is suspended -- i.e. it never moves rollView_ --
     // until this goes back to false. Set whenever the user changes the horizontal view on their
     // own terms (openClip's fresh fit-to-clip framing counts: a stale follow position from the
@@ -796,14 +911,13 @@ private:
     // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
+    // Eases a mouse-wheel NOTCH (axis 0 = beats, 1 = rows). Stopped before any other view move.
+    synth::ui::ScrollTweenRunner wheelTween_;
+    void scrollByWheel(int axis, double amount, bool eased);
+    void applyWheelScroll(int axis, double amount);
     // Within the house 160-220 ms spec (docs/layout/animation.md), matching MainComponent's own
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
-
-    // ClipScaleMemory is defined in PianoRollTypes.h; re-exposed as a nested-type alias so
-    // PianoRollComponent::ClipScaleMemory keeps resolving exactly as when it was nested.
-    using ClipScaleMemory = pianoroll::ClipScaleMemory;
-    std::map<synth::ClipId, ClipScaleMemory> clipScaleMemory_;
 
     // ---- Edge auto-scroll timer ----
     //
@@ -841,22 +955,42 @@ private:
     std::vector<ClipboardNote> noteClipboard_;
 
     juce::Rectangle<int> backButtonBounds_;
+    juce::Rectangle<int> drumMachineChipBounds_; // empty unless drumKitTrack_
+    bool drumKitTrack_ = false;
     // Quantise note STARTS to the grid (a drawn "blocks aligned on gridlines" glyph). An action.
     juce::Rectangle<int> quantiseButtonBounds_;
-    // Quantise note LENGTHS to the grid (a drawn "block's trailing edge snapping to a gridline"
-    // glyph). An action; Alt+Q's visible twin (see PianoRollZoom.cpp's keyPressed).
+    // Quantise note LENGTHS to the grid (a drawn trailing-edge glyph). An action; Alt+Q's visible twin.
     juce::Rectangle<int> quantiseLengthButtonBounds_;
     // Quantise note PITCHES into the scale (a drawn "note head snapping onto a row" glyph).
     juce::Rectangle<int> quantisePitchButtonBounds_;
-    // "Show only scale notes" — the row filter, surfaced here as its PRIMARY control (a drawn funnel
-    // glyph). A toggle, so it paints lit; shares one state with the scale panel — see
-    // toggleScaleFilter().
+    // "Show only scale notes": the row filter's primary control (funnel glyph); a toggle sharing the scale panel's
+    // state.
     juce::Rectangle<int> scaleFilterButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
 
+    // ---- Velocity strip ---- a child component; see PianoRollVelocity.cpp.
+    std::unique_ptr<PianoRollVelocityLane> velocityLane_;
+    bool velocityLaneVisible_ = true;
+    // The strip's remembered height (top-edge drag); clamped afresh at layout, never mutated by it.
+    int velocityLaneHeight_ = 0; // set to the lane's default in initVelocityControls()
+    // The strip gesture's live values, read by effectiveGeometryFor; empty outside a gesture.
+    std::map<synth::NoteId, int> velocityPreview_;
+    juce::TextEditor velocityBox_;
+    juce::Rectangle<int> velocityChipBounds_;
+    juce::Rectangle<int> humanizeChipBounds_;
+    juce::Rectangle<int> velocityGroupBounds_, velocityCaptionBounds_;
+    synth::ui::VelocityLaneSlide velocityLaneSlide_; // the strip's open fraction + tween
+    juce::Random humanizeRandom_;
+
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
     HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;
+    std::array<std::unique_ptr<PianoRollHeaderChip>, 9> headerChips_; // indexed by HeaderButtonId - 1
+    juce::String announcedValueText_;
+    bool focusRingForced_ = false;
+    void addTestModeProbe();
+    std::unique_ptr<juce::Component> testModeProbe_;    // reports the roll's zoom to test mode; no size, no input
+    std::unique_ptr<synth::ui::EditorTabWalk> tabWalk_; // set up in PianoRollAccessibility.cpp
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollComponent)
 };

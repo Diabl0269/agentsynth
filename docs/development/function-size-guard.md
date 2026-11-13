@@ -84,7 +84,8 @@ same-size function whose FILE git confirms was renamed is accepted by `--update`
 everything over the cap.
 
 How to split an over-cap function is the root `CLAUDE.md`'s "Code structure" rule: extract a named
-step, or a real collaborator class when the concern has its own state.
+step, or a real collaborator class when the concern has its own state. Extract when a function needs
+section comments or passes roughly a screen (~60-80 lines).
 
 ## Locale: the scanner fails open under UTF-8
 

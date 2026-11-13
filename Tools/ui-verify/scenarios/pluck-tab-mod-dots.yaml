@@ -1,0 +1,101 @@
+# Several mod cables on a Pluck's tabbed knobs met at one point and showed no mod dot.
+#
+# What a user does: adds a Pluck and three LFOs, and drops one LFO on Decay (String tab), one on Pick position (Pick
+# tab) and one on Tune (Tune tab). Each cable ends on its own knob with a mod dot while that knob's tab is shown; the
+# cables of the other tabs wait apart at the card's left edge by the tab strip. Switching tabs glides the ends.
+# The glide is stepped frame by frame in CableEndGlideTests (TabbedKnobCables); here the strips film it.
+motion: true
+record: true
+save_project: fro1675 pluck lfo tabs
+steps:
+  - click: {id: New empty project, instant: "the status bar text changes (New patch, plugin scan progress)"}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: pluck}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Pluck", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  # The cards land at the bottom of the canvas: drag each up as it arrives.
+  - drag: {from: "card:Pluck", fromX: 120, fromY: 14, to: window, toX: 520, toY: 160}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 14, to: window, toX: 120, toY: 80}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 100, fromY: 14, to: window, toX: 120, toY: 360}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {}
+  - drag: {from: "card:LFO 3", fromX: 100, fromY: 14, to: window, toX: 980, toY: 80}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Pluck > Decay"}
+  - wait: {}
+  - click: {id: "card:Pluck > cardTabStrip", x: 128, y: 12}   # the Pick tab
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 268, fromY: 56, to: "card:Pluck > Pick position"}
+  - wait: {}
+  - click: {id: "card:Pluck > cardTabStrip", x: 216, y: 12}   # the Tune tab
+  - wait: {}
+  - drag: {from: "card:LFO 3", fromX: 268, fromY: 56, to: "card:Pluck > Tune"}
+  - wait: {}
+  - expect: {id: "card:Pluck", contains: {cabledTargets: Decay}, within_ms: 3000}
+  - expect: {id: "card:Pluck", contains: {cabledTargets: Pick position}}
+  - expect: {id: "card:Pluck", contains: {cabledTargets: Tune}}
+  - expect: {id: "card:Pluck", contains: {modDots: "Tune modulation"}, within_ms: 3000}
+  - getState: {id: "card:Pluck"}
+  - screenshot: {id: "card:Pluck", name: tune-tab-own-dot}
+  # Check 1: on the Tune tab, Tune's cable ends on its knob with its dot; Decay's and Pick position's wait apart.
+  - mark: {check: 1, name: tune-tab-cables-apart}
+  - glide: {name: to-string-tab, frames: 10, crop: {x: 700, y: 140, w: 340, h: 320}, do: {click: {id: "card:Pluck > cardTabStrip", x: 40, y: 12}}}
+  - wait: {}
+  - expect: {id: "card:Pluck", contains: {modDots: "Decay modulation", cableEndGliding: "false"}, within_ms: 2000}
+  - getState: {id: "card:Pluck"}
+  # Check 2: the String tab shows Decay's dot and cable end; the switch glided the ends.
+  - mark: {check: 2, name: string-tab-decay-dot}
+  - glide: {name: to-pick-tab, frames: 10, crop: {x: 700, y: 140, w: 340, h: 320}, do: {click: {id: "card:Pluck > cardTabStrip", x: 128, y: 12}}}
+  - wait: {}
+  - expect: {id: "card:Pluck", contains: {modDots: "Pick position modulation", cableEndGliding: "false"}, within_ms: 2000}
+  - getState: {id: "card:Pluck"}
+  # Check 3: the Pick tab shows Pick position's dot.
+  - mark: {check: 3, name: pick-tab-own-dot}
+  # Keyboard: Tab from the Pick position knob reaches its dot.
+  - click: {id: "card:Pluck > Pick position"}
+  - key: {keys: tab}
+  - wait: {}
+  - mark: {check: 4, name: pick-dot-focus-ring}

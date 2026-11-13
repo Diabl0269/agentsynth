@@ -3,6 +3,7 @@
 // band, dark/light PNG render showing a boost/cut difference, dimmed when bypassed, and the
 // recompute-only-on-parameter-change discipline (root CLAUDE.md "No unconditional per-tick
 // repaint") -- plus the click-forwards-to-onClicked seam MixerColumnComponent binds to.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
@@ -124,8 +125,9 @@ TEST(MixerEqThumbnailTests, DimmedWhenBypassed) {
 
     const auto activeImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 
+    const int recomputesBefore = thumbnail.getRecomputeCountForTest();
     eq.setBypassed(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return thumbnail.getRecomputeCountForTest() > recomputesBefore; });
 
     const auto bypassedImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 
@@ -158,7 +160,7 @@ TEST(MixerEqThumbnailTests, RecomputeOnlyOnParameterChange) {
 
     // One parameter write + a pumped dispatch loop coalesces to exactly one more recompute.
     eq.setBandGain(1, -6.0f);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (thumbnail.getRecomputeCountForTest()) == (afterBind + 1); });
     EXPECT_EQ(thumbnail.getRecomputeCountForTest(), afterBind + 1);
 
     thumbnail.paint(g);
@@ -218,4 +220,35 @@ TEST(MixerEqThumbnailTests, DoesNotTouchFreedParametersWhenTheNodeWasRemovedWith
     // No crash/UAF is the point: this must not dereference the now-freed ParametricEQModule*.
     thumbnail.setEqModule(nullptr);
     EXPECT_FALSE(thumbnail.isVisible());
+}
+
+TEST(MixerEqThumbnailTests, TheBadgeCountsEveryBandAndTheTooltipSaysSo) {
+    ParametricEQModule eq;
+    for (int b = 0; b < 16; ++b)
+        eq.setBandEnabled(b, true);
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(&eq);
+    EXPECT_EQ(thumbnail.getBandCount(), 16);
+    EXPECT_EQ(thumbnail.getBadgeText(), "16");
+    EXPECT_TRUE(thumbnail.getTooltip().startsWith("EQ: 16 bands."));
+    thumbnail.setEqModule(nullptr);
+}
+
+TEST(MixerEqThumbnailTests, OneBandIsSingularAndNoBandsShowNoBadge) {
+    ParametricEQModule eq;
+    for (int b = 0; b < 4; ++b)
+        eq.setBandEnabled(b, false);
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(&eq);
+    EXPECT_EQ(thumbnail.getBandCount(), 0);
+    EXPECT_TRUE(thumbnail.getBadgeText().isEmpty());
+
+    const int before = thumbnail.getRecomputeCountForTest();
+    eq.setBandEnabled(2, true);
+    synth::test::waitUntil([&] { return thumbnail.getRecomputeCountForTest() > before; });
+    EXPECT_EQ(thumbnail.getBandCount(), 1);
+    EXPECT_TRUE(thumbnail.getTooltip().startsWith("EQ: 1 band."));
+    thumbnail.setEqModule(nullptr);
 }

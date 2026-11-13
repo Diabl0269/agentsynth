@@ -9,16 +9,21 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/LFOModule.h"
+#include "Modules/Shapes/MorphShapes.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
 using namespace detail;
 using synth::LfoCustomWave;
 using synth::ui::CurveHitKind;
 using synth::ui::CurveHitResult;
-using synth::ui::CurveMode;
-using synth::ui::CurveModel;
-using synth::ui::CurveNode;
 using synth::ui::CurvePlayhead;
 
 namespace {
@@ -34,49 +39,24 @@ constexpr int kLfoToolbarGap = 6;
 const char* const kLfoPresetNames[] = {"Triangle",  "Ramp Up",   "Ramp Down", "Square",
                                        "Pulse 1/4", "Steps (4)", "Soft Sine"};
 const char* const kLfoToolNames[] = {"Invert", "Reverse", "Straighten", "Clear", "Reset to Default"};
-// Grid combo entries: divisions-per-axis (0 == Off), index-parallel to the display label.
-const int kLfoGridDivisions[] = {0, 4, 8, 16, 32};
-const char* const kLfoGridLabels[] = {"Grid Off", "Grid 1/4", "Grid 1/8", "Grid 1/16", "Grid 1/32"};
-
-// Free-mode CurveModel <-> LfoCustomWave: the LFO card's own topology (spec section 4 "Card
-// wiring"). Endpoints are pinned in x (a wave always spans phase 0..1); every point is movable
-// in y over the full 0..1 range (bipolar/unipolar is a card-side display convention, not a model
-// constraint -- see setFillBaselineLevel below).
-CurveModel buildLfoCurveModel(const LfoCustomWave& wave) {
-    const int n = (int)wave.points.size();
-    std::vector<CurveNode> nodes((size_t)n);
-    for (int i = 0; i < n; ++i) {
-        CurveNode node;
-        node.x = (double)wave.points[(size_t)i].x;
-        node.y = wave.points[(size_t)i].y;
-        node.xMovable = (i != 0 && i != n - 1);
-        node.yMovable = true;
-        node.minY = 0.0f;
-        node.maxY = 1.0f;
-        nodes[(size_t)i] = node;
-    }
-    CurveModel model(CurveMode::Free);
-    model.setNodes(std::move(nodes));
-    for (int seg = 0; seg < n - 1; ++seg)
-        model.setBend(seg, wave.points[(size_t)seg].bend);
-    return model;
-}
-
-LfoCustomWave lfoWaveFromCurveModel(const CurveModel& model) {
-    LfoCustomWave wave;
-    const int n = model.getNumNodes();
-    wave.points.resize((size_t)n);
-    for (int i = 0; i < n; ++i) {
-        const auto& node = model.getNode(i);
-        wave.points[(size_t)i].x = (float)node.x;
-        wave.points[(size_t)i].y = node.y;
-        wave.points[(size_t)i].bend = (i < n - 1) ? model.getBend(i) : 0.0f;
-    }
-    wave.sanitise();
-    return wave;
-}
-
 LFOModule* asLfo(juce::AudioProcessor* module) { return dynamic_cast<LFOModule*>(module); }
+
+/** The shape the morph cursor is on: the one the small curve editor shows and edits (shape 0 with one shape). */
+int nearestLfoShape(const LFOModule& lfo) {
+    return synth::morph::nearestShapeIndex(lfo.getCustomShapes().shapes, lfo.getCurrentMorphX(),
+                                           lfo.getCurrentMorphY());
+}
+
+/** The curve editor's accessible name says which shape it edits once there is a choice. */
+void describeEditedShape(synth::ui::CurveEditorComponent& editor, const LFOModule& lfo, int index) {
+    const auto& shapes = lfo.getCustomShapes().shapes;
+    juce::String text = "Custom waveform of the LFO";
+    if (shapes.size() > 1)
+        text << ", editing "
+             << (shapes[(size_t)index].name.isEmpty() ? "shape " + juce::String(index + 1)
+                                                      : shapes[(size_t)index].name);
+    editor.setDescription(text);
+}
 
 } // namespace
 
@@ -86,7 +66,13 @@ void ModuleComponent::createLfoCardControls() {
         return;
 
     lfoCurveEditor = std::make_unique<synth::ui::CurveEditorComponent>();
-    lfoCurveEditor->setModel(buildLfoCurveModel(lfo->getCustomWave()));
+    lfoCurveEditor->setTitle("LFO custom wave");
+    lfoCurveEditor->setDescription("Custom waveform of the LFO");
+    lfoEditedShape_ = nearestLfoShape(*lfo);
+    describeEditedShape(*lfoCurveEditor, *lfo, lfoEditedShape_);
+    lfoCurveEditor->setModel(
+        synth::ui::curveModelFromWave(lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve));
+    lfoRestoreWatch_ = synth::ui::RestoreWatch(undoManager != nullptr ? undoManager->getRestoreSerial() : 0);
     lfoCurveEditor->setVisibleRangeOverride(1.0);
     lfoCurveEditor->setZeroSegmentPx(0.0f);
     lfoCurveEditor->setTimeLabelFormatter([](double) { return juce::String(); });
@@ -99,22 +85,28 @@ void ModuleComponent::createLfoCardControls() {
     lfoCurveEditor->onNodeChanged = [this](int) { writeLfoWaveFromCurve(); };
     lfoCurveEditor->onBendChanged = [this](int) { writeLfoWaveFromCurve(); };
     lfoCurveEditor->onPointsChanged = [this] { writeLfoWaveFromCurve(); };
+    // With several shapes a double-click on empty space opens the shape editor (Shift keeps adding a point); with one
+    // shape it adds a point as it always did.
+    lfoCurveEditor->onEmptyDoubleClick = [this](const juce::MouseEvent& e) {
+        if (morphCard_ == nullptr || e.mods.isShiftDown() || morphCard_->getNumShapes() < 2)
+            return false;
+        morphCard_->openEditor(lfoEditedShape_);
+        return true;
+    };
     lfoCurveEditor->onContextMenu = [this](const juce::MouseEvent& e, CurveHitResult hit) {
         showLfoWaveContextMenu(e, hit);
     };
 
-    lfoGridCombo = std::make_unique<juce::ComboBox>();
-    for (int i = 0; i < (int)std::size(kLfoGridLabels); ++i)
-        lfoGridCombo->addItem(kLfoGridLabels[i], i + 1);
-    lfoGridCombo->setSelectedId(3, juce::dontSendNotification); // 1/8, the default
+    lfoGridCombo = std::make_unique<synth::ui::NoteLengthBox>();
+    synth::ui::curvegrid::setUpNoteLengthBox(*lfoGridCombo);
+    lfoGridCombo->setCurrentName(synth::ui::curvegrid::defaultNoteLengthName(), juce::dontSendNotification);
+    lfoGridCombo->setTitle("LFO custom wave grid");
+    lfoGridCombo->setTooltip("Grid: the snap grid of the custom wave editor");
     lfoGridCombo->onChange = [this] {
-        if (lfoGridCombo == nullptr)
-            return;
-        const int i = lfoGridCombo->getSelectedId() - 1;
-        if (i >= 0 && i < (int)std::size(kLfoGridDivisions))
-            setLfoGridDivisions(kLfoGridDivisions[i]);
+        if (lfoGridCombo != nullptr)
+            setLfoGridDivisions(synth::ui::curvegrid::noteLengthDivisions(lfoGridCombo->getCurrentName()));
     };
-    addAndMakeVisible(lfoGridCombo.get());
+    addChildComponent(lfoGridCombo.get()); // the custom section's fade shows it
 
     lfoShapesButton = std::make_unique<juce::TextButton>("Shapes");
     lfoShapesButton->onClick = [this] {
@@ -127,7 +119,7 @@ void ModuleComponent::createLfoCardControls() {
             });
         showContextMenuHook_(menu);
     };
-    addAndMakeVisible(lfoShapesButton.get());
+    addChildComponent(lfoShapesButton.get());
 
     lfoToolsButton = std::make_unique<juce::TextButton>("Tools");
     lfoToolsButton->onClick = [this] {
@@ -140,7 +132,8 @@ void ModuleComponent::createLfoCardControls() {
             });
         showContextMenuHook_(menu);
     };
-    addAndMakeVisible(lfoToolsButton.get());
+    addChildComponent(lfoToolsButton.get());
+    attachBlockFade(lfoFade_, {lfoCurveEditor.get(), lfoGridCombo.get(), lfoShapesButton.get(), lfoToolsButton.get()});
 
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
     syncLfoCustomSectionVisibility();
@@ -180,7 +173,7 @@ void ModuleComponent::writeLfoWaveFromCurve() {
     auto* lfo = asLfo(module);
     if (lfoCurveEditor == nullptr || lfo == nullptr)
         return;
-    lfo->setCustomWave(lfoWaveFromCurveModel(lfoCurveEditor->getModel()));
+    lfo->setCustomShapeCurve(lfoEditedShape_, synth::ui::waveFromCurveModel(lfoCurveEditor->getModel()));
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
 }
 
@@ -190,7 +183,13 @@ void ModuleComponent::syncLfoCurveFromModule() {
     auto* lfo = asLfo(module);
     if (lfoCurveEditor == nullptr || lfo == nullptr || lfoCurveGestureActive)
         return;
-    lfoCurveEditor->setModel(buildLfoCurveModel(lfo->getCustomWave()));
+    lfoEditedShape_ = nearestLfoShape(*lfo);
+    describeEditedShape(*lfoCurveEditor, *lfo, lfoEditedShape_);
+    // An undo or redo that moved the wave's points glides them; any other change lands at once.
+    const bool restored =
+        undoManager != nullptr && lfoRestoreWatch_.take(undoManager->isRestoring(), undoManager->getRestoreSerial());
+    lfoCurveEditor->setModel(
+        synth::ui::curveModelFromWave(lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve), restored);
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
 }
 
@@ -202,20 +201,12 @@ void ModuleComponent::syncLfoCustomSectionVisibility() {
     auto* shapeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module, "shape"));
     const bool isCustom = shapeParam != nullptr && shapeParam->getIndex() == LFOModule::kCustomShapeIndex;
 
-    lfoCurveEditor->setVisible(isCustom);
-    if (lfoGridCombo != nullptr)
-        lfoGridCombo->setVisible(isCustom);
-    if (lfoShapesButton != nullptr)
-        lfoShapesButton->setVisible(isCustom);
-    if (lfoToolsButton != nullptr)
-        lfoToolsButton->setVisible(isCustom);
-
     auto* bipolarParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "bipolar"));
     const bool bipolar = bipolarParam != nullptr && bipolarParam->get();
     lfoCurveEditor->setFillBaselineLevel(bipolar ? 0.5f : 0.0f);
 
-    updateLayout();
-    owner.handleModuleResized(this);
+    // The editor and its toolbar fade in and out with their height (docs/layout/animation.md#fading-things-in-and-out).
+    fadeBlock(lfoFade_, isCustom);
 }
 
 void ModuleComponent::applyLfoWavePreset(int presetIndex) {
@@ -224,7 +215,7 @@ void ModuleComponent::applyLfoWavePreset(int presetIndex) {
         return;
 
     const juce::var before = lfo->getExtraState();
-    lfo->setCustomWave(LfoCustomWave::preset((LfoCustomWave::Preset)presetIndex));
+    lfo->setCustomShapeCurve(lfoEditedShape_, LfoCustomWave::preset((LfoCustomWave::Preset)presetIndex));
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
     syncLfoCurveFromModule();
     if (undoManager != nullptr)
@@ -239,11 +230,11 @@ void ModuleComponent::applyLfoWaveTool(int toolIndex) {
 
     const juce::var before = lfo->getExtraState();
     if (toolIndex == 4) { // Reset to Default
-        lfo->setCustomWave(LfoCustomWave::defaultWave());
+        lfo->setCustomShapeCurve(lfoEditedShape_, LfoCustomWave::defaultWave());
     } else {
-        LfoCustomWave wave = lfo->getCustomWave();
+        LfoCustomWave wave = lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve;
         wave.apply((LfoCustomWave::Tool)toolIndex);
-        lfo->setCustomWave(wave);
+        lfo->setCustomShapeCurve(lfoEditedShape_, wave);
     }
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
     syncLfoCurveFromModule();
@@ -253,15 +244,8 @@ void ModuleComponent::applyLfoWaveTool(int toolIndex) {
 }
 
 void ModuleComponent::setLfoGridDivisions(int n) {
-    if (lfoCurveEditor == nullptr)
-        return;
-    if (n <= 0) {
-        lfoCurveEditor->setGrid(synth::ui::CurveEditorComponent::CurveGrid{4, 2});
-        lfoCurveEditor->setSnapToGrid(false);
-    } else {
-        lfoCurveEditor->setGrid(synth::ui::CurveEditorComponent::CurveGrid{n, juce::jmin(n, 8)});
-        lfoCurveEditor->setSnapToGrid(true);
-    }
+    if (lfoCurveEditor != nullptr)
+        synth::ui::curvegrid::applyDivisions(*lfoCurveEditor, n, synth::ui::CurveEditorComponent::CurveGrid{4, 2});
 }
 
 void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitResult hit) {
@@ -296,13 +280,12 @@ void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitRe
         });
 
     juce::PopupMenu gridMenu;
-    for (int i = 0; i < (int)std::size(kLfoGridLabels); ++i) {
-        const int divisions = kLfoGridDivisions[i];
-        gridMenu.addItem(juce::String(kLfoGridLabels[i]).fromFirstOccurrenceOf("Grid ", false, false),
-                         [safeThis, divisions] {
-                             if (safeThis != nullptr)
-                                 safeThis->setLfoGridDivisions(divisions);
-                         });
+    for (const auto& name : synth::ui::curvegrid::noteLengthNames()) {
+        const int divisions = synth::ui::curvegrid::noteLengthDivisions(name);
+        gridMenu.addItem(name, [safeThis, divisions] {
+            if (safeThis != nullptr)
+                safeThis->setLfoGridDivisions(divisions);
+        });
     }
     menu.addSubMenu("Grid", gridMenu);
 
@@ -311,7 +294,12 @@ void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitRe
 
 void ModuleComponent::updateLfoWavePlayhead() {
     auto* lfo = asLfo(module);
-    if (lfoCurveEditor == nullptr || !lfoCurveEditor->isVisible() || lfo == nullptr)
+    if (lfoCurveEditor == nullptr || lfo == nullptr)
+        return;
+    // The cursor moved onto another shape (its knobs, the map, a cable, undo): the editor follows it.
+    if (!lfoCurveGestureActive && nearestLfoShape(*lfo) != lfoEditedShape_)
+        syncLfoCurveFromModule();
+    if (!lfoCurveEditor->isVisible())
         return;
 
     const double phase = (double)lfo->getPhaseForUI();
@@ -332,19 +320,29 @@ int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int content
     if (lfoCurveEditor == nullptr || !lfoCurveEditor->isVisible())
         return y;
 
+    // The section fades with its gap under the body controls, so the toolbar never touches the Morph value boxes.
+    y += blockHeight(lfoFade_, synth::cardbody::gapUnderBodyControls(false));
+
+    // Each part takes its height in step with the fade, so the rows under the section slide.
     if (apply) {
+        const int rowH = blockHeight(lfoFade_, kRowHeight);
+        // The grid box is as wide as its longest name ("Grid 1/128T"); the two buttons share what is left.
+        const int gridWidth =
+            juce::jmax(kLfoGridComboWidth, synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(*lfoGridCombo));
+        const int buttonWidth =
+            juce::jlimit(40, kLfoToolbarButtonWidth, (contentW - gridWidth - 2 * kLfoToolbarGap) / 2);
         int x = contentX;
-        lfoGridCombo->setBounds(x, y, kLfoGridComboWidth, kRowHeight);
-        x += kLfoGridComboWidth + kLfoToolbarGap;
-        lfoShapesButton->setBounds(x, y, kLfoToolbarButtonWidth, kRowHeight);
-        x += kLfoToolbarButtonWidth + kLfoToolbarGap;
-        lfoToolsButton->setBounds(x, y, kLfoToolbarButtonWidth, kRowHeight);
+        lfoGridCombo->setBounds(x, y, gridWidth, rowH);
+        x += gridWidth + kLfoToolbarGap;
+        lfoShapesButton->setBounds(x, y, buttonWidth, rowH);
+        x += buttonWidth + kLfoToolbarGap;
+        lfoToolsButton->setBounds(x, y, buttonWidth, rowH);
     }
-    y += kRowHeight + 2;
+    y += blockHeight(lfoFade_, kRowHeight + synth::cardbody::kBlockGap);
 
     if (apply)
-        lfoCurveEditor->setBounds(contentX, y, contentW, kLfoWaveGraphHeight);
-    y += kLfoWaveGraphHeight + 8;
+        lfoCurveEditor->setBounds(contentX, y, contentW, blockHeight(lfoFade_, kLfoWaveGraphHeight));
+    y += blockHeight(lfoFade_, kLfoWaveGraphHeight + synth::cardbody::kBlockGap);
 
     return y;
 }

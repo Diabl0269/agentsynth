@@ -1,9 +1,11 @@
+#include "AutomationLaunch.h"
 #include "UpdateManager.h"
 
 #if JUCE_MAC
 
 #import <Foundation/Foundation.h>
 #import <Sparkle/Sparkle.h>
+#include <juce_events/juce_events.h>
 
 namespace synth::update {
 
@@ -13,7 +15,9 @@ public:
         NSString* publicKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"SUPublicEDKey"];
         NSString* feedURL = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"SUFeedURL"];
 
-        started = (publicKey.length > 0 && feedURL.length > 0);
+        // An automation launch (test mode) never checks for updates.
+        started = (publicKey.length > 0 && feedURL.length > 0) &&
+                  !synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray());
 
         if (started) {
             controller = [[SPUStandardUpdaterController alloc] initWithStartingUpdater:YES

@@ -6,6 +6,7 @@
 // not a smart-connections concern. GraphEditor is declared in GraphEditor.h.
 
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "GraphEditor.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars
@@ -65,10 +66,8 @@ void GraphEditor::setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId,
 // needs it and title resolution otherwise requires a live GraphEditor.
 juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId,
                                          juce::AudioProcessor* processor) const {
-    const auto custom = getModuleDisplayName(nodeId);
-    if (custom.isNotEmpty())
-        return custom;
-    return processor != nullptr ? processor->getName() : juce::String();
+    const auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    return synth::moduleTitle(node != nullptr ? node->properties : juce::NamedValueSet(), processor);
 }
 
 // Commits and closes any open inline title editor, on any card.

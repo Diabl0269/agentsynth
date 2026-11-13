@@ -1,13 +1,17 @@
 #include "SettingsWindow.h"
 #include "AI/AIProviderRegistry.h"
 #include "AI/LocalHistoryStore.h"
+#include "AccountSettingsTab.h"
 #include "AppearanceSettingsTab.h"
-#include "AudioSettingsTab.h"
+#include "AudioSettingsTab/AudioSettingsTab.h"
 #include "Branding.h"
 #include "FeedbackSettingsTab.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "ShortcutsSettingsTab.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
+#include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
 //==============================================================================
 // AISettingsTab - AI configuration interface
@@ -25,6 +29,7 @@ public:
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
 
         addAndMakeVisible(providerCombo);
+        providerCombo.setTitle("AI provider");
         // Hosted mode sends the prompt and current patch off this machine to Agent Synth's
         // servers; local (Ollama) mode never leaves it. See also the same disclosure next to the
         // model picker in AIChatComponent, which most users see far more often than this dialog.
@@ -57,6 +62,7 @@ public:
             // updateSettings() persists anything, or the previous provider's host text gets
             // written under the new provider's key.
             const auto* descriptor = selectedDescriptor();
+            customServerRevealed = remoteHostIsCustom();
             hostEditor.setText(
                 appProperties.getUserSettings()->getValue(hostSettingsKeyFor(descriptor), defaultHostFor(descriptor)),
                 juce::dontSendNotification);
@@ -65,6 +71,10 @@ public:
 
         addAndMakeVisible(hostLabel);
         addAndMakeVisible(hostEditor);
+        hostEditor.setTitle("AI provider host");
+        hostEditor.setTooltip("Address of the AI provider's server. Press Return to apply.");
+        synth::ui::removeHiddenTabStops(hostEditor);
+        synth::ui::bubbleEscapeToParents(hostEditor);
         {
             const auto* initialDescriptor = selectedDescriptor();
             hostEditor.setText(appProperties.getUserSettings()->getValue(hostSettingsKeyFor(initialDescriptor),
@@ -73,6 +83,24 @@ public:
         hostEditor.onReturnKey = [this] { updateSettings(); };
         hostEditor.onFocusLost = [this] { updateSettings(); };
 
+        // The hosted server's address is baked into the app (synth::branding::kApiBaseUrl), so the
+        // address box stays out of the way for "remote" unless the user asks for a custom server.
+        addChildComponent(customServerButton);
+        customServerButton.setButtonText("Custom server address...");
+        customServerButton.setTitle("Use a custom server address");
+        customServerButton.setTooltip("Point Remote at your own AgentSynth server instead of the hosted one.");
+        customServerButton.onClick = [this] {
+            customServerRevealed = true;
+            updateHostFieldForSelectedProvider();
+            hostEditor.grabKeyboardFocus();
+        };
+        addChildComponent(useHostedButton);
+        useHostedButton.setButtonText("Use hosted server");
+        useHostedButton.setTitle("Use the hosted AgentSynth server");
+        useHostedButton.setTooltip("Switch back to the hosted AgentSynth server and forget any custom address.");
+        useHostedButton.onClick = [this] { switchToHostedServer(); };
+
+        customServerRevealed = remoteHostIsCustom();
         updateHostFieldForSelectedProvider();
 
         // Local chat-history retention. This is deliberately the only *local* retention
@@ -84,6 +112,7 @@ public:
         historyRetentionLabel.setText("Local History:", juce::dontSendNotification);
 
         addAndMakeVisible(historyRetentionCombo);
+        historyRetentionCombo.setTitle("Local history retention");
         historyRetentionCombo.setTooltip("How long AI chat history stays on this device. Independent of "
                                          "cloud sync, which subscribers get automatically.");
         historyRetentionCombo.addItem("30 days", kRetention30Id);
@@ -110,6 +139,7 @@ public:
         requestTimeoutLabel.setText("Request Timeout:", juce::dontSendNotification);
 
         addAndMakeVisible(requestTimeoutCombo);
+        requestTimeoutCombo.setTitle("Request timeout");
         requestTimeoutCombo.setTooltip("How long to wait for an AI response before cancelling it. Local "
                                        "(Ollama) models on modest hardware can legitimately take several "
                                        "minutes.");
@@ -191,6 +221,11 @@ public:
         hostLabel.setBounds(hostRow.removeFromLeft(100));
         hostEditor.setBounds(hostRow);
 
+        auto hostedRow = bounds.removeFromTop(28).withTrimmedTop(3);
+        useHostedButton.setBounds(hostedRow.removeFromLeft(150));
+        hostedRow.removeFromLeft(8);
+        customServerButton.setBounds(hostedRow.removeFromLeft(190));
+
         bounds.removeFromTop(30);
         auto historyRow = bounds.removeFromTop(25);
         historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
@@ -231,7 +266,10 @@ private:
         const bool signedIn =
             accountService != nullptr && accountService->getSnapshot().state == synth::AccountState::SignedIn;
         promptLearningToggle.setEnabled(signedIn);
-        promptLearningToggle.setTooltip(signedIn ? juce::String() : juce::String("Sign in required"));
+        promptLearningToggle.setTooltip(signedIn
+                                            ? juce::String("Share your hosted-mode prompts with us for product "
+                                                           "learning. Human review only; never used to train models.")
+                                            : juce::String("Sign in required"));
         promptLearningToggle.setToggleState(signedIn && accountService->getSnapshot().promptLearningOptIn,
                                             juce::dontSendNotification);
     }
@@ -337,11 +375,36 @@ private:
                                                                      : juce::String("http://localhost:11434");
     }
 
+    bool remoteHostIsCustom() const {
+        return appProperties.getUserSettings()->getValue("remoteHost").trim().isNotEmpty();
+    }
+
+    // Back to the baked-in hosted server: provider "remote", no custom address.
+    void switchToHostedServer() {
+        for (size_t i = 0; i < visibleProviders.size(); ++i)
+            if (visibleProviders[i]->id == "remote")
+                providerCombo.setSelectedId((int)i + 1, juce::dontSendNotification);
+        customServerRevealed = false;
+        hostEditor.setText({}, juce::dontSendNotification);
+        updateSettings();
+    }
+
     void updateHostFieldForSelectedProvider() {
         const auto* descriptor = selectedDescriptor();
-        bool showHost = descriptor == nullptr || descriptor->needsHost;
-        hostLabel.setVisible(showHost);
-        hostEditor.setVisible(showHost);
+        const bool isRemote = descriptor != nullptr && descriptor->id == "remote";
+        bool showHost = descriptor == nullptr || (descriptor->needsHost && (!isRemote || customServerRevealed));
+        // The host row's controls fade in and out where they stand (the rows around them never move); what is
+        // there when the tab is built does not fade.
+        const auto fadeTo = [this](synth::ui::FadeVisibility& fade, bool shown) {
+            if (hostRowSettled)
+                fade.setShown(shown);
+            else
+                fade.snapTo(shown);
+        };
+        fadeTo(hostFade, showHost);
+        fadeTo(customServerFade, isRemote && !customServerRevealed);
+        fadeTo(useHostedFade, !isRemote || remoteHostIsCustom());
+        hostRowSettled = true;
         hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
                           juce::dontSendNotification);
     }
@@ -366,6 +429,13 @@ private:
     juce::ComboBox providerCombo;
     juce::Label hostLabel;
     juce::TextEditor hostEditor;
+    juce::TextButton customServerButton;
+    juce::TextButton useHostedButton;
+    synth::ui::FadeVisibility hostFade{&hostLabel, &hostEditor};
+    synth::ui::FadeVisibility customServerFade{&customServerButton};
+    synth::ui::FadeVisibility useHostedFade{&useHostedButton};
+    bool hostRowSettled = false;
+    bool customServerRevealed = false;
     juce::Label historyRetentionLabel;
     juce::ComboBox historyRetentionCombo;
     juce::Label requestTimeoutLabel;
@@ -378,26 +448,52 @@ private:
 //==============================================================================
 // SettingsWindow - Consolidated tabbed settings interface
 //==============================================================================
+namespace {
+// The remembered tab is saved by name: the Audio tab exists in the app and not in the plugin, so a
+// saved index would open a different tab in the other build. The older index key is read only when no
+// name was ever saved.
+constexpr const char* kSettingsTabNameKey = "settingsTabName";
+constexpr const char* kSettingsTabIndexKey = "settingsTab";
+// The main window samples its hints on a 10 Hz timer too (MainComponent::timerCallback).
+constexpr int kHintPollHz = 10;
+
+int rememberedTabIndex(juce::PropertiesFile& settings, const juce::StringArray& tabNames) {
+    const auto name = settings.getValue(kSettingsTabNameKey);
+    if (name.isNotEmpty())
+        return juce::jmax(0, tabNames.indexOf(name)); // a tab this build lacks opens the first one
+    return settings.getIntValue(kSettingsTabIndexKey, 0);
+}
+} // namespace
+
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
-                               juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames)
+                               juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames,
+                               synth::soundpacks::SoundPackInstaller* soundPacks,
+                               synth::soundbrowser::SoundFolderBook* soundFolders, AudioSettingsSource* audioSource)
     : appProperties(appProperties)
+    , shortcutManager(shortcutManager)
     , themeManager(themeManager) {
     if (showAudioTab) {
         tabs.addTab("Audio", juce::Colours::transparentBlack,
-                    new AudioSettingsTab(deviceManager, midiRemoteDeviceNames), true);
+                    new AudioSettingsTab(deviceManager, midiRemoteDeviceNames, audioSource, &appProperties), true);
     }
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);
     tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
 
-    auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
+    // Plan, usage, subscription and account deletion. Only meaningful with an account service, and left out
+    // without one so a build with no accounts keeps its tab order.
+    if (accountService != nullptr)
+        tabs.addTab("Account", juce::Colours::transparentBlack, new AccountSettingsTab(accountService), true);
+
+    auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager, &appProperties);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
 
     auto* preferencesSettingsTab = new PreferencesSettingsTab(appProperties);
     preferencesSettingsTab->setGraphEditor(graphEditor);
+    preferencesTab = preferencesSettingsTab;
     tabs.addTab("Preferences", juce::Colours::transparentBlack, preferencesSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
@@ -409,7 +505,37 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
+    // Optional instrument downloads, each row opening to its credit. After Feedback for the same reason Feedback is
+    // last.
+    if (soundPacks != nullptr)
+        tabs.addTab("Sound packs", juce::Colours::transparentBlack,
+                    new SoundPacksSettingsTab(*soundPacks, soundFolders, &appProperties), true);
+
     addAndMakeVisible(tabs);
+    // The strip is one Tab stop (SettingsTabs::getStripFocus), ahead of the open tab's controls; its
+    // buttons are not stops of their own.
+    for (int i = 0; i < tabs.getNumTabs(); ++i) {
+        // A tab's content is not a Tab stop of its own: its controls are, and an unnamed stop between
+        // the tab button and the first control is one key press nobody can explain.
+        if (auto* content = tabs.getTabContentComponent(i)) {
+            content->setWantsKeyboardFocus(false);
+            // Up/Down walk the tab's controls, Left/Right tick a check box or fold a section.
+            arrowKeys.push_back(std::make_unique<synth::ui::ArrowKeyNavigation>(*content));
+            arrowKeys.back()->watchViewportsInScope();
+            // A text field types Cmd+1 before the window's own keyPressed runs, so each one offers the
+            // tab keys to the window first.
+            tabSwitchKeys.attachToTextEditorsIn(*content);
+            // The Inputs table makes name fields as the layout changes; each is offered the same keys.
+            if (auto* audioTab = dynamic_cast<AudioSettingsTab*>(content))
+                audioTab->setEditorHook([this](juce::TextEditor& editor) { tabSwitchKeys.attachTo(editor); });
+        }
+        if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
+            tabButton->setComponentID("settingsTab:" + tabs.getTabNames()[i]);
+            tabButton->setTooltip(
+                "Show the " + tabs.getTabNames()[i] + " settings" +
+                (i < 9 ? " (" + platformCommandKeyName() + "+" + juce::String(i + 1) + ")" : juce::String()));
+        }
+    }
 
     // Restore last selected tab — unless the caller asked for a specific tab by name (e.g. the
     // toolbar's feedback button opening Settings pre-selected to "Feedback"), in which case that
@@ -422,19 +548,89 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                 break;
             }
     if (initialIndex < 0)
-        initialIndex = appProperties.getUserSettings()->getIntValue("settingsTab", 0);
+        initialIndex = rememberedTabIndex(*appProperties.getUserSettings(), tabs.getTabNames());
     tabs.setCurrentTabIndex(initialIndex, false);
 
+    attachShortcutHints();
+    startTimerHz(kHintPollHz);
+
     themeManager.addChangeListener(this);
+    juce::Desktop::getInstance().addFocusChangeListener(this);
+}
+
+// Holding Cmd names each tab's positional key on its button, the way the main window names its buttons'.
+void SettingsWindow::attachShortcutHints() {
+    shortcutHints = std::make_unique<synth::ui::ShortcutHintOverlay>(*this, shortcutManager);
+    for (int i = 0; i < tabs.getNumTabs() && i < 9; ++i)
+        if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i))
+            shortcutHints->addFixedKeyTarget(*tabButton,
+                                             juce::KeyPress('1' + i, juce::ModifierKeys::commandModifier, '1' + i));
+}
+
+void SettingsWindow::modifierKeysChanged(const juce::ModifierKeys& modifiers) {
+    if (shortcutHints != nullptr)
+        shortcutHints->sample(modifiers);
+}
+
+// JUCE sends modifierKeysChanged only to the component under the mouse, so with the pointer outside
+// this window a held Cmd would never reach the hints. Poll the live modifiers instead, as the main
+// window's timer does, and only while this window holds keyboard focus (a Cmd held in another window
+// is not for these tabs).
+void SettingsWindow::timerCallback() {
+    if (shortcutHints != nullptr)
+        shortcutHints->sample(hasKeyboardFocus(true) ? juce::ModifierKeys::getCurrentModifiersRealtime()
+                                                     : juce::ModifierKeys());
+}
+
+void SettingsWindow::setUrlOpener(std::function<void(const juce::URL&)> opener) {
+    if (preferencesTab != nullptr)
+        preferencesTab->setUrlOpener(std::move(opener));
 }
 
 SettingsWindow::~SettingsWindow() {
+    stopTimer();
+    juce::Desktop::getInstance().removeFocusChangeListener(this);
     themeManager.removeChangeListener(this);
-    appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
+    appProperties.getUserSettings()->setValue(kSettingsTabNameKey, tabs.getTabNames()[tabs.getCurrentTabIndex()]);
     appProperties.saveIfNeeded();
 }
 
 void SettingsWindow::resized() { tabs.setBounds(getLocalBounds()); }
+
+bool SettingsWindow::handleTabKey(const juce::KeyPress& key) {
+    const int count = tabs.getNumTabs();
+    if (count == 0)
+        return false;
+    // Cmd+<digit> is positional and fixed. A digit past the last tab is consumed too, so a text field
+    // does not type it.
+    const int position = synth::ui::TabSwitchKeys::positionalTabIndex(key);
+    if (position >= 0) {
+        if (position < count)
+            tabs.setCurrentTabIndex(position);
+        return true;
+    }
+    return false;
+}
+
+bool SettingsWindow::keyPressed(const juce::KeyPress& key) {
+    if (handleTabKey(key))
+        return true;
+    if (key != juce::KeyPress::escapeKey)
+        return false;
+    if (onRequestClose)
+        onRequestClose();
+    else
+        synth::ui::closeHostingWindow(*this);
+    return true;
+}
+
+bool SettingsWindow::redirectWindowFocusToTabStrip(juce::Component* focused) {
+    auto* window = getTopLevelComponent();
+    if (focused == nullptr || focused != window || window == this || !window->isVisible())
+        return false;
+    focusCurrentTab();
+    return true;
+}
 
 void SettingsWindow::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
     sendLookAndFeelChange();

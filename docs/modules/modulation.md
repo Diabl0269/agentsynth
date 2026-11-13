@@ -31,6 +31,7 @@ modules already work.
 
 Two consequences worth stating explicitly:
 
+- **"Is a CV input patched?" probes scan the whole block, never the first 64 samples.** An envelope idles at exactly 0 between notes and fires mid-block, so a head-of-block probe reads it as unpatched, drops the attack and steps the note in a block later (an audible click at every note onset). Every module scans the whole block through the one shared `hasAnyNonZero` (`Source/Modules/PortRole.h`) (exits on the first live sample): VCA, Attenuverter, Oscillator, Noise, Wavetable, Envelope Follower, Sampler, Ring Modulator, Pitch Shifter and Bitcrusher. A new CV probe uses it too.
 - **Automation is visible to the user as a moved knob**, because it really is one. That is why the
   applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per
   automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection
@@ -39,6 +40,10 @@ Two consequences worth stating explicitly:
   and the applier writes nothing, so a paused session never fights a mouse drag. CV, by contrast,
   keeps flowing whenever its source module is producing signal — a stopped transport does not
   silence an LFO.
+
+The timeline shows this layering directly: every CV routing into an automated parameter's jack is a
+**modulator row** under its automation lane, and the lane's "..." menu adds an LFO cabled into that
+jack in one step ([timeline/automation.md](../timeline/automation.md#modulators)).
 
 ### Recording a knob
 
@@ -95,7 +100,7 @@ through the one shared resolver, `synth::resolveLaneParameter`
 AI-tool path and the UI path. The resolver's shape and the normalised-range note are in
 [`architecture/plugin-layer.md`](../architecture/plugin-layer.md#automation-lanes-on-hosted-plugin-parameters).
 
-The automation strip's lane picker offers **"Add lane…"** entries for a hosted plugin's
+The timeline's lane choices (`TimelinePanelComponent::collectAutomationLaneOptions`) offer **"Add lane…"** entries for a hosted plugin's
 not-yet-automated instance parameters (there is no `ModuleComponent` knob to right-click for them —
 the plugin has its own editor). Choosing one creates a lane with a `RangeSnapshot` of
 `{0, 1, default}` (a hosted parameter's native domain is always 0..1) and captures `paramIndexHint`
@@ -146,6 +151,41 @@ internals:
   exposed via `getLastOutputPeak()` and `getLastModValue()`.
 - **Bypass behaviour.** When bypassed, `lastOutputPeak` and `lastModValue` are both set to `0.0f`
   and all channels are cleared — no pass-through; an attenuverter in bypass silences its output.
+- **Response curve (`synth::ModCurve`).** `setCurve` / `getCurve` (message thread) give the signal a
+  curve: a `LfoCustomWave` breakpoint shape over an output range, default straight. The audio thread
+  maps channel 0 through a 256-step table **before** the amount and CV code, mirrored around zero
+  (`sign(x) * table(min(|x|, 1))`, NaN gives 0), so the amount still scales the curved signal. A
+  linear curve runs the original path untouched. The curve is extra state: `getExtraState` is void
+  while linear (old projects and linear attenuverters write no `state`), otherwise `ModCurve::toVar`;
+  `setExtraState` reads it back through `fromVar`, which turns anything unusable into linear. It is
+  trusted-path only (no `setUntrustedExtraState`). Handoff: `setCurve` renders the table and copies
+  it into a pending array under a `juce::SpinLock`, then sets an atomic non-linear flag; the audio
+  thread try-locks to adopt it and keeps the previous table when the lock is busy. Anything that
+  rebuilds an attenuverter chain while keeping its amount copies the curve too.
+
+## The modulation curve
+
+Each attenuverter carries a response curve (`synth::ModCurve`: a breakpoint shape plus an output range, default a straight line)
+applied to the signal before the amount. It is saved with the module, copied by snippets, duplicate and the AI state
+mapper, and an untrusted apply resolves a bad one to linear.
+
+Every place edits that one curve through `ModCurveEditTarget` (a node id and the editor, never a processor pointer, so a
+deleted node is a safe no-op and a safe close):
+
+- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode (double-click the line to add a point, double-click a point to remove it, right-click a point for its menu), a draggable
+  middle bend handle, the chips Linear / Exp / Log / S-curve, two range handles on the left edge (min and max output,
+  Up/Down 1 percent, Shift 10), saved presets ("Load", "Save...") and Enlarge. Enlarge opens a window titled
+  "Curve: <source> to <destination>" with a big editor, the chips, the Snap icon button (the shared `SnapToggleButton`, icon and word) and a Grid label beside its box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
+- **Where it opens**: the curve chip (26 x 18, a Tab stop; accent border when bent) in each mod dot row between the amount
+  and the timeline button, the Curve column after Amount in the Mod Matrix (row name "Routing N curve"), and the cable
+  right-click item **Edit curve...**. One box is open at a time.
+- **Cables**: on a mono cable that has no attenuverter yet, Edit curve... splices one in at amount 1 as ONE undo step
+  and one rebuild, so the sound is unchanged while the curve is linear. Poly bus cables get no item.
+- **Undo**: one step per gesture (`beginModAmountGesture` / `commitModAmountGesture`); an open box and chip follow undo and
+  redo, and close when their node goes.
+- **Presets**: `ModCurvePresetStore` lists the four built-ins, then the user's, kept in `mod-curve-presets.json` under the
+  settings directory and read on every list so a second box sees a new preset. A corrupt file lists the built-ins only.
+- **Keyboard**: the chips are the keyboard path (Tab, Return or Space); a cable has no keyboard focus on the canvas.
 
 ## The routing snapshot
 
@@ -266,7 +306,7 @@ rather than raw channel numbers.
 
 1. `resolvePolyLink(source, sourceVisibleJack, dest, destVisibleJack)` calls `getJackTargets` on both
    ends and pairs one `JackTarget` from each into a
-   `PolyLink { sourceRawChannel, destRawChannel, voiceCount, sourceStride }`. Pairings are scored:
+   `PolyLink { sourceRawChannel, destRawChannel, voiceCount, sourceStride, destStride }`. Pairings are scored:
    matching `PortRole` is the strongest signal (this is what lets Poly MIDI's single "Poly Out" jack
    send Pitch to an Oscillator and Gate to an Amp Env from the same jack); a `ModCV`/`Other` end is a
    wildcard, since mod inputs accept anything; equal fan widths break remaining ties.
@@ -291,11 +331,16 @@ rather than raw channel numbers.
      (`isPolyGroupHead` at `kRightBase`, `polyVoiceSpan == 8` in poly), so there is no span-2 group to
      broadcast into — a mono cable reaches `Audio L` only, and a stereo path means two cables. See
      [`modules.md`](modules.md#oscillator-module).
+   - **A collapsed stereo source onto a split Left jack** (span-2 `Audio` source, destination jack that is
+     the Left of a labelled Left/Right pair) wires the whole pair: `voiceCount = 2`, `sourceStride = 1`,
+     and `destStride` is the gap to the destination's real Right leg (1 for the FX and Master, the
+     distance to `kRightBase` for the voice modules and the Channel Strip). A hand-built cable that
+     reaches only `Audio L` is therefore a mono source or a mono jack, not a stereo one.
    - A poly source into a mono jack never broadcasts either; summing N envelopes onto one CV channel
      is not what the user asked for.
 4. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between
    through `resolvePolyLink` and adds `voiceCount` connections,
-   `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v}` for each voice. A fan is always
+   `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v * destStride}` for each voice. A fan is always
    wired direct — an `AttenuverterModule` is only inserted for a single mono mod wire
    (`voiceCount == 1`), because the engine collapses the N raw edges of a fan into one `PolyBus` for
    display.
@@ -312,6 +357,49 @@ rather than raw channel numbers.
    before the toggle, because by the time the parameter listener fires the live mapping already
    reflects the new layout — only the snapshot can say which visible jack an existing raw connection
    used to be anchored to.
+
+### The Poly toggle
+
+(The same switch is on each instrument track's header as one note / chord icon toggle: [the Mono/Poly switch](../timeline/tracks.md#the-monopoly-switch).)
+
+A user click on the **Poly** pill (or Space on it) of an Oscillator, Wavetable, Noise, Filter, ADSR or VCA
+switches the whole **voice graph** of that module, not the one card. `PolyChainController`
+(`Source/UI/Graph/PolyChain/`) does it as ONE undo step:
+
+1. **The voice graph** (`planPolyVoiceGraph`, `Source/Mixer/ChannelFlows/PolyVoiceGraph.cpp`) is an undirected walk
+   over every cable (audio, CV, MIDI) from the clicked module. It reaches but does not expand through a Channel
+   Strip, Master, a track source (Track In / Track Audio), a Gate / EQ / Compressor, a Record Tap and an Audio
+   Output (a different channel starts there), and never crosses a sidechain key. Macro port nodes and hidden
+   attenuverters are ordinary nodes to it, so a module inside a macro and one wired into the macro are one voice
+   graph. Parallel branches (two oscillators, several filters or envelopes) are in by construction.
+2. **Tracks.** A node belongs to track T when it is forward-reachable from T's source node (stopping at a strip). If
+   the voice graph holds modules owned only by other tracks, a question comes first: "This also changes N modules on
+   Bass and Lead." with **This track only** (default, Return), **Include connected tracks** and **Cancel** (Esc,
+   nothing changes). With none, there is no question.
+3. **The change** (`applyPolyVoiceGraph`). Every poly-capable module in the chosen set gets the clicked pill's new
+   value; each card re-anchors its own cables as it hears the parameter change (point 6 above).
+   - **Turning poly on:** for each MIDI source whose MIDI output feeds a module that just went poly (Oscillator,
+     Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
+     MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
+     gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
+     MIDI cable into a poly **ADSR** is then removed: a poly ADSR takes its gates from Poly MIDI and never reads raw MIDI.
+     An Oscillator's or Wavetable's raw MIDI cable stays: poly voice 0 still restarts on a raw note-on and plays a raw
+     note's pitch when no pitch CV is patched, so it is not redundant. A source's cable into a mono module is never touched.
+   - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
+     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing; so poly on then off returns the original
+     cables), and a Poly MIDI left with no outgoing cable is removed. The result is a mono patch that plays every note.
+4. **Feedback.** The click glides like Cmd+Z of it does (`PolyChainController::commit` opens the same restore
+   `CardGlideAnimator::Scope` and cable retract/grow `AppUndoManager::applyHistoryStep` does, [undo-glide.md](../layout/undo-glide.md)):
+   the Poly MIDI card grows in or shrinks away and its cables grow out of or pull back into their jacks; Reduce Motion
+   and Animations Off are handled by the shared helpers. A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
+   modules mono", with **Undo** ([`chrome.md`](../layout/chrome.md#toast)).
+5. **Only a user click propagates.** The pill does not toggle itself (`CardBody::installPolyPill`: `setClickingTogglesState(false)`; its attachment
+   follows the parameter; the click goes to `GraphEditor::getPolyChain()`, and the track header's switch reads `TrackHeaderHost::getTrackPolyState`, never the graph), so no second or half undo step exists. Setting the parameter any other way (undo/redo
+   restore, project load, the AI, MIDI Learn, automation) changes that one module and never reaches the controller.
+6. **A new module joins.** `GraphEditor::connectPorts` (every drag, smart connection, insert-between and port-panel
+   cable) asks `joinConnectedModules` first: a poly-capable module with **no cables at all** that is cabled to a
+   poly-ON poly-capable module or a Poly MIDI becomes poly too, inside the cable's own undo step. A module that
+   already had a cable is never flipped. A delete-heal restores wiring and does not count (`SuppressJoin`).
 
 ## isAutoPromotableModTarget
 
@@ -361,11 +449,15 @@ is a common pattern when building poly patches.
 It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find
 which knobs have live modulation and paints a ring overlay proportional to the routed signal value,
 giving a real-time visual indication of modulation depth directly on the parameter knob.
+A card fader (`CardFader`, [module-card.md](../layout/module-card.md#faders-switches-and-steppers))
+shows the same routing as a bar beside its slot, from the base value to base + CV, in
+`mod-ring-positive` / `mod-ring-negative`, painted from the same snapshot in the same pass
+(`ModuleComponentModRings.cpp`); Alt-drag or a drag started on the bar adjusts the routing's amount.
 
 **Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that
-is not visible.** A card can page its controls (the Wavetable tab strip,
-[`layout/module-card.md`](../layout/module-card.md)), and a knob on a hidden page keeps the bounds it
-had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints
+is not visible.** A card can page its controls (a layout's tab strip, such as the Wavetable's,
+[`layout/module-card.md`](../layout/module-card.md#tab-strips)), and a knob on an unselected tab keeps the bounds it
+had when its tab was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints
 an orange arc over empty card. The rule lives in that one accessor so it can be tested without a
 themed LookAndFeel and a live routing.
 
@@ -420,6 +512,8 @@ sliderIndexForModTarget()` turns into a knob index:
 2. Otherwise → the parameter whose display name equals the jack label `name`.
 3. Neither → no knob (Oscillator's Pitch CV; Wavetable's Sync input).
 
+The reverse also holds: a knob can have no jack. The Oscillator's Phase and Rand have none, because they are read once when a note starts; its Fixed rate takes a cable on the knob (ch28, no gutter jack).
+
 A module sets `paramId` whenever its jack label is not the knob's name — the jack is "Rate", the
 knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Gain"; Wavetable's "Warp" jack drives
 "Warp Amt". Matching the label against the knob's `componentID` (the parameter's display name) was
@@ -430,8 +524,8 @@ mismatched jacks needed touching, and `ModulationTargetBindingTests` sweeps ever
 a new mismatch cannot ship (a jack that really has no knob goes in that test's `knoblessTargets()`
 list, with a reason).
 
-**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the
-timeline panel's automation strip (creating its lane/track on first use) — see
+**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane under its
+track in the timeline panel (creating the lane on first use, the track folds open) — see
 [`timeline/automation.md`](../timeline/automation.md#the-knob-entry-point) for the full path
 (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
 
@@ -444,13 +538,180 @@ the ring/knob highlights the cable. The ring's highlight is `AppLookAndFeel::dra
 `hovered` flag — the stroke widens by `Theme::Metrics::modRingHoverWidthBoost` and the colour gets
 the same `brighter(0.3)` treatment a hovered cable already gets, no new colour token.
 
-While either side of that correlation is hovered, a small chip appears just under the knob's value
-box: `"<source module name> · <signed percent>"`, e.g. `"LFO · +63%"` or `"Env 2 · -40%"`. The
+While either side of that correlation is hovered, a stack of small chips appears just under the knob's value
+box, one row per modulation source on it: `"<source module name> · <signed percent>"`, e.g. `"LFO 1 · +63%"` then
+`"Env 2 · -40%"`, each row with a small swatch dot (`modRingPositive` or `modRingNegative` by the amount's sign). The
 percent is the attenuverter's `amount` (`ModulationDisplayInfo::amount`) rounded to the nearest
 whole number; the source name is the routing's source node's `getName()` (the same identity the mod
-matrix labels a source with). Formatted by the free function `synth::ui::formatModHoverChipText`
-(`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is), drawn in
-the knob-value-box mono font on a `surfaceHi` chip, clipped to the card.
+matrix labels a source with, looking through macro ports: `synth::ui::knobModSources`, `UI/Graph/ModDot/KnobModSources.h`).
+Bypassed sources and sources with no name are left out. The stack lists at most four sources and then one
+`"+N more"` row; the source the dot drag adjusts (the [last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot))
+is **bold** and always listed. Rows are formatted by `synth::ui::formatModHoverChipText` and chosen by
+`synth::ui::modHoverChipRows` (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is),
+drawn in the knob-value-box mono font, each row on the tooltip's own box (`synth::theme::paintTooltipBox`, the painter `drawTooltip` uses: opaque `surfaceHi`, `border`, radius 5). The stack fades in over 160 ms and out over 110 ms with the shared `ShownFade` (`synth::ui::ModChipFade`), keeping its last rows through the fade-out so it fades with its text; Reduce Motion makes it the plain 80 ms fade and Animations Off lands it at once. The stack is never clipped: it hangs under the knob
+when it fits inside the card, flips above the knob when the knob is in the card's last row, and as a last resort is pushed
+up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `synth::ui::modHoverChipRects`). While the
+knob's own sources panel is open the stack is not drawn: the panel lists the same sources, and the chip would peek out
+from under it (`synth::ui::modHoverChipShows`). A left click on the dot (or Return on its button) opens the panel, and
+the chip fades out on that click through the same fade, stays gone while the panel is open and fades back in when it
+closes (Esc, a click away) with the pointer still on the knob: the dot's controller repaints the card whenever the
+panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. The panel's window
+takes the knob's mouse-exit while it is open and no mouse-enter follows until the pointer moves, so on close
+`ModDotController::popoverClosed` restores the hovered knob when the pointer rests on the dot (the popover pointer seam,
+`PopoverPointer.h`). Tests:
+`ModChipClickHideTests.cpp` (per-frame alpha under Full, Reduce Motion and Animations Off); scenario
+`mod-chip-hides-on-dot-click`.
+
+The same stack is the mod dot's [drag readout](#the-mod-dot-drag-an-amount-from-the-landing-dot): during a dot drag or key
+step it shows under that knob even when the pointer is not on it, and the dragged source's row shows the live amount.
+
+### The mod dot: drag an amount from the landing dot
+
+The small dot where a modulation cable lands on a knob or fader is a handle. Press it and drag up or
+down: the amount of the source chosen last changes live (up is more, down is less, one pixel is one
+percent, from where the press started, clamped to -100..+100 percent) and the ring and depth band
+follow. The readout is the [chip stack under the knob](#hover-highlight-and-the-chip): the dragged source's row
+(bold, `"LFO 1 · +42%"` with its colour swatch) shows the live amount, and it fades out when you let go. The value
+stays; the whole drag is **one** undo step ("Change modulation amount", Cmd+Z). Esc during the drag
+puts the starting amount back and leaves no undo step. A press that moves under 3 px is a click, which
+opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::onModDotClicked`, and only that panel: the
+card hears the knob's release as a listener, in the knob's own space, and ignores it (`ModuleComponent::mouseUp` acts only
+on releases in its own space), so it can never also read it as a click on a jack and open the port panel.
+
+* **Last-chosen source.** Session-only, never saved in the project, per (card, destination channel).
+  The default is the first attenuverter routing on the knob; `ModDotController::setLastChosen` changes
+  it, and a stored choice that no longer exists falls back to the default.
+* **Cmd-drag re-routes.** Cmd+press on the dot keeps the old behaviour of picking the cable up to
+  re-drag it. A dot with no attenuverter routing (nothing to adjust, or a direct/poly cable) also still
+  starts a cable drag on a plain press.
+* **Keyboard.** The dot has its own Tab stop right after its knob (`ModDotButton`, named "Cutoff
+  modulation, 2 sources", tooltip "Modulation sources for Cutoff. Double-click to remove"). Up and Down change the last-chosen
+  source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
+  and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
+  open the dot's panel like a click.
+* **Right-click.** A right press (or Ctrl-click) on the dot opens only the knob's own menu (Automate, MIDI learn), never the
+  panel and never a cable pickup: `CardControlGestures::claimMouseDown` declines every claim on a popup-menu press.
+  The guard test is `ARightPressOnTheDotOfEveryModulatedControlOpensOneMenuAndNoPanel`.
+* **Where it lives.** `ModDotTooltip` holds the readout (which source, its live amount) and its fade; the card
+  paints it as the chip stack (`ModuleComponentModChip.cpp`), repainting as the amount and opacity change. The gesture is a
+  third claim on `CardControlGestures` (`wantsModDotGesture`/`onModDotGesture`), asked after the
+  ring-amount drag and before the cable pickup, wired in `ModuleComponent::wireCardControlGestures`;
+  the behaviour is `ModDotController` (`Source/UI/Graph/ModDot/`), owned by `GraphEditor`.
+
+### The mod dot menu
+
+(A click on a plain jack opens the sibling [port connections panel](../layout/cables.md#port-connections-panel), built from the same parts. A modulation cable listed there, from the jack it lands on or the jack it leaves, is this panel's own row with the same amount bar, typed percent, curve chip and show in timeline, laid out on one line like this panel's, and both panels wire them through one helper, `wireModSourceRow` in `ModSourceRowWiring.cpp`. Tab walks a row in reading order, set explicitly by `ModDotSourceRow`: bar, percent, curve chip, show in timeline, then remove, on both panels. A name too long for its area ends in an ellipsis and its full name is the tooltip.)
+
+A click on a knob's mod dot (or Return/Space on its Tab stop) opens a small panel beside the dot, with an arrow on its
+edge pointing at the dot; a second click on the dot closes it. While it is open the dot carries the `accent` ring. The
+panel is one outlined shape (`ModDotPanelGeometry::outline`: the rounded body and the arrow are a single path, so there
+is no separate callout arrow) in a window of its own, `ModDotPanelFrame`: right of the dot, or left when the screen has
+no room. Near the bottom of the screen it slides up to stay fully on screen while the arrow tip stays level with the
+dot's centre, and it keeps doing so frame by frame as the panel grows (`ModDotPanelGeometry::place`, pinned by
+`ModDotPanelGeometryTests`). The window is not modal: a press anywhere else closes it (the edits already applied),
+except while "Pick on canvas" is on, and it fades in and out like every popup (`PopupMotion`), growing out of the dot (the whole panel scales from 40% with a 3% overshoot while it fades in) and shrinking back toward it on Esc, click-away or a pick. `ModDotPopover`
+(`Source/UI/Graph/ModDot/`) is the panel inside it; everything it paints uses the theme tokens itself (`ModDotPalette`).
+The window owns a tooltip window of its own (`ModDotPanelFrame::installTooltipWindow`, the shared
+`AppTooltipWindow` with its fade and the "Show info tooltips" preference), a child of the frame, because the main
+window's tooltip covers only its own tree; tooltip texts are kept short enough to fit the panel's width. The window is
+made the key window and focus is taken as soon as it can be (retried for about two seconds); if a control
+that held focus goes away (a removed row, a folded list) the panel's tick moves focus to its first control, so Esc and
+the arrows keep working.
+
+* **Rows** ("Cutoff · modulation"). One row per source on the knob (`synth::ui::knobModSources`, macro ports looked
+  through, so a row names the LFO, not the inlet): a swatch (`modRingPositive` from 0 up, `modRingNegative` below), the
+  source's name, an amount fader, the signed amount in the mono font, "Show <Source> in timeline" and "Remove <Source>".
+  The fader is the Design System fader a module card shows (`ModDotAmountBar`, a horizontal `juce::Slider` painted by
+  `AppLookAndFeel`, -100 to +100 percent); the row's controls are a theme spacing unit (`ModDotPalette::space`) apart,
+  so the icons never touch the fader or the amount. The icons are always in colour, resting, hovered or focused
+  (`modDotGlyphColour`): remove in the negative colour (with a pulse in the remove-highlight mode), show in timeline
+  and the crosshair in the positive one, the list in the accent. Resting the pointer on any of them shows its tooltip.
+  Dragging the fader edits live (the ring follows) as ONE undo step; typing in the amount (click it, Return applies as
+  one step, Esc cancels) is one step too. Clicking a row, or focusing it, selects it (a 10 percent accent tint) and
+  calls `ModDotController::setLastChosen`, so a dot drag edits that source next; the chosen source's row is selected
+  when the panel opens.
+* **Disconnect all** is one icon-only button (the unlink glyph, name and tooltip "Disconnect all connections") at the
+  right end of the panel's title row, shown from two sources up and aligned with the rows' remove column. It removes every
+  source of the knob as one undo step through `ModDotController::removeAllSources`; the source modules stay and no "Remove
+  LFO" question is asked, like the port panel's Disconnect all. It is a focus stop after the Add source split button.
+* **Add source** is a split button under the rows, after a divider (`SplitButton`, `Source/UI/Layout/SplitButton.h`, shared with the hosted plugin card's add-controls button). The left half (list icon,
+  "Add source", tooltip "Add source from a list") unfolds the source list in the same panel, directly under the rows,
+  which stay visible above it; a second click or Esc folds it back. The right half (crosshair icon, "Pick on canvas")
+  starts the canvas pick below. Each half is its own Tab stop with the accent focus ring; Left and Right hop between
+  them. A half is drawn lit while its mode is on.
+* **The source list** (`ModDotAddSourcePage`, unfolded). A pill search field (focused on opening) and "Expand all" /
+  "Collapse all", then collapsible groups: LFOs, Envelopes, Macros, MIDI, then the Mod Matrix's other categories
+  (Sequencers, Oscillators, Filters, Effects, Other), each only when it has a source. The groups are
+  `synth::ui::enumerateModSources` regrouped (`ModSourceCatalog.h`): the SAME list the Mod Matrix's source combos are
+  built from, so the two always offer the same sources; macro ports and the card itself are left out. Each row shows on
+  the right how many things that source already moves (`modSourceTargetCounts`: the modulation routings leaving it,
+  macro ports looked through, each destination jack counted once): "1 target", "N targets", or "Not used yet". A
+  source already on this knob (same module and output) is greyed and cannot be picked twice. The search is the shared
+  matcher (`UI/Layout/SearchMatch.h`: every word must match, matched letters highlighted); while it has text, groups
+  with a match are open and the rest hidden, clearing it puts back the folds the user had, and no hit reads "No source
+  matches". Return picks the best match.
+* **New module.** While the search has text, a last group "New module" offers "New <module>" rows, each with a small
+  "New" tag, for the module types that match the query and can be a source: the authorable LFO, envelope, macro,
+  sequencer and oscillator types (`newModuleSources`, probed from the module factory once, like the Dual I/O list; the
+  new source reads the module's first modulation output). The ADSR, Amp Env and Filter Env factory keys are one
+  module class, so they are ONE row, "New Env" (it creates an ADSR; "envelope", "adsr", "amp env" and "filter env" all
+  find it, and every key stays loadable). Choosing one creates the module beside the knob's card and
+  connects it, as ONE undo step (`GraphEditor::addModulationSourceModule`: the card, its place and any room made for it,
+  the cable through the macro-port seam, its depth, and joining the card's macro when it is in one). Return prefers an
+  existing match to a new module.
+* **Picking a source** from the list connects it through the same programmatic routing seam as the Mod Matrix and the
+  timeline's "Add modulator" (`GraphEditor::connectModulationSource`, which `connectExistingModulator` wraps), so
+  macro ports are minted where a macro boundary is crossed. The new routing starts at +25 percent
+  (`kModDotNewSourceDepth`); the cable, its depth and any ports are ONE undo step. The list folds and the new row grows
+  in selected (and chosen for a later dot drag).
+* **Pick on canvas.** The right half puts a transparent layer over the graph canvas (`ModDotCanvasPicker`, a child of
+  the `GraphEditor`; `PickTargetOverlay` is keyed to MIDI controls and parented on the main window, so it does not
+  fit). The module card under the pointer is outlined when it can be a source (not the knob's own card, not a source
+  already on the knob); a press on it adds it exactly as picking it from the list would (its first modulation output,
+  +25 percent, one undo step) and ends the mode; a press on anything else leaves the mode on. The mouse wheel still
+  scrolls the canvas. Esc, or the half again, ends it; so does the canvas being rebuilt
+  (`GraphEditor::onBeforeDetachAllModuleComponents` also ends it, through `ModDotController::endCanvasPick`). Picking
+  with the pointer has no keyboard equivalent by nature; the list is the keyboard path.
+* **Remove** goes through the same path as the timeline's "Remove modulator" (`ModDotController::host.removeModulator`,
+  set by `MainComponent` to `removeModulator`): the routing and its amount lane go in one undo step, the ports it
+  crossed are swept, and removing an LFO's last destination asks first (Remove LFO, Keep module or Cancel, with a
+  Remember my choice box: [asking first](../timeline/automation.md)). A double-click on the dot or on the cable takes
+  this same path. With no host set (a canvas test) it falls back
+  to `GraphEditor::removeModulationChain`.
+  The row shrinks toward its centre (180 ms) and the rows below then close the gap (200 ms); Cmd+Z opens the gap, grows
+  the row back and fades a thin accent outline around it (a plain fade under Reduce Motion, at once off screen):
+  [delete and undo animation](../layout/animation.md#delete-and-undo-animation).
+* **Double-click the dot to remove.** With ONE source on the knob, a double-click on its dot removes that connection
+  as one undo step: the cable animates out and the attenuverter and any macro-port hop it used go with it, the source
+  module stays unless it was that LFO's last destination, which asks first like Remove above (`ModDotController::
+  removeChain`, then the same `host.removeModulator`, via `ModDotController::dotDoubleClicked`; without a host
+  `GraphEditor::removeModulationChain`); Cmd+Z brings it all back. With SEVERAL sources it opens this panel (or keeps it open) with every remove button drawn in the negative
+  colour at full strength, with one short pulse (none under reduced motion) and "Choose a source to remove"
+  announced; removing one there is the normal Remove above. The same applies to a double-click on a visible CV jack
+  that drives a knob's modulation (`ModuleComponent::handleModJackDoubleClick`; the panel then points at the card).
+  Gated by the preference "Double-click port to disconnect" (on by default); off, a double-click is two clicks. The
+  panel is not modal, so the dot receives the second press itself. The knob's own double-click-to-reset is skipped
+  when the dot claimed the press.
+* **Show in timeline** (`host.revealModulator` -> `MainComponent::revealModulatorInTimeline`) opens the Timeline tab and
+  shows the lane of the knob's parameter, where its modulator rows sit. A parameter with no lane gets one the way
+  "Automate" makes it (`automateParameter`, one undo step); the view scrolls to the lane row, not to the single
+  modulator row under it. A MIDI clip open in the timeline (piano roll) is closed first, so the lanes are showing.
+* **Closing and keys.** A press outside closes it, the edits already applied. Esc steps back: it stops a canvas pick,
+  then clears the search, then folds the list, then closes; focus moves into the panel on open and back to the dot's
+  button on close. Up and Down walk the rows, the split button and (with the list open) the group headers and source
+  rows; Left and Right on an amount bar step 1 percent (Shift 10), each key press one undo step; on a group header Left
+  folds, Right unfolds, Return toggles.
+* **Accessibility.** Every control has a keyboard stop with the accent focus ring, a name and a tooltip: the bar is a
+  slider ("<Source> amount", the value in percent, tooltip "Drag to change <Source> amount", description "How strongly <Source> moves <Param>"), the halves
+  read "Add source" / "Add source, list open" and "Pick on canvas" / "Pick on canvas, on", the group headers read
+  "LFOs, expanded" / "collapsed", a source row reads "<Source>, 2 targets" (", added" when it is on the knob) and a new
+  module row "New ADSR, new module". The `ModDotPopover` surface is audited in
+  `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp`.
+* **Where it lives.** The panel and its parts are `ModDotPopover` (+ `ModDotPanelFrame`, `ModDotPanelGeometry`),
+  `ModDotSourcesPage` (+ `ModDotSourceRow`, `ModDotAmountBar`; the shared `SplitButton`), `ModDotAddSourcePage` (+
+  `ModDotAddSourceParts`) and `ModDotCanvasPicker`; `ModDotController` opens it (`popoverLauncher` is the seam a
+  headless test uses instead of a real window) and follows the graph with it open on the editor's tick. Motion:
+  [animation.md](../layout/animation.md#what-moves-and-how).
 
 ## Drag-to-knob modulation
 
@@ -462,12 +723,15 @@ jack it used to also be reachable from is gone.
 
 A visible input jack is **knob-bound** when it is a `ModulationTarget` whose knob resolves on this
 card right now (`ModuleComponent::isInputJackKnobBound`, `sliderIndexForModTarget(target) >= 0`) —
-recomputed live on every call (never cached across a layout), so a poly toggle, Dual I/O change or
-Wavetable tab switch that changes which knob is visible changes which jacks are hidden on the very
-next repaint. A knob-bound jack:
+recomputed live on every call (never cached across a layout), so a poly toggle or Dual I/O change
+that changes which knob is visible changes which jacks are hidden on the very next repaint. A knob in a
+layout's tab section never binds its jack, selected or not, so a tab switch never moves a jack
+([module-card.md](../layout/module-card.md#tab-strips)). A knob-bound jack:
 
 - draws no gutter dot or label at all (`ModuleComponent::paint`'s input loop iterates
   `drawnInputJackIndices()`, not every visible index);
+- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV, the LFO's Morph X/Y, the shared Level, Mix and Pan, the Voice Mixer's Level, the Level of Drum Kit, Pluck and Mallet, Pluck's Body, Mallet's Tremolo and the Oscillator's Fixed rate) is left out of that list even
+  while its knob is hidden, so a mode that hides the knob never brings its jack back into the gutter;
 - is never hit-tested by `getPortForPoint` (same list), so a mouse-down there falls through to the
   knob's own gesture handling instead of starting a jack drag;
 - still fully participates in the routing model — an existing or saved connection into that raw
@@ -522,10 +786,13 @@ mechanism.
 
 ## Every continuous parameter is a target
 
+Hosted plugin parameters and Drum Kit pad knobs take cables through modulation slots claimed on demand (`synth::ModSlotHost`):
+[`plugin-card-layout.md#modulating-plugin-parameters`](../control/plugin-card-layout.md#modulating-plugin-parameters).
+
 The rule for a module's CV jacks: **every continuous (`AudioParameterFloat`/`Int`) parameter that
 shapes the sound gets a CV jack and a `ModulationTarget`.** Choice and toggle parameters do not
-(there is no meaningful "half a waveform"), nor does the shared output Level stage (see
-[`fx-modules.md`](fx-modules.md#output-level-shared-stage) for why). A user who can turn a knob
+(there is no meaningful "half a waveform"). The shared output stage's Level, Mix and Pan take a
+cable on the knob, with no gutter jack ([`fx-modules.md`](fx-modules.md#output-level-shared-stage)). A user who can turn a knob
 expects to be able to drop a cable on it — a knob with no jack reads as a bug, not a design choice.
 
 New jacks are **appended** after the module's existing channels, never inserted: connections
@@ -537,15 +804,38 @@ the jacks never existed and the AI schema advertised ports nothing could connect
 `ModulationTargetBindingTests` now checks every target's channel against the declared input count.
 
 Also covered, appended after each module's existing channels so saved patches keep theirs: the
-LFO (Rate ch0, Level ch1, Glide ch2; Rate CV applies in Hz mode only), the ADSR (Attack ch9, Hold
-ch10, Decay ch11, Sustain ch12, Release ch13, after Threshold ch8; a tempo-synced stage ignores its
-time CV) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
-ch6-14) — see [`lfo.md`](lfo.md),
+LFO (Rate ch0, Level ch1, Glide ch2, Phase ch3, Fade In ch4; Rate CV applies in Hz mode only), the
+ADSR (Attack ch9, Hold ch10, Decay ch11, Sustain ch12, Release ch13, Velocity ch14, after Threshold
+ch8; a tempo-synced stage ignores its time CV), the Oscillator's Pulse Width ch16 and Glide ch17
+(after Unison/Detune), every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
+ch6-14; slots 5-24 add knob-only Freq, Gain and Q channels 17-76 with no gutter jack; band Type/Slope take no cable), the Filter's Key Track ch27 (after its Pitch block, ch19-26) and the Reverb's Pre-Delay ch7 (the
+Delay's tempo sync and ping-pong are switches and have no jack) — see [`lfo.md`](lfo.md),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
-[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the
-mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the mixer panel rather
-than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
-layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
+[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). A knob that takes no cable is listed with its reason in `ModCableExemptions.h`: wiring switches (Dual I/O, Poly),
+choices, the Macros' `macroCount`, the MIDI Keyboard octave, the Sequencers' per-step pattern data and the Drum Kit pads.
+Everything else that can be modulated takes a knob-only cable on a channel above every existing input
+(`ModTargetList`, below), so saved cables keep their channel:
+
+| Module | Knob (channel) | Read |
+|---|---|---|
+| Wavetable | Unison (31) | at note start, rounded to a whole voice count; applied when the voices restart (gain glides, no click); a cable change mid-note waits for the next note |
+| Oscillator | Phase (29), Rand Phase (30) | at note start, for each restarted voice |
+| Sequencer, Poly Sequencer | BPM (0), Transpose (1), Gate (2), Velocity (3), Chance (4) | BPM every block; the other four at each step, on the step's own sample; the knob is never written |
+| Channel Strip | Gain (5), Pan (6), Send 1-4 Level (7-10), Send 1-4 Pan (11-14) | live, every block |
+| Master | Gain (4) | live, every block |
+| Macros | Macro 1-16 (0-15) | live, every block; moves the knob inside its own range |
+
+The cable moves the knob in its normalised range, never the stored value.
+
+The dynamics and Sampler controls follow the same rule: Compressor Knee on ch9 (after the Key pair
+on ch7/ch8, which keep their channels, so the Knee jack is the last visible one), Limiter Ceiling
+on ch5 (after Input Gain) and Sampler End on ch8 and Fine on ch9 (after Root Note). Compressor
+Knee and Limiter Ceiling follow the [normalised convention](#cv-in-normalised-units) and are read
+once per block. The Sampler's two follow its own per-sample convention (End: the parameter's 0-1
+span; Fine: 100 cents per unit). The Sampler's Reverse switch is a toggle and has no jack — see
+[`fx-modules.md`](fx-modules.md#compressor-module),
+[`fx-modules.md`](fx-modules.md#limiter-module) and
+[`modules.md#sampler-module`](modules.md#sampler-module).
 
 **FRO314** closed a gap this rule had let through silently: Oscillator's targets had no
 `paramId` (falling back to fragile jack-label/knob-name string matching — harmless only because
@@ -567,6 +857,36 @@ build instead of shipping. Its explicit, commented exclusion list documents whic
 legitimately out of scope (paged tab cards, port widgets, per-step pattern data, mixer gain
 stages, hosted-plugin parameters) rather than absorbing them silently — the ADSR Curve amounts need
 no entry there at all, since they are never declared targets in the first place.
+
+## One list per module
+
+An instrument whose knobs take cables with no gutter jack declares them once, as a `synth::ModTargetList`
+(`Source/Modules/PortRole.h`): a `constexpr std::array<synth::ModTargetSpec, N>` of
+`{paramId, read}` pairs, where entry k owns raw input channel k. Everything else comes from the list:
+
+- the input channel count passed to `ModuleBase` (`kModTargets.size()`);
+- `getModulationTargets()` (one knob-only target per entry, named with the parameter's display name);
+- `getInputPortLabel()` (the same name);
+- the value the module uses: `valueAt(buffer, param, sample)`, the knob moved by its cable in the
+  knob's [normalised range](#cv-in-normalised-units).
+
+`read` says when the module reads the cable, matching when it reads the knob:
+
+| `ModRead` | Read at | Used for |
+|---|---|---|
+| `Live` | every block (`blockCV`) | Level, Body, Tremolo |
+| `NoteOn` | the note-on's own sample | Tune, Decay, Brightness, Hardness, ... |
+| `NoteOff` | the note-off's own sample | Release |
+
+A `NoteOn` cable changes each new note and never a note already ringing, which is how note-time settings
+behave in other synths. The read is on the note's sample, not the block's first one, so a ramp feeding
+the cable gives a note mid-block the ramp's value there (bug kind edge-reads-a-ramp). The render writes
+the output channels as it goes, so a module reads a note's cables before rendering past that note.
+
+New entries are appended, never inserted: a saved cable keeps its channel. Pluck, Mallet and the Drum Kit use the
+list; see [`pluck-mallet.md`](pluck-mallet.md#mod-cables) and [`drum-kit.md`](drum-kit.md#mod-cables). The Drum
+Kit's list is its Level (live) and its group knobs (read when a pad of the group is struck); the channels after the
+list are reserved for pad cables.
 
 ## CV in normalised units
 
@@ -595,8 +915,11 @@ what was added, not retroactively.
 
 ## Smart cables, poly-bus wires and the mod matrix
 
-The three surfaces that expose a routing's depth, and what each one does:
+The surfaces that expose a routing's depth, and what each one does:
 
+- **The timeline's amount lane.** Under an automation lane, a modulator row's band sets the same
+  attenuverter `amount` (a vertical drag or Up/Down while it has no lane) or draws how it changes over the
+  song as an ordinary automation lane on that `amount` ([amount lane](../timeline/automation.md#amount-lane)).
 - **Smart cables.** Every mono CV cable (an `AttenuverterChain` routing) renders a circular knob at
   the midpoint of its bezier curve. Drag up/down to sweep depth from -100% to +100%; double-click to
   delete the connection.
@@ -606,8 +929,13 @@ The three surfaces that expose a routing's depth, and what each one does:
   between two equally-wide poly jacks creates all N per-voice connections directly, so no preset JSON
   has to hand-author each voice.
 - **Mod matrix panel.** Lists every active CV connection as a labelled row with a bipolar slider. The
-  sliders and the smart-cable knobs are **bidirectionally synced in real time** off a 30 Hz timer.
-  The panel's own geometry, striping and row widgets are in
+  sliders and the smart-cable knobs are **bidirectionally synced in real time**: both are bound to the
+  attenuverter's own amount parameter, so neither polls. The panel's 10 Hz timer
+  (`startTimerHz(10)`) only keeps the row list, the combo contents and the selections in step with the
+  graph. Source and destination labels follow the **card title**: a module the user renamed on the
+  canvas reads under that name here too (`synth::moduleTitle`), and a rename refreshes the labels on the
+  next tick. Its source list offers the output jacks the card draws, one entry per jack (an LFO's
+  two silent pass-through channels are not sources). The panel's own geometry, striping and row widgets are in
   [`layout/chrome.md`](../layout/chrome.md#mod-matrix-panel); the toolbar toggle that shows and hides
   it is in the same doc.
 

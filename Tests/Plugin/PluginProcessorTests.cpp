@@ -16,9 +16,11 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
+#include "Music/SongKey.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginEditor.h"
 #include "Plugin/PluginProcessor.h"
+#include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
@@ -133,7 +135,7 @@ public:
 
     void prepareToPlay(double, int) override {}
 
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {
         insidePass.store(true, std::memory_order_release);
         // Bounded, so a test that never releases fails rather than wedging the audio thread.
         const auto deadline = juce::Time::getMillisecondCounter() + 5000u;
@@ -480,6 +482,57 @@ TEST(AgentSynthAudioProcessorStateTest, EditorSizeSurvivesStateRoundTrip) {
     EXPECT_EQ(second.getSavedEditorSize().y, 777);
 }
 
+TEST(AgentSynthAudioProcessorStateTest, SongKeySurvivesStateRoundTrip) {
+    synth::AgentSynthAudioProcessor first;
+    synth::MusicalScale dMinor;
+    dMinor.rootPitchClass = 2;
+    dMinor.mask = 0b101101011010; // natural minor
+    dMinor.name = "Natural Minor";
+    first.getAudioEngine().getTransport().setSongKey(dMinor);
+
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+
+    synth::AgentSynthAudioProcessor second;
+    second.setStateInformation(state.getData(), (int)state.getSize());
+
+    const auto& key = second.getAudioEngine().getTransport().getDocumentState().songKey;
+    ASSERT_TRUE(key.has_value());
+    EXPECT_TRUE(synth::sameKey(*key, dMinor));
+    EXPECT_EQ(second.getAudioEngine().getTransport().getSongKeyPacked(), synth::TransportService::packSongKey(dMinor));
+}
+
+TEST(AgentSynthAudioProcessorStateTest, StateWithoutSongKeyLoadsAsNoKey) {
+    synth::AgentSynthAudioProcessor first; // never set a key: nothing is written
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+    EXPECT_FALSE(juce::JSON::parse(state.toString()).getDynamicObject()->hasProperty("songKey"));
+
+    // A processor that already holds a key drops it when an older, key-less state loads over it.
+    synth::AgentSynthAudioProcessor second;
+    synth::MusicalScale key;
+    key.rootPitchClass = 7;
+    key.mask = 0b101010110101; // major
+    key.name = "Major";
+    second.getAudioEngine().getTransport().setSongKey(key);
+    second.setStateInformation(state.getData(), (int)state.getSize());
+    EXPECT_FALSE(second.getAudioEngine().getTransport().getDocumentState().songKey.has_value());
+    EXPECT_EQ(second.getAudioEngine().getTransport().getSongKeyPacked(), 0u);
+}
+
+TEST(AgentSynthAudioProcessorStateTest, MalformedSongKeyLoadsAsNoKey) {
+    synth::AgentSynthAudioProcessor first;
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+    auto parsed = juce::JSON::parse(state.toString());
+    parsed.getDynamicObject()->setProperty("songKey", "garbage");
+    const auto json = juce::JSON::toString(parsed);
+
+    synth::AgentSynthAudioProcessor second;
+    second.setStateInformation(json.toRawUTF8(), (int)json.getNumBytesAsUTF8());
+    EXPECT_FALSE(second.getAudioEngine().getTransport().getDocumentState().songKey.has_value());
+}
+
 class AgentSynthAudioProcessorJunkStateTest : public ::testing::Test {
 protected:
     void SetUp() override { processor = std::make_unique<synth::AgentSynthAudioProcessor>(); }
@@ -524,14 +577,14 @@ TEST_F(AgentSynthAudioProcessorJunkStateTest, IgnoresValidJSONThatIsNotAnObject)
 TEST_F(AgentSynthAudioProcessorJunkStateTest, RejectsPatchExceedingValidationLimitsWithoutPartiallyApplying) {
     const int nodesBefore = processor->getAudioEngine().getGraph().getNumNodes();
 
-    // One node entry over AIStateMapper::kMaxNodes — trusted=false on the processor's
-    // setStateInformation path means this must be rejected wholesale by validatePatch(), never
-    // partially applied. Mirrors the TooManyNodes case in AIPatchValidationTests.cpp.
+    // One node entry over AIStateMapper::kMaxAppDataNodes (a host session is app data) — trusted=false on the
+    // processor's setStateInformation path means this must be rejected wholesale by validatePatch(), never partially
+    // applied. Mirrors the TooManyNodes case in AIPatchValidationTests.cpp.
     juce::DynamicObject::Ptr n = new juce::DynamicObject();
     n->setProperty("id", 1);
     n->setProperty("type", "Oscillator");
     juce::Array<juce::var> nodes;
-    for (int i = 0; i < synth::AIStateMapper::kMaxNodes + 1; ++i)
+    for (int i = 0; i < synth::AIStateMapper::kMaxAppDataNodes + 1; ++i)
         nodes.add(juce::var(n.get()));
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("nodes", nodes);

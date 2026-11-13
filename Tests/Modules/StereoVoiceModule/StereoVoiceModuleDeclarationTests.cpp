@@ -30,13 +30,21 @@ const std::vector<std::pair<juce::String, const char*>> kDualIOOptOuts = {
                    "two unrelated CV jacks per side, and no audio output at all"},
     {"Rec Tap", "a hidden recording tap: its two channels are the take's capture pair, wired by the "
                 "record flow rather than patched, and it has no card to put a jack toggle on"},
-    {"Master", "the mix bus: its four inputs are two stereo BLOCKS (Mix L/R and Direct L/R), not an FX "
-               "pair plus CV, so a collapsed 'Audio' jack over ch0/ch1 would misdescribe it"},
 };
 
 // Modules that declare a second audio leg the shape rule cannot see (their own kRightBase block, or
 // a ch0/ch1 pair alongside further outputs). Each passes StereoAudio::Declared and ships SPLIT.
-const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable", "Filter", "VCA", "Sampler"};
+//
+// Master is Declared too (inputs only): its four inputs are two stereo BLOCKS (Mix L/R, Direct L/R),
+// so the inherited Auto rule (collapsed by default, one "Audio" jack) would misdescribe it. Declared
+// ships SPLIT, which is its long-standing four-jack look; collapsed shows "Mix" and "Direct".
+//
+// Hosted Plugin is Declared too: its fixed 16/16 shape hides whether the hosted instance is a stereo
+// pair, so the toggle is always present and only acts on an instance with exactly 2 inputs / 2 outputs. It ships
+// SPLIT because every project saved before the toggle existed loaded as separate Left/Right jacks.
+const std::vector<juce::String> kDualIODeclared = {"Oscillator", "Wavetable",     "Filter",       "VCA",
+                                                   "Sampler",    "Drum Kit",      "Pluck",        "Mallet",
+                                                   "Master",     "Hosted Plugin", "Channel Strip"};
 
 bool containsName(const std::vector<juce::String>& v, const juce::String& s) {
     return std::find(v.begin(), v.end(), s) != v.end();
@@ -57,7 +65,7 @@ public:
         : ModuleBase("Shape Only", 4, 2) {} // 2 audio + 2 CV in, stereo out — the Distortion shape
 
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Distortion; }
 };
 
@@ -165,7 +173,7 @@ TEST(StereoDeclaration, RingModulatorGetsTheTogglePurelyByInheritance) {
     // ...and its five input jacks are still its own, in both states.
     for (bool dual : {false, true}) {
         setBoolParam(ringMod, "dualIO", dual);
-        EXPECT_EQ(ringMod.getVisibleInputPortCount(), 5) << "dual=" << dual;
+        EXPECT_EQ(ringMod.getVisibleInputPortCount(), 7) << "dual=" << dual;
         EXPECT_EQ(ringMod.getInputPortLabel(0), "Carrier") << "dual=" << dual;
         EXPECT_EQ(ringMod.getInputPortLabel(1), "Modulator") << "dual=" << dual;
         EXPECT_NE(ringMod.mapInputChannel(1).role, PortRole::Audio) << "dual=" << dual;
@@ -246,10 +254,21 @@ TEST(StereoDeclaration, MuteAndCVClearHoldForEveryDualIOCapableModuleInBothState
                     mb->setBypassed(bypassed);
                     fill(buffer);
                     mb->processBlock(buffer, midi);
-                    for (const auto& t : mb->getModulationTargets()) {
-                        ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "
-                                                        "cannot sit below ch2";
-                        if (t.channelIndex < channels)
+                    // A source with no audio input (the Drum Kit) owns ch0/ch1 on the output side only: its
+                    // knob-only CV on ch0 is read before the block writes its audio there.
+                    const auto targets = mb->getModulationTargets();
+                    bool takesAudio = false;
+                    for (int ch = 0; ch < mb->getTotalNumInputChannels(); ++ch)
+                        takesAudio = takesAudio || (!mb->isReservedInputChannel(ch) &&
+                                                    std::none_of(targets.begin(), targets.end(), [ch](const auto& t) {
+                                                        return t.channelIndex == ch && t.knobOnly;
+                                                    }));
+                    for (const auto& t : targets) {
+                        if (takesAudio)
+                            ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "
+                                                            "cannot sit below ch2";
+                        // A cable channel above the outputs (the Master's Gain) never reaches an output.
+                        if (t.channelIndex < std::min(channels, mb->getTotalNumOutputChannels()))
                             EXPECT_LT(rmsOf(buffer, t.channelIndex), 1.0e-6f)
                                 << "CV channel " << t.channelIndex << " (" << t.name
                                 << ") leaked, bypassed=" << bypassed;
@@ -313,7 +332,7 @@ TEST(StereoDeclaration, APatchSavedBeforeTheMoveLoadsWithTheSameLayout) {
     EXPECT_FALSE(osc->isDualIO()) << "an explicit false must survive the move to the base";
     EXPECT_EQ(osc->getVisibleOutputPortCount(), 1);
     EXPECT_TRUE(filter->isDualIO()) << "an explicit true must survive";
-    EXPECT_EQ(filter->getVisibleInputPortCount(), 5);
+    EXPECT_EQ(filter->getVisibleInputPortCount(), 14);
     EXPECT_TRUE(reverb->isDualIO());
     EXPECT_EQ(reverb->getVisibleOutputPortCount(), 2);
     EXPECT_FALSE(delay->isDualIO()) << "an omitted dualIO must fall to the module's default (collapsed)";
@@ -379,7 +398,7 @@ TEST(StereoDeclaration, ALegacyStateBlobWithNoDualIOPropertyLoadsAtTheModuleDefa
         FilterModule target; // fresh
         target.setStateInformation(legacy.getData(), (int)legacy.getSize());
         EXPECT_TRUE(target.isDualIO()) << "a blob with no dualIO must leave a Declared module split";
-        EXPECT_EQ(target.getVisibleInputPortCount(), 5);
+        EXPECT_EQ(target.getVisibleInputPortCount(), 14);
     }
 
     {

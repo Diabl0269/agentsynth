@@ -1,0 +1,32 @@
+# Bug: the Filter's Cutoff knob was linear in hertz, so its first tenth of travel swept 20 Hz to 2 kHz.
+#
+# What a user does:
+#   1. Starts a new project and adds a Filter from the library (Cmd+F).
+#   2. Sees Cutoff at 440 Hz, with the knob near the middle of its travel, not hard against the bottom.
+#   3. Saves the project and opens it again: Cutoff still reads 440 Hz.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - expect: {id: "card:Filter > Cutoff", showing: true, value: 440.0, min: 20.0, max: 20000.0, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: cutoff-default-position}
+  - saveProject: {path: "${OUT}/cutoff-taper.agsproj"}
+  - click: {id: New empty project}
+  - wait: {}
+  - openProject: {path: "${OUT}/cutoff-taper.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Filter > Cutoff", value: 440.0, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: cutoff-reopened}

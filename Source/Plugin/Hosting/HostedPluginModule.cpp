@@ -15,11 +15,21 @@ constexpr int kReapRetryDelayMs = 250;
 } // namespace
 
 HostedPluginModule::HostedPluginModule()
-    : ModuleBase("Hosted Plugin", kMaxPluginChannels, kMaxPluginChannels) {
-    // 16 in / 16 out, for the node's whole lifetime, whatever plugin (if any) it ends up hosting.
-    // See the class comment: JUCE fixes the bus layout here and renegotiating it would drop every
-    // connection the node has.
+    : ModuleBase("Hosted Plugin", kMaxPluginInputChannels + kMaxModSlots, kMaxPluginOutputChannels,
+                 StereoAudio::Declared) {
+    // The inputs above the 16 audio channels are the modulation slots (see bindModSlot); they are never jacks.
+    for (int k = 0; k < kMaxModSlots; ++k) {
+        modSlotParamIndex_[(size_t)k].store(-1, std::memory_order_relaxed);
+        modSlotBase_[(size_t)k].store(-1.0f, std::memory_order_relaxed);
+    }
+    // 16 audio in (+ the mod slots) / 64 out, for the node's whole lifetime, whatever plugin (if any) it ends up
+    // hosting. See the class comment: JUCE fixes the bus layout here and renegotiating it would drop every connection
+    // the node has.
     addMuteParameter();
+    // StereoAudio::Declared: the "dualIO" parameter exists (default ON = separate Left/Right jacks, what every
+    // project saved before the toggle loads as) but only does anything once the published instance has exactly 2
+    // inputs / 2 outputs; see getVisibleOutputPortCount(). The plugin's own parameters live on the inner
+    // instance, so this one never shifts their indices.
 }
 
 HostedPluginModule::~HostedPluginModule() {
@@ -43,6 +53,16 @@ HostedPluginModule::~HostedPluginModule() {
     retired_.clear();
 }
 
+// The shown name: the plugin's name, with " <n>" for the second and later hosted modules of the same plugin
+// (instanceOrdinal_, assigned by AudioEngine::updateModuleNames); "Hosted Plugin" while bare. Deliberately NOT
+// getName(): that is the type key several callers branch on, so only the title layer (synth::moduleTitle)
+// reads this. Nothing is persisted for it -- the plugin identity is, and the ordinal is recomputed from the graph.
+juce::String HostedPluginModule::getDefaultTitle() const {
+    if (identity_.name.isEmpty())
+        return getName();
+    return instanceOrdinal_ > 1 ? identity_.name + " " + juce::String(instanceOrdinal_) : identity_.name;
+}
+
 //==============================================================================
 // Loading (message thread only)
 //==============================================================================
@@ -51,10 +71,15 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
     // Nothing but a state restore may carry a blob into a load: the blob belongs to the plugin it was
     // saved from, and applying it to a DIFFERENT plugin hands third-party code someone else's bytes.
     pendingBlob_.reset();
-    setCardLayoutOverride({}); // like the blob, a card layout belongs to the plugin it was made for
+    setCardLayoutOverride({});   // like the blob, a card layout belongs to the plugin it was made for
+    modSlotsFromVar({});         // and so do the parameters its cables modulate
+    savedOutputs_ = juce::var(); // and so does the choice of which outputs show: a fresh load shows the main bus only
+    outputsRestored_ = false;
+    outputsFolded_ = false;
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
+    switchedOffAfterCrash_ = false;
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -77,6 +102,9 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
                 module->publishInstance(std::move(instance));
             }
 
+            if (!module->hasInstance())
+                module->fireLoadFailedEdge();
+
             // Fires last, whatever branch above ran — see onLoadCompleted's own comment for
             // why hasInstance() (not `instance != nullptr`) is the right read here: publishInstance()
             // itself can silently refuse an over-max instance without ever publishing one.
@@ -88,12 +116,19 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPluginBackend& backend) {
     pendingBlob_.reset(); // see the description overload
     setCardLayoutOverride({});
+    modSlotsFromVar({});
+    savedOutputs_ = juce::var();
+    outputsRestored_ = false;
+    outputsFolded_ = false;
     startIdentityLoad(identity, backend);
 }
 
 void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, HostedPluginBackend& backend) {
     identity_ = identity;
     statusMessage_.clear();
+    // isSwitchedOffAfterCrash(): set when the load starts, cleared by a publish, by any other load and by unload.
+    // Checked now, while the load that carries the skip is still running: the skip ends with that load.
+    switchedOffAfterCrash_ = backend.isSkippedForNextLoad(identity);
     loading_ = true;
 
     const int generation = ++loadGeneration_;
@@ -117,11 +152,26 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
             } else {
                 module->publishInstance(std::move(instance));
             }
+            if (module->hasInstance())
+                module->switchedOffAfterCrash_ = false;
+
+            if (!module->hasInstance())
+                module->fireLoadFailedEdge();
 
             // See the description-overload's own comment on this same line.
             if (module->onLoadCompleted)
                 module->onLoadCompleted(module->hasInstance());
         });
+}
+
+// Reloads identity_ through startIdentityLoad, so the saved plugin state, the card layout override and the mod slots
+// are kept. Ends that plugin's skip first, so an explicit turn-on is never blocked by one still set. A no-op while an
+// instance is live or a load is in flight. Not an undo step: it restores what the project already holds.
+void HostedPluginModule::turnBackOn(HostedPluginBackend& backend) {
+    if (!identity_.isValid() || hasInstance() || loading_)
+        return;
+    backend.clearSkipFor(identity_);
+    startIdentityLoad(identity_, backend);
 }
 
 void HostedPluginModule::unloadPlugin() {
@@ -131,7 +181,11 @@ void HostedPluginModule::unloadPlugin() {
     identity_ = {};
     pendingBlob_.reset();
     setCardLayoutOverride({});
+    modSlotsFromVar({});
+    savedOutputs_ = juce::var();
+    outputsRestored_ = false;
     statusMessage_.clear();
+    switchedOffAfterCrash_ = false;
     // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
     setLatencyAndNotify(0);
@@ -174,14 +228,54 @@ void HostedPluginModule::detachInstanceListener() {
 }
 
 void HostedPluginModule::prepareInstance(juce::AudioPluginInstance& instance) const {
-    instance.setPlayConfigDetails(instance.getTotalNumInputChannels(), instance.getTotalNumOutputChannels(),
-                                  currentSampleRate_, currentBlockSize_);
+    // NOT setPlayConfigDetails(): it ends with disableNonMainBuses(), which would switch off every aux output bus the
+    // publish step just enabled.
+    instance.setRateAndBufferSizeDetails(currentSampleRate_, currentBlockSize_);
     instance.prepareToPlay(currentSampleRate_, currentBlockSize_);
+}
+
+void HostedPluginModule::negotiateStereoMainBuses(juce::AudioPluginInstance& instance) {
+    const auto layout = instance.getBusesLayout();
+    const auto stereo = juce::AudioChannelSet::stereo();
+
+    // Only a main bus that is mono (or, for the output, absent/disabled) is widened to stereo. 2 is already
+    // stereo; 3+ is a wider plugin whose raw jacks stay as they are. An INPUT that is disabled (an instrument)
+    // stays off. Aux buses (index 1+) are carried through untouched, so a sidechain is never enabled here.
+    auto widen = [&stereo](juce::Array<juce::AudioChannelSet>& buses, bool isInput) {
+        if (buses.isEmpty())
+            return false;
+        auto& main = buses.getReference(0);
+        const int n = main.size();
+        if (n >= 2 || (isInput && n == 0))
+            return false;
+        main = stereo;
+        return true;
+    };
+
+    auto candidate = layout;
+    const bool widenedIn = widen(candidate.inputBuses, /*isInput*/ true);
+    const bool widenedOut = widen(candidate.outputBuses, /*isInput*/ false);
+    if (!widenedIn && !widenedOut)
+        return;
+
+    if (instance.checkBusesLayoutSupported(candidate)) {
+        instance.setBusesLayout(candidate);
+        return;
+    }
+    if (widenedIn && widenedOut) { // mono-in / stereo-out is the common shape when stereo-in is refused
+        candidate = layout;
+        widen(candidate.outputBuses, /*isInput*/ false);
+        if (instance.checkBusesLayoutSupported(candidate))
+            instance.setBusesLayout(candidate);
+    }
 }
 
 void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance) {
     if (instance == nullptr)
         return;
+
+    negotiateStereoMainBuses(*instance);
+    enableOutputBuses(*instance);
 
     // Take whatever bus layout the instance reports as its default — we ask it what it is rather
     // than imposing one, because a plugin's preferred layout is the one it is guaranteed to render
@@ -189,18 +283,19 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     const int instanceInputs = instance->getTotalNumInputChannels();
     const int instanceOutputs = instance->getTotalNumOutputChannels();
 
-    if (instanceInputs > kMaxPluginChannels || instanceOutputs > kMaxPluginChannels) {
-        // Refused, not truncated. Truncating a surround plugin down to 16 would silently drop
-        // channels with nothing to tell the user; this leaves the module passing audio through and
-        // says why.
+    if (instanceInputs > kMaxPluginInputChannels || instanceOutputs > kMaxPluginOutputChannels) {
+        // Refused, not truncated. Truncating a surround plugin would silently drop channels with nothing to
+        // tell the user; this leaves the module passing audio through and says why.
         statusMessage_ = identity_.name + " needs " + juce::String(instanceInputs) + " in / " +
                          juce::String(instanceOutputs) + " out channels; a Hosted Plugin module carries at most " +
-                         juce::String(kMaxPluginChannels) + ".";
+                         juce::String(kMaxPluginInputChannels) + " in / " + juce::String(kMaxPluginOutputChannels) +
+                         " out.";
         instance.reset(); // message thread — never the audio thread
         return;
     }
 
     prepareInstance(*instance);
+    registerParameterContextMenu(*instance);
 
     // The plugin's own state, if we are restoring a patch. Applied BEFORE publication so the audio
     // thread never renders one block of the plugin's factory default.
@@ -212,9 +307,13 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 
     retireActiveInstance();
 
+    // After the retire (the audio thread can no longer reach the old instance) and before the publish below.
+    resolveModSlots(*instance);
+
     auto* raw = instance.get();
     ownedInstance_ = std::move(instance);
 
+    buildOutputBuses(*raw);
     visibleInputs_.store(instanceInputs, std::memory_order_relaxed);
     visibleOutputs_.store(instanceOutputs, std::memory_order_relaxed);
     // Plain, NOT setLatencyAndNotify: onInstancePublished below already tells the owner to rebuild,
@@ -231,6 +330,8 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // Release: everything above (prepareToPlay, the state blob, the port counts) must be visible to
     // the audio thread's acquire-load before it can see the pointer.
     activeInstance_.store(raw, std::memory_order_release);
+    instanceParametersStale_.store(true, std::memory_order_relaxed);
+    modKnobReconcilePending_ = true;
 
     statusMessage_.clear();
 
@@ -248,12 +349,33 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
         onInstancePublished();
 }
 
+// Routes a VST3 instance's parameter context menu to buildParameterContextMenu() through
+// juce::VST3PluginFormat::setHostContextMenuExtension (cmake/patches/juce-vst3-context-menu.patch,
+// docs/development/juce-patches.md). Any other format, and a build without VST3 hosting, ignores it. The
+// callback lives inside the plugin's host context and holds the module weakly, so a menu that outlives the
+// module finds nothing to call.
+void HostedPluginModule::registerParameterContextMenu([[maybe_unused]] juce::AudioPluginInstance& instance) {
+#if JUCE_PLUGINHOST_VST3 && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD)
+    juce::VST3PluginFormat::setHostContextMenuExtension(
+        instance, [weak = juce::WeakReference<HostedPluginModule>(this)](juce::uint32 paramId, juce::PopupMenu& menu) {
+            if (auto* module = weak.get())
+                module->buildParameterContextMenu(juce::String(paramId), menu);
+        });
+#endif
+}
+
+void HostedPluginModule::buildParameterContextMenu(const juce::String& paramId, juce::PopupMenu& menu) {
+    if (onParameterContextMenu)
+        onParameterContextMenu(paramId, menu);
+}
+
 void HostedPluginModule::retireActiveInstance() {
     // Stop listening to the instance on its way out, and drop anything it had already
     // queued. Done first, so nothing can arrive from an instance we are in the middle of retiring.
     detachInstanceListener();
 
     activeInstance_.store(nullptr, std::memory_order_release);
+    instanceParametersStale_.store(true, std::memory_order_relaxed);
 
     // The "instance gone" edge — fired here, BEFORE the retired instance is moved into
     // retired_/reapRetired() below, which may free it SYNCHRONOUSLY if the module isn't currently
@@ -270,6 +392,8 @@ void HostedPluginModule::retireActiveInstance() {
     if (ownedInstance_ != nullptr)
         retired_.push_back({std::move(ownedInstance_), blockCounter_.load(std::memory_order_acquire)});
 
+    outputBuses_.clear();
+    mainOutputChannels_.store(1, std::memory_order_relaxed);
     visibleInputs_.store(1, std::memory_order_relaxed);
     visibleOutputs_.store(1, std::memory_order_relaxed);
 
@@ -293,6 +417,13 @@ void HostedPluginModule::fireInstanceEdge(bool live) {
         else
             observer.hostedInstanceGone();
     });
+}
+
+// Announced for an outright failure and for a refused over-max instance alike: either way the card has
+// no instance to show and getStatusMessage() holds the reason. Kept apart from onLoadCompleted, which
+// the track-creation flow owns.
+void HostedPluginModule::fireLoadFailedEdge() {
+    instanceObservers_.call([](InstanceObserver& observer) { observer.hostedLoadFailed(); });
 }
 
 void HostedPluginModule::scheduleReapRetry() {
@@ -343,6 +474,9 @@ void HostedPluginModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     // callback stopped, so re-preparing in place is safe and keeps the published pointer valid.
     if (auto* instance = activeInstance_.load(std::memory_order_acquire)) {
         prepareInstance(*instance);
+        // A plugin may keep its voices through a prepare, and a source that forgot its notes owes it no note-off.
+        restartMidi_.ensureSize(kRestartMidiBytes);
+        voiceResetPending_.store(true, std::memory_order_relaxed);
         // Plain, NOT setLatencyAndNotify — and that is load-bearing, not an oversight.
         // juce::AudioProcessorGraph prepares its nodes from INSIDE its own render-sequence rebuild
         // and reads every node's latency immediately afterwards, so the new value is already picked
@@ -360,7 +494,33 @@ void HostedPluginModule::releaseResources() {
     reapRetired();
 }
 
-void HostedPluginModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+bool HostedPluginModule::midiFitsAfterVoiceReset(const juce::MidiBuffer& midiMessages) const noexcept {
+    // Sixteen channels of two controllers, each a 3-byte message under a 6-byte event header.
+    constexpr int kResetBytes = 16 * 2 * (3 + 6);
+    return midiMessages.data.size() + kResetBytes <= kRestartMidiBytes;
+}
+
+// The first block after a re-prepare. The reset must come before this block's own notes or it would cut the ones a
+// source has just resumed, and a MidiBuffer only appends at equal positions, so the block's events are copied in after
+// it, into storage sized on the message thread. VST3 only passes a controller the plugin maps, so this backs up the
+// sources' own per-note note-offs rather than replacing them.
+void HostedPluginModule::processWithVoiceReset(juce::AudioPluginInstance& instance, juce::AudioBuffer<float>& view,
+                                               juce::MidiBuffer& midiMessages) {
+    voiceResetPending_.store(false, std::memory_order_relaxed);
+    restartMidi_.clear();
+    for (int channel = 1; channel <= 16; ++channel) {
+        restartMidi_.addEvent(juce::MidiMessage::allSoundOff(channel), 0);
+        restartMidi_.addEvent(juce::MidiMessage::allNotesOff(channel), 0);
+    }
+    restartMidi_.addEvents(midiMessages, 0, -1, 0);
+    instance.processBlock(view, restartMidi_);
+
+    // The plugin's own output replaces the input, as it does on every other block. A swap never allocates, and the
+    // next prepare, the only thing that can ask for another reset, sizes restartMidi_ again.
+    midiMessages.swapWith(restartMidi_);
+}
+
+void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
@@ -391,11 +551,15 @@ void HostedPluginModule::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const int instanceOutputs = instance->getTotalNumOutputChannels();
     const int instanceChannels = std::max(instanceInputs, instanceOutputs);
 
-    // Cannot happen on the graph (the node always has kMaxPluginChannels and publish refuses
+    // Cannot happen on the graph (the node always has 64 channels and publish refuses
     // anything wider), but a bare unit-test render could hand us a narrower buffer. Passing through
     // beats scribbling past the end of it.
     if (instanceChannels > numChannels)
         return;
+
+    // The modulation CV arrives on raw input channels 16..63, which overlap the output-only channels cleared below
+    // once an instance has more than 16 outputs: read it first.
+    applyModSlots(*instance, buffer);
 
     // JUCE's processBlock convention: channels above the input count are output-only and arrive as
     // garbage. AudioProcessorGraph clears them for its own nodes; we do the same for ours, which is
@@ -407,7 +571,10 @@ void HostedPluginModule::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::AudioBuffer<float> view(buffer.getArrayOfWritePointers(), instanceChannels, numSamples);
 
     instance->setPlayHead(getPlayHead());
-    instance->processBlock(view, midiMessages);
+    if (voiceResetPending_.load(std::memory_order_relaxed) && midiFitsAfterVoiceReset(midiMessages))
+        processWithVoiceReset(*instance, view, midiMessages);
+    else
+        instance->processBlock(view, midiMessages);
 
     // Hidden channels are silenced every block — the other half of the fixed-maximum/visible-count
     // pattern (the Macro rule). Without it, whatever the upstream node put on channel 9 of a stereo
@@ -422,31 +589,31 @@ void HostedPluginModule::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
 juce::String HostedPluginModule::getInputPortLabel(int channelIndex) const {
     const int visible = getVisibleInputPortCount();
+    if (visibleInputs_.load(std::memory_order_relaxed) == 2 && visible == 1)
+        return "Audio";
     if (visible == 2)
         return channelIndex == 0 ? "In L" : "In R";
     return "In " + juce::String(channelIndex + 1);
 }
 
-juce::String HostedPluginModule::getOutputPortLabel(int channelIndex) const {
-    const int visible = getVisibleOutputPortCount();
-    if (visible == 2)
-        return channelIndex == 0 ? "Out L" : "Out R";
-    return "Out " + juce::String(channelIndex + 1);
-}
-
 LogicalPort HostedPluginModule::mapInputChannel(int rawChannel) const {
+    // A modulation slot is reached only through its knob; its "jack" index is the raw channel itself, past every
+    // audio jack, so it never shares a jack with audio and never draws one.
+    if (isModChannel(rawChannel)) {
+        LogicalPort port;
+        port.visibleJackIndex = rawChannel;
+        port.role = PortRole::ModCV;
+        port.isPolyGroupHead = true;
+        port.polyVoiceSpan = 1;
+        return port;
+    }
+
+    // A collapsed stereo pair: one Audio jack owning raw ch0 + ch1 (the FX-pair map, no CV jacks).
+    if (visibleInputs_.load(std::memory_order_relaxed) == 2 && !isDualIO())
+        return mapStereoPairInput(rawChannel, 0);
+
     LogicalPort port;
     const int visible = getVisibleInputPortCount();
-    port.visibleJackIndex = (visible > 0) ? juce::jlimit(0, visible - 1, rawChannel) : 0;
-    port.role = PortRole::Audio;
-    port.isPolyGroupHead = (rawChannel < visible);
-    port.polyVoiceSpan = 1;
-    return port;
-}
-
-LogicalPort HostedPluginModule::mapOutputChannel(int rawChannel) const {
-    LogicalPort port;
-    const int visible = getVisibleOutputPortCount();
     port.visibleJackIndex = (visible > 0) ? juce::jlimit(0, visible - 1, rawChannel) : 0;
     port.role = PortRole::Audio;
     port.isPolyGroupHead = (rawChannel < visible);
@@ -487,13 +654,21 @@ int HostedPluginModule::getInstanceParamIndexFallback(const juce::String& paramI
     return param != nullptr ? param->getParameterIndex() : -1;
 }
 
-std::vector<HostedPluginModule::InstanceParameterInfo> HostedPluginModule::getInstanceParameters() const {
-    std::vector<InstanceParameterInfo> result;
+// Kept between calls because asking a real plugin for a name crosses its wrapper, and a big plugin has thousands of
+// them: one list per instance, rebuilt when the plugin says its parameter info changed (any thread, hence the flag).
+const std::vector<HostedPluginModule::InstanceParameterInfo>& HostedPluginModule::getInstanceParameters() const {
+    auto& result = instanceParameters_;
 
     auto* instance = activeInstance_.load(std::memory_order_acquire);
-    if (instance == nullptr)
+    if (instance == nullptr) {
+        result.clear();
+        instanceParametersStale_.store(true, std::memory_order_relaxed);
+        return result;
+    }
+    if (!instanceParametersStale_.exchange(false, std::memory_order_relaxed))
         return result;
 
+    result.clear();
     const auto& params = instance->getParameters();
     result.reserve(static_cast<std::size_t>(params.size()));
     for (int i = 0; i < params.size(); ++i) {
@@ -544,6 +719,14 @@ juce::var HostedPluginModule::getExtraState() const {
     if (!cardLayoutOverride_.isVoid())
         object->setProperty("cardLayout", cardLayoutOverride_.clone());
 
+    if (auto slots = modSlotsToVar(); !slots.isVoid())
+        object->setProperty("modSlots", slots);
+
+    if (auto outputs = outputsToVar(); !outputs.isVoid())
+        object->setProperty("outputs", outputs);
+    if (outputsFolded_)
+        object->setProperty("outputsFolded", true);
+
     // NOTE: no path is written here, ever — not the plugin binary's, not anything else. The identity
     // is format + uniqueId + name (see PluginIdentity). HostedPluginTests asserts it over the
     // serialized patch.
@@ -560,7 +743,14 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
 
     const PluginIdentity identity = PluginIdentity::fromVar(state);
 
+    if (applyStateInPlace(identity, *object))
+        return;
+
     pendingBlob_.reset();
+    modSlotsFromVar(object->getProperty("modSlots"));
+    savedOutputs_ = object->getProperty("outputs");
+    outputsRestored_ = true;
+    outputsFolded_ = static_cast<bool>(object->getProperty("outputsFolded"));
     setCardLayoutOverride(object->getProperty("cardLayout"));
     const juce::String encoded = object->getProperty("pluginState").toString();
     if (encoded.isNotEmpty())

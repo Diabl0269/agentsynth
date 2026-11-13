@@ -2,6 +2,7 @@
 // PanelSlide (inside MixerPlacementController, separate from MainComponent's three fractions).
 // Headless there is no VBlank, so the slide's frames are stood in for by the controller's test seams.
 
+#include "../../TestWait.h"
 #include "MixerOwnPanelTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
@@ -11,6 +12,7 @@ TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
     ASSERT_EQ(own.getSlideProgressForTest(), 1.0f);
+    const int opened = own.getOwnPanelHeight(); // the floor, or taller to fit the mixer's sections
 
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close
     EXPECT_EQ(own.getSlideProgressForTest(), 0.0f);
@@ -24,14 +26,14 @@ TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // open
     EXPECT_EQ(own.getSlideProgressForTest(), 1.0f);
     EXPECT_TRUE(own.isOwnPanelShowing());
-    EXPECT_EQ(own.getCarveHeight(), 220);
-    EXPECT_EQ(own.getHeight(), 220);
+    EXPECT_EQ(own.getCarveHeight(), opened);
+    EXPECT_EQ(own.getHeight(), opened);
     EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY());
 }
 
 TEST_F(MixerOwnPanelTest, MidSlideCarveFollowsTheFraction) {
     useOwnPanelPlacement();
-    writeSetting(Controller::kOwnPanelHeightKey, 400);
+    writeSetting(Controller::kOwnPanelHeightKey, 480);
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
@@ -39,7 +41,7 @@ TEST_F(MixerOwnPanelTest, MidSlideCarveFollowsTheFraction) {
     for (const float progress : {0.25f, 0.5f, 0.9f}) {
         own.setSlideProgressForTest(progress);
         mc.resized();
-        const int expected = (int)std::lround(progress * 400.0);
+        const int expected = (int)std::lround(progress * 480.0);
         EXPECT_EQ(own.getCarveHeight(), expected) << progress;
         EXPECT_EQ(own.getHeight(), expected) << progress;
         EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY()) << "pinned bottom edge, " << progress;
@@ -52,6 +54,7 @@ TEST_F(MixerOwnPanelTest, OpeningIsVisibleBeforeTheFirstFrame) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
+    const int opened = own.getOwnPanelHeight();
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close (synchronous)
     ASSERT_FALSE(own.isVisible());
 
@@ -65,12 +68,12 @@ TEST_F(MixerOwnPanelTest, OpeningIsVisibleBeforeTheFirstFrame) {
 
     own.applySlideFrameForTest(0.5f);
     EXPECT_GT(own.getHeight(), 0);
-    EXPECT_LT(own.getHeight(), 220);
+    EXPECT_LT(own.getHeight(), opened);
 
     own.finishSlideForTest();
     EXPECT_FALSE(own.isSlideAnimatingForTest());
     EXPECT_EQ(own.getSlideProgressForTest(), 1.0f);
-    EXPECT_EQ(own.getHeight(), 220);
+    EXPECT_EQ(own.getHeight(), opened);
     EXPECT_TRUE(own.isVisible());
 }
 
@@ -79,6 +82,7 @@ TEST_F(MixerOwnPanelTest, ClosingStaysVisibleUntilTheSlideFinishes) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
+    const int opened = own.getOwnPanelHeight();
 
     own.forceSlideAnimationForTest(true);
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close, as a real tween
@@ -89,7 +93,7 @@ TEST_F(MixerOwnPanelTest, ClosingStaysVisibleUntilTheSlideFinishes) {
 
     own.applySlideFrameForTest(0.5f);
     EXPECT_TRUE(own.isVisible());
-    EXPECT_EQ(own.getHeight(), 110) << "half-way down";
+    EXPECT_NEAR(own.getHeight(), opened / 2, 1) << "half-way down";
 
     own.finishSlideForTest();
     EXPECT_FALSE(own.isVisible());
@@ -130,19 +134,21 @@ TEST_F(MixerOwnPanelTest, SwitchingPlacementSnapsWithNoAnimation) {
     own.forceSlideAnimationForTest(true); // even with animation available, a placement change never tweens
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "ownPanel");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (own.getPlacement()) == (Controller::Placement::OwnPanel); });
 
     EXPECT_EQ(own.getPlacement(), Controller::Placement::OwnPanel);
     EXPECT_EQ(own.getSlideProgressForTest(), 1.0f);
     EXPECT_FALSE(own.isSlideAnimatingForTest());
     EXPECT_TRUE(own.isOwnPanelShowing());
-    EXPECT_EQ(own.getCarveHeight(), 220);
-    EXPECT_EQ(own.getHeight(), 220) << "the live change re-lays out at once";
+    // Shown by the switch, so at least the floor and tall enough for the mixer's sections.
+    EXPECT_GE(own.getOwnPanelHeight(), Controller::kOwnPanelMinHeight);
+    EXPECT_EQ(own.getCarveHeight(), own.getOwnPanelHeight());
+    EXPECT_EQ(own.getHeight(), own.getOwnPanelHeight()) << "the live change re-lays out at once";
     EXPECT_TRUE(own.getResizeHandle().isVisible());
 
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "tab");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return own.getPlacement() == Controller::Placement::Tab; });
 
     EXPECT_EQ(own.getSlideProgressForTest(), 0.0f);
     EXPECT_FALSE(own.isOwnPanelShowing());

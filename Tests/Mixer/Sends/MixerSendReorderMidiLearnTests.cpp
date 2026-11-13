@@ -16,10 +16,13 @@
 //   2. ReorderIsOneUndoStepAndUndoRestoresTheMidiMappingToo -- one undo() restores cables, the
 //      lane AND the MIDI mapping together; redo() re-applies all three together.
 
+#include "../../TestWait.h"
+#include "../../UI/Layout/BottomDockActiveTabResetGuard.h"
 #include "../../UI/MidiRemote/MidiRemoteMockProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "MidiRemote/MidiRemotePreferences.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -52,6 +55,33 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
     return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
 }
 
+// Through the preference, not only the engine: a settings change broadcast reaches the main component later and
+// re-applies the stored default, which would put the engine back on scale takeover. The settings file is the
+// developer's real one, so the key goes back to what it was (including "absent") when the test ends.
+class JumpTakeoverPreference {
+public:
+    JumpTakeoverPreference(MainComponent& mc, synth::midi::RemoteEngine& remote)
+        : settings_(*mc.getAppPropertiesForTest().getUserSettings())
+        , hadKey_(settings_.containsKey(synth::kMidiRemoteDefaultTakeoverSettingKey))
+        , saved_(settings_.getValue(synth::kMidiRemoteDefaultTakeoverSettingKey)) {
+        settings_.setValue(synth::kMidiRemoteDefaultTakeoverSettingKey,
+                           synth::midi::takeoverSettingValue(synth::Takeover::jump));
+        remote.setDefaultTakeover(synth::Takeover::jump);
+    }
+    ~JumpTakeoverPreference() {
+        if (hadKey_)
+            settings_.setValue(synth::kMidiRemoteDefaultTakeoverSettingKey, saved_);
+        else
+            settings_.removeValue(synth::kMidiRemoteDefaultTakeoverSettingKey);
+        settings_.saveIfNeeded();
+    }
+
+private:
+    juce::PropertiesFile& settings_;
+    bool hadKey_;
+    juce::String saved_;
+};
+
 // Settles a fresh learn onto a real wall-clock RemoteEngine (mainComp_'s, unlike
 // MidiLearnControllerTests.cpp's fake-clock fixture) -- mirrors
 // MidiLearnOnAHostedKnobThenAFakeCcDrivesTheParameter's own wait loop exactly.
@@ -67,6 +97,7 @@ void settleLearn(MainComponent& mc, synth::midi::MidiLearnController& controller
 } // namespace
 
 TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
@@ -89,7 +120,7 @@ TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder
     controller.arm(source, "send1Level");
     ASSERT_TRUE(controller.isArmed());
     remote.setSources({juce::String(kFakeDevice)});
-    remote.setDefaultTakeover(synth::Takeover::jump);
+    JumpTakeoverPreference jumpTakeover(mc, remote);
     mc.getAudioEngine().handleIncomingMidiMessageFromSource(kFakeDevice,
                                                             juce::MidiMessage::controllerEvent(1, kCc, 64));
     remote.drain();
@@ -126,7 +157,7 @@ TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder
 
     mc.getAudioEngine().handleIncomingMidiMessageFromSource(kFakeDevice, juce::MidiMessage::controllerEvent(1, kCc, 0));
     remote.drain();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the drain's apply is a real gesture
+    synth::test::waitUntil([&] { return level1->get() != before1; }); // the drain's apply is a real gesture
 
     EXPECT_NE(level1->get(), before1) << "the fake CC now drives slot 1, where the mapped send now lives";
     EXPECT_FLOAT_EQ(level0->get(), before0) << "slot 0 (the send left behind) must not move";
@@ -139,6 +170,7 @@ TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder
 }
 
 TEST(MixerSendReorderMidiLearnTest, ReorderIsOneUndoStepAndUndoRestoresTheMidiMappingToo) {
+    BottomDockActiveTabResetGuardMDT dockGuard; // the dock opens and persists "bottomDockVisible"=1
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     auto& graph = mc.getAudioEngine().getGraph();
     auto& panel = mc.getBottomDock().getMixerPanel();
@@ -157,7 +189,7 @@ TEST(MixerSendReorderMidiLearnTest, ReorderIsOneUndoStepAndUndoRestoresTheMidiMa
 
     controller.arm(source, "send1Level");
     remote.setSources({juce::String(kFakeDevice)});
-    remote.setDefaultTakeover(synth::Takeover::jump);
+    JumpTakeoverPreference jumpTakeover(mc, remote);
     mc.getAudioEngine().handleIncomingMidiMessageFromSource(kFakeDevice,
                                                             juce::MidiMessage::controllerEvent(1, kCc, 64));
     remote.drain();

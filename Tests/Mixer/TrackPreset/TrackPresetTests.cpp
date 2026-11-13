@@ -6,7 +6,7 @@
 //
 // The "outside modulator captured" and "walk stops at another channel's strip" assertions live in
 // the sibling TrackPresetCaptureTests.cpp (they need TrackPresetRigCFT's LFO/otherChannelStrip);
-// the "per-type default used by + Track" assertion lives in TrackPresetDefaultsTests.cpp (it needs
+// the "per-type default used by Add Track" assertion lives in TrackPresetDefaultsTests.cpp (it needs
 // a real MainComponent and the shared on-disk settings file).
 
 #include "TrackPresetTestFixture.h"
@@ -50,8 +50,8 @@ TEST(TrackPreset, InsertingTwiceProducesTwoIndependentCopies) {
     const auto second = synth::TrackPresetManager::insertTrackPreset(preset, target, {900, 0});
 
     // Track In + Oscillator + Filter + the default Gate -> EQ -> Compressor -> Channel Strip chain
-    // makeChannelFromNode folds the region into (the default channel chain).
-    ASSERT_EQ(first.size(), 7u);
+    // makeChannelFromNode folds the region into (the default channel chain), + the strip's output port.
+    ASSERT_EQ(first.size(), 8u);
     EXPECT_EQ(second.size(), first.size());
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Oscillator), 2);
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Filter), 2);

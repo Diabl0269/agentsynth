@@ -4,6 +4,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 namespace synth::ui {
 
@@ -42,6 +43,12 @@ public:
      * (automation). */
     void reflectValue(float normalized) { showValue(normalized); }
 
+    /** The parameter's resting value while it is modulated, shown instead of its live value; empty when not. */
+    std::function<std::optional<float>()> restingValue;
+
+    /** Shows the resting value now, unless the widget is being edited. For a value that moved silently. */
+    void reflectRestingValue();
+
     /** True until detach()/abandon(). */
     bool isBound() const noexcept { return param_ != nullptr; }
     const juce::AudioProcessorParameter* getParameter() const noexcept { return param_; }
@@ -64,6 +71,7 @@ private:
     void buttonClicked(juce::Button*) override;
 
     void bind();
+    bool isBeingEdited() const;
     void showValue(float normalized);
     void writeComplete(float normalized);
     void openGesture();

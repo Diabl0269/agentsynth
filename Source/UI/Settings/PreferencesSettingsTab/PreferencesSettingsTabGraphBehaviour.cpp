@@ -1,6 +1,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
@@ -76,6 +77,8 @@ public:
             addAndMakeVisible(*label);
 
             auto combo = std::make_unique<juce::ComboBox>();
+            combo->setTitle(type);
+            combo->setTooltip("Dual I/O for new " + type + " modules: follow the global setting, or always on or off");
             combo->addItem("Follow global", kDualIOChoiceFollowGlobal);
             combo->addItem("Always on", kDualIOChoiceAlwaysOn);
             combo->addItem("Always off", kDualIOChoiceAlwaysOff);
@@ -101,6 +104,14 @@ public:
             rows.push_back({std::move(label), std::move(combo)});
         }
         setSize(kWidth, kPadding * 2 + kRowHeight * static_cast<int>(rows.size()));
+    }
+
+    // Escape closes the popup, like clicking outside it.
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key != juce::KeyPress::escapeKey)
+            return false;
+        synth::ui::closeHostingWindow(*this);
+        return true;
     }
 
     void resized() override {
@@ -155,6 +166,20 @@ void PreferencesSettingsTab::setSmartConnectionMode(GraphEditor::SmartConnection
     persistSmartConnectionMode(mode);
 }
 
+bool PreferencesSettingsTab::isShowCurvesOnCablesEnabled() const { return showCurvesOnCablesToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setShowCurvesOnCablesEnabled(bool enabled) {
+    showCurvesOnCablesToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistShowCurvesOnCables(enabled);
+}
+
+bool PreferencesSettingsTab::isCablesOnTopEnabled() const { return cablesOnTopToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setCablesOnTopEnabled(bool enabled) {
+    cablesOnTopToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistCablesOnTop(enabled);
+}
+
 bool PreferencesSettingsTab::isDoubleClickPortDisconnectEnabled() const {
     return doubleClickDisconnectToggle.getToggleState();
 }
@@ -207,6 +232,29 @@ void PreferencesSettingsTab::setMacroDragWithoutCmdEnabled(bool enabled) {
     persistMacroDragWithoutCmd(enabled);
 }
 
+bool PreferencesSettingsTab::isPackMacrosOnCollapseEnabled() const {
+    return packMacrosOnCollapseToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setPackMacrosOnCollapseEnabled(bool enabled) {
+    packMacrosOnCollapseToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistPackMacrosOnCollapse(enabled);
+}
+
+bool PreferencesSettingsTab::isTidyCanvasOnPackEnabled() const { return tidyCanvasOnPackToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setTidyCanvasOnPackEnabled(bool enabled) {
+    tidyCanvasOnPackToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistTidyCanvasOnPack(enabled);
+}
+
+bool PreferencesSettingsTab::isMoveMacroOnHullDragEnabled() const { return moveMacroOnHullDragToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setMoveMacroOnHullDragEnabled(bool enabled) {
+    moveMacroOnHullDragToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMoveMacroOnHullDrag(enabled);
+}
+
 bool PreferencesSettingsTab::isMixerAutoCreateChannelOnConnectEnabled() const {
     return mixerAutoCreateChannelOnConnectToggle.getToggleState();
 }
@@ -230,6 +278,70 @@ void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
     persistDefaultDualIOForNewModules(enabled);
 }
 
+// The Smart connections group: the mode combo and the Connect side by side combo, built from the saved values.
+void PreferencesSettingsTab::setupSmartConnectionControls() {
+    contentHost.addAndMakeVisible(smartConnectionLabel);
+    smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
+    smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(smartConnectionCombo);
+    smartConnectionCombo.setTitle("Smart connections");
+    smartConnectionCombo.addItem("Off", 1);
+    smartConnectionCombo.addItem("New modules only", 2);
+    smartConnectionCombo.addItem("When main I/O is free", 3);
+    smartConnectionCombo.addItem("All module moves", 4);
+    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
+    // is the Control key on every platform, macOS included, precisely because Cmd already means
+    // additive selection there.
+    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
+                                    "Placing a module beside a connected one inserts it into the chain; "
+                                    "see Connect side by side below to require holding Ctrl.");
+    {
+        const auto mode = GraphEditor::smartConnectionModeFromString(
+            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
+        smartConnectionCombo.setSelectedId(comboIdFromMode(mode), juce::dontSendNotification);
+    }
+    smartConnectionCombo.onChange = [this] {
+        persistSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
+    };
+
+    contentHost.addAndMakeVisible(sideBySideLabel_);
+    sideBySideLabel_.setText("Connect side by side:", juce::dontSendNotification);
+    sideBySideLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(sideBySideCombo_);
+    sideBySideCombo_.setTitle("Connect side by side");
+    sideBySideCombo_.addItem("Always", 1);
+    sideBySideCombo_.addItem("Only while holding Ctrl", 2);
+    sideBySideCombo_.setTooltip("Whether a module dropped next to a connected one wires itself in, left to right. "
+                                "Always: no key needed, and it is inserted into the chain. Only while holding Ctrl: "
+                                "hold Ctrl while dragging to connect it. Ctrl is the Control key on every platform.");
+    sideBySideCombo_.setSelectedId(
+        comboIdFromSideBySide(SmartConnectionEngine::sideBySideModeFromString(
+            appProperties.getUserSettings()->getValue("smartConnectionSideBySide", "Always"))),
+        juce::dontSendNotification);
+    sideBySideCombo_.onChange = [this] {
+        persistSideBySideMode(sideBySideFromComboId(sideBySideCombo_.getSelectedId()));
+    };
+}
+
+SmartConnectionEngine::SideBySideMode PreferencesSettingsTab::getSideBySideMode() const {
+    return sideBySideFromComboId(sideBySideCombo_.getSelectedId());
+}
+
+void PreferencesSettingsTab::setSideBySideMode(SmartConnectionEngine::SideBySideMode mode) {
+    sideBySideCombo_.setSelectedId(comboIdFromSideBySide(mode), juce::dontSendNotification);
+    persistSideBySideMode(mode);
+}
+
+void PreferencesSettingsTab::persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode) {
+    appProperties.getUserSettings()->setValue("smartConnectionSideBySide",
+                                              SmartConnectionEngine::sideBySideModeToString(mode));
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getSmartConnections().setSideBySideMode(mode);
+}
+
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", GraphEditor::smartConnectionModeToString(mode));
     appProperties.getUserSettings()->saveIfNeeded();
@@ -249,6 +361,48 @@ void PreferencesSettingsTab::persistReconnectChainOnDelete(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setReconnectChainOnDeleteEnabled(enabled);
+}
+
+// The two toggles for what the canvas draws, in tab order.
+void PreferencesSettingsTab::setupCanvasDisplayToggles() {
+    contentHost.addAndMakeVisible(showCurvesOnCablesToggle);
+    showCurvesOnCablesToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("showCurvesOnCables", false),
+                                            juce::dontSendNotification);
+    showCurvesOnCablesToggle.setTooltip(
+        "When on, a small curve button sits beside the amount knob of each modulation cable; click it to edit that "
+        "modulation's response curve.");
+    showCurvesOnCablesToggle.onClick = [this] { persistShowCurvesOnCables(showCurvesOnCablesToggle.getToggleState()); };
+
+    contentHost.addAndMakeVisible(alignmentGuideToggle);
+    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
+                                        juce::dontSendNotification);
+    alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
+    alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
+
+    contentHost.addAndMakeVisible(cablesOnTopToggle);
+    cablesOnTopToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("cablesOnTop", false),
+                                     juce::dontSendNotification);
+    cablesOnTopToggle.setTooltip("When on, connected cables are drawn in front of the module cards. When off (the "
+                                 "default) they pass behind the cards. A cable you are dragging is always in front.");
+    cablesOnTopToggle.onClick = [this] { persistCablesOnTop(cablesOnTopToggle.getToggleState()); };
+}
+
+void PreferencesSettingsTab::persistShowCurvesOnCables(bool enabled) {
+    appProperties.getUserSettings()->setValue("showCurvesOnCables", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor) {
+        graphEditor->showCurvesOnCables = enabled;
+        graphEditor->notifyModuleContentChanged(); // the chips appear or vanish on the next paint
+    }
+}
+
+void PreferencesSettingsTab::persistCablesOnTop(bool enabled) {
+    appProperties.getUserSettings()->setValue("cablesOnTop", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor) {
+        graphEditor->cablesOnTop = enabled;
+        graphEditor->repaint();
+    }
 }
 
 void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
@@ -284,6 +438,27 @@ void PreferencesSettingsTab::persistMacroDragWithoutCmd(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setMacroDragWithoutCmdEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistPackMacrosOnCollapse(bool enabled) {
+    appProperties.getUserSettings()->setValue("packMacrosOnCollapse", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getMacroController().setPackMacrosOnCollapse(enabled);
+}
+
+void PreferencesSettingsTab::persistTidyCanvasOnPack(bool enabled) {
+    appProperties.getUserSettings()->setValue("tidyCanvasOnPack", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->getMacroController().setTidyCanvasOnPack(enabled);
+}
+
+void PreferencesSettingsTab::persistMoveMacroOnHullDrag(bool enabled) {
+    appProperties.getUserSettings()->setValue("moveMacroOnHullDrag", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setMoveMacroOnHullDragEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistMixerAutoCreateChannelOnConnect(bool enabled) {
@@ -416,9 +591,9 @@ void PreferencesSettingsTab::initMacroToggles() {
     macroAutoCreatePortsOnDragToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
     macroAutoCreatePortsOnDragToggle.setTooltip(
-        "When on (the default), dragging a cable across an expanded macro's boundary automatically "
-        "creates a matching Mono port and wires it, instead of connecting straight through to the "
-        "interior member.");
+        "When on (the default), a cable dragged across an expanded macro's boundary, or a mixer send "
+        "into or out of a channel inside a macro, goes through a matching new macro port instead of "
+        "connecting straight through to the interior member.");
     macroAutoCreatePortsOnDragToggle.onClick = [this] {
         persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
     };
@@ -465,6 +640,41 @@ void PreferencesSettingsTab::initMacroToggles() {
     macroDragWithoutCmdToggle.onClick = [this] {
         persistMacroDragWithoutCmd(macroDragWithoutCmdToggle.getToggleState());
     };
+
+    // Plain on/off, OFF by default (dragging inside a hull pans, as before).
+    contentHost.addAndMakeVisible(moveMacroOnHullDragToggle);
+    moveMacroOnHullDragToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("moveMacroOnHullDrag", false), juce::dontSendNotification);
+    moveMacroOnHullDragToggle.setTooltip(
+        "When off (the default), dragging empty space inside an expanded macro's outline pans the "
+        "canvas. When on, it moves the whole macro instead, like dragging its name chip. Shift-drag "
+        "still draws a selection box either way.");
+    moveMacroOnHullDragToggle.onClick = [this] {
+        persistMoveMacroOnHullDrag(moveMacroOnHullDragToggle.getToggleState());
+    };
+
+    // Plain on/off, ON by default (Fold and Pack Macros folds in place when off).
+    contentHost.addAndMakeVisible(packMacrosOnCollapseToggle);
+    packMacrosOnCollapseToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("packMacrosOnCollapse", true), juce::dontSendNotification);
+    packMacrosOnCollapseToggle.setTooltip(
+        "When on (the default), Fold and Pack Macros (Cmd+Ctrl+G on macOS) folds every selected macro and then "
+        "tidies the folded cards into a grid of up to four per row, starting where the top-left one stood. Other "
+        "modules stay put. When off, it only folds the selected macros where they are. The plain Collapse / Expand "
+        "Macro command never packs.");
+    packMacrosOnCollapseToggle.onClick = [this] {
+        persistPackMacrosOnCollapse(packMacrosOnCollapseToggle.getToggleState());
+    };
+
+    // Plain on/off, ON by default; only applies while packing is on.
+    contentHost.addAndMakeVisible(tidyCanvasOnPackToggle);
+    tidyCanvasOnPackToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("tidyCanvasOnPack", true),
+                                          juce::dontSendNotification);
+    tidyCanvasOnPackToggle.setTooltip(
+        "When on (the default), Fold and Pack Macros (Cmd+Ctrl+G on macOS) also runs Auto Arrange once the macro "
+        "cards are packed, so the space they left closes up and the rest of the canvas is tidied. When off, the "
+        "other modules stay where they are. Only applies while \"Collapsing also packs macros together\" is on.");
+    tidyCanvasOnPackToggle.onClick = [this] { persistTidyCanvasOnPack(tidyCanvasOnPackToggle.getToggleState()); };
 }
 
 // Lays out the macro toggle group; returns whether it is visible under the current search filter.
@@ -474,9 +684,14 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
     const std::function<void(bool)>& beginGroup) {
-    const std::initializer_list<juce::Component*> comps = {
-        &reconnectChainOnDeleteToggle, &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle,
-        &macroSpliceCableOnPortDeleteToggle, &macroDragWithoutCmdToggle};
+    const std::initializer_list<juce::Component*> comps = {&reconnectChainOnDeleteToggle,
+                                                           &macroAutoCreatePortsOnDragToggle,
+                                                           &macroAutoDeletePortsOnLastCableToggle,
+                                                           &macroSpliceCableOnPortDeleteToggle,
+                                                           &macroDragWithoutCmdToggle,
+                                                           &moveMacroOnHullDragToggle,
+                                                           &packMacrosOnCollapseToggle,
+                                                           &tidyCanvasOnPackToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     beginGroup(visible);
@@ -487,4 +702,113 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
         }
     }
     return visible;
+}
+
+// Lays out the Graph category's rows, top to bottom. To add a Graph preference, add its group here
+// (see PreferencesSettingsTab.h, "Adding a preference").
+void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& pendingDivider,
+                                               const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
+                                               const BeginGroupFn& beginGroup) {
+    enterCategory(Category::Graph, y);
+    // Group 1: smart connections
+    {
+        const bool visible =
+            groupMatches({&smartConnectionLabel, &smartConnectionCombo, &sideBySideLabel_, &sideBySideCombo_});
+        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo, &sideBySideLabel_, &sideBySideCombo_}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
+            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
+            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+            y += 24;
+            juce::Rectangle<int> sideRow(0, y, contentWidth, 24);
+            sideBySideLabel_.setBounds(sideRow.removeFromLeft(160));
+            sideBySideCombo_.setBounds(sideRow.removeFromLeft(220));
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 2: double-click disconnect
+    {
+        const bool visible = groupMatches({&doubleClickDisconnectToggle});
+        setGroupVisible({&doubleClickDisconnectToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 2b: curve buttons on cables
+    {
+        const bool visible = groupMatches({&showCurvesOnCablesToggle});
+        setGroupVisible({&showCurvesOnCablesToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            showCurvesOnCablesToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 3: alignment guides
+    {
+        const bool visible = groupMatches({&alignmentGuideToggle});
+        setGroupVisible({&alignmentGuideToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 3b: cables on top of the cards
+    {
+        const bool visible = groupMatches({&cablesOnTopToggle});
+        setGroupVisible({&cablesOnTopToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            cablesOnTopToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4: Dual I/O (one line, one row - see the toggle's declaration comment).
+    {
+        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
+        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> dualIORow(0, y, contentWidth, 24);
+            perModuleDefaultsButton.changeWidthToFitText(24);
+            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
+            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
+            dualIORow.removeFromRight(12);
+            defaultDualIOToggle.setBounds(dualIORow);
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4b: macro auto-port preference.
+    {
+        const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
+        setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
+            macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
+            macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4c: macro toggles (auto-create/auto-delete, drag without Cmd).
+    pendingDivider =
+        layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
 }

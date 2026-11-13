@@ -5,7 +5,7 @@
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
@@ -48,6 +48,10 @@ protected:
         mc.simulateToggleBottomPanelClick();
         mc.getBottomDock().setActiveTab(GetParam());
         ASSERT_EQ(mc.getBottomDock().getActiveTab(), GetParam());
+        // Showing the Mixer grows the dock to fit its sections; put it back at the default through
+        // the dock's own resize path so every tab starts from the same height.
+        if (GetParam() == Dock::Tab::Mixer)
+            mc.getBottomDock().onResizeHeight(220);
         ASSERT_EQ(mc.getBottomDock().getHeight(), 220);
     }
 };
@@ -81,20 +85,13 @@ TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabB
     // The strip is chrome ON the tab strip, not extra height: the content below still starts at
     // kTabStripHeight, but no button reaches into the top kHeight px, so a grab never lands on one.
     for (auto* button : dock.getTabButtons())
-        EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
-    // "+ Bus" / "Reset Meters" are carved (and so positioned) only on the Mixer tab.
-    for (auto* button : {&dock.getAddBusButtonForTest(), &dock.getResetMetersButtonForTest()})
         if (button->isVisible())
             EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
-    // Timeline/Controllers always get the dock's full content height -- only the Mixer
-    // host's own top edge moves down, and only while its toolbar row (Add bus/Reset Meters) is
-    // actually showing (i.e. the Mixer tab is active).
+    // Every tab gets the dock's full content height: the mixer's toolbar row lives inside the mixer
+    // panel, so no host is carved.
     EXPECT_EQ(dock.getTimelineHost().getY(), Dock::kTabStripHeight);
     EXPECT_EQ(dock.getMidiRemoteHost().getY(), Dock::kTabStripHeight);
-    const bool mixerToolbarShowing =
-        dock.getAddBusButtonForTest().isVisible() || dock.getResetMetersButtonForTest().isVisible();
-    EXPECT_EQ(dock.getMixerHost().getY(),
-              Dock::kTabStripHeight + (mixerToolbarShowing ? Dock::kMixerToolbarHeight : 0));
+    EXPECT_EQ(dock.getMixerHost().getY(), Dock::kTabStripHeight);
 }
 
 TEST_P(BottomDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryTabButton) {
@@ -198,7 +195,10 @@ TEST_P(BottomDockResizeOnEveryTabTest, DraggingResizesLiveAndPersistsOnDragEnd) 
     // A second component reads the same file back.
     MainComponent mc2(std::make_unique<MockProviderTL>());
     mc2.setSize(1600, 900);
-    EXPECT_EQ(mc2.getTimelinePanelHeight(), 362);
+    if (GetParam() == Dock::Tab::Mixer) // an app starting on the Mixer tab may grow it to fit the sections
+        EXPECT_GE(mc2.getTimelinePanelHeight(), 362);
+    else
+        EXPECT_EQ(mc2.getTimelinePanelHeight(), 362);
 }
 
 TEST_P(BottomDockResizeOnEveryTabTest, AStrayClickOnTheHandleNeverPersists) {
@@ -220,16 +220,17 @@ TEST_F(BottomDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
     mc.simulateToggleBottomPanelClick();
     auto& dock = mc.getBottomDock();
 
-    dock.setActiveTab(Dock::Tab::Mixer);
+    dock.setActiveTab(Dock::Tab::Mixer); // showing the Mixer may first grow the dock to fit its sections
+    const int shown = mc.getTimelinePanelHeight();
     auto& handle = dock.getResizeHandle();
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
     handle.mouseDrag(makeDragEvent(handle, {10.0f, -100.0f}, {10.0f, 2.0f}));
     handle.mouseUp(makeClickEvent(handle, {10.0f, -100.0f}));
-    ASSERT_EQ(mc.getTimelinePanelHeight(), 322);
+    ASSERT_EQ(mc.getTimelinePanelHeight(), shown + 102);
 
     for (auto tab : {Dock::Tab::Timeline, Dock::Tab::MidiRemote, Dock::Tab::Mixer}) {
         dock.setActiveTab(tab);
-        EXPECT_EQ(dock.getHeight(), 322);
+        EXPECT_EQ(dock.getHeight(), shown + 102);
     }
 }
 
@@ -246,12 +247,14 @@ TEST_F(BottomDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
     ASSERT_TRUE(dock.getTimelineHost().isDetached());
     EXPECT_EQ(mc.getTimelinePanel().findChildWithID("timelineResizeHandle"), nullptr);
 
+    // Detaching the Timeline makes another tab (the Mixer) active, which may grow the dock to fit.
+    const int before = mc.getTimelinePanelHeight();
     auto& handle = dock.getResizeHandle();
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
     handle.mouseDrag(makeDragEvent(handle, {10.0f, -80.0f}, {10.0f, 2.0f}));
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 302);
+    EXPECT_EQ(mc.getTimelinePanelHeight(), before + 82);
     handle.mouseUp(makeClickEvent(handle, {10.0f, -80.0f}));
-    EXPECT_EQ(readPersistedDockHeight(mc), 302);
+    EXPECT_EQ(readPersistedDockHeight(mc), before + 82);
 
     dock.getTimelineHost().setDetached(false);
 }

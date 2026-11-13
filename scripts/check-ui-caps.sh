@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+#
+# Guard: UI text is never written in ALL CAPS, and no file paints from a copy of the default theme.
+#
+# Fails on, under Source/UI/ (or the paths given):
+#   (a) any call to toUpperCase() / toupper() in code,
+#   (b) any string literal containing a word of 4+ consecutive capital letters that is not a known
+#       abbreviation (the list below; add to it deliberately), and
+#   (c) outside Source/UI/Theme/, the default theme's accent (0xff00D1FF) or primary text colour
+#       (0xffEAEEF3) written as a literal: the "no look-and-feel installed" fallback of a theme lookup.
+#       Read the colour through synth::theme::themeOf(component) instead, so a light or custom theme
+#       never leaves a control stuck on the dark theme's cyan or white.
+#   (d) a `static` juce::Font, juce::FontOptions or juce::Typeface::Ptr object (function-local or
+#       namespace scope, const or not): it is destroyed after JUCE's typeface caches at exit and the
+#       process aborts ("mutex lock failed"). Build it per call or use AppLookAndFeel::uiFont().
+#       A static member FUNCTION returning one of those types is fine (name followed by a parameter list).
+# Comments are not checked. A line that is not UI text (a hex colour code, a card title awaiting its
+# own change) opts out of (a) and (b) with a trailing marker that states why:
+#
+#     auto hex = s.toUpperCase(); // not-ui-text: hex colour code
+#
+# A literal that is a real product colour, not a fallback, opts out of (c) the same way:
+#
+#     juce::Colour kRecord{0xff00D1FF}; // not-fallback: <why this colour is fixed>
+#
+# A deliberate static font object opts out of (d) the same way:
+#
+#     static const juce::Font f(...); // static-font-ok: <why it cannot outlive the cache>
+#
+# Usage: bash scripts/check-ui-caps.sh [<file-or-dir> ...]     (default: Source/UI)
+# Exit status 1 when anything is flagged. Runs in the Lint job; no compiler, ~1 s.
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "$#" -eq 0 ]; then
+    set -- "$REPO_ROOT/Source/UI"
+fi
+
+python3 - "$@" <<'PY'
+import os
+import re
+import sys
+
+SUFFIXES = (".cpp", ".h", ".mm")
+
+# Words that are written in capitals everywhere (formats, protocols, units, standards). Only 4+ letter
+# words can be flagged at all; the 3-letter ones are listed so the intent is on record.
+ABBREVIATIONS = {
+    "ADSR", "AIFF", "ASCII", "BPM", "CPU", "DAW", "FFT", "FLAC", "HTTP", "HTTPS", "JSON", "LFO", "LUFS",
+    "MIDI", "MPE", "NRPN", "OSC", "RMS", "UTF", "USB", "VCA", "VST", "WAV",
+}
+
+CAPS_WORD = re.compile(r"(?<![A-Za-z])[A-Z]{4,}(?![a-z])")
+UPPER_CALL = re.compile(r"\b(?:toUpperCase|toupper)\s*\(")
+MARKER = re.compile(r"//\s*not-ui-text:\s*\S")
+FALLBACK_MARKER = re.compile(r"//\s*not-fallback:\s*\S")
+FALLBACK_COLOUR = re.compile(r"\b0x[fF][fF](?:00[dD]1[fF][fF]|[eE][aA][eE][eE][fF]3)\b")
+FONT_MARKER = re.compile(r"//\s*static-font-ok:\s*\S")
+STATIC_FONT = re.compile(
+    r"\bstatic\s+(?:(?:inline|thread_local|const|constexpr)\s+)*"
+    r"(?:juce::)?(?:Font|FontOptions|Typeface::Ptr)\b\s*[&*]?\s*(\w+)\s*(.*)$")
+# After the name: a parameter list ("()", "(float h)", "(const X&)") means a function declaration;
+# "(14.0f)" or "(kSize)" is a constructor call on a static object.
+FUNC_PARAMS = re.compile(r"^\(\s*(?:\)|(?:const\s+)?[\w:<>]+(?:\s*[&*]+\s*|\s+)\w*\s*[,)=])")
+THEME_DIR = os.sep.join(["Source", "UI", "Theme"]) + os.sep
+
+
+def scan_line(line, in_block):
+    """Returns (code_without_literals, literals, in_block_after) for one source line."""
+    code = []
+    literals = []
+    i = 0
+    n = len(line)
+    in_str = False
+    in_chr = False
+    esc = False
+    current = []
+    while i < n:
+        ch = line[i]
+        if in_block:
+            if line.startswith("*/", i):
+                in_block = False
+                i += 2
+            else:
+                i += 1
+            continue
+        if in_str:
+            if esc:
+                esc = False
+                current.append(ch)
+            elif ch == "\\":
+                esc = True
+                current.append(ch)
+            elif ch == '"':
+                in_str = False
+                literals.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+            i += 1
+            continue
+        if in_chr:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == "'":
+                in_chr = False
+            i += 1
+            continue
+        if line.startswith("//", i):
+            break
+        if line.startswith("/*", i):
+            in_block = True
+            i += 2
+            continue
+        if ch == '"':
+            in_str = True
+            i += 1
+            continue
+        if ch == "'":
+            in_chr = True
+            i += 1
+            continue
+        code.append(ch)
+        i += 1
+    return "".join(code), literals, in_block
+
+
+def scan_file(path):
+    hits = []
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        lines = handle.read().split("\n")
+    in_block = False
+    theme_file = THEME_DIR in os.path.abspath(path)
+    for number, line in enumerate(lines, 1):
+        code, literals, in_block = scan_line(line, in_block)
+        font = STATIC_FONT.search(code)
+        if font and not FONT_MARKER.search(line) and not FUNC_PARAMS.match(font.group(2)):
+            hits.append((number, "static Font/FontOptions/Typeface::Ptr object aborts at exit", line.strip()))
+            continue
+        if not theme_file and FALLBACK_COLOUR.search(code) and not FALLBACK_MARKER.search(line):
+            hits.append((number, "default-theme colour literal (use synth::theme::themeOf)", line.strip()))
+            continue
+        if MARKER.search(line) or 'R"' in line:  # raw string literals have their own quoting
+            continue
+        if UPPER_CALL.search(code):
+            hits.append((number, "toUpperCase() makes UI text all caps", line.strip()))
+            continue
+        for literal in literals:
+            bad = [w for w in CAPS_WORD.findall(literal) if w not in ABBREVIATIONS]
+            if bad:
+                hits.append((number, "all-caps word " + ", ".join(sorted(set(bad))), line.strip()))
+                break
+    return hits
+
+
+def walk(root):
+    if os.path.isfile(root):
+        yield root
+        return
+    for dirpath, _dirs, files in os.walk(root):
+        for name in sorted(files):
+            if name.endswith(SUFFIXES):
+                yield os.path.join(dirpath, name)
+
+
+total = 0
+for root in sys.argv[1:]:
+    for path in walk(root):
+        for number, kind, text in scan_file(path):
+            print("%s:%d: %s: %s" % (path, number, kind, text[:140]))
+            total += 1
+
+if total:
+    print()
+    print("UI text is never all caps: write it in normal case (Title Case for titles, sentence case for")
+    print("buttons) and drop toUpperCase(). See docs/development/accessibility.md#no-all-caps-ui-text.")
+    print("Not UI text (hex code, identifier)? End the line with: // not-ui-text: <reason>")
+    print("Colour literal that is a fixed product colour, not a fallback? End it with: // not-fallback: <reason>")
+    print("A theme colour is read with synth::theme::themeOf(component).colors.<token>, never a literal.")
+    print("A static Font/FontOptions/Typeface::Ptr outlives JUCE's typeface cache at exit and aborts the process;")
+    print("build it per call or get it from AppLookAndFeel::uiFont(). Deliberate? End it with: // static-font-ok: <reason>")
+    sys.exit(1)
+PY

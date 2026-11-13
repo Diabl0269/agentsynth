@@ -1,7 +1,8 @@
-// ModuleComponentWavetable.cpp -- the Wavetable oscillator's control creation, the hookup of its
-// WavetableTabStrip (the tabbed page body lives in WavetableTabStrip.cpp), and the
-// load/browse/step-through flow for wavetable files and folders. ModuleComponent is declared in
-// ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp units.
+// ModuleComponentWavetable.cpp -- the Wavetable oscillator's card chrome (the frame display, the Table
+// selector, the load and folder row) and the load/browse/step-through flow for wavetable files and
+// folders. Its controls are the card body's, paged by the code default's tab sections
+// (DefaultCardLayoutsSources.cpp). ModuleComponent is declared in ModuleComponent.h; the rest of its
+// implementation lives in the sibling ModuleComponent*.cpp units.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -42,6 +43,9 @@ void ModuleComponent::createWavetableControls() {
     wavetableNameLabel->setInterceptsMouseClicks(false, false);
     addAndMakeVisible(*wavetableNameLabel);
 
+    if (auto* table = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(wtMod, "table")))
+        createWavetableTableSelector(*table);
+
     // A card dropped after the user has already browsed somewhere starts pointed at that
     // folder, so < and > work immediately instead of needing a folder pick per module.
     if (wtMod->getWavetableFolder() == juce::File()) {
@@ -53,27 +57,22 @@ void ModuleComponent::createWavetableControls() {
     refreshWavetableLabel();
 }
 
-void ModuleComponent::createWavetableTabs() {
-    if (dynamic_cast<WavetableOscillatorModule*>(module) == nullptr)
-        return;
+// Everything the card body gives a choice: the comboBoxes/comboLabels/comboParams entries (value
+// reflection, Automate, accessibility names), MIDI Learn with the card as the right-click listener,
+// and the attachment. Built before the body's widgets, so it keeps the first combo slot it always had.
+void ModuleComponent::createWavetableTableSelector(juce::AudioParameterChoice& table) {
+    auto* combo = adoptBespokeWidget(new juce::ComboBox());
+    combo->addItemList(table.choices, 1);
+    addAndMakeVisible(combo);
+    combo->addMouseListener(this, false);
+    registerMidiLearnable(*combo, &table);
+    wavetableTableAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(table, *combo);
+    comboBoxes.add(combo);
+    comboParams.add(&table);
 
-    wavetableTabs = std::make_unique<WavetableTabStrip>(1000 + (int)nodeId.uid);
-    for (int i = 0; i < sliders.size(); ++i)
-        wavetableTabs->addSlider(*sliders[i], *sliderLabels[i]);
-    for (int i = 0; i < comboBoxes.size(); ++i)
-        wavetableTabs->addCombo(*comboBoxes[i], *comboLabels[i]);
-
-    wavetableTabs->onPageChanged = [this] {
-        resized();
-        repaint();
-        owner.notifyModuleContentChanged();
-    };
-    addAndMakeVisible(*wavetableTabs);
-    wavetableTabs->applyVisibility();
-
-    // createControls() ends by sizing the card, and it ran before this — so without a second
-    // pass the card keeps the flat-grid height and the tabbed layout is never applied.
-    updateLayout();
+    auto* label = adoptBespokeWidget(new juce::Label(table.getName(100), table.getName(100)));
+    addAndMakeVisible(label);
+    comboLabels.add(label);
 }
 
 bool ModuleComponent::loadWavetableIntoModule(const juce::File& file) {

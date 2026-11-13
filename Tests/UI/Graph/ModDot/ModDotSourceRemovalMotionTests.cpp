@@ -1,0 +1,227 @@
+// ModDotSourceRemovalMotionTests.cpp: a source removed from the mod dot's panel shrinks toward its centre (180 ms) and
+// then the rows below close the gap (200 ms); Cmd+Z makes room, grows the row back and fades an outline around it. The
+// shared ExitEnterTimeline is stepped by hand with ModDotSourcesPage::applyTimelineAtMs.
+
+#include "ModDotTestFixture.h"
+
+#include "UI/Graph/ModDot/ModDotAddSourceParts.h"
+#include "UI/Graph/ModDot/ModDotSourceRow.h"
+#include "UI/Layout/ReducedMotion.h"
+
+namespace {
+
+using synth::ui::ExitEnterTimeline;
+using synth::ui::ModDotSourceRow;
+using synth::ui::ModDotSourcesPage;
+
+struct ReducedMotionGuard {
+    explicit ReducedMotionGuard(bool reduced) { synth::ui::setReducedMotionForTest(reduced); }
+    ~ReducedMotionGuard() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+
+// The panel opened on a knob with two sources, free to animate although it is not on screen.
+struct TwoSources {
+    Fixture f;
+    juce::AudioProcessorGraph::NodeID first, second;
+    ModDotSourcesPage* page = nullptr;
+
+    TwoSources() {
+        second = f.addSecondLfo();
+        first = f.attenId;
+        auto* panel = f.clickDot();
+        page = &panel->sourcesPage();
+        page->setForceAnimateForTest(true);
+    }
+    int rowY(juce::AudioProcessorGraph::NodeID id) { return page->animatingRowFor(id)->getY(); }
+};
+
+bool isScaled(const juce::Component& c) { return !c.getTransform().isIdentity(); }
+
+} // namespace
+
+TEST_F(ModuleComponentTest, RemovingASourceShrinksItsRowInPlaceThenTheRowsBelowCloseTheGap) {
+    ReducedMotionGuard guard(false);
+    TwoSources s;
+    ASSERT_EQ(s.page->rowCount(), 2);
+    const int firstY = s.rowY(s.first);
+    const int secondOld = s.rowY(s.second);
+    ASSERT_EQ(secondOld, firstY + ModDotSourceRow::kHeight);
+
+    clickNow(s.page->rowAt(0)->removeButton());
+
+    EXPECT_TRUE(s.page->isAnimating());
+    EXPECT_TRUE(s.page->timeline().hasExit);
+    EXPECT_TRUE(s.page->timeline().hasGap);
+    EXPECT_EQ(s.page->rowCount(), 1) << "the model is already one source down";
+    ASSERT_NE(s.page->animatingRowFor(s.first), nullptr) << "its row is still on screen, shrinking";
+    EXPECT_FALSE(s.page->animatingRowFor(s.first)->isEnabled()) << "a row on its way out is not a control";
+
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kExitMs * 0.5);
+    EXPECT_TRUE(isScaled(*s.page->animatingRowFor(s.first))) << "it shrinks toward its centre";
+    EXPECT_EQ(s.page->slotHeightFor(s.first), ModDotSourceRow::kHeight)
+        << "no slow collapse: the slot holds while the row shrinks";
+    EXPECT_EQ(s.rowY(s.second), secondOld) << "the row below waits for the exit";
+
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kExitMs);
+    EXPECT_EQ(s.rowY(s.second), secondOld);
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kExitMs + ExitEnterTimeline::kGapMs * 0.5);
+    EXPECT_LT(s.rowY(s.second), secondOld);
+    EXPECT_GT(s.rowY(s.second), firstY);
+
+    s.page->applyTimelineAtMs(s.page->timeline().totalMs());
+    EXPECT_EQ(s.rowY(s.second), firstY);
+}
+
+TEST_F(ModuleComponentTest, TheRemovalTakesTheSharedExitAndGapTimes) {
+    ReducedMotionGuard guard(false);
+    TwoSources s;
+    clickNow(s.page->rowAt(1)->removeButton());
+    EXPECT_DOUBLE_EQ(s.page->timeline().totalMs(), ExitEnterTimeline::kExitMs + ExitEnterTimeline::kGapMs);
+    EXPECT_DOUBLE_EQ(s.page->timeline().totalMs(), 380.0);
+}
+
+TEST_F(ModuleComponentTest, UndoOpensTheGapThenGrowsTheRowBackThenFadesAnOutline) {
+    ReducedMotionGuard guard(false);
+    TwoSources s;
+    const int firstY = s.rowY(s.first);
+    clickNow(s.page->rowAt(0)->removeButton());
+    s.page->applyTimelineAtMs(s.page->timeline().totalMs());
+    EXPECT_EQ(s.rowY(s.second), firstY);
+
+    ASSERT_TRUE(s.f.undo.undo());
+    s.f.refresh(); // the editor's tick follows the graph
+
+    ASSERT_EQ(s.page->rowCount(), 2);
+    ASSERT_NE(s.page->animatingRowFor(s.first), nullptr) << "the row is back";
+    EXPECT_TRUE(s.page->timeline().hasEnter);
+    EXPECT_FALSE(s.page->timeline().hasExit);
+    EXPECT_EQ(s.page->slotHeightFor(s.first), 0) << "the gap opens first";
+    EXPECT_FALSE(s.page->animatingRowFor(s.first)->isVisible());
+    EXPECT_EQ(s.rowY(s.second), firstY);
+
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kGapMs);
+    EXPECT_EQ(s.page->slotHeightFor(s.first), ModDotSourceRow::kHeight);
+    EXPECT_EQ(s.rowY(s.second), firstY + ModDotSourceRow::kHeight);
+    EXPECT_FALSE(s.page->animatingRowFor(s.first)->isVisible()) << "nothing grows until the gap is open";
+
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs * 0.5);
+    EXPECT_TRUE(s.page->animatingRowFor(s.first)->isVisible());
+    EXPECT_TRUE(isScaled(*s.page->animatingRowFor(s.first)));
+    EXPECT_FLOAT_EQ(s.page->outlineAlphaFor(s.first), 0.0f);
+
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs +
+                              ExitEnterTimeline::kOutlineMs * 0.5);
+    EXPECT_FALSE(isScaled(*s.page->animatingRowFor(s.first)));
+    EXPECT_NEAR(s.page->outlineAlphaFor(s.first), 0.5f, 0.01f);
+
+    s.page->applyTimelineAtMs(s.page->timeline().totalMs());
+    EXPECT_FLOAT_EQ(s.page->outlineAlphaFor(s.first), 0.0f);
+}
+
+// The mod dot's remove button retracts the source's cable, and Cmd+Z (AppUndoManager::undo, the path every undo
+// takes) grows that same cable back out of its source.
+TEST_F(ModuleComponentTest, RemovingASourceRetractsItsCableAndUndoGrowsItBack) {
+    ReducedMotionGuard guard(false);
+    TwoSources s;
+    const auto cableOf = [&s](juce::AudioProcessorGraph::NodeID atten) -> std::optional<GraphEditor::VisibleCable> {
+        for (const auto& c : s.f.editor->buildVisibleCables())
+            if (c.id.attenUid == atten.uid)
+                return c;
+        return std::nullopt;
+    };
+    const auto drawn = cableOf(s.first);
+    ASSERT_TRUE(drawn.has_value()) << "sanity: the first source's cable is drawn";
+    const auto& anim = s.f.editor->getCableRetractForTest();
+
+    clickNow(s.page->rowAt(0)->removeButton());
+
+    EXPECT_FALSE(cableOf(s.first).has_value());
+    ASSERT_EQ(anim.ghosts().size(), 1u) << "the cable retracts";
+    EXPECT_EQ(anim.ghosts()[0].id, drawn->id);
+    s.f.editor->finishCableRetractForTest();
+
+    ASSERT_TRUE(s.f.undo.undo());
+    s.f.refresh();
+
+    ASSERT_TRUE(cableOf(s.first).has_value());
+    EXPECT_EQ(anim.numGrowing(), 1u) << "the undo grows the cable back";
+    EXPECT_TRUE(anim.isGrowing(drawn->id));
+}
+
+TEST_F(ModuleComponentTest, ReduceMotionFadesTheRowInPlaceInsteadOfShrinkingIt) {
+    ReducedMotionGuard guard(true);
+    TwoSources s;
+    clickNow(s.page->rowAt(0)->removeButton());
+
+    EXPECT_TRUE(s.page->isAnimating());
+    s.page->applyTimelineAtMs(ExitEnterTimeline::kExitMs * 0.5);
+    auto* row = s.page->animatingRowFor(s.first);
+    ASSERT_NE(row, nullptr);
+    EXPECT_FALSE(isScaled(*row));
+    EXPECT_LT(row->getAlpha(), 1.0f);
+    EXPECT_GT(row->getAlpha(), 0.0f);
+}
+
+TEST_F(ModuleComponentTest, OffScreenARemovedRowIsGoneAtOnce) {
+    ReducedMotionGuard guard(false);
+    Fixture f;
+    f.addSecondLfo();
+    auto& page = f.clickDot()->sourcesPage();
+    clickNow(page.rowAt(0)->removeButton());
+    EXPECT_FALSE(page.isAnimating());
+    EXPECT_EQ(page.rowCount(), 1);
+    EXPECT_EQ(page.animatingRowFor(f.attenId), nullptr);
+}
+
+TEST_F(ModuleComponentTest, ASourceTheUserAddsGrowsInWithNoRestoreOutline) {
+    ReducedMotionGuard guard(false);
+    Fixture f;
+    auto& page = f.clickDot()->sourcesPage();
+    const auto added = f.addSecondLfo();
+    ASSERT_EQ(page.rowCount(), 2);
+    EXPECT_FALSE(page.timeline().hasEnter) << "an outline means restored";
+    EXPECT_FLOAT_EQ(page.outlineAlphaFor(added), 0.0f);
+}
+
+// The sources panel's Disconnect all: one icon-only button in the title row, shown from two sources, one undo step
+// for the lot.
+
+namespace {
+struct DisconnectAllNoMotion {
+    DisconnectAllNoMotion() { synth::ui::setReducedMotionForTest(true); }
+    ~DisconnectAllNoMotion() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+} // namespace
+
+TEST_F(ModuleComponentTest, SourcesDisconnectAllIsHiddenWithOneSourceAndShownWithTwo) {
+    DisconnectAllNoMotion motion;
+    Fixture f;
+    auto* panel = f.clickDot();
+    ASSERT_NE(panel, nullptr);
+    EXPECT_FALSE(panel->sourcesPage().isDisconnectAllShown());
+    f.addSecondLfo();
+    f.held.reset();
+    panel = f.clickDot();
+    ASSERT_NE(panel, nullptr);
+    EXPECT_TRUE(panel->sourcesPage().isDisconnectAllShown());
+    EXPECT_EQ(panel->sourcesPage().disconnectAllButton().getTooltip(), "Disconnect all connections");
+}
+
+TEST_F(ModuleComponentTest, SourcesDisconnectAllRemovesEverySourceAndOneUndoBringsThemBack) {
+    DisconnectAllNoMotion motion;
+    Fixture f;
+    f.addSecondLfo();
+    auto* panel = f.clickDot();
+    ASSERT_NE(panel, nullptr);
+    ASSERT_EQ(panel->sourcesPage().rowCount(), 2);
+    const auto before = synth::ui::knobModSources(*f.editor, f.vcaId, f.gainChannel).size();
+    ASSERT_EQ(before, 2u);
+    panel->sourcesPage().disconnectAllButton().triggerClick();
+    synth::test::flushMessageQueue();
+    f.refresh();
+    EXPECT_EQ(synth::ui::knobModSources(*f.editor, f.vcaId, f.gainChannel).size(), 0u);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    f.refresh();
+    EXPECT_EQ(synth::ui::knobModSources(*f.editor, f.vcaId, f.gainChannel).size(), 2u) << "one undo restores both";
+}

@@ -101,6 +101,8 @@ TEST_F(MixerModelMasterRecTapTest, RecTapCreatedAfterALimiterLandsAfterTheLimite
     // Record-on is what creates the master tap (MainComponent::ensureMasterRecordTap).
     const auto& tracks = mc.getTimelineDoc().getTracks();
     ASSERT_FALSE(tracks.empty());
+    ASSERT_TRUE(mc.getTimelineDoc().setTrackAudioInput(
+        tracks.front().id, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(mc.getTimelineDoc().setTrackArmed(tracks.front().id, true));
     auto& bar = mc.getTimelinePanel().getTransportBar();
     bar.getRecordButton().onClick();

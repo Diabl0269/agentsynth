@@ -1,0 +1,27 @@
+# Bug: an imported audio clip showed no waveform until it was resized, and a clip narrower than 24 px showed none at all.
+# An import now writes the waveform file before the clip exists, and a narrow clip draws a one-bar summary.
+#
+# What a user does: opens a project with one 4-beat audio clip whose file has no waveform file (an older project), then
+# Option-drags its right edge to 6 beats (the stretch imports a new copy of the audio) and on down to 1 beat (24 px at
+# the default zoom). The probe `clipWaveform` reads `name:none|summary|columns`. Opening the old project backfills the
+# clip's missing waveform file (FRO1487), so it reads columns; the imported copy reads columns while wide and summary once narrow.
+record: true
+save_project: audio-clip-waveform
+steps:
+  - copyFixture: {name: stretch-from-original.agsproj}
+  - openProject: {path: "${SCRATCH}/stretch-from-original.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 10000}
+  - screenshot: {name: 1-backfilled-waveform}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 95, fromY: 28, toX: 144, toY: 28, mods: alt}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 5000}
+  - screenshot: {name: 2-imported-copy-wide}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 143, fromY: 28, toX: 24, toY: 28, mods: alt}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:summary", within_ms: 5000}
+  - screenshot: {name: 3-narrow-summary}

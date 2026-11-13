@@ -2,12 +2,17 @@
 
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
 #include "MidiRemote/RemoteModel.h"
+#include "UI/Layout/ControlMotion.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
+
+class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's timer)
 
 // ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
 // panel's centre region -- the selected controller's controls drawn on a 56 px grid
@@ -84,8 +89,17 @@ public:
     const ControllerSurfaceCell* findCellForTest(const juce::String& controlId) const;
     /** Non-const overload for a test driving a real mouseDown/mouseDrag/mouseUp on the cell found. */
     ControllerSurfaceCell* findCellForTest(const juce::String& controlId);
+    /** Test seams for the grow-in / shrink-away of controls added to or removed from the shown controller
+     *  (ControllerSurfaceMotion.cpp): the leaving pictures on the grid, and a hand-stepped frame (t 0..1;
+     *  1 lands everything, as the end of the motion does). */
+    int getShrinkGhostCountForTest() const noexcept { return ghosts_.size(); }
+    void stepMotionForTest(float t);
     /** Test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
+    /** Test seams for the edge scroll (ControllerSurfaceEdgeScroll.cpp): one tick of its timer, as if the button were
+     *  still held, and whether a drag has it armed. */
+    void tickEdgeScrollForTest();
+    bool isEdgeScrollActiveForTest() const noexcept;
 
     /** Fired on every selection change (click, shift/cmd-click, marquee, Esc, a click on
      *  empty grid space) with the new full id set -- the panel's one hook for keeping its own
@@ -128,14 +142,40 @@ public:
      *  useful for a fixed 56 px grid). */
     static constexpr float kMinZoom = 0.4f;
     static constexpr float kMaxZoom = 2.0f;
+    /** The content's fixed size (content-local px): panning never runs out of room on any controller. */
+    static constexpr int kContentExtent = 6000;
 
 private:
     // ---- Selection (ControllerSurfaceSelection.cpp) -----------
     void setSelectionInternal(std::vector<juce::String> ids, bool notify = true);
     void handleCellSelected(const juce::String& controlId, const juce::ModifierKeys& mods);
 
+    // ---- Controls growing in / shrinking away (ControllerSurfaceMotion.cpp) ----
+    struct Departure {
+        juce::Image image;
+        juce::Rectangle<int> bounds;
+        synth::ui::control_motion::Axis axis = synth::ui::control_motion::Axis::both;
+    };
+    /** Before a same-profile rebuild: a picture of every cell whose id is not in `keep`. */
+    std::vector<Departure> pictureDepartures(const std::vector<CellModel>& keep) const;
+    /** After the rebuild: the departures shrink away and the cells whose id is not in `previousIds` grow in. */
+    void startCellMotion(std::vector<Departure> departures, const std::vector<juce::String>& previousIds, bool animate);
+    void applyMotionFrame(float elapsedMs);
+    void landMotion();
+
     // ---- Marquee / pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
+
+    // ---- Edge scroll (ControllerSurfaceEdgeScroll.cpp) -----------
+    // A marquee or a cell drag held at the edge of the surface pans it, and the box or the cell keeps
+    // tracking the still pointer (docs/layout/layout.md, "Every drag follows the view").
+    void noteEdgePointer(const juce::MouseEvent& event);
+    void beginMarqueeEdgeScroll();
+    void beginCellEdgeScroll(ControllerSurfaceCell& cell);
+    void endEdgeScroll();
+    bool stopEdgeScrollForEscape();
+    CanvasEdgeScroller& edgeScroller();
+    bool panByForEdgeScroll(juce::Point<float> delta);
 
     // ---- Group drag (ControllerSurfaceGroupDrag.cpp) -----------
     void handleCellDragged(const juce::String& controlId, int deltaCol, int deltaRow);
@@ -167,6 +207,11 @@ private:
     juce::String pulseControlId_;
     double pulseSinceMs_ = 0.0;
     juce::OwnedArray<ControllerSurfaceCell> cells_;
+    juce::OwnedArray<synth::ui::control_motion::ShrinkGhost> ghosts_;
+    std::vector<juce::Component::SafePointer<ControllerSurfaceCell>> arriving_;
+    synth::ui::ReorderFramePump motionPump_{*this};
+    double motionStartMs_ = 0.0;
+    bool motionReduced_ = false;
 
     // Marquee drag state (ControllerSurfaceMarquee.cpp), in content-local (canvas) coordinates so
     // it survives pan/zoom: a Shift-press on empty grid space that turns into a drag once the
@@ -200,6 +245,14 @@ private:
                                     // gesture must never be replayed for a new one
     int liveDragDeltaCol_ = 0;
     int liveDragDeltaRow_ = 0;
+
+    // Edge scroll (ControllerSurfaceEdgeScroll.cpp): the pointer is the last one a drag reported, in this component's
+    // own space (it never moves, so it stays true however far the content pans), not the OS cursor, which test-mode
+    // input never moves.
+    std::unique_ptr<CanvasEdgeScroller> edgeScroll_;
+    bool edgeScrollStoppedByEscape_ = false; // Esc stopped this gesture's pan: it stays stopped until the release
+    juce::Point<float> edgePointer_;
+    bool edgeTickForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceComponent)
 };

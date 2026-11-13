@@ -1,13 +1,9 @@
 #include "Modules/AttenuverterModule.h"
-#include "Modules/FilterModule.h"
-#include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
-#include "Modules/OscillatorModule.h"
-#include "Modules/VCAModule.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <map>
+#include <optional>
 
 // ============================================================================
 // SnapRoundsToNearestGridMultiple
@@ -137,8 +133,87 @@ TEST(LayoutUtilTest, FindFreeSlotResolvesDenseCluster) {
     // Result must be within canvas bounds
     EXPECT_GE(result.x, 0);
     EXPECT_GE(result.y, 0);
-    EXPECT_LE(result.x, kCanvasMax - w);
-    EXPECT_LE(result.y, kCanvasMax - h);
+}
+
+TEST(LayoutUtilTest, FindFreeSlotFarRightIsNotClamped) {
+    using namespace synth::LayoutUtil;
+    const auto result = findFreeSlot({20000, 400}, 200, 150, {}, juce::AudioProcessorGraph::NodeID{1});
+    EXPECT_EQ(result.x, 20000);
+    EXPECT_EQ(result.y, 400);
+}
+
+// Regression test for FRO1443: a card dropped just above a wide open macro, with no room above it, was moved to the
+// first clear spot of the search ring in walk order, a corner far right of and below where it was dropped, rather than
+// the spot straight below the macro that is as near by the ring.
+TEST(LayoutUtilTest, FindFreeSlotPicksTheNearestSpotOfItsRing) {
+    using namespace synth::LayoutUtil;
+    const std::vector<Box> wide{{juce::AudioProcessorGraph::NodeID{2}, {0, 100, 4000, 600}}};
+    for (int x : {400, 1000, 3000}) {
+        SCOPED_TRACE("dropped at x " + std::to_string(x));
+        const auto result = findFreeSlot({x, 80}, 280, 105, wide, juce::AudioProcessorGraph::NodeID{1});
+        EXPECT_EQ(result.x, x) << "straight below the macro, not off to one side";
+        EXPECT_EQ(result.y, 712);
+    }
+}
+
+namespace {
+// findFreeSlot as it was before its boxes were filed by grid cell: every spot tested against every box.
+juce::Point<int> findFreeSlotTestingEveryBox(juce::Point<int> desired, int w, int h,
+                                             const std::vector<synth::LayoutUtil::Box>& others,
+                                             juce::AudioProcessorGraph::NodeID selfId) {
+    using namespace synth::LayoutUtil;
+    auto clamp = [](juce::Point<int> p) { return juce::Point<int>{juce::jmax(0, p.x), juce::jmax(0, p.y)}; };
+    const auto snapped = clamp(snap(desired));
+    if (!intersectsAny({snapped.x, snapped.y, w, h}, others, selfId, kCollisionGap))
+        return snapped;
+    for (int ring = 1; ring <= kSpiralMaxRings; ++ring) {
+        const int step = kSpiralStep * ring;
+        std::optional<juce::Point<int>> best;
+        int64_t bestDist = 0;
+        auto consider = [&](int dx, int dy) {
+            const auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y + dy}));
+            if (intersectsAny({pt.x, pt.y, w, h}, others, selfId, kCollisionGap))
+                return;
+            const int64_t ex = pt.x - snapped.x, ey = pt.y - snapped.y;
+            if (!best.has_value() || ex * ex + ey * ey < bestDist) {
+                best = pt;
+                bestDist = ex * ex + ey * ey;
+            }
+        };
+        for (int dx = -step; dx <= step; dx += kSpiralStep)
+            consider(dx, -step);
+        for (int dy = -step + kSpiralStep; dy <= step; dy += kSpiralStep)
+            consider(step, dy);
+        for (int dx = step - kSpiralStep; dx >= -step; dx -= kSpiralStep)
+            consider(dx, step);
+        for (int dy = step - kSpiralStep; dy >= -step + kSpiralStep; dy -= kSpiralStep)
+            consider(-step, dy);
+        if (best.has_value())
+            return *best;
+    }
+    return snapped;
+}
+} // namespace
+
+// The search files its boxes by grid cell so a spot is tested only against the boxes near it; it must still pick the
+// same spot as testing every box, on crowded, sparse, huge and empty canvases, and with the card's own box listed.
+TEST(LayoutUtilTest, FindFreeSlotPicksTheSameSpotAsTestingEveryBox) {
+    using namespace synth::LayoutUtil;
+    juce::Random random(871);
+    for (int trial = 0; trial < 200; ++trial) {
+        SCOPED_TRACE("trial " + std::to_string(trial));
+        const int span = trial % 4 == 0 ? 60000 : 3000;
+        std::vector<Box> boxes;
+        const int count = trial % 10 == 0 ? 0 : 1 + random.nextInt(80);
+        for (int i = 0; i < count; ++i)
+            boxes.push_back({juce::AudioProcessorGraph::NodeID{(juce::uint32)(i + 2)},
+                             {random.nextInt(span), random.nextInt(span), 40 + random.nextInt(i % 7 == 0 ? 2400 : 400),
+                              40 + random.nextInt(600)}});
+        const juce::AudioProcessorGraph::NodeID self{(juce::uint32)(trial % 3 == 0 && count > 0 ? 2 : 1)};
+        const juce::Point<int> desired{random.nextInt(span) - 100, random.nextInt(span) - 100};
+        const int w = 120 + random.nextInt(300), h = 100 + random.nextInt(500);
+        EXPECT_EQ(findFreeSlot(desired, w, h, boxes, self), findFreeSlotTestingEveryBox(desired, w, h, boxes, self));
+    }
 }
 
 // ============================================================================
@@ -169,115 +244,6 @@ TEST(LayoutUtilTest, CollisionGapIsEnforcedOnce) {
     auto placed = findFreeSlot({vca.getX(), vca.getY()}, vca.getWidth(), vca.getHeight(), others, self);
     EXPECT_EQ(placed.x, snap(vca.getX())) << "VCA must stay in its column, not get bumped";
     EXPECT_EQ(placed.y, snap(vca.getY()));
-}
-
-// ============================================================================
-// ComputeAutoArrangeLayersBySignalDepth
-// ============================================================================
-
-TEST(LayoutUtilTest, ComputeAutoArrangeLayersBySignalDepth) {
-    using namespace synth::LayoutUtil;
-
-    // Build a real AudioProcessorGraph:
-    //   AudioInput -> Oscillator -> Filter -> VCA -> AudioOutput
-    //   LFO -> Filter (extraEdge, simulating mod routing)
-    juce::AudioProcessorGraph graph;
-
-    // Add IO processors
-    graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
-        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioInputNode));
-    graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
-        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
-
-    // Get actual NodeIDs after insertion
-    NodeID audioInId, audioOutId;
-    NodeID oscId, filterId, vcaId, lfoId;
-
-    for (auto* node : graph.getNodes()) {
-        if (auto* io = dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(node->getProcessor())) {
-            if (io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioInputNode)
-                audioInId = node->nodeID;
-            else if (io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode)
-                audioOutId = node->nodeID;
-        }
-    }
-
-    oscId = graph.addNode(std::make_unique<OscillatorModule>())->nodeID;
-    filterId = graph.addNode(std::make_unique<FilterModule>())->nodeID;
-    vcaId = graph.addNode(std::make_unique<VCAModule>())->nodeID;
-    lfoId = graph.addNode(std::make_unique<LFOModule>())->nodeID;
-
-    // Signal chain edges in the graph
-    // Module->module audio connections exercise the getConnections() edge path
-    // (these succeed because the modules expose matching audio channels).
-    graph.addConnection({{oscId, 0}, {filterId, 0}}); // Oscillator -> Filter
-    graph.addConnection({{filterId, 0}, {vcaId, 0}}); // Filter -> VCA
-
-    // Edges that touch IO nodes (AudioIn -> Osc, VCA -> AudioOut) cannot be created via
-    // addConnection here: the graph has no setPlayConfigDetails, so the IO processors expose
-    // 0 channels, and the Oscillator has no audio input. Feed them (plus the LFO mod edge)
-    // through extraEdges, which computeAutoArrange treats as topology edges directly.
-    std::vector<std::pair<NodeID, NodeID>> extraEdges = {{audioInId, oscId}, {vcaId, audioOutId}, {lfoId, filterId}};
-
-    // sizeOf stub: return fixed 280x300 for all
-    auto sizeOf = [](NodeID) -> juce::Point<int> { return {280, 300}; };
-
-    auto results = computeAutoArrange(graph, sizeOf, extraEdges);
-
-    // Must have a result for every non-attenuverter node
-    // AudioIn, AudioOut, Osc, Filter, VCA, LFO => 6 nodes
-    ASSERT_GE(static_cast<int>(results.size()), 4) << "Must arrange at least the signal-chain modules";
-
-    // Build result map: nodeId -> x position
-    std::map<NodeID, juce::Point<int>> posMap;
-    for (auto& r : results)
-        posMap[r.id] = r.pos;
-
-    // AudioOutput must be in the results
-    ASSERT_TRUE(posMap.count(audioOutId)) << "AudioOutput must be in arrange results";
-
-    // Helper: get x for a node (skip if not present)
-    auto xOf = [&](NodeID id) -> int {
-        auto it = posMap.find(id);
-        return (it != posMap.end()) ? it->second.x : -1;
-    };
-
-    // Signal chain: AudioIn <= Osc <= Filter <= VCA <= AudioOut
-    // x must strictly increase per depth layer
-    if (posMap.count(audioInId) && posMap.count(oscId))
-        EXPECT_LE(xOf(audioInId), xOf(oscId)) << "AudioInput x must be <= Oscillator x";
-    if (posMap.count(oscId) && posMap.count(filterId))
-        EXPECT_LT(xOf(oscId), xOf(filterId)) << "Oscillator x must be < Filter x";
-    if (posMap.count(filterId) && posMap.count(vcaId))
-        EXPECT_LT(xOf(filterId), xOf(vcaId)) << "Filter x must be < VCA x";
-    if (posMap.count(vcaId))
-        EXPECT_LT(xOf(vcaId), xOf(audioOutId)) << "VCA x must be < AudioOutput x";
-
-    // AudioOutput must be in the last column (no node should have x > audioOut x,
-    // unless the result is clamped — check it's at least as far as VCA)
-    int audioOutX = xOf(audioOutId);
-    if (posMap.count(vcaId))
-        EXPECT_GE(audioOutX, xOf(vcaId)) << "AudioOutput must be in last or later column than VCA";
-
-    // All result positions must be on-grid
-    for (auto& r : results) {
-        EXPECT_EQ(r.pos.x % kGridSize, 0) << "x must be on-grid for node " << r.id.uid;
-        EXPECT_EQ(r.pos.y % kGridSize, 0) << "y must be on-grid for node " << r.id.uid;
-    }
-
-    // No two result boxes should overlap (with gap=kCollisionGap)
-    const int w = 280, h = 300;
-    for (size_t i = 0; i < results.size(); ++i) {
-        juce::Rectangle<int> ri{results[i].pos.x, results[i].pos.y, w, h};
-        for (size_t j = i + 1; j < results.size(); ++j) {
-            juce::Rectangle<int> rj{results[j].pos.x, results[j].pos.y, w, h};
-            // Inflate both by half-gap and check for intersection
-            auto riInflated = ri.expanded(kCollisionGap / 2);
-            auto rjInflated = rj.expanded(kCollisionGap / 2);
-            EXPECT_FALSE(riInflated.intersects(rjInflated))
-                << "Modules " << results[i].id.uid << " and " << results[j].id.uid << " overlap in auto-arrange result";
-        }
-    }
 }
 
 // ============================================================================
@@ -342,95 +308,26 @@ TEST(LayoutUtilTest, WidthBucket_ColumnStride) {
 }
 
 // ============================================================================
-// MacroBankGeometry
+// findFreeSlotBelow: keeps the desired x, walks down in grid steps
 // ============================================================================
 
-TEST(LayoutUtilTest, MacroBank_HeightGrowsOneRowPerMacro) {
+TEST(LayoutUtilTest, FindFreeSlotBelowKeepsXAndTakesTheFirstClearRow) {
     using namespace synth::LayoutUtil;
+    const std::vector<Box> others{{NodeID(1), {0, 0, 280, 200}}, {NodeID(2), {0, 240, 280, 100}}};
 
-    EXPECT_EQ(macroBankHeight(4), kMacroHeaderH + 4 * kMacroRowH + kMacroBottomPad);
-    EXPECT_EQ(macroBankHeight(8) - macroBankHeight(4), 4 * kMacroRowH);
-    EXPECT_EQ(macroBankHeight(16) - macroBankHeight(8), 8 * kMacroRowH);
-    EXPECT_GT(macroBankHeight(1), kMacroHeaderH);
+    // Clear already: the desired spot, snapped.
+    EXPECT_EQ(findFreeSlotBelow({400, 40}, 280, 100, others), juce::Point<int>(400, 40));
+
+    // Blocked: same x, and the first grid row clearing every box by the collision gap.
+    const auto spot = findFreeSlotBelow({0, 0}, 280, 100, others);
+    EXPECT_EQ(spot.x, 0);
+    EXPECT_GE(spot.y, 340 + kCollisionGap);
+    EXPECT_LT(spot.y, 340 + kCollisionGap + kGridSize);
+    EXPECT_EQ(spot.y % kGridSize, 0);
+    EXPECT_FALSE(intersectsAny({spot.x, spot.y, 280, 100}, others, NodeID{}));
 }
 
-TEST(LayoutUtilTest, MacroBank_RowCentresAreEvenlySpacedAndInsideTheBank) {
+TEST(LayoutUtilTest, FindFreeSlotBelowClampsToTheCanvasOrigin) {
     using namespace synth::LayoutUtil;
-
-    EXPECT_EQ(macroRowCentreY(1) - macroRowCentreY(0), kMacroRowH);
-    EXPECT_GT(macroRowCentreY(0), kMacroHeaderH);
-
-    // Every visible row's jack must sit inside the component it belongs to.
-    for (int count = 1; count <= 16; ++count)
-        EXPECT_LT(macroRowCentreY(count - 1), macroBankHeight(count)) << "count " << count;
-}
-
-// ============================================================================
-// resolveOverlapsAfterResize
-// ============================================================================
-
-namespace {
-synth::LayoutUtil::Box makeBox(juce::uint32 uid, int x, int y, int w, int h) {
-    return {synth::LayoutUtil::NodeID{uid}, {x, y, w, h}};
-}
-} // namespace
-
-TEST(LayoutUtilTest, ResolveOverlapsAfterResize_NoOverlapMovesNothing) {
-    using namespace synth::LayoutUtil;
-
-    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 300), makeBox(2, 0, 400, 280, 200)};
-    EXPECT_TRUE(resolveOverlapsAfterResize(NodeID{1}, boxes).empty());
-}
-
-TEST(LayoutUtilTest, ResolveOverlapsAfterResize_PushesTheNeighbourBelowClear) {
-    using namespace synth::LayoutUtil;
-
-    // Node 1 has just grown from 300px to 700px tall and now swallows node 2.
-    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 700), makeBox(2, 0, 400, 280, 200)};
-
-    auto moved = resolveOverlapsAfterResize(NodeID{1}, boxes);
-    ASSERT_EQ(moved.size(), 1u);
-    EXPECT_EQ(moved[0].id, NodeID{2});
-    EXPECT_GE(moved[0].pos.y, 700 + kCollisionGap);
-    EXPECT_EQ(moved[0].pos.y % kGridSize, 0);
-}
-
-TEST(LayoutUtilTest, ResolveOverlapsAfterResize_NeverMovesTheResizedModule) {
-    using namespace synth::LayoutUtil;
-
-    std::vector<Box> boxes = {makeBox(1, 100, 100, 280, 700), makeBox(2, 100, 400, 280, 200)};
-
-    for (const auto& m : resolveOverlapsAfterResize(NodeID{1}, boxes))
-        EXPECT_NE(m.id, NodeID{1});
-}
-
-TEST(LayoutUtilTest, ResolveOverlapsAfterResize_CascadesThroughAStack) {
-    using namespace synth::LayoutUtil;
-
-    // Three modules stacked tightly below the one that grows: displacing the first must not
-    // simply park it on top of the next one.
-    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 700), makeBox(2, 0, 400, 280, 100), makeBox(3, 0, 520, 280, 100),
-                              makeBox(4, 0, 640, 280, 100)};
-
-    auto moved = resolveOverlapsAfterResize(NodeID{1}, boxes);
-    ASSERT_FALSE(moved.empty());
-
-    // Apply the moves and verify the whole canvas is overlap-free afterwards.
-    std::vector<Box> settled = boxes;
-    for (const auto& m : moved)
-        for (auto& b : settled)
-            if (b.id == m.id)
-                b.rect.setPosition(m.pos);
-
-    for (const auto& b : settled)
-        EXPECT_FALSE(intersectsAny(b.rect, settled, b.id)) << "box " << b.id.uid << " still overlaps";
-}
-
-TEST(LayoutUtilTest, ResolveOverlapsAfterResize_ShrinkingLeavesEveryoneWhereTheyAre) {
-    using namespace synth::LayoutUtil;
-
-    // A bank that shrank from 700px to 300px: nothing is in the way any more, so nothing moves
-    // back up — the canvas simply gains empty space.
-    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 300), makeBox(2, 0, 800, 280, 200)};
-    EXPECT_TRUE(resolveOverlapsAfterResize(NodeID{1}, boxes).empty());
+    EXPECT_EQ(findFreeSlotBelow({-300, -16}, 280, 100, {}), juce::Point<int>(0, 0));
 }

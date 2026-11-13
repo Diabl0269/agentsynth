@@ -1,0 +1,68 @@
+# FRO1641: a dock tab you dragged lost the active look (it turned to the inactive fill and text while lifted and
+# gliding). FRO1646: on macOS the shortcut hints in tooltips and in Settings spelled "Alt" instead of the Mac symbols.
+#
+# What a user does:
+#   1. Opens a project, opens the bottom panel (Cmd+J) and clicks the Timeline tab so it is the active one.
+#   2. Drags the Timeline tab along the strip: mid-drag and after the drop it still wears the active fill and text.
+#      Drags the Mixer tab (not active): it keeps the inactive look.
+#   3. Rests the pointer on the detach icon: its tooltip reads "... (⌥ + Return)".
+#   4. Opens Settings > Keyboard Shortcuts and searches "option": rows are found and their keys show ⌥.
+motion: true
+record: true
+save_project: dock-tab-drag-active-look
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Timeline}
+  - wait: {}
+  - screenshot: {name: 1-timeline-active}
+  # The active tab, picked up and dragged to the right.
+  - mouseDown: {id: Timeline, x: 20, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 40, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 70, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 100, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 130, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 160, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 190, y: 8}
+  - glide: {name: drag, frames: 14, do: {mouseMoveHeld: {id: Timeline, x: 220, y: 8}}}
+  - mark: {check: 1, name: active-tab-mid-drag}
+  - screenshot: {name: 2-active-tab-mid-drag}
+  - mouseMoveHeld: {id: Timeline, x: 250, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 280, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 310, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 340, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 370, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 400, y: 8}
+  - glide: {name: drop, frames: 14, do: {mouseUp: {id: Timeline, x: 420, y: 8}}}
+  - wait: {settleMs: 50}
+  - mark: {check: 1, name: active-tab-just-dropped}
+  - wait: {}
+  - screenshot: {name: 3-active-tab-after-drop}
+  # An inactive tab, dragged the same way, keeps the inactive look.
+  - mouseDown: {id: Mixer, x: 20, y: 8}
+  - mouseMoveHeld: {id: Mixer, x: 40, y: 8}
+  - mouseMoveHeld: {id: Mixer, x: 70, y: 8}
+  - mouseMoveHeld: {id: Mixer, x: 100, y: 8}
+  - screenshot: {name: 4-inactive-tab-mid-drag}
+  - mark: {check: 1, name: inactive-tab-mid-drag}
+  - mouseUp: {id: Mixer, x: 100, y: 8}
+  - wait: {}
+  # FRO1646: the detach icon's tooltip names the Mac symbol.
+  - hover: {id: "Detach Mixer to its own window"}
+  - expect: {id: "Detach Mixer to its own window", contains: {tooltip: "⌥ + Return"}}
+  - expect: {id: tooltipWindow, showing: true, contains: {tipText: "⌥ + Return"}, within_ms: 4000}
+  - expect: {id: tooltipWindow, tipAtPointer: true}
+  - wait: {}   # the tip fades in; hold until it is fully drawn
+  - mark: {check: 2, name: detach-tooltip-option-glyph}
+  # Settings > Keyboard Shortcuts, searched by the word "option".
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - expect: {id: "Settings", showing: true, within_ms: 3000}
+  - click: {id: "Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: "Search shortcuts"}
+  - type: {text: option}
+  - wait: {}
+  - mark: {check: 3, name: settings-search-option}

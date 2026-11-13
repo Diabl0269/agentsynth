@@ -1,6 +1,7 @@
 // Concern: the selection-stepping actions (selectNextModule/PreviousModule/NextTrack/PreviousTrack)
 // as table rows -- ids, labels, unbound default, category, command mapping. Dispatch lives in
 // Tests/App/FocusArbitration/FocusArbitrationSelectionStepTests.cpp.
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
 #include <gtest/gtest.h>
 

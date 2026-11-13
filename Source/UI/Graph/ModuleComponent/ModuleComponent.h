@@ -1,16 +1,18 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "TestMode/TestModeStateSource.h"
+#include "UI/Graph/CardBody/CardBlockFade.h"
+#include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
-#include "UI/Graph/ModuleComponent/WavetableTabStrip.h"
+#include "UI/Graph/ModuleComponent/ModRingFades.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
-#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
-#include "UI/ModuleViews/EQCurveComponent.h"
-#include "UI/ModuleViews/EQWindow.h"
-#include "UI/ModuleViews/FrequencyResponseComponent.h"
-#include "UI/ModuleViews/SampleWaveformComponent.h"
+#include "UI/Layout/AutomatedMarker.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
+#include "UI/Layout/SplitButton.h"
+#include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
@@ -20,15 +22,30 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 class AudioEngine;
-class GraphEditor;        // Forward declaration
-class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
-
+namespace synth::cardbody {
+struct BodyGeometry; // Forward declaration — see UI/Graph/CardBody/CardBodyGeometry.h
+}
+class GraphEditor;                // Forward declaration
+class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
+class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
+class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
+struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
+namespace synth {
+class CardHeightGlide; // Forward declaration -- see UI/Graph/CardBody/CardHeightGlide.h
+}
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
-class CardKnobSlider;        // Forward declaration — see CardKnobSlider.h
+class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
+struct CurveHitResult;       // Forward declaration — see UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
+class CurveEditorComponent;  // Forward declaration — see UI/ModuleViews/CurveEditor/CurveEditorComponent.h
+class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
+class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
+class NoteLengthBox;         // Forward declaration — see UI/Layout/NoteLengthMenu/NoteLengthBox.h
+class HostedOutputsStrip;    // Forward declaration — see UI/Graph/HostedOutputs/HostedOutputsStrip.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -38,14 +55,17 @@ class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
 namespace synth {
 struct MacroPort;         // Forward declaration — see ../MacroSet.h
 class HostedPluginModule; // Forward declaration — see Plugin/Hosting/HostedPluginModule.h
+class CardBody;           // Forward declaration — see UI/Graph/CardBody/CardBody.h
 } // namespace synth
 
 class ModuleComponent
     : public juce::Component
     , public juce::Timer
     , public juce::FileDragAndDropTarget
+    , public synth::ui::SoundDropAdapter
     , public juce::TooltipClient
-    , public juce::AudioProcessorParameter::Listener {
+    , public juce::AudioProcessorParameter::Listener
+    , public synth::testmode::StateSource {
 public:
     ModuleComponent(juce::AudioProcessor* module, juce::AudioProcessorGraph::NodeID nodeId, GraphEditor& owner,
                     AppUndoManager* undoMgr = nullptr);
@@ -54,7 +74,7 @@ public:
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     ~ModuleComponent() override;
 
-    /** FRO324: the Audio Output "L / Mono" jack's hover explanation (and Right's "borrows Left"
+    /** The Audio Output "L / Mono" jack's hover explanation (and Right's "borrows Left"
      *  reply), found via getPortForPoint() against the current mouse position -- the same jack
      *  hit-test paint()/mouseDown() already share. Empty everywhere else, so juce::TooltipWindow
      *  falls through to any per-control setTooltip() as before. See ModuleComponentPaint.cpp. */
@@ -63,6 +83,7 @@ public:
     void paint(juce::Graphics&) override;
     void paintOverChildren(juce::Graphics&) override; // hover chip, above the knob labels
     void resized() override;
+    void childBoundsChanged(juce::Component* child) override;
     void timerCallback() override;
 
     void mouseDown(const juce::MouseEvent& e) override;
@@ -70,28 +91,22 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void moved() override;
 
+    /** Test mode: selected, moduleType, title and nodeId (docs/development/test-mode.md). */
+    void addTestModeState(juce::DynamicObject& into) const override;
     juce::AudioProcessor* getModule() const { return module; }
+    /** Where the body may go: the card's width, less the jack-label gutter on the Macros card. */
+    synth::cardbody::BodyGeometry bodyGeometry() const;
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
-    // Safely detach from the processor before graph rebuild.
-    // Removes listeners, destroys attachments, stops timer, nulls module pointer.
+    // Detach from the processor before a graph rebuild: drops listeners and attachments, stops the timer.
     void detachFromProcessor();
 
-    /** T162: the colour a docked macro-port widget paints its own jack dot with. A port user
-     *  colour (synth::MacroPort::colour, set from the Configure I/O modal's swatch) wins when it
-     *  is set; otherwise the kind tint passes through — audioWire for a MIDI jack, accent for an
-     *  Audio/CV jack — the EXACT fallback MacroCardComponent::paint already uses, so an expanded
-     *  docked widget and a collapsed card read a port's jack identically (a custom colour, or —
-     *  with none — the same tint). `port` is the boundary port the node fronts (from
-     *  owner.macroPortOwnerFor); null (a docked widget whose port entry has drifted away, which
-     *  by construction shouldn't happen) just means "unset", i.e. the kind tint. Side-effect-free
-     *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
-     *  is the only caller. */
+    /** A docked macro-port widget's jack colour: the port's own colour when set, else `kindTint` (same rule as
+     *  MacroCardComponent::paint). A null `port` counts as unset. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
-    // transient, so a pick pushes no undo step. Each setter is idempotent: it reports whether this
-    // surface actually changed, so a tick that left the colour alone repaints nothing.
+    // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
     bool setPortColourPreview(juce::Colour c) {
         if (portColourPreview_ && *portColourPreview_ == c)
             return false;
@@ -105,23 +120,16 @@ public:
         return true;
     }
 
-    // The jack's actual colour (preview > stored > tint) -- mirrors paint, so a headless test can read it.
+    // The jack's actual colour (preview > stored > tint), as paint draws it.
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
     bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
-    /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
-     *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
-     *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
+    /** Re-measures the card after its visible port count changed outside a parameter gesture. */
     void refreshPortLayout();
+    synth::CardHeightGlide& heightGlideForTest(); // creates it on first use
 
-    /** Output-card identity treatment only: repoints the muted destination line drawn under the
-     *  Audio Output card's title (device name + sample rate + channel count, or "Host audio" in
-     *  HostMode::Hosted, or empty to hide the line entirely). A no-op on every other module —
-     *  callers do not need to check isAudioOutputIONode() first. Pushed in by
-     *  GraphEditor::refreshOutputDeviceInfo() (MainComponent -> GraphEditor -> here) whenever
-     *  AudioEngine's device state changes; never polled. MESSAGE THREAD ONLY. Repaints (the single
-     *  ZoomFrozenCachedImage refresh seam — see refreshPortLayout above) only when the text
-     *  actually changed. */
+    /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
+     *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
     void setOutputDeviceInfoText(const juce::String& text);
     const juce::String& getOutputDeviceInfoTextForTest() const noexcept { return outputDeviceInfoText; }
 
@@ -133,16 +141,43 @@ public:
         bool isMidi = false;
     };
 
+    /** Plugin cards: shows each modulated knob's resting value. Called on the canvas' 30 Hz tick. */
+    void reflectHostedRestingValues();
+
+    /** Drop channel of a plugin card's body: the whole card is outlined (a drop opens the parameter search). */
+    static constexpr int kHostedCardBodyDropChannel = -2;
+    /** Drop channel of a plugin knob with no modulation slot yet: this minus its slider index. */
+    static constexpr int kUnboundHostedKnobChannelBase = -1000;
+    /** The parameter id a stand-in drop channel names (a plugin knob, or a pad knob), or empty for a real channel. */
+    juce::String hostedParamForDropChannel(int channel) const;
+    /** Drop channel of a pad knob with no pad cable slot yet: this minus its registry entry index. */
+    static constexpr int kUnboundPadKnobChannelBase = -2000;
+    /** A pad knob a cable on a Drum Kit pad slot channel rings: the knob and its card-local bounds, null when the
+     *  card shows another pad's knobs (the cable still moves its own pad). */
+    struct PadKnob {
+        juce::Slider* slider = nullptr;
+        juce::Rectangle<int> bounds;
+    };
+    PadKnob padKnobForTarget(const ModulationTarget& target) const;
+    std::optional<Port> padSlotPortForPoint(juce::Point<int> localPoint) const;
+
     /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
     static constexpr int kHeaderHeight = 24;
-
-    /** What the header paints: the user's custom title when set, else the auto-numbered module
-     *  name. Never reads the processor name directly — see GraphEditor::getModuleTitle. */
+    /** What the header paints: the custom title, else the auto-numbered name (GraphEditor::getModuleTitle). */
     juce::String cardTitle() const;
 
     /** Opens the inline rename editor over the title. Public so a test can drive it without
      *  synthesising a double-click. No-op for an Attenuverter (it has no header). */
     void beginTitleRename();
+
+    /** True when the card has a header title to rename (not an Attenuverter or a macro port). */
+    bool canRename() const;
+
+    /** True when "Replace with..." applies: a real module that is not the Audio Input/Output singleton. */
+    bool canReplace() const;
+
+    /** Opens the "Replace with..." picker over the card. No-op unless canReplace(). */
+    void beginReplace();
 
     /** Closes the inline editor, committing the typed text or discarding it. */
     void finishTitleRename(bool commit);
@@ -157,75 +192,80 @@ public:
      *  constant so they cannot drift again. */
     static constexpr int kPortGutterHeaderHeight = 38;
 
-    /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
-     *  In/Out — P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn). Shared with
-     *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
-     *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
-     *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
-     *  reasoning kPortGutterHeaderHeight's own comment states.
-     *
-     *  P8-15 founder-review fix G4 ("make the routing more elegant and sleek, it's currently too
-     *  large"): shrunk from a 104x26(mono) box that read as a small module card to a slim edge
-     *  chip — roughly a 30% cut in drawn area (104x26=2704px^2 -> 92x21=1932px^2, -28.6%; the
-     *  104x44/92x36 Stereo pair lands within a point of the same ratio). The values below are a
-     *  tuned point, not a formula — see paintMacroPortWidget()'s own comment for the matching jack/
-     *  font/corner-radius cuts, and MacroPortWidgetTests.cpp's
-     *  `MacroPortWidgetG4.RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize` for the
-     *  constraint that actually bounds how far the width could shrink: a realistic port name
-     *  ("Delay 1 Audio") has to still fit un-truncated. */
-    static constexpr int kMacroPortWidgetWidth = 92;
-    /** y of the first (or only) jack row, and the fixed y a MIDI port's single jack sits at. */
-    static constexpr int kMacroPortWidgetHeaderY = 13;
-    /** Vertical spacing between stacked jack rows — only Stereo (2 visible jacks a side) uses a
-     *  second row; Mono, Poly-N and MIDI are always exactly one row. */
-    static constexpr int kMacroPortWidgetRowStep = 15;
-    /** Clearance reserved below the last jack row. */
-    static constexpr int kMacroPortWidgetBottomPad = 8;
+    /** The y below the Wavetable's chrome (display, Table selector, load row, file caption) on a
+     *  double-width card, where it sits beside the jack gutter; the body starts no higher. The size
+     *  estimate (CardBodyMeasure) reads the same number. */
+    static int wavetableChromeBottomY();
+
+    /** Docked-widget row geometry for the four macro-port types (Macro In/Out, Macro MIDI In/Out —
+     *  docs/macros/ports.md#how-a-port-is-drawn). A widget is one 16px row per jack row inside its
+     *  macro's sidebar strip; its size is set by GraphEditor::dockMacroPortWidgets from
+     *  MacroGroupController::macroHullPortLayout, so only the row geometry lives here. Equal to
+     *  detail::kMacroPortRowHeight (static_assert in ModuleComponentLayout.cpp), which this header
+     *  cannot include. */
+    static constexpr int kMacroPortWidgetRowStep = 16;
+    /** y of the first (or only) jack row's centre, and the fixed y a MIDI port's single jack sits at. */
+    static constexpr int kMacroPortWidgetHeaderY = kMacroPortWidgetRowStep / 2;
+    /** Inset of a widget's jacks from its left/right edge: the boundary jack sits on the hull border
+     *  and the widget overhangs the hull by exactly this much. */
+    static constexpr int kMacroPortWidgetJackInset = 5;
 
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
-    /** FRO312: drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
+    /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
+    /** Message thread only. While alive, each card reads its modulation targets, its jack column and each jack's knob
+     *  anchor once; nothing may change a card's controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+    struct JackLayoutPass {
+        JackLayoutPass();
+        ~JackLayoutPass();
+        JackLayoutPass(const JackLayoutPass&) = delete;
+        JackLayoutPass& operator=(const JackLayoutPass&) = delete;
+    };
 
     /** True when visible input `index` renders as a knob's landing dot, not a gutter jack. See .cpp. */
     bool isInputJackKnobBound(int index) const;
+    /** Card-LOCAL gutter place `destChannel`'s jack takes once its knob is hidden, or nullopt. See .cpp. */
+    std::optional<juce::Point<float>> foldedJackCentre(int destChannel) const;
 
 private:
-    /** getModTargetKnobAnchor for whichever target maps to visible input `index`, or nullopt. */
+    /** getModulationTargets(), read once per JackLayoutPass; outside one, filled into `fresh`. */
+    const std::vector<ModulationTarget>& modulationTargetsForPass(std::vector<ModulationTarget>& fresh) const;
+    /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
+    const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
+    const juce::Slider* tabbedKnobFor(const ModulationTarget& target) const; // shown or not; null when untabbed
+    juce::Point<int> gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const;
 
 public:
-    /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,
-     *  at kPortGutterHeaderHeight on an ordinary card or kMacroPortWidgetHeaderY on a macro-port
-     *  widget (no header of its own); they don't participate in the ordinary audio jack stack
-     *  getPortCenter lays out. This is the single ground truth paint() and getPortForPoint() both
-     *  read from; anything anchoring a MIDI cable/preview must go through it too, or it drifts
-     *  from the drawn jack the way GraphEditor::rebuildVisibleCables once did (T149). */
+    /** Fixed MIDI jack anchor, in local coordinates: the single ground truth paint() and getPortForPoint()
+     *  read; anything anchoring a MIDI cable/preview must go through it too, or it drifts from the drawn jack. */
     juce::Point<int> getMidiPortCenter(bool isOutput) const;
 
-    /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs
-     *  stay put and no cable is touched; for a split-block module (#219) collapsing also hides its
-     *  kRightBase leg, so GraphEditor drops the cables left on it — an invisible jack cannot be
-     *  unplugged. NOTE: the card does get one jack row shorter when collapsed — see the reserved-
-     *  count note on ModuleBase::getReservedInputPortCount for why height stability was not taken.
-     *
-     *  Public so GraphEditor can drive it synchronously when the Preferences default re-lays every
-     *  module at once; the parameter-listener path is asynchronous. Message thread only. */
+    /** Re-lays the card after its Dual I/O parameter changed; a split-block module's collapse hides its kRightBase leg,
+     *  so GraphEditor drops the cables left on it (the card gets one jack row shorter, see
+     *  ModuleBase::getReservedInputPortCount). Called synchronously by GraphEditor too. Message thread only. */
     void applyDualIOLayoutChange();
 
-    /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
-     *  Port its CV jack would be. `index` is the jack's RAW channel, not a visible jack index.
-     *
-     *  Deliberately NOT folded into getPortForPoint — that one also decides what starts a drag
-     *  on mouse-down, and a knob has to keep starting a value drag there, not a cable. This is
-     *  only consulted when a cable is already in flight and no real jack was hit. */
+    /** Serum-style modulation drop: the visible knob under `localPoint` as the input Port its CV jack would be (`index`
+     *  is the RAW channel). Not part of getPortForPoint: a press on a knob must keep starting a value drag, so this
+     *  is consulted only while a cable is in flight and no real jack was hit. */
     std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
 
-    /** Highlights a knob as the pending modulation drop target, or clears it with -1.
-     *  Returns true when the highlight changed, so the caller can repaint only on a change. */
+    /** Highlights a knob as the pending modulation drop target (-1 clears); true when the highlight changed. */
     bool setModDropTargetChannel(int channelIndex);
+
+    /** A cable dragged over the card at `localPoint`: unfolds a folded More row under it. */
+    bool unfoldMoreRowForCableDrag(juce::Point<int> localPoint);
+    /** Null for a card whose widgets are not built by a card body. */
+    synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
+    synth::ui::ModRingFades& getModRingFades() noexcept { return ringFades_; }
+    synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
+    synth::ui::ShapeDropTarget* shapeDropTarget() override;
+    /** A SamplerChrome or DrumKitChrome; null unless the module is a Sampler or a Drum Kit. */
+    synth::ui::InstrumentChrome* getInstrumentChrome() const noexcept { return instrumentChrome_.get(); }
 
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
@@ -238,29 +278,42 @@ public:
     // Test/inspection helper: true while a valid audio file is hovering over this module.
     bool isFileDragHighlighted() const noexcept { return fileDragHighlight; }
 
-    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no
-     *  ring belongs on the card right now.
-     *
-     *  Visibility is part of the answer, not just a paint-time detail: a knob on an inactive tab
-     *  page keeps its last bounds, so a ring drawn from them lands on empty card. Public so the
-     *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
+    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no ring belongs on the
+     *  card right now: a knob on an unselected tab or a folded row answers -1. */
     int getModRingSliderIndex(const juce::String& paramName) const;
 
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
     int sliderIndexForModTarget(const ModulationTarget& target) const;
+    /** `si` when that slider is a rotary a ring may be drawn on right now, else -1. */
+    int shownRingSliderIndex(int si) const;
 
-    /** FRO288/FRO313: card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
+    /** Creates, places, names and shows/hides the mod-dot Tab-stop buttons from the live routings; cheap
+     *  and idempotent (GraphEditor calls it every tick and the card on every layout). */
+    void syncModDotButtons();
+    /** The mod-dot button for raw `destChannel`, or null when that knob has none right now. */
+    synth::ui::ModDotButton* getModDotButton(int destChannel) const;
+    /** A double-click on visible CV jack `visibleInputIndex`: handled by the knob's mod dot when it drives a
+     *  modulated knob (true), else false and the caller disconnects. */
+    bool handleModJackDoubleClick(int visibleInputIndex);
+    void portDoubleClicked(const Port& port);
+
+    /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
+    /** Card-LOCAL end of a cable whose knob-only target is out of view (an unselected tab, an unpicked pad), or
+     *  nullopt; `rank` is its place among this card's parked cable ends, so no two meet. */
+    std::optional<juce::Point<float>> parkedCableEnd(int destChannel, int rank) const;
+    /** Call just before something moves this card's cable ends without a fade of its own (a tab or pad pick). */
+    void glideCableEnds();
 
-    /** FRO313: diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
+    /** Diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
     static constexpr float kKnobLandingDotDiameter = 7.0f;
 
-    /** FRO313: how far outside the ring's radius the landing point sits. See .cpp. */
+    /** How far outside the ring's radius the landing point sits. See .cpp. */
     float knobLandingRadiusOffset() const;
 
-    /** FRO287: true when `e` should start a mod-amount drag on `param`'s knob rather than moving
-     *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
-    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+    /** True when `e` should start a mod-amount drag on `param`'s knob rather than moving
+     *  it. `knob`'s local bounds are used. See ModuleComponent.cpp for the rule. */
+    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                   const juce::MouseEvent& e) const;
 
     /** Applies an automation-driven value to whichever slider/combo was built for `param`,
@@ -273,6 +326,8 @@ public:
     /** Pins/unpins this card's raster scale for the duration of a canvas zoom gesture.
      *  Owned by GraphEditor; never call from the card itself. */
     void setRasterFrozen(bool frozen);
+    /** The module's sample or wavetable landed after this card was built (a project opened on screen). */
+    void refreshLoadedFileLabels();
     bool isRasterFrozen() const noexcept;
     const synth::ui::ZoomFrozenCachedImage* getRasterCacheForTest() const noexcept { return rasterCache; }
 
@@ -283,57 +338,57 @@ public:
      *  can assert the exact geometry painted without inspecting pixels. */
     static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
-    /** Builds the same right-click menu mouseDown() shows for a body right-click (Copy/Duplicate/
-     *  Replace with.../Delete Module and, when this module is a macro member, a "Macro: <name>"
-     *  submenu — founder-review item 4, docs/macros/menu-and-membership.md#the-macro-menus-entry-points). Split out of
-     * mouseDown() so a test can inspect the menu's actual content and invoke an item's action directly:
-     * juce::PopupMenu's own showMenuAsync() never displays anything headless, so driving a synthesised right-click
-     *  MouseEvent into mouseDown() alone has nothing observable to assert on. Public so a test can
-     *  call it after that same synthesised mouseDown() (the real gesture/hit-test/selection-
-     *  retargeting entry point) rather than skip straight to menu construction. */
+    /** The menu a body right-click shows (docs/macros/menu-and-membership.md#the-macro-menus-entry-points). Public
+     *  for tests, which cannot see a popup headless. */
     juce::PopupMenu buildModuleContextMenu();
 
-    /** The small context menu a macro port node's own body right-click shows instead of
-     *  buildModuleContextMenu() above (founder-review fix G7: "they cannot be removed" — a port
-     *  node previously had NO delete affordance once its macro was gone, and Configure I/O is
-     *  otherwise the only surface for it at all). Always offers "Delete Port". When the port still
-     *  resolves to a live macro (GraphEditor::macroPortOwnerFor) it also offers "Rename Port..."
-     *  and "Configure I/O..." — the two Configure I/O actions this node's own menu can reach
-     *  without the user hunting down a member module first. Split out exactly like
-     *  buildModuleContextMenu() is, for the same headless-test reason (that method's own comment). */
+    /** A macro port node's right-click menu: "Delete Port", plus "Rename Port..." and "Configure I/O..." while its
+     *  macro is live. Public for tests, like buildModuleContextMenu. */
     juce::PopupMenu buildMacroPortContextMenu();
 
-    /** Replaces what a real body right-click does with the menu buildModuleContextMenu() built --
-     *  in place of the real showMenuAsync() (which opens a real popup and, on a headless Linux CI
-     *  runner with no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow --
-     *  Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this). Mirrors
-     *  TimelineTrackHeaderComponent's setOpenMidiDestinationsPickerHookForTest(): defaults to the
-     *  real behaviour, and a null hook restores it rather than leaving the seam disarmed. A test
-     *  installs a capturing hook to inspect the menu the real mouseDown() gesture actually built,
-     *  without ever opening a popup. */
+    /** Tests: receives the menu a body right-click built instead of opening it (a headless popup crashes). A null
+     *  hook restores the real popup. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [this](juce::PopupMenu& m) { showRealContextMenu(m); };
     }
 
-    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
+    /** What a body right-click does: retargets the selection onto this module when it is outside it,
+     *  builds the menu (the small port menu for a macro port node) and shows it. `screenAnchor`
+     *  (screen coordinates) places the menu at the card instead of at the mouse; GraphEditor passes
+     *  the card's bounds for the keyboard path. */
+    void showContextMenu(std::optional<juce::Rectangle<int>> screenAnchor = {});
+
+    // ---- MIDI Learn (ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
 
     /** Arms/clears (empty id) the breathing outline for the control bound to `paramId`. Message
      *  thread only. */
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
-    /** Hosted-plugin card only (FRO132); empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
-    std::function<void()> onChooseKnobsRequested;
+    std::function<void()> onChooseKnobsRequested; // Hosted-plugin card only; empty otherwise
 
-    /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
+    /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
+     *  See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    synth::ui::HostedOutputsStrip* getHostedOutputs() const { return hostedOutputs_.get(); } // multi-bus plugins
+    /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
+     *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
+     *  the window's "Adding controls" tab. Off is a no-op when it was not on. */
+    void setPluginTouchToAdd(bool on);
+    bool isPluginTouchToAdd() const;
+    /** Opens the card layout editor beside this card; the hosted plugin's picker on a hosted card,
+     *  nothing on a bespoke card. See ModuleComponentLayoutEditor.cpp. */
+    void showCardLayoutEditor();
+    /** Test seam: while set (non-null), every card hands its layout editor here instead of opening a
+     *  window. Message thread only. */
+    static void setCardLayoutEditorLauncherForTest(std::function<void(std::unique_ptr<juce::Component>)> launcher);
 
 protected:
-    /** Virtual test seam; see ModuleComponentHostedPluginCard.cpp. */
-    virtual void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor);
+    /** Virtual test seam; see ModuleComponentLayoutEditor.cpp. */
+    virtual void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int> anchor);
 
 public:
+    void driveEqKnobGlideForTest(bool force, double stepMs); ///< Test: the EQ knob glide while hidden.
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
      *  (also null for a hosted entry -- see findMidiLearnableEntryForTest() below). */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
@@ -352,6 +407,7 @@ public:
             return std::nullopt;
         return MidiLearnableEntryForTest{entry->paramId, entry->hosted};
     }
+    std::vector<MidiLearnableEntryForTest> midiLearnableEntriesForTest() const;
 
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last timerCallback() tick. */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const {
@@ -361,11 +417,40 @@ public:
         return false;
     }
 
-    // FRO256: test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
+    // Test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
     void collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const;
 
+    // ---- Keyboard (ModuleComponentKeyboard.cpp) ----
+    /** Moves keyboard focus to the card's first control. False when the card has none. */
+    bool enterFromKeyboard();
+    /** The card's controls in the order Tab visits them; header buttons come last. */
+    std::vector<juce::Component*> getKeyboardControls();
+    bool keyPressed(const juce::KeyPress& key) override;
+    /** Headless tests: record focus moves here instead of grabbing real focus (needs a peer). */
+    void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
+    juce::Component* getRecordedFocusForTest() const noexcept { return recordedFocus_.getComponent(); }
+
+    // ---- Accessibility (ModuleComponentAccessibility.cpp) ----
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    /** The card's controls for the accessibility tree, a rule-disabled one included. */
+    std::unique_ptr<juce::ComponentTraverser> createFocusTraverser() override;
+    /** Makes the card the tree container of its controls; the constructor calls it. */
+    void makeAccessibilityContainer();
+    /** The accessible stand-ins for the card's jacks, in jack order. */
+    const juce::OwnedArray<juce::Component>& getPortAccessiblesForTest() const noexcept { return portAccessibles_; }
+
 private:
+    void focusForKeyboard(juce::Component* target);
+    // True when `hit` is one of the card's keyboard controls (or inside one): a press there keeps its own focus.
+    bool isOnKeyboardControl(const juce::Component* hit);
+    juce::Component* currentKeyboardFocus() const;
+    void applyControlAccessibility();
+    void syncPortAccessibility();
+    bool recordFocusForTest_ = false;
+    juce::Component::SafePointer<juce::Component> recordedFocus_;
+    juce::OwnedArray<juce::Component> portAccessibles_;
+
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
     // gesture can pin the raster scale. Never call setBufferedToImage() on a ModuleComponent again:
@@ -374,53 +459,79 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
-    bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment (FRO312)
+    bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
+    mutable std::unique_ptr<ModuleComponentJackMemo> jackMemo_; // one JackLayoutPass's answers (see the .h)
     juce::ComponentDragger dragger;
 
-    // FRO287: in-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
+    // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
     juce::AudioProcessorGraph::NodeID modAmountGestureAttenuverterId_;
     juce::Point<int> modAmountGestureLastPos_;
-    juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
-    void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
-    void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
+    juce::AudioProcessorGraph::NodeID firstAttenuverterForChannel(int destChannel) const;
+    void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::Slider& knob, const juce::MouseEvent& e,
+                                int phase);
+    void wireCardControlGestures(juce::Slider& control, synth::ui::CardControlGestures& gestures,
+                                 juce::RangedAudioParameter* param);
 
-    /** FRO312: pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
-    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+    /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
+    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
-    void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
+    /** The canvas zoom this card is drawn at (1 when it has no canvas parent). */
+    float canvasZoom() const;
+    /** Factor (1..2) hit tolerances grow by on a zoomed-out canvas, so a target keeps its on-screen size. */
+    float hitToleranceScale() const;
+    /** The shared hit zone of the landing dot (mod dot and cable pickup). */
+    bool pressIsOnLandingDot(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                             const juce::MouseEvent& e) const;
+    void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::Slider& knob,
+                                  const juce::MouseEvent& e, int phase);
 
-    /** FRO288: the RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
+    /** The RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
+    /** The plugin card knob bound to `paramId`, or -1. */
+    int hostedKnobSliderIndex(const juce::String& paramId) const;
+    /** destChannelForBoundParam, or for a hosted plugin knob (null `param`) its parameter's modulation slot. */
+    int destChannelForKnob(juce::RangedAudioParameter* param, const juce::Component& knob) const;
 
-    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
-    // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
-    // headless test without opening a popup that segfaults with no display (see that setter's
-    // comment).
+    // The mod dot: ModuleComponentModDot.cpp. One transparent Tab-stop button per knob/fader with an
+    // attenuverter routing; the pointer gesture itself lives in synth::ui::ModDotController.
+    juce::OwnedArray<synth::ui::ModDotButton> modDotButtons_;
+    void wireModDotGesture(juce::Slider& control, synth::ui::CardControlGestures& gestures,
+                           juce::RangedAudioParameter* param);
+
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces it via
+    // setShowContextMenuHookForTest() so a real right-click can be driven headless (see that setter's comment).
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
+    // Where the real menu opens while showContextMenu() runs with an anchor; empty = at the mouse.
+    std::optional<juce::Rectangle<int>> menuAnchor_;
+    void showRealContextMenu(juce::PopupMenu& menu);
 
-    // Auto-UI
-    juce::OwnedArray<juce::Slider> sliders;
-    juce::OwnedArray<juce::Label> sliderLabels;
-    juce::OwnedArray<juce::ComboBox> comboBoxes;
-    juce::OwnedArray<juce::Label> comboLabels;
-    juce::OwnedArray<juce::ToggleButton> toggles;
+    // Auto-UI. Non-owning views over every widget on the card, in build order: a built-in module's
+    // are owned by cardBody_, External MIDI's and a hosted plugin's by ownedBespokeWidgets_. Both are
+    // declared here, before every member that points at these widgets, so those unwind first.
+    friend class synth::CardBody;
+    juce::Array<juce::Slider*> sliders;
+    juce::Array<juce::Label*> sliderLabels;
+    juce::Array<juce::ComboBox*> comboBoxes;
+    juce::Array<juce::Label*> comboLabels;
+    juce::Array<juce::ToggleButton*> toggles;
+    std::unique_ptr<synth::CardBody> cardBody_; // null for MIDI Keyboard, External MIDI, Hosted Plugin
+    juce::OwnedArray<juce::Component> ownedBespokeWidgets_;
+    template <typename Widget>
+    Widget* adoptBespokeWidget(Widget* widget) {
+        ownedBespokeWidgets_.add(widget);
+        return widget;
+    }
 
-    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
-    // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
-    // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
-    // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
-    // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
+    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` / `comboBoxes`. Filled only
+    // in createControls()'s generic auto-UI branch; a control built by bespoke chrome, or the ExternalMidiModule
+    // device/channel combos, gets a null entry so the arrays stay aligned and a match is a safe no-op.
     juce::Array<juce::RangedAudioParameter*> sliderParams;
     juce::Array<juce::RangedAudioParameter*> comboParams;
 
-    /** Every learnable control on this card, mapped to the RangedAudioParameter it drives --
-     *  registered via registerMidiLearnable(), read by the menu builder and the badge/pulse paint.
-     *  A nested class rather than living in ModuleComponentInternal.h: it's used as a member's TYPE
-     *  here, and that header assumes ModuleComponent.h is already complete. Entries are non-owning
-     *  (same lifetime as sliderParams/comboParams above). See ModuleComponentMidiLearn.cpp for the
-     *  full design. */
+    /** Every learnable control on this card and the parameter it drives (non-owning, same lifetime as
+     *  sliderParams). Design: ModuleComponentMidiLearn.cpp. */
     class MidiLearnableRegistry {
     public:
         struct Entry {
@@ -429,21 +540,35 @@ private:
             juce::String paramId;                           // ranged: param->paramID; hosted: the slot's stable paramId
             bool hosted = false;                            // true for a plugin-card knob/toggle/choice
             bool mapped = false;                            // badge cache, written only by refreshBadges() below
-            juce::String tooltip;     // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
-            juce::String baseTooltip; // component's own tooltip at registration (e.g. "Bypass")
+            juce::String tooltip;                    // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
+            juce::String baseTooltip;                // component's own tooltip at registration (e.g. "Bypass")
+            synth::ui::AutomatedMarkerFade marker;   // the "has an automation lane" glyph's fade
+            juce::String automatedName;              // what the tooltip says is automated; set with the marker
+            juce::String descriptionBeforeAutomated; // restored when the lane goes
         };
 
         void add(juce::Component& component, juce::RangedAudioParameter* param);
+        /** Points `component`'s entry at `param` (adds one if missing); true when it added. */
+        bool rebind(juce::Component& component, juce::RangedAudioParameter* param);
         /** Hosted-card counterpart of add() -- see the .cpp for why `param`/`paramId` differ. */
         void addHosted(juce::Component& component, juce::AudioProcessorParameter& param, const juce::String& paramId);
         /** Drops every hosted entry; call before a hosted card rebuild destroys its widgets. */
         void clearHosted();
         const Entry* find(const juce::Component* component) const;
+        /** A tooltip given to `component` after it registered; no-op for an unregistered one. */
+        void setBaseTooltip(const juce::Component& component, const juce::String& tooltip);
         const std::vector<Entry>& entries() const { return entries_; }
 
         /** Mapped display label for `paramId` ("Knob 1 on Launchkey Mini"), or empty if unmapped.
          *  Refreshes every entry's badge/tooltip cache; returns whether anything changed. */
         bool refreshBadges(const std::function<juce::String(const juce::String&)>& mappingLabelFor);
+
+        /** Moves every entry's automated marker towards its parameter's state, and rewrites the control's tooltip
+         *  and screen-reader description to match. Returns whether any entry changed target. */
+        bool refreshAutomated(const std::set<juce::String>& automatedParamIds, double nowMs, bool reducedMotion);
+        /** The control's tooltip: its own text, then the MIDI mapping, then the "Automated: ..." line. */
+        static void applyTooltip(Entry& entry);
+        std::vector<Entry>& mutableEntries() { return entries_; }
 
     private:
         std::vector<Entry> entries_;
@@ -452,21 +577,24 @@ private:
     MidiLearnableRegistry midiLearnableRegistry_;
     juce::String midiLearnArmedParamId_; // the control that should breathe, while armed
     double midiLearnArmedSinceMs_ = 0.0;
-    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
-
-    // Attachments need to be kept alive.
-    // We are using raw pointers for parameters currently.
-    juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments;
-    juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments;
-    juce::OwnedArray<juce::ButtonParameterAttachment> buttonAttachments;
 
     std::unique_ptr<ScopeComponent> scopeComponent;
     std::unique_ptr<juce::ToggleButton> scopeToggle;
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
     std::unique_ptr<juce::ToggleButton> freqResponseToggle;
     std::unique_ptr<EQCurveComponent> eqCurveComponent;
+    class EqBandRow;
+    std::unique_ptr<EqBandRow> eqBand_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
+    // The Show Scope / Show Response panels fade with their height (ModuleComponentCardView.cpp); declared after
+    // the panels they fade, so they go first.
+    synth::CardBlockFade scopeFade_;
+    synth::CardBlockFade responseFade_;
+    std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
+    bool settlingFootprint_ = false;                      // measuring at the final footprint (CardBlockFade::setShown)
+    std::unique_ptr<synth::CardHeightGlide> heightGlide_; // the Macros bank's height, drawn gliding to its count
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -475,42 +603,41 @@ private:
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
+    std::unique_ptr<juce::Label> hostedStatusLabel;           // Hosted Plugin: why the load failed, under Open Editor
+    std::unique_ptr<juce::TextButton> turnPluginBackOnButton; // Hosted Plugin: "Turn on", after a crash switched it off
 
-    // --- Hosted Plugin card body (FRO128, ModuleComponentHostedPluginCard.cpp) ---
+    // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
-    std::unique_ptr<juce::TextButton> chooseKnobsButton;
+    std::unique_ptr<synth::ui::SplitButton> addControlsSplit;
     juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
     class HostedCardBinding;
     std::unique_ptr<HostedCardBinding> hostedCard_;
+    std::unique_ptr<synth::ui::HostedOutputsStrip> hostedOutputs_; // the fold line and aux jack motion; multi-bus only
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
-    std::unique_ptr<ThresholdControlComponent> thresholdControl;
+    ThresholdControlComponent* thresholdControl = nullptr; // owned by cardBody_ (its Threshold view)
 
-    // --- Envelope (ADSR) card: knob-and-graph panel (FRO112) ---
-    // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
+    // --- Envelope (ADSR) card: knob-and-graph panel ---
+    // The breakpoint curve editor: the card body's Envelope view (owned by cardBody_; null when the layout
+    // places none), and the toggle that opens and closes it (not persisted — matches the scope/
     // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
-    std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
+    synth::ui::CurveEditorComponent* envelopeCurveEditor = nullptr;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117).
-    std::unique_ptr<juce::TextButton> envelopeMsButton;
-    std::unique_ptr<juce::TextButton> envelopeBpmButton;
     // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
     // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
     // sync (params -> graph) skips rebuilding the model out from under the drag.
     bool envelopeCurveGestureActive = false;
-    // FRO118: attackDiv/holdDiv/decayDiv/releaseDiv pickers, created lazily on first entry to BPM
-    // mode (never for a card that stays in MS) — see ensureEnvelopeDivCombosCreated().
-    juce::OwnedArray<juce::ComboBox> envelopeDivCombos_;
-    // Destroyed before envelopeDivCombos_ (declared after, so members unwind in reverse).
-    juce::OwnedArray<juce::ComboBoxParameterAttachment> envelopeDivAttachments_;
 
-    // --- LFO custom-waveform card (FRO114) -- see ModuleComponentLfoCard.cpp ---
+    // --- LFO custom-waveform card -- see ModuleComponentLfoCard.cpp ---
     std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
-    std::unique_ptr<juce::ComboBox> lfoGridCombo;
+    std::unique_ptr<synth::ui::NoteLengthBox> lfoGridCombo;          // the snap grid of the custom wave editor
     std::unique_ptr<juce::TextButton> lfoShapesButton;
     std::unique_ptr<juce::TextButton> lfoToolsButton;
+    synth::CardBlockFade lfoFade_;      // editor + toolbar, fading with their height
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
+    synth::ui::RestoreWatch lfoRestoreWatch_;
+    int lfoEditedShape_ = 0; // the shape the curve editor shows: the one nearest the morph cursor
 
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
@@ -524,20 +651,15 @@ private:
     std::unique_ptr<juce::Label> wavetableNameLabel;
     std::unique_ptr<juce::FileChooser> wavetableFolderChooser;
 
-    // Wavetable card tab strip: the module's 23 controls grouped into pages behind tab buttons, with
-    // Position/Warp pinned above. Borrows sliders/comboBoxes (declared above, so it is destroyed
-    // first). Null for every other module. Jacks are NEVER tabbed — every CV input stays on the
-    // card so a cable can never point at a hidden port.
-    std::unique_ptr<WavetableTabStrip> wavetableTabs;
+    // The Table selector: card chrome beside the display it drives, not a card-body control (the body's
+    // plan skips the parameter). Its combo and label are bespoke widgets; the attachment goes first.
+    std::unique_ptr<juce::ComboBoxParameterAttachment> wavetableTableAttachment;
 
-    // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
-    std::unique_ptr<SampleWaveformComponent> sampleWaveform;
-    std::unique_ptr<juce::TextButton> loadSampleButton;
-    std::unique_ptr<juce::Label> sampleNameLabel;
-    std::unique_ptr<juce::FileChooser> sampleChooser;
+    // Instrument chrome: the Sampler's waveform and picker (SamplerChrome), the Drum Kit's picker (DrumKitChrome).
+    std::unique_ptr<synth::ui::InstrumentChrome> instrumentChrome_;
     bool fileDragHighlight = false;
-    // Channel index of the knob currently highlighted as a modulation drop target, or -1.
-    int modDropTargetChannel = -1;
+    int modDropTargetChannel = -1; // channel of the knob highlighted as the modulation drop target, or -1
+    synth::ui::ModRingFades ringFades_{*this};
 
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
@@ -546,15 +668,18 @@ private:
     std::unique_ptr<juce::DrawableButton> deleteButton;
     std::unique_ptr<juce::DrawableButton> dualIOButton;
     std::unique_ptr<juce::ButtonParameterAttachment> dualIOAttachment;
+    // MIDI Keyboard's Octave row: widgets owned by ownedBespokeWidgets_, the attachment declared after them.
+    juce::Label* octaveCaption_ = nullptr;
+    synth::ui::CardStepper* octaveStepper_ = nullptr;
+    std::unique_ptr<juce::ParameterAttachment> octaveAttachment_;
 
     AppUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;
     juce::Point<int> dragStartPosition;
 
-    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
-    // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
-    // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
-    // longer toggles-without-dragging (FRO40) — see cmdReparentPending below.
+    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A Shift-click toggles
+    // selection WITHOUT arming the dragger, and this flag stops the next mouseDrag from moving a component the
+    // dragger was never started on. Cmd no longer toggles-without-dragging — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
@@ -565,12 +690,17 @@ private:
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
 
-    // FRO40: Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
+    // A plain press on a module that is already part of a multi-selection keeps the group so a drag
+    // moves it all; if the press turns out to be a click (no movement) mouseUp collapses the
+    // selection onto this module instead. Mirrors the Controller Surface's collapse-on-mouseUp.
+    bool plainClickCollapsePending = false;
+
+    // Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
     // once, resolved at mouseUp by whether the press moved. See mouseDown/mouseUp.
     bool cmdReparentPending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
 
-    // FRO40: whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
+    // Whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
     // cmdReparentPending`, which is also true for a plain macOS Ctrl+drag. Re-derived every
     // mouseDrag tick for a single-module drag, so Cmd pressed/released mid-drag arms/disarms it.
     bool reparentArmed = false;
@@ -583,7 +713,6 @@ private:
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
-    int lastActiveStep = -1;
 
     // Output-card identity treatment (Audio Output only — see setOutputDeviceInfoText). Empty
     // means "nothing to show yet" (before the first refresh, or a Hosted build that returned
@@ -600,47 +729,76 @@ private:
     void unbindHostedPluginCard(bool paramsAlive);
     // detachFromProcessor()'s half: leaves the module's observers and unbinds; safe after the module is gone.
     void releaseHostedPluginCard();
-    // Re-measures the card and asks the canvas to accept its new size.
-    void relayoutHostedPluginCard();
+    void relayoutHostedPluginCard(); // re-measures the card and asks the canvas to accept its new size
+    // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
+    void refreshHostedLoadStatus(bool relayoutOnChange = true);
+    void reconcileHostedModKnobs();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
-    // The Open Editor + Choose knobs... row; returns the y below it, `y` unchanged for any other module.
+    void syncHostedRoutingButtons(); // Outputs button on a multi-bus plugin, Dual I/O on a plain pair
+    // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
-    // External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep
+    // External MIDI's device + channel combos, extracted out of createControls to keep
     // that function under its own line-count ratchet. Neither combo is
     // ComboBoxParameterAttachment-driven (plain module state, not AudioParameters).
     void createExternalMidiControls(ExternalMidiModule* extMidi);
+    // MIDI Keyboard's Octave stepper row and its card geometry (ModuleComponentMidiKeyboardCard.cpp); the
+    // card builds no CardBody, so these are card code.
+    void createMidiKeyboardOctaveRow();
+    void layoutMidiKeyboardCard();
     void updateLayout();
 
-    // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
-    // docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
-    // card from the module's own visible jack count (updateLayout's early branch); its actual
-    // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
-    // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved
-    // MacroPort name (paint()'s early branch).
+    // The optional panels (Show Scope / Show Response / Show Spectrum) -- ModuleComponentCardView.cpp.
+    // The setters are the body of a toggle's click and of restoreCardView(); message thread only.
+    void setScopeShown(bool show);
+    void setResponseShown(bool show);
+    void setSpectrumShown(bool show);
+    void restoreCardView();
+    void createMorphShapesCard();  // ModuleComponentMorphCard.cpp
+    void wireMorphStripGestures(); // the map sliders' modulation gestures, same file
+    int blockHeight(const synth::CardBlockFade& block, int full) const;
+    void fadeBlock(synth::CardBlockFade& block, bool show);
+    void attachBlockFade(synth::CardBlockFade& block, std::vector<juce::Component*> targets);
+    void rememberCardView(const std::function<void(synth::CardViewState&)>& edit);
+    // The toggles that join a footer row (Show Response, Show Spectrum, Show Scope), in that order.
+    std::vector<juce::ToggleButton*> footerChromeToggles(bool visibleOnly = false) const;
+
+    // Compact docked widget for the four macro-port types
+    // (docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
+    // card's height from the module's own visible jack count (updateLayout's early branch); its
+    // canvas POSITION and width are decided separately, by GraphEditor::dockMacroPortWidgets against the
+    // owning macro's hull sidebar. paintMacroPortWidget draws the jacks and the resolved MacroPort name
+    // (paint()'s early branch); the strip behind it is the canvas's.
     void layoutMacroPortWidget();
     void paintMacroPortWidget(juce::Graphics& g);
+    // Opacity of the docked widget's name at the canvas zoom (0 = dots only; the tooltip is the name), and whether
+    // the name would be ellipsised in its column.
+    float macroPortNameAlpha() const;
+    // The docked widget's jack x for `isInput`: the boundary jack stays put, the interior jack slides onto it as the
+    // canvas zooms out (macroPortInteriorJackX). getPortCenter, the MIDI jack and the hit-test all go through it.
+    int macroPortJackX(bool isInput) const;
+    // True when the widget's own (boundary) jack is an output, so a press on the merged dot picks that side first.
+    bool macroPortBoundaryIsOutput() const;
+    juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
+    bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 
-    // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
-    // paint() (which was at the function-size ratchet's ceiling) rather than grown further.
+    // The drop-target ring and the live modulation rings on knobs, split out of paint() (function-size ceiling).
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
     void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
+    bool repaintMovingModulation();            // the controls a moving routing drives only; false when none moves
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
+    /** Right-click-any-knob menu: "Automate '<Param>'" plus the MIDI Learn block, through
+     *  showContextMenuHook_ so a test can capture it headlessly. mouseDown() dispatches here for a
+     *  generic slider (`sliders`, index-parallel to `sliderParams`); `screenAnchor` places the menu
+     *  beside that area instead of at the mouse. */
+    void showAutomateMenuForSlider(juce::RangedAudioParameter* param,
+                                   std::optional<juce::Rectangle<int>> screenAnchor = std::nullopt);
 
-    /** Right-click-any-knob entry point into the automation lane editor. Attached as a
-     *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
-     *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
-     *  isn't this component's own body (checked by identity against `sliders`, index-parallel to
-     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Builds "Automate '<Param>'"
-     *  plus the MIDI Learn block (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp) under one
-     *  separator, through showContextMenuHook_ so a test can capture it headlessly. */
-    void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
+    // ---- MIDI Learn (ModuleComponentMidiLearn.cpp) ----
 
-    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp) ----
-
-    /** Every control on this card whose right-click should offer MIDI Learn -- see
-     *  MidiLearnableRegistry's own comment. Called once per control from createControls(); a null
-     *  `param` is silently ignored. */
+    /** A control whose right-click offers MIDI Learn, registered once; a null `param` is ignored. */
     void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
+    /** `control` now drives `param` (registered on first call): a re-binding knob, the Drum Kit's pad knobs. */
+    void rebindMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
 
     /** Hosted-card counterpart of registerMidiLearnable(); see ModuleComponentHostedPluginCard.cpp. */
     void registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
@@ -653,6 +811,7 @@ private:
     void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
     /** Hosted-card counterpart for a toggle/choice control (no RangedAudioParameter to key on). */
     void showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName);
+    bool showMacroWidgetMenu(juce::Component& widget); ///< Right-click on an XY pad or button; false for others.
     /** Right-click on a hosted-card KNOB: "Automate..." plus the shared MIDI Learn block. */
     void showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName);
 
@@ -673,12 +832,37 @@ private:
      *  repaints only if something changed. Called from the existing gated 15 Hz timerCallback. */
     void refreshMidiLearnBadges();
 
+    /** The automation-lane marker (ModuleComponentAutomationMarker.cpp): one query per module on the same gated tick,
+     *  a repaint only while a marker fades or changes. */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
+
 public:
-    // ---- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ----
+    /** Test/inspection: whether `component`'s parameter was automated as of the last tick, and its marker's level now.
+     */
+    bool isAutomatedMarkerShownForTest(const juce::Component* component) const {
+        const auto* e = midiLearnableRegistry_.find(component);
+        return e != nullptr && e->marker.isAutomated();
+    }
+    float automatedMarkerLevelForTest(const juce::Component* component) const {
+        const auto* e = midiLearnableRegistry_.find(component);
+        return e != nullptr ? e->marker.level(synth::ui::AutomatedMarkerFade::nowMs()) : 0.0f;
+    }
+
+    // ---- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ----
     // Public so a menu item and a test call the same code as each other.
     void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step
     void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
     void setLfoGridDivisions(int n);          // 0: grid Off (no snap); else {n, min(n, 8)}, snap on
+    /** Opens (or raises) this card's shape list editor on `shapeIndex`; null without one or when a test hook took it.
+     */
+    juce::DialogWindow* openShapesWindow(int shapeIndex = 0);
+
+    // ---- Parametric EQ card ----
+    /** Opens the pop-out EQ editor, or raises it when it is already open. Public so the mixer's EQ key
+     *  reaches the same window the card's "Open EQ Window" button does. */
+    void openEqWindow();
 
 private:
     /** Paints the "mapped" badge on every registered control that has one, and the armed control's
@@ -699,38 +883,32 @@ private:
 
     void updateDualIOTooltip();
 
-    // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
-    // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
-    // clear of the new footprint). Message thread only.
-    void applyMacroCountChange();
+    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Knobs" count, the height gliding
+    /** updateLayout() with a Macros bank's height gliding; true when a glide began or runs (room is made). */
+    bool updateLayoutGliding();
 
-    // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
-    // rows above `count` without destroying their sliders or parameters.
-    void layoutMacroBank(int count);
-
-    // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
-    // rather than re-deriving the geometry, so content can never land on top of a port label —
-    // which is exactly what happened when two separate copies of the formula drifted apart.
+    // First y below the header, the MIDI row and every visible jack, derived from getPortCenter() so content never
+    // lands on a port label.
     int getContentTopY();
 
-    // Single source of truth for the default (non-Sequencer/ADSR/keyboard) body layout.
-    // apply == false measures only and touches no bounds; apply == true positions the children.
-    // Returns the total height the body needs, including bottom padding.
+    // The default (non-Sequencer/ADSR/keyboard) body layout; apply == false only measures. Returns the height needed.
     int layoutDefaultContent(bool apply);
 
-    // The generic auto-UI knob grid (kKnobColumns across, wrapping; doubled on a double-width
-    // card). Extracted out of layoutDefaultContent (which is at its own ratchet ceiling) so a
-    // new block — the envelope graph section — has room to be inserted right after it.
-    int layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply);
+    // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.
+    int layoutBodyControls(int y, int width, bool apply);
+    int layoutWavetableChrome(int y, int contentX, int contentW, bool apply);
+    int layoutChromeRows(int y, int contentX, int contentW, bool apply);
 
-    // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
+    // Builds the Sampler's or Drum Kit's instrument chrome. No-op for other modules.
     void createSamplerControls();
+    static void showModuleOnCanvas(GraphEditor& editor, juce::AudioProcessorGraph::NodeID id);
 
     // Repoints the file-name label at whatever the module currently holds.
     void refreshSampleLabel(const juce::String& fallbackMessage = {});
 
-    // Builds the Wavetable module's frame display and load button. No-op for other modules.
+    // Builds the Wavetable module's frame display, Table selector and load row. No-op for other modules.
     void createWavetableControls();
+    void createWavetableTableSelector(juce::AudioParameterChoice& table);
 
     // Opens an async file chooser and, on success, loads the chosen file into the
     // Wavetable module and switches its Table parameter to "Loaded File".
@@ -749,41 +927,31 @@ private:
     // Repoints the wavetable caption at whatever the module currently holds.
     void refreshWavetableLabel(const juce::String& fallbackMessage = {});
 
-    // Builds the tab strip and hands it every slider / combo. Must run AFTER createControls(),
-    // which is what populates sliders and comboBoxes. No-op for other modules.
-    void createWavetableTabs();
-
     // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
     int getInputPortColumns() const;
 
-    // Shared step-column layout helper used by Sequencer and PolySequencer.
-    // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
-    void layoutSequencerStepColumn(int step, int colX, int startY);
+    // --- Sequencer card (ModuleComponentSequencerCard.cpp) ---
+    // Hands the step grid view the undo hook and the card's height hooks; called once after the body built its views.
+    void wireSequencerCard();
+    // The 15 Hz tick: lets the step grid read the module (playhead, pattern generation, parameters).
+    void pollSequencerCard();
 
     // --- Parametric EQ card ---
-    // One column per band (on/off toggle above Freq / Gain / Q), so the knobs read as a grid
-    // instead of the generic two-up flow. Height is computed by parametricEQHeight() from the
-    // same constants the layout uses, so the two cannot drift apart.
+    // Curve, strip, the selected band's controls (EqBandRow), trim, buttons; height from parametricEQHeight().
     void layoutParametricEQ();
     int parametricEQHeight() const;
-    void openEqWindow();
     // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
     // outlives this component becomes a no-op rather than a dangling call.
     void wireEqGestureCallbacks(EQCurveComponent& curve);
     // Auto-UI controls are looked up by their parameter display name (set as the componentID in
     // createControls), which keeps the layout independent of parameter ordering.
-    juce::ToggleButton* findToggleByName(const juce::String& name) const;
     void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
 
     // --- Envelope (ADSR) card ---
-    // Builds the graph disclosure toggle, the curve editor (fixed 5-node topology) and the
-    // BPM|MS row; called from createControls() for ADSR only. Must run AFTER the generic
-    // float-param loop above (it needs `sliders`/`sliderLabels` already built, to shorten their
-    // captions and read attack/hold/decay/sustain/release's current values).
+    // Wires the body's Envelope view (the curve editor, fixed 5-node topology) to the parameters and builds
+    // the Show Envelope Graph toggle; called from the constructor for ADSR only, after createControls()
+    // and the body's views. A no-op when the layout places no Envelope view.
     void createEnvelopeCardControls();
-    // Renames the five knob labels ("Attack" -> "ATK", ...) for ADSR only — componentIDs (used
-    // for lookup/automation) are untouched, this is a display-only caption swap.
-    void applyEnvelopeKnobShortLabels();
     // Brackets a whole curve drag in one undo step (mirrors wireEqGestureCallbacks) and toggles
     // envelopeCurveGestureActive around it.
     void wireEnvelopeGestureCallbacks();
@@ -795,33 +963,11 @@ private:
     // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
     // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
     void syncEnvelopeCurveFromParams();
-    // MS|BPM click handler (FRO117): writes `tempoSync` (true for BPM, false for MS) via
-    // setValueNotifyingHost, no-op if already at that value or the param isn't present.
-    void writeEnvelopeTempoSync(bool bpmMode);
-    // Reverse sync for the MS|BPM toggle pair: reads `tempoSync` and sets the two buttons'
-    // toggle states (dontSendNotification, so this never re-triggers writeEnvelopeTempoSync).
-    // Called once at construction (to reflect a preset/undo-restored value) and from
-    // parameterValueChanged.
-    void syncEnvelopeSyncToggleFromParam();
     // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's
     // segment/progress, called from the existing gated 15 Hz timerCallback (no new Timer).
     void updateEnvelopePlayhead();
-    // The disclosure-toggle+BPM|MS row, then the curve editor itself when expanded — extracted
-    // out of layoutDefaultContent (shared by every module) to keep that function under its own
-    // ratchet. A no-op returning `y` unchanged when envelopeGraphToggle is null (every non-ADSR
-    // module). Mirrors the freqResponseToggle/scopeToggle blocks it sits beside.
-    int layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply);
-    // FRO118: lazily builds the four *Div combos + attachments on first entry to BPM mode; a
-    // later no-op, and never called for a card that stays in MS. See ModuleComponentEnvelopeCard.cpp.
-    void ensureEnvelopeDivCombosCreated();
-    // FRO118: BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
-    void applyEnvelopeSyncModeToControls(bool bpmMode);
-    // FRO118: positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
-    void applyEnvelopeDivComboBounds();
-    // FRO118: true when the slider is hidden only because its *Div combo swapped in over it.
-    bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;
 
-    // --- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ---
+    // --- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ---
     void createLfoCardControls();          // toolbar + Free-mode curve editor; LFO only
     void wireLfoGestureCallbacks();        // undo bracket, mirrors wireEnvelopeGestureCallbacks
     void writeLfoWaveFromCurve();          // forward sync: graph -> module

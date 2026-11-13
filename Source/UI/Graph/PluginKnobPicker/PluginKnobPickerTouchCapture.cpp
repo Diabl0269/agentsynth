@@ -7,13 +7,13 @@
 namespace synth::ui {
 
 PluginKnobPickerTouchCapture::PluginKnobPickerTouchCapture(HostedPluginModule& module)
-    : module_(module) {}
+    : module_(&module) {}
 
 PluginKnobPickerTouchCapture::~PluginKnobPickerTouchCapture() { setArmed(false); }
 
 // Message thread. Iterates getParameters() on the CURRENT instance only -- if the instance is
-// replaced while armed, the new instance's parameters are never listened to (a known v1 limitation;
-// the picker popover is short-lived enough that this has not been worth solving yet). Disarming
+// replaced while armed, the new instance's parameters are never listened to; the owner (the card's
+// PluginTouchToAdd) turns the mode off when the instance goes instead. Disarming
 // cancels any update already queued AND any open burst window, so a touch reported just before the
 // checkbox is unticked can never fire after this call returns.
 void PluginKnobPickerTouchCapture::setArmed(bool armed) {
@@ -21,7 +21,8 @@ void PluginKnobPickerTouchCapture::setArmed(bool armed) {
         return;
     armed_ = armed;
 
-    if (auto* instance = module_.getActiveInstanceForEditor())
+    auto* module = module_.get();
+    if (auto* instance = module != nullptr ? module->getActiveInstanceForEditor() : nullptr)
         for (auto* param : instance->getParameters()) {
             if (armed)
                 param->addListener(this);

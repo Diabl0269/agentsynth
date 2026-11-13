@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 2,
+    "nextLaneId": 1,
+    "nextNoteId": 3,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 0,
+        "name": "Track 1",
+        "colourArgb": 4283215696,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "",
+        "clips": [
+          {
+            "id": 1,
+            "name": "Clip 1",
+            "startBeat": 0.0,
+            "lengthBeats": 8.0,
+            "muted": false,
+            "notes": [
+              {
+                "id": 1,
+                "startBeat": 0.0,
+                "lengthBeats": 1.0,
+                "pitch": 60,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              },
+              {
+                "id": 2,
+                "startBeat": 2.0,
+                "lengthBeats": 1.0,
+                "pitch": 64,
+                "velocity": 100,
+                "channel": 1,
+                "muted": false
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "markers": []
+  },
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "connections": [],
+  "modulations": [],
+  "macros": [],
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Audio Output",
+      "uuid": "0b9a7e10-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "params": {},
+      "position": {
+        "x": 1200,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "Sequencer",
+      "uuid": "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      "params": {},
+      "position": {
+        "x": 104,
+        "y": 64
+      }
+    }
+  ]
+}

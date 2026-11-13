@@ -1,0 +1,57 @@
+# Feature: the Filter's Edit shapes window no longer blocks the main window, so a shape can be dragged from the Sounds
+# view's Shapes list onto the window's morph map: dropped on a dot it stamps that dot's curve, dropped on empty space
+# it adds a shape there. The window stays above the main window while the main window is used.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, clicks Places > Shapes in the main window (it answers
+# with the window still open), drags a shape onto empty space in the window's map (a new dot appears), drags another
+# onto the "ah" dot (its curve changes, its name stays), then closes the window with Esc.
+settings:
+  librarySidebarView: sounds
+record: true
+save_project: filter-shapes-window-drop
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: window-open}
+  - click: {id: soundBrowser, x: 54, y: 126}                   # Places > Shapes, in the main window
+  - wait: {settleMs: 800}
+  - expect: {id: "Filter shapes: Filter", exists: true}
+  - screenshot: {id: window, name: main-window-answers-with-the-shape-window-open}
+  - mouseDown: {id: window, x: 72, y: 273}                     # the "eh" row in the Shapes list
+  - mouseMoveHeld: {id: window, x: 110, y: 273, captured: true}
+  - mouseMoveHeld: {id: window, x: 200, y: 273, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 200, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 110, y: 215, captured: true}  # empty space in the window's map
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: drag-over-empty-space}
+  - mouseUp: {id: "Filter shapes: Filter", x: 110, y: 215, captured: true}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "Filter shapes: Filter", name: dropped-eh-adds-a-shape}
+  - mouseDown: {id: window, x: 72, y: 303}                     # the "ih" row
+  - mouseMoveHeld: {id: window, x: 110, y: 303, captured: true}
+  - mouseMoveHeld: {id: window, x: 200, y: 303, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 90, y: 110, captured: true}
+  - mouseMoveHeld: {id: "Filter shapes: Filter", x: 100, y: 98, captured: true}   # the "ah" dot
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: drag-over-the-ah-dot}
+  - mouseUp: {id: "Filter shapes: Filter", x: 100, y: 98, captured: true}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "Filter shapes: Filter", name: dropped-ih-stamps-ah}
+  - key: {keys: escape, target: "Filter shapes: Filter"}
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter", exists: false, within_ms: 2000}
+  - screenshot: {id: window, name: closed-with-esc}

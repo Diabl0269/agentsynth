@@ -244,6 +244,34 @@ TEST(MetronomeTest, LoopWrapClicks) {
     }
 }
 
+// A loop whose end lands exactly on a block boundary reports no in-block wrap, so the pass's beat-0
+// click is the next block's first beat: it must fire exactly once there, every pass.
+TEST(MetronomeTest, LoopWrapOnBlockBoundaryClicksOncePerPass) {
+    Fixture f;
+    f.build();
+    f.engine.getMetronome().setEnabled(true);
+
+    ASSERT_TRUE(f.engine.getTransport().setLoop(0.0, 8.0, true)); // 375 blocks of 512: wraps on a boundary
+    ASSERT_TRUE(f.engine.getTransport().play());
+
+    int boundaryWraps = 0;
+    bool previousWrapped = false;
+    f.driver->streamBlocks(375 * 4 + 2, [&](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
+        EXPECT_EQ(info.loopWrapSample, -1);
+        if (previousWrapped) {
+            EXPECT_NEAR(block.getSample(0, 0), 0.0f, 1.0e-6f);
+            EXPECT_GT(std::abs(block.getSample(0, 1)), kOnsetThreshold) << "the downbeat click starts the new pass";
+        }
+        if (info.wrapsAtBlockEnd) {
+            ++boundaryWraps;
+            // The old pass must not start a second click on its own last samples.
+            EXPECT_LT(std::abs(block.getSample(0, block.getNumSamples() - 1)), kOnsetThreshold);
+        }
+        previousWrapped = info.wrapsAtBlockEnd;
+    });
+    EXPECT_GE(boundaryWraps, 4);
+}
+
 // ============================================================================
 // 5. NeverInABounce
 // ============================================================================
@@ -368,6 +396,20 @@ TEST(MetronomeTest, DisabledMetronomeIsSilentAndFree) {
                 << "a disabled metronome must not touch the buffer at all, sample " << i;
 
     EXPECT_EQ(metronome.getActiveVoiceCountForTest(), 0) << "the crossing scan must not run while disabled";
+}
+
+TEST(MetronomeTest, MutedMetronomeIsSilentEvenWhenEnabledAndForced) {
+    Metronome metronome;
+    metronome.setEnabled(true);
+    metronome.setForcedOn(true);
+    metronome.setMuted(true);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    metronome.renderClicks(buffer, makeInfo(kSampleRate, 120.0, 4, 4, 0.0, 512));
+
+    EXPECT_FLOAT_EQ(buffer.getMagnitude(0, 512), 0.0f) << "--mute-metronome must beat the toggle and the count-in";
+    EXPECT_EQ(metronome.getActiveVoiceCountForTest(), 0);
 }
 
 // ============================================================================

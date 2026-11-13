@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -28,6 +29,17 @@ namespace synth::ui {
  *  would go dead under macOS's Shift axis swap. */
 inline float dominantWheelDelta(const juce::MouseWheelDetails& wheel) noexcept {
     return wheel.deltaY != 0.0f ? wheel.deltaY : wheel.deltaX;
+}
+
+/**
+ * True for Option plus a mostly-vertical scroll: the one-hand trackpad way to zoom ROW HEIGHT (a
+ * macOS pinch carries no axis, so it cannot say "vertical" itself). Both the timeline panel's track
+ * rows and the piano roll's pitch rows answer it, so the two surfaces can never drift on which key
+ * means height. Cmd held means the Cmd zoom bindings own the gesture, and a mostly-horizontal delta
+ * stays a sideways scroll.
+ */
+inline bool isOptionVerticalZoom(const juce::ModifierKeys& mods, const juce::MouseWheelDetails& wheel) noexcept {
+    return mods.isAltDown() && !mods.isCommandDown() && std::abs(wheel.deltaY) >= std::abs(wheel.deltaX);
 }
 
 /**

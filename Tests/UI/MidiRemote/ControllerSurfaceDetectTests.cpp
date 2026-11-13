@@ -8,6 +8,7 @@
 #include "UI/MidiRemote/Detect/DetectModeController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
+#include "../../TestWait.h"
 #include <cstdlib>
 
 using midiremote_test::MidiRemotePanelLiveRefreshTest;
@@ -168,7 +169,7 @@ TEST_F(MidiRemoteDetectTest, AnAssignedControlStillMovesItsCellWhileDetectIsOn) 
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
-    pump();
+    synth::test::waitUntil([&] { return (controller_->getProfiles().size()) == (1u); });
     ASSERT_EQ(controller_->getProfiles().size(), 1u);
     const auto nodeUuid = node_->properties["uuid"].toString();
     ASSERT_TRUE(panel_.selectAssignmentForParameter(nodeUuid, "cutoff"));

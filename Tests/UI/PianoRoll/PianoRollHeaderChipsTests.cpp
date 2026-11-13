@@ -1,15 +1,17 @@
-// PianoRoll header-chip tests: the six header chips' hover wash + resting/active fill affordance,
-// and GENERATE — add-to-existing vs replace, plus the six chips' distinct/non-overlapping bounds.
+// PianoRoll header-chip tests: the header chips' hover wash + resting/active fill affordance, and
+// GENERATE — add-to-existing vs replace, plus the first six chips' distinct/non-overlapping bounds
+// (the Velocity and Humanize chips and the value box: PianoRollVelocityToolbarTests.cpp).
 // Shared PianoRollFixture, rgbDistance and chooseMajorScaleForOpenClip live in
 // PianoRollTestHelpers.h.
 
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
 
 // ============================================================================
-// 19. Header button chip affordance (six chips — hover wash + resting/active fill).
+// 19. Header button chip affordance (hover wash + resting/active fill).
 // ============================================================================
 
 TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChipRect) {
@@ -153,8 +155,7 @@ TEST(PianoRollGenerateTest, PanelToggleDrivesTheAddPathThroughTheRollsOwnHandler
     const auto kept = f.doc.addNote(clipId, makeNote(0.0, 30, 1.0));
 
     auto& panel = f.roll.getScaleAssistPanel();
-    panel.getMinNoteCombo().setSelectedId(61, juce::dontSendNotification); // pitch 60
-    panel.getMaxNoteCombo().setSelectedId(61, juce::dontSendNotification);
+    panel.getRangePicker().setRange(60, 60);
 
     panel.getAddToExistingToggle().setToggleState(true, juce::dontSendNotification);
     panel.getGenerateButton().onClick();

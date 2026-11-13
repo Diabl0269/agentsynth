@@ -1,0 +1,26 @@
+# The clip sizing control with Show button labels off: the icon alone (no caption), the tooltip names the mode, and the
+# control keeps the width of the labelled one's icon-only form in every mode.
+#
+# What a user does: with button labels off, opens the timeline, clicks a lane and presses 1 twice (Stretch to fit).
+record: true
+save_project: clip-sizing-field-icon-only
+settings:
+  showToolbarLabels: false
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineToolSelect, toggleState: true}
+  - click: {id: window, x: 800, y: 800}
+  - wait: {settleMs: 600}
+  - key: {keys: "1"}
+  - wait: {settleMs: 600}
+  - key: {keys: "1"}
+  - expect: {id: timelineClipSizingState, sizingMode: stretch, glyph: stretch, caption: ""}
+  - expect: {id: timelineClipSizing, contains: {tooltip: "Stretch to fit"}}
+  - mark: {check: 1, name: sizing-stretch-icon-only}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: timelineClipSizing, name: stretch-icon-only-button, scale: 8}

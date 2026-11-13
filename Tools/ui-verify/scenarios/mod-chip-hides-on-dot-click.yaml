@@ -1,0 +1,32 @@
+# The connections chip under a knob fades away when its dot is clicked, stays hidden while the sources panel is open and
+# fades back when the panel closes with Esc.
+#
+# What a user does:
+#   1. Opens a project with two LFOs modulating the Filter's Cutoff and rests the pointer on the Cutoff knob: the chip
+#      fades in under it.
+#   2. Left-clicks the Cutoff dot: the chip fades away as the sources panel opens and stays gone.
+#   3. Presses Esc: the panel closes and, with the pointer still on the knob, the chip fades back in.
+# The marks sit right after the click (the chip mid-fall under the opening panel) and once the chip is back.
+motion: true
+pop_check: {undo: false}   # undo off: the scenario rests the pointer on a knob, which the undo probe's toolbar click would move
+record: true
+save_project: mod-chip-hides-on-dot-click
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot-two-lfos.agsproj"}
+  - wait: {}
+  - hover: {id: Cutoff}
+  - expect: {id: "card:Filter", modHoverChip: true, within_ms: 3000}
+  - expect: {id: "card:Filter", modHoverChipAlpha: 1, within_ms: 3000}
+  - hover: {id: "Cutoff modulation, 2 sources"}
+  - click: {id: "Cutoff modulation, 2 sources"}
+  - mark: {check: 1, name: chip-hides-on-click}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - expect: {id: "card:Filter", modHoverChipAlpha: 0, within_ms: 3000}
+  - screenshot: {id: window, name: panel-open-chip-gone}
+  - wait: {}
+  - expect: {id: "card:Filter", modHoverChipAlpha: 0}
+  - key: {keys: escape}
+  - expect: {id: modDotPopover, exists: false, within_ms: 2000}
+  - expect: {id: "card:Filter", modHoverChipAlpha: 1, within_ms: 3000}
+  - mark: {check: 2, name: chip-returns-on-close}
+  - screenshot: {id: window, name: panel-closed-chip-back}

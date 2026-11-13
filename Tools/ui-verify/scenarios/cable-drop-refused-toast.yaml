@@ -1,0 +1,36 @@
+# FRO1419: a cable dropped on a jack that cannot take it says why in a red error toast over the canvas.
+#
+# What a user does: adds a Delay and an LFO, drags a cable from the LFO's output and drops it on the Delay's output.
+# A toast with the reason appears (error colour: red bar and border) and no cable is made.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+motion: true
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the caret moves in the library search field"}
+  - type: {text: delay}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down, instant: "the selected row highlight moves in the library list"}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "the search field takes focus and the library list shows its rows again"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down, instant: "the selected row highlight moves in the library list"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Delay", toX: 268, toY: 56}
+  - expect: {id: "Error: Connect an output to an input", showing: true, within_ms: 2000}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: refused-drop-error-toast}

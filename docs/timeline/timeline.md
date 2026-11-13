@@ -11,12 +11,12 @@ This doc is the shell — the regions, the dock, the height and the slide. The r
 | [view](view.md) | `TimelineViewState`: beat↔pixel mapping, snap, the lanes grid, wheel/zoom/scroll |
 | [ruler](ruler.md) | The ruler strip, its two gesture zones, the loop brace, markers |
 | [tracks](tracks.md) | Track header rows: binding chips, M/S/R, focus, reordering |
-| [add-track](add-track.md) | The `"+ Track"` menu and every flow it starts |
+| [add-track](add-track.md) | The `"Add Track"` menu and every flow it starts |
 | [playhead](playhead.md) | The playhead overlay, latency compensation, follow-playhead |
 | [transport](transport.md) | The transport bar, recording, metronome and count-in |
 | [edit-tools](edit-tools.md) | The Cubase-style tool strip shared by the lanes and the roll |
 | [clips](clips.md) | Clip lanes: selection, drag/trim, authoring, import |
-| [automation](automation.md) | The automation strip and its curve canvas |
+| [automation](automation.md) | Automation lanes under their tracks and the curve editor |
 | [piano-roll](piano-roll.md) | The per-clip MIDI note editor |
 | [scale-assist](scale-assist.md) | The Scale Assist panel, the scale engine, random generation |
 | [focus](focus.md) | Which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on |
@@ -26,15 +26,18 @@ Source layout — one file per concern; the class itself is declared in `Timelin
 | Unit | Concern |
 |------|---------|
 | `TimelinePanelComponent.cpp` | Ctor/dtor, shortcut-manager wiring, transport/doc/undo-manager setters |
-| `TimelinePanelStrips.cpp` | Edit-tool strip, piano-roll open/close, automation strip |
+| `TimelinePanelStrips.cpp` | Edit-tool strip, piano-roll open/close, snap selector setup |
+| `TimelinePanelAutomation.cpp` | Automation lanes under their tracks: geometry push, fold toggle, `showAutomationLane`, lane choices |
 | `TimelinePanelClipClipboard.cpp` | Clip clipboard: copy/paste/cut/duplicate/repeat/select-all |
 | `TimelinePanelShortcuts.cpp` | Panel-scoped keyboard shortcut dispatch (`matchesAction`/`keyPressed`) |
-| `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement, drag-to-reorder |
+| `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement |
+| `TimelinePanelTrackDrag.cpp` | Track-header drag-to-reorder: animator glue, autoscroll, drop, row placement |
+| `TimelinePanelFollowMode.cpp` | Follow playhead's mode (Page/Smooth), the pin point and the Smooth view move |
 | `TimelinePanelLayout.cpp` | Preferences (snap/follow-playhead/scroll-invert), zoom/scroll helpers, `resized()`/`paint()` |
 
 ## Regions
 
-The low-rate transport poll ([playhead](playhead.md#two-timers)) aside, everything here is pure
+The low-rate transport poll ([playhead](playhead.md#two-frame-sources)) aside, everything here is pure
 layout-plus-paint with no timer or animation of its own:
 
 ```
@@ -42,14 +45,13 @@ layout-plus-paint with no timer or animation of its own:
 | Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  transport
 | readout, metronome/count-in .......................... snap combo) |   (+ view's snap selector)
 +---------------------+----------------------------------------------+
-| "+ Track"            | Ruler  (bar/beat ticks, loop brace)          |  add-track (+ ruler)
+| "Add Track"            | Ruler  (bar/beat ticks, loop brace)          |  add-track (+ ruler)
 | Track header column  +----------------------------------------------+
-| (name/colour/M/S/R/  | Clip lanes  <-or->  Piano roll               |  tracks / clips <-> roll
-|  binding chip),      | (one of the two, same rect, playhead overlay |
-|  scrolls              | drawn on top of either)                     |  playhead
-|                       +----------------------------------------------+
-|                       | Automation strip (opens by shrinking the     |  automation (docked,
-|                       |  region above by its own fixed height)       |   optional)
+| (fold arrow/name/    | Clip lanes  <-or->  Piano roll               |  tracks / clips <-> roll
+|  colour/M/S/R/chip), | (one of the two, same rect, playhead overlay |
+|  scrolls             |  drawn on top of either)                     |  playhead
+|   lane headers under | lane editors in each open track's rows       |  automation
+|   an open track      |  (under the track they belong to)            |
 +---------------------+----------------------------------------------+
 ```
 
@@ -64,7 +66,7 @@ above. `resized()` lays out three child regions:
 All three are exposed as public rect getters (`getTransportBarBounds()`, `getTrackHeaderBounds()`,
 `getLanesBounds()`) so every consumer and its tests build on the same arithmetic instead of
 re-deriving it. The component owns no timer and no animation of its own, apart from the playhead
-overlay's and the automation strip's knob entry point.
+overlay's ([automation](automation.md) lane rows fold out inside the track rows, not as a region).
 
 Keyboard focus is orthogonal to this diagram, not another region: whichever of the graph editor,
 clip lanes or piano roll the user last clicked owns Cmd+C/V/D — see [focus](focus.md).
@@ -80,14 +82,14 @@ user's height scaled by the panel's open fraction, so the same carve serves both
 and every frame of its slide.
 
 FRO333: ONE toolbar toggle (`ToolbarComponent::Slot::ToggleBottomPanel`, right-hand group,
-immediately before `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleBottomPanel`; see
+immediately before `ToggleTheme`) and the **Cmd+J** shortcut (action id `toggleBottomPanel`; see
 [`shortcuts.md`](../control/shortcuts.md)) flip `MainComponent::isBottomDockVisible` — show/hide the
 whole dock, reopening on whichever tab was last active. It replaced the former separate
 Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
-**Cmd+1/2/3** (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) now each only SHOW
-their own tab (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
-closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration and the drag-reorder
-re-keying. Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
+**Cmd+1/2/3** (`showDockTab1`..`3`) now each only SHOW
+the tab at that place of the strip (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
+closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (the keys follow
+the strip order when it is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
 default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
@@ -98,7 +100,7 @@ actually drive. `isBottomDockVisible` / `bottomDockVisible` mean "the dock is op
 which tab is active; which tab is *showing* inside an open dock is the separate, independently
 persisted `bottomDockActiveTab` key (`BottomDockComponent::kActiveTabKey`, default `"timeline"`), and
 the strip's own user-reorderable left-to-right order is the also-independent `bottomDockTabOrder`
-key (comma-joined tab names, default `"timeline,mixer,midiRemote"`) — both keys are documented
+key (comma-joined view names, default `"timeline,mixer,midiRemote,canvas"`) — both keys are documented
 alongside the tab strip itself in
 [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows).
 
@@ -107,13 +109,16 @@ window (`Source/UI/Layout/DetachablePanelHost/`) leaves the strip entirely — i
 disappear from here — and if it was the active tab, `BottomDockComponent` falls back to the next tab
 still offered; only once every tab has been detached (or Mixer disabled by its own placement
 preference too) does `MainComponent` hide the whole dock, reopening it automatically the moment a
-tab redocks. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
+tab redocks. A detached Timeline has no header strip; its transport row ends with the "Dock back" button. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is
 open — it only reflects "the Timeline tab is selected" — so a caller that needs "is the panel
-actually on screen" composes `timelinePanel.isVisible() && bottomDock.isVisible()`.
-`MainComponent::timerCallback()`'s 10 Hz poll gate is the reference call site.
+actually on screen" asks `bottomDock.isTimelineShowing()`: the Timeline tab of a showing dock, its own
+window, or the main area, where the panel shows with the dock closed (see
+[the main view](../layout/chrome.md#the-main-view); the Timeline commands' gate there is
+`MainComponent::isTimelineReachable()`). `MainComponent::timerCallback()`'s 10 Hz poll gate is the
+reference call site.
 
 ## Panel height
 
@@ -145,9 +150,8 @@ minimum**:
   be resized from Timeline, Mixer and Controllers alike (and while the Timeline is detached into
   its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
   height so the content below never moves, but the tab/detach buttons are laid out beneath it, so a
-  resize grab never lands on a button. FRO338: `+ Bus`/Reset Meters moved off the tab strip
-  entirely — they sit in their own Mixer-only toolbar row inside the content area now (see
-  [`docs/mixer/panel.md`](../mixer/panel.md)), so switching tabs never changes the tab strip's own
+  resize grab never lands on a button. `Add Bus`/Reset Meters are not on the tab strip at all — they are the mixer panel's own
+  toolbar (see [`docs/mixer/panel.md`](../mixer/panel.md#the-toolbar)), so switching tabs never changes the tab strip's own
   width split. The Timeline panel itself has no handle
   and no resize callbacks; its transport bar uses its whole `Metrics::timelineTransportBarHeight`
   strip. Idle the handle paints a 1 px border hairline along the dock's top edge; hovered or
@@ -173,11 +177,16 @@ is actually done, same as the sibling panels. See `docs/layout/animation.md` for
 full contract: mid-flight reversal, the synchronous off-screen path, and why one driver serves all
 three panels.
 
+Anything that points at a control inside the panel (the Add Track picker, the song key picker) is launched through
+`timelineSlide_.whenSettled(...)` rather than straight after the panel is asked to open: it runs at once when the panel
+is already open or nothing animates, and otherwise at the end of `finishPanelSlide()`, once the control is where it
+will stay. A slide closed again before it lands drops the call.
+
 ## Always compiled, never gated
 
 Everything past the always-present `TimelinePanelComponent` member and the `resized()` carve — the
 toolbar button and the `toggleTimelinePanel` command included — is ordinary, always-compiled,
 always-active code. There is no build configuration and no runtime preference that omits the
-button, the shortcut or the panel carve, and Cmd+T and Space are always available. A stale
+button, the shortcut or the panel carve, and Cmd+J and Space are always available. A stale
 `timelineFeatureEnabled` key left in an existing install's `ApplicationProperties` by an earlier
 kill switch is ignored.

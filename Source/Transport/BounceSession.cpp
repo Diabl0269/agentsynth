@@ -50,7 +50,7 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     auto& transport = engine_.getTransport();
     auto& graph = engine_.getGraph();
 
-    metronomeGuard_ = std::make_unique<MetronomeForceOffGuard>(engine_.getMetronome());
+    metronomeGuard_ = std::make_unique<MetronomeForceOffGuard>(engine_.getMetronome(), engine_.getSoundPreview());
 
     // ---- Everything that has to go back afterwards, read before anything is disturbed ----
     const auto before = transport.getPositionSnapshot();
@@ -85,12 +85,7 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
         return;
     }
 
-    juce::WavAudioFormat wavFormat;
-    juce::AiffAudioFormat aiffFormat;
-    juce::AudioFormat& audioFormat = options_.format == BounceFormat::Aiff ? static_cast<juce::AudioFormat&>(aiffFormat)
-                                                                           : static_cast<juce::AudioFormat&>(wavFormat);
-    writer_.reset(audioFormat.createWriterFor(stream.get(), options_.sampleRate, (unsigned int)options_.numChannels,
-                                              options_.bitDepth, {}, 0));
+    writer_ = createBounceWriter(options_, stream.get(), (unsigned int)options_.numChannels);
     if (writer_ == nullptr) {
         restoreTransportAndEngine();
         setupFailed_ = true;
@@ -296,6 +291,13 @@ BounceResult BounceSession::finish() {
 
     if (writeFailed_) {
         result.message = "Failed while writing to \"" + outFile_.getFullPathName() + "\".";
+        finishedResult_ = result;
+        return finishedResult_;
+    }
+
+    // Closing the writer is when an MP3 is actually encoded; it fails silently, so look.
+    if (encodedOutputIsMissing(options_, temporary_->getFile())) {
+        result.message = kMp3EncodeFailedMessage;
         finishedResult_ = result;
         return finishedResult_;
     }

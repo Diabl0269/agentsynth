@@ -1,0 +1,40 @@
+# Bug (layout-overlap): on an LFO card set to Custom wave, the Grid / Shapes / Tools row sat flush against the
+# Level / Glide / Phase / Fade In knob labels above it, with no gap.
+#
+# What a user does: starts a new project, adds an LFO, picks the Custom wave shape, then looks at the card as it
+# is, with Sync switched off (Free) (the Rate knob replaces the Sync Rate row). In every state the row under the
+# knobs must start a clear gap below the knob labels.
+record: true
+save_project: lfo-custom-gap
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 583}                       # the Shape combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - screenshot: {id: "card:LFO", name: lfo-custom-default}
+  - click: {id: window, x: 980, y: 631}                        # Free
+  - wait: {}
+  - screenshot: {id: "card:LFO", name: lfo-custom-free}

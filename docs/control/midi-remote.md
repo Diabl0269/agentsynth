@@ -64,8 +64,9 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
   *surface-resolved* (the panel's own `keyPressed` matches them). Record and metronome have no
   action at all — the transport bar reports intent through `onRecordToggled` and `MainComponent`
   decides.
-- The module card's generic controls come from one function, `ModuleComponent::createControls()`
-  (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`): a rotary `juce::Slider` per
+- The module card's generic controls come from one place, the card body's
+  `CardBody::createParameterWidgets()` (`Source/UI/Graph/CardBody/CardBody.cpp`, called from
+  `ModuleComponent::createControls()`): a rotary `juce::Slider` per
   float/int parameter (each registered with `slider->addMouseListener(this)` — the
   "right-click-any-knob" hook), a `ComboBox` per choice, a `ToggleButton` per bool (no mouse
   listener at the time), parallel `sliders`/`sliderParams` arrays. Right-click on a knob showed one

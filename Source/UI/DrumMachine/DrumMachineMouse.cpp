@@ -1,0 +1,141 @@
+// DrumMachineComponent: the mouse. A press on an empty cell starts an add stroke (DrumMachineStroke.cpp); a press on a
+// hit waits to see what it is: released in place it removes the hit (Shift: toggles its accent), dragged sideways it
+// starts a remove stroke, dragged up or down it sets the loudness, previewed on screen and committed once on release.
+
+#include "DrumMachineComponent.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace synth::ui {
+
+int DrumMachineComponent::getCellVelocity(int row, int step) const {
+    const int pitch = getLanePitch(row);
+    if (pitch < 0 || ghostSourceStep(row, step) >= 0)
+        return 0; // a cell past the drum's end holds no hit of its own, whatever notes are stored there
+    if (gesture_.kind == Gesture::Kind::Velocity && gesture_.cell == Cell{row, step})
+        return gesture_.previewVelocity;
+    if (gesture_.kind == Gesture::Kind::Stroke && gesture_.strokeKeys.count(drumgrid::cellKey(pitch, step)) > 0)
+        return gesture_.erase ? 0 : gesture_.strokeVelocity;
+    const auto it = cells_.find(drumgrid::cellKey(pitch, step));
+    return it == cells_.end() ? 0 : it->second.velocity;
+}
+
+void DrumMachineComponent::mouseDown(const juce::MouseEvent& e) {
+    grabKeyboardFocus();
+    if (e.mods.isPopupMenu() || !clipId_.isValid())
+        return;
+    if (const int edgeRow = edgeHandleRowAt(e.getPosition()); edgeRow >= 0) {
+        beginEdgeDrag(edgeRow);
+        repaint();
+        return;
+    }
+    const auto cell = cellAt(e.getPosition());
+    if (!cell)
+        return;
+    focus_ = *cell;
+    const int pitch = getLanePitch(cell->row);
+    // A click past the drum's end is ignored: the cell repeats the pattern and has no hit of its own to add or remove.
+    if (pitch < 0 || ghostSourceStep(cell->row, cell->step) >= 0)
+        return;
+    const bool occupied = cells_.count(drumgrid::cellKey(pitch, cell->step)) > 0;
+    if (!occupied) {
+        beginStroke(*cell, false, e.mods.isShiftDown() ? drumgrid::kAccentVelocity : drumgrid::kNewHitVelocity,
+                    e.position);
+        return;
+    }
+    gesture_ = {};
+    gesture_.kind = Gesture::Kind::PendingHit;
+    gesture_.cell = *cell;
+    gesture_.pitch = pitch;
+    gesture_.startVelocity = getCellVelocity(cell->row, cell->step);
+    gesture_.previewVelocity = gesture_.startVelocity;
+    gesture_.startY = e.getPosition().y;
+    gesture_.startX = e.getPosition().x;
+    gesture_.lastPos = e.position;
+    gesture_.shift = e.mods.isShiftDown();
+    repaint();
+}
+
+void DrumMachineComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (gesture_.kind == Gesture::Kind::None)
+        return;
+    if (gesture_.kind == Gesture::Kind::EdgeDrag) {
+        dragEdgeTo(e.position.x);
+        trackGridDrag(e.getPosition());
+        return;
+    }
+    if (gesture_.kind == Gesture::Kind::Stroke) {
+        extendStroke(e.position);
+        trackGridDrag(e.getPosition());
+        return;
+    }
+    const int dy = gesture_.startY - e.getPosition().y; // up is louder
+    if (gesture_.kind == Gesture::Kind::PendingHit) {
+        // The first few pixels decide: sideways removes the hits the pointer passes, up or down sets the loudness.
+        const int dx = e.getPosition().x - gesture_.startX;
+        if (std::max(std::abs(dx), std::abs(dy)) < kVelocityDragThresholdPx)
+            return;
+        if (std::abs(dx) > std::abs(dy)) {
+            const auto first = gesture_.cell;
+            const auto start = gesture_.lastPos;
+            beginStroke(first, true, 0, start);
+            extendStroke(e.position);
+            trackGridDrag(e.getPosition());
+            return;
+        }
+        gesture_.kind = Gesture::Kind::Velocity;
+    }
+    const int velocity =
+        juce::jlimit(1, 127, gesture_.startVelocity + static_cast<int>(std::lround(dy * kVelocityPerPixel)));
+    if (velocity == gesture_.previewVelocity)
+        return;
+    gesture_.previewVelocity = velocity;
+    repaint(cellBounds(gesture_.cell.row, gesture_.cell.step).expanded(2));
+}
+
+void DrumMachineComponent::mouseUp(const juce::MouseEvent&) { endGesture(true); }
+
+// Commits (or, with `commit` false, drops) the gesture in flight; a velocity drag becomes one undo step here.
+void DrumMachineComponent::endGesture(bool commit) {
+    stopEdgeScroll();
+    const auto gesture = gesture_;
+    gesture_ = {};
+    if (gesture.kind == Gesture::Kind::None)
+        return;
+    if (gesture.kind == Gesture::Kind::EdgeDrag) {
+        // One undo step with exactly the length the drag showed; the preview goes after the commit so nothing flickers.
+        if (commit && gesture.previewLength != gesture.startLength)
+            setRowLength(gesture.pitch, gesture.previewLength);
+        setRowPreview(gesture.pitch, std::nullopt);
+        updateEdgeHover(getMouseXYRelative());
+        repaint();
+        return;
+    }
+    if (gesture.kind == Gesture::Kind::Stroke) {
+        if (commit)
+            commitStroke(gesture);
+        else
+            cancelStroke(gesture);
+        return;
+    }
+    if (!commit) {
+        repaint();
+        return;
+    }
+    if (gesture.kind == Gesture::Kind::PendingHit) {
+        if (gesture.shift)
+            toggleAccent(gesture.pitch, gesture.cell.step);
+        else
+            removeHits(gesture.pitch, gesture.cell.step);
+        return;
+    }
+    if (gesture.previewVelocity != gesture.startVelocity) {
+        setCellVelocity(gesture.pitch, gesture.cell.step, gesture.previewVelocity);
+        audition(gesture.pitch, gesture.previewVelocity);
+    } else {
+        repaint();
+    }
+}
+
+} // namespace synth::ui

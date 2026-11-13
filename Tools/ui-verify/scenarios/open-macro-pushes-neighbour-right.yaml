@@ -1,0 +1,55 @@
+# Bug (FRO1436): opening a folded macro whose border covers the folded macro on its right pushed that macro DOWN below
+# it whenever the output dock (Master, Audio Output) sat just past it, because sliding right would have landed on the
+# dock. The dock is placed right of everything after the push, so the macro beside it must slide right and stay level.
+#
+# What a user does (a copy of Tal's 'fro830 test' project):
+#   1. Folds the open "Oscillator 2" macro with the fold button at its border's top right.
+#   2. Zooms out, moves Filter 3, "Macro2" and "Macro" close to the folded card, so "Macro" sits right beside it on the
+#      same row and the dock comes in right behind them.
+#   3. Opens "Oscillator 2" again with its card's chevron: "Macro" slides right and keeps its y; nothing goes under the
+#      border.
+# LayoutUtilDisplacement.ANeighbourOnAnySideOfThePreviousRectIsPushedOnThatSide and
+# OutputDock.OpeningAMacroSlidesTheMacroBesideItRightEvenWithTheDockJustPastIt cover the geometry headlessly.
+record: true
+save_project: end
+steps:
+  - copyFixture: {name: fro830-test.agsproj}
+  - openProject: {path: "${SCRATCH}/fro830-test.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Channel Strip 2", bounds: {x: 478, y: 208, w: 185, h: 271}}
+  - click: {id: window, x: 726, y: 199}                        # the fold button of the open "Oscillator 2" border
+  - wait: {}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
+  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
+  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
+  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
+  - wait: {}
+  - expect: {id: "macroCard:Oscillator 2", bounds: {x: 261, y: 342, w: 96, h: 34}}
+  - mouseDown: {id: "card:Filter 3", x: 100, y: 10}
+  - mouseMoveHeld: {id: window, x: 1000, y: 650}
+  - mouseMoveHeld: {id: window, x: 600, y: 700}
+  - mouseUp: {id: window, x: 600, y: 700}
+  - wait: {}
+  - mouseDown: {id: "macroCard:Macro2", x: 140, y: 8}
+  - mouseMoveHeld: {id: window, x: 900, y: 470}
+  - mouseMoveHeld: {id: window, x: 600, y: 520}
+  - mouseUp: {id: window, x: 600, y: 520}
+  - wait: {}
+  - mouseDown: {id: "macroCard:Macro", x: 140, y: 8}
+  - mouseMoveHeld: {id: window, x: 900, y: 350}
+  - mouseMoveHeld: {id: window, x: 450, y: 352}
+  - mouseUp: {id: window, x: 450, y: 352}
+  - wait: {}
+  - expect: {id: "macroCard:Macro", bounds: {x: 404, y: 350, w: 96, h: 31}}
+  - expect: {id: "card:Master", bounds: {x: 687, y: 296, w: 96, h: 71}}   # the dock came in right behind "Macro"
+  - screenshot: {name: 1-macro-beside-the-folded-card}
+  - click: {id: "macroCard:Oscillator 2", x: 262, y: 18}      # the card's open chevron
+  - wait: {}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: false}
+  - expect: {id: "card:Channel Strip 2", bounds: {x: 1084, y: 342, w: 95, h: 138}}
+  - expect: {id: "macroCard:Macro", bounds: {x: 1221, y: 350, w: 95, h: 31}}   # slid right, same y (was 404, 350)
+  - screenshot: {name: 2-opened-macro-slid-right-and-stayed-level}

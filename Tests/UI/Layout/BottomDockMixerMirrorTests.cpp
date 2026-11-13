@@ -12,6 +12,7 @@
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -90,7 +91,7 @@ TEST(BottomDockMixerMirrorTests, DetachWithBothPlacesKeepsTheTabAndOpensASecondL
     dock.setActiveTab(Tab::Mixer);
     ASSERT_FALSE(dock.isMixerMirrorOpenForTest()) << "not open until the detach button is actually pressed";
 
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
 
     EXPECT_TRUE(dock.isMixerMirrorOpenForTest());
     EXPECT_FALSE(dock.getMixerHost().isDetached()) << "\"both places\", not moved -- the real host stays docked";
@@ -106,7 +107,7 @@ TEST(BottomDockMixerMirrorTests, DetachWithBothPlacesKeepsTheTabAndOpensASecondL
 
     // Pressing the detach button again closes the mirror (still "both places" -- the tab and the
     // docked view are never touched).
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     EXPECT_FALSE(dock.isMixerMirrorOpenForTest());
     EXPECT_TRUE(dock.isMixerTabActive());
 }
@@ -128,7 +129,7 @@ TEST(BottomDockMixerMirrorTests, AFaderGestureInEitherViewIsReflectedInBothAsExa
     ASSERT_GT(mixerPanel.getColumnCount(), 0);
 
     dock.setActiveTab(Tab::Mixer);
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock.isMixerMirrorOpenForTest());
     auto* mirrorPanel = dock.getMixerMirrorPanelForTest();
     ASSERT_NE(mirrorPanel, nullptr);
@@ -179,7 +180,7 @@ TEST(BottomDockMixerMirrorTests, SwitchingBackToMoveWhileBothPlacesIsOpenClosesT
     auto& dock = mc.getBottomDock();
 
     dock.setActiveTab(Tab::Mixer);
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock.isMixerMirrorOpenForTest());
     ASSERT_FALSE(dock.getMixerHost().isDetached());
 
@@ -223,7 +224,7 @@ TEST(BottomDockMixerMirrorTests, ClickingMuteInEitherViewUpdatesTheOtherViewsMut
     ASSERT_GT(mixerPanel.getColumnCount(), 0);
 
     dock.setActiveTab(Tab::Mixer);
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock.isMixerMirrorOpenForTest());
     auto* mirrorPanel = dock.getMixerMirrorPanelForTest();
     ASSERT_NE(mirrorPanel, nullptr);
@@ -274,7 +275,7 @@ TEST(BottomDockMixerMirrorTests, PanLawLabelIsIdenticalInBothViewsAfterAChangeIn
     mixerPanel.rebuild();
 
     dock.setActiveTab(Tab::Mixer);
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock.isMixerMirrorOpenForTest());
     auto* mirrorPanel = dock.getMixerMirrorPanelForTest();
     ASSERT_NE(mirrorPanel, nullptr);
@@ -315,7 +316,7 @@ TEST(BottomDockMixerMirrorTests, PanLawLabelIsIdenticalInBothViewsAfterAChangeIn
 
 // A regression pin, not a new mechanism -- undo of a mute is a graph-snapshot
 // restore (AppUndoManager::pushSnapshotFromCapture), which already reaches BOTH views through the
-// pre-existing unbind-before/rebuild-after hooks (unbindAllMixerViews()/rebuildIfUnboundMixerViews(),
+// pre-existing unbind-before/rebuild-after hooks (unbindAllMixerViews()/rebuildIfStaleMixerViews(),
 // wired to GraphEditor::onBeforeDetachAllModuleComponents/onGraphStructureChanged) that
 // already extends to the mirror -- see MixerPanelUndoUnbindTests.cpp for the same
 // undo-triggers-unbind-then-rebuild contract on the single-view case.
@@ -336,7 +337,7 @@ TEST(BottomDockMixerMirrorTests, UndoOfAMuteRestoresBothViews) {
     ASSERT_GT(mixerPanel.getColumnCount(), 0);
 
     dock.setActiveTab(Tab::Mixer);
-    dock.getDetachButtonForTest().onClick();
+    dock.getDetachIcon(Tab::Mixer)->onClick();
     ASSERT_TRUE(dock.isMixerMirrorOpenForTest());
     auto* mirrorPanel = dock.getMixerMirrorPanelForTest();
     ASSERT_NE(mirrorPanel, nullptr);

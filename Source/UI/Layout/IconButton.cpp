@@ -1,0 +1,47 @@
+#include "IconButton.h"
+
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+namespace synth::ui {
+
+IconButton::IconButton(const juce::String& name, synth::theme::Glyph glyph, Style style)
+    : SpaceClaimingButton<juce::Button>(name)
+    , glyph_(glyph)
+    , style_(style) {}
+
+void IconButton::setGlyph(synth::theme::Glyph glyph) {
+    glyph_ = glyph;
+    repaint();
+}
+
+void IconButton::setGlyphWhenOn(synth::theme::Glyph glyph) {
+    glyphWhenOn_ = glyph;
+    repaint();
+}
+
+void IconButton::setOnColour(std::optional<juce::Colour> colour) {
+    onColour_ = colour;
+    repaint();
+}
+
+void IconButton::setOnTone(OnTone tone) {
+    onTone_ = tone;
+    repaint();
+}
+
+synth::theme::Glyph IconButton::currentGlyph() const noexcept {
+    return (getToggleState() && glyphWhenOn_) ? *glyphWhenOn_ : glyph_;
+}
+
+juce::Colour IconButton::glyphColour(bool highlighted, bool down) const {
+    return synth::theme::iconButtonGlyphColour(synth::theme::themeOf(*this), *this, highlighted, down);
+}
+
+void IconButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        lf->drawIconButton(g, *this, highlighted, down);
+    else
+        synth::theme::paintIconButton(g, *this, synth::theme::themeOf(*this), highlighted, down);
+}
+
+} // namespace synth::ui

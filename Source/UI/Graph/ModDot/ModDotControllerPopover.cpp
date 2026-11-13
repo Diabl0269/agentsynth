@@ -1,0 +1,238 @@
+// ModDotControllerPopover.cpp -- the controller's side of the dot's panel: opening it under a dot, following the
+// graph while it is open, and the two actions that belong to the app window (remove a source, show it in the
+// timeline), with their hooks and fallbacks. docs/modules/modulation.md#the-mod-dot-menu.
+
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
+#include "ModDotController.h"
+#include "ModDotPanelFrame.h"
+#include "ModDotPanelLaunch.h"
+#include "ModDotPopover.h"
+#include "Modules/LFOModule.h"
+#include "Modules/ModuleBase.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Layout/PopoverPointer.h"
+#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
+
+namespace synth::ui {
+
+namespace {
+// The timeline names a routing by uuids (a node id does not survive an undo), so the source, the target and the
+// hidden attenuverter each get one here, the same ensure-uuid step the timeline's own lookup takes.
+ModulatorInfo modulatorInfoFor(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card, int destChannel,
+                               const KnobModSource& source, const KnobModTarget& target) {
+    auto& graph = editor.getAudioEngine().getGraph();
+    ModulatorInfo info;
+    auto uuidOf = [&graph](juce::AudioProcessorGraph::NodeID id) {
+        auto* node = graph.getNodeForId(id);
+        return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
+    };
+    info.sourceUuid = uuidOf(source.sourceNodeId);
+    info.sourceTitle = source.sourceName;
+    info.sourceChannel = source.sourceChannel;
+    if (auto* node = graph.getNodeForId(source.sourceNodeId))
+        info.isLfo = dynamic_cast<LFOModule*>(node->getProcessor()) != nullptr;
+    info.attenuverterUuid = uuidOf(source.attenuverterId);
+    info.targetUuid = uuidOf(card);
+    info.paramId = target.paramId;
+    info.targetChannel = destChannel;
+    info.colour = editor.modulationWireColour(source.sourceNodeId);
+    return info;
+}
+} // namespace
+
+ModDotController::~ModDotController() {
+    if (auto* open = getPopover()) {
+        open->stopPick();
+        open->orphan(); // its window is deleted a turn later, by when this is gone
+        open->dismiss();
+    }
+}
+
+void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
+    // A dot clicked again while its panel is still fading out: the fade is cut short, the new panel takes the spot.
+    if (auto* old = dynamic_cast<ModDotPanelFrame*>(frame_.getComponent()); old != nullptr && old->isClosing())
+        old->finishClosingNow();
+    frame_ = nullptr;
+    closePopover();
+    if (!knobModTarget(editor_, card, destChannel).valid())
+        return;
+    auto content = std::make_unique<ModDotPopover>(editor_, *this, card, destChannel, anchor);
+    popover_ = content.get();
+    if (popoverLauncher)
+        popoverLauncher(std::move(content), anchor);
+    else
+        frame_ = launchPopoverFrame(std::move(content), anchor);
+    repaintCard(card); // the chip under this knob steps aside for the panel: it fades out now, not at the next paint
+}
+
+// The panel gets a window of its own beside the dot, held open while a canvas pick is under way.
+ModDotPanelFrame* ModDotController::launchPopoverFrame(std::unique_ptr<juce::Component> content,
+                                                       juce::Component& anchor) {
+    auto* panel = dynamic_cast<ModDotPopover*>(content.get());
+    ModDotPanelLaunch options;
+    options.appProperties = host.appProperties;
+    if (panel != nullptr) {
+        options.setMaxHeight = [panel = juce::Component::SafePointer<ModDotPopover>(panel)](int height) {
+            if (panel != nullptr)
+                panel->setMaxHeight(height);
+        };
+        options.bindDismiss = [panel =
+                                   juce::Component::SafePointer<ModDotPopover>(panel)](std::function<void()> close) {
+            if (panel != nullptr)
+                panel->onDismiss = std::move(close);
+        };
+        options.keepOpenOnOutsideClick = [panel = juce::Component::SafePointer<ModDotPopover>(panel)] {
+            return panel != nullptr && panel->isPicking();
+        };
+    }
+    auto* frame = launchInFrame(std::move(content), anchor, anchor.getScreenBounds(), options);
+    // A row's curve box sits over this panel and is anchored to a chip in it: Esc takes the box first, wherever the
+    // keyboard focus is, and the box never outlives the panel.
+    frame->keepOpenOnPressAt = [](juce::Point<int> screenPoint) { return modCurvePopoverContains(screenPoint); };
+    frame->escapeGoesElsewhere = [] {
+        if (!isModCurvePopoverOpen())
+            return false;
+        closeModCurvePopover();
+        return true;
+    };
+    frame->onClosed = [closed = frame->onClosed] {
+        closeModCurvePopover();
+        if (closed)
+            closed();
+    };
+    return frame;
+}
+
+ModDotPopover* ModDotController::getPopover() const { return static_cast<ModDotPopover*>(popover_.getComponent()); }
+
+void ModDotController::endCanvasPick() {
+    if (auto* open = getPopover())
+        open->stopPick();
+}
+
+void ModDotController::closePopover() {
+    if (auto* open = getPopover()) {
+        const auto card = open->card();
+        open->dismiss();
+        popover_ = nullptr;
+        repaintCard(card);
+    }
+    popover_ = nullptr;
+}
+
+void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                                        juce::Component& anchor) {
+    const auto sources = knobModSources(editor_, card, destChannel, true);
+    if (sources.empty())
+        return;
+    if (sources.size() == 1) {
+        closePopover();
+        removeChain(sources.front().attenuverterId);
+        return;
+    }
+    auto* open = getPopover();
+    const bool reusable = open != nullptr && open->card() == card && open->destChannel() == destChannel;
+    if (!reusable) {
+        openPopover(card, destChannel, anchor);
+        open = getPopover();
+    }
+    if (open != nullptr)
+        open->setRemoveHighlighted(true);
+}
+
+void ModDotController::tickPopover() {
+    if (auto* open = getPopover())
+        open->syncFromGraph();
+    tickModCurvePopover();
+}
+
+namespace {
+juce::Point<int> pointerPosition() {
+    const auto& forced = synth::ui::test_hooks::popoverMouseForTest();
+    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
+}
+} // namespace
+
+void ModDotController::popoverClosed(ModDotPopover* popover) {
+    if (popover_.getComponent() == static_cast<juce::Component*>(popover))
+        popover_ = nullptr;
+    // Esc or a click away: the chip comes back (fades in) with the pointer still on the dot. The panel's window took
+    // the knob's mouse-exit while it was open and no mouse-enter follows until the pointer moves, so the hovered knob
+    // is restored from where the pointer rests.
+    if (const auto* anchor = popover->anchor();
+        anchor != nullptr && anchor->getScreenBounds().contains(pointerPosition()))
+        editor_.setHoveredModTarget(GraphEditor::HoveredModTarget{popover->card(), popover->destChannel()});
+    repaintCard(popover->card());
+}
+
+namespace {
+// One source of a knob, removed as the host does; `bulk` keeps the source module and asks nothing.
+void removeOneSource(GraphEditor& editor, const ModDotController::Host& host, juce::AudioProcessorGraph::NodeID card,
+                     int destChannel, juce::AudioProcessorGraph::NodeID attenuverterId, bool bulk) {
+    const auto target = knobModTarget(editor, card, destChannel);
+    for (const auto& source : knobModSources(editor, card, destChannel, true)) {
+        if (source.attenuverterId != attenuverterId)
+            continue;
+        if (host.removeModulator && target.valid()) {
+            auto info = modulatorInfoFor(editor, card, destChannel, source, target);
+            info.keepSource = bulk;
+            host.removeModulator(info);
+        } else {
+            editor.removeModulationChain(attenuverterId);
+        }
+        return;
+    }
+}
+} // namespace
+
+void ModDotController::removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                                    juce::AudioProcessorGraph::NodeID attenuverterId) {
+    removeOneSource(editor_, host, card, destChannel, attenuverterId, false);
+}
+
+void ModDotController::removeAllSources(juce::AudioProcessorGraph::NodeID card, int destChannel) {
+    std::vector<juce::AudioProcessorGraph::NodeID> chains;
+    for (const auto& source : knobModSources(editor_, card, destChannel, true))
+        chains.push_back(source.attenuverterId);
+    std::optional<AppUndoManager::ScopedUndoGroup> oneStep;
+    if (auto* undo = editor_.getUndoManager())
+        oneStep.emplace(*undo);
+    for (const auto id : chains)
+        removeOneSource(editor_, host, card, destChannel, id, true);
+}
+
+// The chain is named by its attenuverter; the knob it lands on (macro ports looked through) is read from the live
+// routings, so a cable double-click needs no card or channel of its own.
+void ModDotController::removeChain(juce::AudioProcessorGraph::NodeID attenuverterId) {
+    const auto isPort = [this](juce::AudioProcessorGraph::NodeID id) {
+        return editor_.getMacroController().nodeIsMacroPort(id);
+    };
+    const auto routings = editor_.getAudioEngine().getModulationRoutings();
+    const ConnectionIndex cables(editor_.getAudioEngine().getGraph());
+    for (const auto& routing : routings) {
+        if (routing.kind != ModulationRoutingKind::AttenuverterChain || routing.attenuverterNodeID != attenuverterId ||
+            !routing.hasDest)
+            continue;
+        const auto real = resolveRouting(cables, routing, isPort);
+        if (host.removeModulator && knobModTarget(editor_, real.dest.node, real.dest.channel).valid()) {
+            removeSource(real.dest.node, real.dest.channel, attenuverterId);
+            return;
+        }
+    }
+    editor_.removeModulationChain(attenuverterId);
+}
+
+void ModDotController::revealSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                                    juce::AudioProcessorGraph::NodeID attenuverterId) {
+    const auto target = knobModTarget(editor_, card, destChannel);
+    if (!host.revealModulator || !target.valid())
+        return;
+    for (const auto& source : knobModSources(editor_, card, destChannel, true))
+        if (source.attenuverterId == attenuverterId)
+            host.revealModulator(modulatorInfoFor(editor_, card, destChannel, source, target));
+}
+
+} // namespace synth::ui

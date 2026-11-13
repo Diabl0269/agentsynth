@@ -170,7 +170,9 @@ TEST(PluginScanTest, EnsureScannedReportsProgressAndWhetherItActuallyStartedASca
         });
     EXPECT_TRUE(started) << "the first call must report that it actually started a scan";
 
-    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() == 2; }));
+    // The scan thread publishes each plugin itself but POSTS its progress to the message thread, so
+    // the count can reach 2 before a single progress message has been dispatched. Wait for both.
+    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() == 2 && progressed.size() == 2; }));
     EXPECT_EQ(progressed, (std::vector<juce::String>{kAlpha, kBeta}))
         << "every candidate must reach the caller's progress callback, in scan order";
 

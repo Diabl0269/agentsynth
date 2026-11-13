@@ -1,12 +1,16 @@
 #pragma once
 
+#include "../../Modules/ModSlotHost.h"
 #include "../../Modules/ModuleBase.h"
 #include "HostedPluginBackend.h"
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -14,13 +18,15 @@ namespace synth {
 /**
  * Hosted Plugin — a third-party VST3 (or, on macOS, AU) instrument or effect as a graph module.
  *
- * Fixed at kMaxPluginChannels (16) in/out for the module's entire lifetime. JUCE settles a node's
- * bus layout in the ModuleBase constructor, and renegotiating it later would drop every existing
- * graph connection — but a plugin's real channel count isn't known until an async load completes,
- * necessarily after the node is already wired. getVisibleInput/OutputPortCount report the instance's
- * real counts; hidden channels are cleared every block, and the owner drops routings left on a jack
- * that disappeared (GraphEditor::dropRoutingsOnHiddenJacks — an invisible jack cannot be unplugged).
- * An instance wanting MORE than 16 in or out is REFUSED (getStatusMessage()), never truncated.
+ * Fixed at kMaxPluginInputChannels (16) audio in (plus the modulation slots) and kMaxPluginOutputChannels (64) out
+ * for the module's entire lifetime. JUCE settles a node's bus layout in the ModuleBase constructor, and
+ * renegotiating it later would drop every existing graph connection — but a plugin's real channel count isn't
+ * known until an async load completes, necessarily after the node is already wired. Every output bus the plugin
+ * accepts is switched on at publish and renders, so a multi-output plugin keeps ALL its outputs; the card shows
+ * only the buses marked shown (getOutputBuses()). A raw output channel is the instance's own output channel index,
+ * never compacted, so a cable never moves when an output is shown or hidden. The owner drops routings left on a
+ * jack that disappeared (GraphEditor::dropRoutingsOnHiddenJacks — an invisible jack cannot be unplugged).
+ * More than 16 audio in or a main bus wider than the limits: REFUSED (getStatusMessage()), never truncated.
  *
  * Passes audio through unmodified until an instance is published — loading is async, and a patch
  * naming a plugin this machine doesn't have never publishes one — so a chain never goes silent for
@@ -53,11 +59,17 @@ namespace synth {
  * Added via the library's Plugins section (drag/click), not the module catalogue — a bare instance
  * has no identity and no way to become anything.
  */
-class HostedPluginModule : public ModuleBase {
+class HostedPluginModule
+    : public ModuleBase
+    , public ModSlotHost {
 public:
-    /** Every channel this node can ever carry, in or out. Fixed at construction, for the node's
-     *  entire lifetime — see the class comment. An instance wider than this is refused. */
-    static constexpr int kMaxPluginChannels = 16;
+    /** Audio input channels this node can carry (the modulation slots sit above them). Fixed at construction, for
+     *  the node's entire lifetime — see the class comment. An instance wider than this is refused. */
+    static constexpr int kMaxPluginInputChannels = 16;
+    /** Output channels this node can carry, shown or not. Fixed at construction. */
+    static constexpr int kMaxPluginOutputChannels = 64;
+    /** The one channel limit (in and out) before outputs were chosen; an old project's defaults are judged by it. */
+    static constexpr int kLegacyMaxPluginChannels = 16;
 
     HostedPluginModule();
     ~HostedPluginModule() override;
@@ -84,11 +96,20 @@ public:
     /** True while a load is in flight (no instance yet, but one is coming). */
     bool isLoading() const noexcept { return loading_; }
 
+    /** Message thread. True while the plugin is switched off after a crash ("Open without it"). */
+    bool isSwitchedOffAfterCrash() const noexcept { return switchedOffAfterCrash_; }
+    /** Message thread. Reloads a switched-off plugin, keeping its saved state, layout and mod slots. */
+    void turnBackOn(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
+
     /** The identity this module names, whether or not it resolved. Empty when nothing is loaded. */
     const PluginIdentity& getIdentity() const noexcept { return identity_; }
 
     /** Display name of the loaded (or pending) plugin; empty when the module is bare. */
     juce::String getPluginName() const { return identity_.name; }
+
+    juce::String getDefaultTitle() const override;
+    /** 1-based; 1 shows the bare name. Message thread. */
+    void setInstanceOrdinal(int ordinal) noexcept { instanceOrdinal_ = ordinal < 1 ? 1 : ordinal; }
 
     /** Message thread. Why the module is not currently hosting anything — an over-max refusal, a
      *  format error, "not installed" — or empty when there is nothing to say. Polled by the UI. */
@@ -118,6 +139,8 @@ public:
         virtual void hostedInstanceGone() = 0;
         /** Message thread. A new instance has just been published and is live. */
         virtual void hostedInstanceLive() = 0;
+        /** Message thread. A load finished without publishing an instance; getStatusMessage() says why. */
+        virtual void hostedLoadFailed() {}
     };
 
     /** Message thread only. Not owned; the observer must remove itself before it is destroyed. */
@@ -212,8 +235,9 @@ public:
 
     /** Every live instance parameter. Empty when there is no live instance (still loading, refused,
      *  or the plugin is not installed) — callers treat that exactly like "nothing to offer yet", the
-     *  same transient state HostedPluginModule already models elsewhere. */
-    std::vector<InstanceParameterInfo> getInstanceParameters() const;
+     *  same transient state HostedPluginModule already models elsewhere. Message thread only. Valid until the
+     *  instance or its parameter names change; copy it to keep it past a call that could reload the plugin. */
+    const std::vector<InstanceParameterInfo>& getInstanceParameters() const;
 
     /** The per-instance layout as raw JSON (a CardLayout::toVar object), void when there is none. */
     const juce::var& getCardLayoutOverride() const noexcept { return cardLayoutOverride_; }
@@ -227,20 +251,133 @@ public:
     /** Message thread. Single slot, owned by the module's card; fires after every override change. */
     std::function<void()> onCardLayoutChanged;
 
+    /** Message thread. Single slot, owned by the card: adds items to a VST3 plugin window's context menu
+     *  for one parameter. */
+    std::function<void(const juce::String& paramId, juce::PopupMenu& menu)> onParameterContextMenu;
+
+    /** Message thread. Runs onParameterContextMenu; nothing when unset. */
+    void buildParameterContextMenu(const juce::String& paramId, juce::PopupMenu& menu);
+
+    //==============================================================================
+    // Modulation slots: mod cables onto the plugin's own parameters (message thread unless noted)
+    //==============================================================================
+
+    /** How many plugin parameters can be modulated at once. */
+    static constexpr int kMaxModSlots = 48;
+    /** Raw input channel of slot 0; slot k is kModChannelBase + k. */
+    static constexpr int kModChannelBase = kMaxPluginInputChannels;
+
+    static bool isModChannel(int rawChannel) noexcept {
+        return rawChannel >= kModChannelBase && rawChannel < kModChannelBase + kMaxModSlots;
+    }
+
+    /** The CV channel that modulates `paramId`, claiming a free slot when it has none. -1 when every
+     *  slot is taken or `paramId` is empty. Works before an instance exists (the base is then read
+     *  when it publishes). */
+    int bindModSlot(const juce::String& paramId) override;
+
+    /** Frees the slot on `rawChannel` and puts its parameter back at the resting value. */
+    void releaseModSlot(int rawChannel);
+
+    /** Frees every bound slot whose channel `isConnected` says has no cable. */
+    void releaseUnconnectedModSlots(const std::function<bool(int rawChannel)>& isConnected) override;
+
+    /** The slot channel already bound to `paramId`, or -1. Never claims one. */
+    int modChannelForParam(const juce::String& paramId) const override;
+
+    /** True when `paramId` is modulated already, or the live instance has it and a slot is free. */
+    bool canModulateParam(const juce::String& paramId) const override;
+    int maxModSlots() const noexcept override { return kMaxModSlots; }
+
+    /** The parameter id bound to `rawChannel`, or empty. */
+    juce::String modSlotParamId(int rawChannel) const;
+    /** The display name of the parameter on `rawChannel`'s slot, from the cached list; empty when there is none. */
+    juce::String modSlotParamName(int rawChannel) const;
+
+    /** The resting value (0..1) of `paramId` while it is modulated: what the card knob shows and
+     *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */
+    std::optional<float> modSlotBase(const juce::String& paramId) const;
+
+    /** Message thread. True once per publish; the card then shows a knob for each bound mod slot lacking one. */
+    bool takeModKnobReconcile() noexcept { return std::exchange(modKnobReconcilePending_, false); }
+
+    /** Message thread. Fired after a publish with the bound parameter ids the new instance does not
+     *  have; the owner removes their cables. */
+    std::function<void(const juce::StringArray& missingParamIds)> onModSlotsUnresolved;
+
+    /** One entry per bound slot, labelled with the parameter's name; every one is knob-only. */
+    std::vector<ModulationTarget> getModulationTargets() const override;
+
     //==============================================================================
     // AudioProcessor
     //==============================================================================
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
     //==============================================================================
     // Port model
     //==============================================================================
 
-    int getVisibleInputPortCount() const override { return visibleInputs_.load(std::memory_order_relaxed); }
-    int getVisibleOutputPortCount() const override { return visibleOutputs_.load(std::memory_order_relaxed); }
+    /** The instance's real jack counts, except that an instance with EXACTLY 2 inputs (outputs) shows ONE
+     *  "Audio" jack while Dual I/O is off -- the same collapse an FX pair gets, owning both raw legs. Any other
+     *  count (mono, 3+, none yet) is untouched by the toggle. Dual I/O ON (the default, and what every project
+     *  saved before the toggle existed loads as) is today's separate Left/Right jacks. */
+    int getVisibleInputPortCount() const override {
+        const int raw = visibleInputs_.load(std::memory_order_relaxed);
+        return (raw == 2 && !isDualIO()) ? 1 : raw;
+    }
+    /** One jack per shown output channel, except a joined 2-channel bus, which is one jack. Message thread. */
+    int getVisibleOutputPortCount() const override;
+
+    /** True when the published instance has exactly 2 inputs or a 2-channel main output bus, i.e. the Dual I/O
+     *  toggle does something. The card shows its Dual I/O button only then. */
+    bool hasStereoPairInstance() const noexcept {
+        return visibleInputs_.load(std::memory_order_relaxed) == 2 ||
+               mainOutputChannels_.load(std::memory_order_relaxed) == 2;
+    }
+
+    /** One enabled output bus of the live instance. */
+    struct OutputBusInfo {
+        int busIndex = 0;
+        juce::String name;
+        int firstRawChannel = 0; // raw node output channel of the bus's first channel (== the instance's own)
+        int numChannels = 0;
+        bool shown = false;  // the card has jacks for it; the main bus is always shown
+        bool joined = false; // 2-channel bus: one jack owning both legs (main: Dual I/O off)
+    };
+
+    /** The instance's enabled output buses in bus order; empty without an instance. The reference is valid until the
+     *  next change to the instance or to the outputs. */
+    const std::vector<OutputBusInfo>& getOutputBuses() const;
+
+    /** Shows or hides a bus's jacks. False (and nothing happens) for the main bus, an unknown bus or no change.
+     *  Fires onOutputsChanged. Cables on a bus that just went hidden are dropped by the card's handler. */
+    bool setOutputShown(int busIndex, bool shown);
+
+    /** Joins a 2-channel aux bus into one jack, or splits it. False for the main bus (it follows Dual I/O), a bus
+     *  that is not 2 channels, an unknown bus or no change. Fires onOutputsChanged. */
+    bool setOutputJoined(int busIndex, bool joined);
+
+    /** True when the instance has more than one enabled output bus: the card's routing button opens the Outputs panel
+     *  instead of flipping Dual I/O. */
+    bool hasMultipleOutputBuses() const { return outputBuses_.size() > 1; }
+    /** Jacks of the main bus (always shown, always first), and how many aux buses show. */
+    int getMainOutputJackCount() const;
+    int getShownAuxOutputBusCount() const;
+    /** True when output jack `jack` belongs to a shown aux bus (what the card's fold line gathers). */
+    bool isAuxOutputJack(int jack) const;
+
+    /** The card's fold line: while true the shown aux outputs gather under one "+ N more outputs" line and their
+     *  cables leave from it; false shows every switched-on output. View state kept in the module's extra state
+     *  ("outputsFolded"). Fires onOutputsChanged; false (nothing happens) when unchanged. */
+    bool getOutputsFolded() const noexcept { return outputsFolded_; }
+    bool setOutputsFolded(bool folded);
+
+    /** Single slot, owned by the module's card: fired after the shown/joined/folded set changed, the way a Dual I/O
+     *  change re-lays the card; the owner drops cables left on a hidden output. */
+    std::function<void()> onOutputsChanged;
 
     juce::String getInputPortLabel(int channelIndex) const override;
     juce::String getOutputPortLabel(int channelIndex) const override;
@@ -248,22 +385,19 @@ public:
     LogicalPort mapInputChannel(int rawChannel) const override;
     LogicalPort mapOutputChannel(int rawChannel) const override;
 
-    /** Unlike the split-block voice modules, ch1 here is never a CV input — this module has
-     *  none, only the instance's own raw audio channels in a contiguous block (mapOutputChannel
-     *  above) — so it does NOT use the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which
-     *  would read -1 forever: this module never registers a Dual I/O parameter (its shape is fixed
-     *  16/16, not the exactly-2-out shape that grants one). Derived from the PUBLISHED instance's
-     *  real output count instead: ch1 once there are 2+ real outputs (a stereo or wider
-     *  instrument/effect); ch0 again (both legs read the one channel) for a genuinely mono
-     *  instance; -1 (no leg at all) for a bare/silent module. Callers that build a stereo channel
-     *  from this node (MainComponent::addInstrumentPluginTrack) must read this only AFTER the load
-     *  completes — see onLoadCompleted above — so it reflects the real instance, not the bare
-     *  placeholder's 1-in/1-out default. */
+    /** Unlike the split-block voice modules, ch1 here is never a CV input -- this module has none, only the
+     *  instance's own raw audio channels in a contiguous block (mapOutputChannel above) -- so it does NOT use
+     *  the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which would say ch1 even for a mono or
+     *  bare module. Derived from the PUBLISHED instance's raw output count instead (NOT the visible count: a
+     *  collapsed stereo pair still has two raw legs, which is what keeps its cables intact): ch1 once there
+     *  are 2+ real outputs; ch0 again (both legs read the one channel) for a genuinely mono instance; -1 for a
+     *  bare/silent module. This is the MAIN bus's pair, whatever other buses the instance has. Callers that build a
+     * stereo channel from this node (MainComponent::addInstrumentPluginTrack) must read this only AFTER the load
+     * completes -- see onLoadCompleted above -- so it reflects the real instance, not the bare placeholder. */
     int rightAudioLegChannel() const override {
         if (!hasInstance())
-            return -1; // bare/silent module: getVisibleOutputPortCount()'s floor-of-1 placeholder
-                       // is not a real channel to report a leg on
-        const int outputs = getVisibleOutputPortCount();
+            return -1; // bare/silent module: the floor-of-1 placeholder is not a real channel to report a leg on
+        const int outputs = mainOutputChannels_.load(std::memory_order_relaxed);
         if (outputs >= 2)
             return 1;
         if (outputs == 1)
@@ -289,6 +423,22 @@ private:
     /** Message thread. Applies a layout-only patch (see makeCardLayoutPatch); false if `state` is not one. */
     bool applyCardLayoutPatch(const juce::var& state);
 
+    /** Message thread. Before the instance is read or prepared: asks for a stereo MAIN output (and a stereo main
+     *  input when it has an enabled mono one) if the plugin supports it, so a plugin whose default is mono still
+     *  gets two jacks. Never touches a bus with 3+ channels, a disabled input, or any aux/sidechain bus. */
+    static void negotiateStereoMainBuses(juce::AudioPluginInstance& instance);
+
+    // Message thread: see HostedPluginModuleOutputs.cpp.
+    void enableOutputBuses(juce::AudioPluginInstance& instance);
+
+    void buildOutputBuses(const juce::AudioPluginInstance& instance);
+    void applySavedOutputs(const juce::var& saved, bool keyPresent, bool foldChanged = false);
+    bool applyOutputPolicy();
+    juce::var outputsToVar() const;
+    bool isJoined(const OutputBusInfo& bus) const;
+    OutputBusInfo* findOutputBus(int busIndex);
+    bool locateJack(int jack, std::size_t& busPos, int& leg) const;
+
     /** Message thread. Prepares, validates and publishes `instance`, or refuses it with a reason. */
     void publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance);
 
@@ -305,7 +455,22 @@ private:
      *  time the audio thread has not moved on yet, so the entry is never reapable in that pass. */
     void scheduleReapRetry();
 
-    /** Message thread. prepareToPlay/setPlayConfigDetails the instance to OUR rate and block. */
+    void registerParameterContextMenu(juce::AudioPluginInstance& instance);
+
+    /** Message thread, before `instance` is published: points every slot at its parameter there. */
+    void resolveModSlots(juce::AudioPluginInstance& instance);
+
+    /** Audio thread: writes base + CV into each bound parameter. */
+    void applyModSlots(juce::AudioPluginInstance& instance, const juce::AudioBuffer<float>& buffer) noexcept;
+
+    juce::var modSlotsToVar() const;
+    void modSlotsFromVar(const juce::var& slots);
+
+    /** Message thread. A restore of the identity already live: applies it without reloading. */
+    bool applyStateInPlace(const PluginIdentity& identity, const juce::DynamicObject& object);
+
+    /** Message thread. setRateAndBufferSizeDetails + prepareToPlay the instance (never setPlayConfigDetails: it
+     * disables every aux bus) to OUR rate and block. */
     void prepareInstance(juce::AudioPluginInstance& instance) const;
 
     /** Message thread. setLatencySamples(), then onLatencyChanged — but only when the value really
@@ -335,6 +500,8 @@ private:
 
         /** ANY thread. */
         void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& details) override {
+            if (details.parameterInfoChanged)
+                owner_.instanceParametersStale_.store(true, std::memory_order_relaxed);
             if (details.latencyChanged)
                 triggerAsyncUpdate();
         }
@@ -364,11 +531,28 @@ private:
     // bypass paths — reaping has to make progress in a patch whose hosted module is bypassed.
     std::atomic<std::uint64_t> blockCounter_{0};
 
-    // Visible jack counts. Floor of 1 while empty: a bare module still has to show where audio goes
+    // The instance's RAW channel counts (getVisible*PortCount() starts from these, then applies the Dual I/O
+    // collapse). Floor of 1 while empty: a bare module still has to show where audio goes
     // in and comes out. Set to the instance's REAL counts at publish (which may legitimately be 0 in
     // for an instrument), reset to 1 on unload.
     std::atomic<int> visibleInputs_{1};
     std::atomic<int> visibleOutputs_{1};
+    std::atomic<int> mainOutputChannels_{1}; // channels of the main output bus (0 when it has none)
+
+    mutable std::vector<OutputBusInfo> outputBuses_;
+    std::vector<int> defaultEnabledOutputBuses_;
+    juce::var savedOutputs_;
+    bool outputsRestored_ = false; // a state restore is pending (so a missing key means "old project")
+    bool outputsFolded_ = false;   // the card gathers the shown aux outputs under its fold line
+
+    // Modulation slots. The parameter index is -1 while a slot is free or unresolved; the base can be
+    // moved by the audio thread when something else (the plugin's window, the card knob, automation)
+    // changed the parameter. modResync_ tells the audio thread its read-backs are stale.
+    std::array<std::atomic<int>, kMaxModSlots> modSlotParamIndex_;
+    std::array<std::atomic<float>, kMaxModSlots> modSlotBase_;
+    std::atomic<std::uint32_t> modResync_{0};
+    std::array<float, kMaxModSlots> modSlotReadBack_{}; // audio thread only
+    std::uint32_t modResyncSeen_ = 0;                   // audio thread only
 
     // --- Message-thread state --------------------------------------------------------------
     std::unique_ptr<juce::AudioPluginInstance> ownedInstance_; // owns whatever activeInstance_ points at
@@ -377,15 +561,29 @@ private:
     // One listener for the module's whole life, moved from instance to instance — so a queued
     // update can never outlive the object that would deliver it.
     InstanceListener instanceListener_{*this};
+    mutable std::vector<InstanceParameterInfo> instanceParameters_; // message thread
+    mutable std::atomic<bool> instanceParametersStale_{true};
+
+    bool midiFitsAfterVoiceReset(const juce::MidiBuffer& midiMessages) const noexcept;
+    void processWithVoiceReset(juce::AudioPluginInstance& instance, juce::AudioBuffer<float>& view,
+                               juce::MidiBuffer& midiMessages);
+    static constexpr int kRestartMidiBytes = 64 * 1024;
+    juce::MidiBuffer restartMidi_;
+    std::atomic<bool> voiceResetPending_{false};
     juce::ListenerList<InstanceObserver> instanceObservers_;
+    void fireLoadFailedEdge();
 
     PluginIdentity identity_;
     // Last known plugin state, applied when an instance arrives. Set ONLY by a state restore, and
     // cleared by every other load: it belongs to the plugin it was saved from.
     juce::MemoryBlock pendingBlob_;
     juce::String statusMessage_;
+    int instanceOrdinal_ = 1;
     juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
+    std::array<juce::String, kMaxModSlots> modSlotParamIds_; // empty = free
     bool loading_ = false;
+    bool modKnobReconcilePending_ = false;
+    bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared
     // against the value captured when the load started.

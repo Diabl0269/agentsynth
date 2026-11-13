@@ -26,6 +26,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerFader.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -82,6 +83,7 @@ juce::AudioProcessorGraph::Node* findChannelStripNode(juce::AudioProcessorGraph&
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverTouchesFreedParameters) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
 
@@ -122,6 +124,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverT
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocument) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -158,6 +161,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocume
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -204,6 +208,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesTheStripsNode) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -235,6 +240,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesT
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStripsNode) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -279,6 +285,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStri
 TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDeleted) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
@@ -306,7 +313,7 @@ TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDe
            "surviving strip's fader is attached to its gain parameter again";
 
     // ...and prove the binding is live rather than merely present: drive the fader the way a user
-    // does (the panel's own Up-arrow nudge, MixerPanelKeyboardFocusTests' path) and hold the
+    // does (the panel's own Shift+Up nudge, MixerPanelKeyboardFocusTests' path) and hold the
     // strip's real "gain" parameter to having moved. A rebuilt-but-dead column would pass the
     // flag check above and fail here.
     auto* stripNode = findChannelStripNode(graph);
@@ -320,8 +327,8 @@ TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDe
     // MixerPanelKeyboardFocusTests' own navigation tests take); there is no public setter.
     ASSERT_TRUE(mixerPanel.keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0)));
     ASSERT_EQ(mixerPanel.getFocusedColumnIndexForTest(), 0);
-    ASSERT_TRUE(mixerPanel.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0)))
-        << "the panel must claim Up as a fader nudge on the focused column";
+    ASSERT_TRUE(mixerPanel.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)))
+        << "the panel must claim Shift+Up as a fader nudge on the focused column";
 
     float gainAfter = gainBefore;
     for (auto* param : stripNode->getProcessor()->getParameters())

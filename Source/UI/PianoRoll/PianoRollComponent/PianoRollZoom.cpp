@@ -10,6 +10,7 @@
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include <algorithm>
 #include <cmath>
@@ -75,18 +76,19 @@ void PianoRollComponent::zoomVertical(double factor) {
 }
 
 void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
-    // Trackpad pinch, same pair as the panel's: plain = horizontal zoom around the pinch point
-    // (through the roll's OWN mapping), Shift = vertical (pixels-per-semitone) zoom.
-    // A pinch carries no wheel deltas at all, so there is no axis to disambiguate here — it goes
-    // straight to the same anchored-zoom helpers the Cmd+wheel branches use.
+    // Trackpad pinch, same mapping as the panel's and the patch canvas's: a plain pinch zooms time
+    // (around the pinch x, through the roll's OWN mapping) AND pitch rows (around the pinch y) by
+    // the same factor, so sizes grow and shrink together. A pinch carries no wheel deltas and no
+    // axis, so a modifier picks one: Shift or Option = vertical only, Cmd = horizontal only.
     if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
         return;
     const auto pos = e.getPosition();
-    if (e.mods.isShiftDown()) {
+    const bool verticalOnly = e.mods.isShiftDown() || e.mods.isAltDown();
+    const bool horizontalOnly = !verticalOnly && e.mods.isCommandDown();
+    if (!verticalOnly)
+        zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
+    if (!horizontalOnly)
         zoomVerticalAroundY((double)scaleFactor, (double)pos.y);
-        return;
-    }
-    zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
 }
 
 //==============================================================================
@@ -148,6 +150,8 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         toggleSnap();
+        if (onSnapKeyToggled)
+            onSnapKeyToggled(viewState_.snapEnabled);
         return true;
     }
 
@@ -177,10 +181,24 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // Ctrl+V on macOS, Cmd+Shift+V elsewhere (velocityLaneToggleKey) shows or hides the velocity
+    // strip, the header's Velocity chip's twin. Same focused-text-field guard as Ctrl+S above: the
+    // header's value box is a TextEditor, and a chord typed there must not flip the strip.
+    if (matchesAction(key, "pianoRollToggleVelocityLane", velocityLaneToggleKey())) {
+        if (dynamic_cast<juce::TextEditor*>(juce::Component::getCurrentlyFocusedComponent()) != nullptr)
+            return false;
+        toggleVelocityLane();
+        return true;
+    }
+
     // Escape and Delete/Backspace are FIXED, never manager-resolved: "cancel" and "delete the
     // selection" are platform conventions every surface in the app answers identically, not app
     // shortcuts a user would expect to find in a rebinding list.
     if (key == juce::KeyPress::escapeKey) {
+        if (velocityLane_->cancelGesture())
+            return true; // abandons an in-flight velocity-strip drag; nothing is committed
+        if (cancelNoteDrag())
+            return true; // abandons an in-flight move/copy drag; nothing is committed
         if (!selection_.isEmpty()) {
             selection_.clear();
             repaint();
@@ -227,6 +245,12 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         return selectAdjacentNote(true);
     if (matchesAction(key, "pianoRollNavPrevNote", modKey(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier)))
         return selectAdjacentNote(false);
+
+    // P = loop the selected notes: the roll's twin of the clip lanes' P, the same shared
+    // "timelineLoopSelection" action and a surface-local key rather than a command, so an empty
+    // selection falls through to the panel's whole-clip loop.
+    if (matchesAction(key, "timelineLoopSelection", plainKey('p')))
+        return loopSelectedNotes();
 
     if (matchesAction(key, "pianoRollNudgeRight", plainKey(juce::KeyPress::rightKey)))
         return nudgeSelectedNotes(1);

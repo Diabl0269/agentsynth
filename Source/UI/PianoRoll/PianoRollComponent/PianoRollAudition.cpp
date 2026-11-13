@@ -204,17 +204,7 @@ void PianoRollComponent::promptExtendClipToFitNotes(synth::ClipId clipId, double
 // ---- Tooltips ----
 
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
-    if (quantiseButtonBounds_.contains(pos))
-        return quantiseTooltipText();
-    if (quantiseLengthButtonBounds_.contains(pos))
-        return quantiseLengthTooltipText();
-    if (quantisePitchButtonBounds_.contains(pos))
-        return quantisePitchTooltipText();
-    if (scaleButtonBounds_.contains(pos))
-        return scaleTooltipText();
-    if (scaleFilterButtonBounds_.contains(pos))
-        return scaleFilterTooltipText();
-    return {};
+    return headerTooltipText(headerButtonAt(pos));
 }
 
 juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYRelative()); }
@@ -250,11 +240,12 @@ juce::String PianoRollComponent::quantiseLengthTooltipText() const {
 juce::String PianoRollComponent::quantisePitchTooltipText() const {
     const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantisePitches",
                                       modKey('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
-    juce::String text = "Quantize note pitches into the scale";
+    juce::String text = "Fit notes to key";
     if (hint.isNotEmpty())
         text += " (" + hint + ")";
-    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected. "
-                                   "Needs a scale picked in Scale Assist");
+    text += juce::String::fromUTF8(
+        " \xE2\x80\x94 the selected notes, or all notes when nothing is selected, "
+        "move to the nearest note of the clip's key. Needs a key: the song key or the clip's own");
     return text;
 }
 

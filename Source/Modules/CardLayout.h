@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <optional>
+#include <variant>
 #include <vector>
 
 namespace synth {
@@ -21,27 +22,174 @@ struct CardSlot {
     }
 };
 
+/** How a v2 item is drawn. The first four map onto the v1 kinds; the rest need version 2. */
+enum class CardWidget {
+    Auto,
+    Knob,
+    KnobLarge,
+    FaderV,
+    FaderH,
+    Toggle,
+    Choice,
+    Segmented,
+    Stepper,
+    FaderVLong,
+    XYPad,
+    Button
+};
+
+/** A read-only visual a v2 section can hold. */
+enum class CardView {
+    Scope,
+    Response,
+    Spectrum,
+    Envelope,
+    LfoShape,
+    LfoCurve,
+    Waveform,
+    Wavetable,
+    EqCurve,
+    Threshold,
+    GainReduction,
+    StepGrid
+};
+
+/** Grid = a stack of runs across the card; Tab = consecutive sections share a tab strip; Row = consecutive sections
+ *  sit side by side, each under a small title and apart by a hairline, wrapping to a new line only when the card
+ *  is too narrow. */
+enum class CardPresentation { Grid, Tab, Row };
+enum class CardConditionEffect { Show, Dim };
+
+/** Dim or show an item by another parameter's value: choice value strings, or "true"/"false". */
+struct CardCondition {
+    juce::String param;
+    juce::StringArray is;
+    CardConditionEffect effect = CardConditionEffect::Dim;
+
+    bool operator==(const CardCondition& other) const noexcept {
+        return param == other.param && is == other.is && effect == other.effect;
+    }
+};
+
+/** One parameter in a v2 section. `node` is reserved (a member uuid for a future custom module). */
+struct CardParamItem {
+    juce::String paramId;
+    int indexHint = -1; ///< Kept from v1 slots: the rescue key for id-less hosted parameters.
+    std::optional<juce::String> node;
+    CardWidget widget = CardWidget::Auto;
+    std::optional<juce::String> label;
+    int span = 1; ///< Grid cells taken, 1..6.
+    std::optional<CardCondition> when;
+    /** Top-left of the item's cell (caption and widget) from the section's content origin, in card pixels. */
+    std::optional<juce::Point<int>> at;
+    /** Narrows a knob or fader to this min..max, in the parameter's own units. */
+    std::optional<juce::Range<double>> range;
+    /** An `XYPad` item only: the parameter the pad's vertical axis drives (`paramId` drives the horizontal one). The
+     *  card draws that parameter's own item nowhere (the pad stands in for it), so a layout lists it hidden. */
+    std::optional<juce::String> yParamId;
+    /** A `Button` item only: the button is held (on while pressed, back off on release) instead of toggling. */
+    bool momentary = false;
+
+    bool operator==(const CardParamItem& other) const noexcept {
+        return paramId == other.paramId && indexHint == other.indexHint && node == other.node &&
+               widget == other.widget && label == other.label && span == other.span && when == other.when &&
+               at == other.at && range == other.range && yParamId == other.yParamId && momentary == other.momentary;
+    }
+};
+
+struct CardViewItem {
+    CardView view = CardView::Scope;
+    bool open = true; ///< Collapsible views: open by default or not.
+    /** Top-left of the view from the section's content origin, as a param item's; nullopt = flows. */
+    std::optional<juce::Point<int>> at;
+
+    bool operator==(const CardViewItem& other) const noexcept {
+        return view == other.view && open == other.open && at == other.at;
+    }
+};
+
+using CardItem = std::variant<CardParamItem, CardViewItem>;
+
+/** A titled (or untitled) group of items; consecutive Tab sections render as one tab strip, consecutive Row sections as
+ * one row. */
+struct CardSection {
+    static constexpr int kDefaultColumns = 3;
+    /** The reserved id of the footer section: one compact row at the bottom of a built-in card. */
+    static constexpr const char* kFooterId = "footer";
+
+    juce::String id;
+    std::optional<juce::String> title;
+    int columns = kDefaultColumns; ///< 1..8.
+    CardPresentation presentation = CardPresentation::Grid;
+    std::optional<CardCondition> visibleWhen;
+    std::vector<CardItem> items;
+
+    bool operator==(const CardSection& other) const noexcept {
+        return id == other.id && title == other.title && columns == other.columns &&
+               presentation == other.presentation && visibleWhen == other.visibleWhen && items == other.items;
+    }
+};
+
 struct CardLayoutParseResult;
 
-/** Ordered list of slots a card shows. Persisted as JSON; version 1 is the only one understood. */
+/**
+ * What a card shows, persisted as JSON. Plain value type, no UI or plugin knowledge.
+ *
+ * Exactly one body is in use: `slots` (the flat v1 form, also the implicit single untitled grid
+ * section) or `sections` (v2). Reading v1 fills `slots`, reading v2 fills `sections`; `upgradeV1`
+ * converts the former. Out-of-range numbers and unknown enum strings refuse the whole layout
+ * (Malformed); unknown keys are ignored. docs/layout/module-card-layout.md.
+ */
 struct CardLayout {
-    static constexpr int kCurrentVersion = 1;
+    static constexpr int kLegacyVersion = 1;
+    static constexpr int kCurrentVersion = 2;
 
-    int version = kCurrentVersion;
+    int version = kCurrentVersion; ///< As read; toVar() picks 1 or 2 from usesV2Features().
     std::vector<CardSlot> slots;
+    std::optional<juce::String> basedOn; ///< "<ModuleType>@<defaultRevision>"; v2 only.
+    std::vector<CardSection> sections;
+    juce::StringArray hidden; ///< paramIds the user hid; v2 only.
 
     enum class ParseStatus { Ok, Malformed, UnsupportedVersion };
 
+    /** Writes v1 unless usesV2Features(), so older builds keep reading hosted-plugin cards. */
     juce::var toVar() const;
     static CardLayoutParseResult fromVar(const juce::var& json);
 
-    bool operator==(const CardLayout& other) const noexcept { return version == other.version && slots == other.slots; }
+    /** True when the layout cannot be expressed as a flat v1 slot list. */
+    bool usesV2Features() const;
+    /** `slots`, or every param item across `sections` mapped to the nearest v1 kind. */
+    std::vector<CardSlot> flatSlots() const;
+
+    bool operator==(const CardLayout& other) const noexcept {
+        return slots == other.slots && basedOn == other.basedOn && sections == other.sections && hidden == other.hidden;
+    }
 };
 
 struct CardLayoutParseResult {
     CardLayout::ParseStatus status = CardLayout::ParseStatus::Malformed;
     CardLayout layout;
 };
+
+/**
+ * v1 -> v2: `slots` become one untitled grid section and every id in `allParamIds` that no slot
+ * names goes into `hidden` (the v1 rule "absent = hidden", made explicit). Apply once, on read, by
+ * whoever has the parameter list. A layout already in sections form is returned unchanged.
+ */
+CardLayout upgradeV1(const CardLayout& layout, const juce::StringArray& allParamIds);
+
+/**
+ * The name a section goes by in the layout editor: its title, else a name from its id ("Footer" for the
+ * footer, "Controls" for a "main" or id-less one, "Group 2" for "group-2"/"section-2", and "Trigger meter"
+ * for "trigger-meter"). Never empty. Only the editor uses it: an untitled section still draws no header row.
+ */
+juce::String cardSectionDisplayName(const CardSection& section);
+
+/** Node property that carries a built-in module's per-instance layout JSON. */
+constexpr const char* kCardLayoutNodeProperty = "cardLayout";
+
+/** Node property that carries a module's own knob and fader style (a ControlStyleOverride object). */
+constexpr const char* kControlStyleNodeProperty = "controlStyle";
 
 /** isBoolean -> Toggle; isDiscrete with value strings -> Choice; otherwise Knob. Never Auto. */
 CardSlotKind deriveSlotKind(const juce::AudioProcessorParameter& param);

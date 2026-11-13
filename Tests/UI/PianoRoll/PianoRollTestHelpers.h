@@ -4,12 +4,12 @@
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
 #include "AppUndoManager.h"
-#include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -101,6 +101,10 @@ struct PianoRollFixture {
         state.snap = TimelineViewState::Snap::Quarter;
         roll.setTimelineDoc(&doc);
         roll.setUndoManager(&undo);
+        // The velocity strip is shown by default and takes the bottom 64 px; every grid test here is
+        // written against a grid that runs to the roll's bottom edge, so the shared fixture hides it
+        // (session-only: no properties file). The strip's own tests turn it back on.
+        roll.setVelocityLaneVisible(false);
         roll.setSize(900, 160);
     }
 
@@ -176,12 +180,6 @@ inline ::testing::AssertionResult onlySelected(PianoRollFixture& f, NoteId expec
 }
 
 inline juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
-
-// Picks the first built-in preset ("Major", combo id 2 — see ScaleAssistPanel::rebuildScaleCombo)
-// for whichever clip is open, which is how the panel, the chip and the key all learn the scale.
-inline void chooseMajorScaleForOpenClip(PianoRollFixture& f) {
-    f.roll.getScaleAssistPanel().getScaleCombo().setSelectedId(2, juce::sendNotificationSync);
-}
 
 inline juce::MouseWheelDetails wheelOnY(float deltaY) {
     juce::MouseWheelDetails wheel{}; // value-initialised: the struct has no default member initialisers

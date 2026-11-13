@@ -23,12 +23,15 @@ to absolute beats via `clip->startBeat` and back.
 | `PianoRollScaleAssist.cpp` | The scale-assist panel and its Generate action |
 | `PianoRollPainting.cpp` | `paint()`, header chip glyphs, the local playhead line |
 | `PianoRollEditTools.cpp` | Editing gestures, the edit-tool verbs, split-tool hover preview, tool cursors |
+| `PianoRollAccessibility.cpp` | The focused note and its ring, the grid's screen-reader value, the keyboard buttons over the header chips (`PianoRollHeaderChip.h`) |
 | `PianoRollAudition.cpp` | Keys-column audition, note audition, clip-overrun after resize, tooltips |
 | `PianoRollClipboardAndKeys.cpp` | The note clipboard and arrow-key editing (nudge/transpose/navigate) |
 | `PianoRollMouse.cpp` | Mouse handling and edge-auto-scroll |
+| `PianoRollCopyDrag.cpp` | Option+drag note copy: live copy/move toggle, ghost painting and settle tween, commit, Esc cancel |
 | `PianoRollZoom.cpp` | Anchored zoom and `keyPressed` dispatch |
+| `PianoRollVelocity.cpp` | The velocity strip's wiring (its `Host`, layout band, remembered visibility), the header's value box and Humanize |
 | `PianoRollInternal.h` | Private shared constants and helpers; not a CMake source file |
-| `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`, `ClipScaleMemory`; not a CMake source file |
+| `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`; not a CMake source file |
 
 **The header declares; the units document.** `PianoRollComponent.h` carries only what a caller can
 get wrong from outside — nullability, thread affinity, call ordering, units, ownership — and each
@@ -36,6 +39,17 @@ member's maintainer-facing rationale lives as a doc comment next to its out-of-l
 the matching `PianoRoll<Concern>.cpp` unit, where the edit that invalidates it lands in the same
 diff hunk. See the root `CLAUDE.md`'s "Code structure" section and
 [`development/header-comment-guard.md`](../development/header-comment-guard.md) for the guard that enforces it.
+
+The velocity strip itself is a collaborator in `Source/UI/PianoRoll/VelocityLane/`, a child
+component that never sees `PianoRollComponent` (see **Velocity strip**):
+
+| Unit | Concern |
+|---|---|
+| `PianoRollVelocityLane.h` / `.cpp` | The strip component, its `Host` seam and its vertical mapping |
+| `PianoRollVelocityLaneGestures.cpp` | Stick / pen / ramp drags, Escape-cancel, the one commit on release |
+| `PianoRollVelocityLanePainting.cpp` | Background, the 127 / 64 / 1 scale, sticks, the value readout |
+| `VelocityLaneMath.h` / `.cpp` | Pure maths: y <-> velocity, stick picking, pen/ramp line values, humanize |
+| `VelocityLaneSlide.h` / `.cpp` | The strip's open fraction and the tween that moves it (show / hide slide) |
 
 `PianoRollTypes.h` is a self-contained header (own `#pragma once` plus includes) defining those
 types at namespace scope inside a nested `synth::ui::pianoroll` namespace, so generic names like
@@ -76,7 +90,7 @@ and the same `viewState_.beatToX` mapping it always had.
 
 ## Vertical layout
 
-Toolbar row, then ruler, then note canvas.
+Toolbar row, then ruler, then note canvas, then the velocity strip.
 
 While the roll is CLOSED nothing is unusual: the ruler is the top row of the lanes region and the
 roll occupies exactly `gridLanesBounds_`, the clip-lane rect. While it is **open**, the panel
@@ -89,12 +103,18 @@ own `resized()` is the single carve-up:
 | Chip toolbar | `kToolbarHeight` | the roll (its own chrome) |
 | Ruler | `rulerBandHeight_` | **left blank** for `ruler_`, a sibling drawn on top of it |
 | Note canvas | the remainder | the roll (keys-column gutter plus grid) |
+| Velocity strip | `PianoRollVelocityLane::kDefaultHeight` (64), 0 while hidden | `PianoRollVelocityLane`, a child |
 
 **Why the middle band exists.** It puts the chrome **above** the ruler rather than sandwiching it
 between the ruler and the notes. The owner pushes the ruler's real height in via
 `setRulerBandHeight()` (0 by default, which collapses the layout back to toolbar-then-canvas for a
 bare roll or a test), and the panel calls `ruler_.toFront(false)` while open because the roll was
 added to the panel *after* the ruler and would otherwise paint over it.
+
+The strip is carved from the **bottom** first and spans the full width, so the scale panel, the
+keys column and the grid all stop above it. **`canvasBottom()` is the other edge's seam**: every
+"how tall is the grid" read (`gridRegion()`, row counts, the scroll clamp, the dim band, the playhead
+strip) goes through it rather than `getHeight()`, which would run the grid under the strip.
 
 **`canvasTop()` is the one seam** every grid, row and hit-test coordinate reads — `kToolbarHeight +
 rulerBandHeight_`. Introducing it is what lets the ruler sit between the chrome and the canvas
@@ -130,10 +150,11 @@ Vertically, pitch maps at `pixelsPerSemitone_` px/semitone (default `kPixelsPerS
 Cmd+Shift+wheel scales it within `[kMinPixelsPerSemitone, kMaxPixelsPerSemitone]` = `[4, 40]`), and
 `firstVisiblePitch_` names the HIGHEST pitch drawn at the grid's top row, clamped to `[0, 127]`.
 
-A 20 px header strip sits above both the keys column and the grid. Its chips are plain
+A 20 px header strip sits above both the keys column and the grid. Its chips are the shared chip
+(`AppLookAndFeel::drawChip`, [theming](../layout/theming.md#themed-widgets)) holding plain
 `juce::Path` and text shapes, never a Unicode glyph through a themed font — the same "draw it,
-don't asset it" rule `TimelineTransportBar`'s `GlyphButton` follows, and the reason every label
-here goes through `AppLookAndFeel`; see the root `CLAUDE.md`'s font-swap invariant.
+don't asset it" rule the shared icon glyphs (`Source/UI/Theme/IconGlyphs.cpp`) follow, and the reason every label
+here goes through `AppLookAndFeel`; see `Source/UI/CLAUDE.md`'s themes-don't-swap-fonts invariant.
 
 ## The keys column
 
@@ -271,22 +292,23 @@ mouse-up, so a multi-note move, scrub or delete is one undo step.
 | Gesture | Effect |
 |---|---|
 | **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step |
-| **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing |
+| **Double-click on empty grid** | Creates ONE note: pitch from the row, start at the **left line of the grid cell clicked** (floor, never the nearest line; exactly where clicked when Snap is Off), length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing |
 | **Drag from empty grid** | Marquee (intersection hit-test) — a plain drag REPLACES the selection; Shift or Cmd/Ctrl makes it additive. A press that never crosses the drag threshold is still just the deselect click above, the same deferred-click promotion the clip lanes use, and the roll has no drag-to-pan (scrolling is wheel-only) |
 | Click a note | Selects it; **Shift** toggles it in or out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
 | Drag a note's body | Moves it plus every other selected note, by one shared snapped beat delta and one shared semitone delta |
 | Drag within 5 px of a note's right edge | Resizes (trims) **every selected note** by one shared length delta, Snap-quantised. The grabbed note takes the pointer's own (snapped, division-floored) length; every other snapshotted note gets its OWN original length plus that delta, floored individually at `kMinNoteLengthBeats` — see **Multi-note resize**. Grabbing a note that is not in the selection replaces the selection with it, so it resizes alone |
-| **Cmd**+drag on a note's right edge | The same resize with the grid BYPASSED: the note's end follows the RAW beat under the pointer and the floor drops to `kMinNoteLengthBeats`, for continuous sub-division trimming. Latched at mouse-down (`resizeUnquantized_`), never re-read from the live modifiers — a gesture must not change meaning half way through because Cmd was released. Composes with the multi-note rule: the delta the group takes is unquantized too. Tested BEFORE the Cmd velocity-scrub row below, since a right-edge hit is the more specific of the two Cmd gestures |
-| Mouse-DOWN on any note | **Auditions it** — see **Note audition**. Every note-hit branch sounds the note (select, move, resize, velocity scrub, even a Shift+click that deselects it), so "clicking a note plays it" never depends on which modifier is down |
+| **Cmd**+drag on a note's right edge | The same resize with the grid BYPASSED: the note's end follows the RAW beat under the pointer and the floor drops to `kMinNoteLengthBeats`, for continuous sub-division trimming. Latched at mouse-down (`resizeUnquantized_`), never re-read from the live modifiers — a gesture must not change meaning half way through because Cmd was released. Composes with the multi-note rule: the delta the group takes is unquantized too. Tested BEFORE the Cmd body-move row below, since a right-edge hit is the more specific of the two Cmd gestures |
+| Mouse-DOWN on any note | **Auditions it** — see **Note audition**. Every note-hit branch sounds the note (select, move, copy, resize, velocity scrub, even a Shift+click that deselects it), so "clicking a note plays it" never depends on which modifier is down |
 | **Double-click a note** | Deletes it, one step — the standard DAW mirror of double-click-to-create |
 | Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
-| Escape | Clears the selection; closes the roll when nothing is selected |
+| Escape | Cancels an in-flight velocity-strip drag or any note drag first (move, copy, resize, velocity scrub, draw, marquee: nothing committed, no undo step); otherwise clears the selection; closes the roll when nothing is selected |
 | **Cmd**+drag on a note's BODY | Moves it, and the rest of the selection, with the grid **BYPASSED** — the note follows the raw beat under the pointer. One modifier, one meaning: Cmd on a note says "do this smoothly", whichever part of it you grabbed. Latched at mouse-down (`moveUnquantized_`), never re-read from the live modifiers |
 | **Cmd**+CLICK on a note (no drag) | Additive-select **toggle**: adds an unselected note, removes an already-selected one. Cmd+click and Cmd+drag are indistinguishable at mouse-down, so the note is ADDED immediately (the move needs it in the selection) and mouse-up completes the toggle *only if nothing moved* — the same deferred-classification trick `pendingEmptyClick_` uses for the empty-grid press. A Cmd+drag therefore never deselects what it is moving |
-| **Option**+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (a multi-selection scrubs all by the same delta). Option rather than Cmd, because Cmd means "unsnapped" on both halves of a note, and one modifier meaning "smooth" on the right edge and "change the volume" two pixels to its left is ambiguous. Option is free for a mouse drag on this surface — the roll's other Option bindings are KEY chords, and a modifier may mean different things to the keyboard and the mouse without ambiguity |
+| **Ctrl**+vertical-drag on a note (macOS) / **Ctrl+Alt**+vertical-drag (Windows, Linux) | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (a multi-selection scrubs all by the same delta). Off Cmd because Cmd means "unsnapped" on both halves of a note, and one modifier meaning "smooth" on the right edge and "change the volume" two pixels to its left is ambiguous; off Option because Option is the copy drag below. The chord is `isVelocityScrubChord` (`PianoRollInternal.h`): `(ctrl && !command) \|\| (ctrl && alt)` — on macOS JUCE's `isCommandDown()` is Cmd and `isCtrlDown()` is Ctrl, so plain Ctrl matches; on Windows/Linux Cmd IS Ctrl, so plain Ctrl is the unsnapped move and the scrub is Ctrl+Alt. Tested BEFORE the Cmd and Option branches. Still additive, never a toggle |
+| **Option**+drag on a note's BODY | **Copy drag**: the originals stay put at full opacity and a ghost of the grabbed note (or of the whole selection when it is part of it; otherwise the grabbed note becomes the selection first) follows the pointer through the same move machinery — shared snap, row snapping, edge auto-scroll. The ghost is a raised surface (~0.85 opacity, 1 px accent border, soft shadow). Release commits the copies at the dropped positions in ONE undo step (built and committed through the clipboard's `buildPastedNotes`/`commitPastedNotes`, so muted/channel/velocity carry over and clip-edge clipping is a paste's) and **selects the copies**; zero net movement commits nothing. Option is re-read on every drag event (and on a bare key change via `modifierKeysChanged`), so pressing or releasing it mid-drag flips copy and move in place without restarting the drag. **Esc** cancels a copy or a move drag: nothing is committed and there is no undo step. The cursor is the copy cursor while copying. The right edge is unaffected (Option there is a plain resize). On drop the ghost's raised look eases out over 140 ms (easeOutCubic); on Esc a copy ghost flies back to its origin and fades over 140 ms (easeInCubic), on the roll's existing VBlank updater — see `PianoRollCopyDrag.cpp` |
 | **Quantise** chip (or the bare `Q` key) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while snap is off — cleaning up free-hand notes is its whole point. Flashes on every press, and writes NO undo step when the clip is already quantised, since `recordTimelineChange` drops no-op mutations |
 | **Quantise Length** chip (or `Alt+Q`) | **Quantise selected note LENGTHS to the grid** — the length twin of bare `Q`: same selection-vs-all branching (per-note `resizeNote` in one mutation lambda when something is selected, `TimelineDoc::quantiseNoteLengths` directly when nothing is), same `divisionBeatsRaw()` grid source, same `isQuantiseEnabled()` gate. Rounds each note's `lengthBeats` to the nearest positive multiple of the grid, **floored at one grid unit so a note can never become zero-length**. Flashes on every press |
-| **Quantise Pitches** chip (or `Option+Shift+Q`) | **Quantise pitches into the scale**: `quantisePitchesToActiveScale()` snaps the selected notes' PITCHES — or every note in the clip when nothing is selected — via `MusicalScale::snapPitch`, leaving starts and the selection untouched. An ACTION chip, never lit, but painted dimmed (`isPitchQuantiseEnabled()`) when it would do nothing: no scale chosen for this clip, or an empty clip. A click with no scale is silently inert; the KEY falls THROUGH (`keyPressed` returns `false`) in the same case. **This chip is its ONLY entry point** besides the key |
+| **Fit notes to key** chip (or `Option+Shift+Q`; the chip enum and action id keep the name Quantise Pitches) | **Fit notes to the clip's key** (its own key, or the song key it follows): `quantisePitchesToActiveScale()` snaps the selected notes' PITCHES — or every note in the clip when nothing is selected — via `MusicalScale::snapPitch`, leaving starts and the selection untouched. An ACTION chip, never lit, but painted dimmed (`isPitchQuantiseEnabled()`) when it would do nothing: no key for this clip (neither its own nor the song's), or an empty clip. A click with no key is silently inert; the KEY falls THROUGH (`keyPressed` returns `false`) in the same case. **This chip is its ONLY entry point** besides the key |
 | **Show Only Scale Notes** chip (or `Option+S`) | Toggles the pitch-ROW filter for the open clip (`toggleScaleFilter()`): out-of-scale rows collapse out of the grid, and ↑/↓ start stepping by scale degree. A toggle, so it paints lit; dimmed with no scale chosen, though the flag is still remembered — arm it first, pick the scale second. See [scale-assist](scale-assist.md#show-only-scale-notes-has-one-writer) |
 | `J` key | **Toggles grid magnetism** — flips the shared `TimelineViewState::snapEnabled`, so it switches off and on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. The key is the SHARED `timelineSnapToggle`, not a piano-roll duplicate of it. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. **Magnetism only — the grid stays drawn** |
 
@@ -304,10 +326,11 @@ the time the create or delete runs; the double-click is the last word either way
 
 ## Header chips
 
-**Six** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
+**Eight** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
 `HeaderButtonId` — left to right: **"Clips"** (back), **Quantise**, **Quantise Length**, **Quantise
-Pitches**, **"Scale"**, **Show Only Scale Notes**. The three quantise verbs (position, length,
-pitch) are grouped together in that order.
+Pitches**, **"Scale"**, **Show Only Scale Notes**, **"Velocity"**, **"Humanize"**. The three
+quantise verbs (position, length, pitch) are grouped together in that order. Right after
+"Humanize" sits the one real child control, the velocity value box (see **Velocity strip**).
 
 Each is a `juce::Rectangle<int>` member carved in `resized()` and resolved through the single seam
 `headerButtonBoundsFor(which)`, which `updateHeaderButtonHover()` and `paintHeader()`'s hover wash
@@ -317,14 +340,14 @@ Every chip does exactly ONE thing on a plain click; there are no modifier varian
 all. The GAPS carry meaning: 4 px between groups, 2 px within one, so "the three quantise verbs"
 reads as a cluster and "scale plus its row filter" as another.
 
-Only **Show Only Scale Notes** is a toggle, so it is the only one that ever paints lit; the rest
-are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
+**Scale**, **Show Only Scale Notes** and **Velocity** are toggles and paint lit while on; the
+rest are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
 additionally flash on every press, sharing the same `isQuantiseEnabled()` gate; **Quantise
 Pitches** does not, because it is silently a no-op with no scale chosen, matching its own dim.
 
 The flash is a **one-shot** `juce::Timer` (`kQuantiseFlashMs` = 120; `timerCallback()` stops the
 timer on its first call) repainting only the chip's own rect — bounded, never a running animation,
-per the root `CLAUDE.md` repaint invariant. Tooltips are served by `juce::TooltipClient` resolved
+per `Source/UI/CLAUDE.md`'s repaint invariant. Tooltips are served by `juce::TooltipClient` resolved
 by position (`getTooltipFor(Point<int>)`), since the header's buttons are drawn shapes.
 
 **Four chips carry drawn vector glyphs rather than letters**, because a bare "Q" for length- or
@@ -338,7 +361,7 @@ follows:
 |---|---|---|
 | Quantise | Two small blocks landed flush on two faint **vertical** gridlines, vertically staggered | The axis IS the meaning: this verb moves notes horizontally in time, so the grid it snaps to is vertical. Staggering the pair reads as two notes rather than one bar |
 | Quantise Length | ONE wider block whose **trailing (right)** edge snaps onto a single faint vertical gridline, with a short arrow pushing that edge onto the line | Deliberately not the Quantise glyph rotated or restyled: one block instead of two, and the marked edge is the block's END rather than its START, since this verb resizes a note rather than moving it |
-| Quantise Pitches | A **note head** on the lowest of three faint **horizontal** rows, with a down arrow pushing it there | The same "snapped onto the grid" idea rotated 90°, which is exactly the difference between the two verbs — so they are tellable apart without the tooltip |
+| Fit notes to key | A **note head** on the lowest of three faint **horizontal** rows, with a down arrow pushing it there | The same "snapped onto the grid" idea rotated 90°, which is exactly the difference between the two verbs — so they are tellable apart without the tooltip |
 | Show Only Scale Notes | A **funnel** | The one mark that reads as "filter" everywhere. Deliberately not an eye (the rows are *removed from the row mapping*, not merely hidden) and not a keyboard (indistinguishable from the keys column two pixels below) |
 
 "Scale" keeps its word: it is the one label here naming a NOUN (a panel) rather than a verb, and a
@@ -346,6 +369,99 @@ glyph for "the scale picker" would be a guess. Every tooltip is rebuilt per quer
 `synth::shortcutHintFor` (`quantiseTooltipText()` / `quantiseLengthTooltipText()` /
 `quantisePitchTooltipText()` / `scaleTooltipText()` / `scaleFilterTooltipText()`), so a rebind shows
 up the very next time it is asked for, with no cache and no listener.
+
+## Velocity strip
+
+A 64 px strip (`PianoRollVelocityLane::kDefaultHeight`) under the grid with **one stick per note**
+at the note's start x, its height the velocity (1 at the bottom, 127 at the top), coloured like the
+note (the host resolves it through the same `resolveNoteColourFor` the grid uses; selected sticks
+take `noteSelected`). The gutter at its left (`leftGutterWidth()`, so it tracks the Scale Assist
+panel) shows a 127 / 64 / 1 scale under the keys column, and the sticks' x comes from the roll's
+own `beatToX`, so a stick sits exactly under its note's left edge at every zoom and with the panel
+open. The value shows beside a stick while it is hovered or dragged, fading in and out rather than
+popping (see **Readout fade** below).
+
+**Resizing.** Drag the strip's top edge (the shared `PanelResizeHandle`, a 5 px child of the lane
+that shows the up/down resize cursor) to make it taller or shorter. The height is at least 32 px
+(`PianoRollVelocityLane::kMinHeight`) and at most half of the editor's canvas band, re-clamped at
+every layout so a shorter roll never keeps a strip that swallows the grid; the grid, keys column
+and Scale Assist panel follow it live. It is remembered under `pianoRollVelocityLaneHeight` in the
+roll's properties file, written when the drag is released (a click that does not move writes
+nothing). The clamp is the pure `velocitylane::clampLaneHeight`. The plot keeps 8 px of padding
+above the 127 line so a full-velocity head sits below the handle.
+
+**Cursor.** With the **Draw** tool active the strip shows the same pen cursor as the grid (a child
+component does not inherit the roll's cursor, so `applyToolCursor()` sets it on the lane too);
+under every other tool it keeps the arrow.
+
+**Readout fade.** The value beside a stick fades in when a stick is first hovered (160 ms
+`easeOutCubic`) and out when the pointer leaves it (110 ms `easeInCubic`), retargeting from the
+current opacity, and slides about 4 px out of the stick head as it does. Moving from one stick
+straight to another, or editing, just moves the label at the current opacity (a press makes it fully
+opaque at once). Headless (not showing), it lands at opacity 1 / 0 immediately.
+
+**The strip is a collaborator, not more roll.** `PianoRollVelocityLane`
+(`Source/UI/PianoRoll/VelocityLane/`) owns painting, hit-testing, the readout and the per-gesture
+drag state and preview values; it reads and writes only through its `Host` — a stick provider (id,
+x, velocity, selected, colour), `gutterWidth`, `isDrawToolActive`, and `onPreview` / `onCommit` /
+`onCancel`. `PianoRollVelocity.cpp` is the roll's side of that seam. The pure maths (y <-> velocity,
+which stick a press grabs, the pen/ramp line values, humanize) is free functions in
+`VelocityLaneMath.h`, unit-tested without a component.
+
+| Gesture in the strip | Effect |
+|---|---|
+| Drag starting **on a stick** (within 5 px of its x; a chord's sticks share an x, so the head nearest the pointer's y wins) — unselected note | Sets that one note's velocity **absolutely** from the pointer's y, from the press onwards |
+| The same on a **selected** note | Every selected note moves by the **same delta** (the pointer's travel in velocity units since the press, so nothing jumps on the press), each clamped to 1..127 on its own |
+| Drag starting on **empty strip** | **Pen**: every stick the stroke crosses takes the stroke's value at that x. Each mouse segment is interpolated, so a fast stroke skips no stick; chord notes at one x all take the value. With a selection, only selected notes are touched |
+| **Shift**+drag | **Ramp**: a straight line from the press point to the pointer across the sticks between (selection-restricted likewise); shrinking it back returns the notes it no longer spans to their own values |
+| Any drag while the **Draw** tool is active | A pen stroke, even on a stick |
+| **Escape** mid-drag | Cancels: nothing committed, no undo step. The strip takes focus on a press so Escape reaches it; the roll's own Escape branch cancels a strip drag first too, before it would clear the selection |
+
+Precedence at the press, first match wins: Draw tool, Shift, a stick under the pointer, empty strip.
+
+**A pen or ramp follows the view.** Held at the strip's left or right edge, a pen stroke or a ramp scrolls the roll
+sideways on the roll's own edge timer (never up or down: the strip sits under the grid), faster nearer the edge. Each
+tick shifts the gesture's anchor by the scroll and re-runs it at the still pointer, so a ramp stays anchored to the
+note it began on and reaches the notes that scroll in, and a pen sets every note that passes under it. Release and
+Escape stop it, and the gesture stays one undo step. A stick drag only changes a value and never scrolls.
+
+**Preview and commit.** While dragging, the notes in the grid recolour live: the gesture's values
+reach the roll as a per-note override map (`velocityPreview_`, NoteId -> velocity) that
+`effectiveGeometryFor` applies, so `paintNote`'s `resolveNoteColourFor` and the sticks read the
+same value. It is cleared on commit and on cancel. Release commits only the notes whose value
+changed, exactly like the Ctrl-drag velocity scrub: one `recordTimelineChange` around every
+`setNoteVelocity`, so a gesture is **one undo step** however many notes it touched, and a gesture
+that ends where it started writes nothing. The Ctrl-drag scrub on notes is unchanged, and its
+preview moves the sticks too, since they read `effectiveGeometryFor`.
+
+**Toolbar.** The **Velocity** chip shows or hides the strip and paints lit while it is shown. The
+Velocity chip, the Humanize chip and the value box sit inside ONE rounded frame (theme `border`
+outline, 2 px inner padding), and a muted "Set" caption sits inside it right before the box, so the
+group reads "Velocity  Humanize  Set [ 100 ]". The frame and caption are painted only; hit-testing
+still uses the chips' own bounds. The **value box** (a `juce::TextEditor` right after the caption, titled "Velocity of selected notes"
+for screen readers) shows the selected notes' common velocity — blank with nothing selected, an em
+dash when they differ — kept current through `NoteSelectionModel::onChange`, which fires on every
+real selection change from any path. Typing 1..127 and pressing Return sets the selected notes, or
+every note in the clip when none is selected, as one undo step; anything else is rejected and the
+box reverts (Escape and losing focus revert too). The **Humanize** chip opens a menu — Humanize
+±5 / ±10 / ±20 — that adds a random offset in [-N, +N] to each target note (selection, else every
+note), clamped to 1..127, one undo step. The random source is the roll's own `juce::Random`;
+`setHumanizeRandomSeed` makes it deterministic for tests.
+
+**Slide.** Showing and hiding the strip slides it like the Scale Assist panel: the same 200 ms
+`easeInOutCubic` tween on one `AnimationDriver`, retargeting from the current progress on a mid-flight
+toggle, landing at once when the roll is not on screen. `VelocityLaneSlide` holds the progress p; the
+grid gives up `round(p * full)` px at the bottom (`canvasBottom()` follows every frame) while the
+strip keeps its FULL height with its top at the grid's bottom, so it rises from the roll's bottom
+edge with its content revealed, clipped by the parent rather than squashed. The strip stays visible
+for the whole slide and is hidden only when a close finishes; a gesture in flight is cancelled when
+a close starts. A restore from the properties file never animates.
+
+**Visibility.** Shown by default. The chip and the rebindable `pianoRollToggleVelocityLane`
+shortcut (a real Ctrl+V on macOS, Cmd+Shift+V elsewhere — see
+[shortcuts](../control/shortcuts.md#piano-roll)) toggle it; hiding it mid-drag cancels the drag.
+The state is remembered in the properties file under `"pianoRollVelocityLaneVisible"` (absent =
+shown), restored by `setPropertiesFile`; with no properties file it is session-only.
 
 ## Note audition
 
@@ -482,7 +598,7 @@ nothing, no deselect, no marquee.
   A note inside a muted clip already contributes nothing to the run (`TimelineSnapshot` excludes
   the whole clip), so a note's own mute only matters inside an unmuted clip.
 
-**Draw** anchors on the floor-snapped beat of a mousedown, grows a length preview on drag
+**Draw** anchors on the left line of the cell under a mousedown (the same rule as the double-click, one shared `computeNewNoteAnchor`), grows a length preview on drag
 (`getDrawPreviewLengthForTest()`), and on release either creates the dragged-length note or — for a
 press that never dragged — falls back to the SAME one-note-per-division gesture the Select tool's
 double-click-on-empty-grid performs.
@@ -568,6 +684,15 @@ lose the user's place.
 **Why Alt rather than Cmd or Shift.** Plain arrows already nudge, Shift+Up/Down is the octave, and
 Cmd+arrows carry OS-level jump-to-boundary semantics.
 
+**P loops the selected notes**: `loopSelectedNotes()` (the same shared `timelineLoopSelection` action
+the clip lanes' P uses, a surface-local key rather than a command) computes `[min note start, max note
+end]` over the selection, adds the open clip's `startBeat` so the span is in ABSOLUTE beats, and hands
+it to `std::function<void(double startBeat, double endBeat)> onLoopRangeRequested`. The roll owns no
+transport: `TimelinePanelComponent` forwards the callback into the clip lane area's, so
+`MainComponent` stays the one owner of `transport.setLoop` and the arm-looping preference. With
+nothing selected it returns `false` and the key falls through to the panel's P, which loops the whole
+edited clip.
+
 Tool-switching digit keys are deliberately **not** handled here at all
 ([edit-tools](edit-tools.md#rebinding)) — that binding belongs to the panel, so the roll and the
 panel can never disagree about which tool is active.
@@ -600,21 +725,30 @@ scrolling the current one. Headless seams mirror the clip lanes': `tickAutoScrol
 
 ## Wheel bindings
 
-All four bindings are handled here and NOTHING bubbles to the panel: the roll's zoom and scroll are
+All five bindings are handled here and NOTHING bubbles to the panel: the roll's zoom and scroll are
 its own, so the shared `TimelineViewState` must not move when the wheel lands inside the roll.
 
 | Binding | Effect |
 |---|---|
 | Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(dominantWheelDelta(wheel) * 2.0)` factor as the panel's own zoom so the two feel identical |
 | Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
+| Option + vertical wheel / two-finger scroll | The same vertical zoom as Cmd+Shift+wheel, the trackpad's one-hand way and the same key the timeline uses for track height. Decided by `synth::ui::isOptionVerticalZoom()` (`ScrollPolicy.h`), which the timeline panel calls too, so the two surfaces cannot drift. An Option + sideways scroll stays a horizontal scroll. (Option+drag on a note is copy; that is a drag, not a wheel, so there is no clash) |
 | Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom), inverted by the same `scrollInverted_` / **Natural scrolling** preference as the panel (see [view](view.md#natural-scrolling)) |
 | Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]`, likewise inverted by `scrollInverted_` — and the one axis that needs its own sign flip on top of `scrollAmount()`, since `firstVisiblePitch_` is the pitch at the TOP row and pitch grows upward while the screen convention is "+y moves the view down" (the Natural-scrolling section in [view](view.md#natural-scrolling) has the full reasoning) |
 
-Both zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
+The zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
 reason the panel's own Cmd+Shift+wheel branch does
 ([view](view.md#wheel-and-trackpad-bindings)): macOS folds a Shift-held wheel gesture into
 `deltaX`, so a branch chosen by its modifiers must never assume the OS parked the gesture on
 `deltaY`.
+
+Both scroll rows ease a notched mouse wheel (neither `isSmooth` nor `isInertial`) over ~120 ms through
+`synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`) instead of jumping; a notch mid-ease
+retargets from the current position and keeps the remaining distance. Each applied step still
+suspends follow and fires `onHorizontalViewChanged`. Trackpad/inertial events, zoom, a mouse press,
+`openClip`/`closeRoll` and any other view move end the ease, and a non-showing roll (tests) scrolls
+immediately. The roll is `setOpaque(true)` (its `paint()` starts with a full-bounds fill), so scrolling
+repaints it without the parent repainting behind it.
 
 Cmd+= / Cmd+- and Cmd+Shift+= / Cmd+Shift+- reach the same `zoomHorizontal` / `zoomVertical` entry
 points (anchored at the grid's visible centre rather than the cursor) when the roll is the focused
@@ -668,7 +802,19 @@ fallback, the note clipboard's
 cross-clip survival and its clip-window clamps on paste and repeat, and the arrow keys' shared-delta
 clamp with an empty selection falling through. Audition lives in `PianoRollAuditionTests.cpp`, the
 header chips in `PianoRollHeaderChipsTests.cpp`, and the key bindings in
-`PianoRollShortcutsTests.cpp`.
+`PianoRollShortcutsTests.cpp`. The velocity strip is covered in `PianoRollVelocityLaneTests.cpp`
+(layout band, stick alignment, every gesture driven through the strip's real mouse handlers, Escape,
+live recolour, one undo step), `PianoRollVelocityToolbarTests.cpp` (value box, Humanize, chip,
+shortcut, persistence), `PianoRollVelocitySlideTests.cpp` (slide maths, retarget, restore, the
+captioned group frame) and `VelocityLaneMathTests.cpp`; the shared `PianoRollFixture` hides the
+strip so every other suite keeps its grid-to-bottom geometry, and `VelocityLaneFixture`
+(`PianoRollVelocityTestHelpers.h`) shows it.
 
 **Note for wheel tests:** `juce::MouseWheelDetails` has no default member initialisers, so they must
 construct it `{}`-initialised or a garbage `deltaX` decides the branch.
+
+## Opening and closing
+
+Opening the roll fades it in as the clip lanes fade out; closing fades the emptied roll out as the lanes fade back in
+(`FadeVisibility`, see [animation](../layout/animation.md#fading-things-in-and-out)). The open state and the layout land
+at once; only opacity runs, and a panel that is not on screen swaps immediately.

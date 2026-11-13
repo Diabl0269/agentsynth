@@ -2,6 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "Metronome.h"
+#include "SoundBrowser/SoundPreviewPlayer.h"
 #include <juce_core/juce_core.h>
 
 namespace synth {
@@ -13,21 +14,27 @@ namespace synth {
 
 // The metronome is summed POST-graph (AudioEngine::renderPass), so a session that captures exactly
 // the graph's own output buffer would otherwise pick the click up. Forces BOTH the user toggle and
-// the count-in forced-on flag off for the render and restores them afterwards, on every exit path.
+// the count-in forced-on flag off for the render and restores them afterwards, on every exit path. The Sounds view's
+// preview is summed after the graph the same way, so the guard stops it and keeps it out of the render too.
 struct MetronomeForceOffGuard {
-    explicit MetronomeForceOffGuard(Metronome& metronomeIn) noexcept
+    MetronomeForceOffGuard(Metronome& metronomeIn, soundbrowser::SoundPreviewPlayer& previewIn) noexcept
         : metronome(metronomeIn)
+        , preview(previewIn)
         , savedEnabled(metronomeIn.isEnabled())
         , savedForcedOn(metronomeIn.isForcedOn()) {
         metronome.setEnabled(false);
         metronome.setForcedOn(false);
+        preview.stop();
+        preview.setSuspended(true);
     }
     ~MetronomeForceOffGuard() noexcept {
         metronome.setEnabled(savedEnabled);
         metronome.setForcedOn(savedForcedOn);
+        preview.setSuspended(false);
     }
 
     Metronome& metronome;
+    soundbrowser::SoundPreviewPlayer& preview;
     bool savedEnabled;
     bool savedForcedOn;
 

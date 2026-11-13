@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # dev-sign-app.sh — re-sign a local "Agent Synth.app" build with a stable Apple Development
-# identity, so macOS TCC stops re-asking for microphone access on every rebuild.
+# identity, so macOS stops re-asking for the login keychain and microphone access on every rebuild.
 #
 # WHY: a local ad-hoc/linker-signed build's designated requirement pins to `cdhash H"..."`, which
 # changes on every build (any changed byte mints a new hash). TCC grants (microphone, etc.) are
@@ -39,7 +39,8 @@
 # A signature that fails to apply or verify IS a real problem (exit non-zero): unlike a missing
 # identity, that's not an expected/dev-machine-dependent state.
 #
-# Called from scripts/ci-local.sh after a successful local build, on Darwin only.
+# Runs as a POST_BUILD step of the AgentSynth target on every local macOS build (not on CI), and
+# from scripts/ci-local.sh.
 
 set -euo pipefail
 
@@ -80,9 +81,12 @@ fi
 if [ -z "$identity" ]; then
     cat <<'EOF'
 dev-sign-app: no Apple Development signing identity found -- the app stays ad-hoc signed, so
-macOS will re-ask for microphone access after every rebuild (an ad-hoc signature's designated
-requirement pins to a cdhash that changes on every build, and TCC keys its grants on that
-requirement).
+macOS will re-ask for the login keychain (the saved sign-in token) and microphone access after
+every rebuild (an ad-hoc signature's designated requirement pins to a cdhash that changes on every
+build, and the keychain and TCC key their grants on that requirement).
+
+Building inside a sandboxed agent shell hides the keychain, so no identity is found there: re-run
+`bash scripts/dev-sign-app.sh <app>` outside the sandbox before launching the app.
 
 To fix, either:
   - create a signing identity: Xcode > Settings > Accounts > Manage Certificates > + >

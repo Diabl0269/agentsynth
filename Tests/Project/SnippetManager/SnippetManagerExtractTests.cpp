@@ -256,3 +256,25 @@ TEST(SnippetExtraState, PrepareForInsertStripsAStateKeyUnlessItWasAskedFor) {
     ASSERT_EQ(keptNodes->size(), 1);
     EXPECT_TRUE((*keptNodes)[0].getDynamicObject()->hasProperty("state"));
 }
+
+// The copy is written from the selected nodes alone: the rest of the project, however large, changes nothing in it
+// (a duplicate used to serialise every node to copy one track). Every node still gets its uuid, as before.
+TEST(SnippetExtract, TheRestOfTheProjectDoesNotChangeTheCopy) {
+    auto extractFrom = [](int unrelatedPairs, juce::AudioProcessorGraph& graph) {
+        auto osc = addAt(graph, std::make_unique<OscillatorModule>(), 100, 100);
+        auto filter = addAt(graph, std::make_unique<FilterModule>(), 400, 100);
+        graph.addConnection({{osc->nodeID, 0}, {filter->nodeID, 0}});
+        for (int i = 0; i < unrelatedPairs; ++i) {
+            auto a = addAt(graph, std::make_unique<OscillatorModule>(), 100 * i, 900);
+            auto b = addAt(graph, std::make_unique<VCAModule>(), 100 * i, 1200);
+            graph.addConnection({{a->nodeID, 0}, {b->nodeID, 0}});
+            graph.addConnection({{filter->nodeID, 0}, {b->nodeID, 0}}); // a cable leaving the copy
+        }
+        return SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID}, "Pair", true);
+    };
+    juce::AudioProcessorGraph small, large;
+    const auto fromSmall = juce::JSON::toString(extractFrom(0, small));
+    EXPECT_EQ(juce::JSON::toString(extractFrom(60, large)), fromSmall);
+    for (auto* node : large.getNodes())
+        EXPECT_TRUE(node->properties["uuid"].toString().isNotEmpty());
+}

@@ -26,6 +26,10 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 }
 } // namespace
 
+void MixerMasterColumn::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
 MixerMasterColumn::MixerMasterColumn() {
     // Without this, Master's own group AccessibilityHandler (the default, unspecified-role
     // one Component provides) reads an empty title -- MixerDirectColumn's ctor sets the same "own
@@ -34,19 +38,36 @@ MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
     header_.setRenameEnabled(false); // Master is a MasterModule, not a ChannelStripModule -- no strip name field
-    addAndMakeVisible(insertList_);
-    insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
+    insertViewport_.setList(insertList_);
+    addAndMakeVisible(insertViewport_);
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        addAndMakeVisible(dividers_[i]);
+    addChildComponent(insertsCollapsed_);
+    ownSectionLayout_.onGeometryChanged = [this] { resized(); };
+    ownSectionLayout_.onAppearanceChanged = [this] { repaintSectionDividers(); };
+    setSectionLayout(ownSectionLayout_);
+    header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
-            onEditOnCanvas(uuid);
+            onEditOnCanvas(editOnCanvasTarget_);
+    };
+    insertList_.onFocusModule = [this](const juce::String& uuid) {
+        if (onFocusModule)
+            onFocusModule(uuid);
     };
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();
     };
+    insertList_.onPreferredHeightChanged = [this] {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    };
     addAndMakeVisible(fader_);
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
     meter_.setTitle("Master meter");
+    meter_.setTooltip("Master output level meter");
+    meterReadout_.setTitle("Master peak");
+    meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
     addAndMakeVisible(meterReadout_);
     meterReadout_.onResetAllRequested = [this] {
         if (onResetAllMetersRequested)
@@ -81,13 +102,38 @@ void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManag
     refreshPanLawButton();
 }
 
+// This column outlives its edits, so the rows it showed are still here to be compared with the ones it shows next.
+// A rebuild that leaves the inserts as they were neither restarts nor cuts short a motion already playing.
+void MixerMasterColumn::setInsertEntries(const synth::MixerColumn& column) {
+    const bool changed = column.inserts != shownInserts_;
+    const bool canAnimate = changed && (isShowing() || rowMotionForced_);
+    std::vector<juce::String> nextKeys;
+    for (const auto& entry : column.inserts)
+        nextKeys.push_back(MixerRowsMotion::insertKey(entry));
+    MixerRowsMotion::Part rowsBefore;
+    if (canAnimate)
+        rowsBefore = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), nextKeys);
+    if (changed)
+        rowsMotion_.finishNow();
+    shownInserts_ = column.inserts;
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.chainEndNodeId);
+    if (canAnimate) {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+        rowsMotion_.play(MixerRowsMotion::List::Inserts, rowsBefore,
+                         MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()),
+                         synth::theme::themeOf(*this).colors.surfaceHi);
+    }
+}
+
 void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     setNodeId(column.nodeId);
     // Master's chain hangs off Master's own output (column.sourceNodeId == column.nodeId) and feeds the Rec Tap /
     // Audio Output (column.chainEndNodeId) -- see MixerModelInserts.cpp's buildMasterInsertsForColumn.
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
-                           column.sourceNodeId, column.chainEndNodeId);
+    editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
+    setInsertEntries(column);
     const bool hasInserts = !column.inserts.empty();
+    insertsCollapsed_.setSummary(
+        mixerSectionCountSummary(synth::countInsertModules(column.inserts), "insert", "inserts"));
     if (hasInserts != hasInserts_) {
         hasInserts_ = hasInserts;
         // Both sources are consume-on-read latches that keep the loudest peak since their last read, and only the
@@ -99,10 +145,9 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     // A rebuild is the ONE thing every path that changes the engine's pan law directly --
     // New Patch's factory-default Compensated write (MainComponent::clearTimelineForNewPatch's
     // caller), Load, undo/redo -- reaches unconditionally, so re-reading it here is what keeps this
-    // label from going stale indefinitely rather than only on the next menu pick. Found while
-    // verifying this ticket's cross-view pan-law sync fix: without this, a fresh mirror open() (which
-    // DOES call refreshPanLawButton() from configure()) could show the CORRECT current law while an
-    // already-open dock, rebuilt since its own last configure()/menu-pick, still showed a stale one.
+    // label from going stale indefinitely rather than only on the next menu pick. Without this, a fresh mirror open()
+    // (which DOES call refreshPanLawButton() from configure()) could show the CORRECT current law while an already-open
+    // dock, rebuilt since its own last configure()/menu-pick, still showed a stale one.
     refreshPanLawButton();
     resized();
 }
@@ -145,6 +190,7 @@ void MixerMasterColumn::refreshMuteAccessibility() {
     const bool muted = m != nullptr && m->isMuted();
     muteButton_.setToggleState(muted, juce::dontSendNotification);
     muteButton_.setTitle(juce::String("Master mute, ") + (muted ? "on" : "off"));
+    muteButton_.setTooltip("Mute the master output");
 }
 
 void MixerMasterColumn::toggleMuted() {
@@ -175,6 +221,7 @@ void MixerMasterColumn::refreshPanLawButton() {
     const bool compensated = audioEngine_->getMixerPanLaw() == synth::MixerPanLaw::Compensated;
     panLawButton_.setButtonText(compensated ? "Pan: Comp." : "Pan: Bal.");
     panLawButton_.setTitle(juce::String("Mixer pan law (this project): ") + (compensated ? "Compensated" : "Balance"));
+    panLawButton_.setTooltip("Pan law for this project: click to choose Balance or Compensated");
 }
 
 void MixerMasterColumn::showPanLawMenu() {
@@ -245,6 +292,7 @@ void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     // Same tick also keeps the armed breathing outline animating -- see
     // repaintArmedMidiLearnOutline()'s own comment.
     repaintArmedMidiLearnOutline();
@@ -343,7 +391,6 @@ void MixerMasterColumn::repaintArmedMidiLearnOutline() {
 }
 
 void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     // The slider is nested inside fader_ (a MixerFader, itself a direct child of this
     // column), so its bounds must be walked up TWO levels into this column's own coordinate frame
     // -- getLocalArea(&slider, slider's own local bounds) does that regardless of depth; the
@@ -354,21 +401,20 @@ void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
     const auto bounds = getLocalArea(&fader_.getSlider(), fader_.getSlider().getLocalBounds());
 
     if (midiLearnBadgeMapped_) {
-        const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
+        const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
         synth::ui::midilearn::paintMidiMappedBadge(g, bounds, badgeColour);
     }
 
     if (midiLearnArmedParamId_.isEmpty() || midiLearnableFaderParam_ == nullptr ||
         midiLearnableFaderParam_->paramID != midiLearnArmedParamId_)
         return;
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
     synth::ui::midilearn::paintMidiLearnArmedOutline(g, bounds, armedColour, midiLearnArmedSinceMs_);
 }
 
 void MixerMasterColumn::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
+    const auto bg = synth::theme::themeOf(*this).colors.surfaceHi;
+    const auto border = synth::theme::themeOf(*this).colors.border;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(border);
@@ -377,33 +423,64 @@ void MixerMasterColumn::paint(juce::Graphics& g) {
 
 void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
     paintMidiLearnOverlays(g);
+    paintAutomatedMarkers(g);
 
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }
 
+// Master lays out against the SAME shared MixerSectionLayout geometry as every strip column, so its
+// Inserts row and its fader line up with theirs: the Sends, EQ and pan rows Master has no content for
+// stay empty.
 void MixerMasterColumn::resized() {
-    // Same meter width/readout-row budget as MixerColumnComponent -- the Master column
-    // stays visually consistent with every strip column's meter (docs/mixer/mixer.md meters section).
+    // Same meter width as MixerColumnComponent -- the Master column stays visually consistent with
+    // every strip column's meter (docs/mixer/mixer.md meters section).
     constexpr int kMeterWidth = 32;
-    constexpr int kMeterReadoutHeight = 12;
 
-    auto bounds = getLocalBounds().reduced(2);
-    header_.setBounds(bounds.removeFromTop(24));
-    // Same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
-    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
+    const auto geometry = sectionLayout_->resolve(getHeight());
+    const auto inner = getLocalBounds().reduced(MixerSectionLayout::kColumnInset);
+    header_.setBounds(inner.withHeight(MixerSectionLayout::kHeaderHeight));
+    auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
+
+    const size_t inserts = (size_t)MixerSection::Inserts;
+    const bool insertsHidden = sectionLayout_->isHidden(MixerSection::Inserts);
+    const auto insertsArea = row(geometry.sectionTop[inserts], geometry.sectionHeight[inserts]);
+    insertsSwap_.setHidden(insertsHidden);
+    insertViewport_.setBounds(insertsArea);
+    insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    insertsCollapsed_.setBounds(
+        insertsArea.withHeight(juce::jmin(insertsArea.getHeight(), MixerSectionLayout::kCollapsedHeight)));
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        dividers_[i].setBounds(row(geometry.dividerTop[i], MixerSectionLayout::kDividerHeight));
+
     // Shares the mute row -- mute on the left, the pan-law control on the right.
-    auto bottomRow = bounds.removeFromBottom(20).reduced(2);
-    muteButton_.setBounds(bottomRow.removeFromLeft(bottomRow.getWidth() / 3));
+    // The two buttons keep the same inset and gap as a strip's mute and solo pair.
+    auto bottomRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight).reduced(MixerSectionLayout::kMsButtonInset);
+    const int muteSlot = bottomRow.getWidth() / 3;
+    muteButton_.setBounds(bottomRow.removeFromLeft(muteSlot).withTrimmedRight(2 * MixerSectionLayout::kMsButtonInset));
     panLawButton_.setBounds(bottomRow);
-    meterReadout_.setBounds(bounds.removeFromTop(kMeterReadoutHeight));
-    meter_.setBounds(bounds.removeFromRight(kMeterWidth));
-    bounds.removeFromRight(2);
-    fader_.setBounds(bounds);
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight)
+                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
+    auto faderRow = row(geometry.faderTop, geometry.faderHeight);
+    meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
+    faderRow.removeFromRight(2);
+    fader_.setBounds(faderRow);
+}
+
+void MixerMasterColumn::setSectionLayout(MixerSectionLayout& layout) {
+    sectionLayout_ = &layout;
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        dividers_[i].setLayout(sectionLayout_, (MixerSection)(int)i);
+    insertsCollapsed_.setLayout(sectionLayout_, MixerSection::Inserts);
+    resized();
+}
+
+void MixerMasterColumn::repaintSectionDividers() {
+    for (auto& divider : dividers_)
+        divider.repaint();
 }
 
 } // namespace synth::ui

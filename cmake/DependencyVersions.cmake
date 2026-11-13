@@ -18,8 +18,22 @@
 set(SYNTH_JUCE_GIT_REPOSITORY "https://github.com/juce-framework/JUCE.git"
     CACHE STRING "JUCE upstream fetched via FetchContent")
 
-set(SYNTH_JUCE_GIT_TAG "8.0.3"
-    CACHE STRING "JUCE release tag fetched via FetchContent (a specific tag, for stability)")
+# A plain variable, not CACHE: a cached pin keeps the value of the build dir's first configure, so after a
+# JUCE bump an old build dir still fetched the old tag and failed to apply the new patches.
+set(SYNTH_JUCE_GIT_TAG "9.0.3")
+
+# FetchContent's PATCH_COMMAND for JUCE (cmake/patches/*.patch, docs/development/juce-patches.md). A patch
+# changes build/_deps, so the workflows' deps cache keys hash the patch files too; a source dir given with
+# FETCHCONTENT_SOURCE_DIR_JUCE skips this step and must already be patched.
+set(SYNTH_JUCE_PATCH_COMMAND
+    ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-vst3-context-menu.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake
+    COMMAND ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-testmode-window-order.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake
+    COMMAND ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-aggregate-null-clock.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake
+    COMMAND ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-vblank-listener-removal.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake)
 
 set(SYNTH_GOOGLETEST_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip"
     CACHE STRING "googletest archive fetched via FetchContent (test builds only)")
@@ -41,3 +55,19 @@ set(SYNTH_WINSPARKLE_URL "https://github.com/vslavik/winsparkle/releases/downloa
 
 set(SYNTH_WINSPARKLE_SHA256 "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976"
     CACHE STRING "SHA-256 of SYNTH_WINSPARKLE_URL — verified against the GitHub release asset at pin time")
+
+# Signalsmith Stretch (loop time-stretch and pitch-shift, MIT) and Signalsmith Linear (the FFT/STFT it includes, MIT).
+# Both are header-only; only the include directories are used (CMakeLists.txt), never their own CMake projects.
+# 1.4.0 pins Linear 0.6.4. Tag commits: stretch a670068d9aeb64913331d5cc29337b19a457a7df, linear
+# de55e6a50ffcf6f8f43f649692d94691c7025151 (checked at pin time with `gh api`).
+set(SYNTH_SIGNALSMITH_STRETCH_GIT_REPOSITORY "https://github.com/Signalsmith-Audio/signalsmith-stretch.git"
+    CACHE STRING "Signalsmith Stretch upstream fetched via FetchContent (headers only)")
+
+set(SYNTH_SIGNALSMITH_STRETCH_GIT_TAG "a670068d9aeb64913331d5cc29337b19a457a7df"
+    CACHE STRING "Signalsmith Stretch commit of release tag 1.4.0")
+
+set(SYNTH_SIGNALSMITH_LINEAR_GIT_REPOSITORY "https://github.com/Signalsmith-Audio/linear.git"
+    CACHE STRING "Signalsmith Linear upstream fetched via FetchContent (headers only)")
+
+set(SYNTH_SIGNALSMITH_LINEAR_GIT_TAG "de55e6a50ffcf6f8f43f649692d94691c7025151"
+    CACHE STRING "Signalsmith Linear commit of release tag 0.6.4")

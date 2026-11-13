@@ -7,7 +7,7 @@
 // The right-click menu and the Rename/Delete prompts route through three free-function test hooks
 // (synth::ui::test_hooks::contextMenuHookForTest/renamePromptHookForTest/deleteConfirmHookForTest,
 // defined with external linkage in ControllersListComponent.cpp) rather than hook MEMBERS --
-// ControllersListComponent.h's contract is locked for this ticket, so this file forward-declares
+// ControllersListComponent.h's contract stays fixed, so this file forward-declares
 // the same signatures instead of the class exposing them. contextMenuHookForTest mirrors
 // ModuleComponent::setShowContextMenuHookForTest for the same reason: a real
 // juce::PopupMenu::showMenuAsync() (and a real juce::AlertWindow) segfaults on a headless Linux CI

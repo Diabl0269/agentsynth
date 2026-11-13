@@ -30,6 +30,7 @@ bool AudioEngine::openMidiInput(const juce::MidiDeviceInfo& info) {
     auto input = juce::MidiInput::openDevice(info.identifier, this);
     if (input == nullptr)
         return false;
+    midiInputSources_.sourceFor(info.identifier); // its recording lane exists before its first message
     input->start();
     midiInputs.push_back(std::move(input));
     return true;
@@ -118,6 +119,26 @@ bool AudioEngine::reconcileMidiInputs() {
     return changed;
 }
 
+// The driver thread reads this list because the message thread mutates the graph. Holding the nodes keeps each module
+// alive for a whole delivery; the list lags a graph change by one broadcast. Hosted delivery passes no source and never
+// takes the lock, so the audio thread never does.
+void AudioEngine::refreshExternalMidiNodes() {
+    std::vector<juce::AudioProcessorGraph::Node::Ptr> found;
+    for (auto* node : mainProcessorGraph.getNodes())
+        if (dynamic_cast<ExternalMidiModule*>(node->getProcessor()) != nullptr)
+            found.emplace_back(node);
+
+    // Swapped under the lock, released outside it: the old list's last reference may free a module.
+    {
+        const std::lock_guard<std::mutex> lock(externalMidiNodesLock_);
+        externalMidiNodes_.swap(found);
+    }
+}
+
+juce::Array<juce::MidiDeviceInfo> AudioEngine::getAvailableMidiInputs() const {
+    return isHosted() ? juce::Array<juce::MidiDeviceInfo>() : availableMidiInputs();
+}
+
 std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
     std::vector<juce::String> identifiers;
     identifiers.reserve(midiInputs.size());
@@ -128,7 +149,7 @@ std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
 
 void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) {
     // The MIDI Remote source key is the device *identifier*, not getName()
-    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host §6) — getIdentifier() returns a refcounted
+    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host) — getIdentifier() returns a refcounted
     // juce::String copy, not an allocation. source == nullptr only from a test driving this override directly (see
     // Tests/Engine/DeviceChangeTests.cpp, Tests/Engine/BounceExporterTests.cpp).
     const juce::String sourceKey = source != nullptr ? source->getIdentifier() : juce::String();
@@ -166,15 +187,19 @@ void AudioEngine::handleIncomingMidiMessageFromSource(const juce::String& source
                 return;
     }
 
-    for (auto* node : mainProcessorGraph.getNodes()) {
-        if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
-            // source == nullptr only from a test driving this path directly (see
-            // Tests/Engine/DeviceChangeTests.cpp, Tests/Engine/BounceExporterTests.cpp) — real MIDI input
-            // callbacks always hand back the device that called them.
-            if (source != nullptr && source->getName() == extMidi->getName()) {
-                extMidi->pushMidiMessage(message);
-            }
-        }
+    // source == nullptr from a test driving this path directly (see Tests/Engine/DeviceChangeTests.cpp,
+    // Tests/Engine/BounceExporterTests.cpp) or from the hosted audio thread -- real MIDI input callbacks always hand
+    // back the device that called them. Walking mainProcessorGraph.getNodes() here raced the message thread adding and
+    // removing nodes (a null node read on the driver thread), so this reads the node list the message thread keeps.
+    if (source != nullptr) {
+        const std::lock_guard<std::mutex> lock(externalMidiNodesLock_);
+        for (const auto& node : externalMidiNodes_)
+            if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor()))
+                if (source->getName() == extMidi->getName())
+                    extMidi->pushMidiMessage(message);
     }
+    // The per-device copy recording filters on, beside the merged one and after the same early-outs, so a note is
+    // in a device's lane exactly when it is in the stream the graph plays.
+    midiInputSources_.push(sourceKey, message);
     midiMessageCollector.addMessageToQueue(message);
 }

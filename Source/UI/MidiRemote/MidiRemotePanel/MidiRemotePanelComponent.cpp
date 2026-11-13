@@ -76,6 +76,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     addAndMakeVisible(inspector_);
     addChildComponent(orphanView_);
 
+    toolbar_.onPreferredHeightChanged = [this] { resized(); };
     controllersList_.onSelectProfile = [this](const juce::String& profileId) { selectProfile(profileId); };
     controllersList_.onRenameRequested = [this](const juce::String& profileId, const juce::String& newName) {
         handleRenameRequested(profileId, newName);
@@ -271,8 +272,11 @@ void MidiRemotePanelComponent::refreshActivity() {
             if (step.litControlId.isNotEmpty())
                 litControlIds.push_back(step.litControlId);
         }
-        if (const auto* control = synth::midi::findControlForEvent(profile->controls, event))
+        if (const auto* control = synth::midi::findControlForEvent(profile->controls, event)) {
+            if (event.kind == synth::midi::RemoteEventKind::absolute)
+                lastHardwareValue_[profile->id + "/" + control->id] = juce::jlimit(0.0f, 1.0f, event.value);
             controllerSurface_.noteActivity(control->id, event.kind, event.value);
+        }
     });
 
     commitDetectStep(working, profileChanged, litControlIds, selectedEvents);
@@ -347,7 +351,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     if (profile == nullptr || doc_ == nullptr || audioEngine_ == nullptr) {
         controllerSurface_.setControls({}, {});
         pageStrip_.setPages(1, 1);
-        pageStrip_.setVisible(false); // no controller -> no pages to switch or add
+        pageStripFade_.setShown(false); // no controller -> no pages to switch or add
         return;
     }
 
@@ -356,7 +360,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     const int effectivePageCount = remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(profile->id) : 1;
     pageStrip_.setPages(effectivePageCount, activePage);
-    pageStrip_.setVisible(true);
+    pageStripFade_.setShown(true);
 
     // The engine's own transient bindings, for display only -- fetched once per rebuild
     // rather than per control below (see docs/control/midi-remote.md#focus-bank).
@@ -408,6 +412,10 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                                     ? juce::jlimit(0.0f, 1.0f,
                                                    static_cast<float>((paramValue - rangeMin) / (rangeMax - rangeMin)))
                                     : 0.0f;
+                            // The knob's last reported position beats the parameter-implied one.
+                            if (const auto hw = lastHardwareValue_.find(profile->id + "/" + control.id);
+                                hw != lastHardwareValue_.end())
+                                cell.initialValue = hw->second;
                         } else {
                             // Relative encodings never range-map (RemoteEngineApply.cpp adds event.value
                             // straight onto param->getValue()) -- the parameter's own value IS the
@@ -468,8 +476,8 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
 
 void MidiRemotePanelComponent::refreshInspectorForSelection() {
     const bool orphan = isOrphanSelected();
-    orphanView_.setVisible(orphan);
-    inspector_.setVisible(!orphan);
+    orphanFade_.setShown(orphan);
+    inspectorFade_.setShown(!orphan);
     if (orphan) {
         toolbar_.setControlSelected(false);
         juce::String name;

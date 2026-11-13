@@ -12,20 +12,32 @@ vertical line in `theme.colors.accent` (literal cyan fallback with no themed LnF
 confinement contract, the paint-count test pattern it introduces, and why a third exception is not
 free are all in `docs/layout/animation.md` — read that before touching this component.
 
-## Two timers
+## Two frame sources
 
 One of them is borrowed:
 
 | Rate | Owner | What it does |
 |---|---|---|
 | 10 Hz | `MainComponent::timerCallback` (an existing timer, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
-| 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | Re-reads the transport and requests the movement strip — **only while playing** |
+| Display rate | `TimelinePlayheadOverlay`'s own `juce::VBlankAttachment` | Re-reads the transport, extrapolates the position and requests the movement strips — **only while playing** (or a clip preview, or a locate glide) |
 
-The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
-transition and calls `startTimerHz` / `stopTimer`. The 30 Hz tick deliberately does *not* stop
-itself when it notices a stopped transport — one owner is easier to reason about, and a tick after
-playback stopped simply finds an unchanged x and requests nothing. Worst case the timer runs for
-one extra poll interval, repainting nothing.
+The low-rate poll is the **sole** owner of the frame source's lifecycle: it sees the play/stop
+transition and creates or drops the attachment. A frame deliberately does *not* stop
+itself when it notices a stopped transport — one owner is easier to reason about, and a frame after
+playback stopped simply finds an unchanged x and requests nothing. Worst case the frames run for
+one extra poll interval, repainting nothing. The one exception is a locate glide on a stopped
+transport: its frames end themselves when it lands.
+
+**Position between blocks.** The transport publishes its position once per audio block, together with the wall-clock time
+it was published at (`PositionSnapshot::publishedAtMs`). Every snapshot goes through `PlayheadExtrapolator`
+(`Source/UI/Timeline/PlayheadExtrapolator.h`) before the wrap compensation sees it: while playing the position is advanced by the
+time since it was published (at most 25 ms of beats, never past the loop end, never going back) so a display faster than the
+blocks still moves the line by about the same step each frame. A locate, a loop wrap, a loop change or a stop resets it to
+the published position. The origin of a Smooth follow stays on whole *logical* pixels (every timeline painter rounds to
+those), so the step per frame varies by at most one pixel.
+
+**Frame stats.** Test mode reads `frameCount` and `medianFrameIntervalMs` (the last 64 frames) of the current or last frame
+run from a hidden child of the overlay (id `timelinePlayhead`).
 
 ## What the low-rate poll also does
 
@@ -42,6 +54,22 @@ its bar spacing from it. The first poll seeds the struct instead of counting as 
 
 The drawn beat is `ppq - outputLatencySeconds * (bpm / 60)`, clamped `>= 0`, so the line matches
 what is being **heard** rather than the block currently being rendered.
+
+**At a loop wrap.** The transport folds back to the loop start as soon as the rendered block crosses
+the loop end, while the heard audio is still the output latency short of it. `PlayheadWrapCompensation`
+(fed every snapshot) notices the position falling from within latency (plus the poll slack) of the loop
+end to just after the loop start and enters a *wrapped* state: heard beats below the loop start are
+drawn as `heard + (loopEnd - loopStart)`, so the line reaches the loop end before it turns around and
+never dips below the loop start. The state ends once the heard beat reaches the loop start, on stop, on
+a locate (the position moving backwards or jumping ahead) and when the loop range changes. A fresh play
+from the loop start never enters it. The follow-playhead path and the piano roll's local playhead read
+`getDrawnBeat()`, so they inherit it.
+
+**At a locate.** A jump while playing (Option+1/2 to a loop locator, a marker jump, a ruler click) puts the transport on
+its target, and the heard audio reaches it one output latency later. The snapshot carries `locateCount` (locates the audio
+thread has applied) and `lastLocateBeat`; when the count changes, `PlayheadWrapCompensation` holds the line exactly on
+`lastLocateBeat` until the heard beat reaches it, then plain latency drawing resumes. The hold also ends on stop, so the
+line is never drawn the latency before a marker the cursor was sent to.
 
 `outputLatencySeconds` comes from `AudioEngine::getOutputLatencySamples()` — the open output
 device's `getOutputLatencyInSamples()`, `0` in Hosted mode and `0` when no device is open, which is
@@ -69,11 +97,25 @@ restricts; asking for a repaint is.
 A toggle button sits immediately next to the snap toggle in the panel's snap/tool strip
 (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see
 [`layout/icons.md`](../layout/icons.md)). `kFollowPlayheadButtonWidth` is 30 px; the snap
-toggle's `kSnapToggleButtonWidth` is **46 px**, wide enough for the word `"Snap"`.
+toggle is an inline `ToolbarButton` ([inline buttons](../layout/chrome.md#inline-buttons)): a 30 x 24 amber chip with the
+word `"Snap"` beside it (the chip alone when "Show button labels" is off), as wide as `getPreferredWidth()` plus a 4 px
+margin, lit while snapping is on.
+The glyph is the playhead with two chevrons chasing it. Off, it is muted ink; on, it is the
+theme's dark `iconInk`, because a toggled-on `DrawableButton` is filled solid accent and `iconInk`
+is the glyph colour for a light fill (the same rule the toolbar buttons' lit state follows). The
+glyph is never the accent itself: it vanished on the accent fill (FRO618). A paint test checks the
+glyph/fill contrast (>= 3:1) in every built-in theme, on and off.
 
 **The button is labelled with the VERB, not with its key.** A button that spells its own letter
 goes stale the moment a user rebinds it, so the live key is in the tooltip, resolved through
-`synth::shortcutHintFor`.
+`synth::shortcutHintFor`. The tooltip follows the Draw pen's pattern: the name and the toggle key first, then the
+mode key, then the menu: "Follow playhead, Smooth mode (F) · switch mode: Ctrl+F · right-click for the mode menu"
+(the mode part is left out while the mode key is unbound).
+
+**A key press says what it did.** F, Ctrl+F (Ctrl+Alt+F off the Mac) and J (snap, in the panel and in the piano roll)
+call `TimelinePanelComponent::onShowMessage`, which `MainComponent` wires to its toast
+([chrome](../layout/chrome.md#toast)): "Follow playhead on" / "Follow playhead off", "Follow: Smooth" / "Follow:
+Page", "Snap on" / "Snap off". A click on a button says nothing; it is on screen already.
 
 Backed by the boolean preference `"timelineFollowPlayhead"`, loaded and persisted the same way the
 snap-enabled flag is. Turning it on page-flips the panel's view horizontally so the playhead never
@@ -88,10 +130,43 @@ repaint in `updateFromTransport` uses — no new timer — and is gated on **all
 
 Any one of the four false costs zero work.
 
+**Scrolling by hand turns it off.** A sideways scroll the user makes (wheel, trackpad swipe,
+Shift+wheel, the eased wheel tween; all of them end in `applyWheelScroll`) calls
+`setFollowPlayheadEnabled(false)`, so the flag, the button, the persisted preference and the
+roll's mirror all go off together, rather than the next 10 Hz poll snapping the view back to the
+playhead. Follow's own page-flip (`pageViewToShowBeat`) never goes through that path and leaves it
+on; vertical scroll and zoom do not touch it. Press the button or F to follow again. (The roll's
+own manual scroll is different: it only suspends the roll's follow until re-armed, see below.)
+
 When the latency-compensated drawn playhead beat moves outside `[firstVisibleBeat, firstVisibleBeat
 + visibleBeats)`, the view re-centres so the beat lands **10% into the new page** rather than flush
 against its edge — landing exactly on the edge would immediately re-trigger the same flip on the
 very next poll once the beat advances one more sample.
+
+### Follow modes
+
+Follow has a mode, Page or Smooth (`FollowMode`, `Source/UI/Timeline/FollowPlayhead.h`, which holds the pure rule
+`followViewOrigin(mode, pointPercent, playheadBeat, currentOrigin, visibleBeats)` both views use):
+
+- **Page** (the default, and what a missing setting means) is the page flip above.
+- **Smooth** scrolls the view so the playhead stays pinned at `pointPercent` of the visible width (50 by default, 10 to 90). Near
+  the start of the song the origin stops at beat 0, so the playhead travels to the pin first. The panel moves the view from
+  the playhead overlay's own display-rate frames (`onDrawnBeat`, called before the line's x is read), not the 10 Hz poll, so the line
+  does not drift and snap; the 10 Hz poll runs the same function, which does nothing when the view is already there. The same four
+  gates apply. The origin is snapped to a whole pixel (`snapOriginToWholePixels`), so every grid line and clip edge, each
+  rounded to a pixel on its own, steps by the same whole number of pixels per frame; a fractional origin made them round at
+  different frames and the grid shook. A frame that lands on the pixel the view already has repaints nothing.
+
+Ctrl+F (`timelineFollowModeCycle`; Ctrl+Alt+F off the Mac) switches the mode without touching on/off, right-clicking the
+button (or Shift+F10 on it) opens a Page / Smooth menu with a check on the current mode (`FollowPlayheadButton`; a right-click
+never toggles), and the tooltip names the mode and the keys. The mode is stored under `"timelineFollowMode"` (`"page"` / `"smooth"`)
+and the point under `"timelineFollowPointPercent"`, both written with the on/off flag. The point is the Preferences
+row **Follow playhead point** (Timeline category, a digits-only field committed on Return or focus loss); the settings broadcast
+carries it into the panel and the roll live (`MainComponent::applyTimelineTransportPreferences`).
+
+The roll gets the mode through `PianoRollComponent::setFollowStyle(mode, point)`, a separate setter that never clears the
+manual-scroll latch below; its Smooth branch runs in `setPlayheadBeat`, which already receives the beat every frame. Both
+modes honour the latch. The timeline's own sideways scroll still turns follow off entirely, in both modes.
 
 **Roll-local variant.** `PianoRollComponent::setFollowPlayhead(bool)` mirrors the same feature
 inside the roll's own horizontal view (`rollView_`), independent of the panel's — the roll has its
@@ -124,4 +199,5 @@ back.
 
 Tests: `Tests/UI/Timeline/TimelinePlayheadTests.cpp`,
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp`,
+`Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowModeTests.cpp` (the rule, Ctrl+F, persistence, Smooth, the menu),
 `Tests/UI/PianoRoll/PianoRollMouseTests.cpp` (`PianoRollFollowPlayheadTest`).

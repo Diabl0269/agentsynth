@@ -1,0 +1,46 @@
+# Esc during a mouse drag abandons it instead of committing on release.
+#
+# What a user does: starts a new project, adds an Oscillator track, double-clicks the empty lane to make a clip (and closes the piano roll it opens), presses
+# on the clip's right edge and drags it wider (the clip shows its new length while the button is held), presses Esc, then
+# lets go. The clip is back at its old length, Undo has nothing from the drag (the clip is still the one undo step that
+# made it), and the selection was not cleared by the Esc. A second drag without Esc does widen the clip.
+record: true
+save_project: clip-edge-drag-esc
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  # The double-click opened the piano roll; Esc goes back to the clip lane.
+  - key: {keys: escape}
+  - wait: {}
+  - screenshot: {name: 1-clip}
+  # Grab the clip's right edge (clip at beat 0, 4 beats of 24 px: right edge at x 96) and widen it by two beats.
+  - mouseDown: {id: timelineClipLaneArea, x: 95, y: 50}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 120, y: 50}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 144, y: 50}
+  - screenshot: {name: 2-mid-drag}
+  - key: {keys: escape}
+  - screenshot: {name: 3-after-escape}
+  - mouseUp: {id: timelineClipLaneArea, x: 144, y: 50}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 1000}
+  - screenshot: {name: 4-after-release}
+  # The Esc was spent on the drag: the clip is still selected, and Undo removes the clip itself (the only step).
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipLengths: "", within_ms: 2000}
+  - key: {keys: cmd+shift+z}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  # The same drag without Esc widens the clip.
+  - mouseDown: {id: timelineClipLaneArea, x: 95, y: 50}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 144, y: 50}
+  - mouseUp: {id: timelineClipLaneArea, x: 144, y: 50}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:6.000", within_ms: 2000}
+  - screenshot: {name: 5-widened-without-escape}

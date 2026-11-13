@@ -6,11 +6,18 @@
 #include "Mixer/PeakMeterLatch.h"
 #include "MixerColumnHeader.h"
 #include "MixerFader.h"
-#include "MixerInsertList.h"
+#include "MixerInsertList/MixerInsertList.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "MixerRowsMotion.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/AutomatedMarker.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerSections/MixerSectionControls.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -54,18 +61,36 @@ public:
      *  what the meter and clip/peak readout read once Master has >= 1 insert. Null falls back to Master's own
      *  pre-insert latch. Survives unbindFromGraph(): it points at the engine, not into the graph. */
     std::function<float(int leg)> outputPeakProvider;
-    /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas / onMutated. */
+    /** Fires with Master's uuid when the header's "Edit on canvas" button is activated. */
     std::function<void(const juce::String&)> onEditOnCanvas;
+    /** An insert row's "Show on canvas" (or a double-click on it): the module's uuid; see MixerColumnComponent. */
+    std::function<void(const juce::String&)> onFocusModule;
+    /** Forwarded from the insert list after a mutation. */
     std::function<void()> onMutated;
     /** Fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
      *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
     std::function<void()> onLiveStateChanged;
 
+    /** The row list the panel's keyboard row focus walks (MixerPanelRowKeyboard.cpp). */
+    MixerInsertList& getInsertList() noexcept { return insertList_; }
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
+    MixerRowsMotion& getRowsMotionForTest() noexcept { return rowsMotion_; }
+    /** Plays the insert-row motion in a headless run, where the column is never showing. */
+    void forceRowMotionForTest(bool on) noexcept { rowMotionForced_ = on; }
+    MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
+    /** Sets the callback for a right-click on the header (the pin menu). */
+    void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
+    MixerSectionViewport& getInsertViewportForTest() noexcept { return insertViewport_; }
+
+    /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */
+    void setSectionLayout(MixerSectionLayout& layout);
+    /** Repaints the section dividers after the layout's hover/drag state changed. */
+    void repaintSectionDividers();
 
     /** One 10 Hz tick, same driving chain as MixerColumnComponent::refreshMeter(). */
     void refreshMeter(float elapsedSeconds);
 
+    MixerFader& getFaderForTest() noexcept { return fader_; }
     MixerMeter& getMeterForTest() noexcept { return meter_; }
     MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
     void resetMeterReadout() { meterReadout_.reset(); }
@@ -81,6 +106,8 @@ public:
 
     /** The fader nudged one undo step, or false when nothing is bound. */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+    /** The fader nudge keys' text for the fader's tooltip. */
+    void setFaderShortcutText(const juce::String& keys) { fader_.setNudgeShortcutText(keys); }
 
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
@@ -99,6 +126,8 @@ public:
     // see MixerColumnComponent's sibling pattern for the coverage-table entries with more than
     // one) ----
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
+    /** Test/inspection: whether the fader's parameter was automated as of the last tick. */
+    bool isFaderAutomatedMarkerShownForTest() const { return faderAutomated_.fade.isAutomated(); }
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
     /** The fader, for the pick-target overlay. */
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
@@ -111,17 +140,20 @@ public:
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- see
      *  MixerColumnComponent::setShowContextMenuHookForTest's comment. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     /** The project's pan-law control, next to the mute button -- the mixer has no other
      *  project-settings surface (see docs/mixer/mixer.md#pan-law). */
+    juce::TextButton& getPanLawButton() noexcept { return panLawButton_; }
     juce::TextButton& getPanLawButtonForTest() noexcept { return panLawButton_; }
     /** Same test-seam idiom as setShowContextMenuHookForTest, for the pan-law button's own menu. */
     void setShowPanLawMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showPanLawMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showPanLawMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     /** The cheap per-strip refresh for Master -- mute button + pan-law label, no rebuild.
@@ -130,6 +162,7 @@ public:
     void refreshLiveVisuals();
 
 private:
+    void setInsertEntries(const synth::MixerColumn& column);
     void refreshPanLawButton();
     void showPanLawMenu();
     void setPanLaw(synth::MixerPanLaw law);
@@ -140,6 +173,11 @@ private:
      *  refreshMeter()'s existing 10 Hz tick so the breathing outline actually animates. */
     void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
+    /** The automation-lane marker on the fader (MixerMasterColumnAutomationMarker.cpp). */
+    void refreshAutomatedMarkers();
+    void paintAutomatedMarkers(juce::Graphics& g);
+    synth::ui::AutomatedControlState faderAutomated_;
+    std::unique_ptr<synth::ui::AutomatedMarkerTicker> automatedTicker_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
@@ -157,7 +195,7 @@ private:
     // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     // True once setColumn() saw >= 1 insert -- switches the meter to outputPeakProvider.
@@ -167,7 +205,17 @@ private:
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     MixerColumnHeader header_;
+    juce::String editOnCanvasTarget_;
     MixerInsertList insertList_;
+    MixerRowsMotion rowsMotion_{*this};
+    std::vector<synth::MixerInsertEntry> shownInserts_; // what insertList_ was last given
+    bool rowMotionForced_ = false;
+    MixerSectionLayout ownSectionLayout_; // until setSectionLayout() hands over the panel's
+    MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
+    MixerSectionViewport insertViewport_;
+    std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
+    MixerCollapsedSection insertsCollapsed_;
+    MixerSectionSwap insertsSwap_{&insertViewport_, insertsCollapsed_};
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
@@ -176,7 +224,7 @@ private:
     // comment on where this lives and why.
     juce::TextButton panLawButton_;
     std::function<void(juce::PopupMenu&)> showPanLawMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
     bool keyboardFocused_ = false;
 

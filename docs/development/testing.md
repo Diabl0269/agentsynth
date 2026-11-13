@@ -44,7 +44,9 @@ that env var, so a shipped binary can never be redirected this way. Overriding `
 work for this: on macOS, JUCE expands `~` via the OS user record
 (`File::getSpecialLocation(userHomeDirectory)`), not `getenv("HOME")`.
 
-A local unsharded run needs no env var and behaves exactly as before this ticket. To reproduce the
+A local unsharded run needs no env var: without it `Tests/TestMain.cpp` creates a fresh private
+settings folder under the system temp directory for that run and deletes it at exit, so a local run
+never touches the developer's real settings file either. To reproduce the
 sharded CI step locally: run `./Tests` 3 times concurrently with `GTEST_TOTAL_SHARDS=3`,
 `GTEST_SHARD_INDEX` set to 0/1/2 and `AGENTSYNTH_SETTINGS_DIR` set to 3 different directories — see
 the macOS job's "Run Tests" step in `.github/workflows/ci.yml` for the exact script.
@@ -60,6 +62,8 @@ cmake --build build
   default a build skips them to save time.
 - **`ENABLE_COVERAGE`** is a separate opt-in used by the Ubuntu CI job and `scripts/coverage.sh`.
 - **`ENABLE_AI_HARNESS`** defaults `OFF` — see [ai-harnesses.md](ai-harnesses.md).
+- **`AGENTSYNTH_PCH`** defaults `OFF` — precompiled JUCE headers, turned on only by the three CI
+  build jobs. Leave it off locally: see [ci-pipeline.md](ci-pipeline.md#optimizations).
 - **`ENABLE_PLUGIN`** defaults `ON`, so the plain `cmake --build build` above also builds
   `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same
   `AudioEngine`/`MainComponent` code the standalone app uses (see
@@ -95,6 +99,48 @@ cmake --build build
 Two tripwire suites then apply automatically: a new audio-output module must be classified in
 `ModuleAdoptionTests.cpp`, and a new float parameter is swept by `AutomationZipperTest` without any
 edit — both fail the build until the module is accounted for.
+
+## The shared saved project
+
+`Tests/fixtures/saved-project/SavedProjectFixture.h` (header-only, `synth::test::SavedProjectFixture`) is the real saved
+project to open in any test of code that looks up tracks, macros or cables: a bug that only shows after a save and reopen
+(nested macros, a folded or open box, a track bound inside a parent) does not show on a fresh synthetic graph. A real
+`MainComponent` builds it through the app's own flows and `saveProjectForTest` writes it, so the file cannot drift from
+what the app saves. It holds three audio tracks, each in its channel macro (Audio 1's folded with an LFO and an ADSR
+inside, Audio 2's folded and nested under "Nested parent" with an Oscillator, Audio 3's open) and "Plain group", a folded
+macro no track plays (Oscillator, Filter and a Hosted Plugin stand-in from `StubPluginInstance.h`). Use
+`project.open()` for a `MainComponent` with it loaded, and `trackMacroId`, `macroIdNamed` and `memberUuidOfType` to find
+things after the load. Extend it there (one more shape in `build`) rather than building a second project; first user:
+`UI/Timeline/TimelineTrackDeleteMacroTests.cpp`.
+
+## Waiting for async work
+
+Never pump the message loop for a fixed time and then assert. `runDispatchLoopUntil(50)` followed by
+an `EXPECT_` passes only when the work happens to land inside those 50 ms: on a loaded runner it
+fails, and on a fast one it wastes the rest. Poll for the condition with `synth::test::waitUntil`
+(`Tests/TestWait.h`) and keep the assertion after it, so a timeout still reports the failing state:
+
+```cpp
+synth::test::waitUntil([&] { return mc.isProjectDirty(); });   // pumps in 10 ms steps, up to 2 s
+EXPECT_TRUE(mc.isProjectDirty());
+```
+
+`waitUntil` always pumps once before the first check, so a message posted just before the call is
+delivered even if the condition already holds. For a "nothing may happen" check there is no
+condition to wait for: keep a fixed pump and list the site in `scripts/fixed-waits-baseline.txt`
+with a one-line reason.
+
+`scripts/check-fixed-waits.sh` enforces this (Lint job, pre-commit hook and `ci-local.sh`;
+`scripts/tests/check-fixed-waits.test.sh` covers the checker). It flags
+`runDispatchLoopUntil(<literal or k-constant>)`, or a one-line wrapper of it such as `pump()` /
+`settle()` (a wrapper in a `Tests/` header applies to the files that include it), in `Tests/` when an
+`EXPECT_`/`ASSERT_` follows within 8 code lines in the same block. A call inside a loop whose
+condition checks state (`for (...; i < 50 && !done; ++i) pump();`, `while (!x)`, `do ... while`) is the
+poll pattern and is not flagged. The baseline is a strict ratchet keyed by path and code line, not
+line number: a new site fails, an entry whose site was converted is stale and fails until
+`bash scripts/check-fixed-waits.sh --update` drops it (it never adds one). `--list` prints every
+site ignoring the baseline. The baseline entries are the remaining sites to convert; convert one by
+replacing the pump with a `waitUntil` on the state the next assertion reads.
 
 ## Known flaky patterns
 
@@ -146,3 +192,5 @@ edit — both fail the build until the module is accounted for.
 - **Update the references** after a deliberate DSP change (a better filter algorithm, say):
   `bash scripts/update-reference.sh`
 - **Listen**: `scripts/play-reference.sh <filename>` (requires `ffplay` or `aplay`).
+
+To look at the running app instead of asserting, the in-app test mode drives a dev build by script: see [`test-mode.md`](test-mode.md).

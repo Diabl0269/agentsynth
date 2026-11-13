@@ -1,0 +1,1000 @@
+#pragma once
+
+#include "Mixer/TrackPresetManager.h"
+#include "Plugin/Hosting/HostedPluginBackend.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/ColourSwatchButton.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/DragCursor.h"
+#include "UI/Layout/EdgeResizeHandle.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/AutomationLanes/LaneTarget.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
+#include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
+#include "UI/Timeline/ChannelChipComponent.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
+#include "UI/Timeline/TrackAudioInputSurface.h"
+#include "UI/Timeline/TrackChannelLinkSurface.h"
+#include "UI/Timeline/TrackDrumMachineButton.h"
+#include "UI/Timeline/TrackMonitorButton.h"
+#include "UI/Timeline/TrackShowModuleButton.h"
+#include "UI/Timeline/TrackVoiceToggle.h"
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+
+namespace juce {
+class ApplicationProperties; // only a pointer crosses this header
+}
+
+class ShortcutManager; // non-owning, may-stay-null pointer, like TimelinePanelComponent's own copy
+
+// TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
+//
+// Owns no timeline state: the TimelineDoc is the truth for every value it shows (name, colour,
+// mute/solo/arm, binding), and every edit it makes goes back through the doc via its host so it
+// lands on the undo stack. It is rebuilt/refreshed only when the doc notifies — there is no timer
+// here and no per-frame repaint (see CLAUDE.md's repaint discipline).
+namespace synth::ui {
+struct KitRows; // the Drum Kit rows (UI/DrumMachine/DrumLanes.h); only a reference crosses this header
+
+/**
+ * @brief What a track header needs from the app to resolve and re-bind its track's "Track In" node.
+ *
+ * The header itself is deliberately graph-free: it never sees a juce::AudioProcessorGraph, so it
+ * stays headless-testable against a stub. MainComponent is the real implementor — it is the only
+ * object that owns the doc, the graph and the undo manager at once.
+ */
+struct TrackHeaderHost {
+    virtual ~TrackHeaderHost() = default;
+
+    /** One entry in the binding chip's menu: a live "Track In" node the track could bind to. */
+    struct BindingOption {
+        juce::String uuid;
+        juce::String displayName;
+    };
+
+    /** Live "Track In" nodes that are NOT bound to some other track (the track's own current
+     *  binding is included, so the menu always shows where it currently points). */
+    virtual std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId forTrack) = 0;
+
+    /** Display name for a bound node's uuid, or an empty string when the uuid resolves to nothing
+     *  in the live graph (the "Missing" / orphaned case). */
+    virtual juce::String getNodeDisplayName(const juce::String& uuid) = 0;
+
+    /** A parameter's display name, or empty when it doesn't resolve (callers fall back to paramId). */
+    virtual juce::String getParameterDisplayName(const juce::String& /*uuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+
+    /** A lane value (in the lane's own units) as its parameter displays it, or empty when the
+     *  parameter doesn't resolve (callers fall back to the number). */
+    virtual juce::String getParameterValueText(const juce::String& /*uuid*/, const juce::String& /*paramId*/,
+                                               double /*value*/) {
+        return {};
+    }
+
+    /** The lane value (in the lane's own units) a typed text stands for, parsed by the parameter itself ("-12" for
+     *  a dB parameter), or nullopt when the parameter doesn't resolve. */
+    virtual std::optional<double> getParameterValueFromText(const juce::String& /*uuid*/,
+                                                            const juce::String& /*paramId*/,
+                                                            const juce::String& /*text*/) {
+        return std::nullopt;
+    }
+
+    /** One-click re-bind. NEVER called automatically: a binding is only ever changed by an explicit
+     *  user choice from the chip menu. Matching an orphaned track back onto a node BY NAME is
+     *  forbidden — two nodes can share a display name and a silent re-bind would point a track at
+     *  someone else's instrument (see docs/timeline/tracks.md#a-binding-is-never-re-established-automatically). */
+    virtual void bindTrackTo(synth::TrackId track, const juce::String& uuid) = 0;
+
+    /** The chip menu's "New Track In node" entry: creates a node and binds this track to it, as one
+     *  compound (graph + timeline) undo step. */
+    virtual void createAndBindTrackInNode(synth::TrackId track) = 0;
+
+    /** Chip click on a track whose binding resolves: highlight that node in the graph editor's
+     *  selection. A highlight only — the canvas is not scrolled and focus is not moved. */
+    virtual void selectNodeInGraph(const juce::String& uuid) = 0;
+
+    /** Cmd+Backspace on a focused row: asks first (unless switched off), then deleteTrack. */
+    virtual void deleteTrackAfterConfirm(synth::TrackId track) { deleteTrack(track); }
+
+    /** Right-click -> "Delete Track": removes the track AND its bound Track In node as one compound undo step. */
+    virtual void deleteTrack(synth::TrackId track) = 0;
+
+    /** Cmd+D / right-click -> "Duplicate Track": a copy of the track directly below it with its modules, clips and
+     *  automation, as ONE compound undo step. Non-pure inert default so every existing implementer keeps compiling. */
+    virtual void duplicateTrack(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** The tracks a command clicked on `clicked` acts on (docs/timeline/tracks.md#selecting-several-tracks): the
+     *  whole selection, in timeline order, when `clicked` is one of two or more selected tracks, else just `clicked`
+     *  (a track outside the selection is acted on alone, as in Finder and Logic). */
+    virtual std::vector<synth::TrackId> tracksActedOnBy(synth::TrackId clicked) const { return {clicked}; }
+
+    /** Runs `edits` -- several single-track edits, each of which records its own undo step -- as ONE undo step. */
+    virtual void performTrackGroupEdit(const std::function<void()>& edits) {
+        if (edits)
+            edits();
+    }
+
+    /** Cmd+C on a row whose track is one of several selected: remembers those tracks (in timeline order) for
+     *  pasteTracks. Inert by default. */
+    virtual void copyTracks(const std::vector<synth::TrackId>& tracks) { juce::ignoreUnused(tracks); }
+
+    /** True while copyTracks has remembered tracks that still exist. */
+    virtual bool canPasteTracks() const { return false; }
+
+    /** Cmd+V on a row: a copy of every remembered track, in order, directly below `after`, as ONE undo step. */
+    virtual void pasteTracks(synth::TrackId after) { juce::ignoreUnused(after); }
+
+    /** Runs a doc mutation as ONE undoable timeline step. Everything the header writes (name,
+     *  colour, mute, solo, arm) goes through here rather than touching the doc directly, so the
+     *  header never has to know an AppUndoManager exists. */
+    virtual void performTrackEdit(const std::function<void()>& mutation) = 0;
+
+    /** The "Add Track" button's MIDI entry. Lives on this interface rather than on a separate callback
+     *  so the whole header column talks to the app through one seam. */
+    virtual void addMidiTrack() = 0;
+
+    /** The "Add Track" button's Audio entry: a "Track Audio" node wired into the master bus,
+     *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of addMidiTrack(). */
+    virtual void addAudioTrack() = 0;
+
+    /** The "Add Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
+     *  "Wavetable", "Sampler" or "Drum Kit") wired as Track In -> instrument -> default chain (EQ/Compressor
+     *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
+     *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (Oscillator/
+     *  Wavetable only, ignored for Sampler and Drum Kit, which have no "poly" parameter) turns the new instrument's
+     *  poly mode on before the rest of the wiring runs, so the poly-envelope auto-wire picks
+     *  it up. */
+    virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
+
+    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: true when at least one track's
+     * chain still reaches the output without passing through a ChannelStripModule — the "Add Track" menu's "Create
+     * Channels" entry is enabled exactly when this is true. Non-pure with an inert `false` default so every existing
+     * TrackHeaderHost implementer (test stubs included) keeps compiling. */
+    virtual bool hasTracksNeedingChannels() const { return false; }
+
+    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: the "Add Track" menu's "Create
+     * Channels" entry — wraps every channel-less track's chain into a mixer channel (docs/mixer/mixer.md's factory
+     * default: EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every track it
+     * touches. A track that already has a channel is left untouched; a no-op (nothing pushed to the undo stack) when
+     * hasTracksNeedingChannels() would return false. Non-pure with an inert no-op default so every existing
+     * TrackHeaderHost implementer keeps compiling. */
+    virtual void createChannelsForExistingTracks() {}
+
+    /** docs/mixer/mixer.md#make-channel-and-shared-modules: true when the header menu's "Make Channel"
+     * would build something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges into a
+     * shared module that has none). Non-pure with an inert `false` default, for the same reason
+     * `hasTracksNeedingChannels()` above uses one. */
+    virtual bool canMakeChannelForTrack(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return false;
+    }
+
+    /** docs/mixer/mixer.md#make-channel-and-shared-modules: the header menu's "Make Channel" — gathers
+     * the track's exclusive chain into a channel macro with the default Gate -> EQ -> Compressor -> Channel Strip
+     * -> Master chain as ONE undo step (a merge point becomes its own bus channel). A no-op when
+     * canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
+    virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** Instrument-capable hosted plugins for the "Add Track -> Instrument -> Plugin"
+     *  submenu — every scanned plugin whose juce::PluginDescription::isInstrument is true, sorted by
+     *  name like the library sidebar's own list (effects are never offered here, and neither is this
+     *  app's own VST3/AU build — see MainComponent::getInstrumentPluginOptions). A pure read of
+     *  whatever PluginScanService currently knows — never triggers a scan itself; see
+     *  ensureInstrumentPluginsScanned() below for that. Non-pure with an inert empty-list default so
+     *  every existing TrackHeaderHost implementer keeps compiling unchanged (same reasoning as
+     *  getMidiDestinationOptions below). */
+    virtual std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const { return {}; }
+
+    /** True while a plugin scan is running. The menu shows a disabled "Scanning for plugins..." row
+     *  instead of an empty submenu while this holds and getInstrumentPluginOptions() above is still
+     *  empty (once it finds anything, whether or not the scan is still going, the real rows show
+     *  instead — same "list is visible immediately, regardless of scan state" contract
+     *  PluginScanService::ensureScanned documents). Non-pure default: never scanning. */
+    virtual bool isPluginScanInProgress() const { return false; }
+
+    /** Kicks off (or no-ops past the first call this session — see PluginScanService::
+     *  ensureScanned) the scan that populates getInstrumentPluginOptions() above. Called once when
+     *  the "Add Track" menu opens, never on every keystroke or click. MainComponent delegates to its
+     *  own maybeStartEagerPluginScan(), so opening this menu inside a hosted DAW build never
+     *  re-launches the host binary — the same guard the eager startup scan and the library
+     *  sidebar's manual "Scan for plugins..." row both already honour. Non-pure no-op default. */
+    virtual void ensureInstrumentPluginsScanned() {}
+
+    /** "Add Track -> Instrument -> Plugin -> <name>" — builds the same
+     *  Track In -> instrument -> default chain (EQ bypassed -> Compressor bypassed -> Channel
+     *  Strip) -> Master flow addInstrumentTrack() builds for a factory instrument, boxed into one
+     *  collapsed macro, as ONE undo step — except the instrument is a hosted plugin instance loaded
+     *  ASYNCHRONOUSLY rather than a factory module created on the spot. Nothing touches the graph or
+     *  the undo stack until the load either succeeds (the whole chain lands in one step) or fails /
+     *  the identity no longer resolves (nothing lands at all — see MainComponent's implementation).
+     *  No ADSR+VCA is added: a hosted synth has its own envelope. Non-pure no-op default, same
+     *  reasoning as the two methods above. */
+    virtual void addInstrumentPluginTrack(const synth::PluginIdentity& identity) { juce::ignoreUnused(identity); }
+
+    /** One parameter with no automation lane yet — an "Add lane..." entry of the panel's lane
+     *  choices (TimelinePanelComponent::collectAutomationLaneOptions). Despite the name, also covers a
+     * ChannelStripModule send slot; `paramId`/ `paramIndex` mean what HostedPluginModule::InstanceParameterInfo
+     * documents for a hosted parameter, and `paramIndex` is unused (-1) for a send slot's plain RangedAudioParameter.
+     */
+    struct PluginLaneOption {
+        juce::String nodeUuid;
+        juce::String paramId;
+        int paramIndex = -1;
+        juce::String label;         // "Module name \xC2\xB7 parameter name", or "Send to <target>" for a send slot
+        juce::String moduleTitle;   // the label's two halves, for the add-automation picker's grouping
+        juce::String parameterName; // ("Send to <target>" for a send slot)
+    };
+
+    /** Every not-yet-automated hosted-plugin instance parameter across the live graph, plus every
+     *  ACTIVE, not-yet-automated ChannelStripModule send slot. Empty when there is nothing
+     *  to offer. */
+    virtual std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const = 0;
+
+    /** Creates (find-or-create — the doc-wide one-lane-per-parameter rule may mean it already
+     *  exists) the automation lane for `option` and returns its id. An invalid id means it could not
+     *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node/parameter no longer
+     *  resolves). */
+    virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
+
+    /** One parameter the "Add automation..." picker can offer for a track: a built-in module's knob
+     *  parameter, a hosted plugin's instance parameter or a Channel Strip send slot. `nodeUuid` is empty for a
+     *  node that has never been automated and so has no uuid yet; `nodeUid` (the graph node id) then finds it,
+     *  and addAutomationLane() assigns the uuid. `paramIndex` means what PluginLaneOption::paramIndex does. */
+    struct AutomatableParameter {
+        juce::uint32 nodeUid = 0;
+        juce::String nodeUuid;
+        juce::String paramId;
+        int paramIndex = -1;
+        enum class Placement { Unspecified, InTrack, Shared }; // add-track.md: where the picker says the module lives
+        Placement placement = Placement::Unspecified;
+        juce::String moduleTitle;   // the picker's group header
+        juce::String parameterName; // the picker's row text
+    };
+
+    /** Every parameter the modules `track` plays offer that has no lane yet, grouped by module (all of a
+     *  module's parameters are adjacent). For the Automation track: the parameters of modules no single
+     *  track plays. Empty for a host that cannot say. Non-pure with an inert default so every existing
+     *  TrackHeaderHost implementer (test stubs included) keeps compiling. */
+    virtual std::vector<AutomatableParameter> getAutomatableParameters(synth::TrackId /*track*/) { return {}; }
+
+    /** Creates `parameter`'s lane on `track` (not on the track the ownership rule would pick) as ONE undo step,
+     *  with the parameter's real range, and returns its id; the existing lane's id when the parameter already
+     *  has one. Invalid when it could not be created. Non-pure with an inert default. */
+    virtual synth::LaneId addAutomationLane(synth::TrackId /*track*/, const AutomatableParameter& /*parameter*/) {
+        return {};
+    }
+
+    /** What a lane needs to be bound to `parameter`: the node's uuid (assigned here for a node that has never been
+     *  automated), the parameter id and index hint, and the parameter's real range. nullopt when the parameter no
+     *  longer resolves. Binds nothing. Non-pure with an inert default. */
+    virtual std::optional<LaneTarget> prepareLaneTarget(const AutomatableParameter& /*parameter*/) {
+        return std::nullopt;
+    }
+
+    /** "Change parameter..." carrying the lane's modulators, as ONE undo step; false when the host can't. */
+    virtual bool retargetLaneWithAttachments(synth::LaneId /*lane*/, const LaneTarget& /*target*/) { return false; }
+    /** "Duplicate" carrying copies of the lane's modulators, as ONE undo step; invalid when the host can't. */
+    virtual synth::LaneId duplicateLaneWithAttachments(synth::LaneId /*lane*/, const LaneTarget& /*target*/) {
+        return {};
+    }
+
+    // ---- Modulators under an automation lane (docs/timeline/automation.md#modulators) ----
+    // Every default answers "nothing", so a stub host needs none of them.
+
+    /** Every routing into the CV jack of `paramId` on `nodeUuid`, in graph order. */
+    virtual std::vector<ModulatorInfo> getModulators(const juce::String& /*nodeUuid*/,
+                                                     const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** getModulators for every (nodeUuid, paramId) in `lanes`, in order. A host answers all of them from one pass
+     *  over the graph, so refreshing every lane does not cost lanes x routings; the default asks lane by lane. */
+    virtual std::vector<std::vector<ModulatorInfo>>
+    getModulatorsForLanes(const std::vector<std::pair<juce::String, juce::String>>& lanes) {
+        std::vector<std::vector<ModulatorInfo>> out;
+        out.reserve(lanes.size());
+        for (const auto& [nodeUuid, paramId] : lanes)
+            out.push_back(getModulators(nodeUuid, paramId));
+        return out;
+    }
+    /** True when the parameter has a CV jack an LFO can be cabled into. */
+    virtual bool canModulate(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) { return false; }
+    /** `value` (in the parameter's own units) as a position in the parameter's normalised 0..1 range, skew included;
+     *  nullopt when the parameter does not resolve. */
+    virtual std::optional<double> normaliseParameterValue(const juce::String& /*nodeUuid*/,
+                                                          const juce::String& /*paramId*/, double /*value*/) {
+        return std::nullopt;
+    }
+    /** "Create custom LFO": turns the movement of lane `lane` between `startBeat` and `endBeat` into a new LFO whose
+     *  Custom wave is that movement, cabled into the lane's parameter, with its amount drawn over the range and the
+     *  lane flattened there, as ONE undo step. False (nothing changed) when the range cannot become an LFO. */
+    virtual bool createCustomLfoFromRange(synth::LaneId /*lane*/, double /*startBeat*/, double /*endBeat*/) {
+        return false;
+    }
+    /** One LFO or envelope output the "Add modulator..." and "Change source..." pickers can offer for a parameter:
+     *  where it lives and what it moves. */
+    struct LfoChoice {
+        juce::String uuid;
+        juce::String name;                 // its card title ("LFO 2")
+        juce::String macroName;            // the innermost macro it sits in; empty on the top level
+        std::vector<juce::String> targets; // what it already moves, "<module> <parameter>" each, graph order
+        bool movesThisParameter = false;   // already cabled into the parameter being asked about
+        int sourceChannel = 0;             // the output a routing reads (an envelope has several)
+        bool isEnvelope = false;           // an envelope output rather than an LFO
+    };
+    /** Adds a new module of factory type `typeName` ("LFO", "ADSR") beside the parameter's card, read from its output
+     *  `sourceChannel` and cabled into the parameter, as ONE undo step; returns its uuid, empty when it could not. */
+    virtual juce::String addNewModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/,
+                                         const juce::String& /*typeName*/, int /*sourceChannel*/) {
+        return {};
+    }
+    /** Every LFO and envelope output in the project, in the source catalogue's order, described for the "Add
+     *  modulator..." and "Change source..." pickers of (`nodeUuid`, `paramId`). */
+    virtual std::vector<LfoChoice> getChangeSourceChoices(const juce::String& /*nodeUuid*/,
+                                                          const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** Cables output `sourceChannel` of the existing LFO or envelope `sourceUuid` into the parameter as ONE undo step
+     *  (no new card; through macro ports when they sit in different macros). False when nothing changed. */
+    virtual bool connectModulator(const juce::String& /*sourceUuid*/, int /*sourceChannel*/,
+                                  const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
+        return false;
+    }
+    /** True when `modulator` can be re-pointed at another source with changeModulatorSource(); the lane's
+     *  "Change source..." item shows only then. */
+    virtual bool canChangeModulatorSource(const ModulatorInfo& /*modulator*/) { return false; }
+    /** Re-points the routing at output `sourceChannel` of the existing LFO or envelope `sourceUuid` as ONE undo
+     *  step; false when nothing changed. */
+    virtual bool changeModulatorSource(const ModulatorInfo& /*modulator*/, const juce::String& /*sourceUuid*/,
+                                       int /*sourceChannel*/) {
+        return false;
+    }
+    /** Creates a new module of factory type `typeName` beside the routing's target card (read from its output
+     *  `sourceChannel`) and re-points the routing at it, the amount lane kept, as ONE undo step; false when nothing
+     *  changed. */
+    virtual bool changeModulatorSourceToNew(const ModulatorInfo& /*modulator*/, const juce::String& /*typeName*/,
+                                            int /*sourceChannel*/) {
+        return false;
+    }
+    /** True when dragging `modulator`'s row onto the lane `destLane` can move it there: the lane's parameter has a CV
+     *  jack and the jack does not already have this source. Asked on every drag event for the drop indicator. */
+    virtual bool canMoveModulatorToLane(const ModulatorInfo& /*modulator*/, synth::LaneId /*destLane*/) {
+        return false;
+    }
+    /** Moves the routing to `destLane`'s parameter (its amount lane keeps its points) and puts its row at `destIndex`
+     *  among that lane's rows, dropping it from the old lane's order, as ONE undo step; false, nothing changed, when
+     *  the move is refused. */
+    virtual bool moveModulatorToLane(const ModulatorInfo& /*modulator*/, synth::LaneId /*destLane*/,
+                                     int /*destIndex*/) {
+        return false;
+    }
+    /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */
+    virtual void removeModulator(const ModulatorInfo& /*modulator*/) {}
+    /** A live parameter's value in its own units (a choice's index, a bool's 0/1); 0 when it doesn't resolve. */
+    virtual float getNodeParameter(const juce::String& /*uuid*/, const juce::String& /*paramId*/) { return 0.0f; }
+    /** Writes a live parameter through the canvas knobs' undo path; see ParameterEditPhase. */
+    virtual void setNodeParameter(const juce::String& /*uuid*/, const juce::String& /*paramId*/, float /*value*/,
+                                  ParameterEditPhase /*phase*/) {}
+    /** Selects the node on the canvas and brings it into view. */
+    virtual void showNodeOnCanvas(const juce::String& uuid) { selectNodeInGraph(uuid); }
+    /** Ctrl+E / the row's button: the track's module, selected and centred on the canvas (no window). */
+    virtual void showTrackModule(synth::TrackId track) { juce::ignoreUnused(track); }
+    /** Ctrl+Cmd+E (Ctrl+Alt+E off the Mac): opens a hosted-plugin track's own window, or closes it if open. */
+    virtual void toggleTrackPluginWindow(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
+     *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
+     *  Non-pure so every existing TrackHeaderHost implementer keeps compiling unchanged. */
+    virtual juce::ApplicationProperties* getAppProperties() { return nullptr; }
+
+    /** One entry in the MIDI-destinations picker: a live MIDI-instrument node the track's bound
+     *  Track In node could (or already does) send MIDI to. */
+    struct MidiDestinationOption {
+        juce::String displayName;
+        juce::uint32 nodeUid = 0;
+        bool connected = false;
+        // Instruments list first in the picker; everything else that consumes MIDI (e.g. an
+        // envelope's gate input) goes under "Other". Derived host-side from isMidiInstrumentType.
+        bool isInstrument = true;
+    };
+
+    /** Every MIDI-instrument node in the live graph the track's bound Track In node could send
+     *  MIDI to, with `connected` reflecting today's actual graph wiring. Empty when the track's
+     *  binding doesn't resolve (unbound or orphaned) — there is nothing to wire from. Non-pure
+     *  with an inert default so every existing TrackHeaderHost implementer keeps compiling. */
+    virtual std::vector<MidiDestinationOption> getMidiDestinationOptions(synth::TrackId) { return {}; }
+
+    /** Connects or disconnects the track's bound Track In node's MIDI output from `nodeUid`, as
+     *  one undoable structural change. A no-op when the track's binding or the target node no
+     *  longer resolves (a stale popup must never crash). Non-pure with an inert default so every
+     *  existing TrackHeaderHost implementer keeps compiling. */
+    virtual void setMidiDestinationConnected(synth::TrackId, juce::uint32, bool) {}
+
+    /** A MIDI input a track can record from: its stable identifier and its display name. */
+    struct MidiInputDevice {
+        juce::String identifier;
+        juce::String name;
+    };
+    /** The MIDI inputs connected now, for the routing pane's Input picker; empty when there are none to pick. */
+    virtual std::vector<MidiInputDevice> getMidiInputDevices() { return {}; }
+
+    /** NOTE AUDITION: one preview note-on (`noteOn` true) or note-off into the track's bound Track In node, so it
+     *  reaches the modules the track's clips play through. Driven by the clip editors' note clicks (forwarded by
+     *  TimelinePanelComponent). A no-op when the binding no longer resolves. Message thread; the event reaches the
+     *  node through a wait-free FIFO. Non-pure with an inert default so test stubs keep compiling. */
+    virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
+
+    /** True for a Drum Kit track: its clips open in the drum machine. `rows`, when given, gets the shown pads. */
+    bool isDrumKitTrack(synth::TrackId t) const { return drumKitRows(t, nullptr); }
+    virtual bool drumKitRows(synth::TrackId, KitRows*) const { return false; } // rows: null for just the yes/no
+    virtual bool anyDrumKit() const { return true; }
+    /** The track's Drum Kit: Show all as a toggle, and Shown for `pads` (hiding asks first); each one undo step. */
+    virtual void toggleShowAllDrumKitPads(synth::TrackId) {}
+    virtual void setDrumKitPadsShown(synth::TrackId, const std::vector<int>& /*pads*/, bool /*shown*/) {}
+
+    /** CLIP PREVIEW (the drum machine's Play clip): loops [startBeat, endBeat) of the track on its Track In while the
+     *  transport is stopped; false when nothing can play it. clipPreviewBeat is NaN when none runs. Inert defaults. */
+    virtual bool startClipPreview(synth::TrackId, double /*startBeat*/, double /*endBeat*/) { return false; }
+    virtual void stopClipPreview(synth::TrackId) {}
+    virtual double clipPreviewBeat(synth::TrackId) { return std::numeric_limits<double>::quiet_NaN(); }
+
+    /** docs/mixer/track-presets.md: true when `track`'s bound node has a channel of its own
+     *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as
+     *  default" pair, same disabled-not-hidden precedent canMakeChannelForTrack states. Non-pure
+     *  with an inert `false` default. */
+    virtual bool canSaveTrackPresetForTrack(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return false;
+    }
+
+    /** Opens the naming prompt and saves `track`'s channel (plus every outside module feeding it
+     *  through a port) as a track preset. A no-op when canSaveTrackPresetForTrack() is false.
+     *  Non-pure no-op default. */
+    virtual void saveTrackAsPreset(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** One-click "Set as default for <type>": saves (auto-naming if nothing was saved yet this
+     *  session) and writes the per-type Preferences -> Mixer default in one step. A no-op when
+     *  canSaveTrackPresetForTrack() is false. Non-pure no-op default. */
+    virtual void setTrackPresetAsDefault(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** A preset-list click in the Add menu: inserts the named saved preset as a new track. Non-pure no-op default. */
+    virtual void addTrackFromPreset(const juce::String&, synth::TrackPresetKind) {}
+
+    /** The "Insert Track Preset from File..." entry: a native chooser for `*.agtrackpreset`, then the same insert path
+     *  as addTrackFromPreset(). Non-pure no-op default. */
+    virtual void addTrackFromPresetFile() {}
+
+    /** "Add Track" -> Bus submenu click. Non-pure no-op default. */
+    virtual void addBusFromPreset(const juce::String& presetName) { juce::ignoreUnused(presetName); }
+
+    /** Opens the Add list under `anchor`; false when the host has none (the panel then opens its track picker). */
+    virtual bool openAddList(juce::Component&, bool /*fromKeyboard*/) { return false; }
+
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: everything the header needs about the
+     * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
+     *  accessor rather than a method per feature, so this interface (and MainComponent, which
+     *  implements it) does not grow one line per channel behaviour; the real surface is
+     *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
+     *  simply has no channel behaviour, and every existing implementer keeps compiling. */
+    virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
+    virtual std::shared_ptr<void> holdTrackPolyStates() { return nullptr; }
+    /** The audio Input row's view of the app's inputs, same one-accessor shape; null for a host with none. */
+    virtual TrackAudioInputSurface* getAudioInputSurface() { return nullptr; }
+
+    /** The mono / poly voice toggle (docs/timeline/tracks.md#the-monopoly-switch): whether the voice graph that starts
+     * at `track`'s source is mono, poly or half and half; `none` (the default) when it has nothing poly-capable, which
+     *  hides the toggle. */
+    virtual TrackPolyState getTrackPolyState(synth::TrackId /*track*/) { return TrackPolyState::none; }
+
+    /** The switch was pressed: sets the whole voice graph of `track` to `poly`, as ONE undo step (the same flow as
+     *  a card's Poly pill, including the question when other tracks' modules would change). Inert by default. */
+    virtual void setTrackPoly(synth::TrackId /*track*/, bool /*poly*/) {}
+
+    /** True while the host is certain to re-read every header before anything is painted (a full reconcile follows
+     *  the current edit), so a doc change in the middle of the edit need not refresh the rows itself. */
+    virtual bool everyHeaderRefreshFollows() const { return false; }
+};
+
+class TimelineTrackHeaderComponent
+    : public juce::Component
+    , public juce::SettableTooltipClient
+    , public KeyboardContextMenuProvider
+    , public KeyboardColourProvider {
+public:
+    // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather
+    // than compressing rows, so this stays constant however many tracks there are.
+    //
+    // The themed source of truth is Theme::Metrics::timelineTrackRowHeight — TimelinePanelComponent::
+    // layoutTrackHeaders() reads that (falling back to this literal when no themed LookAndFeel is
+    // installed, e.g. headless tests), and TimelineClipLaneArea reads the SAME token so a track's
+    // header row and its clip-lane row always land at the same y. Kept equal to the themed default
+    // rather than deleted so a header built directly against a stub host (TimelineTrackHeaderTests.cpp)
+    // still has a sizing constant to build against.
+    static constexpr int kRowHeight = 56;
+
+    // Menu ids. The candidate nodes take 1..N; these sit above any plausible candidate count
+    // (TimelineDoc::kMaxTracks is 256, and there can be no more Track In nodes than that in a sane
+    // patch) so the two ranges can never collide.
+    static constexpr int kNewTrackInNodeMenuId = 1000;
+    // Sits between the candidate range (1..N, N well under 1000 — see kNewTrackInNodeMenuId's own
+    // comment) and kDeleteTrackMenuId's separate context-menu id space, so it can never collide
+    // with either.
+    static constexpr int kMidiDestinationsMenuId = 1001;
+    static constexpr int kDeleteTrackMenuId = 2000;
+    // The header context menu's "Make Channel", same id space as kDeleteTrackMenuId.
+    static constexpr int kMakeChannelMenuId = 2001;
+    // "Save track as preset.../Set as default", same id space.
+    static constexpr int kSaveTrackPresetMenuId = 2002;
+    static constexpr int kSetTrackPresetDefaultMenuId = 2003;
+    // "Add automation...": how a track with no lane yet gets its first one (it has no fold arrow).
+    static constexpr int kAddAutomationMenuId = 2004;
+    static constexpr int kIncreaseHeightMenuId = 2005;
+    static constexpr int kDecreaseHeightMenuId = 2006;
+    static constexpr int kResetHeightMenuId = 2007;
+    static constexpr int kDuplicateTrackMenuId = 2008;
+
+    TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
+
+    synth::TrackId getTrackId() const noexcept { return trackId_; }
+
+    /** Re-reads every displayed value from the doc. Called by TimelinePanelComponent whenever the
+     *  doc notifies — the ONLY thing that refreshes a header. */
+    void refreshFromDoc();
+    /** How many times refreshFromDoc() ran on this row. */
+    int getRefreshCountForTest() const noexcept { return refreshCount_; }
+
+    void paint(juce::Graphics& g) override;
+    // The per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
+    // children for the same reason TimelinePanelComponent's own region-outline override is: the
+    // colour swatch and the M/S/R toggles sit flush against this row's left/right edges, so an
+    // outline drawn in paint() would be hidden under them.
+    void paintOverChildren(juce::Graphics& g) override;
+    void setLift(float lift);
+    void resized() override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    // Whole-row drag-to-reorder (see onRowDragStarted below for why this row only ever
+    // reports raw screen positions rather than trying to reorder anything itself).
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    // Re-derives every colour baked via setColour (the binding chip, M/S/R active states) from the new LookAndFeel,
+    // so a theme switch does not leave them on the theme of the last refreshFromDoc() (applyThemeDerivedColours()).
+    void lookAndFeelChanged() override;
+
+    // ---- keyboard focus + M/S/R shortcuts -------------------------------
+    //
+    // A row is a real focusable leaf (setWantsKeyboardFocus(true) in the constructor, matching
+    // TimelineClipLaneArea/PianoRollComponent's own pattern) rather than a virtual row painted by
+    // one big component (contrast ModuleLibraryComponent's row nav). Up/Down and M/S/R only ever reach
+    // keyPressed() below while THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no
+    // extra "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
+    bool keyPressed(const juce::KeyPress& key) override;
+    /** Opens the same menu a right-click on this row does, anchored at the row. Always handled. */
+    bool showContextMenuForKeyboardFocus() override;
+    bool openColourForKeyboardFocus() override; ///< the swatch's picker, beside the row
+    // The three toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
+    // default) — otherwise clicking M/S/R would silently move real focus off the row and onto the
+    // button, exactly the trap TimelinePanelComponent's own tool-strip buttons avoid the same way.
+    // nameLabel_ is deliberately excluded: it needs its own focus machinery for double-click rename.
+    void focusGained(juce::Component::FocusChangeType cause) override;
+    void focusLost(juce::Component::FocusChangeType cause) override;
+    // Because the toggle buttons opt out of focus (see above) this fires only for the name label
+    // (mid-rename) and the binding chip — repaints the row's outline either way, since
+    // hasKeyboardFocus(true) (what paintOverChildren checks) includes descendants.
+    void focusOfChildComponentChanged(juce::Component::FocusChangeType cause) override;
+
+    /** Non-owning; may stay null (falls back to the hardcoded bare m/s/r defaults, same contract as
+     *  every other surface-resolved key in this app). Forwarded by TimelinePanelComponent to every
+     *  header it owns (setShortcutManager both propagates to existing rows and is re-applied to a
+     *  freshly built one in syncTrackHeaders()). */
+    void setShortcutManager(ShortcutManager* manager) {
+        shortcuts_ = manager;
+        refreshHeightHandleText();
+    }
+
+    /** Fired from keyPressed() on a bare Up/Down that this row claims (direction -1/+1) — the row
+     *  cannot move focus to a sibling itself (it is deliberately host/graph/panel-free), so it hands
+     *  the direction back for TimelinePanelComponent::moveFocusedTrack to resolve. Always returns
+     *  true from keyPressed() regardless of whether this is wired (a row built directly, e.g. by a
+     *  test, still "owns" the key while it has focus). */
+    std::function<void(int direction)> onFocusMoveRequested;
+
+    /** Fired from mouseDown() on anything that isn't a right-click (a background click, or one that
+     *  lands on the row rather than being consumed by a child) — deliberately a callback rather than
+     *  relying on the real focusGained() notification round-trip: grabKeyboardFocus() is a best-effort
+     *  no-op without a native peer (headless tests included — see docs/control/shortcuts.md's Focus regions
+     *  section), so TimelinePanelComponent::focusedTrackIndex_ has to be told directly rather than
+     *  waiting on an OS focus event that may never arrive. */
+    std::function<void(const juce::ModifierKeys& mods)> onSelectRequested;
+
+    /** Fired from mouseUp() when the press that selected this row never became a drag: a plain click on a row that
+     *  is one of several selected collapses the selection to it only now, so pressing a selected row and dragging
+     *  moves the whole selection. */
+    std::function<void()> onRowClickReleased;
+
+    /** Shift+Up (-1) / Shift+Down (+1): grow or shrink the selection by one row from the anchor. Same
+     *  sibling-blind division of labour as onFocusMoveRequested; the key is claimed either way. */
+    std::function<void(int direction)> onExtendSelectionRequested;
+
+    /** Cmd/Ctrl+Space: add this row to the selection or take it out. */
+    std::function<void()> onToggleSelectionRequested;
+
+    /** Whether the panel's track selection holds this row's track. Painted as a wash plus the
+     *  selected state for assistive tech; the row that also has keyboard focus keeps its focus ring. */
+    void setSelected(bool selected);
+    bool isSelected() const noexcept { return selected_; }
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    /** The "Next Clip" key was pressed; returns false (key not consumed) when the track has no clips. */
+    std::function<bool()> onEnterClipsRequested;
+
+    // ---- Binding chip ---------------------------------------------------------
+    // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
+    // node) or ORPHANED (had one, and it is gone) — two different messages, one warning colour.
+
+    juce::String getBindingChipText() const { return bindingChip_.getButtonText(); }
+    bool isBindingChipWarning() const noexcept { return chipWarning_; }
+
+    // ---- Track-kind badge ------------------------------------------------------
+    // A fixed per-TrackKind label ("MIDI" / "AUD" / "AUTO") drawn in the top row, right of the
+    // colour swatch. Not editable and not doc-driven beyond the kind itself, so there is no
+    // corresponding setter — refreshFromDoc() just repaints when the kind can't have changed anyway
+    // (a track's kind, unlike its name or colour, never changes after creation).
+    juce::String getKindBadgeTextForTest() const;
+    juce::Rectangle<int> getKindBadgeBoundsForTest() const noexcept { return kindBadgeBounds_; }
+    // The Icon actually drawn for the current TrackKind, or -1 when there is no themed
+    // AppLookAndFeel (or the asset library is absent) and paint() fell back to the text badge —
+    // matches getKindBadgeTextForTest's "value or empty" idiom rather than std::optional, since
+    // every other test accessor here returns a plain value.
+    int getKindBadgeIconForTest() const;
+
+    // ---- Automation fold arrow ------------------------------------------------------
+    // On every track (the Unassigned section only with lanes); the arrow and A only request a
+    // toggle, the panel owns the fold state and answers with setAutomationExpanded().
+    std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    /** The "Drum machine" button (Drum Kit tracks only) was pressed. */
+    std::function<void(synth::TrackId)> onDrumMachineRequested;
+    std::function<void(synth::TrackId)> onAutomationToggleSelectionRequested; // the A key: the whole selection
+    std::function<void()> onSelectAllTracksRequested;                         // Cmd+A on a row
+    // "Add automation..." from the context menu: the panel opens the track's parameter picker.
+    std::function<void(synth::TrackId)> onAddAutomationRequested;
+
+    // ---- Row height: the bottom-edge handle, its three actions and menu items --------
+    std::function<void(synth::TrackId)> onHeightDragStarted;
+    std::function<void(synth::TrackId, int deltaPx)> onHeightDragged;
+    std::function<void(synth::TrackId)> onHeightDragEnded;
+    /** +1 taller, -1 shorter, 0 back to the default height. */
+    std::function<void(synth::TrackId, int direction)> onHeightStepRequested;
+    EdgeResizeHandle& getHeightHandle() noexcept { return heightHandle_; }
+    void setAutomationExpanded(bool expanded);
+    bool isAutomationExpanded() const noexcept { return automationExpanded_; }
+    // How many of the track's lanes the panel draws as an LFO modulator's sections rather than as lane
+    // rows. They are not lanes to the user, so the fold arrow's count and the badge leave them out.
+    void setHiddenLaneCount(int count);
+    /** True for the Automation track, drawn as the "Unassigned automation" section header. */
+    bool isSectionHeader() const;
+
+    // ---- whole-row drag-to-reorder -----------------------------------------
+    //
+    // "Whole row" on purpose: a small dedicated handle is too fiddly a target for dragging a track
+    // (see the ticket) — everything except the interactive children (name label, swatch, M/S/R
+    // buttons, fold arrow, binding chip; each is its own child Component and intercepts its own mouseDown) is a
+    // drag surface. This row is deliberately sibling-blind (it never sees the other rows or the
+    // scroll state — see the class comment), so it hands raw SCREEN Y positions up rather than
+    // computing an insertion index itself; TimelinePanelComponent (which owns the ordered header
+    // list) is the one place that can turn a Y position into "between which two tracks". Modelled
+    // on PanelResizeHandle's own screen-coordinate drag (Source/UI/Layout/PanelResizeHandle.h).
+    //
+    // Fired once a background mouseDrag crosses a small pixel threshold past mouseDown — a plain
+    // click (select) or a click that lands on a child component never reaches here.
+    std::function<void(int screenY)> onRowDragStarted;
+    std::function<void(int screenY)> onRowPressed;
+    // Fired on every further mouseDrag once a drag is underway.
+    std::function<void(int screenY)> onRowDragged;
+    // Fired from mouseUp, but ONLY when a drag was actually underway (never for a plain click).
+    //
+    // ORDERING HAZARD: this is the last thing mouseUp does, and for good reason. The mutation this
+    // callback triggers (TimelinePanelComponent::endTrackDrag -> TimelineDoc::moveTrack) changes
+    // which TrackId sits at which index, which makes TimelinePanelComponent::syncTrackHeaders()
+    // rebuild the ENTIRE header column — destroying this very row from inside its own mouseUp
+    // stack frame. Every write this component makes to its own state must happen BEFORE this call;
+    // nothing may touch `this` after it returns.
+    std::function<void(int screenY)> onRowDragEnded;
+    // Whether the panel's reorder is really dragging (past its threshold, not cancelled by Esc), for
+    // the cursor. Unset, the row's own threshold decides.
+    std::function<bool()> isRowDragging;
+
+    /** The chip menu's contents, in menu-id order (option i has menu id i + 1). Exposed so tests
+     *  drive the choice without a juce::PopupMenu, which never runs headlessly. */
+    std::vector<TrackHeaderHost::BindingOption> collectBindingOptions() const;
+
+    /** Applies a chip-menu choice: 1..N binds to collectBindingOptions()[id - 1],
+     *  kNewTrackInNodeMenuId creates a node and binds to it, kMidiDestinationsMenuId opens the
+     *  MIDI-destinations picker. Anything else is ignored. */
+    void applyBindingMenuChoice(int menuId);
+
+    /** Whether showBindingMenu() would add the "MIDI destinations..." entry — a synchronous query
+     *  seam for the same rule the (async, non-headless) juce::PopupMenu build uses, so a test can
+     *  assert on it without opening a real menu. */
+    bool offersMidiDestinationsMenuEntryForTest() const;
+
+    /** Replaces what kMidiDestinationsMenuId's chip-menu choice does, in place of the real
+     *  openMidiDestinationsPicker() (which launches a juce::CallOutBox and so cannot run in a
+     *  headless test). Defaults to the real behaviour; a test installs its own hook to observe
+     *  the "open" event without a live callout. */
+    void setOpenMidiDestinationsPickerHookForTest(std::function<void()> hook) {
+        openMidiDestinationsPickerHook_ = hook ? std::move(hook) : [this] { openMidiDestinationsPicker(); };
+    }
+
+    /** The chip's click behaviour, split from the button so tests can exercise the selection
+     *  affordance without opening an async menu. `showMenu` false does the highlight only. */
+    void handleChipClick(bool showMenu);
+
+    /** One meter tick for the channel chip, driven by TimelinePanelComponent's single 15 Hz
+     *  timer rather than a per-row one (see ChannelChipComponent's header). Returns true only when
+     *  the chip actually repainted -- the gate that keeps this off the "unconditional per-tick
+     *  repaint" list. A no-op (false) for a row with no channel chip showing. */
+    bool tickChannelMeter();
+
+    /** Applies a header context-menu choice (kDeleteTrackMenuId today). Same test seam as applyBindingMenuChoice. */
+    void applyContextMenuChoice(int menuId);
+
+    /** The header context menu (Make Channel, Delete Track) as showContextMenu() builds it —
+     *  item ids are the k*MenuId constants above, fed back through applyContextMenuChoice(). */
+    juce::PopupMenu buildContextMenu() const;
+
+    /** Test seam, same shape as ModuleComponent::setShowContextMenuHookForTest: a real right-click
+     *  mouseDown() builds the menu and hands it here instead of showing it. Null = the real menu. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ = std::move(hook);
+    }
+
+    // ---- Test accessors -------------------------------------------------------
+    juce::Label& getNameLabel() noexcept { return nameLabel_; }
+    juce::Button& getMuteButton() noexcept { return muteButton_; }
+    juce::Button& getSoloButton() noexcept { return soloButton_; }
+    juce::Button& getArmButton() noexcept { return armButton_; }
+    TrackMonitorButton& getMonitorButton() noexcept { return monitorButton_; } // audio tracks only
+    juce::Button& getColourSwatch() noexcept { return colourSwatch_; }
+    juce::Button& getBindingChip() noexcept { return bindingChip_; }
+    ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
+    TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
+    TrackShowModuleButton& getShowModuleButton() noexcept { return showModuleButton_; }
+    TrackDrumMachineButton& getDrumMachineButton() noexcept { return drumButton_; }
+    TrackVoiceToggle& getVoiceToggle() noexcept { return voiceToggle_; }
+    juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
+
+    /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
+     *  colour-swatch click uses (see the constructor), but never launches a juce::CallOutBox —
+     *  a test drives it directly via setCurrentColourForTest()/commitForTest() instead of going
+     *  through a popup menu that cannot run headlessly. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> createColourPickerForTest();
+
+    /** Builds a MidiDestinationPicker wired with the EXACT same provider/apply callbacks the real
+     *  "MIDI destinations..." menu entry uses (see openMidiDestinationsPicker()), but never
+     *  launches a juce::CallOutBox — mirrors createColourPickerForTest()'s split. */
+    std::unique_ptr<synth::ui::MidiDestinationPicker> createMidiDestinationPickerForTest();
+
+private:
+    // The row's colour swatch: the shared ColourSwatchButton plus the row's press-drag reorder.
+    class SwatchButton : public synth::ui::ColourSwatchButton {
+    public:
+        explicit SwatchButton(TimelineTrackHeaderComponent& owner)
+            : synth::ui::ColourSwatchButton("trackColourSwatch")
+            , owner_(owner) {}
+        // A press-drag on the swatch reorders the row like a press anywhere else; a plain click
+        // still opens the colour picker.
+        void mouseDown(const juce::MouseEvent& e) override {
+            synth::ui::ColourSwatchButton::mouseDown(e);
+            if (!e.mods.isPopupMenu())
+                owner_.mouseDown(e);
+        }
+        void mouseDrag(const juce::MouseEvent& e) override {
+            juce::Button::mouseDrag(e);
+            owner_.mouseDrag(e);
+        }
+        void mouseUp(const juce::MouseEvent& e) override {
+            juce::Button::mouseUp(e);
+            owner_.mouseUp(e); // may destroy the row, and this swatch with it: nothing may follow
+        }
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
+    };
+
+    // JUCE hands a click to whichever child component is directly under the cursor and never
+    // bubbles it up to an ancestor on its own — mouseDown() below only ever sees a right-click that
+    // lands on this row's own background pixels. nameLabel_ and the M/S/R toggles cover almost
+    // every OTHER pixel of the row and have no popup menu of their own, so a right-click there used
+    // to be swallowed silently instead of ever reaching showContextMenu() (4 real right-click spots that a direct
+    // `header.mouseDown(...)` test can't catch, since
+    // that bypasses the child entirely). This subclass is the fix for the label: a right-click goes
+    // straight to the SAME showContextMenu() a right-click on the background uses; anything else is
+    // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
+    // as plain buttons — they already open a menu/picker of their own on click, and that stays (see
+    // docs/timeline/tracks.md#row-context-menu).
+    class ContextMenuForwardingLabel : public synth::ui::CursorDelegatingLabel {
+    public:
+        explicit ContextMenuForwardingLabel(TimelineTrackHeaderComponent& owner)
+            : owner_(owner) {
+            setCursorSource(&owner); // a drag that starts on the name shows the row's cursor
+        }
+        void mouseDown(const juce::MouseEvent& e) override {
+            if (e.mods.isPopupMenu()) {
+                owner_.showContextMenu();
+                return;
+            }
+            juce::Label::mouseDown(e);
+            owner_.mouseDown(e); // the whole row is a drag handle; see mouseDown()
+        }
+        void mouseDrag(const juce::MouseEvent& e) override {
+            juce::Label::mouseDrag(e);
+            owner_.mouseDrag(e);
+        }
+        void mouseUp(const juce::MouseEvent& e) override {
+            juce::Label::mouseUp(e);
+            owner_.mouseUp(e); // may destroy the row, and this label with it: nothing may follow
+        }
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
+    };
+
+    // Same fix as ContextMenuForwardingLabel, for the M/S/R toggle buttons — plus one thing those
+    // need that the label doesn't: juce::Button (unlike juce::Slider, which already checks
+    // `e.mods.isPopupMenu()` itself before starting a value-drag — see juce_Slider.cpp) fires
+    // onClick from ANY mouse button. Left un-forwarded, a bare juce::TextButton here would have BOTH
+    // opened the context menu AND toggled mute/solo/arm on the very same right-click.
+    // Never calling the base class's mouseDown() for a popup click keeps Button::isDown() false for
+    // the whole gesture, so the matching mouseUp() (still the plain juce::TextButton one — no
+    // override needed) finds `wasDown` false and skips the click it would otherwise fire.
+    class ContextMenuForwardingButton : public juce::TextButton {
+    public:
+        ContextMenuForwardingButton(TimelineTrackHeaderComponent& owner, const juce::String& text)
+            : juce::TextButton(text)
+            , owner_(owner) {}
+        void mouseDown(const juce::MouseEvent& e) override {
+            if (e.mods.isPopupMenu()) {
+                owner_.showContextMenu();
+                return;
+            }
+            juce::TextButton::mouseDown(e);
+        }
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
+    };
+
+    const synth::Track* track() const { return doc_.getTrack(trackId_); }
+    // Routes a doc mutation through the host (one undo step). Falls back to running it directly
+    // when there is no host, so a header built for a test is still functional.
+    void performEdit(const std::function<void()>& mutation);
+    // Read-flip-write for M/S/R, shared by the toggle buttons' own onClick and keyPressed()'s
+    // bare m/s/r — one path so a button click and a keystroke can never disagree about what
+    // "toggle" means. No-op when the track is gone (mid-delete race).
+    void toggleMuted();
+    void toggleSoloed();
+    // toggleMuted/toggleSoloed for the clicked track alone (the single-track path), and the follow-up that makes
+    // every other selected track take the state it ended in (TimelineTrackHeaderBulk.cpp).
+    void toggleMutedOne();
+    void toggleSoloedOne();
+    void setOtherTrackMuted(synth::TrackId id, bool muted);
+    void setOtherTrackSoloed(synth::TrackId id, bool soloed);
+    bool isMutedNow(synth::TrackId id) const;
+    bool isSoloedNow(synth::TrackId id) const;
+    std::vector<synth::TrackId> bulkTargets() const;
+    bool handleTrackClipboardKey(const juce::KeyPress& key);
+    void toggleArmed();
+    void toggleMonitor(); // On <-> Auto (nextMonitorMode); a no-op off an audio track
+    // Position of this track in the doc's track list — the index resolveTrackColour falls back to
+    // for a track that has never been coloured. -1 when the track is gone.
+    int trackIndex() const;
+
+    void showBindingMenu();
+    /** `keyboardAnchor` set = opened from the keyboard, anchored at the header; empty = right-click, at the pointer. */
+    void showContextMenu(std::optional<juce::Rectangle<int>> keyboardAnchor = std::nullopt);
+
+    // The app's channel surface, or null (no host, or a host that wires none -- a test
+    // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.
+    int refreshCount_ = 0;
+    synth::ui::TrackChannelLinkSurface* linkSurface() const {
+        return host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
+    }
+    // The channel state refreshFromDoc() last read, so paint/resized and the M/S toggles
+    // agree with what is on screen without each re-walking the graph.
+    TrackChannelLinkSurface::ChannelInfo channelInfo_;
+
+    // Shared by the swatch click, Alt+C and createColourPickerForTest(): the popup, not yet launched.
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildColourPicker();
+
+    // The "MIDI destinations..." menu entry's handler: builds the picker via
+    // createMidiDestinationPickerForTest()'s exact same builder and launches it in a
+    // juce::CallOutBox anchored on the binding chip.
+    void openMidiDestinationsPicker();
+    // Shared by openMidiDestinationsPicker() and createMidiDestinationPickerForTest() — builds a
+    // MidiDestinationPicker whose provider/apply callbacks route through host_, WITHOUT launching
+    // it in a juce::CallOutBox.
+    std::unique_ptr<synth::ui::MidiDestinationPicker> buildMidiDestinationPicker();
+
+    // Re-applies every colour derived from the active theme: the binding chip's warning/normal
+    // colours (unchanged from before) PLUS the M/S/R buttons' active-state colours. Called from
+    // refreshFromDoc() (so a doc-driven repaint always shows the right colours), from
+    // lookAndFeelChanged() (so a theme switch alone — no doc change — also updates them), and once
+    // at the end of the constructor (so the very first paint isn't relying on refreshFromDoc()
+    // having been called with a LookAndFeel already installed).
+    void applyThemeDerivedColours();
+
+    // Bare m/s/r resolution — the same "unset binding has no key at all, once a manager is
+    // installed" contract every other surface action in this app follows. See matchesAction().
+    bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+
+    synth::TimelineDoc& doc_;
+    synth::TrackId trackId_;
+    TrackHeaderHost* host_ = nullptr;
+    // Non-owning; may stay null. LIFETIME: unlike TimelinePanelComponent's own copy of this pointer,
+    // this component never subscribes as a juce::ChangeListener on it (no cached tooltip to
+    // refresh), so there is no matching teardown-ordering hazard to document here.
+    ShortcutManager* shortcuts_ = nullptr;
+
+    // Set in the constructor to `[this] { openMidiDestinationsPicker(); }`; a test replaces it via
+    // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)
+    // is exercisable without a live juce::CallOutBox.
+    std::function<void()> openMidiDestinationsPickerHook_;
+    // See setShowContextMenuHookForTest. Null = show the real async menu.
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
+
+    // The children with no popup menu of their own: a right-click on them forwards to showContextMenu().
+    ContextMenuForwardingLabel nameLabel_{*this};
+    SwatchButton colourSwatch_{*this};
+    ContextMenuForwardingButton muteButton_{*this, "M"};
+    ContextMenuForwardingButton soloButton_{*this, "S"};
+    ContextMenuForwardingButton armButton_{*this, "R"};
+    TrackMonitorButton monitorButton_;
+    TrackFoldArrow foldArrow_;
+    TrackShowModuleButton showModuleButton_;
+    TrackDrumMachineButton drumButton_;
+    synth::ui::FadeVisibility drumButtonFade_{&drumButton_};
+    EdgeResizeHandle heightHandle_{EdgeResizeHandle::Axis::Vertical};
+    void initHeightHandle();
+    void refreshHeightHandleText();
+    juce::String bindingText(const juce::String& actionId, const juce::KeyPress& fallback) const;
+    juce::TextButton bindingChip_;
+    // The CHANNEL chip: where this track's audio ends up (bindingChip_ says what feeds it); hidden with no channel.
+    ChannelChipComponent channelChip_;
+    // The chips and the fold arrow fade as the track gains or loses them (animation.md, "Fading things in and out").
+    synth::ui::FadeVisibility foldArrowFade_{&foldArrow_};
+    synth::ui::FadeVisibility bindingChipFade_{&bindingChip_};
+    synth::ui::FadeVisibility channelChipFade_{&channelChip_};
+    TrackVoiceToggle voiceToggle_;
+    synth::ui::FadeVisibility voiceToggleFade_{&voiceToggle_};
+
+    bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
+    juce::Colour resolvedColour_{juce::Colours::grey};
+    bool chipWarning_ = false;
+    // True from the moment a background mouseDrag crosses the reorder threshold (see
+    // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
+    // see that callback's own ordering-hazard comment.
+    bool draggingRow_ = false;
+    bool selected_ = false; // setSelected()
+    float lift_ = 0.0f;
+    // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
+    // this is only a hit-rect for tests, not a cache of the badge's text.
+    juce::Rectangle<int> kindBadgeBounds_;
+    juce::Rectangle<int> laneBadgeBounds_; // the section header's "N lanes" badge; empty when not shown
+    bool automationExpanded_ = false;
+    int hiddenLaneCount_ = 0;
+    int shownLaneCount() const;
+    // Carves the fold arrow, the kind badge and the section header's "N lanes" badge off `row`.
+    void layoutFoldArrowAndBadges(juce::Rectangle<int>& row);
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineTrackHeaderComponent)
+};
+
+} // namespace synth::ui

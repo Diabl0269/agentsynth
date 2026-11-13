@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/MasterSplice.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/CompressorModule.h"
@@ -11,7 +12,6 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/LimiterModule.h"
 #include "Modules/FX/PhaserModule.h"
-#include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
@@ -28,6 +28,8 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <limits>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -264,6 +266,9 @@ TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
                                            "Wavetable",
                                            "Noise",
                                            "Sampler",
+                                           "Drum Kit",
+                                           "Pluck",
+                                           "Mallet",
                                            "Filter",
                                            "ADSR",
                                            "VCA",
@@ -771,6 +776,29 @@ TEST_F(E2EWorkflowTest, AutoArrangeOnLoadedPresetClearsOverlapsKeepsGraph) {
                                             << "' (" << modBounds[j].bounds.toString() << ") with gap=" << gap;
         }
     }
+
+    // The output dock is not arranged: it sits right of every other card.
+    int rightmostOther = 0;
+    int leftmostDock = std::numeric_limits<int>::max();
+    for (auto* child : content->getChildren())
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            if (synth::isOutputDockProcessor(mc->getModule()))
+                leftmostDock = std::min(leftmostDock, mc->getX());
+            else
+                rightmostOther = std::max(rightmostOther, mc->getRight());
+        }
+    ASSERT_LT(leftmostDock, std::numeric_limits<int>::max()) << "the preset has an Audio Output";
+    EXPECT_GT(leftmostDock, rightmostOther);
+
+    // Arranging again changes nothing.
+    std::map<juce::uint32, juce::Point<int>> first;
+    for (auto* node : graph().getNodes())
+        first[node->nodeID.uid] = {static_cast<int>(node->properties["x"]), static_cast<int>(node->properties["y"])};
+    editor().autoArrange();
+    for (auto* node : graph().getNodes())
+        EXPECT_EQ(juce::Point<int>(static_cast<int>(node->properties["x"]), static_cast<int>(node->properties["y"])),
+                  first[node->nodeID.uid])
+            << "node " << node->nodeID.uid << " moved on the second arrange";
 }
 
 // "App works fine" guard: every factory preset, when loaded into a fresh graph,
@@ -781,7 +809,7 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
     constexpr double kSampleRate = 44100.0;
     constexpr int kBlockSize = 512;
     constexpr int kNumBlocks = 50;
-    constexpr int kNumPresets = 7; // Default..Poly Pad
+    constexpr int kNumPresets = 8; // Default..Acoustic Kit
 
     for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {
         loadPreset(presetIdx);
@@ -831,7 +859,7 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
 // Loads each factory preset, reads getBoundsInParent() of every ModuleComponent, dumps the
 // geometry, and asserts no pairwise overlap at kCollisionGap. This is the true visual check.
 TEST_F(E2EWorkflowTest, AllPresetsLoadWithoutOverlapAsAuthored) {
-    constexpr int kNumPresets = 7;
+    constexpr int kNumPresets = 8;
     const int gap = synth::LayoutUtil::kCollisionGap;
 
     for (int p = 0; p < kNumPresets; ++p) {

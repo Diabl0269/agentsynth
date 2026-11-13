@@ -1,0 +1,261 @@
+#pragma once
+
+#include "AppUndoManager.h"
+#include "MacroSet.h"
+#include "Modules/MacroPortShape.h"
+#include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+
+class GraphEditor; // Forward declaration
+namespace synth::ui {
+class ShownFade;
+}
+namespace synth::theme {
+struct Colors;
+}
+
+/** The collapsed on-canvas representation of a synth::Macro — "a macro reads as one
+ *  card on the canvas". One instance per collapsed macro, owned by GraphEditor's
+ *  GraphContentComponent exactly like a ModuleComponent, and only ever visible while its macro
+ *  is collapsed (GraphEditor::syncMacroCards hides it otherwise).
+ *
+ *  Deliberately NOT a ModuleComponent: a macro has no processor, no ports, no jacks — it is
+ *  pure presentation over a GraphEditor::MacroSet entry. Body-drag mirrors ModuleComponent's own
+ *  (ComponentDragger + GraphEditor::beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag) so
+ *  dragging the card moves every one of its (hidden) members via the exact same group-drag path
+ *  a plain multi-select drag uses — see GraphEditor::beginMacroCardDrag.
+ *
+ *  Also a juce::TooltipClient: hovering a collapsed card shows its member
+ *  module names, since the content preview drawn on the card is too small to read as text. */
+class MacroCardComponent
+    : public juce::Component
+    , public juce::TooltipClient
+    , public synth::testmode::StateSource {
+public:
+    MacroCardComponent(GraphEditor& owner, juce::String macroId);
+    ~MacroCardComponent() override;
+
+    const juce::String& getMacroId() const noexcept { return macroId; }
+
+    /** Test mode: the macro's `name` and `collapsed` flag, and `members` (its direct member count). */
+    void addTestModeState(juce::DynamicObject& into) const override;
+
+    /** Whether this card's own body drag (mouseDown -> beginMacroCardDrag) is currently armed —
+     *  GraphEditor::syncMacroCards() checks this before destroying an orphaned card so a macro that
+     *  vanishes mid-drag cancels the drag rather than leaving it stuck with no mouseUp ever
+     *  coming. */
+    bool isBodyDragActive() const noexcept { return bodyDragActive; }
+    /** Drops an armed body drag without a drop (GraphEditor::cancelMacroUnitDrag): back at its press position. */
+    void abandonBodyDrag();
+
+    void paint(juce::Graphics& g) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override; // arms hoveredPortUuid_ (see below)
+    void mouseExit(const juce::MouseEvent& e) override; // clears hoveredPortUuid_
+
+    /** Newline-separated member module names, capped so a huge macro doesn't produce an
+     *  unreadable tooltip. */
+    juce::String getTooltip() override;
+
+    /** The card's own "N modules[, M ports]" line (
+     * docs/macros/ports.md#member-counts-report-modules-not-ports) — a MODULE count, excluding port
+     * nodes, with the port count named alongside it (never silently dropped) whenever the macro actually has one.
+     * Public so a test can pin the exact text against the crossing-cable scenario (group 2 modules with a crossing
+     * cable -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
+     *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
+    juce::String getModuleCountText() const;
+
+    /** Card-local strip the member preview boxes are laid out in (macro_preview::boxes). */
+    juce::Rectangle<int> getPreviewArea() const;
+
+    /** Opens the inline rename editor over the card. Public so a test can drive it without
+     *  synthesising a right-click + menu selection. */
+    void beginRename();
+    void finishRename(bool commit);
+    bool isRenamingTitle() const noexcept { return nameEditor != nullptr; }
+
+    /** Test accessors for the private layout functions below — so a test can assert the title
+     *  row (and its double-click rename zone) never overlaps a bypass/mute badge slot, without
+     *  duplicating either rectangle's arithmetic. */
+    juce::Rectangle<float> getToggleBadgeBoundsForTest(bool mute) const { return getToggleBadgeBounds(mute); }
+    juce::Rectangle<int> getTitleRowBoundsForTest() const { return getTitleRowBounds(); }
+
+    /** Replaces what a real right-click does with the menu showContextMenu() built — in place of
+     *  the real showMenuAsync() (which opens a real popup and, on a headless Linux CI runner with
+     *  no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow — the exact issue
+     *  ModuleComponent::setShowContextMenuHookForTest's own comment documents). A null hook
+     *  restores the real behaviour rather than leaving the seam disarmed. A test installs a
+     *  capturing hook to inspect the menu the real mouseDown() gesture actually built — including
+     *  the addCandidateSelection it was passed — without ever opening a popup. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
+    }
+
+    bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c); // live jack preview; true iff moved
+    bool clearPortColourPreview(const juce::String& nodeUuid);               // true iff it had been armed
+    bool hasPortColourPreviewForTest(const juce::String& nodeUuid) const;
+    juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
+                                       juce::Colour kindTint) const; // preview -> stored -> kindTint
+
+    // The '+' button's kind/shape choice menu, RETURNED rather than shown — see the .cpp
+    // definition for the choice list and why it doesn't show the popup itself.
+    juce::PopupMenu buildAddPortMenu(bool isInput);
+
+    // Test accessors for the '+'/'-' hit-testing below — same *ForTest pattern as above.
+    juce::Rectangle<float> getAddPortButtonBoundsForTest(bool isInput) const { return getAddPortButtonBounds(isInput); }
+    juce::Rectangle<float> getRemovePortButtonBoundsForTest(bool isInput) const {
+        return getRemovePortButtonBounds(isInput);
+    }
+    juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
+
+    /** Where a cable hovering this card would land: one of the card's ports, or a new port on `isInput`'s side. */
+    struct CableDropHint {
+        bool newPort = false;
+        bool isInput = true;
+        juce::String portUuid;
+        int visibleJack = -1;
+        bool operator==(const CableDropHint& o) const noexcept {
+            return newPort == o.newPort && isInput == o.isInput && portUuid == o.portUuid &&
+                   visibleJack == o.visibleJack;
+        }
+    };
+    /** Set on every drag tick; repeating the same hint keeps its fade going. `instant` drops the fade. */
+    void setCableDropHint(std::optional<CableDropHint> hint, bool instant = false);
+    const std::optional<CableDropHint>& getCableDropHint() const noexcept { return cableDropHint_; }
+    float getCableDropHintAlphaForTest() const;
+
+    /** Fades `portUuid`'s row in (dot and name) as a cable lands on it; a port that is not entering shows fully. */
+    void growInPort(const juce::String& portUuid);
+    float getPortShown(const juce::String& portUuid) const;
+    void stepPortEnterForTest(double ms);
+
+    /** Called by GraphEditor::syncMacroCards on every pass. Compares the card's rows with the ones it showed last pass
+     *  and, when `animate` (the card was on screen before and after the pass), grows in each new row and keeps a ghost
+     * of each row that went from the bottom of its side (an undo, '-' or a port delete) to fade and shrink away.
+     *  Otherwise it just takes the rows as they are and drops any ghost. */
+    void refreshPortRows(bool animate);
+    /** How many ghost rows are drawn now, and how shown they are (1 = whole, 0 = gone). */
+    int getLeavingPortRowCountForTest() const noexcept { return (int)leavingRows_.size(); }
+    float getLeavingPortShownForTest() const;
+    void stepPortExitForTest(double ms);
+
+private:
+    /** A row as it was drawn, kept while it fades out after its port is gone. */
+    struct RowPicture {
+        juce::String nodeUuid;
+        bool isInput = false;
+        synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
+        juce::String name;
+        juce::Point<int> jackPos;
+        juce::Rectangle<int> labelArea;
+        int row = 0;
+        std::optional<juce::Colour> colour;
+    };
+    std::vector<RowPicture> currentRowPictures() const;
+    void paintLeavingRows(juce::Graphics& g, const synth::theme::Colors& themeColors);
+
+    /** `priorSelection`: whatever was selected right before mouseDown's own reselect —
+     *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
+     *  captured by the caller rather than read fresh in here. */
+    void showContextMenu(const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection);
+
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
+    // it via setShowContextMenuHookForTest() — see that setter's comment.
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
+
+    /** Top-right hit zone for the visible expand chevron — right-click's "Expand" menu item did
+     *  the same thing but nothing on the card *looked* clickable, so grouping fresh modules and
+     *  then finding your way back into them was a guessing game (double-click, undocumented). */
+    juce::Rectangle<float> getExpandButtonBounds() const;
+
+    /** One bypass/mute indeterminate-indicator badge's bounds (docs/macros/ports.md
+     *  docs/macros/ports.md#bypass-and-mute), just left of the expand chevron — `mute=false` is the outer (bypass)
+     * slot, `true` the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`, so paint()
+     * and getTitleRowBounds() (which reserves room for both slots so a long macro name can never paint under them) read
+     * the SAME rectangles a test can assert against — the same "one layout definition" principle macroCardPortLayout
+     * applies to port jacks. */
+    juce::Rectangle<float> getToggleBadgeBounds(bool mute) const;
+
+    // Shared by getToggleBadgeBounds() and getTitleRowBounds() so the badge size/spacing can
+    // never drift between where a badge is drawn and how much of the title row is reserved for it.
+    static constexpr float kToggleBadgeSize = 8.0f;
+    static constexpr float kToggleBadgeGap = 5.0f;
+
+    /** The title row's hit zone, in this card's local bounds — the SAME rectangle paint() draws
+     *  the name into (minus the chevron reservation), so a double-click's rename zone can never
+     *  drift from what is drawn. paint() and mouseDoubleClick() both call this rather than
+     *  computing the rect separately. */
+    juce::Rectangle<int> getTitleRowBounds() const;
+
+    // The middle column between the two port strips (title, preview, count), card-local.
+    juce::Rectangle<int> getContentArea() const;
+
+    // Both strips, the jacks, the names, the '+'/'-' pair and the hovered-jack ring
+    // (MacroCardComponentPorts.cpp).
+    void paintPortStrips(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
+    // The cable drop hint at its current fade (MacroCardComponentPorts.cpp).
+    void paintCableDropHint(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
+
+    // Opacity of the port names, '-' glyph and inner dividers at the canvas zoom (0 = dots only); the strips keep
+    // their width. portNameIsTruncated: the name would be ellipsised in its column.
+    float portNameAlpha() const;
+    bool portNameIsTruncated(const juce::String& name) const;
+
+    // The '+' / '-' buttons at the foot of each strip. '-' is empty when the side has no port or
+    // names are hidden. Both are card-local.
+    juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
+    juce::Rectangle<float> getRemovePortButtonBounds(bool isInput) const;
+    // The '-' slot regardless of zoom (what paint fades); getRemovePortButtonBounds is clickable only once >= half
+    // faded in.
+    juce::Rectangle<float> removePortButtonSlot(bool isInput) const;
+
+    // Deletes the bottom port on one side, through the same path the port panel's Delete port uses.
+    void removeBottomPort(bool isInput);
+
+    // The release of a press that landed on a port dot: a plain click opens the port connections panel for that
+    // port's node (PortPanelController); a drag or a modified click is the controller's to ignore.
+    void portReleased(const juce::MouseEvent& e);
+    // Folds away this card's own port panel (and a deferred open) before the card expands or hides.
+    void closeOwnPortPanel();
+    // A double-click on a port dot that has exactly one cable (with "double-click a port to disconnect" on)
+    // disconnects it; true when it did, so the card does not also expand.
+    bool disconnectOnlyCableAt(const juce::MouseEvent& e);
+
+    // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
+    std::optional<juce::String> hoveredPortUuid_;
+    int hoveredPortJack_ = -1; // the hovered row's MacroCardPort::visibleJack (-1 = whole port)
+
+    GraphEditor& owner;
+    juce::String macroId;
+
+    juce::ComponentDragger dragger;
+    juce::Point<int> dragStartPosition;
+    bool bodyDragActive = false;
+
+    std::unique_ptr<juce::TextEditor> nameEditor;
+
+    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_; // the open picker's one port
+
+    std::optional<CableDropHint> cableDropHint_; // what a hovering cable would do now
+    std::optional<CableDropHint> paintedHint_;   // what is drawn while the hint fades out
+    std::unique_ptr<synth::ui::ShownFade> hintFade_;
+    juce::String enteringPortUuid_; // the row growInPort is fading in
+    std::unique_ptr<synth::ui::ShownFade> portEnterFade_;
+    std::vector<RowPicture> shownRows_;   // the rows the last syncMacroCards pass drew
+    std::vector<RowPicture> leavingRows_; // rows of removed ports, drawn while portExitFade_ goes 1 -> 0
+    std::unique_ptr<synth::ui::ShownFade> portExitFade_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
+};

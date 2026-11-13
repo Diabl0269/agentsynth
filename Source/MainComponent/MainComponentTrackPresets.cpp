@@ -1,5 +1,5 @@
 // MainComponentTrackPresets.cpp (docs/mixer/track-presets.md): "Save track as preset.../Set
-// as default" (track header menu + channel macro menu), the "+ Track" grouped preset list, "Insert
+// as default" (track header menu + channel macro menu), the "Add Track" grouped preset list, "Insert
 // Track Preset from File...", and the per-type default consulted by addAudioTrack/
 // buildInstrumentTrackAndChain (see MainComponentTrackCreation.cpp's own edits for that half).
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the
@@ -7,8 +7,10 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupMotion.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
@@ -80,7 +82,8 @@ static bool extractAndSaveTrackPresetForMacro(MainComponent& mc, const juce::Str
 // extraction/save failure) — nothing is left half-written.
 static bool extractAndSaveTrackPreset(MainComponent& mc, const juce::String& bindingUuid, synth::TrackPresetKind kind,
                                       const juce::String& name) {
-    const auto* macro = mc.getGraphEditor().getMacros().findByMember(bindingUuid);
+    const auto* macro =
+        synth::nearestChannelMacro(mc.getAudioEngine().getGraph(), mc.getGraphEditor().getMacros(), bindingUuid);
     if (macro == nullptr)
         return false;
     return extractAndSaveTrackPresetForMacro(mc, macro->id, kind, name);
@@ -103,6 +106,7 @@ void MainComponent::saveTrackAsPreset(synth::TrackId trackId) {
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(
         true, juce::ModalCallbackFunction::create([safeThis, window, bindingUuid, kind](int result) {
             std::unique_ptr<juce::AlertWindow> owned(window);
@@ -161,7 +165,8 @@ void MainComponent::handleMacroTrackPresetAction(const juce::String& macroId, bo
     for (const auto& track : timelineDoc.getTracks()) {
         if (track.bindingUuid.isEmpty())
             continue;
-        const auto* macro = graphEditor.getMacros().findByMember(track.bindingUuid);
+        const auto* macro =
+            synth::nearestChannelMacro(audioEngine.getGraph(), graphEditor.getMacros(), track.bindingUuid);
         if (macro != nullptr && macro->id == macroId) {
             if (setAsDefault)
                 setTrackPresetAsDefault(track.id);
@@ -196,6 +201,7 @@ void MainComponent::saveBusAsPreset(const juce::String& macroId) {
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(
         true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
             std::unique_ptr<juce::AlertWindow> owned(window);
@@ -218,7 +224,7 @@ void MainComponent::saveBusAsPreset(const juce::String& macroId) {
         false);
 }
 
-// The shared insert path (default-consulting branch, "+ Track" preset list, "Insert from File...").
+// The shared insert path (default-consulting branch, "Add Track" preset list, "Insert from File...").
 // NO UNDO TRANSACTION OF ITS OWN — the default-consulting branch is already inside
 // addAudioTrack's own; callers that aren't already inside one wrap this in
 // recordGraphTimelineAndMacroChange themselves. Returns the created track's name, or an empty
@@ -255,7 +261,7 @@ juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, sy
     // Master singleton, the same reason a snippet never captures Audio Output (SnippetManager's own
     // "self-contained" rule). Wire it now, exactly like buildChannelChain's own Strip->Master edges.
     if (stripNode != nullptr) {
-        auto* master = synth::spliceMasterNode(graph, dropPos);
+        auto* master = synth::spliceMasterNode(graph, dropPos, newModuleHook());
         if (master != nullptr) {
             graph.addConnection({{stripNode->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
             graph.addConnection(
@@ -282,6 +288,10 @@ juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, sy
     for (auto& macro : outMacros)
         graphEditor.getMacros().add(macro);
 
+    // The strip's Master edges above are plain; move them behind the track macro's output port.
+    if (stripNode != nullptr)
+        graphEditor.routeChannelOutputThroughMacroPort(stripNode->properties["uuid"].toString());
+
     graphEditor.updateComponents();
     return trackName;
 }
@@ -297,6 +307,7 @@ void MainComponent::addTrackFromPreset(const juce::String& presetName, synth::Tr
     const juce::String prefix =
         kind == synth::TrackPresetKind::Instrument ? juce::String("Instrument") : juce::String("Audio");
     juce::String trackName;
+    const TrackGrowInScope growIn(*this);
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, &preset, kind, prefix, &trackName] { trackName = insertTrackFromPresetVar(preset, kind, prefix); });
@@ -340,7 +351,7 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     if (auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor()))
         strip->setIsBus(true);
 
-    if (auto* master = synth::spliceMasterNode(graph, dropPos)) {
+    if (auto* master = synth::spliceMasterNode(graph, dropPos, newModuleHook())) {
         graph.addConnection({{stripNode->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
         graph.addConnection(
             {{stripNode->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}});
@@ -357,7 +368,9 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     // user-renamed before saving arrives with that name already on its captured macro; only a
     // preset whose macro came back nameless falls back to the numbered default.
     const juce::String stripUuid = stripNode->properties["uuid"].toString();
-    auto* insertedMacro = graphEditor.getMacros().findByMember(stripUuid);
+    graphEditor.routeChannelOutputThroughMacroPort(stripUuid);
+    const auto* nearestMacro = synth::nearestChannelMacro(graph, graphEditor.getMacros(), stripUuid);
+    auto* insertedMacro = nearestMacro != nullptr ? graphEditor.getMacros().find(nearestMacro->id) : nullptr;
     juce::String busName = insertedMacro != nullptr ? insertedMacro->name : juce::String();
     // A preset saved from "Bus 1" and inserted beside it would otherwise show two "Bus 1" columns:
     // a captured name another macro already carries falls back to the numbered default too.

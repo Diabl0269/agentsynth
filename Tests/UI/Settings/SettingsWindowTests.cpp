@@ -8,11 +8,13 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
-#include "UI/Settings/AudioSettingsTab.h"
+#include "UI/Settings/AudioSettingsTab/AudioSettingsTab.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -166,6 +168,9 @@ protected:
         options.applicationName = "SettingsTest";
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
+        // Inside this process's settings root, so CI's parallel test shards (each with its own root) never share
+        // this file: one shard's TearDown clear() used to wipe another's saved tab mid-test.
+        options.folderName = synth::userSettingsRootDirectory().getChildFile("SettingsWindowTest").getFullPathName();
         appProperties.setStorageParameters(options);
 
         // Initialize AI service with mock provider
@@ -199,6 +204,20 @@ TEST_F(SettingsWindowTest, HasSixTabs) {
     EXPECT_EQ(settingsWindow.getNumTabs(), 6);
 }
 
+TEST_F(SettingsWindowTest, AccountTabSitsNextToAiOnlyWhenThereIsAnAccountService) {
+    synth::AccountService service(
+        "http://mock-host:8787",
+        [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+           const std::atomic<bool>&) { return synth::AuthClient::HttpResult{}; },
+        std::make_unique<synth::InMemoryTokenStore>());
+    SettingsWindow withAccounts(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                themeManager, nullptr, &service);
+    EXPECT_EQ(withAccounts.getNumTabs(), 7);
+    EXPECT_EQ(withAccounts.getTabName(1), "AI");
+    EXPECT_EQ(withAccounts.getTabName(2), "Account");
+    EXPECT_EQ(withAccounts.getTabName(3), "Keyboard Shortcuts");
+}
+
 TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
@@ -225,16 +244,13 @@ TEST_F(SettingsWindowTest, DefaultTabIsAudio) {
     EXPECT_EQ(settingsWindow.getCurrentTabIndex(), 0);
 }
 
-TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
+TEST_F(SettingsWindowTest, AudioTabIsMadeOfFoldingSections) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
-    auto* tabContent = settingsWindow.getTabs().getTabContentComponent(0);
-    ASSERT_NE(tabContent, nullptr);
-
-    auto* audioTab = dynamic_cast<AudioSettingsTab*>(tabContent);
+    auto* audioTab = dynamic_cast<AudioSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(0));
     ASSERT_NE(audioTab, nullptr);
-    EXPECT_TRUE(audioTab->isParentOf(&audioTab->getDeviceSelector()));
-    EXPECT_TRUE(audioTab->getDeviceSelector().isVisible());
+    EXPECT_TRUE(audioTab->isParentOf(&audioTab->getSectionForTest(AudioSettingsTab::Section::Device)));
+    EXPECT_TRUE(audioTab->isSectionOpen(AudioSettingsTab::Section::Device));
 }
 
 // The stock selector's MIDI checklist cannot carry a per-device "(MIDI Remote)" suffix, so
@@ -781,6 +797,46 @@ TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBounds
     EXPECT_LE(titleBounds.getBottom(), contentHeight);
     EXPECT_LE(swatchBounds.getBottom(), contentHeight);
     EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
+}
+
+// The Preferences picker row (category drop-down, then the filter field; the All view's fold-all strip sits
+// below it) at the window's least width: the filter field must show its whole hint, and the
+// drop-down must show its longest entry. The drop-down used to be a fixed 200 px and the hint was cut.
+TEST_F(SettingsWindowTest, PreferencesPickerRowFitsItsContentsAtTheMinimumWidth) {
+    synth::theme::AppLookAndFeel lookAndFeel;
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setLookAndFeel(&lookAndFeel);
+    settingsWindow.setSize(SettingsWindow::kMinWidth, SettingsWindow::kDefaultHeight);
+    settingsWindow.resized();
+
+    auto* tab = dynamic_cast<PreferencesSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(3));
+    ASSERT_NE(tab, nullptr);
+    ASSERT_LE(tab->getWidth(), SettingsWindow::kMinWidth) << "the tab is the window's width less its outline";
+    tab->setSelectedCategory(PreferencesSettingsTab::Category::All); // already the default: no layout of its own
+    // The tab is not the open one, so it sits outside the window's component tree: lay it out again now
+    // that the first layout (done while the drop-down still had no height) is behind it.
+    tab->resized();
+    ASSERT_TRUE(tab->getFoldAllButtonForTest().isVisible()) << "All mode shows the fold-all strip";
+
+    auto& search = tab->getSearchFieldForTest();
+    const int hintWidth = juce::GlyphArrangement::getStringWidthInt(search.getFont(), search.getTextToShowWhenEmpty());
+    EXPECT_GE(search.getWidth(), hintWidth + search.getLeftIndent() + search.getBorder().getLeftAndRight())
+        << "the filter field is cut: it is " << search.getWidth() << " px for a " << hintWidth << " px hint";
+
+    auto& combo = tab->getCategoryComboForTest();
+    juce::Label* comboLabel = nullptr;
+    for (auto* child : combo.getChildren())
+        if (comboLabel == nullptr)
+            comboLabel = dynamic_cast<juce::Label*>(child);
+    ASSERT_NE(comboLabel, nullptr);
+    for (int i = 0; i < combo.getNumItems(); ++i) {
+        combo.setSelectedItemIndex(i, juce::dontSendNotification);
+        const int textWidth = juce::GlyphArrangement::getStringWidthInt(comboLabel->getFont(), combo.getItemText(i));
+        EXPECT_GE(comboLabel->getWidth(), textWidth + comboLabel->getBorderSize().getLeftAndRight())
+            << "\"" << combo.getItemText(i).toStdString() << "\" is cut in the category drop-down";
+    }
+    settingsWindow.setLookAndFeel(nullptr);
 }
 
 // ============================================================================

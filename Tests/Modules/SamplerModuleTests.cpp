@@ -126,8 +126,9 @@ TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
     // bypassed, dualIO, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level,
-    // muted  (dualIO only changes the jack layout — the module always emits a real stereo pair)
-    EXPECT_EQ(module->getParameters().size(), 12);
+    // end, fine, reverse, muted, attack, release, tone, feel, voices, releaseSound, glide, mono  (dualIO only changes
+    // the jack layout — the module always emits a real stereo pair)
+    EXPECT_EQ(module->getParameters().size(), 23);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getTotalNumOutputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getVisibleInputPortCount(), SamplerModule::kNumChannels);
@@ -145,7 +146,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 7u); // Root Note CV is the 7th target
+    EXPECT_EQ(targets.size(), 15u); // Root Note, End and Fine CV are the 7th-9th; Instrument knobs the 10th-15th
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 
@@ -516,7 +517,7 @@ TEST_F(SamplerModuleTest, GranularModeProducesBoundedAudio) {
         return 0.6f * std::sin(juce::MathConstants<float>::twoPi * 220.0f * (float)i / (float)kRate);
     });
     ASSERT_TRUE(module->loadSampleFile(file));
-    playMode()->setValueNotifyingHost(1.0f);
+    playMode()->setValueNotifyingHost(playMode()->convertTo0to1(1.0f));
     ASSERT_EQ(playMode()->getIndex(), 1); // Granular
     density()->setValueNotifyingHost(density()->getNormalisableRange().convertTo0to1(40.0f));
     grainSize()->setValueNotifyingHost(grainSize()->getNormalisableRange().convertTo0to1(60.0f));
@@ -563,6 +564,71 @@ TEST_F(SamplerModuleTest, FreeRunsWhenNothingIsPatchedIn) {
     auto out = render(*module, 1, 512);
     EXPECT_GT(TestAudioHelpers::computeRMSInRange(out, 128, 512, 0), 0.1f)
         << "dropping a Sampler in and loading a file should make sound with no wiring";
+    file.deleteFile();
+}
+
+// Regression test for FRO480: a Sampler fed only by a MIDI cable fired its sample on the first block,
+// before any note, because neither latch (trigger cable, MIDI received) had set yet.
+TEST_F(SamplerModuleTest, MidiWiredSamplerStaysSilentUntilTheFirstNote) {
+    auto file = writeTestWav("sampler-midiwired-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(file));
+    module->setMidiInputWired(true);
+
+    auto out = render(*module, 4, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(out, 0, 4 * 512, 0), 0.0f, 1e-6f)
+        << "a MIDI-wired Sampler with no note must stay silent";
+    EXPECT_FALSE(module->isPlaying());
+    file.deleteFile();
+}
+
+// Regression test for FRO480: a project is rebuilt cable by cable while the audio thread renders, so a Sampler
+// restored from saved state looks unpatched for a moment and used to fire its sample as the project opened.
+TEST_F(SamplerModuleTest, ASampleRestoredFromAProjectDoesNotFreeRun) {
+    auto file = writeTestWav("sampler-restored-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    juce::DynamicObject::Ptr state = new juce::DynamicObject();
+    state->setProperty(synth::module_file_keys::kSampleFile, file.getFullPathName());
+    module->setExtraState(juce::var(state.get()));
+
+    auto out = render(*module, 4, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(out, 0, 4 * 512, 0), 0.0f, 1e-6f);
+    EXPECT_FALSE(module->isPlaying());
+
+    auto note = render(*module, 1, 512, -1, 0.0f, TestAudioHelpers::createNoteOnMidi(60));
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(note, 128, 512, 0), 0.01f) << "a note still plays it";
+    file.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, PickingAFileAfterARestoreFreeRunsAgain) {
+    auto restored = writeTestWav("sampler-restored-a-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    auto picked = writeTestWav("sampler-picked-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(restored, /*fromRestoredState=*/true));
+    ASSERT_TRUE(module->loadSampleFile(picked));
+
+    auto out = render(*module, 1, 512);
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(out, 128, 512, 0), 0.1f);
+    restored.deleteFile();
+    picked.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, MidiWiredSamplerPlaysOnNoteOnAndStaysSilentAfterNoteOff) {
+    auto file = writeTestWav("sampler-midiwired-note-480.wav", 44100, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+    module->setMidiInputWired(true);
+
+    auto on = render(*module, 1, 512, -1, 0.0f, TestAudioHelpers::createNoteOnMidi(60));
+    EXPECT_GT(TestAudioHelpers::computeRMSInRange(on, 128, 512, 0), 0.1f);
+    EXPECT_TRUE(module->isPlaying());
+
+    juce::MidiBuffer noteOff;
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 60, 0.0f), 0);
+    juce::AudioBuffer<float> offBlock(SamplerModule::kNumChannels, 512);
+    offBlock.clear();
+    module->processBlock(offBlock, noteOff);
+
+    auto after = render(*module, 1, 512);
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(after, 0, 512, 0), 0.0f, 1e-6f)
+        << "after the Note-Off the gate must stay low, not fall back to free-running";
     file.deleteFile();
 }
 
@@ -615,10 +681,13 @@ TEST_F(SamplerModuleTest, BypassAndMuteSilenceOutput) {
     ASSERT_TRUE(module->loadSampleFile(file));
 
     module->setBypassed(true);
+    render(*module, 1, 512); // the toggle block fades out; the clearing branch runs from the next one
     EXPECT_TRUE(TestAudioHelpers::isSilent(render(*module, 1, 512), 0)) << "a source module clears on bypass";
     module->setBypassed(false);
+    render(*module, 1, 512); // the fade back in runs first; a mute toggled meanwhile waits for it
 
     module->setMuted(true);
+    render(*module, 1, 512);
     EXPECT_TRUE(TestAudioHelpers::isSilent(render(*module, 1, 512), 0));
     module->setMuted(false);
     file.deleteFile();

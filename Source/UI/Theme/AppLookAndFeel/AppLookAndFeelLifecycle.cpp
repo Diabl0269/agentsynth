@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "AppLookAndFeelInternal.h"
+#include "TestMode/AutomationHiding.h"
 
 namespace synth::theme {
 
@@ -28,6 +29,11 @@ AppLookAndFeel::AppLookAndFeel() {
 }
 
 AppLookAndFeel::~AppLookAndFeel() = default;
+
+void AppLookAndFeel::playAlertSound() {
+    if (!synth::testmode::alertSoundsAreMuted())
+        juce::LookAndFeel_V4::playAlertSound();
+}
 
 void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     const bool familyChanged =
@@ -84,16 +90,26 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::ToggleButton::tickColourId, c.accent);
     setColour(juce::ToggleButton::tickDisabledColourId, c.border);
 
+    // An alert window (and the confirm window with its checkbox) keeps V4's stock dark surface otherwise, so the
+    // themed checkbox text vanished on it in every light theme.
+    setColour(juce::AlertWindow::backgroundColourId, c.surface);
+    setColour(juce::AlertWindow::textColourId, c.textPrimary);
+    setColour(juce::AlertWindow::outlineColourId, c.border);
+
     setColour(juce::ComboBox::backgroundColourId, c.surface);
     setColour(juce::ComboBox::textColourId, c.textPrimary);
     setColour(juce::ComboBox::outlineColourId, c.border);
     setColour(juce::ComboBox::arrowColourId, c.textMuted);
     setColour(juce::ComboBox::buttonColourId, c.surfaceHi);
 
-    setColour(juce::PopupMenu::backgroundColourId, c.surface);
+    // JUCE makes a menu window opaque (and fills it white) only when this colour is fully opaque.
+    // drawPopupMenuBackground paints the real rounded surface itself, so the colour is kept
+    // just shy of opaque: the window stays transparent outside the rounded corners.
+    setColour(juce::PopupMenu::backgroundColourId, c.surface.withAlpha(0.99f));
     setColour(juce::PopupMenu::textColourId, c.textPrimary);
     setColour(juce::PopupMenu::highlightedBackgroundColourId, c.accent.withAlpha(0.25f));
     setColour(juce::PopupMenu::highlightedTextColourId, c.textPrimary);
+    setColour(juce::PopupMenu::headerTextColourId, c.textMuted);
 
     setColour(juce::TextEditor::backgroundColourId, c.bg0);
     setColour(juce::TextEditor::textColourId, c.textPrimary);
@@ -152,6 +168,10 @@ void AppLookAndFeel::recomputeMeterColourStops() {
                                                             : synth::ui::MeterColourStops::fromTheme(theme.colors);
 }
 
+std::unique_ptr<juce::Drawable> AppLookAndFeel::getRoleIcon(Icon id, const IconRoleColours& roles) const {
+    return iconLibrary_.createRecoloured(id, roles);
+}
+
 void AppLookAndFeel::retintIcons() {
     const auto& c = theme.colors;
 
@@ -161,33 +181,14 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ModuleDelete, c.error);
     iconLibrary_.setTintColour(Icon::ModuleDualIO, c.textMuted);
 
-    // Toolbar action + panel-toggle glyphs are tinted MUTED here — this is the rest-state base
-    // that MainComponent::applyToolbarIcons() clones and re-tints (via Drawable::replaceColour)
-    // into the hover (textPrimary) and toggled-on (accent) variants it hands to
-    // DrawableButton::setImages(). Do not tint these textPrimary here: applyToolbarIcons()'s
-    // replaceColour(textMuted, ...) calls assume this exact starting colour.
-    iconLibrary_.setTintColour(Icon::ActionNew, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionUndo, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionRedo, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionSave, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionLoad, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionSettings, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ActionFeedback, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleAI, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textMuted);
-    iconLibrary_.setTintColour(Icon::ToggleMinimap, c.textMuted);
+    // The toolbar's glyphs are multi-role: synth::ui::ToolbarButton recolours them per group from the
+    // untinted originals (getRoleIcon) whenever the theme changes, so none is tinted here.
 
     // TransportStop is status-bar-only chrome (StatusBarComponent's master-mute button, which
-    // sets only a single "normal" image — no hover/toggled-on variants) — kept at textPrimary,
-    // unlike the toolbar set above.
+    // sets only a single "normal" image — no hover/toggled-on variants) — kept at textPrimary.
     iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
 
-    // TransportPlay is scaffolding (no dedicated glyph yet — see IconLibrary.h) reused as the
-    // ToggleBottomPanel toolbar button's icon, so it follows the same muted-base convention as the
-    // rest of the toolbar set above.
+    // TransportPlay is scaffolding (no button shows it); tinted like the rest of the chrome.
     iconLibrary_.setTintColour(Icon::TransportPlay, c.textMuted);
 
     // Library category headers are quieter than the action chrome.
@@ -223,17 +224,24 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ToolRange, c.textPrimary);
 
     // Track-header kind glyphs (MIDI/Audio/Automation) are quiet chrome, same convention as the
-    // library category headers above. FollowPlayhead is a toolbar-style toggle, so it follows
-    // the toolbar action set's textPrimary base instead.
+    // library category headers above. FollowPlayhead is a toggle whose glyph colour carries its
+    // state, so it shares their muted rest tint; the timeline panel clones hover and on variants.
     iconLibrary_.setTintColour(Icon::TrackMidi, c.textMuted);
     iconLibrary_.setTintColour(Icon::TrackAudio, c.textMuted);
     iconLibrary_.setTintColour(Icon::TrackAutomation, c.textMuted);
-    iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textMuted);
 
     // DetachablePanelHost's icon-only detach/dock-back control -- muted base, same
     // convention as the toolbar action set above (DetachablePanelHost clones its own hover variant
     // the same way MainComponent::applyToolbarIcons does).
     iconLibrary_.setTintColour(Icon::ActionDetachWindow, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionDockBack, c.textMuted); // the same muted base; the button clones its hover
+
+    // The mixer header's sources badge: a muted base the badge clones its hover and on variants from.
+    iconLibrary_.setTintColour(Icon::MixerSources, c.textMuted);
+
+    // The mixer insert list's split row: the accent, like the paths' rails it heads.
+    iconLibrary_.setTintColour(Icon::MixerSplit, c.accent);
 }
 
 } // namespace synth::theme

@@ -57,6 +57,11 @@ void MixerFaderSlider::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu())
         return;
 
+    // A double-click's second press: mouseDoubleClick resets, and a drag must not open a second
+    // change gesture nested inside it.
+    if (e.getNumberOfClicks() > 1)
+        return;
+
     if (e.mods.isCommandDown()) {
         // Cmd-click (Ctrl-click on Windows -- isCommandDown() is already the platform-correct
         // check) resets to 0 dB, Cubase's convention -- no drag starts.

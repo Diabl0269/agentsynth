@@ -6,6 +6,7 @@
 
 #include "../UI/MidiRemote/MidiRemotePanelTestFixture.h"
 
+#include "../TestWait.h"
 #include "MidiRemote/ControllerProfileStore.h"
 #include "MidiRemote/ProfileEditHistory.h"
 
@@ -223,7 +224,7 @@ TEST_F(MidiRemoteProfileHistoryTest, ForgettingAGlobalActionIsOneUndoableStep) {
 // focus grab) and there is something to undo; the text names the step.
 TEST_F(MidiRemoteProfileHistoryTest, ToolbarCueNamesTheNextUndoOnlyWhileThePanelHoldsFocus) {
     rename("A");
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(panel_.getToolbarForTest().getUndoHint().isEmpty()) << "not focused -- no cue";
 
     panel_.setHoldsUndoFocusForTest(true);
@@ -235,14 +236,14 @@ TEST_F(MidiRemoteProfileHistoryTest, ToolbarCueNamesTheNextUndoOnlyWhileThePanel
 
     // The cue follows the history through the live-refresh path.
     ASSERT_TRUE(controller_->undoProfileEdit());
-    pump();
+    synth::test::waitUntil([&] { return panel_.getToolbarForTest().getUndoHint().endsWith("undoes: Add controller"); });
     EXPECT_TRUE(panel_.getToolbarForTest().getUndoHint().endsWith("undoes: Add controller"));
     ASSERT_TRUE(controller_->undoProfileEdit());
-    pump();
+    synth::test::waitUntil([&] { return panel_.getToolbarForTest().getUndoHint().isEmpty(); });
     EXPECT_TRUE(panel_.getToolbarForTest().getUndoHint().isEmpty()) << "nothing left to undo -- no cue";
 
     ASSERT_TRUE(controller_->redoProfileEdit());
-    pump();
+    synth::test::flushMessageQueue();
     panel_.setHoldsUndoFocusForTest(false);
     EXPECT_TRUE(panel_.getToolbarForTest().getUndoHint().isEmpty()) << "focus left the panel -- cue hidden";
 }

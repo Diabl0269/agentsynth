@@ -6,10 +6,15 @@
 // directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyRing.h"
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/ScrollPolicy.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -17,23 +22,18 @@ namespace {
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
+// The track-header column's width in px; absent = the themed default.
+constexpr const char* kTimelineTrackHeaderWidthPropertyKey = "timelineTrackHeaderWidth";
+constexpr int kTrackHeaderWidthHandleWidth =
+    6; // the strip along the column's right edge, inside the column and 1 px short of the ruler
 // The roll's key-label density (PianoRollComponent::KeyLabelMode). "all" (default) labels every
 // key row; "c" labels only the Cs. Owned by PreferencesSettingsTab's persistX pattern; read here
 // by reloadPianoRollAppearancePrefs().
 constexpr const char* kPianoRollKeyLabelsPropertyKey = "pianoRollKeyLabels";
 
-// the "+ Track" strip at the top of the track-header column. Fixed height — the headers
+// the "Add Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
-
-// Automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
-// fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
-constexpr int kAutomationStripHeaderHeight = 24;
-// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
-// the effective width from 20 to 24 px.
-constexpr int kAutomationToolButtonWidth = 28;
-constexpr int kAutomationRecordModeComboWidth = 90;
-constexpr int kAutomationCloseButtonWidth = 24;
 
 // 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
 // the effective width from 20 to 24 px.
@@ -52,11 +52,6 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
-// 30 (was 26): part of the timeline-panel button-size sweep — both buttons are .reduced(2) at
-// their setBounds() call site, so the effective on-screen size grows from 22 to 26 px.
-// Wide enough for the word "Snap" (it used to read "Q" and be 30 px) — see the member's comment in
-// TimelinePanelComponent.h for why the label is the verb and not the key.
-constexpr int kSnapToggleButtonWidth = 46;
 
 // A marker's stem where it crosses the CLIPS, well under the ruler flag's own alpha: it has to
 // locate the marker against the arrangement without competing with the clips for attention.
@@ -70,21 +65,29 @@ constexpr int kFollowPlayheadButtonWidth = 30;
 // reloadPianoRollAppearancePrefs() once, below.
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
+    automationLanes_.setApplicationProperties(props); // the chips every lane header shows
+    // Closed until first opened (unlike the Mixer's pane): the routing view is opt-in.
+    sidePane_.setPersistence(props != nullptr ? props->getUserSettings() : nullptr, "timeline", /*defaultOpen=*/false);
     // Forwarded even when there is no user-settings file: both of these degrade to "in-memory
     // only" / "read the default" rather than needing one, and the early return below would
     // otherwise leave them holding a stale pointer.
     clipLaneArea_.setApplicationProperties(props);
+    clipSizingButton_->setApplicationProperties(props); // the clip edge sizing mode, kept across projects
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
         ruler_.setPropertiesFile(nullptr);
+        sectionStrip_->setPropertiesFile(nullptr);
+        refreshSectionsStripSetting();
         return;
     }
 
     // Where the marker colour picker's favourites shelf persists to — the same shelf the track
     // header's swatch uses, so a colour saved from one is offered by the other.
     ruler_.setPropertiesFile(appProperties_->getUserSettings());
+    sectionStrip_->setPropertiesFile(appProperties_->getUserSettings());
+    refreshSectionsStripSetting();
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
-    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::HundredTwentyEighth, saved);
+    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::kLastSnap, saved);
     // setSnap (not a bare assignment) so a restored musical division is also where cycleSnapValue's
     // from-Off rule resumes — a restored Snap::Off leaves lastMusicalSnap at its default, which is
     // exactly the documented fallback.
@@ -94,10 +97,20 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
         appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
 
-    followPlayhead_ =
-        appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
-    followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
-    pianoRoll_.setFollowPlayhead(followPlayhead_);
+    follow_.enabled =
+        appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, follow_.enabled);
+    if (const int width = appProperties_->getUserSettings()->getIntValue(kTimelineTrackHeaderWidthPropertyKey, 0);
+        width > 0)
+        setTrackHeaderWidth(width, false);
+    followPlayheadButton_.setToggleState(follow_.enabled, juce::dontSendNotification);
+    follow_.mode = followModeFromKey(
+        appProperties_->getUserSettings()->getValue(kFollowModeKey, followModeKey(follow_.mode)).toStdString());
+    follow_.pointPercent = clampFollowPointPercent(
+        appProperties_->getUserSettings()->getIntValue(kFollowPointPercentKey, follow_.pointPercent));
+    followPlayheadButton_.mode = follow_.mode;
+    pianoRoll_.setFollowPlayhead(follow_.enabled);
+    pianoRoll_.setFollowStyle(follow_.mode, follow_.pointPercent);
+    refreshShortcutTooltips();
 
     // A pure forward -- the transport bar restores/persists ITS OWN two keys
     // ("timelineMetronomeEnabled", "timelineCountInBars") -- this panel has no other reason to know
@@ -171,12 +184,10 @@ bool TimelinePanelComponent::cycleSnapValue(int direction) {
         return setSnapValue(entry);
     }
 
-    // Snap is declared coarsest -> finest (see TimelineViewState), so the step is a clamped +-1 on
-    // the enum's own int. CLAMPED, never wrapped: parking on 1/128 under a held key is far less
-    // surprising than silently landing back on Bar.
-    const int stepped =
-        juce::jlimit((int)Snap::Bar, (int)Snap::HundredTwentyEighth, (int)viewState_.snap + (direction > 0 ? 1 : -1));
-    return setSnapValue((Snap)stepped);
+    // Each kind is declared coarsest -> finest (see TimelineViewState), so the step stays inside the current
+    // kind -- a triplet grid cycles through the triplets, a dotted one through the dotted values. CLAMPED, never
+    // wrapped: parking on 1/128 under a held key is far less surprising than silently landing back on Bar.
+    return setSnapValue(TimelineViewState::stepWithinKind(viewState_.snap, direction));
 }
 
 void TimelinePanelComponent::setSnapEnabled(bool enabled) {
@@ -184,6 +195,7 @@ void TimelinePanelComponent::setSnapEnabled(bool enabled) {
     persistSnapChoice();
     snapToggleButton_.setToggleState(enabled, juce::dontSendNotification);
     ruler_.repaint();
+    sectionStrip_->repaint();
     repaint();
 }
 
@@ -202,7 +214,7 @@ void TimelinePanelComponent::persistSnapChoice() {
 // both the arrangement view and the roll -- including from the setApplicationProperties restore
 // path.
 void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
-    followPlayhead_ = enabled;
+    follow_.enabled = enabled;
     followPlayheadButton_.setToggleState(enabled, juce::dontSendNotification);
     pianoRoll_.setFollowPlayhead(enabled);
     persistFollowPlayheadChoice();
@@ -211,7 +223,9 @@ void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
 void TimelinePanelComponent::persistFollowPlayheadChoice() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
+    appProperties_->getUserSettings()->setValue(kTimelineFollowPlayheadPropertyKey, follow_.enabled);
+    appProperties_->getUserSettings()->setValue(kFollowModeKey, followModeKey(follow_.mode));
+    appProperties_->getUserSettings()->setValue(kFollowPointPercentKey, follow_.pointPercent);
     appProperties_->saveIfNeeded();
 }
 
@@ -225,6 +239,7 @@ void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
     // mouseWheelMove), so a preference set on the panel chrome must reach it directly rather than
     // through anything shared like TimelineViewState.
     pianoRoll_.setScrollInverted(inverted);
+    drum_->grid.setScrollInverted(inverted);
 }
 
 // mouseWheelMove derives the physical gesture direction via synth::ui::wheelGestureIsUpward
@@ -234,6 +249,7 @@ void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
 void TimelinePanelComponent::setZoomScrollInverted(bool inverted) noexcept {
     zoomScrollInverted_ = inverted;
     pianoRoll_.setZoomScrollInverted(inverted); // same forwarding reason as setScrollInverted above
+    drum_->grid.setZoomScrollInverted(inverted);
 }
 
 //==============================================================================
@@ -250,7 +266,8 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
 
     // Cubase-style bindings: Cmd = horizontal zoom, Cmd+Shift = vertical zoom (row height),
     // Shift or a trackpad's own deltaX = horizontal scroll, plain vertical wheel = vertical
-    // track scroll (headers + lanes together).
+    // track scroll (headers + lanes together). Option + a vertical scroll is vertical zoom too,
+    // the trackpad's one-hand way (macOS pinch has no axis, so it cannot say "vertical" itself).
     //
     // The two ZOOM branches are decided by their MODIFIERS, so they must not read a single axis:
     // macOS folds Shift+wheel into deltaX, which would leave Cmd+Shift+wheel reading deltaY == 0
@@ -267,7 +284,10 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomMagnitude = std::abs((double)dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
-    if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
+    const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
+    if (e.mods.isCommandDown() || optionVertical)
+        wheelTween_.stop();
+    if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
     }
@@ -281,6 +301,7 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     // with juce::Viewport's sign convention (natural), plus this panel's inversion preference —
     // and both of these origins DO grow the Viewport way (firstVisibleBeat is the beat at x == 0,
     // trackScrollY the pixels scrolled off the top), so no extra axis mapping is needed here.
+    const bool eased = !wheel.isSmooth && !wheel.isInertial; // a mouse-wheel notch, not a trackpad
     const bool horizontal = e.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
         // Which axis the gesture arrived on, NOT "the dominant delta": a Shift+wheel that the OS
@@ -288,25 +309,60 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
         // either one is the amount to move by.
         const float delta = std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
         const double deltaPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
-        viewState_.scrollBeats(deltaPx / viewState_.pixelsPerBeat);
-        ruler_.repaint();
-        repaint();
+        if (deltaPx != 0.0)
+            scrollByWheel(0, deltaPx / viewState_.pixelsPerBeat, eased);
         return;
     }
 
-    scrollTrackRows((double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit);
+    const double deltaY = (double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit;
+    if (deltaY != 0.0)
+        scrollByWheel(1, deltaY, eased);
+}
+
+// Direct events, and a host that isn't showing (headless tests), apply at once after ending any
+// tween; a notch eases in via ScrollTweenRunner instead.
+void TimelinePanelComponent::scrollByWheel(int axis, double amount, bool eased) {
+    const auto read = [this](int a) { return a == 0 ? viewState_.firstVisibleBeat : viewState_.trackScrollY; };
+    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
+    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
+        return;
+    wheelTween_.stop();
+    applyWheelScroll(axis, amount);
+}
+
+// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lanes,
+// marker stems, playhead) -- never the track headers, which scroll only vertically.
+void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
+    if (axis == 1) {
+        scrollTrackRows(amount);
+        return;
+    }
+    // Only a USER's sideways scroll reaches here (the wheel, a trackpad swipe, the eased wheel
+    // tween); follow's own page-flip goes through pageViewToShowBeat and never this method. Taking
+    // the view away from the playhead by hand means "stop following", so the flag, the button and
+    // the roll's mirror all switch off together rather than the next poll snapping the view back.
+    if (follow_.enabled)
+        setFollowPlayheadEnabled(false);
+    viewState_.scrollBeats(amount);
+    ruler_.repaint();
+    sectionStrip_->repaint();
+    repaint(gridLanesBounds_);
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
-    // Trackpad pinch: deliberate enough that it needs no modifier. Plain pinch = horizontal zoom
-    // around the pinch point; Shift+pinch = vertical (row height) zoom.
-    if (e.mods.isShiftDown()) {
-        if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
-            return;
-        zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
+    // Trackpad pinch, mapped like the patch canvas: a pinch grows everything around the fingers, so
+    // a plain pinch zooms time (around the pinch x) AND the track rows (around the pinch y) by the
+    // same factor, and sizes grow and shrink together. A pinch reports one scale factor and no
+    // axis, so a modifier is the only way to ask for one axis: Option+pinch (or Shift+pinch) =
+    // rows only, Cmd+pinch = time only.
+    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
         return;
-    }
-    zoomHorizontalAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+    const bool rowsOnly = e.mods.isAltDown() || e.mods.isShiftDown();
+    const bool timeOnly = !rowsOnly && e.mods.isCommandDown();
+    if (!rowsOnly)
+        zoomHorizontalAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+    if (!timeOnly)
+        zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
 }
 
 //==============================================================================
@@ -317,6 +373,7 @@ void TimelinePanelComponent::zoomHorizontalAroundX(double factor, double anchorX
         return;
     viewState_.zoomAroundX(factor, anchorX);
     ruler_.repaint();
+    sectionStrip_->repaint();
     repaint();
 }
 
@@ -349,18 +406,8 @@ void TimelinePanelComponent::zoomTimelineVertical(double factor) {
     zoomTrackRows(factor, visibleCentreYInLanes());
 }
 
-// The SAME value TimelineClipLaneArea::getRowHeight computes, duplicated only because the two
-// components resolve their LookAndFeel independently.
-int TimelinePanelComponent::currentRowHeight() const {
-    int base = TimelineTrackHeaderComponent::kRowHeight;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        base = lf->getTheme().metrics.timelineTrackRowHeight;
-    return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
-}
-
 double TimelinePanelComponent::maxTrackScrollPx() const {
-    const int rows = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
-    return std::max(0.0, (double)(rows * currentRowHeight() - gridLanesBounds_.getHeight()));
+    return std::max(0.0, (double)(rowLayout().totalHeight() - gridLanesBounds_.getHeight()));
 }
 
 void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
@@ -371,17 +418,23 @@ void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
     syncTrackScroll();
 }
 
+// Keeps the row under the pointer put: the content y under the anchor is mapped from the old row
+// layout to the new one (clip rows and lane rows rescale, the section row does not), and the
+// scroll moves by whatever keeps that y at the same visible position. Read from the actual
+// (rounded, clamped) layouts rather than `factor`, so the clamps can't make the anchor drift.
+// A zoom sets ONE height for every track: any per-track height is cleared first, as one undo step,
+// so the zoom never scales a tall or short track relative to the rest.
 void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
-    // Keep the row under the pointer put: contentY scales with the row height, the visible y must
-    // not move. Recompute from the actual (rounded, clamped) row heights rather than `factor` so
-    // the clamps can't make the anchor drift.
-    const int oldRowHeight = currentRowHeight();
+    const auto before = rowLayout();
     const double contentY = anchorLaneY + viewState_.trackScrollY;
+    const bool clearedHeights = clearTrackHeightOverrides();
     viewState_.scaleRowHeight(factor);
-    const int newRowHeight = currentRowHeight();
-    if (newRowHeight == oldRowHeight)
+    pushAutomationGeometry(); // lane rows follow the same zoom
+    const auto after = rowLayout();
+    if (!clearedHeights && after.trackRowHeight() == before.trackRowHeight() &&
+        after.totalHeight() == before.totalHeight())
         return;
-    viewState_.trackScrollY = contentY * (double)newRowHeight / (double)oldRowHeight - anchorLaneY;
+    viewState_.trackScrollY = TimelineRowLayout::mapContentY(before, after, contentY) - anchorLaneY;
     viewState_.scrollTracksPx(0.0, maxTrackScrollPx()); // clamp into the new range
     layoutTrackHeaders();
     syncTrackScroll();
@@ -393,37 +446,29 @@ void TimelinePanelComponent::syncTrackScroll() {
     // no feedback loop.
     trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
     clipLaneArea_.repaint();
+    placeLaneBodies();
     repaint(gridLanesBounds_);
 }
 
 //==============================================================================
 void TimelinePanelComponent::resized() {
+    trackListMotion_.finishNow(); // its picture is of the old geometry
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
     // MainComponent::resized()).
     int transportBarHeight = 34;
-    int trackHeaderWidth = 190;
     int rulerHeight = 30; // keep in step with Theme::Metrics::timelineRulerHeight
-    int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         transportBarHeight = m.timelineTransportBarHeight;
-        trackHeaderWidth = m.timelineTrackHeaderWidth;
         rulerHeight = m.timelineRulerHeight;
-        automationStripHeight = m.timelineAutomationStripHeight;
     }
+    const int trackHeaderWidth = getTrackHeaderWidth();
 
     auto bounds = getLocalBounds();
     transportBarBounds_ = bounds.removeFromTop(transportBarHeight);
+    layoutSidePane(bounds);
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
-
-    // The "+ MIDI Track" strip is pinned at the top of the header column, the scrolling header list
-    // below it. Both live INSIDE trackHeaderBounds_, so the panel's three regions still tile.
-    auto headerColumn = trackHeaderBounds_;
-    addTrackButton_.setBounds(headerColumn.removeFromTop(kAddTrackButtonHeight).reduced(2, 1));
-    trackHeaderViewport_.setBounds(headerColumn);
-    layoutTrackHeaders();
-
     auto lanes = lanesBounds_;
     // While the piano roll is OPEN its chip toolbar is the top row of the lanes region — ABOVE the
     // ruler, so the roll's chrome sits over the whole unit instead of being sandwiched between the
@@ -431,21 +476,38 @@ void TimelinePanelComponent::resized() {
     // leaves the ruler's band blank for this sibling to draw in (PianoRollComponent::
     // setRulerBandHeight). While the roll is closed nothing here changes: the ruler is the top row and
     // the roll gets gridLanesBounds_ like the clip lanes do.
-    const bool rollOpen = pianoRoll_.isOpen();
+    const bool rollOpen = clipEditorOpen();
     const int rollTop = lanes.getY();
     // Open, the ruler drops below the roll's toolbar row; closed, it is the top row as it always was.
     if (rollOpen)
         lanes.removeFromTop(synth::ui::PianoRollComponent::kToolbarHeight);
+    // The Sections strip sits directly above the ruler; 0 px (and hidden) while an editor covers the lanes or the
+    // setting is off. `rulerHeight` stays the ruler's own height everywhere below.
+    const int stripHeight = sectionStripHeight();
+    sectionStrip_->setBounds(lanes.removeFromTop(stripHeight));
+    sectionStrip_->setVisible(stripHeight > 0);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
+    // The width handle runs down the column's right edge beside the track rows, inside the column and 1 px short of
+    // the lanes, so it never overlaps the ruler, the lanes or the strip above them.
+    const auto handleColumn = trackHeaderBounds_.withTrimmedRight(1).withTop(gridLanesBounds_.getY());
+    trackHeaderWidthHandle_.setBounds(handleColumn.withLeft(handleColumn.getRight() - kTrackHeaderWidthHandleWidth));
 
-    // The automation strip is carved from the BOTTOM of gridLanesBounds_ (which is what
-    // shrinks the clip-lane area/piano roll below), leaving the ruler untouched above.
-    if (automationStripVisible_ && gridLanesBounds_.getHeight() > automationStripHeight) {
-        automationStripBounds_ = gridLanesBounds_.removeFromBottom(automationStripHeight);
-    } else {
-        automationStripBounds_ = {};
-    }
+    // The "Add Track" strip is pinned at the top of the header column, the scrolling header list below it. Both live
+    // INSIDE trackHeaderBounds_, so the panel's three regions still tile. The strip is exactly as tall as what sits
+    // above the clip rows (the Sections strip and the ruler, plus the roll's toolbar while it is open), so every header
+    // row starts at the same y as its clip row and its lane rows. The Sections strip's row carries the "Sections" label
+    // (paint()); the button sits below it.
+    auto headerColumn = trackHeaderBounds_;
+    const auto strip = headerColumn.removeFromTop(
+        std::max(kAddTrackButtonHeight, gridLanesBounds_.getY() - trackHeaderBounds_.getY()));
+    // The button is as tall as its 24 px chip needs; the strip itself does not grow.
+    // ... and stops one pixel short of the width handle that runs down the column's right edge.
+    auto addArea = strip.withTrimmedTop(stripHeight).reduced(2);
+    addArea.setRight(std::min(addArea.getRight(), trackHeaderWidthHandle_.getX() - 1));
+    addTrackButton_.setBounds(addArea);
+    trackHeaderViewport_.setBounds(headerColumn);
+    layoutTrackHeaders();
 
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
@@ -460,10 +522,12 @@ void TimelinePanelComponent::resized() {
     // only on the open path would frame the very first clip against the wrong canvas height. A closed
     // roll is invisible, so a canvasTop() describing the open geometry costs nothing meanwhile.
     pianoRoll_.setRulerBandHeight(rulerHeight);
+    drum_->grid.setRulerBandHeight(rulerHeight);
     // The rect, by contrast, IS two-mode: closed, the roll is exactly the clip-lane rect (the two are
     // interchangeable there, and leaving an invisible component sitting over the ruler is the kind of
     // thing that reads as a bug); open, it also covers its toolbar row and the ruler band.
-    pianoRoll_.setBounds(rollOpen ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    pianoRoll_.setBounds(pianoRoll_.isOpen() ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    drum_->grid.setBounds(drum_->grid.isOpen() ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
     // The ruler is a SIBLING drawn inside the band the roll reserves for it, and the roll was added to
     // this panel after the ruler — so without this the roll would paint over it. Re-asserted here
     // rather than once at open time because a re-layout is the only moment the overlap can appear.
@@ -473,10 +537,8 @@ void TimelinePanelComponent::resized() {
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
     // also the ruler's — i.e. exactly TimelineViewState's origin, so no offset arithmetic is
-    // needed anywhere in the overlay. Trimmed by the strip height too, so the line never
-    // draws underneath the strip's own chrome.
-    playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
-                                                          : lanesBounds_);
+    // needed anywhere in the overlay. It runs straight through the automation lanes too.
+    playhead_.setBounds(lanesBounds_);
     // The piano roll's rect PLUS the ruler strip above it, expressed in the OVERLAY's coordinates.
     // While the roll is open the overlay skips these rows — the roll draws its own line
     // (LocalPlayheadClient), and the ruler strip is skipped too because it then labels bars
@@ -485,48 +547,114 @@ void TimelinePanelComponent::resized() {
     // The roll's OWN rect, not gridLanesBounds_, so the toolbar row it added above the ruler is in
     // the skipped region too — otherwise the overlay would draw its line straight across the chips.
     // Closed, pianoRoll_.getBounds() IS gridLanesBounds_, so this is unchanged there.
-    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(pianoRoll_.getBounds()) -
-                                     playhead_.getBounds().getPosition());
+    const auto editorBounds = drum_->grid.isOpen() ? drum_->grid.getBounds() : pianoRoll_.getBounds();
+    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(editorBounds) - playhead_.getBounds().getPosition());
 
-    // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
-    // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.
-    const bool stripOpen = !automationStripBounds_.isEmpty();
-    automationEditor_.setVisible(stripOpen);
-    automationToolPointerButton_.setVisible(stripOpen);
-    automationToolPencilButton_.setVisible(stripOpen);
-    automationToolLineButton_.setVisible(stripOpen);
-    automationToolEraserButton_.setVisible(stripOpen);
-    laneCombo_.setVisible(stripOpen);
-    recordModeCombo_.setVisible(stripOpen);
-    automationCloseButton_.setVisible(stripOpen);
-    if (stripOpen) {
-        auto strip = automationStripBounds_;
-        auto header = strip.removeFromTop(kAutomationStripHeaderHeight);
-        automationToolPointerButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolPencilButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolLineButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolEraserButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationCloseButton_.setBounds(header.removeFromRight(kAutomationCloseButtonWidth).reduced(2));
-        recordModeCombo_.setBounds(header.removeFromRight(kAutomationRecordModeComboWidth).reduced(2));
-        laneCombo_.setBounds(header.reduced(2));
-        automationEditor_.setBounds(strip);
+    // The automation lane editors cover the clip lanes' rect (each sits at its lane row); the piano
+    // roll takes that rect over while it is open, so they hide with the clip lanes.
+    automationLanes_.getBodies().setBounds(gridLanesBounds_);
+    automationLanes_.setBodiesOpen(!rollOpen);
+    placeLaneBodies();
+
+    layoutTransportRow();
+}
+
+// The Add Track, Snap and clip sizing buttons share the "Show button labels" preference with the top bar. The names
+// stay their screen-reader titles either way; icon-only, the tooltips carry them.
+void TimelinePanelComponent::setToolbarLabelsShown(bool shown) {
+    for (ToolbarButton* button : std::initializer_list<ToolbarButton*>{&addTrackButton_, &snapToggleButton_}) {
+        button->setLayout(ToolbarButtonLayout::Inline);
+        button->setContentCentred(button == &addTrackButton_);
+        button->setLabel(button->getName(), shown);
     }
+    clipSizingButton_->setCaptionShown(shown);
+    layoutTransportRow();
+}
 
+// Its own step so the transport row can be re-laid out without laying out the whole panel.
+void TimelinePanelComponent::layoutTransportRow() {
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_;
+    transportBar.removeFromLeft(SidePaneToggleButton::kWidth); // the side-pane button, laid out by layoutSidePane()
+    if (dockBack_ != nullptr)
+        dockBack_->setBounds(transportBar.removeFromRight(DockBackSlot::kButtonWidth).reduced(2));
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
-    snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
+    snapToggleButton_.setBounds(transportBar.removeFromRight(snapToggleButton_.getPreferredWidth() + 4).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.
     followPlayheadButton_.setBounds(transportBar.removeFromRight(kFollowPlayheadButtonWidth).reduced(2));
-    // The tool strip sits immediately left of the snap controls: both are "how the next edit
-    // behaves" chrome, so they read as one group, and neither pushes the transport controls off
-    // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).
+    // The Sizing field, then the tool strip, sit immediately left of the snap controls: all are "how the next edit
+    // behaves" chrome, so they read as one group, and none pushes the transport controls off their left-aligned
+    // home. The tools are laid out left-to-right in EditTool order (1, 2, 3, 4, 5, 7, 8).
+    clipSizingButton_->setBounds(transportBar.removeFromRight(clipSizingButton_->getFixedWidth() + 4).reduced(2));
     auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))
             button->setBounds(toolStrip.removeFromLeft(kEditToolButtonWidth).reduced(2));
     transportBar_.setBounds(transportBar);
+}
+
+//==============================================================================
+// The header column's width: the themed metric until the person drags the seam, then their width,
+// clamped so the M/S/R block and a few letters of the name always fit and the clips keep the room.
+int TimelinePanelComponent::defaultTrackHeaderWidth() const {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().metrics.timelineTrackHeaderWidth;
+    return synth::theme::Metrics{}.timelineTrackHeaderWidth;
+}
+
+// The Sections strip's row: 0 while the piano roll or drum editor covers the lanes or the Settings toggle is off.
+int TimelinePanelComponent::sectionStripHeight() const {
+    if (clipEditorOpen() ||
+        !sectionsStripShown(appProperties_ != nullptr ? appProperties_->getUserSettings() : nullptr))
+        return 0;
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().metrics.timelineSectionStripHeight;
+    return synth::theme::Metrics{}.timelineSectionStripHeight;
+}
+
+// The Preferences toggle reaches a live panel through MainComponent's settings-change dispatch, which calls this.
+void TimelinePanelComponent::refreshSectionsStripSetting() {
+    if (sectionStrip_->getHeight() == sectionStripHeight())
+        return;
+    resized();
+    repaint();
+}
+
+int TimelinePanelComponent::getTrackHeaderWidth() const {
+    return trackHeaderWidth_ > 0 ? trackHeaderWidth_ : defaultTrackHeaderWidth();
+}
+
+void TimelinePanelComponent::setTrackHeaderWidth(int width, bool persist) {
+    const int clamped = juce::jlimit(kMinTrackHeaderWidth, kMaxTrackHeaderWidth, width);
+    if (clamped != getTrackHeaderWidth()) {
+        trackHeaderWidth_ = clamped;
+        resized();
+        repaint();
+    }
+    if (persist && appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr) {
+        appProperties_->getUserSettings()->setValue(kTimelineTrackHeaderWidthPropertyKey, getTrackHeaderWidth());
+        appProperties_->saveIfNeeded();
+    }
+}
+
+// One Tab stop on the seam (Left/Right nudge, Return resets) rather than a rebindable action: the
+// column has one edge, and its arrows only mean something while it holds focus.
+void TimelinePanelComponent::initTrackHeaderWidthHandle() {
+    auto& handle = trackHeaderWidthHandle_;
+    handle.setComponentID("timelineTrackHeaderWidthHandle");
+    handle.setTitle("Track column width");
+    handle.setTooltip("Drag to resize the track column; double-click for the default width. "
+                      "When focused, Left/Right resize it and Return resets it.");
+    handle.setKeyboardFocusable(true);
+    handle.onDragStarted = [this] { trackHeaderWidthAtPress_ = getTrackHeaderWidth(); };
+    handle.onDragged = [this](int delta) { setTrackHeaderWidth(trackHeaderWidthAtPress_ + delta, false); };
+    handle.onDragEnded = [this] { setTrackHeaderWidth(getTrackHeaderWidth(), true); };
+    handle.onResetRequested = [this] { setTrackHeaderWidth(defaultTrackHeaderWidth(), true); };
+    handle.onKeyboardStep = [this](int direction) {
+        setTrackHeaderWidth(getTrackHeaderWidth() + direction * kTrackHeaderWidthKeyStep, true);
+    };
+    addAndMakeVisible(handle);
 }
 
 //==============================================================================
@@ -611,7 +739,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         // are showing. Same split PianoRollComponent draws with (see its own note: magnetism reads
         // divisionBeats, drawing reads divisionBeatsRaw).
         const double division = viewState_.divisionBeatsRaw(beatsPerBar);
-        const bool drawSubdivisionLines = drawBeatLines && division > 0.0 && division < 1.0 &&
+        const bool drawSubdivisionLines = drawBeatLines && TimelineViewState::linesFallOffBeats(division) &&
                                           synth::ui::gridLevelIsReadable(division, viewState_.pixelsPerBeat);
 
         const auto barColour = synth::ui::gridLineColourFor(synth::ui::GridLineLevel::Bar, border, bg);
@@ -628,7 +756,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
             // The beat/subdivision loops below cull per line.
             if (x >= -1.0 && x <= widthPx + 1.0) {
                 g.setColour(barColour);
-                g.drawVerticalLine(xOrigin + (int)std::llround(x), (float)top, (float)bottom);
+                g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(x), (float)top, (float)bottom);
             }
 
             if (drawBeatLines) {
@@ -637,21 +765,27 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     if (beatX < 0.0 || beatX > widthPx)
                         continue;
                     g.setColour(beatColour);
-                    g.drawVerticalLine(xOrigin + (int)std::llround(beatX), (float)top, (float)bottom);
+                    g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(beatX), (float)top, (float)bottom);
                 }
             }
 
             if (drawSubdivisionLines) {
                 g.setColour(subColour);
-                for (double beatInBar = division; beatInBar < beatsPerBar - division * 0.5; beatInBar += division) {
+                // Lines sit at whole multiples of the division counted from beat 0 (the snap grid), each worked out as
+                // k * division rather than by adding up steps, so a triplet third never drifts; a dotted grid does not
+                // restart at every bar.
+                const auto firstStep = (juce::int64)std::ceil(barBeat / division - 1e-9);
+                for (juce::int64 step = firstStep; (double)step * division < barBeat + beatsPerBar - division * 0.5;
+                     ++step) {
+                    const double beatAbs = (double)step * division;
                     // Skip positions that already got a bar/beat line — a subdivision line under
                     // a stronger one would just anti-alias the stronger line's edge.
-                    if (std::abs(beatInBar - (double)std::llround(beatInBar)) < division * 0.25)
+                    if (std::abs(beatAbs - std::round(beatAbs)) < 1e-6)
                         continue;
-                    const double subX = viewState_.beatToX(barBeat + beatInBar);
+                    const double subX = viewState_.beatToX(beatAbs);
                     if (subX < 0.0 || subX > widthPx)
                         continue;
-                    g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);
+                    g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(subX), (float)top, (float)bottom);
                 }
             }
         }
@@ -675,11 +809,22 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         g.drawVerticalLine(x, (float)trackHeaderBounds_.getY(), (float)getHeight());
     }
 
+    // ---- The Sections strip's row in the header column, and its placement-start lines through the lanes ----
+    if (sectionStrip_->isVisible()) {
+        g.setColour(synth::theme::themeOf(*this).colors.textMuted);
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawText("Sections",
+                   trackHeaderBounds_.withHeight(sectionStrip_->getHeight()).withTrimmedLeft(8).withTrimmedRight(4),
+                   juce::Justification::centredLeft, true);
+        sectionStrip_->paintLaneEdges(g, gridLanesBounds_);
+    }
+
     // ---- Marker stems through the lanes ----
     //
     // The ruler's flag says WHAT a marker is; this says WHERE, against the clips. A static painted
     // line at low alpha, repainted only when the doc changes (timelineChanged -> repaint of the
-    // lanes rect) — no timer, no per-frame work, so the §3 animation rules are untouched.
+    // lanes rect) — no timer, no per-frame work, so docs/layout/animation.md#the-time-bounded-animation-rule is
+    // untouched.
     if (doc_ != nullptr && !gridLanesBounds_.isEmpty() && viewState_.pixelsPerBeat > 0.0) {
         const double widthPx = (double)gridLanesBounds_.getWidth();
         for (const auto& marker : doc_->getMarkers()) {
@@ -693,10 +838,17 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler,
+// Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler,
 // track header viewport, transport bar and clip lane area all tile wall-to-wall against this
 // panel's own edge, so an outline painted at the end of paint() above would sit UNDER them and
 // never show.
-void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
+//
+// The routing pane and the piano roll's scale pane are focus regions nested inside this one, so the panel skips its own
+// outline while focus is in either: the pane paints its own, never two outlines for one focus location.
+void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) {
+    if (!routingPane_.hasKeyboardFocus(true) && !pianoRoll_.getScaleAssistPanel().hasKeyboardFocus(true))
+        synth::ui::paintFocusRegionOutline(*this, g);
+    topBarKeys_->paintRing(g);
+}
 
 } // namespace synth::ui

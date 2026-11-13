@@ -3,20 +3,52 @@
 // directly (there is no dock slot to reparent it out of -- see the class comment).
 #include "MixerMirrorController.h"
 
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+
 namespace synth::ui {
 
 MixerMirrorController::MixerMirrorController(juce::ApplicationProperties& appProperties, ConfigureFn configure)
     : appProperties_(appProperties)
     , configure_(std::move(configure)) {
-    headerTitle_.setText("Mixer", juce::dontSendNotification);
-    headerButton_.setClickingTogglesState(false);
-    headerButton_.setButtonText({}); // icon-only -- same convention DetachablePanelHost's own button uses
-    headerButton_.setTooltip("Close mixer window");
-    headerButton_.setTitle("Close mixer window");
-    headerButton_.onClick = [this] { close(); };
+    dockBackButton_.onClick = [this] { close(); };
 }
 
 MixerMirrorController::~MixerMirrorController() = default;
+
+void MixerMirrorController::unbindIfOpen() {
+    if (mirror_)
+        mirror_->unbindAllColumns();
+}
+
+void MixerMirrorController::unbindIfOpenFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+    if (mirror_)
+        mirror_->unbindColumnsFor(doomed);
+}
+
+void MixerMirrorController::rebuildIfStaleIfOpen() {
+    if (mirror_)
+        mirror_->rebuildIfStale();
+}
+
+void MixerMirrorController::rebuildIfOpen() {
+    if (mirror_)
+        mirror_->rebuild();
+}
+
+void MixerMirrorController::refreshTrackColoursIfOpen() {
+    if (mirror_)
+        mirror_->refreshTrackColours();
+}
+
+void MixerMirrorController::refreshMetersIfOpen() {
+    if (mirror_)
+        mirror_->refreshMeters();
+}
+
+void MixerMirrorController::refreshLiveVisualsIfOpen() {
+    if (mirror_)
+        mirror_->refreshLiveMixerVisuals();
+}
 
 void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme::AppLookAndFeel* lookAndFeel,
                                  ShortcutManager* shortcutManager,
@@ -42,8 +74,9 @@ void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme:
     mirror_->onLiveMixerStateChanged = [&sourcePanel] { sourcePanel.refreshLiveMixerVisuals(); };
     mirror_->rebuild();
 
-    window_ = std::make_unique<DetachedPanelWindow>(*mirror_, headerButton_, headerTitle_, "mixerMirrorWindowBounds",
-                                                    &appProperties_, lookAndFeel, shortcutManager);
+    window_ = std::make_unique<DetachedPanelWindow>(*mirror_, "Mixer", "mixerMirrorWindowBounds", &appProperties_,
+                                                    lookAndFeel, shortcutManager);
+    mirror_->setDockBackButton(&dockBackButton_);
     window_->onCloseRequested = [this] { close(); };
     window_->onAppShortcut = std::move(appShortcutFallback);
     window_->registerHostedPanelFocusRegion("mixerMirror", *mirror_);
@@ -62,9 +95,16 @@ void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme:
 void MixerMirrorController::close() {
     if (window_ == nullptr)
         return;
+    mirror_->setDockBackButton(nullptr);
     window_.reset();
     if (onOpenedOrClosed)
         onOpenedOrClosed();
+}
+
+// Brings the open window forward without moving keyboard focus into it (the docked copy takes the focus).
+void MixerMirrorController::raiseIfOpen() {
+    if (window_ != nullptr)
+        window_->toFront(false);
 }
 
 } // namespace synth::ui

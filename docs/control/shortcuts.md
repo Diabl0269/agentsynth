@@ -1,17 +1,17 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **94 actions** across four categories —
-**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26) and
-**Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
-nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
-digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **138 actions** across eight categories —
+**General** (56, app-wide or routed per focused editor), **Graph** (15), **Timeline** (35), **Piano Roll** (14),
+**Mixer** (5), **Layout Editor** (12), **EQ** (13, [shortcuts-eq.md](shortcuts-eq.md)) and **Track Header** (1), **Sampler Map** (1, `samplerMapPlaySelected`: P plays the selected recording while the Sampler's map window has focus) — every one rebindable, including keys that used to be hardcoded: nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
 "COLLAPSE ALL"/"EXPAND ALL"; see [`layout/module-library.md`](../layout/module-library.md#collapsible-sections) for
-the shared collapsible-list pattern it mirrors. Export/import round-trip every binding as JSON;
+the shared collapsible-list pattern it mirrors. Which sections are folded is remembered across Settings windows and launches (user setting `shortcutsFolded`). The whole tab works from the keyboard: Tab visits the search box, the strip, each
+section header and each row's binding button (named "<Action> shortcut"), and while a row is listening
+that button keeps focus and takes every key, Space and Return included. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via
 `ApplicationCommandManager`.
 
@@ -27,60 +27,66 @@ when reasoning about a key that "does nothing."
 | Cmd+N | New Patch (clear canvas) |
 | Cmd+S | Save Project — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
 | Cmd+Shift+S | Save Project As — always prompts for a new `.agsproj` location |
-| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)). Greyed out while a bounce is already running |
+| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF/FLAC/MP3, see [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)). Greyed out while a bounce is already running |
 | (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (see [`architecture/audio-engine.md`](../architecture/audio-engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
+| (menu only) | Collect & Archive... — copies every sample and wavetable the project uses from elsewhere on disk into the project folder and saves, optionally zipping the project for sending (see [`architecture/app-wiring.md`](../architecture/app-wiring.md#collect--archive)). A menu-only `AppCommands::collectAndArchive` (File menu, after Export MIDI), with no default shortcut. Greyed out while a collect, zip or render is running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable |
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). This was split from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
-| (menu only) | Contribute to Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. |
+| (menu only) | Help build Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. Join the Discord... follows it (`AppCommands::joinDiscord`, opens `branding::kDiscordUrl`, the site redirect agentsynth.app/discord): same treatment. On macOS each Help item with a description also shows it as the system menu's hover hint (`UI/Layout/MainMenuTooltips.h`); Windows menus carry none, so the text stays on the Welcome button and the Cmd+K row. |
 | Cmd+Z | Undo — the project history, or the controller edit history while the Controllers panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
 | Cmd+Shift+Z | Redo — routed the same way as Undo |
-| Cmd+M | Toggle Mod Matrix |
-| Cmd+K | Toggle Minimap |
+| Cmd+M (macOS) / Ctrl+Alt+M (Windows, Linux) | Toggle Mod Matrix — off the Mac Cmd is Ctrl, and Ctrl+M belongs to Toggle Metronome |
+| Cmd+K | Search Everything (`openCommandPalette`) — opens the [command palette](../layout/command-palette.md), one search over every action, view, module, track, marker, on/off setting, recent project and preset; type + to add a track, module or preset. A second press closes it. The top bar's Search button runs the same action |
+| Opt+Cmd+K | Toggle Minimap — moved off Cmd+K for the palette; a saved Cmd+K moves here once (`migrateMinimapOptCmdK`, only while it still holds exactly Cmd+K and nothing else holds Opt+Cmd+K; a user's own key stays) |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
-| Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
-| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
+| Cmd+B, Cmd+Opt+B | Toggle Module Library / Sound Browser: the sidebar's two views ([states](../layout/sound-browser.md#shortcuts)) |
+| Cmd+J | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active, and closing it hides the Canvas too while that is a tab. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the view in the main area. Cmd+T is released (a saved Cmd+T moves to Cmd+J once, see below). See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show the tab at that place of the tab strip (`showDockTab1`/`2`/`3`) — the key follows the position, so dragging a tab to a new place re-keys it (`BottomDockComponent::tabAtKeyPosition`; the strip's hint overlay and tooltips show the same number). Opens the dock if it's hidden and switches to the tab; a second press is a no-op (only Cmd+J closes the dock), and for a docked tab keyboard focus lands on the tab strip. A detached tab keeps its number: the key raises its window and focuses its panel (with the Mixer in both places, the second window is raised and the docked copy focused). Any other target first brings the main window forward, so the key also works from inside a detached window. A key that lands on the main window itself (nothing focused: right after launch, or after an in-place editor closes) is forwarded to the main component, so these keys work then too. The per-view actions (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`/`showCanvas`) stay rebindable, unbound by default. See [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) |
+| Cmd+0 | Focus Main View (`focusMainView`) — brings the main window forward and focuses the view in the main area, whichever it is; consistent however views are added or reordered |
+| Opt+Cmd+1 / 2 / 3 | Show the tab at that place in the Main Area (`swapDockTab1ToMain`/`2`/`3`) — the keys behind each tab's swap icon: the tab trades places with the view in the main area (the main window comes forward first), and a screen reader hears "<View> in the main area". The digit is the tab's Cmd+digit. A tab in its own window or the Mixer outside the Tab placement is refused: nothing changes (Ctrl+Alt+1..3 off the Mac). The icon's tooltip names Shift+Return and the live key; the per-view swap actions (`swapTimelineToMain` ...) stay, unbound. Related: Detach Main View (`detachMainView`, **View** menu and the command palette, rebindable, unbound by default) — opens the view in the main area (Timeline, Mixer or Controllers) in its own window; the Canvas takes the main area and the view returns to it when its window is docked back (Esc, Cmd+W or its Dock back button). Enabled only while one of those three fills the main area: the canvas has no window of its own. With the Mixer's "both places" preference on, it still moves the real Mixer panel (there is no second view to open from the main area) |
+| Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
-| Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
+| Cmd+D | Duplicate (Selected Modules, the selected clips/notes, the selected points of the focused automation lane, or the focused automation lane itself: [picks a parameter for the copy](../timeline/automation.md#change-parameter-and-duplicate)) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
-| Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
-| Space | Play / Stop (toggle the timeline transport) |
-| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
+| Cmd+R (macOS) / Ctrl+Shift+R (Windows, Linux) | Repeat — off the Mac Cmd is Ctrl, and Ctrl+R belongs to Record. Prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
+| Space | Play / Stop (toggle the timeline transport); it stays the song's key in the Sounds view, where the rebindable Shift+Space (`soundPreviewToggle`, ⇧Space on a Mac) plays or stops the sound preview |
+| Ctrl+M | Toggle Metronome (`transportToggleMetronome`) on every platform. On macOS a REAL Control, so Cmd+M stays Toggle Mod Matrix; on Windows/Linux Mod Matrix moved to Ctrl+Alt+M — see [**Transport family**](#transport-family) |
+| Ctrl+R | Record (`transportRecord`) on every platform. On macOS a REAL Control, so Cmd+R stays Repeat; on Windows/Linux Repeat moved to Ctrl+Shift+R — see [**Transport family**](#transport-family) |
+| *(unbound)* | Play / Stop / Toggle Looping / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
 | *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
-| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
+| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas toolbar, Canvas, Dock tabs, Timeline, Timeline routing pane, piano-roll scale pane, Mixer, Controllers, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
+| Cmd+Shift+Up | Focus Transport Bar (`focusTransportBar`) — from any view (canvas, library, timeline, piano roll, mixer, controllers) opens the Timeline first if it's closed (the bottom panel included: the ring is put on **Play** once the panel has slid open and only if the keys have not moved on, so it works from a closed panel too) and puts its top bar key ring on **Play**; Left/Right walk the transport (Record, Loop, Metronome, Count-in, Tempo, Time Signature, Key) and the rest of the top bar, Return presses the ringed control, Down leaves to Add Track at once (the ring is off, Add Track shows its focus), Escape leaves to the panel. Ctrl+Shift+Up off the Mac. Rebindable |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
+| Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
+| Alt+C | Recolour Focused Item (`recolourFocusedItem`) — opens the colour picker of whatever holds keyboard focus: a timeline track row, a mixer strip, the selected macro card, a morph map dot. See [`recolour-focused-item.md`](recolour-focused-item.md). Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
+| Cmd+Shift+F | Send Feedback (`openFeedback`) — opens the Send feedback window from anywhere (canvas, timeline, mixer): the same action as the top bar's **Feedback** button, whose tooltip names the live chord. Rebindable. Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen; Cmd+F is Focus Library Search and bare F is Follow Playhead, so Cmd+Shift+F is free |
+| Cmd+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add... (`openAddTrackMenu`) — opens the searchable Add list of tracks, modules and presets with the search field ready. With keyboard focus on the canvas or its toolbar it opens from the canvas toolbar's **Add** button (modules first); otherwise it shows the Timeline, focuses its **Add** button and opens from there (tracks first). Enter adds the first match, Escape closes and focus stays on the button. On the Mac it moved from the physical Ctrl+T to Cmd+T (a saved Ctrl+T moves once, `migrateAddTrackCmdT`; a key you bound yourself stays), because Ctrl+T now inserts a point in a focused curve editor or automation lane ([`point-editing.md`](point-editing.md)); off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
 
-Cmd+T (now `toggleBottomPanel`) and Space are always active (see
-[`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
-and zoom commands below are inactive whenever the panel itself isn't open (`isBottomDockVisible`),
-the same as any other timeline-only command.
+Cmd+J (`toggleBottomPanel`) and Space are always active (see
+[`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid and zoom commands below
+are inactive while the panel is closed, unless the Timeline is in the main area.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
 modifier there) and on `Cmd+Shift+A` everywhere else: on Windows/Linux JUCE's `commandModifier` IS
 Ctrl, so a Ctrl+A default there would be the same chord as Select All and the two commands would
-collide. Like every row above, all of these are rebindable in
-Settings — and note that a machine which already persisted the old bindings keeps them until
-"Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
+collide. Like every row above, all of these are rebindable in Settings; a machine that already persisted the old
+bindings keeps them until "Reset to Defaults" (defaults only fill the gaps).
 
-FRO333: Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old
-`Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the new toggleBottomPanel action,
-one-shot, the first time it loads its settings — `ShortcutManager::migrateBottomPanelToggleKeys`;
-an old `Cmd+Alt+M` for Mixer just carries forward unchanged, since it never collided with anything).
-Dragging a tab in the strip to reorder it re-keys Cmd+1/2/3 to match the new order
-(`BottomDockComponent::permuteShortcutKeysForNewOrder`) — but only while all three still hold a bare
-Cmd+digit as a set; rebinding one of the three away from that convention (in Settings) opts it out of
-future re-keying, same guard shape as the Save-As/Save-Snippet chord-swap migration below.
+Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old `Cmd+Alt+M` (a saved Cmd+T binding
+migrates onto toggleBottomPanel once, `ShortcutManager::migrateBottomPanelToggleKeys`; an old `Cmd+Alt+M` carries
+forward). Cmd+T was then released: `migrateBottomPanelCmdJ` moves a saved toggleBottomPanel that is exactly Cmd+T to
+Cmd+J once. `migrateDockDigitKeys` clears the old per-view digits (Cmd+1..4, Opt+Cmd+1..4) where they are still the default.
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by
@@ -96,89 +102,38 @@ selection AND always inactive on the Graph surface.
 
 ### Focus regions
 
-A general-purpose keyboard focus-region framework (`Source/UI/Layout/FocusRegion.h`) provides the
-base for arrow-key navigation within the module library and for Up/Down + M/S/R within timeline
-track header rows (below); both build on top of it without changing the registry itself. A
-`synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
-singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with eight regions once every root component
-exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
-**Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
-bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
-`open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
-(`graphEditor.isModMatrixVisible()`). Timeline, Mixer and Controllers share one dock
-(`BottomDockComponent`) with one tab visible at a time, so `isBottomDockVisible` alone (the dock's own
-open/closed state) stopped being enough to say the Timeline region is on screen the moment a second
-tab exists — each region's `isOpen` also checks which of the dock's tabs is active, and each
-region's `open` re-selects its own tab before falling through to the same "open the dock if it's
-closed" step every panel toggle already does. See [**Mixer column navigation**](#mixer-column-navigation)
-below for the Mixer region's own keyboard behaviour.
+Tab and Shift+Tab move between the open focus regions (Toolbar, Library, Canvas toolbar, Canvas, Dock tabs, Timeline,
+routing pane, scale pane, Mixer, Controllers, AI Panel, Mod Matrix). How the regions are registered, nested and outlined, and
+what the keys do inside each one, is in [`focus-regions.md`](focus-regions.md).
 
-- **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
-  by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
-  (both actions report inactive, so the key falls through unhandled) while the launch welcome screen
-  overlay (`welcomeScreen_`) is on screen — every region it would cycle to is sitting behind it.
-- **Cmd+Shift+T/L OPEN a closed target first, then focus it** — the opposite rule from Tab-cycling,
-  and deliberate: a direct-focus shortcut is a request to go somewhere specific, so it is allowed to
-  get you there even if that panel was closed; Tab-cycling only ever moves between what's already on
-  screen. Neither is suppressed by the welcome screen.
-- **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
-  Matrix", and the chord instead went to "Locate Master" (Graph category — see [**Locate Master
-  **](#locate-master)), the same "find the mix bus" need this reservation was
-  originally held for, ahead of the eventual mixer panel.
-- **Every region root explicitly wants keyboard focus** — each of the six roots calls
-  `setWantsKeyboardFocus(true)` in its constructor, so `grabKeyboardFocus()` always lands
-  deterministically on the root itself. Without this, JUCE would instead descend into whichever
-  child happens to sort first by Y/X position (not by which child actually wants focus) — fragile to
-  depend on for a container whose row layout can change, and liable to silently focus nothing at all
-  if that positional chain ends at a non-focusable leaf. One consequence worth calling out: Cmd+Shift+L
-  lands on the Library container itself, not the search box, and Cmd+Shift+T lands on the Timeline
-  panel root rather than the clip lane area — `resolveEditSurface()` (below) still reports `Graph`
-  immediately afterwards, so Cmd+C still acts on the canvas until the user clicks into the clip lanes
-  specifically. A bare **Down** on the panel root DOES seed keyboard focus into the track-header
-  column (the track-header focus work, below) — the one direct keyboard path out of the region root
-  this adds; reaching the clip lanes themselves by keyboard alone stays out of scope (the locked
-  "track headers only" decision).
-- **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
-  so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
-  resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
-  it, so Tab-cycling and the outline both track the right one.
-- **A detached window ([`docs/mixer/panel.md`](../mixer/panel.md)) cycles only its OWN regions** — the
-  Timeline or Mixer panel, popped out into its own `DetachedPanelWindow`, owns a SEPARATE
-  `FocusRegionRegistry` with exactly one region (its hosted panel); Tab/Shift+Tab there resolves via
-  the same shared `synth::ui::resolveFocusCycleKeyPress()` translation this app's command table
-  uses, so the SAME bound key does the same thing everywhere, but the cycle itself never crosses
-  into MainComponent's own registry or vice versa. No new binding — Tab/Shift+Tab stay exactly what
-  they already are. While a panel is detached, MainComponent's own registry drops that region
-  entirely (re-added the moment it redocks), so Tab-cycling in the MAIN window never lands on
-  something that isn't there.
-- **Visual indicator** — a region's root component paints a translucent outline (55% alpha) in the
-  theme's `accent` colour (`docs/layout/theming.md`), at the theme's normal border weight (1px in every
-  built-in theme, `theme.metrics.borderWidth`) rather than an arbitrary heavier one, whenever it or a
-  descendant holds keyboard focus (`hasKeyboardFocus(true)`) — deliberately softer than the same
-  `accent`-outline treatment on a small control (ComboBox/TextEditor), since a hard-edged fully-opaque
-  rect around an entire panel reads as much heavier than the identical treatment on a button. Painted
-  via the shared `synth::ui::paintFocusRegionOutline` helper every one of the six roots calls from its
-  own `paintOverChildren` override — never plain `paint()`, since each root's children (module images,
-  the ruler/clip-lane/transport tiling, the chat message view, the mod-row viewport) fill wall-to-wall
-  to the root's own edge and would otherwise paint over a border drawn earlier in `paint()` (the
-  Toolbar has no children of its own — buttons are direct children of `MainComponent` — so this makes
-  no practical difference there, but it uses the same override for consistency). GraphEditor also
-  skips its own outline while the nested Mod Matrix has focus, so the two regions never double-paint.
-  Nothing repaints on its own when focus moves (`Component::focusGained`/`focusLost` are no-op
-  virtuals for most widgets), so `MainComponent` is a `juce::FocusChangeListener` and repaints every
-  region root on `globalFocusChanged` — event-driven, never a per-tick timer.
-- **Out of scope here** — no arrow-key navigation WITHIN a region (the Library/track-header
-  navigation's job), and no
-  canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
-- **The track-header row outline is a second, per-row instance of the SAME visual language, not a variant** —
-  `TimelineTrackHeaderComponent::paintOverChildren` calls `paintFocusRegionOutline` on itself exactly
-  the way each region root's own override does, just one nesting level deeper (a row is not a region
-  root; the Timeline region root stays the panel). Both outlines CAN paint at once (the panel's own
-  softer region border, plus the focused row's identical treatment around just that row) — deliberate,
-  the same double-outline already ships for a focused row inside the Library region.
+### Open Context Menu
+
+`openContextMenu` (General, **Shift+F10** by default, rebindable) opens the same menu a right-click on the
+keyboard-focused item opens, placed at that item instead of at the mouse. It is a command like the
+focus-cycle keys: `MainComponent` performs it, inactive while the launch overlay is up front, and a
+detached panel window resolves the same bound key itself (`isOpenContextMenuKeyPress`), because
+`MainComponent::keyPressed` never sees keys typed in another top-level window. The [shape editor window](../modules/custom-filter.md#shape-editor-window) passes on the keys it does not use that are bound to an app command which makes sense there (play/stop, undo and redo, the transport, the panels), through `makeAppShortcutRelay` (`Source/UI/Layout/AppShortcutRelay.h`), one message-loop turn later, and so do the Parametric EQ window and the modulation curve window; copy, paste and the other canvas-selection commands and the focus-region keys stay with the window.
+
+On a track row, an automation lane header and a modulator row, a bare Return opens that same menu too (those rows
+have no "..." button), and their tooltips name Right-click, Shift+F10 and Return. The Cmd-hold hint bubbles only
+label static buttons, so these rows carry the key in their tooltips instead.
+
+The action starts from the focused component and walks up its parents to the first one that implements
+`KeyboardContextMenuProvider` (`Source/UI/Layout/KeyboardContextMenu.h`). That provider's answer is
+final: a provider with nothing to open a menu for returns false, the key stays unhandled, and no outer
+provider is tried. Each provider calls its surface's existing right-click menu builder (the mouse path
+and the key share one function), never a second copy of the menu:
+
+| Focus is in | Menu opened |
+|-------------|-------------|
+| Timeline track header row (or its name label / chip) | The track's menu (Make Channel, Save Track as Preset, Delete Track), at the row |
+| Timeline clip lane | The selected clip's menu (the first one when several are selected), at the clip; "Split at pointer" acts at the clip's middle |
+| Mixer panel | The focused column's header menu (Pin left / Pin right / Unpin, and Duplicate Track on a track's strip), at the column. Nothing with no column focused |
+| Graph canvas | The selected card's menu when exactly one module is selected, at the card; otherwise the canvas menu at the middle of the view. Nothing while focus is in the Mod Matrix |
+| Module library | The keyboard-focused row's menu, at the row. Only snippet rows have one (Delete Snippet) |
+| MIDI Remote panel | The selected controller's menu (Rename, Export, Delete, feedback output), at its row in the Controllers list |
+
+A new surface opts in by implementing the provider on the component that is, or contains, the focused one; no per-surface key handling is needed.
 
 ### Library keyboard navigation
 
@@ -241,12 +196,17 @@ panel or the mixer is open — the clip lanes, the piano roll and the mixer are 
 surface's clipboard and selection these verbs act on:
 
 ```cpp
-enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane };
 ```
 
 - **TimelineClips** — the timeline panel is visible AND real keyboard focus
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
+- **AutomationLane** — same, but focus sits on an automation lane's editor or header: Select All takes every point of the
+  lane, Copy/Cut/Paste move points ([timeline/automation.md](../timeline/automation-points.md#selecting-points)),
+  Duplicate copies the lane below itself once a parameter is picked
+  ([timeline/automation.md](../timeline/automation.md#change-parameter-and-duplicate)), Repeat is inactive, and zoom is
+  the timeline's.
 - **Mixer** — the mixer panel is actually showing (docked-and-active on the tab strip, an "Own
   panel" strip, or detached into its own window — `BottomDockComponent::isMixerShowing()` /
   `MixerPlacementController::isOwnPanelShowing()`) AND real keyboard focus sits inside
@@ -269,9 +229,9 @@ What each surface does:
 | Surface | Copy | Paste | Duplicate | Cut | Repeat |
 |---|---|---|---|---|---|
 | Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
-| TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip. With a live **Range** tool range it copies the range instead: each clip's part inside it (`TimelineDoc::clipToRange`), starts relative to the range start — see [clips](../timeline/clips.md#range-tool) | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step); with a live range, `cutRange()` — the range copy, then the lanes' own range Delete, also one step | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
+| TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip. With a live **Range** tool range it copies the range instead: each clip's part inside it (`TimelineDoc::clipToRange`), starts relative to the range start — see [clips](../timeline/clips.md#range-tool) | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `repeatSelectedClips(1)`: one copy of the whole selection, starting where the selection ends (so adjacent clips never overlap their copies), one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step); with a live range, `cutRange()` — the range copy, then the lanes' own range Delete, also one step | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
-| Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
+| Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Down into the rows, Shift+Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
 
 `getCommandInfo` marks Paste active only when the **surface-matching** clipboard has something in
 it — the Graph clipboard, the TimelineClips clipboard and the PianoRoll's note clipboard are three
@@ -319,7 +279,18 @@ Every transport verb is promoted to a command-dispatched `AppCommands` action �
 [`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a controller hardware button to trigger
 one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
-still bind one from Settings like any other action:
+still bind one from Settings like any other action. The two exceptions are **Record** and **Toggle
+Metronome**: they default to a literal **Ctrl+R** and **Ctrl+M** on every platform (Option+letter types
+characters in text fields on the Mac, and Alt+letter is menu-mnemonic territory on Windows). On macOS Control is
+a distinct physical key, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix are untouched; on Windows/Linux, where Cmd
+is Ctrl, those two moved to Ctrl+Shift+R and Ctrl+Alt+M to free the chords. Holding Ctrl (Cmd on Windows/Linux)
+labels both transport buttons with their keys. An install that saved its settings before the chords existed holds
+both as unbound (and, off the Mac, holds Ctrl+R / Ctrl+M on Repeat and the matrix), so a one-shot migration
+(`ShortcutManager::migrateTransportCtrlChords`) moves Repeat / the matrix off the old chords when they still hold
+them, gives Record / Metronome the new chords unless another action already uses one, and leaves any key the
+user chose alone. Every migration writes the keys it changes back to the settings file (not only its done-flag), so
+the chords survive the next launch; the transport one runs under the flag `shortcutMigration_transportCtrlChords2`,
+which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the Windows/Linux defaults are tested from a Mac host:
 
 | Action id | Display name | Behaviour |
 |---|---|---|
@@ -329,7 +300,8 @@ still bind one from Settings like any other action:
 | `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
-| `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
+| `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop. The transport bar's Return to Start button runs this same command ([`transport.md`](../timeline/transport.md#return-to-start-button)) |
+| `setSongKey` | Set Song Key | Shift+Cmd+K. Shows the Timeline and opens the transport bar's song key picker ([`song-key.md`](../timeline/song-key.md)) |
 | `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
 | `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
 | `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |
@@ -360,6 +332,28 @@ changes which surface `resolveEditSurface()` reports (a track header is neither 
 the piano roll), so a routed pair would flip from tracks to modules between two presses of the same
 pad.
 
+### Switching tabs
+
+Every tab strip is one Tab stop; with it focused, plain Left / Right step to the previous / next tab (stopping at
+the ends, no wrap) and Home / End jump to the first / last, switching at once. Return (and Space, in Settings) or Tab
+moves into the open tab and Shift+Tab comes back to the strip ([rule](../development/accessibility.md#tab-strips)). These
+keys belong to the focused strip and are not actions. The former Cmd+Opt+Left / Right `tabPrevious` / `tabNext`
+actions are gone; a saved shortcut or MIDI mapping that still names them is ignored on load.
+
+- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+J opens the pane, and both leave focus on the strip (Cmd+0 focuses the main view)
+  ([details](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access)).
+- **Settings window**: Cmd+1..9 opens the Nth tab, a fixed key, not an action (a text field passes it up). Holding
+  Cmd over the window shows each tab's `Cmd+N` as a hint badge ([hints](#shortcut-hints)).
+
+### Editing keys in text fields
+
+In every text field, Cmd+Backspace deletes everything left of the caret back to the start of the line (just the selection when
+one is highlighted; on macOS only), and Option+Backspace (Ctrl+Backspace on Windows and Linux) deletes the word before the caret,
+which `juce::TextEditor` already does. Read-only fields ignore both. `synth::ui::TextFieldKeys` (`Source/UI/Layout/`) provides the
+first: `MainComponent` starts one app-wide instance that listens on any `juce::TextEditor` as it takes focus, so no field needs a
+subclass and a field added later is covered without a call. The listener runs before the app's shortcut map, so a shortcut on
+Cmd+Backspace never fires while typing.
+
 ## Graph
 
 | Shortcut | Action |
@@ -369,22 +363,26 @@ pad.
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
-| Cmd+Shift+M | Locate Master — selects Master (falling back to Audio Output when there is no Master yet) and pans it into view; a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
+| Cmd+Ctrl+G | Fold and Pack Macros (`foldAndPackMacros`; Ctrl+Alt+Shift+G on Windows/Linux, where Cmd is Ctrl and Ctrl+G is Group): folds every selected macro and, with the Graph preference "Collapsing also packs macros together" on, tidies the cards into a grid; all folded already: expands them. See [Fold and Pack Macros](../macros/menu-and-membership.md#fold-and-pack-macros-cmdctrlg) |
+| Cmd+Shift+M | Go to Output (was "Locate Master") — selects Master (falling back to Audio Output when there is no Master yet) and centres the view on the whole output dock (Master, Rec Tap, Audio Output); a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
+| F2 / Option+R (Alt+R off the Mac) | Rename (`renameSelectedModule`, and `renameSelectedModuleAlt` for the second key; one command) — opens the inline name editor of whatever name has focus: a focused timeline track header's name, a focused mixer column's name (also inside a detached mixer window), else the one selected module card; Return commits, Escape cancels. It never fires while a text editor has focus (on macOS Option+R types a symbol there). F2 needs Fn on a Mac laptop unless "Use F1, F2, etc. keys as standard function keys" is on, which is why Option+R exists; both are rebindable |
+| Cmd+Alt+R (macOS) / Ctrl+Alt+R (Windows, Linux) | Replace Module With... (`replaceSelectedModule`) — opens the searchable "Replace with..." picker over the one selected module card (not Audio Input/Output). In the timeline it swaps what the lane is about instead: with a modulator row focused it opens the row's Change source picker, with an automation lane header or editor focused the lane's Change parameter picker, both right there (greyed out where the picker could not open). To replace a lane's module, use Show on canvas, then the chord. Cmd+R is Repeat and Ctrl+R is Record, so neither was free for it |
 
-Graph holds only the six verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating Master —
+| ← / → / ↑ / ↓ | Select the nearest card in that direction (`canvasSelectCardLeft` / `Right` / `Up` / `Down`). See [**Canvas card keys**](#canvas-card-keys) |
+| Alt+← / → / ↑ / ↓ | Move the selected cards one grid step (`canvasMoveCardLeft` / `Right` / `Up` / `Down`), one undo step |
+| Return | Enter the selected card: focus goes to its first control (`canvasEnterCard`) |
+
+Besides the card keys, Graph holds only the seven command verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, grouping/ungrouping/collapsing/folding-and-packing a macro, and locating Master —
 everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
 zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
 
-**Cmd+G is smart (`GraphEditor::groupOrToggleSelectionMacros`)**: if the selection touches
-any macro, Cmd+G toggles those macros collapsed/expanded instead of grouping; only a selection that
-touches no macro at all gets grouped into a new one. "Group" is honoured exactly when it's a
-meaningful verb for the selection (the flat model refuses nested macros anyway), and once the
-selection is already in a macro, the key is free to carry the toggle the user reaches for instead.
-A **mixed selection** (some selected modules already in a macro, some not) toggles the touched
-macro(s) and leaves the loose modules alone — it does not fold them into the macro, and it does not
-refuse; the status bar reports how many macros were toggled and that modules outside a macro were
-left alone. Because Cmd+G now covers two verbs depending on selection state, its label/description
+**Cmd+G is smart (`MacroGroupController::groupOrToggleSelectionMacros`)**: a selection of only whole
+macros toggles them collapsed/expanded; two or more modules or whole macros at the same level (top
+level, or directly inside one open macro) are grouped into a new macro there, nesting included; any
+other selection that touches a macro toggles the touched macros and leaves modules outside a macro
+alone, reporting that in the status bar. The matrix is in
+[menu and membership](../macros/menu-and-membership.md#cmdg). Because Cmd+G now covers two verbs depending on selection state, its label/description
 is the single static string "Group / Toggle Macro", same reasoning as Cmd+Alt+G below.
 
 Cmd+Alt+G stays a separate, **always-toggle** binding
@@ -398,7 +396,34 @@ always wins). One command works because the menu/Settings-list label is a single
 Ungroup above stays its own command because dissolving a macro is a different precondition and a
 genuinely different verb from either grouping or toggling.
 
+### Canvas card keys
+
+With the canvas focused (Tab to the Canvas region, or click empty canvas), the keyboard drives the same
+selection the mouse does; the selected card's accent border is its focus ring. All nine are Graph-category
+surface actions resolved by `CanvasCardKeyboard::keyPressed` (`Source/UI/Graph/CanvasCardKeyboard/`), not
+commands, so they appear in Settings > Keyboard Shortcuts and a rebind takes effect at once.
+
+| Default | Action id | Behaviour |
+|---|---|---|
+| ← → ↑ ↓ | `canvasSelectCard{Left,Right,Up,Down}` | Selects the nearest visible card whose centre lies on that side, centre to centre, scoring distance along the arrow plus twice the distance across it (`Source/UI/Graph/CardNavigation.h`). Nothing selected picks the first card in [selection-stepping](#selection-stepping) order. No card that way: consumed, nothing changes. Pans the view only when the card is off-screen. A multi-selection moves from its last-added card. Falls through on an empty canvas |
+| Alt+← → ↑ ↓ | `canvasMoveCard{Left,Right,Up,Down}` | Moves the selected cards one 8 px grid step through the same commit a mouse drag makes (`finalizeModuleDrag`, or the group's rigid-body `finalizeSelectionDrag`), one undo step. A spot taken by another card resolves to the nearest free slot, as a drop there would. Falls through with nothing selected, and does nothing for a selected collapsed macro (the arrows only ever land on module cards) |
+| Return | `canvasEnterCard` | Moves keyboard focus to the selected card's first control. Falls through with nothing selected |
+
+Inside a card: Tab and Shift+Tab walk its controls in reading order (body first, then the header buttons);
+Escape, Tab on the last control and Shift+Tab on the first all return focus to the canvas with the card still
+selected, so focus never gets stuck in a card (the arrows then move between cards, the next Tab moves to the
+next region). No control inside a card swallows Escape or a Cmd chord such as Cmd+Shift+T. A focused knob turns with Up/Right and Down/Left (one
+percent of its travel; Shift a tenth of that), Page Up/Down (ten percent) and Home/End (minimum/maximum). Those
+keys are the knob's own (`CardKnobSlider::keyPressed`), not actions, and each press is one change gesture, so
+one undo step and one automation touch. Shift+F10 still opens the selected card's menu. A key that bubbles up
+from a control inside a card or from the Mod Matrix never moves the canvas selection.
+
 ### Locate Master
+
+*Now labelled **Go to Output** everywhere (menu row, command, Preferences); the command id and this anchor
+are unchanged. It centres on the whole output dock, not the one card
+([`docs/layout/layout.md#output-dock`](../layout/layout.md#output-dock)). The rest of this section describes
+the original behaviour.*
 
 Founder feedback on a live check: once Master and Audio Output exist (an Audio Output is seeded
 on New Patch, [`docs/mixer/mixer.md`](../mixer/mixer.md)), auto-arrange or an ordinary drag can leave either node
@@ -416,7 +441,7 @@ future "Mixer-focus" shortcut before this (see the Focus regions section above);
 that same "find the mix bus" need in its interim, pre-panel form, so it claims the chord now rather
 than leaving it idle. Reuses the same select-by-NodeID path `MainComponent::selectNodeInGraph`
 already uses for the timeline binding chip (`GraphEditor::selectModule`) plus the same pan
-primitive the minimap's own click-to-navigate uses (`GraphEditor::centreViewOn`) — no new
+primitive the minimap's own click-to-navigate uses (`GraphEditor::centreViewOn`, now flown by `flyViewTo`) — no new
 selection or pan mechanism was added.
 
 ## Timeline
@@ -432,9 +457,13 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 |----------|--------|
 | J | Toggle Snap (grid magnetism) — the chosen division survives underneath, and so do the grid LINES (see below); shared with the piano roll (one binding, `timelineSnapToggle`, whichever surface has focus). Cubase's snap key; **Q** is Cubase's *quantise*, which is what the roll uses it for |
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
-| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
-| P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)) |
+| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus. **Ctrl+F** (macOS) / **Ctrl+Alt+F** (Windows, Linux) cycles the mode, `timelineFollowModeCycle`: Page (jump a screenful when the playhead leaves the view, the default) or Smooth (the view scrolls so the playhead stays pinned at one point of the width). Off the Mac Cmd is Ctrl, so Ctrl+F would be Cmd+F (Focus Library Search) and the chord takes Alt too ([playhead](../timeline/playhead.md#follow-modes)) |
+| P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the selected notes', else the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only). On a focused track header that has a Poly toggle, P is instead Poly On or Off for Focused Track (`trackHeaderTogglePoly`, its own **Track Header** category so the two P keys do not collide): the [voice toggle's](../timeline/tracks.md#the-monopoly-switch) click, one undo step |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)). 1 again while Select is the tool steps the clip edge Sizing mode ([edit tools](../timeline/edit-tools.md#the-sizing-field)) |
+| Shift+1 .. Shift+6 | Pick the Draw tool and a shape: 1 Free, 2 Line, 3 Sine, 4 Triangle, 5 Saw, 6 Square (`timelineShapeFree` .. `timelineShapeSquare`, titled "Free Draw Shape", "Line Shape", ...). With a lane range selected the shape is also stamped over it. Pressing the Draw key again while Draw is the tool steps to the next shape, wrapping ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). Stored as Shift plus the digit; `keyPressMatches` maps the `!`..`^` macOS delivers back to the digit. Shift+digit was never bound before, so no saved setting shadows these |
+| Shift+8 | Open the Draw button's shape flyout (`timelineShapeMenu`, "Open shape menu"): a list of the six shapes under the pen, picked with the mouse or Up/Down and Enter. It only opens the menu; it does not pick Draw or a shape ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). No other action uses Shift+8 (the grid division 1/128 is Ctrl+Shift+8) |
+| Delete / Backspace, Esc (with a lane range) | Remove the points inside the automation lane range (one undo step); Esc clears the lane range |
+| Cmd+Left / Cmd+Right (hold) | Glide the cursor back / forward, starting faster on a coarse grid and gentler on a fine one, accelerating while held, settling to the grid on release when snap is on (`timelineGlideBack` / `timelineGlideForward`) — [`timeline/transport.md`](../timeline/transport.md#gliding-the-cursor). A tap moves one grid step (one beat with snap off). Neither chord was bound before: the other Timeline arrows are bare or Alt, the grid cycle is Ctrl+Shift |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
@@ -450,10 +479,28 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 
 | Shortcut | Action |
 |----------|--------|
-| ↑ / ↓ | Move focus to the previous/next track header row (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
+| ↑ / ↓ | Move focus to the previous/next track header row; ↓ on the Timeline region root lands on the **Add** button first and ↓ again on the first row; ↑ off the first row comes back to **Add**, and ↑ there returns to the root. ↓ on the last row also moves on to **Add**, and ↑ from it entered that way returns to the last row (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
+| I | Monitor Focused Track (`timelineMonitorFocusedTrack`) — on an audio track, switches [Monitor](../timeline/tracks.md#monitoring) between On and Auto (from Off it turns On), like the speaker button, same path; a MIDI or automation row leaves the key alone |
+| Return / Space on **Add** | Opens the Add list, exactly like a click. ↓ on the Timeline region root lands on the button first, with or without tracks. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **Add** |
+| Option+= / Option+- / Option+0 | Increase / Decrease / Reset Track Height (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`, `timelineResetTrackHeight`) — sizes the focused row only (a focused automation lane header sizes that lane, [lane controls](../timeline/lane-controls.md#resizing-a-lane)), ×1.25 a step, one undo step each ([tracks](../timeline/tracks.md#one-tracks-height)); no Option+=/-/0 is bound anywhere else |
+| Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused row's track below it with its modules, clips and automation as one undo step ([add-track](../timeline/add-track.md#duplicate-a-track)); shares the chord with the General Duplicate (`duplicateSelection`) because conflicts are per category, and only a focused track row claims it With several tracks selected it copies all of them ([tracks](../timeline/tracks.md#what-acts-on-the-selection)) |
+| Cmd+C / Cmd+V | Copy Selected Tracks (`timelineCopyFocusedTracks`) / Paste Tracks (`timelinePasteTracks`) — on a track row, Cmd+C remembers the selected tracks (claimed only with two or more selected) and Cmd+V pastes a copy of each below the focused row as one undo step (claimed only while tracks are copied); otherwise the chords keep their General copy / paste meaning ([tracks](../timeline/tracks.md#what-acts-on-the-selection)) |
+| Ctrl+E | Show Focused Track Module (`timelineShowFocusedTrackModule`) — selects and centres the track's module on the canvas (its instrument when it has one, else its bound node); it never opens a plugin's window, that is the next row's chord ([tracks](../timeline/tracks.md#show-a-tracks-module)). A literal Ctrl on every platform. The Mixer's Show or Hide EQ also carries Ctrl+E on macOS; conflicts are per category and only a focused track row claims the key. The shortcut-hint overlay covers fixed toolbar buttons only, so it has no entry for the per-row button; its tooltip and this table name the key |
+| Ctrl+Cmd+E (macOS) / Ctrl+Alt+E (Windows, Linux) | Toggle Focused Track Plugin Window (`timelineToggleFocusedTrackPluginWindow`) — opens the focused track's hosted-plugin editor window, and the next press closes it; a track without a hosted plugin ignores it ([tracks](../timeline/tracks.md#show-a-tracks-module)). A real Control plus Cmd on the Mac; off the Mac Cmd is Ctrl, so that chord would collapse into Ctrl+E and the key takes Ctrl+Alt+E. Mixer's Ctrl+Alt+E (Show or Hide EQ) is another category |
+| A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier). On a row that is one of several selected tracks it acts on all of them: if the focused row's lanes are open every selected track closes, otherwise every one opens, as one animation ([tracks](../timeline/tracks.md#selecting-several-tracks)). **Cmd+A** on a focused row is Select All Tracks (`timelineSelectAllTracks`): every track, focus stays; the clip lane, canvas and piano roll keep Select All |
+| Cmd+Backspace | Delete Focused Track (`timelineDeleteFocusedTrack`) — deletes the focused row's track as one undo step, after a "Delete track?" question with a Don't ask again box ([tracks](../timeline/tracks.md#row-context-menu)); the question comes back from `Settings → Preferences → "Ask before deleting a track or its macro"`. Bare Backspace/Delete on clips and lanes stay fixed keys and are unaffected |
+
+#### Settings and dialog arrow keys
+
+The Settings tabs and the Export Audio, Sign in and Configure I/O dialogs also use hard-coded arrow keys,
+not `ShortcutManager` actions (same precedent as the Library and track-header rows above): **Up / Down**
+move focus to the previous / next control (clamped at the ends), **Right / Left** tick / untick a focused
+check box or unfold / fold a focused section header. A combo box, slider or text field keeps its own
+arrows, and a Keyboard Shortcuts row that is listening for a new key captures them as the binding. →
+[`accessibility.md`](../development/accessibility.md#arrow-keys-in-lists-of-controls)
 
 M/S/R are rebindable, Timeline category, bare-letter defaults matching the J/L/P/F convention — free
 on all three (no other binding in this table is a BARE, unmodified m/s/r; every existing use of those
@@ -465,13 +512,39 @@ narrows to "mute". A row's own keyboard-focus outline reuses `paintFocusRegionOu
 the Focus regions section above) — same colour/alpha/thickness as a whole region root's, just painted
 around one row via the row's own `paintOverChildren`.
 
+**Clip keyboard mode** — from a focused track header, **Right** moves keyboard focus into that track's
+clips, and the arrow keys then walk them without the mouse. The "keyboard clip" is the single
+selected clip (stepping replaces the selection, so every selection-based verb — Delete, Cmd+C, the
+Split/Mute/Loop-the-selection keys — applies to it), drawn with an accent ring. All seven keys are
+rebindable Timeline-category actions, resolved by `TimelineClipLaneArea::keyPressed` (and, for the
+header's Right, `TimelineTrackHeaderComponent::keyPressed`). See
+[`timeline/focus.md`](../timeline/focus.md#clip-keyboard-mode).
+
+| Shortcut | Action |
+|----------|--------|
+| → (on a track header or the Timeline region root) | Next Clip (`timelineClipNext`) — enters that track's clips: the first clip starting at or after the playhead, else the track's first. Does nothing on a track with no clips |
+| ← / → (in clip mode) | Previous Clip / Next Clip (`timelineClipPrevious` / `timelineClipNext`) — the neighbour on the same track; the first/last clip stays put |
+| ↑ / ↓ | Clip on Track Above / Below (`timelineClipAbove` / `timelineClipBelow`) — the clip nearest in start time on the closest track above/below that has clips (empty tracks are skipped; an exact tie goes to the earlier clip) |
+| Return | Open Clip in Editor (`timelineClipOpen`) — the same hook a double-click on the clip fires (the piano roll for a MIDI clip) |
+| Alt+← / Alt+→ | Move Clip Earlier / Later by One Grid Step (`timelineClipMoveEarlier` / `timelineClipMoveLater`) — one grid division (the chosen Snap division even with the snap switch off; one beat with Snap Off), one undo step, clamped at beat 0 |
+| Shift+Cmd+D | Duplicate Selected Clips as Linked Copies (`timelineClipDuplicateLinked`) — every selected MIDI clip gets a copy linked to it, the copies tiled after the selection as one block, one undo step (audio clips are skipped). Also "Duplicate linked" in the clip's menu ([linked clips](../timeline/linked-clips.md)) |
+| Shift+Cmd+J | Make Section from Range (`timelineMakeSection`) — the live Range tool selection becomes a named section on the Sections strip above the ruler, one undo step, its name open for typing. Also "Make section" in the range menu ([sections](../timeline/sections.md)). |
+| Shift+Cmd+R (Ctrl+Alt+Shift+R off the Mac) | Render Range or Selected Clips to Audio Track (`timelineRenderToAudioTrack`) — the live Range tool selection, else the selected clips, rendered to new audio tracks ([render to audio track](../timeline/render-to-audio.md)). Also in the range menu and the clip menu |
+| Alt+↑ / Alt+↓ | Move Automation Lane Up / Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`) — the lane whose header controls or curve editor hold focus swaps with its neighbour within its track, one undo step ([automation](../timeline/automation.md#reordering-lanes)). The same chord as every other "move this item one place" key (a canvas card, a mixer row). In a curve editor with points selected it moves the points instead; with none selected, the lane. An install that saved the old Cmd+Alt+↑/↓ moves to it once, unless it was rebound. On a focused modulator row it moves the row within its lane, and past the lane's end into the next lane on screen that can take it, across tracks, focus following it |
+| Esc | Back to the clip's track header. Fixed, like Delete (not in the action table); the clip stays selected |
+
+Left/Right share `timelineClipNext`/`timelineClipPrevious` between the header and the lane because two Timeline actions
+on one default key would read as a binding conflict in Settings. No existing action covered any of these verbs:
+`pianoRollNudge*` moves notes inside the roll and `transportNudge*` moves the playhead, so clip movement is new.
+
 ### Mixer column navigation
 
 **Mixer column navigation** — parallel to Track header focus above, but the region ROOT is the focusable leaf
 here, not a per-column child: `MixerPanelComponent` is the Mixer region's own root (see **Focus
 regions** above), `setWantsKeyboardFocus(true)`, and every child control inside a column (the
 fader/pan sliders, the M/S buttons, Direct's "Make channel" button) gives up keyboard focus
-(`setWantsKeyboardFocus(false)`) so it can never intercept these keys — the same trap
+(`setWantsKeyboardFocus(false)`), except the small icon buttons that take no key beyond Return and Space (the colour dot, which takes Return only so Space still plays,
+the sources badge and the per-row bypass buttons, besides the toolbar), so they can never intercept these keys — the same trap
 `TimelineTrackHeaderComponent` sidesteps by being the focusable leaf itself, just one level higher
 here because a column hosts several controls, not one. The focused column is
 `MixerPanelComponent::focusedColumnIndex_` — ephemeral UI state, an index into the same
@@ -479,23 +552,23 @@ left-to-right order `rebuild()` lays columns out in (strips in track order, then
 then Master if visible) — and survives a `rebuild()` of the same strip by re-resolving through the
 strip's own uuid (Direct/Master match by kind alone), never a raw index; the focused strip/Direct/
 Master column also paints its own outline, reusing `paintFocusRegionOutline`'s colour/alpha/
-thickness the same way a track-header row does.
+thickness the same way a track-header row does. Clicks focus a column too: [strip focus](../mixer/strip-focus.md).
 
 | Shortcut | Action |
 |----------|--------|
 | Left / Right | Move focus to the previous/next column (strips, then Direct, then Master), clamped at either end — never wraps. From nothing focused, either direction seeds column 0. Auto-scrolls the focused column into view |
-| Up / Down | Nudge the focused fader by 1.0 dB (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
-| Shift+Up / Shift+Down | Nudge by 0.1 dB — the gain parameter's own declared interval |
+| Shift+Up / Shift+Down | Nudge the focused fader by 1.0 dB, or 0.1 dB with Alt added, the gain parameter's own interval (`mixerNudgeFaderUp` / `mixerNudgeFaderDown`, rebindable; the fader's tooltip names them; undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused. Plain Up on a column does nothing |
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
+| Down | Move into the focused column's insert, send and EQ rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled. Tab stays the app-wide region cycle |
+| E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
+| C, Shift+Left / Shift+Right, H | The focused strip's colour picker (`mixerOpenColour`), its pan a tenth left or right per press, one undo step each (`mixerPanLeft`, `mixerPanRight`), and hiding the column, the focus moving to its neighbour (`mixerToggleChannelHidden`; in the side pane's list H shows or hides the cursor row); [strip focus](../mixer/strip-focus.md#colour) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
-| S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (root `CLAUDE.md`'s invariant); no-op on Direct/Master |
+| S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (`Source/CLAUDE.md`'s mixer-solo invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
+| Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused strip's track, like the strip menu's Duplicate Track; [strip focus](../mixer/strip-focus.md) |
 
-M/S/R resolve the exact same rebindable Timeline-category action ids the track-header row above
-already binds — deliberately, so a user's rebind applies to whichever of the two surfaces has
-focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare
-letters with no `ShortcutManager` installed, the same "no manager installed" contract every other
-surface action in this app follows.
+M/S/R and Cmd+D resolve the exact same rebindable Timeline-category action ids the track-header row above already
+binds — deliberately, so a user's rebind applies to whichever surface has focus (a new id would not inherit it). Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
 
 Accessibility (JUCE `AccessibilityHandler`, this ticket's other half): the fader and pan sliders
 report their value as spoken text (`"-3.0 dB"`, `"50% left"`) via `textFromValueFunction`; the
@@ -504,6 +577,31 @@ own handler is a `group` role titled with the channel name; the M/S buttons carr
 on/off state in their title (`"Lead 1 mute, on"`) since they are built with
 `setClickingTogglesState(false)`, which would otherwise report a plain button to a screen reader
 rather than a toggle.
+
+### Mixer row navigation
+
+With the Inserts, Sends or EQ section shown, **Down** (`mixerEnterRows`, Mixer category) moves keyboard focus from the
+focused column into its rows. Row focus is state of the panel (`MixerPanelComponent::rowFocus_`, a kind and an
+index, like `focusedColumnIndex_`), never real focus on a child, so the panel stays the single focusable leaf.
+Rows walk in layout order: the insert rows, the send rows, then the strip's EQ curve (one row, while it has an EQ). The focused row is drawn with
+`synth::ui::paintFocusRing` and scrolled into its section's frame, and the panel's accessibility description
+announces it ("Send to Reverb Bus, -6.0 dB", "Insert 2, Compressor").
+
+| Shortcut | Action in row mode |
+|----------|--------------------|
+| Up / Down | Previous / next row, clamped at the bottom; Up on the first row returns to the column |
+| Left / Right | Lower / raise the focused send's level by 1.0 dB (Shift: 0.1 dB); one undo step per press, through the parameter's change gesture. No-op on an insert row (the arrows never walk columns while rows hold the keys) |
+| Return | On an insert, select its module on the canvas; on the EQ row, select the EQ, exactly what the curve's click does |
+| Delete / Backspace | Remove the focused send or insert through the same path its menu uses; one undo step. A branching insert chain is read-only and keeps its rows. Focus moves to a surviving row, or back to the column when none is left |
+| B | Bypass the focused row (`mixerToggleRowBypass`): an insert's module, or the send's own bypass. One undo step; B again toggles it back. Claimed only in row mode |
+| Alt+Up / Alt+Down | Move the focused insert or send up or down one place (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable); one undo step, focus follows the row, and the moved inserts' cards trade places on the canvas ([row motion](../mixer/row-motion.md#the-canvas-follows-a-reorder)). Swallowed where the drag would refuse (split and dry rows, across paths, front of a bus chain) and on the EQ row |
+| Esc | Back to column mode |
+
+Down is claimed only when a focused column has rows shown. Row mode ends when the panel loses focus.
+
+**Why E and not Return opens the EQ.** Return already selects the focused column on the canvas, so the EQ action
+defaults to a bare E (Ctrl+E, the section toggle, is unaffected). It does what the card's "Open EQ Window" button
+does: it opens the pop-out Parametric EQ editor of the strip's first EQ insert.
 
 **Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
 division; it does **not** change which grid lines are drawn. Paint sites read
@@ -550,19 +648,19 @@ stops playback wrapping (the same rule `TimelineRulerComponent::braceStateFor` f
 
 | Shortcut | Action |
 |----------|--------|
-| Ctrl+Shift+1 | Set Grid to 1 (whole bar) |
+| Ctrl+Shift+1 | Set Grid to 1/1 (whole bar) |
 | Ctrl+Shift+2 | Set Grid to 1/2 |
 | Ctrl+Shift+3 | Set Grid to 1/4 |
 | Ctrl+Shift+4 | Set Grid to 1/8 |
 | Ctrl+Shift+5 | Set Grid to 1/16 |
 | Ctrl+Shift+6 | Set Grid to 1/32 |
 | Ctrl+Shift+7 | Set Grid to 1/64 |
-| Ctrl+Shift+8 | Set Grid to 1/128 |
-| Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
+| Ctrl+Shift+8 | Set Grid to 1/128 (the 16 triplet and dotted values, `snapSetEighthTriplet` ... `snapSetHundredTwentyEighthDotted`, are rebindable and unbound) |
+| Ctrl+Shift+Left | Grid Coarser (step toward Bar; stays inside the current kind) |
 | Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
 
-**Three Timeline families share the digit row**, separated only by their modifier set: **bare** =
-the edit tools, **Ctrl+Shift** = set the grid, **Option** = jump to a locator. Modifier equality on
+**Four Timeline families share the digit row**, separated only by their modifier set: **bare** =
+the edit tools, **Shift** = the Draw shapes, **Ctrl+Shift** = set the grid, **Option** = jump to a locator. Modifier equality on
 the binding side is exact (`keyPressMatches` normalizes only the key CODE), so none of the three can
 reach another; `ShortcutManagerTest.BareToolDigitsDoNotCollideWithTheGridOrLocatorCommands` is the
 tripwire. The grid-set family is on its ORIGINAL `Ctrl+Shift+digit` home, which is also what every
@@ -582,7 +680,7 @@ real-event form instead, on the grid family's own `!`/`^`/`&`/`*`.
 Note that `charactersIgnoringModifiers` DOES ignore **Option**, which is half of why the locator
 jumps sit on plain `Option+digit`: a real Option+2 arrives carrying `2` and matches by key code
 directly, so that pair is outside this bug's reach entirely. The rescue matters for the eight
-Ctrl+Shift grid commands and the Cmd+Shift zoom pair.
+Ctrl+Shift grid commands and the Cmd+Shift zoom pair. Ctrl+Shift+2 is a different case: the peer drops it ([details](shortcuts-mac-peer-keys.md)).
 
 **Ctrl, not Cmd — deliberately, including on macOS.** `ShortcutManager::resetToDefaults` binds
 these with `juce::ModifierKeys::ctrlModifier`, a REAL Ctrl rather than `commandModifier`. On macOS
@@ -612,7 +710,7 @@ moved — a held key parked at a clamp says so instead of implying another step 
 
 ## Piano Roll
 
-All thirteen are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
+All fourteen are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
 dispatched through `ApplicationCommandManager`:
 
 | Shortcut | Action |
@@ -622,20 +720,31 @@ dispatched through `ApplicationCommandManager`:
 | Shift+↑ / Shift+↓ | Transpose Up / Down an Octave (12 semitones) — the same octave-jump convention every DAW uses, a separate action rather than a modifier read off the plain one so it can be rebound on its own |
 | Alt+← / Alt+→ | Select Previous / Next Note — navigates BETWEEN notes in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only, never a document edit. Alt+↑/↓ is reserved (unclaimed) |
 | **Q** | **Quantise Selected Notes** (`pianoRollQuantise`) — one-shot: snap the selected notes' STARTS (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. **Cubase parity:** on a note editor the bare, most reachable key belongs to the verb you use constantly, not to a switch you set once a session |
-| Alt+Q | **Quantise Selected Note Lengths** (`pianoRollQuantiseLength`) — the length twin of bare Q: snaps the selected notes' LENGTHS (or all notes when nothing is selected) to the nearest positive multiple of the chosen grid, floored at one grid unit so a note can never become zero-length. Exact-modifier matching keeps this clear of both bare Q and Option+Shift+Q, so no ordering is needed among the three. Has its own header chip (**Quantise Length**, between Quantise and Quantise Pitches) |
-| Option+Shift+Q | Quantise Note Pitches to Scale (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE bare Q, since it is the more specific chord |
+| Alt+Q | **Quantise Selected Note Lengths** (`pianoRollQuantiseLength`) — the length twin of bare Q: snaps the selected notes' LENGTHS (or all notes when nothing is selected) to the nearest positive multiple of the chosen grid, floored at one grid unit so a note can never become zero-length. Exact-modifier matching keeps this clear of both bare Q and Option+Shift+Q, so no ordering is needed among the three. Has its own header chip (**Quantise Length**, between Quantise and Fit notes to key) |
+| Option+Shift+Q | Fit Notes to Key (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE bare Q, since it is the more specific chord |
 | J | Toggle Snap — grid magnetism on/off, the **shared** `timelineSnapToggle` the timeline panel also uses (one binding, one key, whichever surface has focus; deliberately NOT duplicated into a piano-roll action, since two "Toggle Snap" rows on the same key flipping the same flag is a Settings list nobody could reason about). **Magnetism only: the chosen grid stays VISIBLE either way**. The roll's own Snap header chip was removed as redundant with the timeline toolbar's own Snap button — both read/write this same shared flag by reference, and J remains the roll's own control for it |
 | Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
+| Ctrl+V (macOS) / Cmd+Shift+V (Windows, Linux) | **Show or Hide Velocity Strip** (`pianoRollToggleVelocityLane`) — the Velocity header chip's twin. A real Control on macOS, where Cmd+V is Paste; on Windows/Linux JUCE's Cmd *is* Ctrl, so Ctrl+V would be Paste and those platforms take Cmd+Shift+V instead — the same per-platform split as the AI panel's Ctrl+A / Cmd+Shift+A. Inert while a text field (the header's velocity box) has focus. See [`timeline/piano-roll.md`](../timeline/piano-roll.md#velocity-strip) |
 | Option+S | **Show Only Scale Notes** (`pianoRollToggleScaleFilter`) — collapses the out-of-scale rows out of the grid, and makes ↑/↓ step by scale degree (above). One modifier away from Ctrl+S on purpose: adjacent verbs on adjacent chips should rhyme, and modifier equality is exact so they cannot collide. Remembered per clip; falls through with no clip open |
 
-Every arrow/octave/nav action returns `false` (falls through) when nothing is selected, so the key
-keeps whatever meaning it has elsewhere with an empty selection — nudge/transpose EDIT the
-selection, the two navigation actions only MOVE it. Order matters only where one default is a
+Every arrow/octave action returns `false` (falls through) when nothing is selected, so the key
+keeps whatever meaning it has elsewhere with an empty selection. The two navigation actions are
+the exception: with nothing selected, Next Note selects the clip's first note and Previous Note its
+last, so a keyboard-only user can reach a note without the pointer. Nudge/transpose EDIT the
+selection, while the navigation actions only MOVE it. Order matters only where one default is a
 modified form of another (Shift+Up vs Up, Alt+Left vs Left): the more specific action is matched
 first, so rebinding only one half of a pair can't let the other swallow it. `juce::KeyPress`
 equality is exact on modifiers, which is what keeps Left/Shift+Left/Alt+Left three separate
 actions. Digit keys are deliberately absent here — tool switching belongs to the panel (see
 Timeline above), so the roll and the panel can never disagree about which tool is active.
+
+**The focused note.** The note Alt+Left/Right land on is the roll's *focused note*: the one note the
+selection holds (a multi-selection, or none, has no focused note). While the grid holds keyboard focus
+it is outlined with the accent focus ring, and a screen reader hears it as the grid's value, e.g.
+"C4, bar 2 beat 1, length 1/8, velocity 100" (see [`timeline/focus.md`](../timeline/focus.md#piano-roll-focus)).
+Alt+Left/Right still fall through when nothing is selected, so a first note is picked with the pointer.
+Each header chip has a keyboard button over it: Tab reaches it, **Return** runs its action (Space stays
+the global play/stop) and its tooltip names its shortcut.
 
 **One letter, one verb, on both surfaces.** Snap moved off Q to J for the *timeline* too, so bare Q
 is now unambiguously "quantise" (the roll's `pianoRollQuantise`) and bare J is unambiguously "snap"
@@ -651,7 +760,7 @@ bindings already use, and the reason they survive the platform's own key transla
 
 **Most of these keys have a header chip twin**, and each chip does exactly one thing on a plain
 click (no modifier variants anywhere in the header any more): **Quantise**, **Quantise Length**,
-**Quantise Pitches**, **Scale** and **Show Only Scale Notes**. One key is deliberately keyboard-only
+**Fit notes to key**, **Scale**, **Show Only Scale Notes** and **Velocity**. One key is deliberately keyboard-only
 with no chip: `J` (Toggle Snap — its chip was removed as redundant with the timeline
 toolbar's own Snap button, which shares the same underlying flag). Four of the remaining chips carry
 small drawn vector glyphs rather than letters — a second "Q" beside the Quantise chip for
@@ -664,22 +773,69 @@ those two digits are simply never consumed rather than remapping the shipped too
 Shipping one later costs no rebind: the digit is already reserved — which is exactly how the Range
 tool (`timelineToolRange`, bare **2**) arrived without moving any other key.
 
+## Mixer
+
+The Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
+reads them only while the mixer (the panel, a column control, or its side pane's list) has focus. The first
+three are the keyboard twins of the toolbar's Inserts / Sends / EQ toggles and call the same
+`MixerSectionLayout::toggleHidden`, so a key and a click can never disagree; the toggles' tooltips
+name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other two are
+[row navigation and the EQ key](#mixer-row-navigation).
+
+| Shortcut (macOS) | Windows / Linux | Action |
+|------------------|-----------------|--------|
+| Ctrl+I | Ctrl+Alt+I | Show or Hide Mixer Inserts (`mixerToggleInserts`) |
+| Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
+| Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
+| Down | Down | Enter Mixer Insert, Send and EQ Rows (`mixerEnterRows`; an install that kept the old Tab moves to Down once) |
+| Shift+Up / Shift+Down | same | Raise / Lower Mixer Fader (`mixerNudgeFaderUp`, `mixerNudgeFaderDown`); Alt added: 0.1 dB |
+| E / C / H, Shift+Left / Shift+Right | same | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) / Hide or Show Mixer Channel (`mixerToggleChannelHidden`), Pan Mixer Channel Left / Right (`mixerPanLeft`, `mixerPanRight`) |
+| B, Alt+Up / Alt+Down | same | Bypass Mixer Send or Insert (`mixerToggleRowBypass`), Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
+| Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |
+
+**Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
+the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,
+so a bare Ctrl+S would shadow Save whenever the mixer has focus; those platforms add Alt instead.
+
+The side pane's own list keys (Up/Down, Space, Alt+Up/Down, Esc; H is the rebindable hide key above) are fixed, like the Library list's
+arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility).
+
+## Layout Editor
+
+The card layout editor's list ([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout))
+resolves the first four itself (`CardLayoutEditorComponent`'s row keys) while one of its rows has focus,
+and the on-card editor resolves the arrow-key actions (`CardLayoutOnCardEditor`) while a control's outline
+has focus; the editor is the only thing focused while it is open, so they share keys freely with every
+other category. Up/Down between rows are fixed list keys, and Escape is left to the panel's CallOutBox,
+which closes it; in the on-card editor Escape ends a drag, else cancels the session (not an action).
+
+| Shortcut (macOS) | Windows / Linux | Action |
+|------------------|-----------------|--------|
+| Space | Space | Show or Hide the Control on the Card (`layoutEditorToggleShown`) |
+| Cmd+Up | Ctrl+Up | Move the Control Up (`layoutEditorMoveUp`), into the group above at a group's top |
+| Cmd+Down | Ctrl+Down | Move the Control Down (`layoutEditorMoveDown`), into the group below at a group's end |
+| Return | Return | Rename the Control (`layoutEditorRename`), or the focused group's title |
+| Left / Right / Up / Down | Left / Right / Up / Down | Nudge the Control 1 pixel on the card (`layoutEditorNudgeLeft`, `layoutEditorNudgeRight`, `layoutEditorNudgeUp`, `layoutEditorNudgeDown`) |
+| Shift+Left / Right / Up / Down | Shift+Left / Right / Up / Down | Nudge the Control 8 pixels (`layoutEditorNudgeLeftBig`, `layoutEditorNudgeRightBig`, `layoutEditorNudgeUpBig`, `layoutEditorNudgeDownBig`) |
+| Backspace (also Delete) | Backspace (also Delete) | Remove the Control from the Card (`layoutEditorRemoveControl`), on the on-card editor's focused control: the same as Hide from card, one undo step |
+
 ## Command vs surface actions
 
-The 92 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 136 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (64 actions) — every General action (including the transport family
-  above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
+- **Command-dispatched** (71 actions) — every General action (including the transport family
+  above), the six Graph command actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (28 actions) — the timeline panel's own keys (`timelineSnapToggle`,
-  `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
-  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
-  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), and every
-  piano roll action. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+- **Surface-resolved** (65 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
+  `canvasEnterCard`, resolved by `CanvasCardKeyboard::keyPressed`), the timeline panel's own keys (`timelineSnapToggle`,
+  `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, `timelineFollowModeCycle`, the six
+  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the four track-header
+  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`/`timelineMonitorFocusedTrack`), the seven
+  clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the thirteen `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads
@@ -741,11 +897,15 @@ window gives it.
 
 A **hosted plugin editor window** (a separate top-level window, not a panel inside the main one)
 has its own fixed convention, same "never in the `ShortcutManager` table" shape as the table above:
-Esc closes it only if the plugin's own editor didn't handle it first — a native NSView editor gets
-first crack at it too, via the AppKit responder chain, and only an unhandled Esc reaches
-`HostedPluginEditorWindow::keyPressed()` from there (verified against Apple's own AUDelay) — while
-Cmd+W always closes it, via a mac-only `NSEvent` monitor scoped to the key window. See
-[`architecture/plugin-layer.md#editor-windows`](../architecture/plugin-layer.md#editor-windows) (FRO337) for the full split.
+Esc closes it only if the plugin's own editor didn't handle it first (a native NSView editor gets
+first crack via the AppKit responder chain, so only an unhandled Esc reaches
+`HostedPluginEditorWindow::keyPressed()`), while Cmd+W always closes it, via a mac-only `NSEvent`
+monitor scoped to the key window. See
+[`architecture/plugin-layer.md#editor-windows`](../architecture/plugin-layer.md#editor-windows) for the full split.
+
+A **detached panel window** (Timeline, Mixer, Controllers) follows the same fixed shape: Esc or Cmd+W returns the section
+to the bottom panel, the close button's path. The window tries the app's shortcuts first (so the MIDI pick's Esc wins) and a
+control inside the panel that uses Esc, such as a text field, keeps it.
 
 Arrow keys and the tool digits are split across two components with opposite rules:
 `PianoRollComponent::keyPressed()` consumes an arrow **only when something is selected** (an
@@ -756,25 +916,85 @@ transposes by ONE shared delta (never per-note), clamped so the group stays insi
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
 rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.md`](../timeline/clips.md#cross-track-drag)).
 
+## Shortcut hints
+
+Hold **Cmd** (Ctrl off the Mac) on its own for about half a second and a small key-cap bubble
+appears on each visible button that has a shortcut: `⌘T` on the Show/Hide Panel toolbar button,
+`⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Each bubble grows out of the
+button it labels; release and they shrink back and fade out. **Key names.** `ShortcutManager::keyPressToDisplayString` spells keys that are not characters as words ("Return", "Escape", "Tab", "Backspace", "Delete", "Home", "End", "Page Up", "Page Down", "F1" to "F12", the arrows), so a hint reads "Alt + Return" (on macOS every modifier is its symbol, "⌥ + Return", never "Alt"; `keyPressToSearchText` adds the names Cmd, Command, Ctrl, Control, Alt, Option so the Settings search still finds them) and the Settings search finds a row by "return" (`ShortcutDisplayNamesTest`). The
+overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
+`MainComponent` that paints only while the hints are up. It costs nothing at rest and can never be in the way: it takes no clicks (`setInterceptsMouseClicks(false, false)`), is hidden from the accessibility tree, and never moves or resizes another component.
+
+- **Four hold keys.** **Cmd** alone and **Ctrl** alone (macOS; off the Mac Ctrl is Cmd) both show
+  every target that has any binding, bare keys included (the timeline's edit tools, Follow playhead,
+  Space on Play), so whichever modifier you reach for reveals everything. **Option/Alt** alone shows
+  only the targets whose *current* binding uses Option -- the Mac Option+letter shortcuts (`⌥S` on the
+  piano roll's Scale filter chip). **Shift** alone does the same for Shift: it shows the targets whose current
+  binding uses Shift, such as the timeline's Draw shape buttons (Shift+1..6) while their strip is out. Shift is
+  ignored while a text field has focus (that is typing capitals), and a mouse press cancels it like any other
+  hold, so Shift+drag and Shift+click work as before. The filter reads the binding fresh each time, so a rebind moves a target in or out
+  of the set and its bubble follows the new key. Switching from one hold key to another, or adding a
+  second modifier, cancels like any chord; the latch, fade-out resume and delay all work per key. A
+  different key pressed while the hints are fading out starts over from the 500 ms delay.
+- **Settings tabs.** The Settings window carries its own overlay: holding Cmd shows `⌘1`, `⌘2`, ... on its tab
+  buttons. The keys are positional and fixed (`addFixedKeyTarget` takes the key as given instead of an action
+  id, so a rebind never changes them), shown in the platform's key text like every other badge, and the window feeds
+  the overlay from its `modifierKeysChanged`.
+- **Area targets.** The piano roll's header chips are painted rectangles, not child components, so
+  they register with `addAreaTarget(owner, areaInOwner, actionId)`: the same visibility check runs on
+  the area's centre through the owner's parents (a closed roll gives no bubble) and the bubble
+  anchors on the chip (`PianoRollComponent::getHeaderChipBounds`).
+- **The key is never hard-coded.** A button is registered with the shortcut *action* it triggers
+  (`MainComponentShortcutHints.cpp` names them); the text is read from `ShortcutManager` each time
+  the hints appear and re-read on a rebind while they are up. An action with no key gets no bubble.
+- **Timing.** They appear 500 ms after Cmd goes down alone and animate in over 160 ms
+  (`easeOutCubic`); on release the same motion runs back over 110 ms (`easeInCubic`). Pressing Cmd
+  again while they are fading out resumes from where they are, with no second delay. Any other key (including a Cmd chord such as Cmd+S), a mouse click, another
+  modifier held with Cmd, or the window losing focus cancels at once with no fade, and the hold stays
+  spent until Cmd is released. A key that a focused text field consumes never reaches the cancel hook,
+  so the hints can still appear there. Nothing runs at rest: a one-shot 500 ms timer is armed only
+  while Cmd is down alone, and the one `AnimationDriver` exists only while the tween is in flight. Cmd is noticed
+  through the global mouse listener (JUCE sends a fake mouse move on every modifier change) and
+  `MainComponent`'s existing 10 Hz poll as a backstop.
+- **Only showing components get one.** Hidden, collapsed, scrolled-away or covered buttons (the
+  centre of the button must hit-test to the button itself) are skipped, and nothing appears while a
+  modal is up.
+- **Placement** (`ShortcutHintLayout.h`, pure geometry): centred under the button, overlapping its
+  bottom edge by 4 px; flipped above if that leaves the window (or the bottom panel, for buttons inside
+  it); an overlapping later bubble slides sideways by the overlap, up to half its width, else it is
+  staggered up to two rows further from its button, sliding again in each row (2 px gap; a row of narrow icon buttons with wide "Shift+2"
+  key text off the Mac, like the Draw shapes), and left out only when no row fits. A dock tab carries its bubble inside the tab, 6 px after the name.
+- **Motion.** One tween value `t` (0 hidden, 1 settled) drives every bubble's scale, position and
+  opacity: `hint::animatedBubbleBounds(target, origin, t)` is `target` at t = 1 and, at t = 0, 0.6 of
+  its size centred on `origin`. The origin is the labelled button's centre for a bubble below or
+  above it (so it slides down or up out of the button), the tab's centre for an in-tab cap (slides
+  right), and the pill's own centre 12 px lower for the hidden-panel row (rises). Placement and
+  collision use the settled rectangles only.
+- **Bottom panel hidden.** The tabs are not on screen, so the panel toggle's hint and each strip
+  tab's line up centred along the window bottom, 8 px above the status bar, in tab order, each as a
+  pill (24 px tall, label one point above the `label` size) holding the key cap and the name. A tab detached to its own window is left out
+  (`BottomDockComponent::getStripTabs()`).
+- **The look** is one shared function, `AppLookAndFeel::drawShortcutKeyCap`
+  (`AppLookAndFeelShortcutHints.cpp`): a `cornerRadiusSmall` cap 20 px tall (at least 20 wide, 6 px
+  side padding), `surfaceHi` fill, a `textDisabled` outline with a 2 px bottom edge (`border` is
+  nearly the fill on dark themes, so the cap vanished), a soft shadow (0.5 alpha, 2 px down, blur
+  radius 4), the mono face at the `value` size plus 2 px in `textPrimary`. The medium weight comes from
+  requesting `Font::bold` on the mono family: the embedded mono faces load their Medium cut for it.
+  The in-tab cap is 15 px tall with the `value` size plus 1 px (the tab is 17 px tall, so the cap keeps
+  a pixel above and below; the strip does not grow). Text comes from `hint::formatKeyCapText`: Mac glyphs on macOS,
+  `Ctrl+Shift+Z` style elsewhere.
+- **Never in the way.** The overlay takes no clicks, is hidden from the accessibility tree, never
+  takes keyboard focus and never moves or resizes anything.
+
+Covered today: the toolbar's Library, New, Save, Load, Settings, Undo, Redo, Auto-arrange, Minimap,
+Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline transport bar's
+play/stop, record, loop and metronome buttons (loop shows the bare L of `timelineToggleLoop`, or the
+`transportToggleLoop` binding while L is unbound); the timeline's seven edit-tool buttons, Snap and Follow
+playhead (`TimelinePanelComponent::getShortcutHintTargets()` is the one list, so a new shortcut button there is
+labelled by adding it to it; the per-row M/S/R buttons act on the focused row and are not labelled, and neither are the mixer's per-row bypass buttons, whose tooltips name B instead); the status bar's play/stop; the mixer toolbar's
+Inserts, Sends and EQ toggles; and, while a clip is open, the piano roll's Quantise, Quantise length,
+Quantise pitches, Scale, Scale filter and Velocity chips.
+
 ## Canvas mouse gestures
 
-Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout/selection.md`](../layout/selection.md) for the full contract.
-
-| Gesture | Action |
-|---------|--------|
-| Drag on empty canvas | Pan (unchanged) |
-| **Shift** + drag on empty canvas | Marquee-select, replacing the selection |
-| **Cmd/Ctrl + Shift** + drag | Marquee-select, adding to the selection |
-| Click a module | Select just that module |
-| **Shift**/**Cmd** + click a module | Toggle that module in the selection |
-| Drag any selected module | Move the whole selection together |
-| Drag a module across an expanded macro's outline | Join, leave, or move it between macros (a plain drag by default; **Cmd** + drag when "Drag modules into and out of macros without Cmd" is off in `Settings → Preferences`; single module only, never a group). See [macro membership](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) |
-| Click empty canvas | Clear the selection |
-| Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
-| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Locate Master (see [Locate Master](#locate-master); greyed out with neither Master nor Audio Output) |
-| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
-
-Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
-on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste
-cascade there, so a following `Cmd+V` continues from the same place.
+Pan, marquee, click and drag on the canvas are mouse gestures, not rebindable shortcuts; the table is in [`layout/selection.md`](../layout/selection.md#canvas-mouse-gestures).

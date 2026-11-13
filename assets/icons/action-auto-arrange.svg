@@ -1,8 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <rect x="3" y="4" width="5" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="3" y="10" width="5" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="3" y="16" width="5" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="10" y="4" width="5" height="7" rx="1" fill="#FFFFFF"/>
-  <rect x="10" y="13" width="5" height="7" rx="1" fill="#FFFFFF"/>
-  <rect x="17" y="7" width="5" height="10" rx="1" fill="#FFFFFF"/>
+  <!-- Toolbar icon, edit group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
+  <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2" fill="#FF00FF" />
+  <path d="M7.25 4.85 L7.82 6.68 L9.65 7.25 L7.82 7.82 L7.25 9.65 L6.68 7.82 L4.85 7.25 L6.68 6.68Z" fill="#FFFF00" />
+  <g id="mv">
+    <rect x="13" y="3.5" width="7.5" height="5" rx="2" fill="#FF00FF" fill-opacity=".45" />
+  </g>
+  <rect x="3.5" y="13" width="7.5" height="7.5" rx="2" fill="#FF00FF" fill-opacity=".45" />
+  <g id="mv2">
+    <rect x="13" y="10.5" width="7.5" height="10" rx="2" fill="#FF00FF" />
+  </g>
 </svg>

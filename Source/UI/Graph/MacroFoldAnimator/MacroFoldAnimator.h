@@ -1,0 +1,227 @@
+#pragma once
+
+// MacroFoldAnimator.h
+//
+// Paint-only fold of a macro's modules into its closed card, and out of it again (docs/layout/animation.md "Macro
+// fold"). The model change (collapse, expand, undo, redo) is already final and synchronous when this is armed; the
+// real cards that should not show yet are held invisible and ghosts of them are drawn flying between their place on
+// the canvas and their preview box on the card, on top of the canvas by GraphContentComponent::paintOverChildren.
+// The timing is the pure Timeline in MacroFoldTimeline.h. Owned by CardGlideAnimator, which lends it its hooks.
+
+#include "MacroFoldTimeline.h"
+#include "UI/Graph/CableColour.h"
+#include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include "UI/Layout/UIAnimation.h"
+#include <functional>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+#include <vector>
+
+class MacroFoldAnimator {
+public:
+    using VisibleCable = graph_editor_types::VisibleCable;
+
+    /** What the owner lends: a repaint, the VBlank updater, whether the canvas shows, and the canvas' own drawing. */
+    struct Hooks {
+        juce::VBlankAnimatorUpdater* updater = nullptr;
+        std::function<bool()> canAnimate;
+        /** Repaints the whole canvas and drops its cable memo. */
+        std::function<void()> repaint;
+        /** Repaints only `area` (canvas coordinates). Unset: every frame uses `repaint`. */
+        std::function<void(juce::Rectangle<int>)> repaintArea;
+        /** A copy of the cables drawn on the canvas right now. */
+        std::function<std::vector<VisibleCable>()> visibleCables;
+        std::function<juce::Colour(synth::ui::ModuleCategory)> categoryColour;
+        /** Strokes `cable` (its ends already moved) with the canvas' wire look at `alpha`. */
+        std::function<void(juce::Graphics&, const VisibleCable&, float alpha)> paintCable;
+        /** The module card of `nodeUid` on the canvas now: a re-sync that rebuilt the cards gives the fold the new
+         *  one to hold. Unset: a rebuilt card is not held. */
+        std::function<juce::Component*(uint32_t nodeUid)> moduleFor;
+    };
+
+    /** One module of the macro: where its card stands on the open canvas and where its box sits on the closed card.
+     *  A macro nested in it flies as one of these too (`macroId` set, `nodeUid` 0): from its own card, the real one
+     *  when it is folded, the one it folds into when it is open (its own Plan then runs before or after this one). */
+    struct Module {
+        uint32_t nodeUid = 0;
+        synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
+        juce::Rectangle<int> rect;
+        juce::Rectangle<float> box;
+        juce::Image picture; // the card's own raster; null draws a plain box
+        juce::Component::SafePointer<juce::Component> comp;
+        juce::String macroId; // a nested macro
+        juce::Colour colour;  // a nested macro's colour, for its box
+    };
+
+    /** A cable drawn both before and after the fold whose end on the macro moved (between the closed card's jack and
+     *  the open border's port): it slides from `from1`/`from2` to the ends of `cable` as the border grows or shrinks.
+     */
+    struct CableSlide {
+        VisibleCable cable; // as drawn after the change
+        juce::Point<float> from1, from2;
+    };
+
+    /** One macro's fold. Collapse: `cables` are the ones with both ends on a module, or one end on a module and gone
+     *  after the fold; expand: the ones touching one. */
+    struct Plan {
+        juce::String macroId;
+        bool collapsing = true;
+        juce::Colour colour;
+        juce::Rectangle<int> hull; // the open border
+        juce::Rectangle<int> card; // the closed card
+        juce::Component::SafePointer<juce::Component> cardComp;
+        std::vector<Module> modules;
+        std::vector<VisibleCable> cables;
+        std::vector<CableSlide> slides;
+        /** The open macro's port widgets: held back until the border has grown to hold them. */
+        std::vector<juce::Component::SafePointer<juce::Component>> ports;
+        /** When this macro starts, after the fold began: a nested macro folds before its parent's flight, and unfolds
+         *  once its box has flown out of the parent. A nested plan has no `cardComp`: its card is its box. */
+        double delayMs = 0.0;
+        /** Nested macros fold together: every level of a tree of N runs on a clock 1/N as long (Timeline::scale). */
+        double timeScale = 1.0;
+        /** The outermost macro whose change started this plan's tree, and what that change left it as: collapsed, or
+         *  gone (`rootRemoved`). A re-sync keeps the plan running while the model still says so. */
+        juce::String rootId;
+        bool rootCollapsed = true;
+        bool rootRemoved = false;
+        /** An unfold whose card was still gliding starts this far off `card` (and its boxes) and eases onto it. */
+        juce::Point<float> startShift;
+    };
+
+    /** What is captured before a collapse or expand changes the canvas, to be turned into a Plan once it has: for an
+     *  open macro the modules' rects, pictures and the border; for a closed one the card and boxes. */
+    struct Before {
+        bool wasCollapsed = false;
+        juce::Rectangle<int> hull, card;
+        juce::Point<int> cardOffset; // how far off `card` the closed card is drawn (the glide still moves it)
+        std::vector<Module> modules;
+    };
+
+    /** A cable as drawn this frame. */
+    struct DrawnCable {
+        VisibleCable cable;
+        float alpha = 1.0f;
+    };
+
+    MacroFoldAnimator() = default;
+    ~MacroFoldAnimator();
+    MacroFoldAnimator(const MacroFoldAnimator&) = delete;
+    MacroFoldAnimator& operator=(const MacroFoldAnimator&) = delete;
+
+    /** Message thread only. Must be set before the first arm(). */
+    void setHooks(Hooks hooks);
+    const Hooks& hooks() const noexcept { return hooks_; }
+
+    /** The animation lands at once (arm() returns false) unless the canvas shows (or a test forces it) and animations
+     *  are not Off. A fold already running goes on, on the same clock; one of the same macros (or modules) is dropped
+     *  for the new plan, which starts from where the caller captured them drawn. */
+    bool arm(std::vector<Plan> plans);
+    bool isLive() const noexcept { return !lives_.empty(); }
+    /** Whether arm() would animate right now: the canvas shows (or a test forces it) and animations are not Off. A
+     *  caller skips capturing pictures and cables when this is false. */
+    bool wouldAnimate() const;
+    /** Shows every held card, drops all state and repaints. */
+    void land() noexcept;
+    /** Lands only the plans `stale` picks (their cards shown, their ghosts gone); the rest keep running. */
+    void landWhere(const std::function<bool(const Plan&)>& stale);
+    /** Holds back again every card a running plan holds, after a re-sync decided visibility from the model. */
+    void reassertHolds();
+    /** Module `nodeUid` as the fold draws it now (its rect this frame and its picture); nothing when no plan flies it.
+     */
+    std::optional<Module> drawnModule(uint32_t nodeUid) const;
+    /** Runs `fn` once every held card is shown again: at once when no fold runs, else when the fold lands. */
+    void whenSettled(std::function<void()> fn);
+
+    /** Advances the clock to `ms` (what the driver does each frame) and lands when everything has settled. */
+    void applyAtMs(double ms);
+    /** Test seam: one driver frame at linear driver value `t`, including its repaint request. */
+    void stepFrameForTest(float t);
+    double elapsedMs() const noexcept { return elapsed_; }
+    double totalMs() const noexcept { return total_; }
+    bool isReduced() const noexcept { return reduced_; }
+    void setForceAnimateForTest(bool force) noexcept { forceAnimate_ = force; }
+
+    /** Modules still flying or waiting to land, over every macro. */
+    int ghostCount() const noexcept;
+    /** Every module of `macroId` as drawn now (a landed one at its place), canvas coordinates; empty if none folds. */
+    std::vector<juce::Rectangle<float>> moduleRects(const juce::String& macroId) const;
+    /** The rect the module with `nodeUid` is drawn at now; empty when it is not folding. */
+    juce::Rectangle<float> moduleRectFor(uint32_t nodeUid) const;
+    /** The border drawn around `macroId` now, holding every module; nothing when it does not fold. */
+    std::optional<juce::Rectangle<float>> outlineFor(const juce::String& macroId) const;
+    /** The same for an expanding macro, as the integer rect its border is painted with. */
+    std::optional<juce::Rectangle<int>> expandOutlineFor(const juce::String& macroId) const;
+    /** Whether the module's real card is still held back. */
+    bool isHeld(uint32_t nodeUid) const;
+    /** The rect the nested macro `macroId` is drawn at now as one box of its parent's fold; empty when none is. */
+    juce::Rectangle<float> nestedRectFor(const juce::String& macroId) const;
+    /** When the fold of `macroId` starts and when its last module lands, in ms; nothing when it does not fold. */
+    std::optional<std::pair<double, double>> spanFor(const juce::String& macroId) const;
+
+    /** An expanding macro's cables are drawn here (growing out of their ports), not by the canvas: removes them. */
+    void applyTo(std::vector<VisibleCable>& cables) const;
+    /** The cables the fold draws itself this frame. */
+    std::vector<DrawnCable> drawnCables() const;
+    /** A copy of the canvas' cables (empty without the hook). */
+    std::vector<VisibleCable> currentCables() const;
+
+    void paint(juce::Graphics& g) const;
+    /** What the fold draws now, for repaint. */
+    juce::Rectangle<int> drawnArea() const;
+
+    /** The card raster of `comp`, or a null image when it has none (never renders a card). */
+    static juce::Image cachedPicture(juce::Component& comp);
+    /** The dashed macro border the expanded canvas draws. */
+    static void paintDashedBorder(juce::Graphics& g, juce::Rectangle<float> border, juce::Colour colour,
+                                  bool emphasised);
+
+private:
+    struct Live {
+        Plan plan;
+        synth::ui::macro_fold::Timeline timeline;
+        std::vector<char> landed;
+        double startMs = 0.0; // the shared clock when this plan was armed
+        struct Shift {
+            juce::Point<float> from, to;
+            float p0 = 0.0f; // the flight's progress when it was retargeted
+        };
+        std::vector<Shift> shifts; // per module, once a later change moved where it lands
+        Shift outlineShift;
+    };
+
+    double localMs(const Live& live) const noexcept { return elapsed_ - live.startMs - live.plan.delayMs; }
+    const Live* liveFor(const juce::String& macroId) const noexcept;
+    float handover(const Live& live) const noexcept;
+    float nestedAlpha(const Live& live, size_t index) const noexcept;
+    juce::Point<float> cableEnd(uint32_t nodeUid, juce::Point<float> p) const;
+    juce::Rectangle<float> moduleRect(const Live& live, size_t index) const noexcept;
+    std::vector<juce::Rectangle<float>> moduleRects(const Live& live) const;
+    juce::Rectangle<float> outline(const Live& live) const noexcept;
+    float outlineProgress(const Live& live) const noexcept;
+    void retargetRunning(const std::vector<Plan>& incoming);
+    int indexOf(const Live& live, uint32_t nodeUid) const noexcept;
+    std::optional<DrawnCable> expandCable(const Live& live, const VisibleCable& cable) const;
+    std::optional<DrawnCable> collapseCable(const Live& live, const VisibleCable& cable) const;
+    VisibleCable slideCable(const Live& live, const CableSlide& slide) const;
+    std::vector<DrawnCable> drawnCables(const Live& live) const;
+    void paintModule(juce::Graphics& g, const Live& live, size_t index) const;
+    void applySideEffects();
+    void frameAt(float t);
+    void release(bool stopDriver) noexcept;
+    static void showCards(Live& live) noexcept;
+    void hold(juce::Component* c) const;
+    void startDriver();
+    bool canAnimate() const;
+
+    Hooks hooks_;
+    std::vector<Live> lives_;
+    synth::ui::AnimationDriver driver_;
+    double elapsed_ = 0.0;
+    double total_ = 0.0;
+    double driverFromMs_ = 0.0; // the clock when the driver last (re)started: its 0..1 spans from here to total_
+    bool reduced_ = false;
+    bool forceAnimate_ = false;
+    std::vector<std::function<void()>> settled_;
+    juce::Rectangle<int> lastDrawn_;
+};

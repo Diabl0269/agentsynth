@@ -1,0 +1,104 @@
+#pragma once
+
+#include "Modules/Sequencer/SequencerLanes.h"
+#include <juce_core/juce_core.h>
+#include <optional>
+
+namespace synth {
+
+/** Which optional panels a module card has open: its scope, its filter response curve and that
+ *  curve's spectrum backdrop. Presentation only -- it never reaches the audio thread -- so it lives
+ *  on the module (which outlives its card, and so survives a card rebuild) and is saved as the
+ *  node's own `"cardView"` key, separate from `"state"` (which each module type owns the shape of).
+ *
+ *  Absent means the card's built-in defaults: scope and response closed. The spectrum default is
+ *  per card (off on a Filter, on on a Parametric EQ), so it is tri-state: unset follows that default.
+ *  Message thread only. */
+struct CardViewState {
+    bool showScope = false;
+    bool showResponse = false;
+    std::optional<bool> showSpectrum;
+    /** The morph map of the Filter's Custom type and the LFO's Custom shape: unset follows the card default, shown
+     *  from two shapes up. */
+    std::optional<bool> showMorphMap;
+    /** The Filter's Custom curve view (the shape under the morph cursor): unset follows the card default, shown from
+     *  two shapes up. */
+    std::optional<bool> showCurveView;
+    /** Not a panel: the core pack sound ("core/flute") this module stands in for until the pack is installed. It rides
+     *  here because this is the module's one saved non-parameter field that is neither a file nor model input. */
+    juce::String pendingSound;
+    /** The sequencer step grid's shown lanes, one SequencerLane bit each; unset follows the card default
+     *  (kDefaultSequencerLanes). */
+    std::optional<std::uint16_t> stepGridLanes;
+    /** Not a panel: the Filter cutoff knob's Snap to notes, "notes" or "key"; empty is Free. */
+    juce::String cutoffSnap;
+
+    bool isDefault() const noexcept {
+        return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
+               !showCurveView.has_value() && pendingSound.isEmpty() && !stepGridLanes.has_value() &&
+               cutoffSnap.isEmpty();
+    }
+
+    /** A void var when everything is at its default, so an untouched card adds no JSON. */
+    juce::var toVar() const {
+        if (isDefault())
+            return {};
+        auto* obj = new juce::DynamicObject();
+        if (showScope)
+            obj->setProperty("scope", true);
+        if (showResponse)
+            obj->setProperty("response", true);
+        if (showSpectrum.has_value())
+            obj->setProperty("spectrum", *showSpectrum);
+        if (showMorphMap.has_value())
+            obj->setProperty("morphMap", *showMorphMap);
+        if (showCurveView.has_value())
+            obj->setProperty("curveView", *showCurveView);
+        if (pendingSound.isNotEmpty())
+            obj->setProperty("pendingSound", pendingSound);
+        if (stepGridLanes.has_value()) {
+            juce::Array<juce::var> lanes;
+            for (int i = 0; i < kSequencerLaneCount; ++i)
+                if ((*stepGridLanes & sequencerLaneBit((SequencerLane)i)) != 0)
+                    lanes.add(sequencerLaneId((SequencerLane)i));
+            obj->setProperty("lanes", lanes);
+        }
+        if (cutoffSnap.isNotEmpty())
+            obj->setProperty("cutoffSnap", cutoffSnap);
+        return juce::var(obj);
+    }
+
+    /** Lenient on purpose: this is presentation state, so a value of the wrong type is skipped rather
+     *  than refusing the project. Anything that is not an object reads as the defaults. */
+    static CardViewState fromVar(const juce::var& v) {
+        CardViewState out;
+        if (auto* obj = v.getDynamicObject()) {
+            const auto scope = obj->getProperty("scope");
+            const auto response = obj->getProperty("response");
+            const auto spectrum = obj->getProperty("spectrum");
+            out.showScope = scope.isBool() && static_cast<bool>(scope);
+            out.showResponse = response.isBool() && static_cast<bool>(response);
+            if (spectrum.isBool())
+                out.showSpectrum = static_cast<bool>(spectrum);
+            const auto morphMap = obj->getProperty("morphMap");
+            if (morphMap.isBool())
+                out.showMorphMap = static_cast<bool>(morphMap);
+            const auto curveView = obj->getProperty("curveView");
+            if (curveView.isBool())
+                out.showCurveView = static_cast<bool>(curveView);
+            out.pendingSound = obj->getProperty("pendingSound").toString();
+            if (const auto* lanes = obj->getProperty("lanes").getArray()) {
+                std::uint16_t mask = 0;
+                for (const auto& lane : *lanes)
+                    if (const auto id = sequencerLaneFromId(lane.toString()))
+                        mask = (std::uint16_t)(mask | sequencerLaneBit(*id));
+                out.stepGridLanes = mask;
+            }
+            if (const auto snap = obj->getProperty("cutoffSnap").toString(); snap == "notes" || snap == "key")
+                out.cutoffSnap = snap;
+        }
+        return out;
+    }
+};
+
+} // namespace synth

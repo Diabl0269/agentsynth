@@ -3,9 +3,12 @@
 // Select-tool drag, and the QUANTIZE verb (its header chip and both Option+Q shortcuts).
 // Shared PianoRollFixture and mouse-gesture helpers live in PianoRollTestHelpers.h.
 
+#include "../../ShortcutDisplayText.h"
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Timeline/EditTool.h"
+#include <set>
 
 // ============================================================================
 // 4. Edit tools
@@ -76,6 +79,32 @@ TEST(PianoRollToolTest, SplitCutsANoteInTwoAndTheRightHalfInheritsEveryField) {
     ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 2.0);
     EXPECT_FALSE(f.undo.canUndo()) << "resize + add were ONE undo step";
+}
+
+TEST(PianoRollToolTest, SplitRightHalfInheritsThePerHitDrumSettings) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 2.0));
+    ASSERT_TRUE(f.doc.setNoteChance(id, 40));
+    ASSERT_TRUE(f.doc.setNoteRepeat(id, 3, true));
+    ASSERT_TRUE(f.doc.setNoteNudge(id, -0.25));
+    ASSERT_TRUE(f.doc.setNoteCondition(id, 2, 4));
+
+    f.roll.setActiveTool(EditTool::Split);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 2.0, 60)));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    const auto& right = clip->notes[1];
+    EXPECT_EQ(right.chance, 40);
+    EXPECT_EQ(right.repeat, 3);
+    EXPECT_TRUE(right.flam);
+    EXPECT_DOUBLE_EQ(right.nudge, -0.25);
+    EXPECT_EQ(right.condHit, 2);
+    EXPECT_EQ(right.condOf, 4);
 }
 
 TEST(PianoRollToolTest, SplitTooCloseToAnEdgeIsANoOpWithNoUndoStep) {
@@ -405,7 +434,8 @@ TEST(PianoRollToolTest, SelectToolKeepsItsDoubleClickCreateAndDelete) {
     f.roll.mouseDoubleClick(leftClick(f.roll, pos));
     ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
     const auto id = f.doc.getClip(clipId)->notes[0].id;
-    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0) << "the double-click still snaps to the NEAREST division";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0)
+        << "the double-click starts at the left line of the clicked cell";
 
     f.roll.mouseDoubleClick(leftClick(f.roll, centreOf(f.roll.getNoteRect(id))));
     EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty());
@@ -502,8 +532,11 @@ TEST(PianoRollPitchQuantiseTest, ChipTooltipCarriesTheDynamicShortcutHint) {
     PianoRollFixture f;
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantisePitchButtonBounds().getCentre());
     // No ShortcutManager installed, so the hint falls back to the hardcoded Option+Shift+Q.
-    EXPECT_TRUE(tooltip.startsWith("Quantize note pitches into the scale (Alt + Shift + Q)")) << tooltip;
-    EXPECT_TRUE(tooltip.contains("Scale Assist")) << tooltip;
+    EXPECT_TRUE(tooltip.startsWith(
+        "Fit notes to key (" +
+        synth::test::keyText('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier) + ")"))
+        << tooltip;
+    EXPECT_TRUE(tooltip.contains("Needs a key")) << tooltip;
 }
 
 // Both quantise keys dispatch through keyPressed with the Option-based defaults. Stored as a KEY
@@ -572,4 +605,118 @@ TEST(PianoRollPitchQuantiseTest, PitchQuantiseHonoursTheSelectionSubset) {
     EXPECT_EQ(f.doc.getNote(idA)->pitch, 60);
     EXPECT_EQ(f.doc.getNote(idB)->pitch, 63) << "an unselected note is untouched";
     EXPECT_TRUE(f.roll.hasNoteSelection()) << "the selection is deliberately left exactly as it was";
+}
+
+// ---- A new note starts in the cell that was clicked ----
+//
+// Regression test for FRO1095: a double-click at the right half of a cell snapped to the NEXT
+// line, so the note landed one cell right of the click.
+
+namespace {
+
+// The whole gesture a user performs, delivered through the component's own handlers.
+void realDoubleClick(PianoRollFixture& f, juce::Point<float> pos) {
+    f.roll.mouseDown(leftClick(f.roll, pos));
+    f.roll.mouseUp(leftClick(f.roll, pos));
+    f.roll.mouseDown(leftClick(f.roll, pos));
+    f.roll.mouseUp(leftClick(f.roll, pos));
+    f.roll.mouseDoubleClick(leftClick(f.roll, pos));
+}
+
+// Clicks `fraction` of the way through the cell starting at `cellStart`, in a fresh clip each time.
+double doubleClickedStart(PianoRollFixture& f, ClipId clipId, double cellStart, double cellLength, double fraction,
+                          int pitch) {
+    std::set<synth::NoteId> known;
+    for (const auto& note : f.doc.getClip(clipId)->notes)
+        known.insert(note.id);
+    realDoubleClick(f, pointAt(f.roll, cellStart + fraction * cellLength, pitch));
+    const auto& notes = f.doc.getClip(clipId)->notes;
+    EXPECT_EQ(notes.size(), known.size() + 1u);
+    for (const auto& note : notes)
+        if (known.count(note.id) == 0) {
+            EXPECT_DOUBLE_EQ(note.lengthBeats, cellLength) << "one division long";
+            return note.startBeat;
+        }
+    return -1.0;
+}
+
+} // namespace
+
+TEST(PianoRollNewNoteCellTest, DoubleClickStartsAtTheCellStartWhereverInTheCellItLands) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 2.0, 1.0, 0.25, pitch), 2.0);
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 5.0, 1.0, 0.75, pitch), 5.0) << "75% must not round up to 6";
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 8.0, 1.0, 0.5, pitch), 8.0);
+}
+
+TEST(PianoRollNewNoteCellTest, DoubleClickInAScrolledViewStillLandsInTheClickedCell) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 32.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    // A fractional scroll origin and a different zoom: gridlines are no longer pixel aligned.
+    f.roll.setHorizontalView(53.0, 3.37);
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 6.0, 1.0, 0.25, pitch), 6.0);
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 9.0, 1.0, 0.75, pitch), 9.0);
+    // The cell centre sits half a division right of the drawn left line.
+    EXPECT_NEAR(f.roll.xToBeat(f.roll.beatToX(7.5)), 7.5, 1e-9) << "gridlines and xToBeat agree";
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 7.0, 1.0, 0.5, pitch), 7.0);
+}
+
+TEST(PianoRollNewNoteCellTest, CoarserDivisionsFloorToTheirOwnCell) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Sixteenth);
+    f.open(clipId);
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 3.25, 0.25, 0.75, pitch), 3.25);
+    EXPECT_DOUBLE_EQ(doubleClickedStart(f, clipId, 4.5, 0.25, 0.25, pitch), 4.5);
+}
+
+TEST(PianoRollNewNoteCellTest, SnapOffStartsExactlyWhereClicked) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter, false);
+    f.open(clipId);
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+
+    realDoubleClick(f, pointAt(f.roll, 2.7, pitch));
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    // beatToX rounds to a whole pixel (40 px/beat), so allow half a pixel.
+    EXPECT_NEAR(f.doc.getClip(clipId)->notes[0].startBeat, 2.7, 0.5 / 40.0);
+}
+
+TEST(PianoRollNewNoteCellTest, DrawToolStartsInTheClickedCellAndItsPreviewIsWhatIsCommitted) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    f.roll.setActiveTool(EditTool::Draw);
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+
+    const auto down = pointAt(f.roll, 2.75, pitch);
+    const auto to = pointAt(f.roll, 4.4, pitch);
+    f.roll.mouseDown(leftClick(f.roll, down));
+    f.roll.mouseDrag(leftDrag(f.roll, to, down));
+    const double previewLength = f.roll.getDrawPreviewLengthForTest();
+    f.roll.mouseUp(leftDrag(f.roll, to, down));
+
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    const auto& drawn = f.doc.getClip(clipId)->notes[0];
+    EXPECT_DOUBLE_EQ(drawn.startBeat, 2.0) << "75% into the cell still starts at its left line";
+    EXPECT_GT(previewLength, 1.0);
+    EXPECT_DOUBLE_EQ(drawn.lengthBeats, previewLength) << "what the last drag frame showed is what was committed";
 }

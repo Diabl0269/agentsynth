@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <array>
 #include <cmath>
 #include <juce_core/juce_core.h>
@@ -12,7 +13,9 @@ public:
     {
         addParameter(typeParam = new juce::AudioParameterChoice("noiseType", "Type", {"White", "Pink", "Brown"}, 0));
         addParameter(colorParam = new juce::AudioParameterFloat("color", "Color", -1.0f, 1.0f, 0.0f));
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addMuteParameter();
         enableVisualBuffer(true);
@@ -32,12 +35,22 @@ public:
         smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
         if (buffer.getNumChannels() == 0)
             return;
 
-        if (isBypassed() || isMuted()) {
+        // A pure source has no dry path, so bypass clears too; two branches per the bypass/mute contract.
+        if (isBypassed()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
+            return;
+        }
+
+        if (isMuted()) {
+            buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
@@ -69,19 +82,15 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Noise; }
 
+    // Raw 8/9 are the Color/Level CV jacks (the declared modulation targets). Raw 0/1 are legacy aliases the
+    // mono path still reads: they sit on the same jacks but are never a head, or getJackTargets would hand a
+    // jack drop the alias first and a Level drop would land on a channel that is no modulation target.
     LogicalPort mapInputChannel(int raw) const override {
         LogicalPort p;
-        if (raw == 8 || raw == 0) {
-            p.visibleJackIndex = 0;
+        if (raw == 8 || raw == 0 || raw == 9 || raw == 1) {
+            p.visibleJackIndex = (raw == 8 || raw == 0) ? 0 : 1;
             p.role = PortRole::ModCV;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
-            return p;
-        }
-        if (raw == 9 || raw == 1) {
-            p.visibleJackIndex = 1;
-            p.role = PortRole::ModCV;
-            p.isPolyGroupHead = true;
+            p.isPolyGroupHead = raw >= 8;
             p.polyVoiceSpan = 1;
             return p;
         }
@@ -195,15 +204,7 @@ private:
     }
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
-        if (ch >= buffer.getNumChannels())
-            return false;
-        const float* data = buffer.getReadPointer(ch);
-        int checkLen = std::min(numSamples, 64);
-        for (int i = 0; i < checkLen; ++i) {
-            if (data[i] != 0.0f)
-                return true;
-        }
-        return false;
+        return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
     }
 
     void processMonoMode(juce::AudioBuffer<float>& buffer) {
@@ -247,9 +248,7 @@ private:
         }
 
         if (auto* vb = getVisualBuffer()) {
-            for (int i = 0; i < numSamples; ++i) {
-                vb->pushSample(ch0[i]);
-            }
+            vb->pushBlock(ch0, numSamples);
         }
     }
 
@@ -295,9 +294,7 @@ private:
 
         if (auto* vb = getVisualBuffer()) {
             if (numChannels > 0) {
-                const float* ch0 = buffer.getReadPointer(0);
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(ch0[s]);
+                vb->pushBlock(buffer.getReadPointer(0), numSamples);
             }
         }
     }

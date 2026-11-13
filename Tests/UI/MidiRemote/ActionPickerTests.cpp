@@ -14,6 +14,16 @@ using synth::ui::ActionPickerComponent;
 using synth::ui::ActionPickerRow;
 using synth::ui::buildActionPickerRows;
 
+TEST(MidiRemoteActionPickerTest, FilterMatchesEveryWordInAnyOrder) {
+    const auto rows = buildActionPickerRows("page next");
+    bool found = false;
+    for (const auto& row : rows)
+        found = found || (row.isPage && row.label == "Next page");
+    EXPECT_TRUE(found);
+    for (const auto& row : rows)
+        EXPECT_FALSE(row.label == "Previous page") << "'next' is missing";
+}
+
 TEST(MidiRemoteActionPickerTest, ListsOnlyCommandDispatchedActions) {
     const auto rows = buildActionPickerRows({});
     int actions = 0;

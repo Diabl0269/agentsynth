@@ -370,7 +370,8 @@ private:
  * in process. Only the standalone app calls it: a VST3/AU build of ourselves never scans, so it has
  * no entry point to intercept.
  *
- * `suppressCrashDialog`: when true, installs `installQuietCrashHandlers()`
+ * `suppressCrashDialog`: when true, this is the real re-exec'd child: it also enters the scratch
+ * directory and starts the parent watchdog, and installs `installQuietCrashHandlers()`
  * (PluginScanCrashGuard.h) before touching the candidate's binary, so a crash inside
  * `scanAndAddFile` exits this process quietly instead of popping macOS's own crash-reporter dialog.
  * Defaults to false ON PURPOSE — this function is also called IN-PROCESS by tests
@@ -379,5 +380,16 @@ private:
  */
 std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut,
                                           bool suppressCrashDialog = false);
+
+juce::File pluginScratchDirectory();
+
+/** Makes pluginScratchDirectory() the working directory; false if it could not be entered. */
+bool enterPluginScratchDirectory();
+
+/** True once the process's parent is no longer the one it started with. */
+bool isParentGone(int originalParentPid, int currentParentPid);
+
+/** Ends this process promptly once its parent is gone (POSIX; no-op elsewhere). */
+void startParentWatchdog(int pollMs = 500);
 
 } // namespace synth

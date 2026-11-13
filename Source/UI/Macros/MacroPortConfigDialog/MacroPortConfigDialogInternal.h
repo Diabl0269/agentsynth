@@ -1,13 +1,19 @@
 #pragma once
 
 // Shared between the split MacroPortConfigDialog*.cpp units: the "Add a port" combo-box item ids
-// (constructed in Lifecycle.cpp, read back in TestSeams.cpp), liveThemeColours (used by the row
-// widgets below and by MacroPortConfigDialog::paint in Lifecycle.cpp), and — because it is a
+// (constructed in Lifecycle.cpp, read back in TestSeams.cpp), and — because it is a
 // private nested class of MacroPortConfigDialog whose members Lifecycle.cpp (rebuildRowComponents),
 // RowOrdering.cpp (drag/keyboard nav), and TestSeams.cpp all need the complete type for — the row
 // widgets (GlyphButton, PortColourSwatch, DragHandle) and PortRowComponent itself.
 
 #include "MacroPortConfigDialog.h"
+#include "UI/Layout/ColourSwatchButton.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/DragCursor.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/IconButton.h"
+#include "UI/Layout/PopupHost.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -20,19 +26,6 @@ constexpr int kDirectionOutputId = 2;
 constexpr int kKindAudioCVId = 1;
 constexpr int kKindMidiId = 2;
 } // namespace
-
-// Resolves the live theme's colour tokens, evaluated fresh at every call site (never cached) so a
-// theme switch or this dialog being reparented mid-life is never stale — the same reasoning
-// PreferencesSettingsTab's popup content and MidiDestinationPicker give for the identical
-// dynamic_cast, and why it is done here at PAINT time rather than once at construction (a
-// juce::DialogWindow's content component is not guaranteed to already sit under
-// synth::theme::AppLookAndFeel the moment its constructor runs).
-inline const synth::theme::Colors& liveThemeColours(const juce::Component& c) {
-    static const synth::theme::Colors fallback{};
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().colors;
-    return fallback;
-}
 
 namespace {
 // Up/Down on a control that opts in (the row's colour swatch and Delete glyph button — see
@@ -57,61 +50,15 @@ constexpr int kGlyphButtonGap = 2;
 constexpr int kColourSwatchSize = 16;
 constexpr int kDragHandleWidth = 14;
 
-// Same live/fallback split as liveThemeColours, for the border-width metric the focus-ring paint
-// below needs — kept as a separate accessor rather than widening
-// liveThemeColours's return type, since every existing call site only ever wanted colours.
-inline const synth::theme::Metrics& liveThemeMetrics(const juce::Component& c) {
-    static const synth::theme::Metrics fallback{};
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().metrics;
-    return fallback;
-}
-
-// A compact icon-style Delete button — a small square button drawing an X as a couple of strokes,
-// the same "drawn Path/lines, not an SVG asset" idiom MacroCardComponent's own expand chevron
-// already uses. Cmd+Up/Cmd+Down on this button is the keyboard-accessible reorder (see
-// PortRowComponent's onReorderChord wiring below); Delete is its only glyph.
-class GlyphButton : public juce::Button {
+// The row's Delete button: the shared IconButton (Danger style, the drawn X glyph). Cmd+Up/Cmd+Down
+// on this button is the keyboard-accessible reorder (see PortRowComponent's onReorderChord wiring
+// below).
+class GlyphButton : public IconButton {
 public:
     enum class Glyph { Delete };
 
-    explicit GlyphButton(Glyph glyph)
-        : juce::Button(juce::String())
-        , glyph_(glyph) {}
-
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
-        juce::ignoreUnused(glyph_); // only one glyph remains; kept for a future affordance to reuse
-        const auto& c = liveThemeColours(*this);
-        const juce::Colour hotColour = c.error;
-        auto bounds = getLocalBounds().toFloat();
-
-        if (isEnabled() && (highlighted || down)) {
-            g.setColour(hotColour.withAlpha(down ? 0.28f : 0.15f));
-            g.fillRoundedRectangle(bounds, 4.0f);
-        }
-
-        juce::Colour glyphColour = c.textMuted;
-        if (!isEnabled())
-            glyphColour = c.textDisabled;
-        else if (highlighted || down)
-            glyphColour = hotColour;
-        g.setColour(glyphColour);
-
-        auto inner = bounds.reduced(bounds.getWidth() * 0.3f, bounds.getHeight() * 0.3f);
-        g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
-        g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
-
-        // Keyboard-focus indicator. juce::Button::paint() only ever hands paintButton()
-        // isOver()/isDown() (juce_Button.cpp), never keyboard-focus state, so without this a
-        // Tab'd-to-but-not-hovered button would paint with no visible change at all. Reuses
-        // AppLookAndFeel::drawTextEditorOutline/drawComboBox's own "accent outline when focused"
-        // convention.
-        if (hasKeyboardFocus(true) || forceFocusRingForTest) {
-            const auto& m = liveThemeMetrics(*this);
-            g.setColour(c.accent);
-            g.drawRoundedRectangle(bounds.reduced(m.borderWidth * 0.5f), 4.0f, m.borderWidth);
-        }
-    }
+    explicit GlyphButton(Glyph)
+        : IconButton(juce::String(), synth::theme::Glyph::Delete, Style::Danger) {}
 
     // The Delete button is the keyboard-accessible delete fallback (it gets Tab/Return/Space for
     // free from juce::Button) — this adds Up/Down-arrow FOCUS navigation between rows on top, wired
@@ -132,51 +79,23 @@ public:
                 return true;
             }
         }
-        return juce::Button::keyPressed(key);
+        return IconButton::keyPressed(key);
     }
 
     std::function<void(bool moveDown)> onVerticalArrow;
     std::function<void(bool moveDown)> onReorderChord; // Cmd+Up/Cmd+Down
-    bool forceFocusRingForTest = false;                // test seam
-
-private:
-    Glyph glyph_;
 };
 
 // The row's kind-tinted left-edge swatch — left-click opens a synth::ui::ColourPickerPopup (the
 // same favourites-shelf picker TimelineTrackHeaderComponent's track colour swatch and
-// AppearanceSettingsTab's note swatches already use), right-click resets to the kind-tint default.
+// AppearanceSettingsTab's note swatches already use), right-click resets to the kind-tint default. The shared
+// ColourSwatchButton paints and handles the right-click; this adds the row's arrow-key navigation.
 // `colour` is what actually PAINTS (custom colour, or the kind tint fallback); PortRowComponent is
 // the one that decides which of those it currently is.
-class PortColourSwatch : public juce::Button {
+class PortColourSwatch : public ColourSwatchButton {
 public:
     PortColourSwatch()
-        : juce::Button("portColourSwatch") {}
-
-    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
-        auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-        g.setColour(colour);
-        g.fillRoundedRectangle(bounds, 3.0f);
-        const auto& c = liveThemeColours(*this);
-        // Same focus-state gap as GlyphButton (see its own comment) — accent replaces the normal
-        // border colour when focused, matching AppLookAndFeel's own "accent when focused"
-        // convention.
-        const bool focused = hasKeyboardFocus(true) || forceFocusRingForTest;
-        g.setColour(focused ? c.accent : c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
-        g.drawRoundedRectangle(bounds, 3.0f,
-                               focused ? liveThemeMetrics(*this).borderWidth : (highlighted || down ? 1.4f : 1.0f));
-    }
-
-    // Mirrors ColourPickerPopup::FavouriteSwatchButton's own override exactly (see its comment):
-    // a right-click must reset to default, not ALSO fire onClick the way a plain Button would.
-    void mouseDown(const juce::MouseEvent& e) override {
-        if (e.mods.isPopupMenu()) {
-            if (onRightClick)
-                onRightClick();
-            return;
-        }
-        juce::Button::mouseDown(e);
-    }
+        : ColourSwatchButton("portColourSwatch") {}
 
     // Cmd+Up/Cmd+Down is checked first and fires onReorderChord (keyboard-accessible reordering); a
     // bare arrow only moves focus via onVerticalArrow — see GlyphButton's identical override for
@@ -194,14 +113,11 @@ public:
                 return true;
             }
         }
-        return juce::Button::keyPressed(key);
+        return ColourSwatchButton::keyPressed(key);
     }
 
-    juce::Colour colour{juce::Colours::grey};
-    std::function<void()> onRightClick;
     std::function<void(bool moveDown)> onVerticalArrow;
     std::function<void(bool moveDown)> onReorderChord; // Cmd+Up/Cmd+Down
-    bool forceFocusRingForTest = false;                // test seam
 };
 
 // The drag-to-reorder handle — a small grip icon to the left of the name editor. Deliberately a
@@ -213,8 +129,10 @@ class DragHandle
     : public juce::Component
     , public juce::SettableTooltipClient {
 public:
+    DragHandle() { setMouseCursor(dragGrabCursor()); } // the grab hand on hover and while dragging
+
     void paint(juce::Graphics& g) override {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         const juce::Colour grip = dragging_ ? c.accent : (isMouseOver() ? c.textPrimary.withAlpha(0.85f) : c.textMuted);
         g.setColour(grip);
         auto bounds = getLocalBounds().toFloat();
@@ -229,16 +147,18 @@ public:
     void mouseEnter(const juce::MouseEvent&) override { repaint(); }
     void mouseExit(const juce::MouseEvent&) override { repaint(); }
 
-    void mouseDown(const juce::MouseEvent&) override {
+    // The events go up whole: the owner converts each one into its own list coordinates, because the
+    // handle moves with its row while the row is dragged.
+    void mouseDown(const juce::MouseEvent& e) override {
         dragging_ = true;
         repaint();
         if (onDragStart)
-            onDragStart();
+            onDragStart(e);
     }
 
     void mouseDrag(const juce::MouseEvent& e) override {
         if (onDragMove)
-            onDragMove(e.getScreenPosition());
+            onDragMove(e);
     }
 
     void mouseUp(const juce::MouseEvent&) override {
@@ -248,8 +168,8 @@ public:
             onDragEnd();
     }
 
-    std::function<void()> onDragStart;
-    std::function<void(juce::Point<int> screenPos)> onDragMove;
+    std::function<void(const juce::MouseEvent&)> onDragStart;
+    std::function<void(const juce::MouseEvent&)> onDragMove;
     std::function<void()> onDragEnd;
 
 private:
@@ -288,7 +208,10 @@ public:
         // — Escape does not discard anything Close wouldn't). Wired here (rather than relying on the bubble
         // MacroPortConfigDialog::keyPressed catches) because juce::TextEditor consumes Escape itself before it ever
         // bubbles.
-        nameEditor.onEscapeKey = [this] { owner_.requestClose(); };
+        nameEditor.onEscapeKey = [this] { owner_.escapePressed(); };
+        nameEditor.setTitle("Port name");
+        nameEditor.setTooltip("Rename this port. Press Return to apply.");
+        removeHiddenTabStops(nameEditor);
         addAndMakeVisible(nameEditor);
 
         midiTag.setText("MIDI", juce::dontSendNotification);
@@ -299,7 +222,8 @@ public:
 
         populateShapeBox(shapeBox);
         shapeBox.setSelectedId(comboIndexFromShape(row.shape), juce::dontSendNotification);
-        shapeBox.setVisible(!isMidi);
+        shapeBox.setTitle("Port shape");
+        shapeBox.setTooltip("Mono, stereo or poly. Changing it replaces the port.");
         // The combo box IS the shape-commit gesture — selecting a new shape commits immediately
         // (still delete+re-add of the node as ONE undo step underneath, per
         // GraphEditor::changeMacroPortShape). maybeCommitShape guards against firing on a no-op
@@ -312,6 +236,7 @@ public:
             maybeCommitShape();
         };
         addAndMakeVisible(shapeBox);
+        shapeBox.setVisible(!isMidi); // a MIDI row has no shape: hidden, so Tab skips it too
 
         voicesLabel.setText("Voices", juce::dontSendNotification);
         voicesLabel.setJustificationType(juce::Justification::centredRight);
@@ -328,8 +253,11 @@ public:
         voicesEditor.onFocusLost = [this] { maybeCommitShape(); };
         voicesEditor.onReturnKey = voicesEditor.onFocusLost;
         voicesEditor.onEscapeKey = [this] { // same reasoning as nameEditor's onEscapeKey above
-            owner_.requestClose();
+            owner_.escapePressed();
         };
+        voicesEditor.setTitle("Voice count");
+        voicesEditor.setTooltip("Number of voices of this poly port. Press Return to apply.");
+        removeHiddenTabStops(voicesEditor);
         addAndMakeVisible(voicesEditor);
 
         // The per-port colour swatch — left-click opens a ColourPickerPopup, right-click
@@ -337,6 +265,7 @@ public:
         // (nullopt for every uncoloured port), never anything the dialog invents.
         customColour = row.colour;
         colourSwatch.colour = customColour.value_or(kindTintColour());
+        colourSwatch.setTitle("Port colour");
         colourSwatch.setTooltip("Port colour (right-click to reset)");
         colourSwatch.onClick = [this] { showColourPicker(); };
         colourSwatch.onRightClick = [this] { commitColour(std::nullopt); };
@@ -353,11 +282,13 @@ public:
         // The drag-to-reorder handle. Cmd+Up/Cmd+Down on the colour swatch or Delete button below
         // is the keyboard route — this is an ADDITIONAL, mouse-only gesture, never a replacement.
         dragHandle.setTooltip("Drag to reorder (or Cmd+Up/Cmd+Down on a focused control)");
-        dragHandle.onDragStart = [this] { owner_.beginRowDrag(*this); };
-        dragHandle.onDragMove = [this](juce::Point<int> screenPos) { owner_.updateRowDrag(*this, screenPos); };
+        dragHandle.onDragStart = [this](const juce::MouseEvent& e) { owner_.beginRowDrag(*this, e); };
+        dragHandle.onDragMove = [this](const juce::MouseEvent& e) { owner_.updateRowDrag(e); };
         dragHandle.onDragEnd = [this] { owner_.endRowDrag(*this); };
         addAndMakeVisible(dragHandle);
 
+        deleteButton.setTitle("Delete port");
+        deleteButton.setDescription(row.name);
         deleteButton.setTooltip("Delete this port (Cmd+Up/Cmd+Down to reorder)");
         deleteButton.onClick = [this] {
             if (owner_.onDeletePort)
@@ -373,11 +304,21 @@ public:
         };
         addAndMakeVisible(deleteButton);
 
-        updateVoicesVisibility();
+        // The controls are centred in the row at different heights, which would sort them by pixel
+        // row rather than left to right: Tab visits them in the order they read.
+        colourSwatch.setExplicitFocusOrder(1);
+        nameEditor.setExplicitFocusOrder(2);
+        shapeBox.setExplicitFocusOrder(3);
+        voicesEditor.setExplicitFocusOrder(4);
+        deleteButton.setExplicitFocusOrder(5);
+
+        voicesFade_.snapTo(isPolyShown()); // what a row starts with does not fade
+        voicesFade_.onFrame = [this] { resized(); };
+        resized();
     }
 
     juce::Colour kindTintColour() const {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         return isMidi ? c.audioWire : c.accent;
     }
 
@@ -440,7 +381,8 @@ public:
     }
 
     void showColourPicker() {
-        juce::CallOutBox::launchAsynchronously(buildColourPicker(), colourSwatch.getScreenBounds(), nullptr);
+        synth::ui::launchPopover(buildColourPicker(), colourSwatch.getScreenBounds(), nullptr,
+                                 {.trigger = &colourSwatch});
     }
 
     // The real drag-end path (DragHandle::onDragEnd -> MacroPortConfigDialog::endRowDrag) and
@@ -457,19 +399,23 @@ public:
     // otherwise read stale immediately after a same-tick commitColour().
     bool hasCustomColourForTest() const { return customColour.has_value(); }
 
-    // -1 = none, 0 = insertion point is ABOVE this row, 1 = BELOW it. Purely visual — repaints
-    // only on an actual change, matching Source/UI/CLAUDE.md's "no unconditional repaint" rule.
-    void setDropIndicator(int position) {
-        if (dropIndicatorPosition_ != position) {
-            dropIndicatorPosition_ = position;
+    // 0..1: how strongly the row is drawn lifted while it is dragged. Purely visual — repaints only
+    // on an actual change, matching Source/UI/CLAUDE.md's "no unconditional repaint" rule.
+    void setLift(float lift) {
+        if (lift_ != lift) {
+            lift_ = lift;
             repaint();
         }
     }
 
+    bool isPolyShown() const {
+        return !isMidi && shapeFromComboIndex(shapeBox.getSelectedId()) == MacroPortShape::Poly;
+    }
+
+    // The voices editor fades in and out as the shape changes; shapeBox slides over as its block's width follows
+    // the fade (resized()).
     void updateVoicesVisibility() {
-        const bool poly = !isMidi && shapeFromComboIndex(shapeBox.getSelectedId()) == MacroPortShape::Poly;
-        voicesEditor.setVisible(poly);
-        voicesLabel.setVisible(poly);
+        voicesFade_.setShown(isPolyShown());
         resized();
     }
 
@@ -507,10 +453,11 @@ public:
     // delete+recreate, complete with a fresh uuid and dropped cables) just from opening and
     // closing the dialog. Voices only matters while the row is showing Poly (the only shape that
     // makes voicesEditor visible at all, and Poly can never be the lossy StereoCollapsed case), so
-    // gating on isVisible() keeps this reachable only through the one path that's actually safe to
+    // gating on the voices editor being shown (voicesFade_.isShown(): false the moment its fade-out starts, not
+    // when it ends) keeps this reachable only through the one path that's actually safe to
     // re-derive from the combo's current selection.
     void maybeCommitVoicesOnClose() {
-        if (voicesEditor.isVisible())
+        if (voicesFade_.isShown())
             maybeCommitShape();
     }
 
@@ -541,11 +488,12 @@ public:
         if (isMidi) {
             midiTag.setBounds(area.removeFromRight(56));
         } else {
-            if (voicesEditor.isVisible()) {
-                voicesEditor.setBounds(area.removeFromRight(38));
-                area.removeFromRight(4);
-                voicesLabel.setBounds(area.removeFromRight(42));
-                area.removeFromRight(6);
+            // The voices block (editor, label, gap: 90 px) is as wide as the fade has got, so the shape box slides.
+            if (const int voicesWidth = juce::roundToInt(90.0f * voicesFade_.progress()); voicesWidth > 0) {
+                auto block = area.removeFromRight(voicesWidth);
+                voicesEditor.setBounds(block.removeFromRight(38));
+                block.removeFromRight(4);
+                voicesLabel.setBounds(block.removeFromRight(42));
             }
             shapeBox.setBounds(area.removeFromRight(90));
         }
@@ -563,21 +511,13 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        const auto& c = liveThemeColours(*this);
+        const auto& c = synth::theme::themeOf(*this).colors;
         auto bounds = getLocalBounds().toFloat();
 
+        paintReorderLift(g, bounds, lift_, c.surfaceHi, c.accent);
         if (isMidi) {
             g.setColour(c.midiWire.withAlpha(0.08f));
             g.fillRoundedRectangle(bounds, 5.0f);
-        }
-
-        // Drag insertion indicator — a thin accent line at the edge the dragged row would
-        // land next to. Drawn here (not by MacroPortConfigDialog/rowsContent_) so it always tracks
-        // this row's own live bounds with no separate geometry computation to drift out of sync.
-        if (dropIndicatorPosition_ >= 0) {
-            g.setColour(c.accent);
-            auto local = getLocalBounds();
-            g.fillRect(dropIndicatorPosition_ == 0 ? local.removeFromTop(2) : local.removeFromBottom(2));
         }
     }
 
@@ -599,7 +539,10 @@ private:
     int committedVoices_;
     juce::String committedName_;              // see maybeCommitName()
     std::optional<juce::Colour> customColour; // nullopt = falls back to kindTintColour()
-    int dropIndicatorPosition_ = -1;          // -1 none, 0 above, 1 below
+    float lift_ = 0.0f;                       // see setLift()
+
+    // The voices editor and its label, shown for a poly shape only. Declared after them: destroyed first.
+    synth::ui::FadeVisibility voicesFade_{&voicesLabel, &voicesEditor};
 };
 
 } // namespace synth::ui

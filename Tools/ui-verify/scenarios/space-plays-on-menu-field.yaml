@@ -1,0 +1,39 @@
+# Space on a menu field is the app's play/stop key, and only Return opens the menu (Space used to open the menu and block
+# play/stop).
+#
+# What a user does: with the timeline open, raises the top bar's key ring with Up, steps to the song Key field with Home
+# and nine Rights, and presses Space twice: no key picker opens either time (the key goes on to the transport). Return
+# opens the key picker. The test-mode app has no audio device, so the transport never runs here: that half is pinned by
+# MenuFieldSpaceTest, which reads the engine's playing state.
+record: true
+save_project: space-plays-on-menu-field
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - key: {keys: up, target: timelinePanel}
+  - key: {keys: home, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - key: {keys: right, target: timelinePanel}
+  - wait: {}
+  - screenshot: {name: 1-key-field-ringed}
+  - key: {keys: space, target: timelinePanel}
+  - expect: {id: keyPicker, exists: false}
+  - screenshot: {name: 2-space-opens-no-picker}
+  - key: {keys: space, target: timelinePanel}
+  - expect: {id: keyPicker, exists: false}
+  - screenshot: {name: 3-second-space-opens-no-picker}
+  - key: {keys: return, target: timelinePanel}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPickerPanel, name: 4-return-opens-picker}

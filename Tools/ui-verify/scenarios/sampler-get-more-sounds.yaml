@@ -1,0 +1,53 @@
+# The Sampler's Instrument list offers the core instruments until the core pack is installed (other packs, such as the
+# animals, no longer hide the offer), and always ends with a "Get more sounds..." row that opens Settings > Sound packs.
+# The Drum Kit's picker shares both; its list is covered by InstrumentPickerRowTests.
+#
+# What a user does (only the animals pack installed, the SoundPacks fixture folder):
+#   1. Adds a Sampler from the library and switches its Mode to Instrument.
+#   2. Opens the Instrument list: Cat under Animals, the file loaders, then "Get more sounds..." as the last row, and
+#      under the list the "Get the core instruments" strip with its Download button.
+#   3. Walks down to "Get more sounds..." and presses Return: Settings opens on its Sound packs tab.
+#   4. Opens the Animals pack's row (its chevron), so the tab is seen listing the pack that is installed.
+# The Mode switch has three segments (Sample, Granular, Instrument); the click lands in the third.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-get-more-sounds
+steps:
+  - copyFixture: {name: SoundPacks}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - expect: {id: samplerPackOffer, showing: true, within_ms: 3000}
+  - expect: {id: samplerPackOffer, contains: {title: "Get the core instruments"}}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: offer-strip-with-animals}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: "settingsTab:Sound packs", showing: true, within_ms: 3000}
+  - expect: {id: "settingsTab:Sound packs", toggleState: true}
+  - click: {id: "packDisclosure:animals"}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: get-more-opens-sound-packs}

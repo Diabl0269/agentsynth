@@ -19,19 +19,20 @@ if(CCACHE_PROGRAM)
         set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     endif()
 endif()
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/Pch.cmake)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Dependency pins live in one file so CI can key its build/_deps cache on that file alone —
-# adding a source file below must not invalidate a ~350 MB dependency cache. See the header of
-# cmake/DependencyVersions.cmake for the full rationale.
+# Dependency pins live in one file so CI can key its build/_deps cache on that file alone, and adding a
+# source file below does not invalidate a ~350 MB cache. Rationale: cmake/DependencyVersions.cmake.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/CheckJuceSourceDir.cmake)
 
 # Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
 # build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
-# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("8.0.3"), which a
+# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("9.0.3"), which a
 # shallow clone can fetch directly, not a bare commit SHA (which a shallow fetch of an arbitrary
 # commit cannot always reach on every git-server configuration). A shallow clone still downloads
 # every blob in that one commit's tree (JUCE ships examples/fonts/images in-tree), just not the
@@ -40,16 +41,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 # for the actual measured numbers. This cache key hashes only
 # cmake/DependencyVersions.cmake (see that file's header) and does not depend on this line, so the
 # workflows' deps cache keys had to be bumped by hand (deps3 -> deps4, release-deps-ninja3 -> 4;
-# see docs/development/ci-caching.md) for the shallow clone to actually take effect instead of
-# forever restoring the old, non-shallow juce-src.
-include(FetchContent)
-FetchContent_Declare(
-    juce
-    GIT_REPOSITORY ${SYNTH_JUCE_GIT_REPOSITORY}
-    GIT_TAG        ${SYNTH_JUCE_GIT_TAG}
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(juce)
+# see docs/development/ci-caching.md) for the shallow clone to actually take effect, not restore the old juce-src.
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchJuce.cmake)
 
 # Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
 # FetchContent_MakeAvailable populates it and, finding no CMakeLists.txt at its root, does not try
@@ -91,8 +84,7 @@ option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
-# Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read
-# directly since they're consumed at configure time, not compile time.
+# Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read (consumed at configure time).
 set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, About box, installer")
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
@@ -101,7 +93,6 @@ set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentif
 # The public keys are deliberately empty by default: both update managers stay inert without one,
 # so a dev/local build never shows an "app is misconfigured" alert. CI supplies the real keys via
 # -DSYNTH_SPARKLE_PUBLIC_KEY / -DSYNTH_WINSPARKLE_PUBLIC_KEY (separate, independent EdDSA pairs).
-#
 # One cache var for the feed URL, platform-conditional default: mac and Windows publish separate
 # appcast files under the same agentsynth.app/updates/ path.
 if(APPLE)
@@ -211,6 +202,7 @@ endif()
 add_library(Core STATIC
     Source/AudioEngine/AudioEngine.h
     Source/AudioEngine/ModulationRoutingTypes.h
+    Source/AudioEngine/ModuleTitle.h
     Source/AudioEngine/DeviceStateInputs.h
     Source/AudioEngine/DeviceStateInputs.cpp
     Source/AudioEngine/AudioEngineBounceSuspend.cpp
@@ -221,10 +213,14 @@ add_library(Core STATIC
     Source/AudioEngine/AudioEngineRenderPass.cpp
     Source/AudioEngine/AudioEngineRuntimeState.cpp
     Source/AudioEngine/AudioEngineTimelinePublish.cpp
+    Source/AudioEngine/AuditionMonitor.cpp
+    Source/AudioEngine/AuditionMonitor.h
+    Source/AudioEngine/SamplerMidiWiring.cpp
+    Source/AudioEngine/SamplerMidiWiring.h
     Source/AudioEngine/SidechainConnections.cpp
     Source/AudioEngine/SidechainConnections.h
-    Source/AppUndoManager.cpp
-    Source/AppUndoManager.h
+    Source/AudioEngine/StereoDownMix.cpp
+    Source/AudioEngine/StereoDownMix.h
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h
@@ -236,8 +232,18 @@ add_library(Core STATIC
     Source/PresetManager.h
     Source/PatchDocument.cpp
     Source/PatchDocument.h
+    Source/PatchSaveLocation.cpp
+    Source/PatchSaveLocation.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    Source/Project/ModuleFileRefs.cpp
+    Source/Project/ModuleFileRefs.h
+    Source/Project/ProjectCollector.cpp
+    Source/Project/ProjectCollector.h
+    Source/Project/ProjectCommandLine.cpp
+    Source/Project/ProjectCommandLine.h
+    Source/Project/ViewDoc.cpp
+    Source/Project/ViewDoc.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
@@ -281,6 +287,8 @@ add_library(Core STATIC
     Source/Mixer/ChannelFlows/ChannelFlowsMakeChannel.cpp
     Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp
     Source/Mixer/ChannelFlows/ChannelFlowsTrackPreset.cpp
+    Source/Mixer/ChannelMacroLookup.cpp
+    Source/Mixer/ChannelMacroLookup.h
     Source/Mixer/MasterSplice.cpp
     Source/Mixer/MasterSplice.h
     Source/Mixer/TrackChannelLink.cpp
@@ -290,11 +298,8 @@ add_library(Core STATIC
     Source/Mixer/SoloAudibleSet.h
     Source/Mixer/SoloAudibleSet.cpp
     Source/Mixer/PeakMeterLatch.h
-    Source/Mixer/MixerModel/MixerModel.h
-    Source/Mixer/MixerModel/MixerModelInternal.h
-    Source/Mixer/MixerModel/MixerModelColumns.cpp
-    Source/Mixer/MixerModel/MixerModelInserts.cpp
-    Source/Mixer/MixerModel/MixerModelSends.cpp
+    Source/Mixer/MixerViewDoc.h
+    Source/Mixer/MixerViewDoc.cpp
     Source/Mixer/MixerSends/MixerSends.h
     Source/Mixer/MixerSends/MixerSends.cpp
     # Transport
@@ -306,6 +311,8 @@ add_library(Core STATIC
     Source/Transport/BounceRunner.h
     Source/Transport/BounceSession.cpp
     Source/Transport/BounceSession.h
+    Source/Transport/LameLocator.cpp
+    Source/Transport/LameLocator.h
     Source/Transport/Metronome.cpp
     Source/Transport/Metronome.h
     Source/Transport/OfflineTransportDriver.cpp
@@ -317,9 +324,12 @@ add_library(Core STATIC
     Source/Transport/StemSession.cpp
     Source/Transport/StemSession.h
     Source/Transport/TempoMap.h
+    Source/Transport/TransportDoc.cpp
     Source/Transport/TransportService.cpp
     Source/Transport/MarkerJump.h
     Source/Transport/TransportNudge.h
+    Source/Transport/CursorGlide.h
+    Source/Transport/TransportDoc.h
     Source/Transport/TransportService.h
     # Timeline
     Source/Timeline/ArrangementContext.cpp
@@ -338,8 +348,6 @@ add_library(Core STATIC
     Source/Timeline/EpochExchange.h
     Source/Timeline/MidiClipFile.cpp
     Source/Timeline/MidiClipFile.h
-    Source/Timeline/MidiRecorder.cpp
-    Source/Timeline/MidiRecorder.h
     Source/Timeline/PeaksFile.cpp
     Source/Timeline/PeaksFile.h
     Source/Timeline/TakePlacement.cpp
@@ -350,26 +358,37 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocCore.cpp
     Source/Timeline/TimelineDoc/TimelineDocInternal.h
     Source/Timeline/TimelineDoc/TimelineDocMarkers.cpp
+    Source/Timeline/TimelineDoc/TimelineDocLinkedClips.cpp
     Source/Timeline/TimelineDoc/TimelineDocNotes.cpp
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
+    Source/Timeline/TimelineDoc/TimelineDocScaleSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
+    Source/Timeline/TimelineDoc/TimelineDocStretchOriginSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
-    Source/Timeline/TimelineOps.cpp
-    Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
     Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp
     Source/Timeline/TimelineSnapshot.h
     Source/Timeline/TimelineSnapshotExchange.h
+    Source/Timeline/TrackOwnership.cpp
+    Source/Timeline/UniqueTrackName.h
+    Source/Timeline/TrackOwnership.h
     Source/Timeline/TimelineValidator.cpp
     Source/Timeline/TimelineValidator.h
     # Modules
+    Source/Modules/CardViewState.h
     Source/Modules/ModuleBase.h
+    Source/Modules/ModuleOutputStage.h
+    Source/Modules/ModuleOutputStage.cpp
+    Source/Modules/NoteInbox.h
+    Source/Modules/NoteInbox.cpp
+    Source/Modules/ModuleFileStateKeys.h
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
-    Source/Modules/FilterModule.h
+    Source/Modules/FrequencyText.h
+    Source/Modules/ParameterText.h
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
@@ -377,6 +396,7 @@ add_library(Core STATIC
     Source/Modules/SamplerModule.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleRender.cpp
     Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.h
     Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.cpp
     Source/Modules/SequencerModule.h
@@ -386,12 +406,15 @@ add_library(Core STATIC
     Source/Modules/Lfo/LfoCustomWave.cpp
     Source/Modules/SampleHoldModule.h
     Source/Modules/SchmittTrigger.h
+    Source/Modules/GateEdges.h
     Source/Modules/ThresholdMeterSource.h
     Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/CardLayout.cpp
     Source/Modules/CardLayout.h
+    Source/Modules/CardLayoutJson.cpp
+    Source/Modules/CardLayoutJson.h
     Source/Modules/MacroControlModule.h
     Source/Modules/RecordTapModule.cpp
     Source/Modules/RecordTapModule.h
@@ -416,16 +439,15 @@ add_library(Core STATIC
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
     Source/Modules/FX/RingModulatorModule.h
-    Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
-    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the
-    # AgentSynthPlugin target: this is the app HOSTING plugins, which the headless Tests target
-    # exercises against a stub backend (Tests/StubPluginInstance.h).
+    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the AgentSynthPlugin
+    # target: this is the app HOSTING plugins, which the headless Tests target exercises against a stub backend.
     Source/Plugin/Hosting/HostedPluginBackend.cpp
     Source/Plugin/Hosting/HostedPluginBackend.h
     Source/Plugin/Hosting/HostedPluginModule.cpp
     Source/Plugin/Hosting/HostedPluginModule.h
     Source/Plugin/Hosting/HostedPluginModuleCardLayout.cpp
+    Source/Plugin/Hosting/HostedPluginModuleModSlots.cpp
     Source/Plugin/Hosting/PluginScanService.cpp
     Source/Plugin/Hosting/PluginScanService.h
     Source/Plugin/Hosting/PluginScanCrashGuard.cpp
@@ -439,6 +461,8 @@ add_library(Core STATIC
     Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp
     Source/AI/AIIntegrationService/AIIntegrationServicePatchApply.cpp
     Source/AI/AIIntegrationService/AIIntegrationServiceTimelineOps.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEdit.cpp
+    Source/AI/AIIntegrationService/AIIntegrationServiceProjectEditRun.cpp
     Source/AI/OllamaProvider.cpp
     Source/AI/RemoteProvider.cpp
     Source/AI/AIIntegrationService/AIIntegrationService.h
@@ -447,12 +471,18 @@ add_library(Core STATIC
     Source/AI/AIStateMapper/AIStateMapperValidation.cpp
     Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp
     Source/AI/AIStateMapper/AIStateMapperSchema.cpp
+    Source/AI/AIStateMapper/AIStateMapperCatalog.cpp
+    Source/AI/AIStateMapper/AIStateMapperModulations.cpp
     Source/AI/AIProviderRegistry.h
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
     Source/AI/PatchDiff.h
     Source/AI/PatchDiff.cpp
+    Source/AI/RawHeaderParser.h
+    Source/AI/RawHeaderParser.cpp
+    Source/AI/WinHttpTransport.h
+    Source/AI/WinHttpTransport.cpp
     Source/AI/AuthClient.h
     Source/AI/AuthClient.cpp
     Source/AI/AccountService.h
@@ -470,9 +500,13 @@ add_library(Core STATIC
     Source/Auth/DeviceIdStore.h
     Source/Auth/DeviceIdStore.cpp
     # UI utilities
+    Source/UI/Layout/CableCurve.h
     Source/UI/Layout/LayoutUtil.h
     Source/UI/Layout/LayoutUtil.cpp
+    Source/UI/Layout/HierarchicalArrange.h
+    Source/UI/Layout/HierarchicalArrange.cpp
     Source/UI/Graph/ModuleStepOrder.h
+    Source/UI/Graph/CardNavigation.h
     Source/UI/Graph/SelectionModel.h
     Source/UI/Chrome/StatusBarComponent.h
     Source/UI/Chrome/StatusBarComponent.cpp
@@ -490,38 +524,63 @@ add_library(Core STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
-    # FRO147: MeterColourStops is pure model code (no juce::Component) that used to live only in
-    # AppUI's source list, but AppLookAndFeel (Core, below) now caches an effective MeterColourStops
-    # itself (the ONE cache every meter painter reads) -- so Core needs the definition too. Moved
-    # here rather than compiled into BOTH Core and AppUI, which would duplicate-symbol any target
-    # linking both (AgentSynth, Tests). AppUI's own MixerMeter.cpp/ChannelChipComponent.cpp (still
-    # AppUI-only, still real juce::Components) reach it transitively via AppUI's PUBLIC link to Core.
+    # The shared icon button, colour swatch, text link + the drawn glyphs: Core because Core components use them
+    Source/UI/Theme/IconGlyphs.h
+    Source/UI/Theme/IconGlyphs.cpp
+    Source/UI/Layout/IconButton.h
+    Source/UI/Layout/IconButton.cpp
+    Source/UI/Layout/ColourSwatchButton.h
+    Source/UI/Layout/ColourSwatchButton.cpp
+    Source/UI/Layout/TextLinkButton.h
+    Source/UI/Layout/TextLinkButton.cpp
+    # Pure model code that AppLookAndFeel caches, so Core compiles it (AppUI too would duplicate symbols)
     Source/UI/Mixer/MeterColourStops.h
     Source/UI/Mixer/MeterColourStops.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelLifecycle.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFonts.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelSliders.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFader.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelButtons.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelSharedControls.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelComboAndMenus.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelScrollbarsAndChrome.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelCanvasTreatments.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelShortcutHints.cpp
 )
 
-# Link Core against JUCE: the headers and definitions of every module, and one shared compiled copy
-# of the module code (cmake/JuceModules.cmake, FRO306).
+# Link Core against JUCE: every module's headers and definitions, one shared compiled copy (cmake/JuceModules.cmake).
 include(cmake/JuceModules.cmake)
 target_link_libraries(Core PUBLIC JuceModules)
-
-# TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
-# therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
-# which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
-# or the CLAP headers, i.e. exactly the new dependency this decision avoids.
-#
-# The JUCE_PLUGINHOST_* switches are set PUBLIC on JuceModules (cmake/JuceModules.cmake), which
-# Core links PUBLIC: the module code must be compiled with them, and every consumer (AppUI, Tests,
-# the plugin wrapper) must agree on these values or the format list in DefaultHostedPluginBackend's
-# constructor differs between translation units.
+synth_enable_pch(Core)
+synth_enable_unity(Core)
+include(cmake/PopupMotionSources.cmake)
+include(cmake/TelemetrySources.cmake)
+include(cmake/KnobStyleSources.cmake)
+include(cmake/ToolbarButtonSources.cmake)
+include(cmake/AiSources.cmake)
+include(cmake/GraphQuerySources.cmake)
+include(cmake/ModCurveSources.cmake)
+include(cmake/ProjectLoadSources.cmake)
+include(cmake/PluginCrashRecoverySources.cmake)
+include(cmake/TimelineOpsSources.cmake)
+include(cmake/MidiRecordingSources.cmake)
+include(cmake/DrumKitSources.cmake)
+include(cmake/OscillatorSources.cmake)
+include(cmake/PluckMalletSources.cmake)
+include(cmake/SamplerInstrumentSources.cmake)
+include(cmake/SoundPackSources.cmake)
+include(cmake/SoundBrowserSources.cmake)
+include(cmake/FilterSources.cmake)
+include(cmake/ParametricEQSources.cmake)
+include(cmake/SequencerSources.cmake)
+include(cmake/UndoSources.cmake)
+# Hosting third-party plugins uses JUCE's built-in hosting only — no new dependency pins, and therefore no new
+# licences to clear (the VST3 and AU host code ships inside juce_audio_processors, which we already link). CLAP is
+# deliberately deferred: it would mean vendoring clap-juce-extensions or the CLAP headers, i.e. exactly the new
+# dependency this decision avoids. The JUCE_PLUGINHOST_* switches are set PUBLIC on JuceModules
+# (cmake/JuceModules.cmake), which Core links PUBLIC: the module code must be compiled with them, and every consumer
+# (AppUI, Tests, the plugin wrapper) must agree on these values or DefaultHostedPluginBackend's format list differs.
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
@@ -532,18 +591,14 @@ if(UNIX AND NOT APPLE)
     target_include_directories(Core PUBLIC ${GTK3_INCLUDE_DIRS})
 endif()
 
-# RemoteProvider (Source/AI/RemoteProvider.cpp) needs libcurl. Required on macOS and Linux (the
-# macOS SDK ships a curl.tbd stub, so find_package(CURL) succeeds there with no Homebrew
-# dependency) but deliberately NOT on WIN32 — the windows-latest CI job
-# (.github/workflows/ci.yml) has no libcurl setup step, and RemoteProvider's Windows branch is a
-# stub that never calls into curl.
-if(NOT WIN32)
+# HTTP transport: libcurl on macOS/Linux (the macOS SDK ships curl.tbd), WinHTTP on Windows (no CURL
+# needed). Token storage: Security.framework on macOS, advapi32 (Credential Manager) on Windows.
+if(WIN32)
+    target_link_libraries(Core PUBLIC winhttp advapi32)
+else()
     find_package(CURL REQUIRED)
     target_link_libraries(Core PUBLIC CURL::libcurl)
 endif()
-
-# KeychainTokenStore (Source/Auth/KeychainTokenStore.cpp) needs Security.framework's SecItem* C
-# API on macOS; every other platform delegates to an in-memory fallback and needs nothing linked.
 if(APPLE)
     target_link_libraries(Core PUBLIC "-framework Security")
 endif()
@@ -558,16 +613,11 @@ else()
     target_compile_options(Core PRIVATE -Wall -Wextra)
 endif()
 
-# Sparkle Info.plist keys, merged into JUCE's generated plist. Empty string on non-Apple
-# platforms, where JUCE ignores the argument entirely.
-set(SYNTH_SPARKLE_PLIST_TO_MERGE "")
-if(APPLE)
-    set(SYNTH_SPARKLE_PLIST_TO_MERGE
-        "<?xml version='1.0' encoding='UTF-8'?><plist version='1.0'><dict><key>SUFeedURL</key><string>${SYNTH_UPDATE_FEED_URL}</string><key>SUEnableAutomaticChecks</key><true/><key>SUScheduledCheckInterval</key><integer>86400</integer><key>SUPublicEDKey</key><string>${SYNTH_SPARKLE_PUBLIC_KEY}</string></dict></plist>")
-endif()
+include(cmake/AppBundleMetadata.cmake)
 
 # Create the application target
 juce_add_gui_app(AgentSynth
+    ${SYNTH_ICON_ARGS}
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "${SYNTH_MARKETING_VERSION}"
     BUILD_VERSION "${SYNTH_BUILD_NUMBER}"
@@ -619,17 +669,20 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # a second time.
 # Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
 # JuceHeader.h) and has no meaning inside a plugin.
-# Source list in cmake/AppUISources.cmake (APPUI_SOURCES) -- split out to keep this file
-# under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh).
-include(cmake/AppUISources.cmake)
+include(cmake/AppUISources.cmake) # APPUI_SOURCES, split out for the 1,000-line file-size cap
+include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
+include(cmake/MixerRowSources.cmake)
+include(cmake/DrumKitPadsSources.cmake)
+include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
+include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
+include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
 # in APPUI_SOURCES' plain file(GLOB)-free list like every other AppUI source; registered directly
-# on the target instead, same shape as Source/Update/SparkleUpdateManager.mm below. AppUI (not a
-# specific app/plugin target) because every consumer needs it: the app, both plugin formats, and
-# Tests all link AppUI and share the one HostedPluginEditorWindow it patches.
+# on the target instead, same shape as Source/Update/SparkleUpdateManager.mm below. AppUI because
+# every consumer needs it: the app, both plugin formats and Tests share the window it patches.
 if(APPLE)
     target_sources(AppUI PRIVATE Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm)
     # ARC explicitly, matching SparkleUpdateManager.mm below — this file's NSEvent monitor block
@@ -640,9 +693,10 @@ endif()
 # PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
 # the Assets binary-data lib and HAS_FONT_ASSETS.
 target_link_libraries(AppUI PUBLIC Core)
+synth_enable_pch(AppUI)
+synth_enable_unity(AppUI)
 
-# WhatsNewData.h (generated above, "What's New" block) — PRIVATE since only AppUI's
-# Source/MainComponent/ units (MainComponent.cpp, MainComponentPanels.cpp) include it.
+# WhatsNewData.h (generated above): PRIVATE, only AppUI's Source/MainComponent/ units include it.
 target_include_directories(AppUI PRIVATE "${SYNTH_WHATSNEW_GENERATED_DIR}")
 
 # The VST3 is a shared object on Linux, and every object linked into a .so must be
@@ -736,6 +790,7 @@ if(APPLE)
         COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
         COMMENT "Embedding Sparkle.framework"
     )
+    include(cmake/DevSign.cmake) # after Sparkle is embedded, so the signature covers it
 endif()
 
 if(WIN32)
@@ -772,12 +827,10 @@ endif()
 
 # ----------------------------------------------------------------------------------------------
 # Audio plugin (VST3 everywhere, + AU on macOS)
-#
 # Wraps the SAME AudioEngine and MainComponent the standalone app runs (via the AppUI library
 # above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
 # opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
 # docs/architecture/architecture.md.
-#
 # Standalone is deliberately NOT in FORMATS: JUCE would emit a second "Agent Synth.app" that
 # collides with the AgentSynth app target's own artifact in release packaging, for a build that
 # does strictly less than the real app.
@@ -789,6 +842,7 @@ if(ENABLE_PLUGIN)
     endif()
 
     juce_add_plugin(AgentSynthPlugin
+        ${SYNTH_ICON_ARGS}
         PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
         VERSION "${SYNTH_MARKETING_VERSION}"
         COMPANY_NAME "${SYNTH_COMPANY_NAME}"
@@ -892,7 +946,6 @@ if(ENABLE_PLUGIN)
     # source/linking AgentSynth gets, purely to satisfy the linker — the plugin's own build never
     # gets SUFeedURL/SUPublicEDKey-equivalent compile definitions (only AgentSynth does, above), so
     # UpdateManager::isAvailable() reads empty values and stays inert here.
-    #
     # Delay-loaded (/DELAYLOAD, not a normal import-lib link) rather than linked hard: on macOS the
     # equivalent hazard is that juce_vst3_helper dlopens the freshly-linked plugin bundle right
     # after linking (to write moduleinfo.json), before this target's own POST_BUILD DLL-copy step

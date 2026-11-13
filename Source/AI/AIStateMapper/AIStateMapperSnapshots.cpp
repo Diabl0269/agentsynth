@@ -5,6 +5,7 @@
 // the whole graph on every Cmd+Z. The class itself is declared in AIStateMapper.h.
 
 #include "AIStateMapper.h"
+#include "GraphRebuildBatch.h"
 
 #include "AIStateMapperInternal.h"
 
@@ -50,13 +51,13 @@ struct SnapshotTargetConnection {
 // disk from it — so a restore that re-applied it unconditionally would reload every sample and every
 // wavetable on every single Cmd+Z.
 void applyExtraStateIfChanged(juce::AudioProcessor* processor, const juce::DynamicObject* nObj) {
-    if (!nObj->hasProperty("state"))
-        return;
     auto* mb = dynamic_cast<ModuleBase*>(processor);
     if (mb == nullptr)
         return;
 
-    const juce::var target = nObj->getProperty("state");
+    // A node saved with no "state" had none to save: a module that has gained some since (a Sampler's first
+    // instrument) goes back to nothing.
+    const juce::var target = nObj->hasProperty("state") ? nObj->getProperty("state") : juce::var();
     if (juce::JSON::toString(mb->getExtraState()) == juce::JSON::toString(target))
         return;
 
@@ -74,7 +75,7 @@ void applyPositionToNode(juce::AudioProcessorGraph::Node* node, const juce::Dyna
 } // namespace
 
 bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
-                                                 std::function<void()> beforeNodeRemoval) {
+                                                 NodeRemovalHook beforeNodeRemoval) {
     auto* rootObj = snapshot.isObject() ? snapshot.getDynamicObject() : nullptr;
     if (rootObj == nullptr)
         return false;
@@ -194,14 +195,6 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
     // correct, instead of a hazard the plan has to anticipate.
     // ---------------------------------------------------------------------------------------
     bool topologyChanged = false;
-    bool teardownNotified = false;
-    auto notifyBeforeNodeRemoval = [&beforeNodeRemoval, &teardownNotified] {
-        if (teardownNotified)
-            return;
-        teardownNotified = true;
-        if (beforeNodeRemoval)
-            beforeNodeRemoval();
-    };
     auto resolve = [&graph](const SnapshotTargetNode& t) {
         return t.hasLiveId ? graph.getNodeForId(t.liveId) : nullptr;
     };
@@ -219,7 +212,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
             applyExtraStateIfChanged(live->getProcessor(), t.obj);
         if (auto* live = resolve(t)) {
             applyPositionToNode(live, t.obj);
-            detail::applyDisplayNameToNode(live, t.obj);
+            detail::restoreNodePresentation(live, t.obj);
         }
     }
 
@@ -233,7 +226,8 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
             doomed.push_back(node->nodeID);
 
     if (!doomed.empty()) {
-        notifyBeforeNodeRemoval();
+        if (beforeNodeRemoval)
+            beforeNodeRemoval(doomed);
         for (auto nodeId : doomed)
             graph.removeNode(nodeId, juce::AudioProcessorGraph::UpdateKind::none);
         topologyChanged = true;
@@ -260,8 +254,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         if (processor == nullptr)
             continue;
 
-        if (auto* pObj = t.obj->getProperty("params").getDynamicObject())
-            applyParamsToProcessor(processor.get(), pObj, /*trusted=*/true);
+        applyParamsToNewProcessor(processor.get(), t.obj, /*trusted=*/true);
         applyExtraStateToProcessor(processor.get(), t.obj, /*trusted=*/true);
 
         std::optional<juce::AudioProcessorGraph::NodeID> preservedId;
@@ -279,7 +272,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         node->properties.set("uuid", t.uuid);
         detail::mirrorUuidIntoProcessor(node.get(), t.uuid);
         applyPositionToNode(node.get(), t.obj);
-        detail::applyDisplayNameToNode(node.get(), t.obj);
+        detail::restoreNodePresentation(node.get(), t.obj);
     }
 
     // 4. Connections: apply the delta only. A restore that changed no wiring issues no graph
@@ -306,7 +299,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
     }
 
     if (topologyChanged) {
-        graph.rebuild();
+        GraphRebuildBatch::rebuild(graph);
         graph.sendChangeMessage(); // Suppressed per-op above; announced once here instead.
     }
 

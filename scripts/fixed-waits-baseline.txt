@@ -1,0 +1,10 @@
+# Test sites that pump the message loop for a FIXED time and then assert (scripts/check-fixed-waits.sh).
+# Prefer waitUntil() from Tests/TestWait.h: poll for the condition instead. STRICT ratchet: an entry
+# may only be removed (when its site is converted, run `bash scripts/check-fixed-waits.sh --update`),
+# never added for new code. Format: <path> | <the call's code line> | <reason>. N identical lines
+# in one file need N entries.
+Tests/Plugin/PluginScan/PluginScanLifecycleTests.cpp | juce::MessageManager::getInstance()->runDispatchLoopUntil(20); | a second ensureScanned() must not launch another scan; a wrongly started scan would run on the scan thread, so no posted message bounds it and no predicate can wait for an absence
+Tests/Plugin/PluginScan/PluginScanLifecycleTests.cpp | juce::MessageManager::getInstance()->runDispatchLoopUntil(20); | a later ensureScanned() must not call its progress callback; wrong progress would come from a scan thread after this point, so no queued message bounds it and no predicate can wait for an absence
+Tests/UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp | juce::MessageManager::getInstance()->runDispatchLoopUntil(50); | a Free account's thumbs-up must send no feedback POST; a wrongly fired request runs on a background thread, so the test sleeps then pumps and asserts the call count stayed 0
+Tests/UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp | juce::MessageManager::getInstance()->runDispatchLoopUntil(50); | a Free account's thumbs-up after a reply must send no feedback POST; a wrongly fired request runs on a background thread, so the test sleeps then pumps and asserts the call count stayed 0
+Tests/UI/Graph/PortPanel/PortPanelClickTests.cpp | juce::MessageManager::getInstance()->runDispatchLoopUntil(juce::MouseEvent::getDoubleClickTimeout() + 80); | a double-click on a port must not open the panel once the double-click window has passed; the wait outlasts that timer so a wrongly kept pending open would fire, and no predicate can wait for an absence

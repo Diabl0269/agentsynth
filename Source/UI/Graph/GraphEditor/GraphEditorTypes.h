@@ -8,8 +8,12 @@
 
 #include "UI/Graph/CableColour.h"
 #include <cstdint>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+
+class MacroCardComponent;
+class ModuleComponent;
 
 namespace graph_editor_types {
 
@@ -26,7 +30,7 @@ enum class LocateMasterResult {
 
 /** Raw-channel wiring for a single cable: the channel each end starts at, and how many
  *  consecutive per-voice channels the cable covers (1 = an ordinary mono wire).
- *  Voice v connects sourceRawChannel + v * sourceStride -> destRawChannel + v. */
+ *  Voice v connects sourceChannel(v) -> destChannel(v). */
 struct PolyLink {
     int sourceRawChannel = 0;
     int destRawChannel = 0;
@@ -34,6 +38,12 @@ struct PolyLink {
     // 1 for a voice-to-voice fan; 0 when a single mono source is broadcast to every voice of
     // the destination fan, so all N wires leave the same source channel.
     int sourceStride = 1;
+    // Gap between the destination's consecutive raw channels: 1 for every fan except a collapsed
+    // jack whose second leg sits on a split block (the Channel Strip's kRightBase).
+    int destStride = 1;
+
+    int sourceChannel(int voice) const noexcept { return sourceRawChannel + voice * sourceStride; }
+    int destChannel(int voice) const noexcept { return destRawChannel + voice * destStride; }
 };
 
 // ---- Cables ---------------------------------------------------------------------------------
@@ -88,6 +98,52 @@ struct VisibleCable {
     uint32_t destNodeId = 0;
     int destChannel = 0;
     bool landsOnKnob = false;
+};
+
+// ---- Macro auto-port preference ---------------------------------------------------------------
+// Tri-state; GraphEditorMacroPrompts.cpp's requestGroupSelectionIntoMacro() explains the persistence.
+enum class MacroAutoPortPreference { Unset, AutoCreatePorts, LeaveCablesAsIs };
+
+// ---- Macro port recolour ----------------------------------------------------------------------
+// The two surfaces that draw a macro port's jack; card/widget are null when the macro is
+// collapsed/absent.
+struct MacroPortRecolourTargets {
+    MacroCardComponent* card = nullptr;
+    ModuleComponent* widget = nullptr;
+};
+
+// ---- Hover correlation ------------------------------------------------------------------------
+// The modulation target (destination node + RAW channel) correlated with a hover in EITHER
+// direction: hovering a cable that lands on a knob, or hovering the knob/ring itself. Cable paint
+// treats it like the hovered cable id; ModuleComponent's ring paint reads it back to highlight the
+// ring. One shared piece of state, since both directions mean "this routing is what the user is
+// looking at". docs/modules/modulation.md#modulation-rings-on-knobs.
+struct HoveredModTarget {
+    juce::AudioProcessorGraph::NodeID nodeId;
+    int channel = 0;
+    bool operator==(const HoveredModTarget& o) const noexcept { return nodeId == o.nodeId && channel == o.channel; }
+};
+
+// ---- Alignment guides -------------------------------------------------------------------------
+// During drag previews, guide positions stored for visual feedback.
+struct AlignmentGuide {
+    juce::Point<float> start; // line start point (canvas coords)
+    juce::Point<float> end;   // line end point (canvas coords)
+    int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
+};
+
+// ---- Drum Kit card hooks -----------------------------------------------------------------------
+// Set by MainComponent; the card owns no timeline.
+struct DrumKitCardHooks {
+    // The instrument picker's "Get more sounds..." row (Sampler and Drum Kit): opens Settings > Sound packs.
+    std::function<void()> openSoundPacks;
+    // Is a track playing the kit (else the card's "Drum machine" button is disabled), and a press of that button.
+    std::function<bool(juce::AudioProcessorGraph::NodeID)> hasTrack;
+    std::function<void(juce::AudioProcessorGraph::NodeID)> openDrumMachine;
+    // Hiding the pad on `note`: runs `proceed` at once, or after the person confirms when its drum has hits in a clip.
+    std::function<void(juce::AudioProcessorGraph::NodeID, int note, const juce::String& padName,
+                       std::function<void()> proceed)>
+        confirmHidePad;
 };
 
 } // namespace graph_editor_types

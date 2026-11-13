@@ -92,6 +92,17 @@ TEST(MidiDestinationPickerTest, SearchFiltersRowsCaseInsensitiveSubstring) {
     EXPECT_EQ(names[0], "Wavetable");
 }
 
+TEST(MidiDestinationPickerTest, SearchMatchesEveryWordInAnyOrder) {
+    FakeGraph graph;
+    graph.options = {{"Oscillator 1", 1, false}, {"Oscillator 2", 2, false}, {"Wavetable", 3, false}};
+    auto picker = makePicker(graph);
+
+    picker->setSearchTextForTest("1 osc");
+    const auto names = picker->getVisibleRowNamesForTest();
+    ASSERT_EQ(names.size(), 1u);
+    EXPECT_EQ(names[0], "Oscillator 1");
+}
+
 TEST(MidiDestinationPickerTest, SearchClearsBackToTheFullList) {
     FakeGraph graph;
     graph.options = {{"Oscillator 1", 1, false}, {"Sampler", 2, true}};

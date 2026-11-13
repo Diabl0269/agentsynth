@@ -1,0 +1,27 @@
+# Cmd+Z worked on the canvas but not in the Parametric EQ window: the window swallowed every key it did not use, so
+# with a band edited there, undo did nothing until the user clicked back into the main window.
+#
+# What a user does: opens the Parametric EQ window from its card and double-clicks the curve to add band 1 (21 dB), drags
+# the band to a new frequency and gain, then (focus still in the window) presses Cmd+Z. The band goes back to where it was
+# before the drag, in one step, with the main window never clicked. The proof still is the window right after that Cmd+Z.
+record: true
+save_project: eq-window-undo
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 120, y: 60, clicks: 2}
+  - wait: {settleMs: 500}
+  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.387557983398438}
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 120, fromY: 60, toX: 260, toY: 110, steps: 12}
+  - wait: {settleMs: 800}
+  - getState: {id: "card:Parametric EQ 2 > B1 Gain"}
+  - key: {keys: cmd+z, target: eqWindowCurve}
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Parametric EQ 2 > B1 Gain", value: 21.387557983398438, within_ms: 2000}
+  - mark: {check: 1, name: eq-undo}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: eqWindowCurve, name: band-back}

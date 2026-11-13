@@ -1,8 +1,13 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <array>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <optional>
+#include <vector>
 
 class AppUndoManager; // Source/AppUndoManager.h — global namespace, like every other user of it.
 
@@ -22,9 +27,74 @@ struct TimelineOpsResult {
     juce::String previewText;
 };
 
+/** One validated effect insert of an `addInstrumentTrack` op: a factory type and its params object. */
+struct InstrumentTrackInsert {
+    juce::String type;
+    juce::var params; // an object, or void for none
+    juce::var state;  // an object, or void for none; Filter only (its Custom shapes), applied untrusted
+};
+
+/** The uuid of every node an `addInstrumentTrack` build created that an op can address. */
+struct InstrumentTrackBuildResult {
+    juce::String trackInUuid;
+    juce::String instrumentUuid;
+    std::vector<juce::String> insertUuids; // one per insert, in op order
+    juce::String envelopeUuid;             // the track's own ADSR; empty for a Sampler (it has none)
+    bool substitutedSampler = false;       // a pack Sampler was built in place of the planned stand-in
+};
+
+/** What the app supplies so a batch can build graph-side tracks. */
+struct TimelineOpsHost {
+    virtual ~TimelineOpsHost() = default;
+    /** Builds a bound instrument track like the "Add Track -> Instrument" menu, inside the batch's transaction;
+     * nullopt = nothing left behind. `envelopeParams` (an object or void) is applied to the built ADSR,
+     * `instrumentParams` to the instrument. */
+    virtual std::optional<InstrumentTrackBuildResult>
+    addInstrumentTrack(const juce::String& name, const juce::String& instrumentType, bool poly,
+                       const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                       const juce::var& instrumentParams) = 0;
+    /** As addInstrumentTrack, for an op that named a core pack `sound` (one of the CoreSounds.h ids, whose stand-in is
+     * `instrumentType`). The default ignores the sound and builds the stand-in. */
+    virtual std::optional<InstrumentTrackBuildResult>
+    addInstrumentTrackWithSound(const juce::String& name, const juce::String& instrumentType, bool poly,
+                                const std::vector<InstrumentTrackInsert>& inserts, const juce::var& envelopeParams,
+                                const juce::var& instrumentParams, const juce::String& sound) {
+        juce::ignoreUnused(sound);
+        return addInstrumentTrack(name, instrumentType, poly, inserts, envelopeParams, instrumentParams);
+    }
+    /** Runs `mutation` as ONE undo step over graph, timeline and macros; returns the pushed flag. */
+    virtual bool recordBatch(const std::function<void()>& mutation) = 0;
+    /** The live doc an edit plan applies to inside recordBatch; null (the default) = cannot apply one. */
+    virtual TimelineDoc* editableTimelineDoc() { return nullptr; }
+    /** Called inside recordBatch once an edit plan has applied, with every node the plan created (creation order):
+     * gives the ones with no position a spot beside what they connect to. The default places nothing. */
+    virtual void placeNewModules(const std::vector<juce::AudioProcessorGraph::NodeID>& created) {
+        juce::ignoreUnused(created);
+    }
+    /** Inside recordBatch after a batch applied: files each new lane under the track that plays its module. */
+    virtual void assignLanesToOwners() {}
+    /** True if this host can change the project tempo; a `setTempo` op is rejected without one. */
+    virtual bool canSetTempo() const { return false; }
+    /** Sets the project tempo (BPM, already range-checked) inside recordBatch, so the same undo step reverts it.
+     * Called only while applying, never while validating. False = the tempo was not changed. */
+    virtual bool setTempo(double bpm) {
+        juce::ignoreUnused(bpm);
+        return false;
+    }
+    /** True if this host can change the song key; a `setSongKey` op is rejected without one. */
+    virtual bool canSetSongKey() const { return false; }
+    /** Sets the song key (already checked: a root and one of the key scales) inside recordBatch, so the same undo step
+     * reverts it. Called only while applying, never while validating. False = the key was not changed. */
+    virtual bool setSongKey(const MusicalScale& key) {
+        juce::ignoreUnused(key);
+        return false;
+    }
+};
+
 /**
  * @brief The app-side timeline tools: discrete, validated, previewable operations a model
- *        may ask for (addTrack, placeClips, writeLane, placeMidiClip), applied as ONE undo step.
+ *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip, setTempo, setSongKey,
+ * addMarker, makeSection, placeSection), applied as ONE undo step.
  *
  * A **sibling** of a patch suggestion, never nested inside one — `"timelineOps"` is a distinct
  * envelope key from `"timeline"`, so a response may legitimately carry both side by side. Trust
@@ -52,6 +122,17 @@ struct TimelineOps {
      *  MIDI file; a bigger one is not a note surface any more. */
     static constexpr int kMaxMidBlobBytes = 262144;
 
+    /** Most effect inserts one `addInstrumentTrack` op may ask for. */
+    static constexpr int kMaxInstrumentInserts = 8;
+
+    /** The instrument types `addInstrumentTrack` accepts -- the "Add Track -> Instrument" menu's own. */
+    static const std::array<const char*, 7> kAuthorableInstrumentTypes;
+
+    /** True for Sampler, Drum Kit, Pluck and Mallet: no ADSR/VCA is built for it, and no poly mode. */
+    static bool instrumentOwnsItsEnvelope(const juce::String& instrument);
+
+    static bool instrumentSupportsPolyTrack(const juce::String& instrument);
+
     /**
      * @brief True if `payload` carries a `"timelineOps"` key at all.
      *
@@ -70,15 +151,16 @@ struct TimelineOps {
      * @param graph the LIVE graph — a `writeLane` op's `(nodeUuid, paramId)` must resolve against
      *              it, and the resolved parameter's real range is what bounds the values.
      */
+    /** @param host null fails any `addInstrumentTrack`, `setTempo` or `setSongKey` op; only its presence (and
+     * canSetTempo/canSetSongKey) is read here. */
     static TimelineOpsResult validate(const juce::var& envelope, const TimelineDoc& doc,
-                                      const juce::AudioProcessorGraph& graph);
+                                      const juce::AudioProcessorGraph& graph, const TimelineOpsHost* host = nullptr);
 
     /**
      * @brief Validates again, then applies the WHOLE batch as ONE undo step.
      *
-     * Wrapped in a single `AppUndoManager::recordTimelineChange`, so however many tracks, clips,
-     * notes and breakpoints the batch touches, one Cmd+Z reverts all of it (the same contract
-     * `MidiRecorder::stopAndCommit` gets for a take's clip plus its every note).
+     * Wrapped in one `AppUndoManager::recordTimelineChange`, or `host->recordBatch` (graph +
+     * timeline + macros) when it carries an `addInstrumentTrack` or `setTempo` op: one Cmd+Z reverts all of it.
      *
      * See TimelineOps.cpp for per-op behaviour (addTrack/placeClips/writeLane/placeMidiClip),
      * documented beside each op's own implementation there.
@@ -89,7 +171,11 @@ struct TimelineOps {
      *         correctly leaves no undo entry).
      */
     static TimelineOpsResult apply(const juce::var& envelope, TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
-                                   AppUndoManager& undo);
+                                   AppUndoManager& undo, TimelineOpsHost* host = nullptr);
+
+    /** Runs an already-validated batch inside the CALLER's open transaction; on failure the caller restores `doc`. */
+    static TimelineOpsResult applyInsideTransaction(const juce::var& envelope, TimelineDoc& doc,
+                                                    const juce::AudioProcessorGraph& graph, TimelineOpsHost* host);
 };
 
 } // namespace synth

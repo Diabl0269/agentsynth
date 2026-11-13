@@ -1,0 +1,55 @@
+# The mod dot's and the port connections panel's tests (docs/modules/modulation.md#the-mod-dot-menu,
+# docs/layout/cables.md#port-connections-panel), kept in their own list so Tests/CMakeLists.txt stays under the
+# file-size cap.
+target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotGestureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotOnlyOwnPanelTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSingleReadoutTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotChipAndTooltipTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRemoveRoutingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingFadeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModChipClickHideTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModChipFadeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/KnobModSourcesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotAddSourceTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotMacroRoutingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPopoverTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSourceRemovalMotionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRowPolishTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotFaderGestureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotDoubleClickTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotInlineAddTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPickOnCanvasTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPanelGeometryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/MorphStripModTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/NoiseLevelModTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelClickTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelRowsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelModControlsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDisconnectAllTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollGestureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroGroupController/MacroMultiSelectTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDropRebuildTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentModDotEveryControlTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentMidiLearnEveryControlTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentMidiLearnCableTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelStereoPairRowsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelAddConnectionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelMacroCardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDimTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardBody/CardBodyOverlapTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/MacroFold/MacroPackOffKeepsPlacesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroContainer/MacroDropIntoMacroTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroContainer/MacroLeaveDragTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroContainer/MacroDragMatrixTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroContainer/MacroGroupDropTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/ModuleDeletePathsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/DrumKit/DrumKitPadCableTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadCableCardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadModDotTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadsRowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadGlideTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorKnobDropChannelSweepTests.cpp
+)

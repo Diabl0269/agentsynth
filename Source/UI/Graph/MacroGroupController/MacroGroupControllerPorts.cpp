@@ -10,19 +10,22 @@
 #include "MacroGroupController.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
+#include "MacroGroupControllerInternal.h"
+#include "MacroNesting.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
+#include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 
-namespace {
 // Mirrors GraphEditor::rightAudioLegOf + audioChannelReachableFromJack's rule (the Dual
 // I/O toggle's own "which raw channel is this peer's right leg, and can the user actually reach
 // it" lookup) without pulling in GraphEditor.h, which MacroGroupController deliberately never
 // includes (MacroGroupController.h's class comment: it reaches its host only through
 // GraphCanvasHost). A collapsed split-block peer's hidden kRightBase must not get a cable nobody
 // can unplug, exactly as it mustn't for an ordinary Dual I/O toggle.
-int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
+int macro_ports::reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
     auto* peerMb = dynamic_cast<ModuleBase*>(proc);
     if (peerMb == nullptr) {
         // Graph I/O (Audio Input/Output) is a plain contiguous pair, same as rightAudioLegOf.
@@ -43,11 +46,10 @@ int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
     for (int jack = 0; jack < visible; ++jack)
         for (const auto& t : peerMb->getJackTargets(jack, asInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                if (t.rawHeadChannel + v == leg)
+                if (t.rawHeadChannel + v * t.rawStride == leg)
                     return leg;
     return -1; // reported but hidden behind a collapsed jack — not reachable
 }
-} // namespace
 
 void MacroGroupController::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {
     if (!host_.getAutoDeleteMacroPortsOnLastCableEnabled())
@@ -65,9 +67,10 @@ void MacroGroupController::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph
         if (c.source.nodeID == nodeId || c.destination.nodeID == nodeId)
             return; // still has at least one cable — survives
 
+    const auto macroId = m->id;
     spliceOutMacroPort(*m, uuid);
-    if (m->members.empty())
-        host_.getMacros().remove(m->id); // MacroSet::removeMemberEverywhere's own "zero members" rule
+    if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
+        host_.getMacros().remove(macroId); // MacroSet::removeMemberEverywhere's own "zero members" rule
 }
 
 // A bounded ONE-extra-hop special case. Almost
@@ -87,6 +90,7 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
         return;
 
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
     auto* node = graph.getNodeForId(nodeId);
     if (node == nullptr || dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
         return;
@@ -108,7 +112,8 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
         return; // the attenuverter's one remaining leg goes somewhere real, not this bounded case
 
     host_.clearModMatrixRows();
-    graph.removeNode(nodeId); // drops the attenuverter's own edge to the port too
+    graph.removeNode(nodeId,
+                     juce::AudioProcessorGraph::UpdateKind::none); // drops the attenuverter's own edge to the port too
 
     // "Treat the port as orphaned" only if nothing exterior is left on it. A macro-interior
     // source can fan out through more than one attenuverter (e.g. an Envelope feeding both a
@@ -148,9 +153,10 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
     if (hasExteriorConnection)
         return; // still feeding another fan-out leg (e.g. a second attenuverter) — keep the port
 
+    const auto macroId = m->id;
     spliceOutMacroPort(*m, portUuid);
-    if (m->members.empty())
-        host_.getMacros().remove(m->id); // matches autoDeleteOrphanedMacroPort's own zero-members rule
+    if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
+        host_.getMacros().remove(macroId); // matches autoDeleteOrphanedMacroPort's own zero-members rule
 }
 
 std::vector<juce::AudioProcessorGraph::NodeID> MacroGroupController::macroPortDeletionNeighbors(
@@ -200,12 +206,13 @@ juce::String MacroGroupController::addMacroPort(const juce::String& macroId, boo
     const int order = nextMacroPortOrder(*macro, isInput);
 
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
     auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
     juce::String newUuid;
     auto doAdd = [this, macroId, proc, placed, isInput, kind, name, order, &newUuid] {
         if (!*proc)
             return;
-        auto node = host_.graph().addNode(std::move(*proc));
+        auto node = host_.graph().addNode(std::move(*proc), {}, juce::AudioProcessorGraph::UpdateKind::none);
         if (!node)
             return;
         node->properties.set("x", placed.x);
@@ -227,6 +234,7 @@ juce::String MacroGroupController::addMacroPort(const juce::String& macroId, boo
         m->ports.push_back(port);
 
         host_.updateComponents();
+        makeRoomFor("m:" + macroId);
     };
 
     if (host_.undo())
@@ -263,9 +271,10 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
         if (m == nullptr)
             return; // defensive: shouldn't happen mid-transaction
         spliceOutMacroPort(*m, nodeUuid);
-        if (m->members.empty())
+        if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
             host_.getMacros().remove(macroId); // matches MacroSet::removeMemberEverywhere's own zero-members rule
         host_.updateComponents();
+        returnDisplacedNeighbours(macroId, /*keepBlocked=*/true); // no-op when the macro just dissolved
     };
 
     if (host_.undo())
@@ -282,11 +291,51 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
 // instead of calling either primitive directly, so a flip of the "splice the cable back"
 // preference always applies to both at once. Ungroup and the auto-delete-on-last-cable path are
 // untouched — neither goes through this.
+// The cables the delete takes away retract into their jack like any other removal (a splice re-joins the rest).
 void MacroGroupController::deleteMacroPortManually(const juce::String& macroId, const juce::String& nodeUuid) {
+    const auto cablesBefore = host_.snapshotCablesForRetract();
     if (host_.getSpliceCableOnMacroPortDeleteEnabled())
         deleteMacroPortNode(macroId, nodeUuid);
     else
         removeMacroPort(macroId, nodeUuid);
+    host_.retractCablesGoneSince(cablesBefore);
+}
+
+void MacroGroupController::deleteBottomMacroPort(const juce::String& macroId, bool isInput) {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr)
+        return;
+    const synth::MacroPort* bottom = nullptr;
+    for (const auto& p : macro->ports)
+        if (p.isInput == isInput && (bottom == nullptr || p.order > bottom->order))
+            bottom = &p;
+    if (bottom == nullptr)
+        return;
+    const juce::String uuid = bottom->nodeUuid; // the delete rebuilds the set `bottom` points into
+    deleteMacroPortManually(macroId, uuid);
+}
+
+juce::PopupMenu MacroGroupController::buildAddPortMenu(const juce::String& macroId, bool isInput) {
+    // The SAME kind/shape choice list synth::ui::MacroPortConfigDialog's own "Add a port" panel offers
+    // (Audio/CV picks Mono/Stereo/Poly-N, MIDI has no shape) and, on a choice, the SAME addMacroPort()
+    // Configure I/O's Add button calls, so the created port and its one-undo-step transaction are identical
+    // either way. `isInput` is fixed by which side's '+' was clicked; an empty name falls back to
+    // addMacroPort's own defaultMacroPortName(). The Poly-N voice count matches the dialog's own default ("4").
+    // The menu is async, so its actions hold a weak reference: the editor can go away while it is open.
+    juce::PopupMenu menu;
+    juce::WeakReference<MacroGroupController> weakThis(this);
+    auto addItem = [&menu, weakThis, macroId, isInput](const juce::String& text, synth::MacroPortKind kind,
+                                                       MacroPortShape shape, int voices) {
+        menu.addItem(text, [weakThis, macroId, isInput, kind, shape, voices] {
+            if (weakThis != nullptr)
+                weakThis->addMacroPort(macroId, isInput, kind, shape, voices, {});
+        });
+    };
+    addItem("Audio/CV - Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1);
+    addItem("Audio/CV - Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1);
+    addItem("Audio/CV - Poly-N", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4);
+    addItem("MIDI", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1);
+    return menu;
 }
 
 void MacroGroupController::renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid,
@@ -303,6 +352,7 @@ void MacroGroupController::renameMacroPort(const juce::String& macroId, const ju
                     p.name = trimmed;
                     break;
                 }
+        host_.updateComponents(); // a new name can change the sidebar strip width, so re-dock
     };
 
     if (host_.undo())
@@ -487,6 +537,7 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
     auto doChange = [this, macroId, nodeUuid, oldNodeId, typeName, newShape, newVoiceCount, portName, order, isInput,
                      savedEdges, oldX, oldY, oldShape, &newUuid] {
         auto& g = host_.graph();
+        const synth::GraphRebuildScope rebuildScope{g};
         auto newProcessor = synth::AIStateMapper::createModule(typeName);
         if (!newProcessor)
             return;
@@ -497,9 +548,9 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
 
         // Same cleanup replaceModule/deleteSelection do before a node leaves the graph.
         host_.clearModMatrixRows();
-        g.removeNode(oldNodeId);
+        g.removeNode(oldNodeId, juce::AudioProcessorGraph::UpdateKind::none);
 
-        auto node = g.addNode(std::move(newProcessor));
+        auto node = g.addNode(std::move(newProcessor), {}, juce::AudioProcessorGraph::UpdateKind::none);
         if (!node)
             return;
         node->properties.set("x", oldX);
@@ -524,17 +575,36 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                 }
         }
 
+        // Stereo <-> StereoCollapsed carries the same two raw legs on different channels (Stereo's right leg is
+        // raw kRightBase, StereoCollapsed's is raw 1): the PORT-side channel is remapped so a split or a join keeps
+        // both legs wired on both sides of the port; the other end of each edge is unchanged.
+        const bool stereoPairSwitch =
+            (oldShape == MacroPortShape::Stereo && newShape == MacroPortShape::StereoCollapsed) ||
+            (oldShape == MacroPortShape::StereoCollapsed && newShape == MacroPortShape::Stereo);
+        auto portChannelFor = [&](int oldChannel) {
+            if (!stereoPairSwitch)
+                return oldChannel;
+            if (oldShape == MacroPortShape::Stereo && oldChannel == MacroInletModule::kRightBase)
+                return 1;
+            if (oldShape == MacroPortShape::StereoCollapsed && oldChannel == 1)
+                return (int)MacroInletModule::kRightBase;
+            return oldChannel;
+        };
+
         auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
         for (const auto& e : savedEdges) {
             if (g.getNodeForId(e.otherId) == nullptr)
                 continue;
-            const bool channelStillActive = mb != nullptr && mb->mapOutputChannel(e.myChannel).role == PortRole::Audio;
+            const int portChannel = portChannelFor(e.myChannel);
+            const bool channelStillActive = mb != nullptr && mb->mapOutputChannel(portChannel).role == PortRole::Audio;
             if (!channelStillActive)
                 continue;
             if (e.oldNodeIsSource)
-                g.addConnection({{node->nodeID, e.myChannel}, {e.otherId, e.otherChannel}});
+                g.addConnection({{node->nodeID, portChannel}, {e.otherId, e.otherChannel}},
+                                juce::AudioProcessorGraph::UpdateKind::none);
             else
-                g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, e.myChannel}});
+                g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, portChannel}},
+                                juce::AudioProcessorGraph::UpdateKind::none);
         }
 
         // A Mono->Stereo/StereoCollapsed grow adds a raw channel the OLD Mono port never
@@ -557,9 +627,11 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                     // One visible jack, two raw legs: fan the SAME cable onto the hidden follower
                     // channel, exactly like a collapsed FX jack's own dual-raw-leg fan.
                     if (e.oldNodeIsSource)
-                        g.addConnection({{node->nodeID, 1}, {e.otherId, e.otherChannel}});
+                        g.addConnection({{node->nodeID, 1}, {e.otherId, e.otherChannel}},
+                                        juce::AudioProcessorGraph::UpdateKind::none);
                     else
-                        g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, 1}});
+                        g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, 1}},
+                                        juce::AudioProcessorGraph::UpdateKind::none);
                     continue;
                 }
                 // Stereo: two SEPARATE jacks. Pair with the peer's own right leg (L->L/R->R) when
@@ -567,12 +639,14 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                 // already exposes — the "no second visible jack" ruling
                 // completeStereoPairConnections applies for an ordinary Dual I/O toggle.
                 const bool peerIsInput = e.oldNodeIsSource;
-                const int peerLeg = reachablePeerRightAudioLeg(otherNode->getProcessor(), peerIsInput);
+                const int peerLeg = macro_ports::reachablePeerRightAudioLeg(otherNode->getProcessor(), peerIsInput);
                 const int peerChannel = peerLeg >= 0 ? peerLeg : e.otherChannel;
                 if (e.oldNodeIsSource)
-                    g.addConnection({{node->nodeID, kRightBase}, {e.otherId, peerChannel}});
+                    g.addConnection({{node->nodeID, kRightBase}, {e.otherId, peerChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
                 else
-                    g.addConnection({{e.otherId, peerChannel}, {node->nodeID, kRightBase}});
+                    g.addConnection({{e.otherId, peerChannel}, {node->nodeID, kRightBase}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
             }
         }
 
@@ -586,90 +660,6 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
 
     host_.requestRepaint();
     return newUuid;
-}
-
-void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput,
-                                                           bool isMidi, juce::AudioProcessorGraph::NodeID otherNodeId,
-                                                           int otherVisibleJack) {
-    auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr)
-        return;
-
-    const auto kind = isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
-    const juce::String typeName = macroPortNodeTypeName(newPortIsInput, kind);
-    auto newProcessor = synth::AIStateMapper::createModule(typeName);
-    if (!newProcessor)
-        return;
-    if (!isMidi) {
-        // Infer the shape from the dragged cable's own jack fan (same getJackTargets read
-        // resolvePolyLink already does) instead of always Mono. newPortIsInput true means the drag
-        // started at an OUTPUT (this new port receives it), so the OTHER module's relevant side is
-        // its output; false is the mirror.
-        auto& graphForInference = host_.graph();
-        auto* otherNodeForInference = graphForInference.getNodeForId(otherNodeId);
-        auto* otherMbForInference = otherNodeForInference != nullptr
-                                        ? dynamic_cast<ModuleBase*>(otherNodeForInference->getProcessor())
-                                        : nullptr;
-        const auto [inferredShape, inferredVoices] =
-            inferPortShapeFromCableFan(otherMbForInference, otherVisibleJack, /*otherAsInput=*/!newPortIsInput);
-        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
-            inlet->setPortShape(inferredShape, inferredVoices);
-        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
-            outlet->setPortShape(inferredShape, inferredVoices);
-    }
-
-    // See addMacroPort's identical comment: dockMacroPortWidgets() (run from doCreate()'s own
-    // updateComponents() below) places the widget for real.
-    const auto placed = macro->bounds.getTopLeft();
-
-    const juce::String name = defaultMacroPortName(newPortIsInput, kind);
-    const int order = nextMacroPortOrder(*macro, newPortIsInput);
-
-    auto& graph = host_.graph();
-    auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-    auto doCreate = [this, macroId, proc, placed, newPortIsInput, kind, name, order, isMidi, otherNodeId,
-                     otherVisibleJack] {
-        auto& g = host_.graph();
-        if (!*proc)
-            return;
-        auto node = g.addNode(std::move(*proc));
-        if (!node)
-            return;
-        node->properties.set("x", placed.x);
-        node->properties.set("y", placed.y);
-        const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
-
-        auto* m = host_.getMacros().find(macroId);
-        if (m == nullptr)
-            return;
-        m->members.push_back(uuid);
-        synth::MacroPort port;
-        port.nodeUuid = uuid;
-        port.isInput = newPortIsInput;
-        port.name = name;
-        port.order = order;
-        port.kind = kind;
-        m->ports.push_back(port);
-
-        // Wire the boundary through the SAME connectPorts a completed manual cable-drag uses.
-        // recordUndo=false: already inside this method's own recordGraphAndMacroChange
-        // transaction. Deliberately does NOT also wire anything on the INTERIOR side.
-        if (g.getNodeForId(otherNodeId) != nullptr) {
-            if (newPortIsInput)
-                host_.connectPorts(otherNodeId, otherVisibleJack, node->nodeID, 0, isMidi, /*recordUndo=*/false);
-            else
-                host_.connectPorts(node->nodeID, 0, otherNodeId, otherVisibleJack, isMidi, /*recordUndo=*/false);
-        }
-
-        host_.updateComponents();
-    };
-
-    if (host_.undo())
-        host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doCreate);
-    else
-        doCreate();
-
-    host_.requestRepaint();
 }
 
 std::pair<MacroPortShape, int>

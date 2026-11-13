@@ -1,4 +1,5 @@
 #include "TransportService.h"
+#include "Music/SongKey.h"
 
 #include <algorithm>
 
@@ -33,14 +34,22 @@ bool TransportService::setLoop(double startBeat, double endBeat, bool enabled) {
     c.a = std::max(0.0, startBeat);
     c.b = std::max(0.0, endBeat);
     c.flag = enabled && (c.b - c.a >= kMinLoopLengthBeats);
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    documentState_.loopStartBeat = c.a;
+    documentState_.loopEndBeat = c.b;
+    documentState_.loopEnabled = c.flag;
+    return true;
 }
 
 bool TransportService::setBpm(double newBpm) {
     Command c;
     c.type = Command::Type::SetBpm;
     c.a = std::clamp(newBpm, kMinBpm, kMaxBpm);
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    documentState_.bpm = c.a;
+    return true;
 }
 
 bool TransportService::setTimeSignature(int numerator, int denominator) {
@@ -54,7 +63,54 @@ bool TransportService::setTimeSignature(int numerator, int denominator) {
     c.type = Command::Type::SetTimeSignature;
     c.i = numerator;
     c.j = denominator;
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    const bool changed =
+        documentState_.timeSigNumerator != numerator || documentState_.timeSigDenominator != denominator;
+    documentState_.timeSigNumerator = numerator;
+    documentState_.timeSigDenominator = denominator;
+    if (changed && onTimeSignatureChanged)
+        onTimeSignatureChanged();
+    return true;
+}
+
+// The song key is message-thread state only: it posts no command, so it can never be dropped by a full FIFO.
+void TransportService::setSongKey(const std::optional<MusicalScale>& key) {
+    if (sameKey(documentState_.songKey, key))
+        return;
+    documentState_.songKey = key;
+    songKeyPacked_.store(packSongKey(key), std::memory_order_release);
+    if (onSongKeyChanged)
+        onSongKeyChanged();
+}
+
+// Packed so the audio thread can read the key without a lock: the mask is 12 bits, the root 4.
+std::uint32_t TransportService::packSongKey(const std::optional<MusicalScale>& key) noexcept {
+    if (!key.has_value() || (key->mask & 0xFFF) == 0)
+        return 0;
+    const auto root = (std::uint32_t)(((key->rootPitchClass % 12) + 12) % 12);
+    return (1u << 16) | (root << 12) | (std::uint32_t)(key->mask & 0xFFF);
+}
+
+std::optional<MusicalScale> TransportService::unpackSongKey(std::uint32_t packed) {
+    if ((packed & (1u << 16)) == 0)
+        return std::nullopt;
+    MusicalScale key;
+    key.rootPitchClass = (int)((packed >> 12) & 0xF);
+    key.mask = (std::uint16_t)(packed & 0xFFF);
+    return key;
+}
+
+// The mirror is updated only once the command is queued, and holds exactly what was queued (the clamped
+// bpm, the computed loop flag). It exists because the audio-side snapshot lags until the next tick() and
+// never updates at all without an audio device, so saving and dirty tracking must read the requested
+// state, never getPositionSnapshot().
+bool TransportService::applyDocumentState(const TransportDoc& doc) {
+    setSongKey(doc.songKey);
+    const bool sigOk = setTimeSignature(doc.timeSigNumerator, doc.timeSigDenominator);
+    const bool bpmOk = setBpm(doc.bpm);
+    const bool loopOk = setLoop(doc.loopStartBeat, doc.loopEndBeat, doc.loopEnabled);
+    return sigOk && bpmOk && loopOk;
 }
 
 bool TransportService::postCommand(const Command& command) noexcept {
@@ -101,6 +157,8 @@ void TransportService::applyCommand(const Command& command) noexcept {
     case Command::Type::LocateBeat:
         ppqPosition = command.a;
         samplePosition = tempoMap.sampleFromBeat(ppqPosition);
+        ++locateCount;
+        lastLocateBeat = ppqPosition;
         break;
     case Command::Type::SetLoop:
         loopStartPpq = command.a;
@@ -135,6 +193,7 @@ const BlockTimeInfo& TransportService::tick(int numSamples) {
     currentBlock.loopStartPpq = loopStartPpq;
     currentBlock.loopEndPpq = loopEndPpq;
     currentBlock.loopWrapSample = -1;
+    currentBlock.wrapsAtBlockEnd = false;
 
     publishSnapshot(); // block-start state is what this block sounds like
 
@@ -153,6 +212,8 @@ const BlockTimeInfo& TransportService::tick(int numSamples) {
                 const auto wrapAt = loopEndSample - samplePosition; // in [1, numSamples]
                 if (wrapAt < numSamples)
                     currentBlock.loopWrapSample = (int)wrapAt;
+                else
+                    currentBlock.wrapsAtBlockEnd = true;
                 endSample = loopStartSample + (endSample - loopEndSample) % loopLength;
             }
         }
@@ -180,6 +241,10 @@ void TransportService::publishSnapshot() noexcept {
     shared.looping.store(looping);
     shared.loopStartPpq.store(loopStartPpq);
     shared.loopEndPpq.store(loopEndPpq);
+    shared.locateCount.store(locateCount);
+    shared.lastLocateBeat.store(lastLocateBeat);
+    // A monotonic clock read (mach_absolute_time on macOS): no lock, no allocation, fine on the audio thread.
+    shared.publishedAtMs.store(juce::Time::getMillisecondCounterHiRes());
     sharedVersion.fetch_add(1); // even: write complete
 }
 
@@ -199,6 +264,9 @@ TransportService::PositionSnapshot TransportService::getPositionSnapshot() const
         out.looping = shared.looping.load();
         out.loopStartPpq = shared.loopStartPpq.load();
         out.loopEndPpq = shared.loopEndPpq.load();
+        out.locateCount = shared.locateCount.load();
+        out.lastLocateBeat = shared.lastLocateBeat.load();
+        out.publishedAtMs = shared.publishedAtMs.load();
         if (sharedVersion.load() == before)
             return out;
     }

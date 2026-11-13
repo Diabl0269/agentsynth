@@ -1,9 +1,15 @@
 #pragma once
 
+#include "../GateEdges.h"
+#include "../ModTargetList.h"
 #include "../ModuleBase.h"
+#include "../RestartGhosts.h"
+#include "../UnisonMix.h"
+#include "../UnisonVoicing.h"
 #include "WavetableTableBuilder.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
@@ -37,6 +43,9 @@ public:
     // channels 0-7 are the per-voice pitch fan and the shared mod-CV block starts at
     // kPolyModCVBase, so jack j (j >= 1) lands on kPolyModCVBase + j - 1.
     //
+    // Gate is the last jack and is not a mod CV: mono reads one channel (raw 16 = its jack index),
+    // poly an eight-wide fan at kGateBase. A rising edge restarts that voice's phases on its own sample.
+    //
     // New jacks are only ever APPENDED — Position..Level keep their original channel numbers
     // so previously saved patches still route to the same targets.
     // -------------------------------------------------------------------------
@@ -57,15 +66,25 @@ public:
         kJackSub,    // sub-oscillator level
         kJackPan,
         kJackSync, // audio-rate input for Hard Sync / Ring Mod / AM
+        kJackGate, // a rising edge restarts the voice's phases (a new note)
         kNumJacks
     };
 
     static constexpr int kNumVoices = 8;
-    static constexpr int kNumModCV = kNumJacks - 1;               // every jack except Pitch
-    static constexpr int kPolyModCVBase = kNumVoices;             // poly shared-CV block start
-    static constexpr int kNumInputs = kPolyModCVBase + kNumModCV; // 23
-    static constexpr int kRightBase = kNumInputs;                 // Audio R block starts here
-    static constexpr int kNumOutputs = kRightBase + kNumVoices;   // 31
+    static constexpr int kNumModCV = kJackGate - 1;              // every jack except Pitch and Gate
+    static constexpr int kPolyModCVBase = kNumVoices;            // poly shared-CV block start
+    static constexpr int kGateBase = kPolyModCVBase + kNumModCV; // 23: poly Gate fan, 8 wide
+    static constexpr int kJackInputs = kGateBase + kNumVoices;   // 31: the jacks' channels, mono and poly
+    /** The knobs that take a cable and have no jack, one channel each after the jacks. Append only. */
+    static constexpr std::array<synth::ModTargetSpec, 1> kModTargets{{{"unison", synth::ModRead::NoteOn}}};
+    static constexpr int kUnisonCvChannel = kJackInputs; // 31, the same in mono and poly
+    static constexpr int kNumInputs = kJackInputs + (int)kModTargets.size();
+    // A LITERAL, not derived from the input count: it must never move, saved Audio R routings depend on
+    // raw output channel 23. The poly Gate fan aliases the Audio R block exactly (like the Oscillator's
+    // ch14-19), so it is scanned before any write or clear.
+    static constexpr int kRightBase = 23;
+    static constexpr int kNumOutputs = kNumInputs; // 32: audio to 30, then silent pass-through channels
+    static_assert(kNumOutputs >= kNumInputs, "outputs must cover every input channel");
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. */
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
@@ -153,7 +172,7 @@ public:
         return (ImportMode)juce::jlimit(0, (int)ImportMode::Count - 1, importModeParam->getIndex());
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
     // -------------------------------------------------------------------------
     // Ports / modulation
@@ -165,12 +184,15 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override;
 
     juce::String getInputPortLabel(int i) const override {
+        if (mods_.ownsChannel(i))
+            return mods_.label(i);
         return (i >= 0 && i < kNumJacks) ? jackLabels()[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
     int getVisibleInputPortCount() const override { return kNumJacks; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+    int polyGateInputChannel() const override { return kGateBase; }
 
     // processBlock consumes note-on for the mono-mode MIDI pitch fallback, same as
     // OscillatorModule, but never writes to the MIDI buffer.
@@ -204,6 +226,9 @@ public:
 
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    /** A stored node without Detune, Blend, Width or Rand keeps the values it had before those defaults changed. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) override;
+
     // -------------------------------------------------------------------------
     // Wavetable loading (message thread)
     // -------------------------------------------------------------------------
@@ -218,6 +243,8 @@ public:
         Does not change any parameter — callers that want the new table to sound must also
         select the "Loaded File" choice. Message thread only. */
     bool loadWavetableFile(const juce::File& file);
+    /** Reads and builds `file` as `mode` cuts it; null when it cannot. Any thread: it touches no module. */
+    static TablePtr decodeWavetableFile(const juce::File& file, ImportMode mode);
 
     /** True for any extension the wavetable loader can read. */
     static bool isSupportedWavetableFile(const juce::File& file) {
@@ -249,10 +276,8 @@ public:
     bool nextWavetable() { return stepWavetable(1); }
     bool previousWavetable() { return stepWavetable(-1); }
 
-    /** File backing the loaded table, or an invalid File when none is loaded. */
-    juce::File getWavetableFile() const {
-        return messageLoadedTable != nullptr ? juce::File(messageLoadedTable->sourcePath) : juce::File();
-    }
+    /** File backing the loaded table (or one a project open is still decoding), or an invalid File when none. */
+    juce::File getWavetableFile() const;
 
     /** Frame count of the table the module would currently play. */
     int getNumFrames() const;
@@ -263,16 +288,29 @@ public:
     /** True when a file-backed table is available for the "Loaded File" choice. */
     bool hasLoadedWavetable() const { return messageLoadedTable != nullptr; }
 
-    /** Current scan position (the Position parameter), 0..1. */
+    /** The Position knob's own value, 0..1. A display shows getModulatedScanPosition() instead. */
     float getScanPosition() const { return positionParam->get(); }
+
+    /** The Position the oscillator plays now, 0..1: the knob plus the Position cable at the end of the last block
+        while a note sounds, the knob alone at rest. Any thread. */
+    float getModulatedScanPosition() const;
+
+    /** The Warp amount the oscillator plays now, 0..1, the same way as getModulatedScanPosition(). Any thread. */
+    float getModulatedWarpAmount() const;
 
     /** Fills `out` with numPoints samples of the frame at scan position `position`, for UI
         display. Message thread only. */
     void getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position) const;
 
+    /** As above, warped by `warpAmount` (0..1) instead of the knob. Message thread only. */
+    void getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position, float warpAmount) const;
+
     /** Changes to this value mean the drawn waveform changed shape. The display's repaint
         gate folds it in so a Warp tweak redraws without an unconditional per-tick repaint. */
     int getWarpSignature() const;
+
+    /** getWarpSignature() for a drawn Warp amount of `warpAmount`. */
+    int getWarpSignature(float warpAmount) const;
 
     /** Fills `out` with the frame currently under the scan position. Message thread only. */
     void getDisplayWaveform(std::vector<float>& out, int numPoints) const {
@@ -326,28 +364,24 @@ private:
         }
     };
 
-    struct VoiceState {
+    /** What a restart replaces and a ghost keeps running: the phases, the sub phase and the decimator history. */
+    struct StackState {
         float phase[MAX_UNISON]{};       // slave phase, what actually reads the table
         float masterPhase[MAX_UNISON]{}; // drives Sync's reset and Formant's window
         float subPhase = 0.0f;
-        juce::SmoothedValue<float> smoothedFreq;
-        float lastMidiNote = 69.0f;
-        bool active = false;    // poly: was this voice sounding last block?
-        Decimator decimator[2]; // one per stereo leg — panning happens before decimation
+        Decimator decimator[2]; // one per stereo leg -- panning happens before decimation
 
         /** Restarts every sub-oscillator at the configured retrigger phase. `spread`
-            decorrelates the unison stack, `randomAmount` adds per-note jitter — without
+            decorrelates the unison stack, `randomAmount` adds per-note jitter -- without
             either, a unison stack or a poly chord attacks perfectly phase-correlated and
-            comb-filters itself. */
-        void resetPhases(float startPhase, float spread, float randomAmount, int unisonCount, juce::Random& rng) {
+            comb-filters itself. `draws` (0..1, one per unison voice) place that jitter. */
+        void resetPhases(float startPhase, float spread, float randomAmount, int unisonCount, const float* draws) {
             const int count = std::max(1, unisonCount);
             for (int u = 0; u < MAX_UNISON; ++u) {
                 float p = startPhase;
                 if (count > 1)
                     p += spread * (float)u / (float)count;
-                if (randomAmount > 0.0f)
-                    p += randomAmount * rng.nextFloat();
-                p -= std::floor(p);
+                p = synth::unisonRestartPhase(p, randomAmount, draws[u]);
                 phase[u] = p;
                 masterPhase[u] = p;
             }
@@ -355,6 +389,30 @@ private:
             decimator[0].reset();
             decimator[1].reset();
         }
+
+        void resetSyncPhases() {
+            for (int u = 0; u < MAX_UNISON; ++u)
+                phase[u] = masterPhase[u] = 0.0f;
+        }
+    };
+
+    static constexpr int kMaxMidiRestarts = 64;
+
+    struct VoiceState {
+        StackState stack;
+        synth::RestartGhosts<StackState> ghosts; // the stacks from before a restart, running out
+        juce::SmoothedValue<float> smoothedFreq;
+        float lastMidiNote = 69.0f;
+        GateEdges gateEdges; // this block's rising Gate edges, each a note that restarts the phases
+        bool active = false; // poly: was this voice sounding last block?
+        std::array<int, kMaxMidiRestarts> midiRestarts{};
+        int numMidiRestarts = 0;
+        int nextMidiRestart = 0;
+        float restartDraws[MAX_UNISON] = {}; ///< each unison voice's random draw at the last note start, 0..1
+        synth::SyncRestartRun sync;          ///< tells oscillator sync from a note, and holds the sub-sample lead
+
+        void addMidiRestart(int offset);
+        bool restartFiresAt(int s, float& lead);
     };
 
     // -------------------------------------------------------------------------
@@ -396,6 +454,7 @@ private:
     /** Publishes a freshly built table. Reclaims the slot the audio thread retired first,
         so the audio thread never has to free anything. */
     void publishLoadedTable(TablePtr table);
+    bool deferWavetableLoad(const juce::File& file); // inside a project open on screen; false: load now
 
     /** Audio thread: take a published table if one is waiting. Pointer moves only — no
         allocation, no deallocation. Skipped (and retried next block) when the message
@@ -711,9 +770,6 @@ private:
         at the root so Blend can fade the stack against an unshifted centre. */
     static float stackSemitones(Stack mode, int u, int unisonCount);
 
-    /** Equal-power stereo placement for unison voice `u`. width 0 collapses to centre. */
-    static void unisonPanGains(int u, int unisonCount, float width, float& gainL, float& gainR);
-
     // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter have
     // Audio L/R blocks of their own too, and all three modules must place a signal identically.
 
@@ -733,11 +789,34 @@ private:
         float subOctaveRatio = 0.5f; // -1 octave
         float subPosition = 0.0f;    // scan position of the sub's shape in Basic Shapes
         // Per-block voicing gains (width/blend move slowly; their CV lands at block rate).
-        float uniGainL[MAX_UNISON]{};
-        float uniGainR[MAX_UNISON]{};
+        int renderCount = 1;  // voices that still sound, leaving ones included
+        synth::UnisonMix mix; // the voice gains and their ramps over the block
         float uniRatio[MAX_UNISON]{};
-        float uniNormalise = 1.0f;
     };
+
+    /** What one sample of a stack reads besides its own phases. */
+    struct SampleParams {
+        const Wavetable* wt = nullptr;
+        const Wavetable* subTable = nullptr;
+        const int* uniMip = nullptr;
+        float dt = 0.0f;
+        float mipRateScale = 1.0f;
+        float posFrames = 0.0f;
+        float warpAmount = 0.0f;
+        float subLevel = 0.0f;
+        float subPosFrames = 0.0f;
+        bool hermite = false;
+        float norm = 1.0f;
+        float gainL[MAX_UNISON]{};
+        float gainR[MAX_UNISON]{};
+    };
+
+    struct StackOut {
+        float left = 0.0f;
+        float right = 0.0f;
+    };
+    StackOut renderStackSample(StackState& st, const BlockSettings& bs, const SampleParams& p) const;
+    StackOut renderWithGhosts(VoiceState& voice, StackOut live, const BlockSettings& bs, const SampleParams& p) const;
 
     /** Renders one voice into `outL` / `outR`. freqRamp holds the (already smoothed)
         per-sample base frequency in Hz; positionRamp / levelRamp hold the smoothed parameter
@@ -745,149 +824,37 @@ private:
         entries, so blocks longer than kMaxBlock hold the last cached CV/ramp value for the
         remainder (same behaviour as OscillatorModule). */
     void renderVoice(const Wavetable& wt, VoiceState& voice, float* outL, float* outR, int numSamples, int cacheLen,
-                     const BlockSettings& bs) {
-        const float invSampleRate = 1.0f / (float)currentSampleRate;
-        const int oversample = bs.oversample ? kOversample : 1;
-        const float subStep = 1.0f / (float)oversample;
-
-        // The ramp is monotone, so its highest-frequency end bounds the harmonic content for
-        // the whole block — pick the mip from that end to stay alias-free.
-        const float mipFreq = std::max(freqRamp[0], freqRamp[(size_t)(cacheLen - 1)]);
-
-        // Worst-case warp rate over the block, so the mip is chosen for the fastest read the
-        // warp will ever perform rather than for its value at sample 0.
-        const float blockDt = juce::jlimit(20.0f, 20000.0f, mipFreq) * invSampleRate;
-        const float warpRate = warpRateFactor(bs.warp, clampWarpAmount(bs.warp, blockPeakWarpAmount, blockDt));
-
-        // Dividing by the oversample factor targets the OVERSAMPLED Nyquist: those extra
-        // harmonics are representable while we render at kOversample x, and the decimator
-        // takes them back out on the way down. Band-limiting to the base Nyquist here instead
-        // would collapse a hard-synced table to a sine before the warp ever saw it.
-        const float mipRateScale = warpRate / (float)oversample;
-
-        int uniMip[MAX_UNISON];
-        for (int u = 0; u < bs.unisonCount; ++u)
-            uniMip[u] = selectMip(blockDt * bs.uniRatio[u] * mipRateScale);
-
-        const auto& subTable = *builtInTables()[0];
-        const float subPosFrames = bs.subPosition * (float)(subTable.numFrames - 1);
-        const float lastFrame = (float)(wt.numFrames - 1);
-        const bool hermite = bs.interpolation == Interpolation::Hermite;
-
-        for (int s = 0; s < numSamples; ++s) {
-            const int idx = std::min(s, cacheLen - 1);
-
-            float freq = freqRamp[(size_t)idx];
-            if (bs.pitchModulated) {
-                float semis = 0.0f;
-                if (hasCV(kJackOctave))
-                    semis += std::round(cvAt(kJackOctave, idx) * 4.0f) * 12.0f;
-                if (hasCV(kJackCoarse))
-                    semis += std::round(cvAt(kJackCoarse, idx) * 12.0f);
-                if (hasCV(kJackFine))
-                    semis += cvAt(kJackFine, idx);
-                if (semis != 0.0f)
-                    freq *= std::pow(2.0f, semis / 12.0f);
-            }
-            const float dt = juce::jlimit(20.0f, 20000.0f, freq) * invSampleRate;
-
-            const float position = juce::jlimit(0.0f, 1.0f, positionRamp[(size_t)idx] + cvAt(kJackPosition, idx));
-            const float posFrames = position * lastFrame;
-            const float level = juce::jlimit(0.0f, 1.0f, levelRamp[(size_t)idx] + cvAt(kJackLevel, idx));
-            const float warpAmount =
-                clampWarpAmount(bs.warp, juce::jlimit(0.0f, 1.0f, warpRamp[(size_t)idx] + cvAt(kJackWarp, idx)), dt);
-            const float subLevel = juce::jlimit(0.0f, 1.0f, subRamp[(size_t)idx] + cvAt(kJackSub, idx));
-
-            float panL, panR;
-            panGains(juce::jlimit(-1.0f, 1.0f, panRamp[(size_t)idx] + cvAt(kJackPan, idx)), panL, panR);
-
-            // Hard sync resets every sub-oscillator on the master's rising zero crossing.
-            if (bs.syncMode == SyncMode::HardSync && syncResetCache[(size_t)idx]) {
-                for (int u = 0; u < MAX_UNISON; ++u) {
-                    voice.phase[u] = 0.0f;
-                    voice.masterPhase[u] = 0.0f;
-                }
-            }
-
-            float accL = 0.0f, accR = 0.0f;
-            for (int k = 0; k < oversample; ++k) {
-                float subL = 0.0f, subR = 0.0f;
-
-                for (int u = 0; u < bs.unisonCount; ++u) {
-                    const float uniDt = dt * bs.uniRatio[u] * subStep;
-                    const int mip = bs.pitchModulated ? selectMip(dt * bs.uniRatio[u] * mipRateScale) : uniMip[u];
-
-                    const float v = readWarped(wt, mip, posFrames, voice.masterPhase[u], bs.warp, warpAmount, hermite);
-                    subL += v * bs.uniGainL[u];
-                    subR += v * bs.uniGainR[u];
-
-                    voice.masterPhase[u] += uniDt;
-                    // `while`, not `if`: at very low sample rates a single note can advance more
-                    // than a full cycle per sample, and one subtraction would leave phase >= 1.
-                    while (voice.masterPhase[u] >= 1.0f)
-                        voice.masterPhase[u] -= 1.0f;
-                    voice.phase[u] = voice.masterPhase[u];
-                }
-
-                subL *= bs.uniNormalise;
-                subR *= bs.uniNormalise;
-
-                // Sub-oscillator: read out of the band-limited Basic Shapes table rather than
-                // generated naively, so it inherits the same mip anti-aliasing as everything else.
-                if (subLevel > 0.0f) {
-                    const float subDt = dt * bs.subOctaveRatio * subStep;
-                    const int subMip = selectMip(dt * bs.subOctaveRatio);
-                    const float sv = sampleTable(subTable, subMip, subPosFrames, voice.subPhase, hermite) * subLevel;
-                    subL += sv;
-                    subR += sv;
-                    voice.subPhase += subDt;
-                    while (voice.subPhase >= 1.0f)
-                        voice.subPhase -= 1.0f;
-                }
-
-                if (bs.oversample) {
-                    voice.decimator[0].push(subL);
-                    voice.decimator[1].push(subR);
-                } else {
-                    accL = subL;
-                    accR = subR;
-                }
-            }
-
-            if (bs.oversample) {
-                accL = voice.decimator[0].read();
-                accR = voice.decimator[1].read();
-            }
-
-            // Ring mod / AM multiply the finished voice, so they apply to the whole stack.
-            if (bs.syncMode == SyncMode::RingMod || bs.syncMode == SyncMode::AM) {
-                const float sync = cvAt(kJackSync, idx);
-                const float gain = (bs.syncMode == SyncMode::RingMod) ? sync : (0.5f + 0.5f * sync);
-                accL *= gain;
-                accR *= gain;
-            }
-
-            outL[s] = accL * level * panL;
-            outR[s] = accR * level * panR;
-        }
-    }
+                     const BlockSettings& bs);
 
     /** Fills the per-sample parameter ramps for this block. */
     void fillParameterRamps(int numSamples);
 
     /** Gathers the voice-independent settings for this block, including the unison gain
-        table. Width and Blend land at block rate: they are voicing settings whose CV does
+        mix. Width and Blend land at block rate: they are voicing settings whose CV does
         not need sample accuracy, and keeping them out of the inner loop keeps the
-        oversampled path affordable. */
-    BlockSettings gatherBlockSettings();
+        oversampled path affordable. Call once per block: it advances the gain fades. */
+    BlockSettings gatherBlockSettings(int numSamples);
 
     /** Marks the samples where the Sync input crosses zero going up. Computed once per block
         because every voice needs the same crossings, and the voices render one after another. */
     void buildSyncResets(int cacheLen, SyncMode mode);
 
-    /** Restarts a voice's oscillators at the configured retrigger phase. Phase / Rand /
-        Spread are sampled at the note-on instant — they shape the attack, not the sustain. */
-    void retriggerVoice(VoiceState& voice, int unisonCount);
+    /** Restarts a voice's oscillators at the configured retrigger phase; with `fadeFromOld` the old sound
+        runs out over kRestartFadeSamples. Phase / Rand / Spread are sampled at the note-on instant. `lead` is how far
+        past the restart the sample being rendered lies (a Gate edge between two samples); only oscillator sync uses it.
+     */
+    void restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld, float lead = 0.0f);
+
+    /** Counts one rendered sample for the sync detector and, when a sync restart fell between the last sample and this
+        one, runs the stack on by that lead at the pitch `dt` (cycles per sample). */
+    void advanceSyncLead(VoiceState& voice, const BlockSettings& bs, float dt);
+
+    /** Tracks the block's MIDI note-ons: the pitch now, the restart at each note-on's own sample. */
+    void scanMidi(const juce::MidiBuffer& midi, int numSamples);
+
+    /** Settles this block's voice count before it is gathered (WavetableOscillatorModuleUnison.cpp). */
+    void holdUnisonCable(const juce::AudioBuffer<float>& buffer, bool poly, int numSamples);
+    int firstNoteStart(const float* pitchCV, bool poly, int numSamples) const;
 
     /** Fills freqRamp with a voice's smoothed per-sample frequency in Hz. */
     void fillFrequencyRamp(VoiceState& voice, float targetHz, int numSamples);
@@ -912,13 +879,24 @@ private:
         return cvActive[slot] ? cvCache[slot][(size_t)idx] : 0.0f;
     }
 
+    /** Finds the rising Gate edges of every voice (poly: the fan, mono: raw channel kJackGate for voice 0)
+        before the block clears those channels. */
+    void scanGateEdges(const juce::AudioBuffer<float>& buffer, bool poly, int numSamples);
+
     void pushToVisualBuffer(const juce::AudioBuffer<float>& buffer, int numSamples);
+
+    /** Publishes the block's last Position and Warp for the display (WavetableOscillatorModuleLiveDisplay.cpp);
+        `cacheLen` 0 publishes "at rest". Audio thread. */
+    void publishLiveDisplayValues(int cacheLen);
+    bool displayFollowsSound() const;
+    void countHeldMidiNotes(const juce::MidiMessage& msg);
 
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
     VoiceState voices[MAX_VOICES];
     double currentSampleRate = 44100.0;
+    int syncEdgeSamples = 1102; ///< synth::kSyncEdgeSeconds at the current sample rate
     juce::SmoothedValue<float> smoothedPosition;
     juce::SmoothedValue<float> smoothedLevel;
     juce::SmoothedValue<float> smoothedWarp;
@@ -931,6 +909,8 @@ private:
     TablePtr retiredTable;       // audio thread -> message thread
     TablePtr audioLoadedTable;   // audio thread only
     TablePtr messageLoadedTable; // message thread only (UI queries, state save)
+    juce::File pendingFile;      // message thread only: a deferred decode in flight (deferWavetableLoad)
+    int fileLoadSerial = 0;      // message thread only: bumped by every load request
 
     // Wavetable folder browser (message thread only)
     juce::File wavetableFolder;
@@ -953,7 +933,10 @@ private:
 
     float blockPeakWarpAmount = 0.0f;
     float lastSyncSample = 0.0f;
-    bool pendingRetrigger = false;
+    std::atomic<float> liveScanPosition{-1.0f}; ///< audio -> UI; below 0 means at rest (show the knob)
+    std::atomic<float> liveWarpAmount{-1.0f};   ///< audio -> UI, as liveScanPosition
+    int heldMidiNotes_ = 0;                     ///< audio thread: MIDI notes down now
+    synth::UnisonMix unisonMix;
     juce::Random phaseRandom{0x5EED1234};
 
     juce::AudioParameterChoice* tableParam = nullptr;
@@ -964,6 +947,10 @@ private:
     juce::AudioParameterFloat* levelParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
     juce::AudioParameterInt* unisonParam = nullptr;
+    synth::ModTargetList mods_{kModTargets, kJackInputs};
+    int heldUnison_ = -1;   ///< the voice count the Unison cable set at the last note start; -1 while the knob rules
+    bool noteSeen_ = false; ///< a note has started since prepareToPlay
+    int unisonNow_ = 1;     ///< the voice count this block renders
     juce::AudioParameterFloat* detuneParam = nullptr;
     juce::AudioParameterChoice* warpParam = nullptr;
     juce::AudioParameterFloat* warpAmountParam = nullptr;
@@ -981,6 +968,7 @@ private:
     juce::AudioParameterChoice* importModeParam = nullptr;
     juce::AudioParameterChoice* interpolationParam = nullptr;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(WavetableOscillatorModule)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WavetableOscillatorModule)
 };
 

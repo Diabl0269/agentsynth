@@ -5,17 +5,42 @@
 // sibling MacroGroupController*.cpp files in this directory hold the rest of the class.
 
 #include "MacroGroupController.h"
+#include "MacroNesting.h"
 
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 
+// A macro a track plays is not deleted on its own: the app hook asks whether the track goes too. Any other macro takes
+// the plain path.
+void MacroGroupController::requestDeleteMacro(const juce::String& macroId) {
+    if (onDeleteMacrosRequested && onDeleteMacrosRequested({macroId}, false))
+        return;
+    deleteMacroAndMembers(macroId);
+}
+
+// The macros the selection holds whole, outermost only: a macro whose members are all selected and whose ancestors are
+// not (an ancestor that is selected whole already covers it).
+void MacroGroupController::requestDeleteSelection() {
+    std::vector<juce::String> macroIds;
+    for (const auto& macro : host_.getMacros().getAll()) {
+        const auto ancestors = host_.getMacros().ancestorChain(macro.id);
+        const bool covered = std::any_of(ancestors.begin(), ancestors.end(),
+                                         [this](const juce::String& id) { return isMacroInSelection(id); });
+        if (isMacroInSelection(macro.id) && !covered)
+            macroIds.push_back(macro.id);
+    }
+    if (!macroIds.empty() && onDeleteMacrosRequested && onDeleteMacrosRequested(macroIds, true))
+        return;
+    host_.deleteSelection();
+}
+
+// Transitive: deleting a macro deletes everything drawn inside it, nested children included.
 void MacroGroupController::deleteMacroAndMembers(const juce::String& macroId) {
-    auto* m = host_.getMacros().find(macroId);
-    if (m == nullptr)
+    if (host_.getMacros().find(macroId) == nullptr)
         return;
 
     std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
-    for (const auto& uuid : m->members) {
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid != 0)
             memberIds.push_back(nodeId);
@@ -29,15 +54,13 @@ void MacroGroupController::deleteMacroAndMembers(const juce::String& macroId) {
     host_.deleteSelection();
 }
 
+// Transitive (nested children's members too), so bypass/mute state and fan-out cover everything
+// drawn inside the macro.
 std::vector<juce::AudioProcessorGraph::NodeID>
 MacroGroupController::resolvedMacroMemberModuleNodes(const juce::String& macroId) const {
     std::vector<juce::AudioProcessorGraph::NodeID> result;
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr)
-        return result;
-
     auto& graph = host_.graph();
-    for (const auto& uuid : macro->members) {
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;

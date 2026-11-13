@@ -1,0 +1,52 @@
+# A mod row dragged to its smallest height stays tidy: below three comfortable lines it shows the folded one-line look
+# (name, amount, the row's buttons), so its shape, rate and Sync controls never run into each other, and the full
+# controls return when it is dragged back.
+#
+# What a user does:
+#   1. Opens the lane-rows project (a Cutoff lane with two LFO mod rows), shows the timeline and opens the automation.
+#   2. Drags the LFO 1 row's bottom strip far up: the row stops at half its height, shows one line and hides Sync.
+#   3. Presses Option+- on the LFO 2 row until it stops: the same look.
+#   4. Cmd+Z puts the first row back: its full controls are visible again.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 54}}
+  - expect: {id: "LFO 1 mod lane on Cutoff > modulatorRowState", compactLook: false}
+  - screenshot: {name: rows-before}
+  # 2. The drag stops at the smallest size.
+  - drag: {from: Resize LFO 1 mod lane on Cutoff, fromX: 100, fromY: 2, to: Resize LFO 1 mod lane on Cutoff, toX: 100, toY: -200}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 27}}
+  - expect: {id: "LFO 1 mod lane on Cutoff > modulatorRowState", compactLook: true, collapsed: false}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 231, w: 200, h: 54}}
+  - expect: {id: "LFO 2 mod lane on Cutoff > modulatorRowState", compactLook: false}
+  - screenshot: {name: lfo1-smallest}
+  # 3. The key stops where the drag does.
+  - key: {keys: "alt+-", target: LFO 2 mod lane on Cutoff}
+  - key: {keys: "alt+-", target: LFO 2 mod lane on Cutoff}
+  - key: {keys: "alt+-", target: LFO 2 mod lane on Cutoff}
+  - key: {keys: "alt+-", target: LFO 2 mod lane on Cutoff}
+  - key: {keys: "alt+-", target: LFO 2 mod lane on Cutoff}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 231, w: 200, h: 27}}
+  - expect: {id: "LFO 2 mod lane on Cutoff > modulatorRowState", compactLook: true}
+  - screenshot: {name: both-smallest}
+  # 4. Back to full size.
+  - key: {keys: cmd+z}
+  - key: {keys: cmd+z}
+  - key: {keys: cmd+z}
+  - key: {keys: cmd+z}
+  - key: {keys: cmd+z}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 54}}
+  - expect: {id: "LFO 1 mod lane on Cutoff > modulatorRowState", compactLook: false}
+  - screenshot: {name: back-to-full}

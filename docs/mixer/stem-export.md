@@ -24,7 +24,7 @@ exactly like Export Audio. The two pieces both paths would otherwise duplicate
 `Source/Transport/BounceGuards.h`, so `BounceExporter`'s own behaviour and tests are unchanged.
 
 **Strips are enumerated from the graph in ascending node-id order** — the "else node id" fallback,
-whose ORDER has no dependency on the timeline or track model — and named `"NN - <name>.<ext>"`.
+whose ORDER has no dependency on the timeline or track model — and named `"NN - <name>.<ext>"`, where `<ext>` follows the chosen format (`wav`, `aiff`, `flac` or `mp3`; 32-bit float is WAV only).
 
 ## Stem naming
 
@@ -93,9 +93,18 @@ defence-in-depth backstop.
 **"Export Stems..." sits immediately after "Export Audio..."** everywhere that action is offered,
 opening `ExportAudioDialog` in a stems mode: the destination is a **FOLDER** (default
 `"<project name> Stems"` inside the same `Exports/` base Export Audio uses), with the same range, tail,
-format, rate and bit-depth controls and the same progress page, and **no destination-exists collision
+format (WAV, AIFF, FLAC or MP3; 32-bit float is WAV only; MP3 swaps the bit-depth control for a bitrate and needs `lame`, see [Export Audio](../architecture/audio-engine.md#bounceexport)), rate and bit-depth controls and the same progress page, and **no destination-exists collision
 prompt** — a stems folder is a re-exportable container, not a one-shot file. A cancelled or failed
 export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
+
+## Render options
+
+`StemSession` takes an optional `StemSessionOptions` (also accepted by `StemRunner`); the defaults are the export described above, unchanged.
+"Render to audio track" ([`docs/timeline/render-to-audio.md`](../timeline/render-to-audio.md)) sets all three:
+
+- **`onlyStrips`** - only these strips get a file (empty = every strip). `StemResult::stemStrips` lists the strip each file came from, in file order.
+- **`tapBeforeSolo`** - each strip's *live tap* (`ChannelStripModule::setLiveTapBuffer`: after the inserts, fader, pan and mute, before the solo gate) is armed with the stem buffer instead of the stem tap. A strip another strip's solo silences still renders its own sound. The session disarms only a live tap that still points at its own buffer.
+- **`unmuteStrips`** - these strips are un-muted before the graph is re-prepared (a freshly prepared strip adopts its parameters without a fade, so the sound starts at the first sample) and put back on every exit path, a cancel or a failure included. Mute is applied before the live tap, so this is what lets a muted source render what it plays.
 
 ## Related
 

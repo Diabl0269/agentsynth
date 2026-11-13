@@ -224,6 +224,12 @@ std::vector<Case> makeCases() {
 
         {PatchValidationError::MixerPanLawNotAllowed, "patch carries a root 'mixerPanLaw' key",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerPanLaw":"compensated"})"); }},
+
+        {PatchValidationError::MixerViewNotAllowed, "patch carries a root 'mixerView' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerView":{"zones":{},"hidden":[]}})"); }},
+
+        {PatchValidationError::ViewNotAllowed, "patch carries a root 'view' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"view":{"zoom":1,"panX":0,"panY":0}})"); }},
     };
 }
 
@@ -428,8 +434,12 @@ TEST(AIPatchValidationTest, SchemaChoiceParamIdsAreUnambiguous) {
         auto processor = AIStateMapper::createModule(value.toString());
         if (!processor)
             continue;
+        auto* module = dynamic_cast<ModuleBase*>(processor.get());
         for (auto* param : processor->getParameters()) {
             if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                // A parameter no surface offers yet is kept out of the schema on purpose.
+                if (module != nullptr && !module->isParameterExposed(choice->paramID))
+                    continue;
                 auto existing = seen.find(choice->paramID);
                 if (existing == seen.end())
                     seen[choice->paramID] = choice->choices;
@@ -450,4 +460,28 @@ TEST(AIPatchValidationTest, SchemaChoiceParamIdsAreUnambiguous) {
         EXPECT_FALSE(params["properties"][juce::Identifier(paramId)].isVoid())
             << "choice parameter \"" << paramId << "\" is not constrained in the schema";
     }
+}
+
+// The model bounds stay for a model's patch; the app's own data (a project, a plugin session, a snippet) gets the
+// larger app-data bounds, so a big project is not refused.
+TEST(AIPatchValidation, AppDataPastTheModelNodeLimitIsAcceptedAndAModelPatchIsNot) {
+    juce::Array<juce::var> nodes;
+    for (int i = 1; i <= AIStateMapper::kMaxNodes + 1; ++i) {
+        juce::DynamicObject::Ptr n = new juce::DynamicObject();
+        n->setProperty("id", i);
+        n->setProperty("type", "Oscillator");
+        nodes.add(juce::var(n.get()));
+    }
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty("nodes", nodes);
+    const juce::var patch(root.get());
+    juce::AudioProcessorGraph graph;
+
+    const auto model = AIStateMapper::validatePatch(patch, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_FALSE(model.ok);
+    EXPECT_EQ(model.error, PatchValidationError::TooManyNodes);
+
+    const auto appData = AIStateMapper::validatePatch(patch, graph, /*clearExisting=*/true, /*trusted=*/false,
+                                                      /*allowInternalModuleTypes=*/true);
+    EXPECT_TRUE(appData.ok) << appData.message;
 }

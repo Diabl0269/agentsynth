@@ -1,5 +1,8 @@
 # Module Library Sidebar
 
+The library is the **Modules** view of the left column; `LibrarySidebarViews` adopts it beside the Sounds view and
+switches between them ([sound browser](sound-browser.md#the-sounds-view)).
+
 `Source/UI/Library/ModuleLibraryComponent/` — one class, declared in `ModuleLibraryComponent.h` and
 split across per-concern translation units, none over 1,000 lines:
 
@@ -16,6 +19,8 @@ split across per-concern translation units, none over 1,000 lines:
   calls
 - `ModuleLibraryInput.cpp` — mouse events, keyboard navigation, starting a drag-and-drop session
 - `ModuleLibraryHelpPopover.cpp` — the "?" help popover's pin/float versus `CallOutBox` hosting
+- `ModuleLibraryAccessibility.cpp` — the screen-reader list handler and the spoken text of the
+  keyboard-focused row (wording in `Source/UI/Library/ModuleLibraryAccessibilityText.h`)
 
 ## One layout pass
 
@@ -42,7 +47,7 @@ strings via `ModuleLibraryComponent::subsectionKey(section, subHeader)`, a publi
 They are kept separate from the section's own `Header` key, so folding a format group never touches
 (or is touched by) the section header's fold. A `SubHeader`'s fold rides the same single
 `AnimationDriver` as header folds and persists through the same opaque `collapsedSections`
-`StringArray` — no schema change. `setAllSectionsCollapsed()` (COLLAPSE ALL / EXPAND ALL) starts
+`StringArray` — no schema change. `setAllSectionsCollapsed()` (Collapse all / Expand all) starts
 from the current `collapsedSections` set and only adds or removes top-level `Header` keys, so a
 subsection fold survives a Collapse All or Expand All untouched.
 
@@ -56,7 +61,7 @@ guaranteed across the embedded typefaces (see the font limitation in
 the shapes the old two-state version switched between.
 
 Rows also carry a hover highlight, a grab / dragging-hand cursor when draggable, per-module
-descriptions surfaced as `setTooltip()` via `descriptionFor(name)`, and the search-query substring
+descriptions surfaced as `setTooltip()` via `descriptionFor(name)`, and the search-query
 highlight described below.
 
 ## Search
@@ -66,7 +71,7 @@ ALL strip. The two together are `kPinnedChromeHeight`; the scrollbar, the row cl
 all start below that band, so the field never scrolls away and a scrolled row cannot steal a click
 from it.
 
-Typing a query — trimmed, case-insensitive substring — filters `buildRows()`:
+Typing a query — trimmed, matched by the shared [search matcher](chrome.md#shared-search) (every word, any order, ignoring case) — filters `buildRows()`:
 
 - Module, snippet and empty-hint rows that do not contain the query are hidden.
 - A section stays visible when its header matches **or** any of its children match, and a header
@@ -75,12 +80,16 @@ Typing a query — trimmed, case-insensitive substring — filters `buildRows()`
   rewritten and `onCollapseStateChanged` does not fire, so clearing the field restores exactly the
   collapse state the user had.
 - Matching runs in the visible label are highlighted with the theme accent (fill plus accent text).
-  `highlightSpansFor` is the pure helper `paint()` uses, and tests cover it directly.
+  `paint()` calls the shared `synth::ui::drawSearchHighlightedText`; the matcher and spans are tested in
+  `SearchMatchTests`. A blank query is guarded at the library's call sites (it hides nothing).
 - A query that matches nothing leaves `buildRows()` empty and the body draws "No matching modules".
 - Filtering is layout-only. `getDraggableModuleNames()` is unfiltered, because callers that
   instantiate through the factory must not see a search-shrunk catalogue.
 
-Escape clears the field.
+Escape clears the field. Return in the field inserts the first match (type "filt", Return -> Filter), the
+same as arrowing onto that row and pressing Return: it picks the first module, snippet or plugin row that is enabled,
+never a section header. With an empty query, or one that matches nothing, Return does nothing; once Up or Down has put
+the keyboard focus on a row, Return inserts that row instead.
 
 **The search field's colours are re-applied in `parentHierarchyChanged()` as well as
 `lookAndFeelChanged()`.** `MainComponent`'s constructor applies the persisted theme in its ctor
@@ -89,10 +98,24 @@ theme was active before that, so without this the field showed stale colours unt
 switch. `parentHierarchyChanged()` fires when `MainComponent::initialiseCommon()` calls
 `addAndMakeVisible(moduleLibrary)`, which always runs after that ctor-body `applyTheme()` call.
 
+The [Add list](../timeline/add-track.md#the-add-list) reads the same catalogue (`getAddListRows()`): every module, plugin card and snippet, whatever the collapse state or filter, and a pick runs the same path as Return on the row.
+
+## Screen reader
+
+The rows are painted, not components, so the library is one accessibility element: a **list** titled
+"Module library" whose value follows the keyboard-focused row. Arrowing onto a module is spoken as
+"Oscillator, 3 of 12, Sources" (its position among the visible rows of its section, then the section
+name); a section header reads "Sources, section, expanded, 12 items" and updates when Left/Right folds
+it; with no row focused the value is the visible row count. A value-changed event is posted only when
+the text changes (`refreshAccessibilityValue()`), so a repaint never re-reads it. The search field is
+titled "Search library". The component keeps a default tooltip while nothing is hovered, so the list
+always has one. The wording is pure (`ModuleLibraryAccessibilityText.h`) and tested in
+`Tests/UI/Library/ModuleLibraryAccessibilityTests.cpp`.
+
 ## Collapsible sections
 
 With a Snippets section on top of eight module categories the sidebar overflows its height. Every
-section header is a disclosure toggle, plus a **COLLAPSE ALL / EXPAND ALL** strip in the top 24 px
+section header is a disclosure toggle, plus a **Collapse all / Expand all** strip in the top 24 px
 (`kTopStripHeight`).
 
 Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
@@ -102,7 +125,7 @@ Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`)
 - **`sectionProgress` is purely visual** (0 = open, 1 = shut). The logical state stays in
   `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
   persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
-- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+- **One driver for all sections**, so Collapse all folds them together instead of racing nine
   animators. Retargeting mid-flight eases on from the current value rather than snapping back.
 - **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
   `naturalHeight x (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
@@ -119,6 +142,14 @@ Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`)
   `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
   re-notifying would write back what was just read.
 
+## Dragging a module onto the canvas
+
+A module row drags onto the canvas as a ghost and is added where it is dropped. Dropped over an open macro it lands
+INSIDE that macro: it becomes a member (the innermost open macro under the pointer wins when macros are nested), is
+placed where it was dropped (members it overlaps are pushed aside and the macro grows around it), and the macro's border is emphasised while the pointer is over it.
+No modifier is needed, and the node and its membership are one undo step. A collapsed macro is not a target; the card
+lands beside it as an ordinary canvas drop. Details: [dropping a library module into a macro](../macros/menu-and-membership.md#dropping-a-library-module-into-a-macro).
+
 ## Scrolling
 
 With every section expanded the rows exceed any realistic panel height, so the sidebar scrolls.
@@ -129,7 +160,7 @@ With every section expanded the rows exceed any realistic panel height, so the s
   `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
   bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
   `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
-- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+- **The Collapse all strip stays pinned** in the top `kTopStripHeight` px — the one control that
   shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
   below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
   background fill.
@@ -146,7 +177,7 @@ With every section expanded the rows exceed any realistic panel height, so the s
 
 ## Help popover
 
-A small themed "?" button sits on the collapse-all strip, left of the COLLAPSE ALL / EXPAND ALL
+A small themed "?" button sits on the collapse-all strip, left of the Collapse all / Expand all
 label. `ModuleLibraryComponent::getHelpButtonBounds()` is the one rect `paint()` and the mouse
 handlers (`mouseMove` / `mouseDown` / `mouseExit`) all read, so the drawn button and the clickable
 one can never drift apart — the same "one enumeration" rule `buildRows()` follows for the rows. Its
@@ -176,7 +207,8 @@ first patch" steps are the minimal audible patch, verified against `Source/Prese
 Default preset and `VCAModule`'s own CV handling (see
 [modules.md](../modules/modules.md#vca-amplifier-module)): Poly MIDI to Oscillator to VCA to Audio Output,
 with an ADSR into the VCA's CV input — not optional shaping, since an unpatched VCA CV input reads
-as silence rather than an implicit fully-open value.
+as silence rather than an implicit fully-open value. Poly is switched on once, on any module of the chain
+(one click switches the connected voice graph, [modulation.md](../modules/modulation.md#the-poly-toggle)), not on each module.
 
 ### Pin or float it over the canvas
 
@@ -235,11 +267,13 @@ the sidebar reflows, since a window resize is the other way this class of bug re
 The header itself is structurally safe either way: `TopBar` is a plain sibling of `viewport_`, laid
 out first in `resized()`, so it can never be clipped into the scrollable area.
 
-The pin icon has a hover state (an accent-tinted highlight behind the glyph, mirroring the sidebar's
-own "?" button treatment) and a tooltip ("Pin - keep open while you work") via
-`juce::SettableTooltipClient`, resolved dynamically per hovered icon the same way
-`ModuleLibraryComponent::mouseMove` resolves its per-row tooltip. The close (X) gets the same hover
-treatment and a plain "Close" tooltip. The header's title reads simply "Help".
+The pin and close icons are real buttons (`TopBar::IconButton`), so Tab reaches them and Space or
+Return presses them; each draws the accent focus ring. The pin icon has a hover state (an
+accent-tinted highlight behind the glyph, mirroring the sidebar's own "?" button treatment) and a
+tooltip ("Pin - keep open while you work"); it is a toggle named "Pin help" / "Unpin help" for a screen
+reader. The close (X) gets the same hover treatment and a "Close (Esc)" tooltip. The three section
+headers are buttons too (toggle state = expanded), so the whole popover is Tab-reachable, and Escape
+closes it. The header's title reads simply "Help".
 
 **Opening the popover is split across two `protected virtual` leaves**, the same seam idiom
 [cables](cables.md) and `TimelineRulerComponent::openMarkerContextMenu` use for any real popup or
@@ -259,9 +293,12 @@ lookalike, mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopup
 `Source/UI/Settings/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the
 same collapsible-section idiom once its row count passed 49 (see [shortcuts](../control/shortcuts.md)): one
 collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
-flips between "COLLAPSE ALL" and "EXPAND ALL", lifted from `ModuleLibraryComponent` so the app's two
+flips between "Collapse all" and "Expand all", lifted from `ModuleLibraryComponent` so the app's two
 collapsible lists behave identically — clickable header rows with a chevron, a collapsed set keyed
-by the header's identity, the same strip idiom.
+by the header's identity, the same strip idiom. The strip is the shared `synth::ui::FoldAllButton`
+(`Source/UI/Layout/FoldAllButton.h`), which the Preferences "All" view uses as well; the library paints
+the same wording itself. A fold re-lays the rows without ever hiding and re-showing a header that stays on
+screen, because hiding the header that holds keyboard focus would throw the focus to the search field.
 
 Two things it deliberately does NOT copy, both because the two components live in different
 contexts:

@@ -1,0 +1,39 @@
+# FRO1404: Cmd+Z and Cmd+Shift+Z run the app's undo and redo while a sequencer's Randomize panel is open. The panel
+# is a pop-up window of its own, so a key it did not use used to die there.
+#
+# What a user does:
+#   1. Opens a project with a Sequencer (fixture clip-and-sequencer.agsproj) and opens the Randomize panel.
+#   2. Drags (as press, moves, release: a recorded one-command drag closes the pop-up) the note range band left by a few notes (C2 to C4 becomes C1 to C3).
+#   3. With the panel still open, presses Cmd+Z: the band is back at C2 to C4. Presses Cmd+Shift+Z: it moves again.
+#   4. The panel is open the whole time (the last step still sees it).
+record: true
+save_project: randomize-panel-undo
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
+  - expect: {id: randomizeRangePicker, title: "Note range, C2 to C4"}
+  - getState: {id: randomizeRangePicker}
+  - screenshot: {id: randomizeRangePicker, name: 1-range-before}
+  - mouseDown: {id: randomizeRangePicker, x: 90, y: 17}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 75, y: 17}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 60, y: 17}
+  - mouseUp: {id: randomizeRangePicker, x: 60, y: 17}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, title: "Note range, C1 to C3", within_ms: 1500}
+  - screenshot: {id: randomizeRangePicker, name: 2-range-dragged}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, title: "Note range, C2 to C4", within_ms: 2000}
+  - expect: {id: randomizeRangePicker, showing: true}
+  - screenshot: {id: randomizeRangePicker, name: 3-after-cmd-z}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, title: "Note range, C1 to C3", within_ms: 2000}
+  - expect: {id: randomizeRangePicker, showing: true}
+  - screenshot: {id: randomizeRangePicker, name: 4-after-cmd-shift-z}
+  - screenshot: {id: window, name: 5-window-panel-open}

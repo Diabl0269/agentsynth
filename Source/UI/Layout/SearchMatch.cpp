@@ -1,0 +1,152 @@
+#include "SearchMatch.h"
+
+#include <algorithm>
+
+namespace synth::ui {
+
+namespace {
+
+bool isLetterDigitSeam(juce::juce_wchar before, juce::juce_wchar after) {
+    using CF = juce::CharacterFunctions;
+    return (CF::isLetter(before) && CF::isDigit(after)) || (CF::isDigit(before) && CF::isLetter(after));
+}
+
+// A run of letters and a run of digits typed together are two words, so "lfo6" finds "LFO 6" as "lfo 6" would.
+juce::StringArray queryWords(const juce::String& query) {
+    juce::StringArray tokens;
+    tokens.addTokens(query, " \t\r\n", "");
+    tokens.removeEmptyStrings();
+    juce::StringArray words;
+    for (const auto& token : tokens) {
+        int start = 0;
+        for (int i = 1; i < token.length(); ++i)
+            if (isLetterDigitSeam(token[i - 1], token[i])) {
+                words.add(token.substring(start, i));
+                start = i;
+            }
+        words.add(token.substring(start));
+    }
+    return words;
+}
+
+// 0/1/2 rank of the best occurrence of `word` in `text`, or -1 when it does not occur.
+int wordRank(const juce::String& text, const juce::String& word) {
+    int best = -1;
+    int from = 0;
+    while (from + word.length() <= text.length()) {
+        const int hit = text.indexOfIgnoreCase(from, word);
+        if (hit < 0)
+            break;
+        const int rank = hit == 0 ? 0 : (juce::CharacterFunctions::isLetterOrDigit(text[hit - 1]) ? 2 : 1);
+        if (best < 0 || rank < best)
+            best = rank;
+        if (best == 0)
+            break;
+        from = hit + 1;
+    }
+    return best;
+}
+
+} // namespace
+
+juce::String moduleSearchAliases(const juce::String& moduleName) {
+    auto base = moduleName.trim();
+    while (base.isNotEmpty() && juce::CharacterFunctions::isDigit(base.getLastCharacter()))
+        base = base.dropLastCharacters(1).trimEnd();
+    if (base.equalsIgnoreCase("ADSR") || base.equalsIgnoreCase("Amp Env") || base.equalsIgnoreCase("Filter Env"))
+        return "env envelope eg contour";
+    if (base.equalsIgnoreCase("Oscillator"))
+        return "vco";
+    if (base.equalsIgnoreCase("Filter"))
+        return "vcf";
+    if (base.equalsIgnoreCase("VCA"))
+        return "amp amplifier";
+    return {};
+}
+
+juce::StringArray searchQueryWords(const juce::String& query) { return queryWords(query); }
+
+bool searchMatches(const juce::String& text, const juce::String& query) {
+    return searchWordsMatch(text, queryWords(query));
+}
+
+bool searchWordsMatch(const juce::String& text, const juce::StringArray& words) {
+    for (const auto& word : words)
+        if (!text.containsIgnoreCase(word))
+            return false;
+    return true;
+}
+
+int searchScore(const juce::String& text, const juce::String& query) {
+    return searchWordsScore(text, queryWords(query));
+}
+
+int searchWordsScore(const juce::String& text, const juce::StringArray& words) {
+    int worst = 0;
+    for (const auto& word : words) {
+        const int rank = wordRank(text, word);
+        if (rank < 0)
+            return -1;
+        worst = std::max(worst, rank);
+    }
+    return worst;
+}
+
+std::vector<SearchSpan> searchHighlightSpans(const juce::String& text, const juce::String& query) {
+    std::vector<SearchSpan> hits;
+    if (text.isEmpty())
+        return hits;
+    for (const auto& word : queryWords(query)) {
+        int from = 0;
+        while (from + word.length() <= text.length()) {
+            const int hit = text.indexOfIgnoreCase(from, word);
+            if (hit < 0)
+                break;
+            hits.push_back({hit, word.length()});
+            from = hit + word.length();
+        }
+    }
+    std::sort(hits.begin(), hits.end(), [](const SearchSpan& a, const SearchSpan& b) { return a.start < b.start; });
+
+    std::vector<SearchSpan> merged;
+    for (const auto& hit : hits) {
+        if (!merged.empty() && hit.start <= merged.back().start + merged.back().length) {
+            auto& last = merged.back();
+            last.length = std::max(last.length, hit.start + hit.length - last.start);
+        } else {
+            merged.push_back(hit);
+        }
+    }
+    return merged;
+}
+
+void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
+                               juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
+                               juce::Colour /*unusedFill*/, juce::Colour highlightText,
+                               juce::Justification justification) {
+    g.setFont(font);
+    const auto spans = searchHighlightSpans(text, query);
+    if (spans.empty()) {
+        g.setColour(normal);
+        g.drawText(text, bounds, justification, true);
+        return;
+    }
+
+    // JUCE has no semi-bold: matched letters are bold and in the accent colour, with nothing drawn behind them.
+    const auto boldFont = font.boldened();
+    juce::AttributedString as;
+    as.setJustification(justification);
+    as.setWordWrap(juce::AttributedString::none);
+    int pos = 0;
+    for (const auto& span : spans) {
+        if (span.start > pos)
+            as.append(text.substring(pos, span.start), font, normal);
+        as.append(text.substring(span.start, span.start + span.length), boldFont, highlightText);
+        pos = span.start + span.length;
+    }
+    if (pos < text.length())
+        as.append(text.substring(pos), font, normal);
+    as.draw(g, bounds.toFloat());
+}
+
+} // namespace synth::ui

@@ -1,0 +1,87 @@
+# The sound index: a background scan of the sound packs and the user's folders, name guessing and the search.
+# Part of Core (no UI), with the library of named shape curves the Sounds view lists; their own list so the root file stays under the line cap.
+include(${CMAKE_CURRENT_LIST_DIR}/SignalsmithStretch.cmake)
+target_sources(Core PRIVATE
+    Source/Modules/Shapes/FactoryShapes.cpp
+    Source/Modules/Shapes/ShapeLibrary.cpp
+    Source/Modules/Shapes/ShapeLibrary.h
+    Source/SoundBrowser/KeyAuditionSound.cpp
+    Source/SoundBrowser/KeyAuditionSound.h
+    Source/SoundBrowser/LoopStretch.cpp
+    Source/SoundBrowser/LoopStretch.h
+    Source/SoundBrowser/LoopStretchFile.cpp
+    Source/SoundBrowser/LoopStretchFile.h
+    Source/SoundBrowser/SoundEntry.h
+    Source/SoundBrowser/SoundFolderBook.cpp
+    Source/SoundBrowser/SoundFolderBook.h
+    Source/SoundBrowser/SoundIndex.cpp
+    Source/SoundBrowser/SoundIndex.h
+    Source/SoundBrowser/SoundIndexScan.cpp
+    Source/SoundBrowser/SoundIndexScan.h
+    Source/SoundBrowser/SoundLists.cpp
+    Source/SoundBrowser/SoundLists.h
+    Source/SoundBrowser/SoundNameGuess.cpp
+    Source/SoundBrowser/SoundNameGuess.h
+    Source/SoundBrowser/SoundPreviewDecoder.cpp
+    Source/SoundBrowser/SoundPreviewPlayer.cpp
+    Source/SoundBrowser/SoundPreviewPlayer.h
+    Source/SoundBrowser/SoundPreviewShared.h
+    Source/SoundBrowser/SoundSearch.cpp
+    Source/SoundBrowser/SoundSearch.h
+)
+
+# The Sounds view and the sidebar that switches between it and the module library (App UI).
+set(SOUND_BROWSER_UI_SOURCES
+    Source/MainComponent/MainComponentLibraryViews.cpp
+    Source/MainComponent/MainComponentSoundLoad.cpp
+    Source/UI/Library/LibrarySidebarSwitch.cpp
+    Source/UI/Library/LibrarySidebarSwitch.h
+    Source/UI/Library/LibrarySidebarViews.cpp
+    Source/UI/Library/LibrarySidebarViews.h
+    Source/UI/Controls/RangeSlider/RangeSlider.cpp
+    Source/UI/Controls/RangeSlider/RangeSlider.h
+    Source/UI/Library/SoundBrowser/ShapeCurveView.cpp
+    Source/UI/Library/SoundBrowser/ShapeCurveView.h
+    Source/UI/Library/SoundBrowser/ShapeStamp.cpp
+    Source/UI/Library/SoundBrowser/ShapeStamp.h
+    Source/UI/Library/SoundBrowser/SoundBrowserAccessibility.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserComponent.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
+    Source/UI/Library/SoundBrowser/SoundBrowserDrag.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserFolders.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserIcons.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserIcons.h
+    Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserNavigation.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserPacks.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserPainting.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserShapeActions.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserShapes.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserText.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserText.h
+    Source/UI/Library/SoundBrowser/ShapeDragPayload.h
+    Source/UI/Library/SoundBrowser/ShapeDropTarget.h
+    Source/UI/Library/SoundBrowser/SoundDragPayload.h
+    Source/UI/Library/SoundBrowser/SoundDragState.cpp
+    Source/UI/Library/SoundBrowser/SoundDragState.h
+    Source/UI/Library/SoundBrowser/SoundDropAdapter.cpp
+    Source/UI/Library/SoundBrowser/SoundDropAdapter.h
+    Source/UI/Library/SoundBrowser/SoundFilterChipGroup.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterChipGroup.h
+    Source/UI/Library/SoundBrowser/SoundFilterChipRow.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterChipRow.h
+    Source/UI/Library/SoundBrowser/SoundFilterModel.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterModel.h
+    Source/UI/Library/SoundBrowser/SoundFilterPanel.cpp
+    Source/UI/Library/SoundBrowser/SoundFilterPanel.h
+    Source/UI/Library/SoundBrowser/SoundFiltersButton.h
+    Source/UI/Library/SoundBrowser/SoundPreviewFooter.cpp
+    Source/UI/Library/SoundBrowser/SoundPreviewFooter.h
+    Source/UI/Library/SoundBrowser/SoundWaveformView.cpp
+    Source/UI/Library/SoundBrowser/SoundWaveformView.h
+    Source/UI/Settings/SoundPacks/SoundFolderRow.cpp
+    Source/UI/Settings/SoundPacks/SoundFolderRow.h
+)

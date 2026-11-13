@@ -3,6 +3,13 @@
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListPlan.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
+#include "UI/Layout/SpaceClaimingButton.h"
+#include "UI/Mixer/MixerHeader/MixerIconButton.h"
+#include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -15,8 +22,8 @@ class GraphEditor;
 // MixerInsertList and laid out directly under it.
 //
 // One row per ACTIVE slot, in slot order: the target bus's name (click to retarget -- the same menu
-// also carries a ticked "Mono" item), a small rotary level knob, a small rotary pan knob, an "M"
-// mute toggle, a PRE/POST toggle and an `x` remove; then a "+ Send" row while the strip has a free
+// also carries a ticked "Mono" item), a small rotary level knob, a small rotary pan knob, a bypass icon
+// toggle, an "M" mute toggle, a PRE/POST toggle and an `x` remove; then a "+ Send" row while the strip has a free
 // slot. Each mutation is ONE AppUndoManager::recordGraphAndMacroChange around synth::MixerSends'
 // Core flows (which have no undo of their own), exactly as MixerInsertList wraps the insert
 // splices.
@@ -28,7 +35,9 @@ class GraphEditor;
 // parameters this list is still attached to.
 namespace synth::ui {
 
-class MixerSendList : public juce::Component {
+class MixerSendList
+    : public juce::Component
+    , public juce::TooltipClient {
 public:
     MixerSendList();
     ~MixerSendList() override;
@@ -56,7 +65,11 @@ public:
      *  can size canvas cards. */
     std::function<juce::AudioProcessorGraph::NodeID()> createBus;
 
-    /** Drag-reorder a row -- `fromRow`/`toRow` are VISIBLE row indices (positions in
+    /** The row menu's "Show <bus> on canvas" item: the uuid of the bus strip the send feeds. The owner selects that
+     * module and brings its card into view. */
+    std::function<void(const juce::String& moduleUuid)> onFocusModule;
+
+    /** Drag-reorder a row -- fired ONCE, on release; `fromRow`/`toRow` are VISIBLE row indices (positions in
      *  `entries_`, same addressing as removeRow/retargetRow above). Supplied by MixerPanelComponent,
      *  the one component that owns both the AppUndoManager (for ONE
      *  recordGraphTimelineAndMacroChange step, docs/mixer/sends-and-buses.md#reordering-sends) and
@@ -66,7 +79,37 @@ public:
      *  which is what moveRow() below uses to decide whether to fire onMutated(). */
     std::function<bool(juce::AudioProcessorGraph::NodeID, int fromRow, int toRow)> moveSendRow;
 
+    /** Fired just before a drag's commit, with the dropped row's final index and where it was drawn
+     *  (this list's coordinates). The commit normally rebuilds the mixer and destroys this list, so
+     *  the panel keeps the settle and hands it to the NEW list's startSettleFrom(). */
+    std::function<void(int finalRow, float fromY)> onSettlePending;
+
+    /** Glides row `rowIndex` from `fromY` into its slot (the settle of a drop this list did not see). */
+    void startSettleFrom(int rowIndex, float fromY);
+
     int getPreferredHeight() const noexcept;
+
+    // ---- Keyboard row focus (docs/mixer/panel.md#keyboard-navigation-and-accessibility) ----
+    // Row indices address the visible rows, like the test seams below. The panel owns which row is
+    // focused and draws its ring; this list only scrolls it into view and answers questions about it.
+    int getRowCount() const noexcept { return (int)entries_.size(); }
+    /** -1 clears; any other row is scrolled into the section's frame. */
+    void setFocusedRow(int rowIndex);
+    int getFocusedRow() const noexcept { return focusedRow_; }
+    /** The motion's view of the list: every row's key, and the rows on screen ("+ Send" excluded) in this list's
+     *  coordinates. See MixerRowsMotion. */
+    std::vector<juce::String> entryKeys() const;
+    std::vector<ExitEnterListRow> motionRows() const;
+    /** Row `rowIndex`'s bounds in this list's coordinates; empty when out of range. */
+    juce::Rectangle<int> getRowBounds(int rowIndex) const;
+    /** What a screen reader says for the row: "Send to Reverb Bus, -6.0 dB". Empty when out of range. */
+    juce::String describeRow(int rowIndex) const;
+    /** Moves the row's level by `deltaDb` (clamped to the parameter's range) as ONE undo step, through
+     *  the same change-gesture bracket a knob drag uses. False when the row has no level parameter. */
+    bool nudgeLevel(int rowIndex, float deltaDb);
+
+    /** The tooltip for whatever part of a row the pointer is over. */
+    juce::String getTooltip() override;
 
     /** Drops every SliderParameterAttachment and this list's own graph pointers -- called
      *  from MixerColumnComponent::unbindFromGraph(), i.e. BEFORE a graph-replacing mutation frees
@@ -89,6 +132,13 @@ public:
     void togglePreFaderForRow(int rowIndex);
     /** Flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
     void toggleMuteForRow(int rowIndex);
+    /** Flips row `rowIndex`'s bypass bit via synth::setSendBypassed, one recordGraphAndMacroChange -- the bypass
+     *  button's click and the panel's bypass key (B) both land here. */
+    void toggleBypassForRow(int rowIndex);
+    /** Names the bypass key for the buttons' tooltips ("B"); null leaves the tooltips without a key. */
+    std::function<juce::String()> bypassShortcutText;
+    /** The row's real bypass button. Null out of range. */
+    MixerIconButton* getBypassButtonForTest(int rowIndex) const;
     /** Flips row `rowIndex`'s mono bit via synth::setSendMono, one recordGraphAndMacroChange
      *  -- the target menu's "Mono" item and this class's own headless test seam both call this. */
     void toggleMonoForRow(int rowIndex);
@@ -97,8 +147,10 @@ public:
     /** The real mutation behind a completed drag -- calls the moveSendRow callback and, on
      *  success, onMutated(), same shape as every other row mutation's mutateAndNotify. A synthesized
      *  test drag (mouseDown/mouseDrag past the threshold/mouseUp on the name area) reaches this
-     *  through the real mouse path; a test that wants to skip the gesture can call it directly. */
-    void moveRow(int fromRow, int toRow);
+     *  through the real mouse path; a test that wants to skip the gesture can call it directly.
+     *  onMutated() normally rebuilds the mixer and destroys this list: nothing may follow moveRow(). The
+     *  panel holds its own stale-check rebuild while moveSendRow runs, so the list outlives that call. */
+    bool moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     /** Modules whose Key input this strip may feed (synth::enumerateKeySendTargets). */
     std::vector<juce::AudioProcessorGraph::NodeID> availableKeyTargets() const;
@@ -121,8 +173,8 @@ public:
      *  inspect the built menu (item count, an item's text) or invoke an item's action directly,
      *  instead of the real showMenuAsync(). A null hook restores the real behaviour. */
     void setShowMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showMenuHook_ = hook ? std::move(hook)
+                             : [](juce::PopupMenu& m) { m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
     }
 
     void paint(juce::Graphics& g) override;
@@ -132,24 +184,35 @@ public:
      *  click-vs-drag decision is deferred to here/mouseUp rather than taken in mouseDown. */
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    /** The target-name area is a grab handle: the grab cursor on hover and during the drag. */
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
 
-    /** Test seam: the insertion boundary a synthesized drag is currently hovering, or -1 when
-     *  no drag is live -- lets a test assert the insertion line without decoding paint() output. */
-    int getDragInsertionRowForTest() const noexcept { return draggingRow_ ? dragInsertionRow_ : -1; }
+    /** Test seams for the reorder drag: whether a row is lifted or still gliding, where a row's
+     *  content is drawn (its top in this list's coordinates), and Esc delivered through the listener
+     *  a real key press reaches. */
+    bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
+    int getRowTopForTest(int rowIndex) const { return (int)std::lround(rowTop(rowIndex)); }
+    /** Whether the row is gliding into its slot, and where it is being drawn right now. */
+    bool isSettlingForTest() const noexcept { return rowDrag_.isReordering(); }
+    /** The last startSettleFrom() this list received: row -1 if none. */
+    struct SettleForTest {
+        int row = -1;
+        float fromY = 0.0f;
+    };
+    SettleForTest getLastSettleForTest() const noexcept { return lastSettle_; }
+    bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
 
 private:
     static constexpr int kRowHeight = 20;
-    static constexpr int kKnobWidth = 20;
-    static constexpr int kPanKnobWidth = 20;
-    static constexpr int kToggleWidth = 30;
-    static constexpr int kMuteWidth = 18;
+    static constexpr int kKnobWidth = 18;
+    static constexpr int kPanKnobWidth = 18;
+    static constexpr int kToggleWidth = 26;
+    static constexpr int kMuteWidth = 16;
+    static constexpr int kBypassWidth = 16;
     static constexpr int kRemoveWidth = 14;
     // Painted (not a real component) only when a row is mono -- see paint()'s own comment.
     static constexpr int kMonoMarkerWidth = 6;
-    // Pixel distance a name-area press must cross before it commits to a reorder drag rather
-    // than the click that opens the target menu -- same value/reasoning as
-    // TimelineTrackHeaderComponent's own kRowDragThreshold.
-    static constexpr float kRowDragThreshold = 4.0f;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;
@@ -161,7 +224,9 @@ private:
         // MixerColumnComponent's own "M" button type/LookAndFeel (setClickingTogglesState(false),
         // manual setToggleState mirroring the strip's own mute button convention) so mute gets the
         // same real hit area, accessibility role and on/off colouring with no new ad-hoc paint.
-        std::unique_ptr<juce::TextButton> muteButton;
+        std::unique_ptr<SpaceClaimingButton<juce::TextButton>> muteButton;
+        // The bypass icon toggle, sitting between the knobs and the M button.
+        std::unique_ptr<MixerIconButton> bypassButton;
     };
 
     // paint() above draws the "+ Send" row itself (plain text, no component), so VoiceOver/
@@ -175,14 +240,28 @@ private:
     };
 
     int rowIndexAt(juce::Point<int> position) const;
-    /** The insertion BOUNDARY (0..entries_.size()) nearest `y` -- boundary k sits between
-     *  visible rows k-1 and k, and dragging to it means "insert before row k". */
-    int insertionRowAt(int y) const;
+    /** Whether `position` is on a row's target name (a grab handle), not its buttons or knobs. */
+    bool isNameArea(juce::Point<int> position) const;
+    void updateHoverCursor(juce::Point<int> position);
+    /** Where row `rowIndex` is drawn: its static slot, or the animator's place for it while a drag
+     *  is live or settling. */
+    float rowTop(int rowIndex) const;
+    /** Moves every row's child controls to match rowTop() and repaints. */
+    void placeRows();
+    void paintRow(juce::Graphics& g, int rowIndex, float lift);
+    void beginRowDrag(int rowIndex, const juce::MouseEvent& event);
+    void commitRowDrag(int pressedRow);
     void rebuildKnobs();
     void showTargetMenu(int rowIndex);
+    void showRowTargetOnCanvas(int rowIndex);
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
     juce::String targetNameFor(juce::AudioProcessorGraph::NodeID target) const;
+    /** "Bypass Send to Bus 1  (B)", or "Turn ... back on" while it is bypassed. */
+    juce::String bypassTooltip(int rowIndex) const;
+    /** Re-reads row `rowIndex`'s bypass bit into its button, its title and the dimmed look of its controls. */
+    void applyBypassLook(int rowIndex);
+    static juce::String bypassTitle(const synth::MixerSendEntry& entry);
     juce::String targetNameFor(const synth::SendTarget& target) const;
     /** The separator + one "Key: ..." item per legal Key target, calling `choose` on pick. */
     void appendKeyTargetItems(juce::PopupMenu& menu, const std::function<void(synth::SendTarget)>& choose) const;
@@ -196,17 +275,20 @@ private:
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
     AddSendAccessibilityProxy addSendProxy_;
+    /** The painted "+ Send" row fades with the proxy (its opacity is the text's); see paint(). */
+    FadeVisibility addSendFade_{&addSendProxy_};
 
-    // Drag-reorder gesture state. dragFromRow_ is armed on a name-area mouseDown and stays
-    // set for the whole press (drag or not); draggingRow_ flips true only once the threshold is
-    // crossed, exactly like TimelineTrackHeaderComponent's own draggingRow_.
-    int dragFromRow_ = -1;
-    bool draggingRow_ = false;
-    int dragInsertionRow_ = -1;
+    // Drag-reorder gesture. pressedRow_ is armed on a name-area mouseDown and stays set for the whole
+    // press (drag or not); the animator's keys are the rows' indices at the press. The press only
+    // becomes a drag past the animator's threshold, so a plain click still opens the target menu.
+    int pressedRow_ = -1;
+    int focusedRow_ = -1;
+    SettleForTest lastSettle_;
+    ReorderDragSession rowDrag_{*this, [this] { placeRows(); }};
 
     // See setShowMenuHookForTest's own comment.
     std::function<void(juce::PopupMenu&)> showMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     static int liveUnbindCalls_;

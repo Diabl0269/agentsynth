@@ -4,7 +4,7 @@
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
 #include "AudioEngine/AudioEngine.h"
-#include "GraphEditorTestHelpers.h"
+#include "GraphEditorWiredFixtures.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -26,6 +26,7 @@ TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false);
     editor.setDefaultDualIOForNewModules(false); // collapsed ghost: one jack owning both raw legs
 
@@ -33,7 +34,7 @@ TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
 
     DummyDragSource dummySource;
     juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
-                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
+                                                   libraryCursorForGhostTopLeft("Chorus", f.ghostTopLeft));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
@@ -74,7 +75,7 @@ TEST_F(GraphEditorTest, SmartConnectionProbeHonoursTheDualIODefault) {
 
     DummyDragSource dummySource;
     juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
-                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
+                                                   libraryCursorForGhostTopLeft("Chorus", f.ghostTopLeft));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
@@ -255,6 +256,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoA
     GraphEditor editor(engine);
     editor.setSize(1400, 1000);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(false); // no modifier yet
 
     auto f = makeCtrlDragFixture(engine, editor);
@@ -498,6 +500,7 @@ TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) 
     GraphEditor editor(engine);
     editor.setSize(1400, 1000);
     editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
     editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto f = makeCtrlDragFixture(engine, editor);

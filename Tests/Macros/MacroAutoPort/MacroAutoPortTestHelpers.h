@@ -23,7 +23,7 @@ public:
     TestMonoModule()
         : ModuleBase("TestMono", 1, 1) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
@@ -36,7 +36,7 @@ public:
     TestPolyCVModule()
         : ModuleBase("TestPolyCV", 8, 8) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
     int getVisibleInputPortCount() const override { return 1; }
     int getVisibleOutputPortCount() const override { return 1; }
@@ -65,7 +65,7 @@ public:
         : ModuleBase("TestConstant", 1, 1)
         , value_(value) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
             buffer.clear(ch, 0, buffer.getNumSamples());
             if (ch == 0)
@@ -87,7 +87,7 @@ public:
     TestCvProbeModule()
         : ModuleBase("TestProbe", 1, 1) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
         if (buffer.getNumChannels() > 0 && buffer.getNumSamples() > 0)
             lastSample_.store(buffer.getReadPointer(0)[buffer.getNumSamples() - 1], std::memory_order_relaxed);
     }

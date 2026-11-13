@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <rect x="3" y="3" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="10" y="3" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="17" y="3" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="3" y="10" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="10" y="10" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="17" y="10" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="3" y="17" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="10" y="17" width="4" height="4" rx="1" fill="#FFFFFF"/>
-  <rect x="17" y="17" width="4" height="4" rx="1" fill="#FFFFFF"/>
+  <!-- Toolbar icon, view group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
+  <g id="mv">
+    <circle cx="6" cy="6" r="2.1" fill="#FF00FF" />
+    <circle cx="6" cy="12" r="2.1" fill="#FF00FF" fill-opacity=".45" />
+    <circle cx="6" cy="18" r="2.1" fill="#FF00FF" />
+    <circle cx="12" cy="6" r="2.1" fill="#FF00FF" fill-opacity=".45" />
+    <circle cx="12" cy="12" r="2.1" fill="#FF00FF" />
+    <circle cx="12" cy="18" r="2.1" fill="#FF00FF" fill-opacity=".45" />
+    <circle cx="18" cy="6" r="2.1" fill="#FF00FF" />
+    <circle cx="18" cy="12" r="2.1" fill="#FF00FF" fill-opacity=".45" />
+    <circle cx="18" cy="18" r="2.1" fill="#FF00FF" />
+  </g>
 </svg>

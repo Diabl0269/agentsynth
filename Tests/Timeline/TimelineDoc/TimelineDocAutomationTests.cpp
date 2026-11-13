@@ -123,3 +123,101 @@ TEST_F(TimelineDocTest, FromVarClampsBreakpointValuesToTheRangeSnapshot) {
 // The audio half of Clip: an asset reference that must stay inside the bundle, a gain, two fades
 // and a source offset. Everything here is ADDITIVE — kFormatVersion stays 1, an absent field loads
 // as its default, and the path rule is enforced identically by the mutation API and by fromVar.
+
+TEST_F(TimelineDocTest, MoveLaneToTrackKeepsTheLaneAndBumpsRevisionOnce) {
+    const auto from = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto to = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(from, "uuid-filter", "cutoff", makeRange(20.0f, 20000.0f, 1000.0f), 7);
+    ASSERT_TRUE(doc.addBreakpoint(lane, 2.0, 500.0));
+    ASSERT_TRUE(doc.setLaneRecordMode(lane, static_cast<int>(synth::LaneRecordMode::Latch)));
+    const auto revisionBefore = doc.getRevision();
+
+    ASSERT_TRUE(doc.moveLaneToTrack(lane, to));
+
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1);
+    EXPECT_TRUE(doc.getTrack(from)->lanes.empty());
+    ASSERT_EQ(doc.getTrack(to)->lanes.size(), 1u);
+    const auto* moved = doc.getLane(lane);
+    ASSERT_NE(moved, nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane)->id, to);
+    EXPECT_EQ(moved->points.size(), 1u);
+    EXPECT_EQ(moved->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));
+    EXPECT_EQ(moved->paramIndexHint, 7);
+    EXPECT_FLOAT_EQ(moved->range.maxValue, 20000.0f);
+}
+
+TEST_F(TimelineDocTest, MoveLaneToTrackRejectsBadIdsAndTheSameTrack) {
+    const auto from = doc.addTrack(TrackKind::Midi, "A");
+    const auto to = doc.addTrack(TrackKind::Midi, "B");
+    const auto lane = doc.addLane(from, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    const auto revisionBefore = doc.getRevision();
+
+    EXPECT_FALSE(doc.moveLaneToTrack(LaneId{999}, to));
+    EXPECT_FALSE(doc.moveLaneToTrack(lane, TrackId{999}));
+    EXPECT_FALSE(doc.moveLaneToTrack(lane, from));
+    EXPECT_EQ(doc.getRevision(), revisionBefore);
+    EXPECT_EQ(doc.getTrackForLane(lane)->id, from);
+}
+
+// A lane's own height: display data saved with the project, clamped, left out of the file at the default, copied by a
+// duplicate and kept by a retarget.
+TEST_F(TimelineDocTest, SetLaneHeightScaleClampsAndNotifiesOnlyOnAChange) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    EXPECT_EQ(doc.getLane(lane)->heightScale, 1.0);
+    const int before = listener.calls;
+
+    EXPECT_TRUE(doc.setLaneHeightScale(lane, 1.0));
+    EXPECT_EQ(listener.calls, before) << "the value already stored: no notification";
+    EXPECT_TRUE(doc.setLaneHeightScale(lane, 2.0));
+    EXPECT_EQ(doc.getLane(lane)->heightScale, 2.0);
+    EXPECT_EQ(listener.calls, before + 1);
+    EXPECT_TRUE(doc.setLaneHeightScale(lane, 99.0));
+    EXPECT_EQ(doc.getLane(lane)->heightScale, synth::AutomationLane::kMaxHeightScale);
+    EXPECT_TRUE(doc.setLaneHeightScale(lane, 0.01));
+    EXPECT_EQ(doc.getLane(lane)->heightScale, synth::AutomationLane::kMinHeightScale);
+    EXPECT_FALSE(doc.setLaneHeightScale(lane, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.setLaneHeightScale(LaneId{9999}, 2.0));
+}
+
+TEST_F(TimelineDocTest, LaneHeightScaleRoundTripsAndIsOmittedAtTheDefault) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto tall = doc.addLane(track, "uuid-a", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    const auto plain = doc.addLane(track, "uuid-b", "res", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(doc.setLaneHeightScale(tall, 1.5));
+
+    const auto text = juce::JSON::toString(doc.toVar());
+    EXPECT_EQ(text.indexOfWholeWord("heightScale") >= 0, true);
+    EXPECT_EQ(text.fromFirstOccurrenceOf("heightScale", false, false).indexOf("heightScale"), -1)
+        << "written for the one lane that differs, left out for the other";
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(text)));
+    EXPECT_EQ(loaded.getLane(tall)->heightScale, 1.5);
+    EXPECT_EQ(loaded.getLane(plain)->heightScale, 1.0);
+}
+
+TEST_F(TimelineDocTest, ALaneHeightScaleOutOfRangeLoadsClamped) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(doc.setLaneHeightScale(lane, 2.0));
+    auto text = juce::JSON::toString(doc.toVar());
+    text = text.replace("\"heightScale\": 2", "\"heightScale\": 90");
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(text)));
+    EXPECT_EQ(loaded.getLane(lane)->heightScale, synth::AutomationLane::kMaxHeightScale);
+}
+
+TEST_F(TimelineDocTest, DuplicateLaneCopiesTheHeightAndRetargetKeepsIt) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(track, "uuid-a", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    ASSERT_TRUE(doc.setLaneHeightScale(lane, 2.5));
+
+    ASSERT_TRUE(doc.retargetLane(lane, "uuid-b", "pitch", makeRange(0.0f, 10.0f, 0.0f), -1));
+    EXPECT_EQ(doc.getLane(lane)->heightScale, 2.5);
+
+    const auto copy = doc.duplicateLane(lane, "uuid-c", "res", makeRange(0.0f, 1.0f, 0.0f), -1);
+    ASSERT_TRUE(copy.isValid());
+    EXPECT_EQ(doc.getLane(copy)->heightScale, 2.5);
+}

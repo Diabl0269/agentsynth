@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, edit group (Trim: the clip edge cuts the notes, the part past it fades out). Colour roles are placeholders the icon library replaces: #FF00FF = group colour, #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M3.5 8.2H12.8M6 15.8H13.5" stroke-width="3" stroke-linecap="round" fill="none" stroke="#FF00FF" />
+  <path d="M17.2 15.8H20.5" stroke-width="3" stroke-linecap="round" fill="none" stroke="#FF00FF" stroke-opacity="0.45" />
+  <path d="M16.6 3.2V20.8" stroke-width="2.4" stroke-linecap="round" fill="none" stroke="#FFFF00" />
+</svg>

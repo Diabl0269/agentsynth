@@ -51,6 +51,27 @@ TEST(TimelineMidiSourceTest, SoloOnMyTrackPlays) {
     EXPECT_TRUE(blocks[0].second[0].isNoteOn);
 }
 
+// A soloed Audio track recording "Another track" keeps its source playing; otherwise the take records silence.
+TEST(TimelineMidiSourceTest, SoloedTrackInputRecorderKeepsItsSourcePlaying) {
+    Doc doc;
+    ASSERT_TRUE(doc.doc.addNote(doc.clipId, makeNote(1.0, 60, 1.0)).isValid());
+    const auto recorder = doc.doc.addTrack(TrackKind::Audio, "Bounce");
+    ASSERT_TRUE(recorder.isValid());
+    synth::AudioInputChoice input;
+    input.kind = synth::AudioInputChoice::Kind::Track;
+    input.sourceTrack = doc.trackId;
+    ASSERT_TRUE(doc.doc.setTrackAudioInput(recorder, input));
+    ASSERT_TRUE(doc.doc.setTrackSoloed(recorder, true));
+    auto snapshot = doc.snapshot();
+    ASSERT_TRUE(snapshot->anySoloed);
+
+    Harness h;
+    ASSERT_TRUE(h.transport.play());
+    const auto blocks = h.renderBlocks(snapshot.get(), blockOfBeat(1.0) + 1);
+    ASSERT_EQ(blocks.size(), 1u);
+    EXPECT_TRUE(blocks[0].second[0].isNoteOn);
+}
+
 // Solo (or mute) turning on while a note is down is a suppression edge, and must release it.
 TEST(TimelineMidiSourceTest, SuppressionTurningOnFlushesActiveNotes) {
     Doc doc;

@@ -1,0 +1,32 @@
+# Bug: a single module dragged (Cmd held) into an open macro drew its landing outline one frame late, on the exact frame
+# it crossed the border; the next frame corrected it.
+#
+# What a user does (group-drop fixture, zoomed out):
+#   1. Presses on "Oscillator 1" with Cmd held and drags it up to the "Open macro" border.
+#   2. On the very first frame past the border (one move, so this is the crossing frame) the module is already inside the
+#      macro and its landing outline is drawn (PNG 2).
+#   3. A second move to the same point draws the next frame (PNG 2b): it must be identical to PNG 2 (before the fix the
+#      outline jumped between the two). Compare with `cmp`.
+#   4. Releases: the oscillator is a member of "Open macro" (PNG 3).
+# The unit guard is MacroGroupDrop.SingleModuleGhostIsRightOnTheTickItCrosses (Tests/Macros/MacroContainer/).
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/group-drop.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: ""}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:Oscillator 1", x: 58, y: 10, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 520, y: 188, mods: cmd}
+  - screenshot: {name: 2-crossing-frame}
+  - mouseMoveHeld: {id: window, x: 520, y: 188, mods: cmd}
+  - screenshot: {name: 2b-next-frame-same-outline}
+  - mouseUp: {id: window, x: 520, y: 188, mods: cmd}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: "Open macro"}
+  - screenshot: {name: 3-after-drop}

@@ -43,3 +43,81 @@ TEST(AIStateMapperTest, TimelineOpsTrackFieldIsNotOpenSchema) {
     EXPECT_FALSE(trackDef->hasProperty("oneOf"));
     EXPECT_FALSE(trackDef->hasProperty("anyOf"));
 }
+
+// addInstrumentTrack's fields must be expressible through a local grammar (a closed item schema
+// would forbid them outright), each with a concrete type -- never `{}`, never anyOf/oneOf.
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsAddInstrumentTrackFields) {
+    for (const auto& schema : {synth::AIStateMapper::getPatchSchemaWithTimelineOps()}) {
+        auto* rootProperties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
+        ASSERT_NE(rootProperties, nullptr);
+        auto* opItems =
+            rootProperties->getProperty("timelineOps").getDynamicObject()->getProperty("items").getDynamicObject();
+        ASSERT_NE(opItems, nullptr);
+        auto* opProperties = opItems->getProperty("properties").getDynamicObject();
+        ASSERT_NE(opProperties, nullptr);
+
+        EXPECT_TRUE(opProperties->getProperty("op").getProperty("enum", {}).getArray()->contains("addInstrumentTrack"));
+        const std::pair<const char*, const char*> expected[] = {
+            {"instrument", "string"}, {"poly", "boolean"},    {"instrumentId", "integer"},
+            {"inserts", "array"},     {"envelope", "object"}, {"instrumentParams", "object"}};
+        for (const auto& [field, type] : expected) {
+            auto* def = opProperties->getProperty(field).getDynamicObject();
+            ASSERT_NE(def, nullptr) << field;
+            EXPECT_EQ(def->getProperty("type").toString(), type) << field;
+            EXPECT_FALSE(def->hasProperty("anyOf")) << field;
+            EXPECT_FALSE(def->hasProperty("oneOf")) << field;
+        }
+        // The envelope is a closed pair of concrete types: its id binds in the plan, its params are open.
+        const juce::var envelope = opProperties->getProperty("envelope");
+        EXPECT_EQ(envelope.getProperty("properties", {}).getProperty("id", {}).getProperty("type", {}).toString(),
+                  "integer");
+        const juce::var envelopeParams = envelope.getProperty("properties", {}).getProperty("params", {});
+        EXPECT_EQ(envelopeParams.getProperty("type", {}).toString(), "object");
+        EXPECT_TRUE(static_cast<bool>(envelopeParams.getProperty("additionalProperties", {})));
+    }
+}
+
+// setTempo and addMarker must be expressible through the local grammar: their ops in the enum, their
+// "bpm" and "beat" fields typed (no other op-specific field is shared with them).
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsSetTempoAndAddMarker) {
+    const juce::var schema = synth::AIStateMapper::getPatchSchemaWithTimelineOps();
+    auto* opProperties = schema.getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject()
+                             ->getProperty("timelineOps")
+                             .getDynamicObject()
+                             ->getProperty("items")
+                             .getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject();
+    ASSERT_NE(opProperties, nullptr);
+    auto* ops = opProperties->getProperty("op").getProperty("enum", {}).getArray();
+    ASSERT_NE(ops, nullptr);
+    EXPECT_TRUE(ops->contains("setTempo"));
+    EXPECT_TRUE(ops->contains("addMarker"));
+    EXPECT_EQ(opProperties->getProperty("bpm").getProperty("type", {}).toString(), "number");
+    EXPECT_EQ(opProperties->getProperty("beat").getProperty("type", {}).toString(), "number");
+}
+
+// makeSection and placeSection are expressible through the local grammar: both ops in the enum, with the
+// "endBeat" field they add typed ("name", "startBeat" and "beat" are shared with other ops).
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsMakeSectionAndPlaceSection) {
+    const juce::var schema = synth::AIStateMapper::getPatchSchemaWithTimelineOps();
+    auto* opProperties = schema.getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject()
+                             ->getProperty("timelineOps")
+                             .getDynamicObject()
+                             ->getProperty("items")
+                             .getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject();
+    ASSERT_NE(opProperties, nullptr);
+    auto* ops = opProperties->getProperty("op").getProperty("enum", {}).getArray();
+    ASSERT_NE(ops, nullptr);
+    EXPECT_TRUE(ops->contains("makeSection"));
+    EXPECT_TRUE(ops->contains("placeSection"));
+    for (const char* field : {"startBeat", "endBeat", "beat"})
+        EXPECT_EQ(opProperties->getProperty(field).getProperty("type", {}).toString(), "number") << field;
+    EXPECT_EQ(opProperties->getProperty("name").getProperty("type", {}).toString(), "string");
+}

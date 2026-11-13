@@ -13,8 +13,11 @@
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <set>
 
 using synth::ui::FrequencyGrid;
 
@@ -264,17 +267,43 @@ TEST(EQCurveInteraction, AddPointPicksTheSlotMatchingTheClickedFrequency) {
     EXPECT_EQ(comp.addPointAt({highX, (float)kCurveHeight * 0.5f}), 3) << "a high click should take the high shelf";
 }
 
-TEST(EQCurveInteraction, AddPointReturnsMinusOneOnceAllSlotsAreUsed) {
+TEST(EQCurveInteraction, AddPointPastFourTakesTheLowestFreeSlotAsABellUntilAll24AreOn) {
     ParametricEQModule eq;
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
 
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
-        EXPECT_GE(comp.addPointAt({(float)(40 + i * 60), (float)kCurveHeight * 0.5f}), 0) << "point " << i;
+    std::set<int> slots;
+    for (int i = 0; i < ParametricEQModule::kMaxBands; ++i) {
+        const int slot = comp.addPointAt({(float)(10 + i * 15), (float)kCurveHeight * 0.5f});
+        ASSERT_GE(slot, 0) << "point " << i;
+        slots.insert(slot);
+        if (i >= ParametricEQModule::kOriginalBands)
+            EXPECT_EQ(eq.getBandType(slot), synth::eq::BandType::Peak) << "a band past four is a Bell";
+    }
+    EXPECT_EQ(slots.size(), (size_t)ParametricEQModule::kMaxBands) << "every point took its own slot";
 
-    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kNumBands);
-    EXPECT_EQ(comp.addPointAt({200.0f, 50.0f}), -1) << "a fifth point has nowhere to go";
-    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kNumBands);
+    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kMaxBands);
+    EXPECT_EQ(comp.addPointAt({200.0f, 50.0f}), -1) << "a 25th point has nowhere to go";
+    EXPECT_EQ(eq.getEnabledBandCount(), ParametricEQModule::kMaxBands);
+}
+
+// A slot past the fourth that is on is a point like any other: it is drawn, can be hit, selected and removed.
+TEST(EQCurveInteraction, ASlotPastFourThatIsOnIsAPointTheCurveReaches) {
+    ParametricEQModule eq;
+    eq.setBandFreq(9, 1000.0f);
+    eq.setBandGain(9, 9.0f);
+    eq.setBandEnabled(9, true);
+    EQCurveComponent comp(eq);
+    comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
+    const float x = EQCurveComponent::freqToXStatic(1000.0f, (float)kCurveWidth);
+    const float y = EQCurveComponent::dbToYStatic(9.0f, (float)kCurveHeight);
+    EXPECT_EQ(comp.hitTestBand({x, y}), 9);
+    EXPECT_EQ(comp.getAccessibilityValueText(), "No band selected, 1 of 24 bands on");
+    comp.selectBandRelative(+1); // the first press selects slot 1
+    comp.selectBandRelative(+30);
+    EXPECT_EQ(comp.getSelectedBand(), ParametricEQModule::kMaxBands - 1);
+    comp.removeBand(9);
+    EXPECT_FALSE(eq.isBandEnabled(9));
 }
 
 TEST(EQCurveInteraction, RemoveBandDisablesItAndClearsSelection) {
@@ -294,7 +323,7 @@ TEST(EQCurveInteraction, RemoveBandDisablesItAndClearsSelection) {
     // Removing an already-disabled or out-of-range band is a no-op, not a crash.
     EXPECT_NO_FATAL_FAILURE(comp.removeBand(band));
     EXPECT_NO_FATAL_FAILURE(comp.removeBand(-1));
-    EXPECT_NO_FATAL_FAILURE(comp.removeBand(ParametricEQModule::kNumBands));
+    EXPECT_NO_FATAL_FAILURE(comp.removeBand(ParametricEQModule::kMaxBands));
 }
 
 TEST(EQCurveInteraction, HitTestFindsEnabledHandlesAndIgnoresDisabledOnes) {
@@ -340,7 +369,7 @@ TEST(EQCurveInteraction, DragMovesTheBandInBothFrequencyAndGain) {
     EXPECT_LE(clamped[(size_t)band].gainDb, ParametricEQModule::kMaxGainDb + 0.01f);
 
     EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(-1, {10.0f, 10.0f}));
-    EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(ParametricEQModule::kNumBands, {10.0f, 10.0f}));
+    EXPECT_NO_FATAL_FAILURE(comp.dragBandTo(ParametricEQModule::kMaxBands, {10.0f, 10.0f}));
 }
 
 TEST(EQCurveInteraction, ScrollAdjustsQMultiplicatively) {
@@ -369,7 +398,7 @@ TEST(EQCurveInteraction, ScrollAdjustsQMultiplicatively) {
     EXPECT_NEAR(eq.getBandSnapshots()[(size_t)band].q, ParametricEQModule::kMinQ, 0.05f);
 
     EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(-1, 1.0f));
-    EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(ParametricEQModule::kNumBands, 1.0f));
+    EXPECT_NO_FATAL_FAILURE(comp.nudgeBandQ(ParametricEQModule::kMaxBands, 1.0f));
 }
 
 TEST(EQCurveInteraction, EveryEditIsBracketedByExactlyOneGesture) {
@@ -398,7 +427,7 @@ TEST(EQCurveInteraction, EveryEditIsBracketedByExactlyOneGesture) {
     EXPECT_EQ(ends, 3);
 
     // A rejected add (all slots full) must not open a gesture at all.
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kMaxBands; ++i)
         comp.addPointAt({(float)(40 + i * 60), 60.0f});
     const int startsAfterFill = starts;
     EXPECT_EQ(comp.addPointAt({210.0f, 60.0f}), -1);
@@ -487,7 +516,7 @@ TEST(EQCurveTest, PaintSmokeWithAllFourBandsAndSpectrum) {
 
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
-    for (int i = 0; i < ParametricEQModule::kNumBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kOriginalBands; ++i)
         comp.addPointAt({(float)(40 + i * 80), (float)(40 + i * 20)});
 
     ASSERT_TRUE(comp.getShowSpectrum());
@@ -585,4 +614,81 @@ TEST(EQWindowTest, PaintSmoke) {
     juce::Image img(juce::Image::ARGB, 700, 400, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(window.paintEntireComponent(g, false));
+}
+
+// A muted EQ's spectrum falls to the floor: its curve ticks through spectrumTickForTest after the audio has run through
+// ModuleBase::processBlock past the click-free mute fade.
+namespace {
+
+constexpr double kMuteRate = 44100.0;
+constexpr int kMuteBlock = 512;
+constexpr float kMuteFloor = -80.0f;
+
+void feedTone(ModuleBase& m, int blocks, long& phase) {
+    juce::MidiBuffer midi;
+    for (int b = 0; b < blocks; ++b) {
+        juce::AudioBuffer<float> buffer(std::max(m.getTotalNumInputChannels(), m.getTotalNumOutputChannels()),
+                                        kMuteBlock);
+        buffer.clear();
+        for (int i = 0; i < kMuteBlock; ++i, ++phase) {
+            const auto v =
+                (float)(0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 1000.0 * (double)phase / kMuteRate));
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.setSample(ch, i, v);
+        }
+        m.processBlock(buffer, midi);
+    }
+}
+
+float muteDbPeak(const std::vector<float>& db) { return *std::max_element(db.begin(), db.end()); }
+
+} // namespace
+
+// The EQ's own spectrum used to skip a silent buffer and leave the last picture painted.
+TEST(MuteSpectrumFallEQ, TheEqCurveFallsToTheFloorAfterMuteAndPaintsIt) {
+    ParametricEQModule eq;
+    eq.prepareToPlay(kMuteRate, kMuteBlock);
+    long phase = 0;
+    feedTone(eq, 20, phase);
+    EQCurveComponent view(eq);
+    view.setBounds(0, 0, 400, 180);
+    view.setShowSpectrum(true);
+    for (int i = 0; i < 12; ++i)
+        view.spectrumTickForTest();
+    ASSERT_GT(muteDbPeak(view.getSpectrumDbForTest()), -30.0f) << "the tone must show before the mute";
+
+    eq.setMuted(true);
+    feedTone(eq, 40, phase);
+    int repaints = 0;
+    bool lastRepainted = false;
+    for (int i = 0; i < 120; ++i) {
+        lastRepainted = view.spectrumTickForTest();
+        repaints += lastRepainted ? 1 : 0;
+    }
+    EXPECT_FLOAT_EQ(muteDbPeak(view.getSpectrumDbForTest()), kMuteFloor);
+    EXPECT_GT(repaints, 5) << "the fall is painted frame by frame";
+    EXPECT_FALSE(lastRepainted) << "once at rest, an idle patch repaints nothing";
+}
+
+TEST(MuteSpectrumFallEQ, TheLastFallingFrameIsPainted) {
+    ParametricEQModule eq;
+    eq.prepareToPlay(kMuteRate, kMuteBlock);
+    long phase = 0;
+    feedTone(eq, 20, phase);
+    EQCurveComponent view(eq);
+    view.setShowSpectrum(true);
+    for (int i = 0; i < 12; ++i)
+        view.spectrumTickForTest();
+    eq.setMuted(true);
+    feedTone(eq, 40, phase);
+    int lastPainted = -1;
+    int firstAtFloor = -1;
+    for (int i = 0; i < 120; ++i) {
+        if (view.spectrumTickForTest())
+            lastPainted = i;
+        if (firstAtFloor < 0 && muteDbPeak(view.getSpectrumDbForTest()) <= kMuteFloor)
+            firstAtFloor = i;
+    }
+    ASSERT_GE(firstAtFloor, 0);
+    EXPECT_GT(lastPainted, firstAtFloor - 1) << "the frame that reaches the floor is painted";
 }

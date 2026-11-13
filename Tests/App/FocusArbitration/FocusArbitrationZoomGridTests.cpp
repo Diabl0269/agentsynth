@@ -1,7 +1,9 @@
 // Concern: grid (snap) commands and zoom commands routed by resolveEditSurface(), the
 // inactive-while-hidden gate, and the Preferences natural-scrolling/scroll-to-zoom toggles
 // reaching both the timeline and the roll live.
+#include "../../TestWait.h"
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 // ============================================================================
 // 10. Grid (snap) commands — one shared value, gated on the panel being on screen
@@ -41,6 +43,17 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
     EXPECT_EQ(view.snap, Snap::SixtyFourth);
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHundredTwentyEighth, false));
     EXPECT_EQ(view.snap, Snap::HundredTwentyEighth);
+
+    // The triplet and dotted values are set the same way, and the cycle then stays inside their kind.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetEighthTriplet, false));
+    EXPECT_EQ(view.snap, Snap::EighthTriplet);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
+    EXPECT_EQ(view.snap, Snap::SixteenthTriplet);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetQuarterDotted, false));
+    EXPECT_EQ(view.snap, Snap::QuarterDotted);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
+    EXPECT_EQ(view.snap, Snap::HalfDotted);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHundredTwentyEighth, false));
 
     // Cycle: +1 goes FINER, -1 COARSER, and both CLAMP rather than wrapping. The finest division is
     // now 1/128, so that is where a held key parks.
@@ -145,7 +158,8 @@ TEST_F(FocusArbitrationTest, GridAndTimelineZoomCommandsAreInactiveWhileThePanel
     for (auto cmdId :
          {AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter, AppCommands::snapSetEighth,
           AppCommands::snapSetSixteenth, AppCommands::snapSetThirtySecond, AppCommands::snapSetSixtyFourth,
-          AppCommands::snapSetHundredTwentyEighth, AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
+          AppCommands::snapSetHundredTwentyEighth, AppCommands::snapSetEighthTriplet, AppCommands::snapSetEighthDotted,
+          AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
         EXPECT_FALSE(commandIsActive(mc, cmdId)) << "command " << (int)cmdId;
         EXPECT_FALSE(cm.invokeDirectly(cmdId, false)) << "command " << (int)cmdId;
     }
@@ -195,12 +209,13 @@ TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheR
     prefs.setNaturalScrollingEnabled(false);
     // ChangeBroadcaster posts its notification, so the loop has to turn once — the same idiom the
     // triggerClick() tests above use.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getTimelinePanel().isScrollInverted(); });
     EXPECT_TRUE(mc.getTimelinePanel().isScrollInverted());
     EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
 
     prefs.setNaturalScrollingEnabled(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !mc.getTimelinePanel().isScrollInverted(); });
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
     EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
 }
@@ -232,14 +247,15 @@ TEST_F(FocusArbitrationTest, ZoomScrollPreferenceReachesTheTimelineAndTheRoll) {
     EXPECT_TRUE(prefs.isZoomScrollUpZoomsInEnabled()) << "default ON";
 
     prefs.setZoomScrollUpZoomsInEnabled(false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getTimelinePanel().isZoomScrollInverted(); });
     EXPECT_TRUE(mc.getTimelinePanel().isZoomScrollInverted());
     EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
     // The two wheel preferences are independent: inverting the zoom must not touch plain scrolling.
     EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
 
     prefs.setZoomScrollUpZoomsInEnabled(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !mc.getTimelinePanel().isZoomScrollInverted(); });
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getTimelinePanel().isZoomScrollInverted());
     EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
 }

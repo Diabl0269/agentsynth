@@ -1,0 +1,56 @@
+# Feature: one panel gap (6 px) sits under every button row of a Custom LFO and a Custom Filter, and a snippet row in the
+# module library keeps the Yours badge at the far right with the count left of it and a long name cut short.
+#
+# What a user does: sets the Filter to Custom and the LFO to Custom, saves each as a snippet (Cmd+Opt+S, a short name
+# for one and a very long one for the other), looks at the Snippets list, then at the LFO in Sync and in Free.
+record: true
+save_project: custom-card-gaps-and-snippet-row
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 493, y: 391}                        # the LFO Shape combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 880, y: 301}                        # select the Filter card
+  - key: {keys: "cmd+alt+s"}
+  - wait: {settleMs: 600}
+  - type: {text: "Wah", target: name}
+  - key: {keys: return, target: "Save Snippet"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 450, y: 301}                        # select the LFO card
+  - key: {keys: "cmd+alt+s"}
+  - wait: {settleMs: 600}
+  - type: {text: "A very long snippet name that has to be cut short before the count", target: name}
+  - key: {keys: return, target: "Save Snippet"}
+  - wait: {settleMs: 800}
+  - screenshot: {id: window, name: library-snippets}
+  - mark: {check: 1, name: snippet-row-badge-right}
+  - screenshot: {id: "card:Filter", name: filter-custom-card}
+  - screenshot: {id: "card:LFO", name: lfo-custom-sync}
+  - click: {id: window, x: 428, y: 439}                        # Free
+  - wait: {settleMs: 600}
+  - screenshot: {id: "card:LFO", name: lfo-custom-free}
+  - mark: {check: 2, name: lfo-custom-free-gaps}

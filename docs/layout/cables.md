@@ -27,19 +27,45 @@ records carrying geometry, signal kind, source category, activity and bypass sta
 
 This is load-bearing: computing the drawn curve and the clickable curve separately means they drift
 apart the first time either is tweaked, and clicks silently miss the wire. For the same reason the
-bezier lives in exactly one place, `GraphEditor::buildCablePath()`, which must stay identical to
-`AppLookAndFeel::drawConnectionWire`'s default curve. Cable geometry is canvas-space, so zoom and
+bezier lives in exactly one place, `synth::ui::makeCablePath()` (`Source/UI/Layout/CableCurve.h`),
+which `GraphEditor::buildCablePath()` (paint and hit-testing) and `AppLookAndFeel::drawConnectionWire`'s
+fallback curve both call. Cable geometry is canvas-space, so zoom and
 pan alone can never move a cable — only a graph edit invalidates it.
 
+**Direction rule.** `p1` is always the output (source) end and `p2` the input (destination) end, fixed
+by the caller (the in-progress drag wire swaps its endpoints when the drag started on an input). The
+cable leaves `p1` heading right and enters `p2` heading right, from the left. Forward cables use a
+handle of half the run, at least 50 px (`kCableMinHandle`) but never more than half the vertical gap, so
+anything 100 px or more apart is the plain half-run curve, a near-vertical cable still bulges out
+sideways, and a short hop (a macro's interior jack to a member) doesn't overshoot into a kink. Backward
+cables use a handle of the full backward run clamped to 50 to 300 px (`kCableMaxBackHandle`), which keeps
+the loop out of the output visibly to the right of its card, so a cable never leaves over its own card or arrives from below.
+
 `buildVisibleCables()` returns a **memoized `const&`**: it is rebuilt only when
-`GraphEditor::repaintCanvas()` invalidates the memo (see [rendering](rendering.md)), not on every
-call. **The returned reference must never be stored across a `repaintCanvas()`, a `timerCallback()`
+`GraphEditor::repaintCanvas()` invalidates the memo or the routing set changes (see
+[rendering](rendering.md#per-frame-work-does-not-grow-with-the-patch)), not on every call and not on every tick; the
+tick refreshes cable activity in place. **The returned reference must never be stored across a `repaintCanvas()`, a `timerCallback()`
 or a graph edit** — any of those can invalidate and rebuild the backing vector.
 
 A collapsed macro re-anchors the cables crossing its boundary in a post-process pass at the end of
 `rebuildVisibleCables()` — see [macro-cards](macro-cards.md#cables-re-anchor-around-a-collapsed-macro).
 That pass runs AFTER the knob-landing pass below, so a cable that is both knob-bound and crosses a
-collapsed macro's boundary ends up re-anchored to the macro card.
+collapsed macro's boundary ends up re-anchored to the macro card. The pass lives in
+`GraphEditorMacroCableAnchors.cpp`.
+
+### Nested macros
+
+With nested macros (see [macro-cards](macro-cards.md#nested-macros)), every hidden node maps to its **outermost collapsed ancestor**: the collapsed
+macro with no collapsed ancestor of its own, whose card is the only one on screen for it. The usual
+rules then apply to that card:
+
+- both ends under the same card (however deep each sits) → the cable is dropped;
+- ends under two different cards → both ends anchor, each on its own card;
+- one hidden end → it anchors on that card.
+
+A port jack anchor is used only when the hidden end is a port of that outermost macro itself; a
+nested child's port hidden under the card takes the card's directional edge anchor, like any other
+interior member.
 
 `buildVisibleCables()` itself, one step further out than `rebuildVisibleCables()`'s own post-passes,
 overlays `MacroCrossingAnimator::applyTo()` on the freshly-rebuilt vector — the FRO41 cable-slide
@@ -47,7 +73,54 @@ tween a Cmd-drag that crosses a macro's hull can arm on finalize (see
 [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41)).
 It lives at the memo-wrapper level, not inside `rebuildVisibleCables()`, purely so the tween can
 overwrite a matched cable's endpoints without teaching that enumeration anything about macros; while
-no tween is live it is a no-op and the memo's own live-graph anchors show through unchanged.
+no tween is live it is a no-op and the memo's own live-graph anchors show through unchanged. It offsets
+each matched endpoint from its LIVE anchor, so a slide started mid-drag stays attached to the moving card.
+
+### Retracting removed cables
+
+A cable that goes away does not vanish, and one that comes back does not blink in. `CableRetractAnimator`
+(`Source/UI/Graph/CableRetractAnimator/`) is pure state, armed by `GraphEditor::retractCablesGoneSince(before,
+growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`), and driven by one 220 ms tween.
+
+- **Retract.** A cable no longer drawn pulls back into its source jack (`easeInOutCubic`), staying fully opaque
+  until 60% of the tween and then fading to 0 linearly. Callers: `disconnectCable`, `disconnectPort`,
+  `removeModulator` (and so the mod dot panel's remove button), `MacroGroupController::deleteMacroPortManually`
+  (through the `GraphCanvasHost` seam), a delete that removes a macro (its cables retract while the
+  card shrinks away) and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away
+  animates too. The ghosts paint in `GraphContentComponent::paint` after the live cables.
+- **Grow.** Undo and redo pass `growAdded`, and so does a cable dropped on a macro's port under Reduce Motion
+  (`GraphEditor::armMacroPortSlide`, which slides it from the drop point otherwise; see
+  [ports](../macros/ports.md#a-cable-dropped-on-a-folded-card)): a cable in the graph now that was not drawn before grows from its
+  source jack out to its destination (`easeOutCubic`) while its opacity rises over the first 40%. The cable is real
+  already, so the normal cable pass skips its id and the growing wire is drawn instead (no flow dots or knob until
+  it lands). More than 16 cables in one step skip the grow (a mass undo shows them at once). Undoing the mod dot
+  panel's remove button grows the cable back this way.
+- **Chains.** A change that turns one cable into two (a module inserted on a cable) or two into one (the middle of a
+  chain deleted and healed) is neither a retract nor a grow: `Options::morphChains` matches the cables on the jacks
+  they share, and the new halves run out of the old cable, or the old halves run onto the new one, instead
+  ([split and join](insert-motion.md#cables-around-an-inserted-or-deleted-module)). `GraphEditor::morphCablesSince` arms
+  only that (the insert and the delete call it); `retractCablesGoneSince` (undo, redo, disconnects) also detects it.
+  A cable that fits neither shape keeps its retract or grow.
+- **Reduce Motion** is an 80 ms alpha fade, out or in, with no geometry change. **Animations: Off** shows the result
+  at once.
+- Each frame repaints only the area the moving wires were and are drawn in (`CableRetractAnimator::paintArea`).
+
+New does not go through undo/redo and does not animate; a project opened on screen draws its cables out from their
+source jacks instead, each once both its ends have appeared ([project load reveal](animation.md#project-load-reveal)).
+
+## Cable layer
+
+By default every connected cable is painted in `GraphContentComponent::paint`, before the module cards (children), so
+a cable passes behind a card it crosses. Two things change that:
+
+- **The wire being dragged out of a jack** is stroked in `paintOverChildren`, so it is in front of every card for the
+  whole drag.
+- **Settings -> Preferences -> Graph -> "Draw cables on top of modules"** (`"cablesOnTop"`, OFF by default;
+  `GraphEditor::cablesOnTop`) moves the whole connected-cable pass to `paintOverChildren`, after the gliding card
+  snapshots and before the knob-landing dots.
+
+Both the default and the on-top layer run the one `GraphContentComponent::paintCables`, so they cannot drift. Hit-testing is geometric
+([Hit-testing](#hit-testing)) and does not depend on the layer; a click inside a card still goes to the card.
 
 ## Knob landing
 
@@ -76,10 +149,16 @@ predictable offset from the ring, never a hand-rolled approximation.
 `ModulationTarget::channelIndex`), set for every cable kind so they also serve as the
 [hover-correlation](#hover) key.
 
-**Fallback — the gutter jack, unchanged.** A knob on a hidden tab page (`getModTargetKnobAnchor`
-returns `nullopt` the same way `getModRingSliderIndex` does) is not knob-bound for layout purposes
-either — `ModuleComponent::isInputJackKnobBound` says false, so the jack stays drawn and a cable
-still lands there, rather than painting a landing dot over empty card.
+**Fallback when the knob is out of view.** A knob on a tab that is not shown paints no ring and no dot, and its
+cable cannot end on it. A target that also has a gutter jack (most Wavetable knobs) keeps that jack drawn on every tab
+(`knobAnchorForVisibleInputJack` never binds a tabbed knob's jack, so the jack column is the same on every tab), and
+its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
+Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
+left edge, 10 px in, level with the tab strip (an unpicked Drum Kit pad: the top of the pad panel). Several parked
+cables on one card each take their own place, 6 px apart in channel order and kept inside the card
+(`ModuleComponent::parkedCableEnd`, ranked in `GraphEditor::reanchorCablesToKnobTargets`), so they never meet at one
+point. A parked end draws no landing dot. A knob-only target of a folded More row ends at the left edge of the More
+button instead (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
 re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.
@@ -91,13 +170,43 @@ knob-bound target, a click within a few px of the dot claims the same
 begin/drag/endConnectionDrag gesture a real input jack starts — see
 `ModuleComponent::wantsCablePickupGestureFor`/`handleCablePickupGesture`, wired onto the knob itself
 (`CardKnobSlider::wantsCablePickupGesture`/`onCablePickupGesture`) rather than into
-`getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob.
+`getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob. The Filter's
+and LFO's morph map sliders land Morph X / Y cables the same way, the dot pushed out past the slider's modulation bar
+([custom-filter](../modules/custom-filter.md#card)).
+When the knob has at least one attenuverter routing, a plain press on the dot is NOT a pickup any
+more: it is the [mod-dot drag](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot)
+(the amount of the last-chosen source), and **Cmd+press** keeps the cable pickup. A dot with no
+attenuverter routing (a direct or poly cable, or a bare knob's drop spot) still starts the cable drag
+on a plain press.
 
 **Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
-moved/resized card automatically (both already call `repaintCanvas()`). A Wavetable tab-page switch
+moved/resized card automatically (both already call `repaintCanvas()`), and a knob moved inside its card (the on-card
+layout editor) through `ModuleComponent::childBoundsChanged`. A Wavetable tab-page switch
 changes which knob is visible without moving or resizing the card, so it explicitly calls
 `GraphEditor::notifyModuleContentChanged()` (a public wrapper around the otherwise-private
 `repaintCanvas()`) to invalidate the memo too.
+
+## The end glides when the More row toggles
+
+Folding or unfolding a card's More row moves where a cable lands on a control in that row: between the knob's ring
+(`getModTargetKnobAnchor`) and the left edge of the More button (`moreRowButtonForKnobOnlyJack`). The end does not
+jump. `CardBody::setMoreUnfolded` asks `CableEndGlide` (`Source/UI/Graph/GraphEditor/CableEndGlide.{h,cpp}`, owned by
+`graph_editor_paint::CanvasMemo`) to record where each cable landing on the card is drawn, and for the row's fade time
+(160 ms in, 110 ms out) `buildVisibleCables()` moves `p2` from that old place to the live anchor
+(`easeOutCubic` opening, `easeInCubic` closing; a plain short linear move under Reduce Motion; at once under
+Animations Off or off screen). Only the drawn end moves, never a card's bounds. The old place is stored relative to
+its card, so a card the canvas pushes aside during the fade carries the end with it, and a toggle that reverses a
+glide in flight starts from where the end is on screen. A knob-only control (no gutter jack, like Pan) of a row that is fading out already answers for the folded row
+(`CardBody::isFoldingAway`), so its cable heads for the More button from the first frame and the landing dot goes with it.
+A control that also has a gutter jack keeps its knob until the fade ends, since the jack joins the gutter column only
+then, so when a fold begins `CableEndGlide::begin` asks the card where that jack will sit (`ModuleComponent::foldedJackCentre`:
+the drawn column with the jack added back, by the same math as `getPortCenter`) and the end glides to that place, so it
+does not jump when the fade ends. Each frame repaints the canvas and the glide stops repainting when it ends.
+
+A tab switch (`CardBody::selectTab`) and a Drum Kit pad pick move ends the same way through
+`ModuleComponent::glideCableEnds` (`CableEndGlide::beginMove`): the old tab's cables leave their knobs for the parked
+place or the gutter jack while the new tab's cables arrive on their knobs, over the fade-in time with `easeOutCubic`,
+a plain short move under Reduce Motion and at once under Animations Off.
 
 ## Hit-testing
 
@@ -108,6 +217,16 @@ method *returns* the distance **along** the path and writes the nearest point ou
 the perpendicular distance is `pos.getDistanceFrom(nearestPoint)`.
 
 Ties go to the later cable, matching paint order: mod wires draw over audio wires.
+
+## A refused drop says why
+
+A cable released on a jack that cannot take it (an output on an output, or a MIDI jack against an audio or CV jack:
+Poly MIDI's Poly Out carries CV, so the Oscillator's MIDI input refuses it) makes no cable, and `GraphEditor::endConnectionDrag`
+reports the reason through a toast with error severity (`GraphEditor::onDropRefused`, wired in `MainComponentSetup.cpp`; [toast](chrome.md#toast)), so a refusal is as visible as the cable it did not make. Nothing is said when the cable lands somewhere else
+on the same release (a collapsed macro's card, a plugin's knob picker).
+
+Every knob that can be modulated takes a cable (the rest are wiring switches and choices, which have no knob to drop
+on), so a drop on a knob is never refused for being a knob.
 
 ## Hover
 
@@ -127,12 +246,142 @@ stale `VisibleCable` across a graph edit would dangle conceptually — ports mov
 `GraphEditor::setHoveredModTarget` to its destination — `ModuleComponent`'s ring paint reads it back
 and highlights that knob's ring. The same state runs the other way: hovering the knob itself (its
 `CardKnobSlider`'s `onHoverChanged`) sets the same target, which the cable's own hover treatment
-checks. See [modulation rings on knobs](../modules/modulation.md#modulation-rings-on-knobs) for the
+checks. Only the cable under the pointer is drawn hovered: of several cables into one knob, hovering one lights that
+cable and the knob's ring, not its siblings (the knob's own hover lights every cable into it). See [modulation rings on knobs](../modules/modulation.md#modulation-rings-on-knobs) for the
 ring-side treatment and the hover chip.
+
+## Port connections panel
+
+A plain click on any jack (audio, CV or MIDI; a regular module, a macro boundary port node, Track In, Audio Output) opens a
+small panel in a window beside the jack that lists what the jack is wired to. A port dot on a **collapsed macro card**
+does the same (see below).
+It is built from the [mod dot menu](../modules/modulation.md#the-mod-dot-menu)'s parts: the same window (`ModDotPanelFrame`
+through the shared `launchInFrame`, which grows out of the jack and shrinks back, closes on a click outside or Esc), width
+(`ModDotPage::kWidth`), palette, row look and remove button.
+
+- **One row per connection.** A collapsed stereo pair keeps a raw edge per leg (or a mono source feeds both legs), which
+  the canvas draws as separate cables landing on one jack. `listPortConnections` merges cables with the same far module,
+  far jack, signal and kind into one row (`PortConnection::group` keeps every cable), so the list shows the Filter once;
+  removing the row removes all of them as one undo step (`GraphEditor::disconnectCable`'s second argument). The canvas
+  still draws every cable. Test: `PortPanelStereoPairRowsTests.cpp`.
+- **Row names.** A row reads "<card title> . <jack>", or "<card title> . <knob>" for a cable that lands on a knob. A
+  modulated plugin parameter (it has a modulation slot, no knob target and no named jack) reads exactly as the Mod
+  Matrix names it, "<card title> - <parameter>" (`hostedSlotLabel`, the one rule both lists call), never "In 18".
+  Test: `HostedPluginCardModTests.cpp` (every row against the Mod Matrix).
+- **Click.** A left press and release under 3 px apart that is the first click of its run. A drag from the jack still
+  makes a cable and opens nothing; the right-click menu is unchanged. A second click on the same jack closes the panel.
+- **Double-click.** With *Double-click port to disconnect* on, a jack with exactly one cable waits one double-click
+  interval before opening, so the double-click that disconnects it never flashes the panel. A jack with none or several
+  cables opens at once, and a double-click on one with several keeps the panel and disconnects nothing. The knob-bound
+  CV jack's double-click is the mod dot's and is unchanged. A double-click on a modulation cable's middle removes that
+  chain through `ModDotController::removeChain`, the app window's one removal, so it asks what the mod dot's Remove asks
+  when it would delete an LFO. (Disconnect Cable and the port panel's row still cut the chain without asking.)
+- **Collapsed macro cards.** A plain click on a port dot of a collapsed macro card (`MacroCardComponent::mouseUp`) opens
+  the same panel for that port's node, anchored on the dot, listing the cables drawn to the card: an inlet's outside
+  cables (its input jack), an outlet's cables out of the card. The title is the port's own name. The card's port node has
+  no visible module card, so the controller takes a `PortRef` plus an anchor rectangle
+  (`PortPanelController::jackReleased(anchor, area, ref, e)`, `open(anchor, area, ref)`); every other rule is the jack's. `ModuleComponent::mouseUp` (and `MacroCardComponent::mouseUp` for a collapsed card's port dot) hands a jack release to `GraphEditor::getPortPanel()`, and the double-click branch asks it first (a jack with several cables keeps the panel); no card opens its own popup. The panel's row motion is `ExitEnterRowSlots`, shared with the mod dot's rows.
+  Hovering a dot draws a ring, not a delete: the press no longer deletes. The '+', '-', the chevron and a shift/cmd click
+  keep priority over the click; a
+  press that becomes a drag moves the card as before. With *Double-click port to disconnect* on, a double-click on a port
+  dot with exactly one cable disconnects it (`MacroCardComponent::disconnectOnlyCableAt`, one undo step) and the macro
+  stays closed; with none or several cables, or anywhere else on the card, it still expands the macro. Either way the
+  card's own panel or a deferred open is folded away first. Remove, Disconnect all, Add destination
+  and Pick on canvas behave as for any jack; the Add destination preview starts at the card's dot, and the cable
+  highlight matches the cables drawn to the card by id.
+- **Content.** The title reads "Module · port (N connections)" ("1 connection", "No connections yet"). One row per
+  cable: a swatch in the cable's colour (`GraphEditor::colourForCable`), "other module · other port" and a remove button.
+  A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows at
+  two or more as one icon-only button at the right end of the title row (a 24 px `ModDotLinkButton::IconOnly` with the coloured
+  unlink glyph, `ModDotGlyph::Unlink`), centred in the row and aligned with the rows' remove column; there is no footer
+  row. Its name and tooltip are "Disconnect all connections", it is a focus stop with the accent focus ring, and it fades
+  in and out with the rows (instant under Reduce Motion). The mod dot's sources panel has the same button in its title row. On a macro's port (a collapsed card's dot or an expanded macro's boundary port node) a **Delete port**
+  link (tooltip "Delete this macro port") sits under the other buttons. The rows come from `listPortConnections`, a filter over `buildVisibleCables()` by the jack's visible index
+  (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
+  connection still show the panel; with none, "Add destination" is its main action.
+- **Modulation rows.** A cable that is a modulation (an attenuverter chain, `PortConnection::isModulation()`) is not a plain
+  row: it is the mod dot sources panel's own row, `ModDotSourceRow`, embedded in `PortConnectionRow`. Rows are told apart
+  per cable, never per module type, so a jack that carries both (an Oscillator's output into an audio input and onto a
+  knob) lists its audio cables as plain rows and its modulations as mod rows, side by side. The panel is
+  `PortConnectionsPanel::kWidth` (336 px) wide, 24 px wider than the knob's panel, so a mod row is one 30 px line
+  (`PortConnectionRow::kHeight`, `ModDotSourceRow::Look{kHeight, kElasticName, timeline}`): the swatch, the name (elastic,
+  up to `ModDotSourceRow::kNameMax` = 90 px, less what the fader needs), the amount bar (`kMinBar` = 48 px minimum, with
+  the scroll bar's 10 px in), the
+  typed percent (click it or press Return), the curve chip, **show in timeline** and the remove button. Plain rows are the
+  same 30 px. It
+  shows from a destination jack (the far end is the modulator) and from a source jack such as an LFO's output (the far
+  end is the knob or jack it drives). `listPortConnections` fills each modulation's `attenuverterId`, its `modSource`
+  and the knob it lands on (`modCard`, `modChannel`, macro ports looked through) from `knobModChains`, the list the
+  knob's panel filters (one read per listing, the editor's cache first). Every control is wired by
+  `wireModSourceRow` (`ModDot/ModSourceRowWiring.cpp`), the one wiring the sources panel uses too, so the two cannot
+  drift: a drag of the bar is one undo step (`beginModAmountGesture` / `commitModAmountGesture`), a typed value is one
+  step (`applyModAmount`), the chip opens the same curve editor (`wireModCurveChip`) and show in timeline is
+  `ModDotController::revealSource` for that knob, the same call as the mod dot panel's (hidden when no routing names a
+  knob). Its name and tooltip are "Show <far end> in timeline". Rows of both heights move through the shared row motion
+  (`ExitEnterRowSlots` with a height per row): every row is `PortConnectionRow::kHeight` and a removed one shrinks from it; Cmd+Z grows it back.
+  Audio, MIDI and plain CV rows are unchanged. Keys: Tab walks remove, bar, percent, chip and show in timeline in each
+  mod row, left to right (`ModDotSourceRow` sets an explicit focus order, since sorting by top edge would visit the
+  tall timeline button before the fader; the knob's rows read the same way); Up and Down move between rows.
+  **Names.** `PortConnection::label` is what a row shows and `fullLabel` is always "<module> . <port>". The rule: the
+  module is dropped only where it names the panel's own card (an LFO modulating one of its own knobs reads "Rate"); on
+  another card's name `label` keeps its module, so the row reads in full whenever it fits. A name too wide for its area first gives up its module and shows only the port (`ModDotSourceRow::shownName`: "Pad 2
+  level", since the port tells two rows of one module apart), then is elided with an ellipsis if still too wide; and the name area
+  (`ModDotSourceRow::nameArea()`, a plain row's whole row) carries the full name as its tooltip, title and the remove
+  button's name, on both this panel and the knob's panel (`KnobModSource::fullName`, `spokenName()`).
+  Tests: `PortPanelModControlsTests.cpp`. Its `EverySurfaceThatListsAModulationOffersAmountPercentAndCurve` lists every
+  surface that shows a modulation (the knob's sources panel and the port panel from either end; a new surface that
+  lists modulations is one more entry there). Its output-row tests cover an LFO on two knobs, an Oscillator used as
+  audio and as a mod source, the drag, the chip, the reveal against the mod dot panel's, the Tab order and the
+  undo. FRO1665 / FRO1676 add a long-name case (elided text, tooltip, title), the panel height at 1, 8 and 32 rows under
+  a cap, and the one-line row fit (no overlap, nothing clipped, bar >= 48 px) in every built-in theme.
+- **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
+  through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step), "Delete port" is
+  `MacroGroupController::deleteMacroPortManually` (one undo step, the cables retract; the node is gone, so the panel
+  closes). The panel follows
+  the graph on the editor's 30 Hz tick, so an undo brings a row back. Removing the last connection keeps the panel open.
+- **Canvas highlight.** Hovering a row, or keyboard-focusing its remove button, draws that cable as hovered and dims
+  every other cable to 35%, wire, glow, casing, travelling dots and knob landing dot alike (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
+  pointer or focus leaves the row, the row goes, or the panel closes.
+- **Add destination.** Under the rows sits a split button in the mod dot's look
+  (`SplitButton`): **Add destination** and **Pick on canvas**. Add destination swaps the list for a search page in the
+  same panel, a cross-fade (the list's alpha 1 to 0, the page's 0 to 1) while the panel's height settles to the
+  page's: 160 ms ease-out going in, 110 ms ease-in coming back; under Reduce Motion an 80 ms fade with the height
+  changing at once. Focus lands in the search field. A **Back** link, Esc (after the search is cleared) or a pick
+  returns to the list. The search page (`PortTargetSearchPage`, modelled on the mod dot's Add source list) lists what
+  the jack could be cabled to with the cable drop's rules: an output lists input jacks and an input lists output
+  jacks of other modules (never its own), MIDI only with MIDI. A target already wired to the jack is greyed with
+  "Connected" and is not pickable. When the jack is a modulation output it also lists the other modules' knobs
+  ("Filter 1 · Cutoff", from `getModulationTargets()`; a knob already modulated by it shows "Connected"). Modules are
+  ordered nearest this jack's card first (canvas distance, title breaking a tie); a module with exactly one target is
+  ONE row "Module · port", one with several is a foldable group with its targets underneath. Typing uses the
+  [shared search](chrome.md#shared-search) (matched letters highlighted, aliases searched but not painted) and adds
+  "New <module>" rows (the New tag) for authorable module types with a compatible jack, once per class. Down from the
+  field enters the rows, Up/Down walk them, Return with nothing focused picks the best match (lowest `searchScore`,
+  existing targets before New rows), Esc clears the query and then goes back. Hovering or focusing a row previews a
+  dashed cable from the jack to its target on the canvas (`PortPanelController::setPreview`, painted over the cables;
+  it clears when the pointer or focus leaves, or the panel closes).
+- **Picking.** A pick is one undo step and goes through `PortConnector` (`Source/UI/Graph/PortPanel/`), a friend of
+  `GraphEditor`: a jack uses `connectJacks`, the **same function the cable drag's drop calls**, so a poly fan, MIDI, a
+  mono CV jack through its attenuverter, the macro-boundary auto ports and a Track In's auto channel behave exactly
+  as dropping a cable there would; a knob uses `GraphEditor::connectModulationSource` at the mod dot's new-source
+  depth; a "New <module>" row creates the module beside this jack's card (right of an output, left of an input; it
+  joins this card's macro) and cables its first compatible jack, all in the same undo step. The new cable grows out of
+  its source jack (the [cable grow-back](animation.md#motion-rules) armed after the connect), the panel swaps back to
+  the list and the new row grows in.
+- **Pick on canvas.** The mod dot's `ModDotCanvasPicker` in its jack mode: a layer over the canvas outlines the
+  eligible jack (or knob) under the pointer, a press on it connects, Esc stops. The panel stays open while picking
+  (`keepOpenOnOutsideClick`); the eligible set is the list of compatible targets above.
+- **Keyboard.** Tab visits each row's remove button, the two halves of the split button (Left/Right hop between
+  them), then "Disconnect all" and "Delete port" (Up/Down move between them), Return/Space press, Esc steps back (stop picking, clear
+  the search, return to the list, close). Every control has a name and a tooltip.
+
+Code: `Source/UI/Graph/PortPanel/` (`PortPanelController`, `PortConnectionsPanel`, `PortConnectionRow`,
+`PortConnectionList`, `PortTargetList`, `PortTargetSearchPage`, `PortConnector`); the card hands a jack release and a jack double-click to the controller from
+`ModuleComponentInteraction.cpp`. Motion: [animation](animation.md#motion-rules) (Port connections panel row).
 
 ## Right-click menu
 
-Right-clicking a cable opens a menu with **Disconnect Cable**. Before this the only way to remove a
+Right-clicking a cable opens a menu with **Disconnect Cable** and, on a mono modulation cable, **Edit curve...** (see [the modulation curve](../modules/modulation.md#the-modulation-curve); built by `GraphEditorCableMenu.cpp`, poly bus cables get no item). With the preference Show curves on cables on, a 26 x 18 chip sits beside each attenuverter cable's midpoint knob (`GraphEditorCableCurveChips.cpp`); a press on it opens the box and never starts a knob drag. It is mouse only. Before this the only way to remove a
 connection was to right-click one of its *ports*, which is not where users aim.
 
 `GraphEditor::disconnectCable()` removes every graph edge behind the cable as **one** undoable

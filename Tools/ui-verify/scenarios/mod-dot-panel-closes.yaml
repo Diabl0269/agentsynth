@@ -1,0 +1,27 @@
+# The mod dot panel closes with its fade: Esc and a click on empty canvas both take it off the screen and leave the dot
+# reachable. In this hidden test mode the windows are invisible, so it cannot show that the fading panel stays above the
+# app window (the closing click raises the app window); that ordering is checked by PopupDismissPaths in the unit tests.
+#
+# What a user does:
+#   1. Opens a project with an LFO modulating the Filter's Cutoff and clicks the Cutoff mod dot: the panel opens.
+#   2. Presses Esc: the panel fades away.
+#   3. Opens it again and clicks an empty part of the canvas: it fades away again.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: "Cutoff modulation, 1 source"}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - screenshot: {id: window, name: mod-dot-panel-open}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: false, within_ms: 2000}
+  - screenshot: {id: window, name: mod-dot-panel-after-escape}
+  - click: {id: "Cutoff modulation, 1 source"}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - click: {id: "card:Audio Output", x: 140, y: 90}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: false, within_ms: 2000}
+  - screenshot: {id: window, name: mod-dot-panel-after-click-away}

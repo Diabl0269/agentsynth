@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and patches
+    url: https://agentsynth.app/discord
+    about: Share patches, ask questions and give feedback on the Agent Synth Discord.

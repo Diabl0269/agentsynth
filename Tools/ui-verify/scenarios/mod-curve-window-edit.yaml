@@ -1,0 +1,51 @@
+# The Enlarge window of a modulation curve does what its hint says: a double-click on the line adds a point, a drag
+# moves it, a right-click opens the point menu, a double-click on a point removes it, the ring on a sloping segment
+# bends it, the Snap button rounds new points to the grid, and undo glides the bend back.
+#
+# What a user does:
+#   1. Opens the Mod Matrix, the curve box and its Enlarge window (both end dots drawn whole, line edge to edge).
+#   2. Double-clicks the line: a point appears. Drags it up and right: it follows.
+#   3. Right-clicks it: the point menu opens (a click elsewhere closes it). Double-clicks it: it is gone.
+#   4. Clicks Snap (an icon button, lit while on, with the Grid label beside its box) and double-clicks the line: the
+#      new point sits on a grid line.
+#   5. Drags the ring on the sloping segment: the line bends. Cmd+Z: the bend glides back.
+record: true
+motion: true
+save_project: fro1764-curve-window
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: modCurve}
+  - wait: {}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - mark: {check: 1, name: window-ends-whole}
+  - click: {id: modCurveWindowEditor, x: 140, y: 247, clicks: 2}
+  - wait: {}
+  - mark: {check: 2, name: double-click-adds-point}
+  - drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 140, fromY: 247, toX: 200, toY: 150}
+  - wait: {}
+  - mark: {check: 3, name: drag-moves-point}
+  - click: {id: modCurveWindowEditor, x: 200, y: 150, button: right}
+  - wait: {}
+  - mark: {check: 4, name: right-click-opens-point-menu}
+  - click: {id: modCurveWindowEditor, x: 60, y: 30}
+  - wait: {}
+  - click: {id: modCurveWindowEditor, x: 200, y: 150, clicks: 2}
+  - wait: {}
+  - mark: {check: 5, name: double-click-removes-point}
+  - click: {id: modCurveSnap}
+  - wait: {}
+  - mark: {check: 6, name: snap-button-lit-grid-label-beside-box}
+  - click: {id: modCurveWindowEditor, x: 140, y: 247, clicks: 2}
+  - wait: {}
+  - mark: {check: 7, name: snap-places-on-grid}
+  - drag: {from: modCurveWindowEditor, to: modCurveWindowEditor, fromX: 309, fromY: 124, toX: 309, toY: 170}
+  - wait: {}
+  - mark: {check: 8, name: ring-bends-segment}
+  - glide: {name: undo-bend, frames: 14, do: {key: {keys: "cmd+z", target: modCurveWindow}}}
+  - wait: {}
+  - mark: {check: 9, name: undo-glides-bend-back}

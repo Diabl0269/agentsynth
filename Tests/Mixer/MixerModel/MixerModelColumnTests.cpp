@@ -141,14 +141,16 @@ TEST(MixerModelColumnTests, ColumnNameAndColourComeFromTheOwningMacroWhenBoxed) 
     synth::TimelineDoc doc;
     synth::MacroSet macros;
 
-    const auto trackA = doc.addTrack(synth::TrackKind::Audio, "Drums");
-    const auto rigA = buildLinearChannelRigMMT(graph, doc, trackA);
-    ASSERT_NE(rigA.strip, nullptr);
+    // An orphan strip (no track feeds it) keeps the macro colour; a single-track channel takes the track's colour
+    // instead (MixerModelColumnColourTests.cpp).
+    juce::String stripUuid;
+    auto* strip = addPlainNodeMMT(graph, "Channel Strip", stripUuid);
+    ASSERT_NE(strip, nullptr);
 
     synth::Macro macro;
     macro.name = "Drum Bus";
     macro.colour = juce::Colour(0xffaa00aa);
-    macro.members.push_back(rigA.strip->properties["uuid"].toString());
+    macro.members.push_back(stripUuid);
     macros.add(macro);
 
     const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);

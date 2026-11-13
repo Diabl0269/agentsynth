@@ -6,6 +6,7 @@
 // Shared PianoRollFixture, CountingRoll and mouse-gesture helpers live in PianoRollTestHelpers.h.
 
 #include "PianoRollTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 // ============================================================================
 // 3. PianoRollComponent
@@ -264,9 +265,11 @@ TEST(PianoRollEditingTest, MoveAndResize) {
     ASSERT_TRUE(f.undo.canUndo());
 }
 
-// ---- Velocity scrub: Cmd+drag, ~1/px, clamped, one step ----
+// ---- Velocity scrub: Ctrl+Alt+drag (Ctrl on macOS), ~1/px, clamped, one step ----
 
 TEST(PianoRollEditingTest, VelocityScrub) {
+    // Ctrl+Alt scrubs on every platform (plain Ctrl is the macOS-only alternative).
+    const int scrubChord = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
@@ -282,9 +285,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     const juce::Point<float> anchor((float)rect.getCentreX(), (float)rect.getCentreY());
     const juce::Point<float> dragged(anchor.x, anchor.y - 15.0f); // up 15 px -> +15 velocity
 
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, scrubChord));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, scrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, scrubChord));
 
     const auto* updated = f.doc.getNote(id);
     ASSERT_NE(updated, nullptr);
@@ -298,9 +301,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     // Clamped at 127.
     f.roll.getSelectionForTest().setSelection({id});
     const juce::Point<float> draggedFar(anchor.x, anchor.y - 400.0f);
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, scrubChord));
+    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, scrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, scrubChord));
     EXPECT_EQ(f.doc.getNote(id)->velocity, 127);
 }
 
@@ -549,7 +552,7 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     // hardcoded default: bare "q", lower-cased.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
     EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (q)")) << tooltip;
-    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
+    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).contains("(Esc)"));
 }
 
 // The QuantiseLength chip's twin of the test above: same isQuantiseEnabled() gate as the Quantise
@@ -572,7 +575,8 @@ TEST(PianoRollEditingTest, QuantiseLengthButtonEnabledStateAndTooltip) {
     // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
     // hardcoded default: Alt+Q.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseLengthButtonBounds().getCentre());
-    EXPECT_TRUE(tooltip.startsWith("Quantize note lengths to the grid (Alt + Q)")) << tooltip;
+    const auto altQ = ShortcutManager::keyPressToDisplayString(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
+    EXPECT_TRUE(tooltip.startsWith("Quantize note lengths to the grid (" + altQ + ")")) << tooltip;
 }
 
 // ---- Edits clamped to the clip window ----

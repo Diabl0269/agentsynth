@@ -17,6 +17,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/OfflineTransportDriver.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <memory>
@@ -32,6 +33,8 @@ constexpr int kBlockSize = 512;
 
 constexpr const char* kOscUuid = "a0100000-0000-0000-0000-000000000001";
 constexpr const char* kFilterUuid = "a0100000-0000-0000-0000-000000000002";
+constexpr const char* kLfoUuid = "a0100000-0000-0000-0000-000000000004";
+constexpr const char* kAttenuverterUuid = "a0100000-0000-0000-0000-000000000005";
 
 // Osc -> Filter -> Audio Output. Nothing here has to be audible: every assertion in this file is
 // about a parameter's value, and the graph exists so those parameters belong to nodes a real
@@ -43,7 +46,11 @@ juce::String buildPatchJson() {
            kOscUuid + R"(", "params": {"waveform": "Sine", "level": 1.0}},
             {"id": 2, "type": "Filter",       "uuid": ")" +
            kFilterUuid + R"("},
-            {"id": 3, "type": "Audio Output", "uuid": "a0100000-0000-0000-0000-000000000003"}
+            {"id": 3, "type": "Audio Output", "uuid": "a0100000-0000-0000-0000-000000000003"},
+            {"id": 4, "type": "LFO",          "uuid": ")" +
+           kLfoUuid + R"("},
+            {"id": 5, "type": "Attenuverter", "uuid": ")" +
+           kAttenuverterUuid + R"("}
         ],
         "connections": [
             {"src": 1, "srcPort": 0, "dst": 2, "dstPort": 0},
@@ -352,4 +359,36 @@ TEST(AutomationApplierTest, PublishingAnEmptyDocClearsBindings) {
     f.driver->renderBlocks(8);
     EXPECT_NEAR(Fixture::denormalised(level), 0.25, 1e-5)
         << "removing a lane must leave the parameter where automation last put it, not reset it";
+}
+
+// ============================================================================
+// Amount lanes: a routing's Attenuverter `amount`, played like any lane
+// ============================================================================
+
+// An amount lane of -50% over beats [8, 16) and 0 elsewhere (Hold points, as the sections migration writes
+// them) on a hidden Attenuverter: the applier drives its `amount` through -1..1 with no engine code of its own.
+TEST(AutomationApplierTest, AnAmountLaneDrivesTheAttenuvertersAmountBipolar) {
+    Fixture f;
+    ASSERT_TRUE(f.build());
+    constexpr int kHold = static_cast<int>(synth::BreakpointCurve::Hold);
+    ASSERT_TRUE(
+        synth::ui::writeAmountLane(f.doc, f.trackId, kAttenuverterUuid,
+                                   {{0.0, 0.0, 0.0f, kHold}, {8.0, -0.5, 0.0f, kHold}, {16.0, 0.0, 0.0f, kHold}}));
+    f.publish();
+    ASSERT_EQ(f.bindingCount(), 1);
+    auto* amount = f.param(kAttenuverterUuid, "amount");
+    ASSERT_NE(amount, nullptr);
+
+    ASSERT_TRUE(f.driver->getTransport().play());
+    int before = 0, inside = 0, after = 0;
+    f.driver->renderToBeat(20.0, [&](const juce::AudioBuffer<float>&, const synth::BlockTimeInfo& info) {
+        if (!info.playing)
+            return;
+        const bool on = info.startPpq >= 8.0 && info.startPpq < 16.0;
+        EXPECT_NEAR(Fixture::denormalised(amount), on ? -0.5 : 0.0, 1.0e-5) << "at beat " << info.startPpq;
+        (info.startPpq < 8.0 ? before : (on ? inside : after))++;
+    });
+    EXPECT_GT(before, 100);
+    EXPECT_GT(inside, 100);
+    EXPECT_GT(after, 50);
 }

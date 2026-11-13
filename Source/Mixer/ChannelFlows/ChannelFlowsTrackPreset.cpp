@@ -7,6 +7,7 @@
 
 #include "ChannelFlowsInternal.h"
 #include "MacroSet.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include <algorithm>
 
@@ -25,13 +26,16 @@ void addUniqueId(std::vector<NodeID>& ids, NodeID id) {
         ids.push_back(id);
 }
 
-// Resolves a macro's uuid-keyed membership to live NodeIDs, dropping any member that no longer
+// Resolves a macro's uuid-keyed membership -- its own members plus every nested child macro's
+// (MacroSet::descendantMembers) -- to live NodeIDs, dropping any member that no longer
 // resolves (the same "skip what's gone" posture reachFrom/absorbSideInputs take elsewhere).
-std::vector<NodeID> resolveMembers(juce::AudioProcessorGraph& graph, const Macro& macro) {
+std::vector<NodeID> resolveMembers(juce::AudioProcessorGraph& graph, const MacroSet& macros,
+                                   const juce::String& macroId) {
     std::vector<NodeID> members;
+    const auto uuids = macros.descendantMembers(macroId);
     for (auto* node : graph.getNodes()) {
         const juce::String uuid = node->properties["uuid"].toString();
-        if (uuid.isNotEmpty() && macro.hasMember(uuid))
+        if (uuid.isNotEmpty() && uuids.count(uuid) > 0)
             addUniqueId(members, node->nodeID);
     }
     return members;
@@ -63,6 +67,7 @@ bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
     return false;
 }
 
+// Members are the channel macro's own plus any nested child macro's (a child's modules are inside the channel).
 // Seeds from every connection landing on a member of `channelMacroId` whose SOURCE is not itself a
 // member (this scans every member's incoming edges rather than only the macro's own ports, which
 // subsumes the ported case for free and also catches a boundary crossing with auto-porting
@@ -81,7 +86,7 @@ std::vector<NodeID> collectOutsideModulatorsForTrackPreset(juce::AudioProcessorG
     if (macro == nullptr)
         return result;
 
-    const auto members = resolveMembers(graph, *macro);
+    const auto members = resolveMembers(graph, macros, channelMacroId);
     if (members.empty())
         return result;
 
@@ -113,7 +118,7 @@ std::vector<NodeID> collectOutsideModulatorsForTrackPreset(juce::AudioProcessorG
         auto* node = graph.getNodeForId(id);
         const juce::String uuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
         if (uuid.isNotEmpty()) {
-            if (const auto* otherMacro = macros.findByMember(uuid))
+            if (const auto* otherMacro = nearestChannelMacro(graph, macros, uuid))
                 if (otherMacro->id != channelMacroId && isChannelMacro(*otherMacro, graph))
                     continue; // a member of a DIFFERENT channel macro: also that channel's business
         }

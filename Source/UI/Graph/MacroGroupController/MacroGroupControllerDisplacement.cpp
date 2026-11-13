@@ -1,0 +1,490 @@
+// MacroGroupControllerDisplacement.cpp
+//
+// Making room when a macro or module grows: the sibling "layout units" at one nesting level, moving a
+// unit rigidly, and the inside-out pass that pushes neighbours clear of a grown hull or card. The
+// geometry itself is the pure LayoutUtil::resolveDisplacement; this unit only turns the canvas into
+// units and applies the resulting moves. MacroGroupController is declared in MacroGroupController.h.
+// (docs/layout/layout.md#making-room-when-something-grows)
+
+#include "MacroGroupController.h"
+#include "MacroGroupControllerInternal.h"
+#include "MacroNesting.h"
+#include "ModelCardBounds.h"
+
+#include "MacroOwnerIndex.h"
+#include "Mixer/MasterSplice.h"
+
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/HierarchicalArrange.h"
+#include "UI/Layout/LayoutUtil.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+
+#include <algorithm>
+#include <set>
+#include <utility>
+
+namespace {
+using synth::LayoutUtil::LayoutUnit;
+
+juce::String nodeKey(juce::AudioProcessorGraph::NodeID id) { return "n:" + juce::String((juce::int64)id.uid); }
+juce::String macroKey(const juce::String& macroId) { return "m:" + macroId; }
+} // namespace
+
+// Units are the things that move as one: a loose module, or a whole macro (open: its hull, collapsed: its card).
+// A module hidden inside a collapsed macro is never a unit -- the card stands in for it -- and a macro's port
+// widgets live docked inside its hull, so they never are either. The pass runs on every edit and canvas frame, so
+// each card's owner comes from one MacroOwnerIndex and every hull is measured against one card map, rather than a
+// search of every macro per card and a fresh card map per hull.
+std::vector<synth::LayoutUtil::LayoutUnit>
+MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
+    const auto& macros = host_.getMacros();
+    if (containerId.isNotEmpty() && (macros.find(containerId) == nullptr || macros.isEffectivelyCollapsed(containerId)))
+        return {};
+
+    const synth::MacroOwnerIndex owners(macros);
+    std::vector<LayoutUnit> units;
+    for (auto* comp : host_.modules()) {
+        // A node removed inside the running change (a swept macro port) keeps its card until the next reconcile, and
+        // that card's processor is already freed: its node must still exist before anything reads the module.
+        if (comp == nullptr || !comp->isVisible() || host_.graph().getNodeForId(comp->getNodeId()) == nullptr ||
+            comp->getModule() == nullptr)
+            continue;
+        const auto uuid = nodeUuidFor(comp->getNodeId());
+        const auto* owner = uuid.isEmpty() ? nullptr : owners.ownerOf(uuid);
+        if ((owner != nullptr ? owner->id : juce::String()) != containerId)
+            continue;
+        if (owner != nullptr && (owner->memberIsPort(uuid) || owners.hiddenByCollapse(uuid)))
+            continue;
+        // The output dock (Master / Rec Tap / Audio Output) is pinned: makeRoomFor never pushes it, the dock is
+        // re-derived to the right of whatever grew instead (GraphEditor::reflowOutputDock).
+        units.push_back(
+            {nodeKey(comp->getNodeId()), comp->getBounds(), synth::isOutputDockProcessor(comp->getModule())});
+    }
+    const auto cards = macro_geometry::cardsByNodeUid(host_);
+    for (const auto& macro : macros.getAll()) {
+        if (macro.parentId != containerId)
+            continue;
+        const auto rect =
+            macro.collapsed ? macroCableAnchorBounds(macro) : macro_geometry::openHullBounds(host_, cards, macro.id);
+        if (!rect.isEmpty())
+            units.push_back({macroKey(macro.id), rect, false, {}, !macro.collapsed});
+    }
+    return units;
+}
+
+namespace {
+// `macroId` and every macro nested under it.
+void collectMacroSubtree(const synth::MacroSet& macros, const juce::String& macroId, std::vector<juce::String>& out) {
+    out.push_back(macroId);
+    for (const auto& child : macros.childrenOf(macroId))
+        collectMacroSubtree(macros, child, out);
+}
+
+// A push or a return moves an open macro without the user touching it, so the spot its card came from moves with it:
+// folding it again still puts the card back by its open-border nudge instead of reading the push as a user move.
+void shiftExpandRecords(synth::MacroSet& macros, const juce::String& unitKey, juce::Point<int> delta) {
+    if (!unitKey.startsWith("m:"))
+        return;
+    std::vector<juce::String> subtree;
+    collectMacroSubtree(macros, unitKey.fromFirstOccurrenceOf("m:", false, false), subtree);
+    for (const auto& id : subtree)
+        if (auto* m = macros.find(id); m != nullptr && m->hasExpandRecord)
+            m->preExpandCardOrigin += delta;
+}
+} // namespace
+
+// Geometry is written synchronously and finally: node x/y, the live component, and (for collapsed macros) the
+// persisted bounds plus the live card. macroHullBounds reads live component bounds, so the inside-out pass in
+// makeRoomFor must never see a stale position.
+void MacroGroupController::moveUnitBy(const juce::String& key, juce::Point<int> delta) {
+    if (delta.x == 0 && delta.y == 0)
+        return;
+
+    auto moveNode = [this, delta](juce::AudioProcessorGraph::NodeID nodeId) {
+        auto* node = host_.graph().getNodeForId(nodeId);
+        if (node == nullptr)
+            return;
+        // One new position, written once to both the node property and the live component.
+        const juce::Point<int> pos = juce::Point<int>((int)node->properties["x"], (int)node->properties["y"]) + delta;
+        node->properties.set("x", pos.x);
+        node->properties.set("y", pos.y);
+        if (auto* comp = host_.moduleComponentFor(nodeId))
+            comp->setTopLeftPosition(pos);
+    };
+
+    if (key.startsWith("n:")) {
+        moveNode(juce::AudioProcessorGraph::NodeID(
+            (juce::uint32)key.fromFirstOccurrenceOf("n:", false, false).getLargeIntValue()));
+        return;
+    }
+
+    auto& macros = host_.getMacros();
+    const auto macroId = key.fromFirstOccurrenceOf("m:", false, false);
+    if (macros.find(macroId) == nullptr)
+        return;
+
+    // Ports dock against the hull afterwards, so they are not moved themselves.
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(macros, macroId)) {
+        const auto* owner = macros.findByMember(uuid);
+        if (owner == nullptr || !owner->memberIsPort(uuid))
+            moveNode(resolveMemberNodeId(uuid));
+    }
+    std::vector<juce::String> subtree;
+    collectMacroSubtree(macros, macroId, subtree);
+    for (const auto& id : subtree) {
+        auto* macro = macros.find(id);
+        if (macro == nullptr || !macro->collapsed)
+            continue;
+        macro->bounds.setPosition(macro->bounds.getPosition() + delta);
+        for (auto* card : host_.macroCards())
+            if (card != nullptr && card->getMacroId() == id)
+                card->setTopLeftPosition(macro->bounds.getPosition());
+    }
+}
+
+// The container a unit sits in: the macro owning a module, or a macro's parent (empty at the top level).
+static juce::String containerOfKey(const MacroGroupController& controller, const synth::MacroSet& macros,
+                                   const juce::String& key) {
+    if (key.startsWith("m:")) {
+        const auto* macro = macros.find(key.fromFirstOccurrenceOf("m:", false, false));
+        return macro != nullptr ? macro->parentId : juce::String();
+    }
+    const auto uuid = controller.nodeUuidFor(juce::AudioProcessorGraph::NodeID(
+        (juce::uint32)key.fromFirstOccurrenceOf("n:", false, false).getLargeIntValue()));
+    const auto* owner = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+    return owner != nullptr ? owner->id : juce::String();
+}
+
+// Inside-out: settle the grower's own level, then, because a pushed neighbour may have widened the enclosing
+// macro's hull, treat that macro as the grower one level up, to the root. Runs inside the caller's undo record.
+// Every push (at every level) is recorded on the grower, on the macro when it is one and in `moduleDisplaced_` when it
+// is a module card, so that collapsing it, removing a port or shrinking the card can offer the neighbours their way
+// back (returnDisplacedNeighbours, reflowForResizedModule).
+// Deferred while a drag applies a macro crossing live: the macro must not slide or push its neighbours under the
+// pointer, so the drop makes the room once the module has landed.
+void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint) {
+    if (makeRoomDeferred_) {
+        if (std::find(deferredMakeRoom_.begin(), deferredMakeRoom_.end(), growerKey) == deferredMakeRoom_.end())
+            deferredMakeRoom_.push_back(growerKey);
+        return;
+    }
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    auto& macros = host_.getMacros();
+    const auto growerMacroId =
+        growerKey.startsWith("m:") ? growerKey.fromFirstOccurrenceOf("m:", false, false) : juce::String();
+    bool movedAny = false;
+    // A hull that grew past the canvas's top-left (a new port, a member dropped in) is clipped and unclickable, so the
+    // grower and then each enclosing macro slide in first; the slide is part of the same glide and undo record.
+    if (!growerMacroId.isEmpty()) {
+        auto holders = macros.ancestorChain(growerMacroId);
+        holders.insert(holders.begin(), growerMacroId);
+        for (const auto& holder : holders)
+            movedAny = (nudgeHullIntoCanvas(holder) != juce::Point<int>()) || movedAny;
+    }
+    juce::String key = growerKey;
+    for (int depth = 0; depth < 64; ++depth) {
+        const auto container = containerOfKey(*this, macros, key);
+        auto units = buildLayoutUnits(container);
+        // The output dock is re-derived right of whatever moved (reflowOutputDock below), so it neither moves nor
+        // blocks here: a neighbour pushed right past the dock must not be sent down because the dock was in its way.
+        units.erase(std::remove_if(units.begin(), units.end(),
+                                   [&key](const LayoutUnit& u) { return u.pinned && u.key != key; }),
+                    units.end());
+        if (depth == 0 && !previousFootprint.isEmpty())
+            for (auto& unit : units)
+                if (unit.key == key)
+                    unit.before = previousFootprint;
+        for (const auto& move : synth::LayoutUtil::resolveDisplacement(key, units)) {
+            const auto unit =
+                std::find_if(units.begin(), units.end(), [&move](const LayoutUnit& u) { return u.key == move.key; });
+            moveUnitBy(move.key, move.delta);
+            shiftExpandRecords(macros, move.key, move.delta);
+            movedAny = true;
+            if (unit == units.end())
+                continue;
+            const synth::Macro::DisplacedNeighbour record{move.key, move.delta, unit->rect.getPosition() + move.delta};
+            // An earlier grower's record of this unit follows it here, so either grower can still send it back.
+            retargetPushRecords(move.key, unit->rect.getPosition(), record.landedAt);
+            if (growerMacroId.isEmpty())
+                moduleDisplaced_[growerKey].push_back(record);
+            else if (auto* grower = macros.find(growerMacroId))
+                grower->displaced.push_back(record);
+        }
+        if (container.isEmpty())
+            break;
+        key = macroKey(container);
+    }
+
+    if (movedAny)
+        refreshAfterMove();
+    // Last, and even when nothing moved: a grown hull that now overlaps or passes the pinned output dock moves the
+    // DOCK (right of everything), never the other way round.
+    host_.reflowOutputDock();
+}
+
+// Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than running a full
+// component reconcile: re-sync the macro cards, re-dock the port widgets, and repaintCanvas() drops the cable memo
+// before repainting.
+void MacroGroupController::refreshAfterMove() {
+    host_.syncMacroCards();
+    dockMacroPortWidgets();
+    host_.reflowOutputDock(); // a moved/returned unit changes what the dock must clear; dock cards are pinned, never
+                              // moved here
+    host_.repaintCanvas();
+}
+
+// The card is seeded at the member union's top-left, which an expand's canvas nudge shifted; if nothing has moved the
+// members since, translating everything back by the nudge puts the card exactly where it was before expanding.
+void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || !macro->hasExpandRecord)
+        return;
+    const auto nudge = macro->expandNudge;
+    const bool untouched = macro->bounds.getTopLeft() == macro->preExpandCardOrigin + nudge;
+    const auto target = macro->bounds.translated(-nudge.x, -nudge.y);
+    macro->hasExpandRecord = false;
+    if ((nudge.x == 0 && nudge.y == 0) || !untouched || target.getX() < 0 || target.getY() < 0)
+        return;
+
+    const auto self = macroKey(macroId);
+    const auto units = buildLayoutUnits(macro->parentId);
+    const bool blocked = std::any_of(units.begin(), units.end(), [&](const LayoutUnit& other) {
+        return other.key != self && target.expanded(synth::LayoutUtil::kCollisionGap).intersects(other.rect);
+    });
+    if (blocked)
+        return;
+    moveUnitBy(self, {-nudge.x, -nudge.y});
+    refreshAfterMove();
+}
+
+// A neighbour comes home only if the user has not touched it (still exactly where the push left it) and its old spot
+// is clear of every other unit at that level, the shrunken macro or card included. Newest push first, so a unit
+// pushed twice retraces its steps and each landedAt is checked against where the last return left it. Shared by
+// macros and module cards; answers the records that only lacked room, in push order.
+MacroGroupController::DisplacedRecords MacroGroupController::returnRecordedNeighbours(const DisplacedRecords& records,
+                                                                                      bool& movedAny) {
+    // Newest first. A cascade tail (C pushed by B pushed by A) is checked while B still sits on C's home, so a single
+    // pass would strand it: repeat over what is still blocked until a pass returns nothing.
+    DisplacedRecords kept(records.rbegin(), records.rend());
+    for (size_t pass = 0; pass <= records.size() && !kept.empty(); ++pass) {
+        DisplacedRecords stillBlocked;
+        bool movedThisPass = false;
+        for (size_t i = 0; i < kept.size(); ++i) {
+            const auto rec = kept[i];
+            const auto units = buildLayoutUnits(containerOfKey(*this, host_.getMacros(), rec.unitKey));
+            const auto self =
+                std::find_if(units.begin(), units.end(), [&rec](const LayoutUnit& u) { return u.key == rec.unitKey; });
+            if (self == units.end() || self->rect.getPosition() != rec.landedAt)
+                continue; // gone or moved by the user: never returns
+
+            const auto home = self->rect.translated(-rec.delta.x, -rec.delta.y);
+            const bool blocked = home.getX() < 0 || home.getY() < 0 ||
+                                 std::any_of(
+                                     units.begin(), units.end(),
+                                     [&](const LayoutUnit& other) {
+                                         return other.key != rec.unitKey &&
+                                                home.expanded(synth::LayoutUtil::kCollisionGap).intersects(other.rect);
+                                     });
+            if (blocked) {
+                stillBlocked.push_back(rec);
+                continue;
+            }
+            moveUnitBy(rec.unitKey, {-rec.delta.x, -rec.delta.y});
+            shiftExpandRecords(host_.getMacros(), rec.unitKey, {-rec.delta.x, -rec.delta.y});
+            // The unit's other records, stored and in this walk, follow it (two growers that pushed the same unit
+            // unwind in either order).
+            retargetPushRecords(rec.unitKey, rec.landedAt, home.getPosition());
+            for (auto* list : {&kept, &stillBlocked})
+                for (auto& other : *list)
+                    if (other.unitKey == rec.unitKey && other.landedAt == rec.landedAt)
+                        other.landedAt = home.getPosition();
+            movedThisPass = movedAny = true;
+            refreshAfterMove(); // the next record's units must see this geometry
+        }
+        kept = std::move(stillBlocked);
+        if (!movedThisPass)
+            break;
+    }
+    return DisplacedRecords(kept.rbegin(), kept.rend());
+}
+
+std::optional<juce::Point<int>> MacroGroupController::layoutUnitTopLeft(const juce::String& key) const {
+    for (const auto& unit : buildLayoutUnits(containerOfKey(*this, host_.getMacros(), key)))
+        if (unit.key == key)
+            return unit.rect.getPosition();
+    return std::nullopt;
+}
+
+// A push record holds the top-left its unit had right after the push. Three things move or reshape a unit without
+// the user touching it: a second grower pushing it further, another grower's record sending it back, and folding or
+// opening it (its footprint switches between card and border). Each retargets every other record of that unit, so
+// whichever pusher shrinks first, the others still recognise it and the pushes unwind in any order. Without this,
+// Fold and Pack (packing off) opening a stack of folded macros, each pushing the next, and folding them again
+// stranded the ones pushed twice, depending on which macro happened to fold first.
+void MacroGroupController::retargetPushRecords(const juce::String& unitKey, juce::Point<int> from,
+                                               juce::Point<int> to) {
+    if (from == to)
+        return;
+    auto retarget = [&](DisplacedRecords& records) {
+        for (auto& rec : records)
+            if (rec.unitKey == unitKey && rec.landedAt == from)
+                rec.landedAt = to;
+    };
+    for (const auto& macro : host_.getMacros().getAll())
+        if (auto* live = host_.getMacros().find(macro.id))
+            retarget(live->displaced);
+    for (auto& [grower, records] : moduleDisplaced_)
+        retarget(records);
+    retarget(deferredReturns_);
+}
+
+// Folding the macros of a stack one by one, each one's neighbours would still be blocked by the open borders of the
+// ones not yet folded, and a fold drops what it could not return, so the stack would come home only for a lucky
+// fold order. Held until the last has folded, every record gets its way back at once.
+void MacroGroupController::returnDeferredNeighbours() {
+    if (deferredReturns_.empty())
+        return;
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    const auto records = std::exchange(deferredReturns_, {});
+    bool movedAny = false;
+    returnRecordedNeighbours(records, movedAny);
+    if (movedAny)
+        host_.requestRepaint();
+}
+
+// `keepBlocked` (the macro stays open, e.g. a port was deleted) keeps the records that only lacked room, so a later
+// shrink can still return them; a collapse clears everything.
+void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || macro->displaced.empty())
+        return;
+    const auto records = std::move(macro->displaced);
+    macro->displaced.clear();
+
+    bool movedAny = false;
+    const auto kept = returnRecordedNeighbours(records, movedAny);
+    if (keepBlocked)
+        if (auto* live = host_.getMacros().find(macroId))
+            live->displaced = kept;
+    if (movedAny)
+        host_.requestRepaint();
+}
+
+// A card changed size in place: the neighbours it pushed before get their way back first (what its new rect still
+// covers stays blocked and keeps its record), then makeRoomFor pushes what the new rect covers. Grow, shrink, grow
+// again therefore settles the same way every time.
+void MacroGroupController::reflowForResizedModule(juce::AudioProcessorGraph::NodeID nodeId) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    const auto key = nodeKey(nodeId);
+    if (const auto found = moduleDisplaced_.find(key); found != moduleDisplaced_.end()) {
+        const auto records = std::move(found->second);
+        moduleDisplaced_.erase(found);
+        bool movedAny = false;
+        auto kept = returnRecordedNeighbours(records, movedAny);
+        if (!kept.empty())
+            moduleDisplaced_[key] = std::move(kept);
+        if (movedAny)
+            host_.requestRepaint();
+    }
+    makeRoomFor(key);
+}
+
+void MacroGroupController::forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId) {
+    moduleDisplaced_.erase(nodeKey(nodeId));
+}
+
+void MacroGroupController::notePushesBy(const juce::String& growerKey,
+                                        const std::vector<synth::Macro::DisplacedNeighbour>& records) {
+    if (records.empty())
+        return;
+    auto& kept = moduleDisplaced_[growerKey];
+    kept.insert(kept.end(), records.begin(), records.end());
+}
+
+void MacroGroupController::refreshAfterUnitMoves() { refreshAfterMove(); }
+
+bool MacroGroupController::isMemberOfOpenMacro(juce::AudioProcessorGraph::NodeID nodeId) const {
+    const auto uuid = nodeUuidFor(nodeId);
+    const auto* owner = uuid.isEmpty() ? nullptr : host_.getMacros().findByMember(uuid);
+    return owner != nullptr && !owner->memberIsPort(uuid) && !host_.getMacros().isEffectivelyCollapsed(owner->id);
+}
+
+// A card's own share of the hull (margin, chip row, port strip) reaches left of and above it, and the hull's left edge
+// must stay kMacroPortOverhang inside the canvas (nudgeHullIntoCanvas). Rounded up to the grid, because a placement
+// snaps: a floor between two grid steps would snap below itself and leave the hull to be nudged.
+juce::Point<int> MacroGroupController::memberCardFloor() {
+    constexpr int g = synth::LayoutUtil::kGridSize;
+    const auto hull = synth::LayoutUtil::openMacroHull({0, 0, 1, 1}, 0);
+    const auto up = [](int v) { return (v + g - 1) / g * g; };
+    return {up(synth::LayoutUtil::kMacroPortOverhang - hull.getX()), up(-hull.getY())};
+}
+
+// Boxes for findFreeSlot, built like buildLayoutUnits but flattened over every level instead of one: a module being
+// placed must clear a collapsed card, an open hull and every visible module wherever they nest. The hidden members of a
+// collapsed macro sit at their pre-collapse positions and are skipped (their card stands in for them).
+std::vector<synth::LayoutUtil::Box>
+MacroGroupController::placementBlockers(const std::vector<juce::AudioProcessorGraph::NodeID>& excludeNodes,
+                                        const juce::String& joinMacroId) const {
+    const auto& macros = host_.getMacros();
+    auto isExcludedNode = [&excludeNodes](juce::AudioProcessorGraph::NodeID id) {
+        return std::find(excludeNodes.begin(), excludeNodes.end(), id) != excludeNodes.end();
+    };
+
+    std::set<juce::String> skippedMacros;
+    std::set<juce::String> movedUuids;
+    for (auto id : excludeNodes)
+        if (const auto uuid = nodeUuidFor(id); uuid.isNotEmpty()) {
+            movedUuids.insert(uuid);
+            for (const auto& owner : macro_nesting::ownerChain(macros, uuid))
+                skippedMacros.insert(owner);
+        }
+    for (const auto& carried : macro_nesting::collapsedMacrosCarriedBy(macros, movedUuids))
+        skippedMacros.insert(carried);
+    if (joinMacroId.isNotEmpty()) {
+        skippedMacros.insert(joinMacroId);
+        for (const auto& ancestor : macros.ancestorChain(joinMacroId))
+            skippedMacros.insert(ancestor);
+    }
+
+    std::vector<synth::LayoutUtil::Box> boxes;
+    std::set<juce::uint32> carded;
+    for (auto* comp : host_.modules()) {
+        if (comp == nullptr)
+            continue;
+        carded.insert(comp->getNodeId().uid);
+        if (comp->getModule() != nullptr && comp->isVisible() && !isExcludedNode(comp->getNodeId()))
+            boxes.push_back({comp->getNodeId(), comp->getBounds()});
+    }
+    // A node with no card still blocks, from the model (stored x/y, estimated size): the canvas detaches every
+    // card for an AI edit plan, which builds its tracks before any card exists again. A member of a collapsed
+    // macro is skipped exactly as its invisible card would be.
+    for (auto* node : host_.graph().getNodes()) {
+        if (carded.count(node->nodeID.uid) > 0 || isExcludedNode(node->nodeID))
+            continue;
+        const auto* owner = macros.findByMember(node->properties["uuid"].toString());
+        if (owner != nullptr && macros.isEffectivelyCollapsed(owner->id))
+            continue;
+        const auto rect =
+            synth::modelCardBounds(*node, [this](const juce::String& t) { return host_.estimateModuleSizeForType(t); });
+        if (!rect.isEmpty())
+            boxes.push_back({node->nodeID, rect});
+    }
+
+    // No real node id is anywhere near the top of the range, so a sentinel is never mistaken for `selfId`.
+    juce::uint32 sentinel = 0xFFFF0000u;
+    for (const auto& macro : macros.getAll()) {
+        if (skippedMacros.count(macro.id) > 0)
+            continue;
+        juce::Rectangle<int> rect;
+        if (!macros.isEffectivelyCollapsed(macro.id))
+            rect = macroHullBounds(macro.id);
+        else if (macro.collapsed && macros.isVisible(macro.id))
+            rect = macroCableAnchorBounds(macro);
+        if (!rect.isEmpty())
+            boxes.push_back({juce::AudioProcessorGraph::NodeID(sentinel++), rect});
+    }
+    return boxes;
+}

@@ -1,0 +1,243 @@
+// The Match key switch in the Sounds view's footer: its default, wording, accessibility, persistence, what it does to a
+// loop's target and the key line under a selected loop.
+#include "../../../SoundBrowser/SoundBrowserTestKit.h"
+#include "SoundBrowser/LoopStretch.h"
+#include "UI/Library/LibrarySidebarViews.h"
+#include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserText.h"
+#include "UserSettings.h"
+#include <gtest/gtest.h>
+
+using synth::soundbrowser::SoundEntry;
+using synth::soundbrowser::SoundKind;
+using synth::ui::SoundBrowserComponent;
+
+namespace {
+
+SoundEntry loopEntry(const juce::String& key, double tempo = 120.0) {
+    SoundEntry e;
+    e.name = "dusty";
+    e.kind = SoundKind::Loop;
+    e.tempo = tempo;
+    e.key = key;
+    return e;
+}
+
+} // namespace
+
+TEST(SoundPreviewFooterMatchKeyTest, IsOffByDefaultAndSaysWhatItDoes) {
+    synth::ui::SoundPreviewFooter footer;
+    EXPECT_FALSE(footer.isMatchKey());
+    auto& toggle = footer.getMatchKey();
+    EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key");
+    EXPECT_EQ(toggle.getTitle(), "Match key");
+    EXPECT_EQ(toggle.getButtonText(), "Match key");
+    EXPECT_TRUE(toggle.getWantsKeyboardFocus()) << "a keyboard stop like Auto-play";
+    EXPECT_EQ(toggle.getWantsKeyboardFocus(), footer.getAutoPlay().getWantsKeyboardFocus());
+    EXPECT_NE(footer.getAutoPlay().getTitle(), toggle.getTitle());
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, SitsBesideAutoPlayAndTellsTheOwnerWhenFlipped) {
+    synth::ui::SoundPreviewFooter footer;
+    footer.setSize(280, synth::ui::SoundPreviewFooter::kHeight);
+    EXPECT_TRUE(footer.getMatchKey().isVisible());
+    EXPECT_EQ(footer.getMatchKey().getBounds().getY(), footer.getAutoPlay().getBounds().getY());
+    EXPECT_LE(footer.getMatchKey().getRight(), footer.getAutoPlay().getX());
+    EXPECT_GT(footer.getMatchKey().getWidth(), 40);
+    int calls = 0;
+    bool last = false;
+    footer.onMatchKeyChanged = [&](bool on) {
+        ++calls;
+        last = on;
+    };
+    footer.getMatchKey().setToggleState(true, juce::sendNotificationSync);
+    EXPECT_EQ(calls, 1);
+    EXPECT_TRUE(last);
+    EXPECT_TRUE(footer.isMatchKey());
+    footer.setMatchKey(false);
+    EXPECT_EQ(calls, 1) << "setting it from outside is silent";
+}
+
+// Regression test for FRO996: at the narrowest sidebar (200 px) both labels were cut to "Match..." and "Auto-...".
+TEST(SoundPreviewFooterMatchKeyTest, AtTheNarrowestSidebarBothSwitchesKeepRoomForTheirLabels) {
+    for (const int width : {200, 236, 280}) {
+        synth::ui::SoundPreviewFooter footer;
+        footer.setSize(width, synth::ui::SoundPreviewFooter::kHeight);
+        auto& match = footer.getMatchKey();
+        auto& autoPlay = footer.getAutoPlay();
+        EXPECT_GE(match.getWidth(), 80) << width;
+        EXPECT_GE(autoPlay.getWidth(), 80) << width;
+        EXPECT_FALSE(match.getBounds().intersects(autoPlay.getBounds())) << width;
+        EXPECT_FALSE(match.getBounds().intersects(footer.getPlayButton().getBounds())) << width;
+        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getPlayButton().getBounds())) << width;
+        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getVolume().getBounds())) << width;
+        EXPECT_FALSE(match.getBounds().intersects(footer.getVolume().getBounds())) << width;
+        EXPECT_TRUE(footer.getLocalBounds().contains(autoPlay.getBounds())) << width;
+    }
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, PersistsAcrossViews) {
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "sound-matchkey-settings-test-" + juce::Uuid().toDashedString();
+    opts.filenameSuffix = "settings";
+    opts.folderName = juce::File::getSpecialLocation(juce::File::tempDirectory).getFullPathName();
+    juce::PropertiesFile settings(opts);
+    ModuleLibraryComponent library;
+    {
+        synth::ui::LibrarySidebarViews sidebar(library, &settings);
+        sidebar.setSize(300, 800);
+        EXPECT_FALSE(sidebar.getSounds().isMatchKey());
+        sidebar.getSounds().getPreviewFooter().getMatchKey().setToggleState(true, juce::sendNotificationSync);
+    }
+    EXPECT_TRUE(settings.getBoolValue(synth::kSoundBrowserMatchKeySettingKey, false));
+    ModuleLibraryComponent library2;
+    synth::ui::LibrarySidebarViews again(library2, &settings);
+    EXPECT_TRUE(again.getSounds().isMatchKey());
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, ALoopIsFittedToTheSongTempoAndToItsKeyOnlyWithMatchKeyOn) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.songTempoProvider = [] { return 96.0; };
+    view.setSongKey("D minor");
+
+    auto target = view.loopTargetFor(loopEntry("Am"));
+    EXPECT_DOUBLE_EQ(target.fileBpm, 120.0);
+    EXPECT_DOUBLE_EQ(target.songBpm, 96.0);
+    EXPECT_EQ(target.semitones, 0) << "Match key is off";
+
+    view.setPreviewSettings(true, -6.0f, true);
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).semitones, 5);
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).keyMatch, synth::soundbrowser::KeyMatch::Shifted);
+    EXPECT_EQ(view.loopTargetFor(loopEntry("C major")).semitones, 5) << "a major loop goes to the relative major";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("C major")).targetKey, "F major");
+    EXPECT_EQ(view.loopTargetFor(loopEntry("")).semitones, 0) << "a loop with no key stays put";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("")).keyMatch, synth::soundbrowser::KeyMatch::NoLoopKey);
+    EXPECT_DOUBLE_EQ(view.loopTargetFor(loopEntry("Am", 0.0)).fileBpm, 0.0) << "unknown tempo: no time-stretch";
+    view.setSongKey("");
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).semitones, 0) << "no song key";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).keyMatch, synth::soundbrowser::KeyMatch::NoSongKey);
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, MatchKeyTextSaysWhatTheLoopWillDo) {
+    using synth::soundbrowser::KeyMatch;
+    using synth::soundbrowser::LoopTarget;
+    const auto target = [](KeyMatch match, int semitones, const char* key) {
+        LoopTarget t;
+        t.keyMatch = match;
+        t.semitones = semitones;
+        t.targetKey = key;
+        return t;
+    };
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, 2, "D minor")), "Plays 2 semitones up, to D minor");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, -1, "F major")), "Plays 1 semitone down, to F major");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, 1, "F major")), "Plays 1 semitone up, to F major");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::InKey, 0, "D minor")), "Already in D minor");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::NoSongKey, 0, "")), "No key in the song");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::NoLoopKey, 0, "")), "This loop has no key");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Off, 0, "")), "");
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, TheFooterTooltipAndDescriptionReadWhatTheLoopWillDo) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    index->setUserFolders({tree.user});
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    view.songTempoProvider = [] { return 96.0; };
+    view.setQuery("dusty");
+    view.completeListAnimationForTest();
+    int loopRow = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].kind == SoundBrowserComponent::RowKind::Sound)
+            loopRow = (int)i;
+    ASSERT_GE(loopRow, 0);
+    view.selectRow(loopRow);
+    auto& toggle = view.getPreviewFooter().getMatchKey();
+    const juce::String base = "Play loops in the song's key";
+
+    view.setSongKey("D minor");
+    EXPECT_EQ(toggle.getTooltip(), base) << "Match key is off: nothing about shifting";
+    EXPECT_EQ(toggle.getDescription(), "");
+
+    toggle.setToggleState(true, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), "Plays 5 semitones up, to D minor");
+    EXPECT_EQ(toggle.getDescription(), toggle.getTooltip());
+
+    view.setSongKey("A minor");
+    EXPECT_EQ(toggle.getTooltip(), "Already in A minor") << "a song key change updates the footer";
+    EXPECT_EQ(toggle.getDescription(), "Already in A minor");
+
+    view.setSongKey("");
+    EXPECT_EQ(toggle.getTooltip(), "No key in the song");
+    EXPECT_EQ(toggle.getDescription(), "No key in the song");
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, TheFooterLineShowsTheLoopsKeyNextToTheSongs) {
+    const auto dot = juce::String::fromUTF8("\xc2\xb7");
+    EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry("A minor"), "D minor"), "Key Am " + dot + " song Dm");
+    EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry("C"), "Eb major"), "Key C " + dot + " song D#");
+    EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry("Am"), ""), "Key Am") << "only the parts that are known";
+    EXPECT_EQ(synth::ui::soundKeyMetaText(loopEntry(""), "Dm"), "") << "no key, nothing shown";
+    auto oneShot = loopEntry("Am");
+    oneShot.kind = SoundKind::OneShot;
+    EXPECT_EQ(synth::ui::soundKeyMetaText(oneShot, "Dm"), "");
+}
+
+// Match key says why it does nothing for a sound that is not a loop.
+TEST(SoundPreviewFooterMatchKeyTest, MatchKeyNotLoopTextExplainsOneShotsAndInstrumentsAndIsEmptyForLoops) {
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::Loop), "");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::OneShot),
+              "Match key applies to loops; this is a one-shot and plays as recorded");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopText(SoundKind::Instrument),
+              "Match key applies to loops; instruments play from the keyboard");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::Loop), "");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::OneShot), "Not a loop, plays as recorded");
+    EXPECT_EQ(synth::ui::matchKeyNotLoopFooterText(SoundKind::Instrument), "Not a loop, plays from the keyboard");
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, ASelectedOneShotSaysMatchKeyDoesNothingOnlyWhileTheSwitchIsOn) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    index->setUserFolders({tree.user});
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    view.setSongKey("D minor");
+    view.setQuery("kick");
+    view.completeListAnimationForTest();
+    int row = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].kind == SoundBrowserComponent::RowKind::Sound)
+            row = (int)i;
+    ASSERT_GE(row, 0);
+    ASSERT_EQ(view.getRows()[(size_t)row].entry->kind, SoundKind::OneShot);
+    view.selectRow(row);
+    auto& toggle = view.getPreviewFooter().getMatchKey();
+    const juce::String why = "Match key applies to loops; this is a one-shot and plays as recorded";
+    const auto footerLine = [&] {
+        juce::DynamicObject state;
+        view.addTestModeState(state);
+        return state.getProperty("footerLine").toString();
+    };
+
+    EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key") << "switch off: nothing to explain";
+    EXPECT_FALSE(footerLine().contains("Match key"));
+
+    toggle.setToggleState(true, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), why);
+    EXPECT_EQ(toggle.getDescription(), why);
+    EXPECT_TRUE(footerLine().startsWith("Not a loop, plays as recorded")) << footerLine();
+
+    toggle.setToggleState(false, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), "Play loops in the song's key");
+    EXPECT_FALSE(footerLine().contains("Match key"));
+}

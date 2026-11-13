@@ -20,11 +20,16 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/PopupHost.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Graph/MacroGroupController/MacroSelectionUnits.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include <algorithm>
 
 // True when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
 // const-callable query since getMacros() itself is non-const.
@@ -37,12 +42,13 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
     return macro != nullptr && synth::isChannelMacro(*macro, audioEngine.getGraph());
 }
 
-// Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. Stays on
+// Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. The grouping rule
+// itself (units under one container, nesting included) and its refusal messages live in
+// MacroGroupController::groupSelectionIntoMacro. Stays on
 // GraphEditor — it shows a juce::Component::SafePointer<GraphEditor>-based async
 // modal, which needs a genuine GraphEditor&; see MacroGroupController.h's class comment. Also
 // GraphCanvasHost::requestGroupSelectionIntoMacro() — MacroGroupController::
-// groupOrToggleSelectionMacros() calls back into this through the host for a selection that
-// touches no macro yet.
+// groupOrToggleSelectionMacros() calls back into this through the host for a selection it groups.
 //
 // MacroAutoPortPreference (GraphEditor.h) rationale:
 // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
@@ -93,10 +99,13 @@ void GraphEditor::requestGroupSelectionIntoMacro() {
 // user picks. Only reached from requestGroupSelectionIntoMacro() when
 // macroAutoPortModalForTest is unset — see that member's comment.
 void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond) {
-    // buildMacroPortCrossingPlan moved into MacroGroupController with no private forwarder (this
-    // is its only caller outside the macro files) — the one genuine host-access rewrite in this
-    // file; see the file header comment.
-    const int crossingCount = (int)macroController_.buildMacroPortCrossingPlan(selection.getSelected()).size();
+    // Counted over the would-be macro's whole inside set (a nested child's modules and ports too), the
+    // same set groupSelectionIntoMacro plans its ports from — not the raw selection, which can miss a
+    // whole child's port nodes.
+    const auto units = macro_units::unitsFor(macroController_, macros, selection.getSelected());
+    const int crossingCount =
+        (int)macroController_.buildMacroPortCrossingPlan(macro_units::insideNodeIdsFor(macroController_, macros, units))
+            .size();
 
     auto* dialog = new synth::ui::MacroAutoPortPromptDialog(crossingCount);
 
@@ -112,11 +121,11 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     // override sits on) would otherwise race it and just hide the window with `onChoice` never
     // firing, which is the exact "no macro, no status message" bug this fixes.
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
 
     dialog->onChoice = [window, respond](bool createPorts, bool remember) {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
         respond(createPorts, remember);
     };
 }
@@ -155,6 +164,7 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     // AlertWindow idiom exactly (see its comment for why the dialog must outlive this call, and
     // why the AlertWindow is owned inside the callback rather than by a member).
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result != 1)
@@ -190,10 +200,13 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
     // restores TO — the exact shape TimelineRulerComponent::buildMarkerColourPicker uses.
     const juce::Colour originalColour = macro->colour;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    // Resolved once per picker: the track that mirrors this macro's colour, if any.
+    const std::function<void(juce::Colour)> mirror =
+        macroController_.makeMacroColourMirror ? macroController_.makeMacroColourMirror(macroId) : nullptr;
 
     return std::make_unique<synth::ui::ColourPickerPopup>(
         originalColour, propertiesFile_,
-        [safeThis, macroId](juce::Colour c) {
+        [safeThis, macroId, mirror](juce::Colour c) {
             // Live preview: writes the macro directly, no undo — every drag repaints live. Goes
             // straight at the macro rather than through setMacroColour, which records an undo
             // step per call.
@@ -202,10 +215,12 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
                 return;
             if (auto* m = self->macros.find(macroId))
                 m->colour = c;
+            if (mirror)
+                mirror(c);
             self->syncMacroCards();
             self->repaint();
         },
-        [safeThis, macroId, originalColour](juce::Colour finalColour) {
+        [safeThis, macroId, originalColour, mirror](juce::Colour finalColour) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return; // the editor (or its window) is gone — nothing left to restore or undo
@@ -216,6 +231,8 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
                 // No net change: put back exactly what was there (a preview may have nudged it)
                 // and record no undo step.
                 m->colour = originalColour;
+                if (mirror)
+                    mirror(originalColour);
                 self->syncMacroCards();
                 self->repaint();
                 return;
@@ -224,6 +241,8 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
             // back first (outside the recorded mutation, so it does not itself become undoable),
             // then perform the real edit as the one recorded step.
             m->colour = originalColour;
+            if (mirror)
+                mirror(originalColour);
             self->getMacroController().setMacroColour(macroId, finalColour);
         });
 }
@@ -235,7 +254,32 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
     auto popup = buildMacroColourPicker(macroId);
     if (popup == nullptr)
         return;
-    juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
+    // Through the card call-out so Cmd+Z and the other app shortcuts reach the main window from the picker.
+    synth::ui::launchPopover(std::move(popup), screenArea, this);
+}
+
+// Alt+C: with exactly one macro selected (its card, or every member of an open one), its colour picker beside it, as
+// the menu's "Change Colour..." opens it. Anything else leaves the key unhandled.
+bool GraphEditor::openColourForKeyboardFocus() {
+    const synth::Macro* only = nullptr;
+    for (const auto& macro : macros.getAll()) {
+        if (!macroController_.isMacroInSelection(macro.id))
+            continue;
+        if (only != nullptr)
+            return false;
+        only = &macro;
+    }
+    if (only == nullptr)
+        return false;
+    juce::Rectangle<int> anchor;
+    if (only->collapsed) {
+        if (auto* card = macroController_.getMacroCard(only->id))
+            anchor = card->getScreenBounds();
+    } else {
+        anchor = content.localAreaToGlobal(macroController_.macroChipBounds(only->id));
+    }
+    promptRecolourMacro(only->id, anchor.isEmpty() ? getScreenBounds() : anchor);
+    return true;
 }
 
 // Builds the recolour popup with the EXACT onPreview/onCommit callbacks promptRecolourMacro
@@ -247,6 +291,27 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
 std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPickerForTest(const juce::String& macroId) {
     return buildMacroColourPicker(macroId);
 }
+
+namespace {
+// A stereo port (a track's Output) switches between one stereo jack and Left/Right jacks from the macro menu too, so
+// the collapsed card -- where a right-click lands on this menu, not the port's own -- reaches it in one click.
+void addStereoPortSwitchItems(juce::PopupMenu& m, const synth::Macro& macro,
+                              juce::Component::SafePointer<GraphEditor> safeThis) {
+    auto ports = macro.ports;
+    std::sort(ports.begin(), ports.end(), [](const auto& a, const auto& b) { return a.order < b.order; });
+    for (const auto& port : ports) {
+        const auto shape = safeThis->getMacroController().stereoPortShape(port.nodeUuid);
+        if (!shape.has_value())
+            continue;
+        const juce::String label = *shape == MacroPortShape::Stereo ? "Join " + port.name + " into One Stereo Jack"
+                                                                    : "Split " + port.name + " into Left/Right Jacks";
+        m.addItem(label, [safeThis, macroId = macro.id, uuid = port.nodeUuid] {
+            if (safeThis != nullptr)
+                safeThis->getMacroController().toggleStereoPortSplit(macroId, uuid);
+        });
+    }
+}
+} // namespace
 
 // `renameAction`, when supplied, replaces the default "Rename..." item's handler — the collapsed
 // card passes its own inline-editor opener (MacroCardComponent::beginRename) here; every other
@@ -362,6 +427,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (safeThis != nullptr)
             safeThis->promptConfigureMacroIO(macroId);
     });
+    addStereoPortSwitchItems(m, *macro, safeThis);
     m.addSeparator();
     // Bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute): each item names the action a click is about to
     // perform, so a Mixed or fully-off state reads as targeting ON ("Bypass"/"Mute") and a fully-on state reads as
@@ -446,7 +512,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
         if (safeThis != nullptr)
-            safeThis->getMacroController().deleteMacroAndMembers(macroId);
+            safeThis->getMacroController().requestDeleteMacro(macroId);
     });
 
     return m;
@@ -475,14 +541,14 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     // juce::DialogWindow's default (which would just hide the window on a different dispatch
     // path, bypassing onRequestClose and every commit-on-close side effect it triggers).
     options.escapeKeyTriggersCloseButton = false;
-    auto* window = options.launchAsync();
+    auto* window = synth::ui::PopupMotion::launchDialog(options);
 
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::Component::SafePointer<synth::ui::MacroPortConfigDialog> safeDialog(dialog);
 
     dialog->onRequestClose = [safeThis, window] {
         if (window != nullptr)
-            window->exitModalState(0);
+            synth::ui::PopupMotion::dismissModal(*window);
         // Teardown backstop: an abandoned picker's CallOutBox can outlive this dialog and its onCommit
         // clear may never reach it, so disarm whatever this session armed (by the node it cached, no node
         // arg); a no-op when nothing was armed, so a plain Close of a never-previewed picker repaints nothing.
@@ -605,6 +671,7 @@ void GraphEditor::promptRenameMacroPort(const juce::String& macroId, const juce:
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true,
                             juce::ModalCallbackFunction::create([safeThis, window, macroId, nodeUuid](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);

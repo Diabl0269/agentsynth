@@ -1,0 +1,55 @@
+# A cable's end jumped when its card's More row folded or unfolded.
+#
+# What a user does:
+#   1. Starts a new project, adds a Delay and an LFO, opens the Delay's More row.
+#   2. Drags the LFO's output onto the Delay's Pan (a More-row knob): the cable ends on the knob's ring.
+#   3. Folds the row: the cable end glides to the left edge of the More button over the fade (110 ms), and no
+#      animation is left running after it.
+#   4. Unfolds the row: the end glides back to the knob (160 ms).
+# The glide itself is a tenth of a second, too short for a scripted step to catch mid-way; CableEndGlideTests step it
+# frame by frame. The scenario checks both resting places and records the toggle for the pictures.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+motion: true
+record: true
+save_project: cable-end-glide
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: delay}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "the caret moves in the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Delay > cardMoreRow"}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Delay > Pan"}
+  - wait: {}
+  - expect: {id: "card:Delay", contains: {cabledTargets: Pan}, within_ms: 3000}
+  - expect: {id: "card:Delay", contains: {cableEndOnKnob: "true", cableEndGliding: "false"}, within_ms: 3000}
+  - screenshot: {id: "card:Delay", name: row-open-cable-on-knob}
+  - click: {id: "card:Delay > cardMoreRow"}
+  - expect: {id: "card:Delay", contains: {cableEndGliding: "false"}, within_ms: 2000}
+  - expect: {id: "card:Delay", contains: {cableEndOnKnob: "false"}}
+  - screenshot: {id: "card:Delay", name: row-folded-cable-on-more-button}
+  - screenshot: {name: row-folded-canvas}
+  - click: {id: "card:Delay > cardMoreRow"}
+  - expect: {id: "card:Delay", contains: {cableEndGliding: "false"}, within_ms: 2000}
+  - expect: {id: "card:Delay", contains: {cableEndOnKnob: "true"}}
+  - screenshot: {id: "card:Delay", name: row-unfolded-again}

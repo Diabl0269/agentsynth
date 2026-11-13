@@ -1,5 +1,7 @@
 // Concern: tracks.
 #include "TimelineDoc.h"
+#include <algorithm>
+#include <cmath>
 
 namespace synth {
 
@@ -22,8 +24,34 @@ TrackId TimelineDoc::addTrack(TrackKind kind, const juce::String& name) {
         track.id = TrackId{nextTrackId++};
         track.kind = kind;
         track.name = name;
+        const TrackId id = track.id;
         tracks.push_back(std::move(track));
-        return tracks.back().id;
+        tracks = automationTracksLast(std::move(tracks));
+        return id;
+    });
+}
+
+// The Automation track holds lanes no single track owns and is drawn as the closing "Unassigned
+// automation" section, so every path that changes track order (add, move, load) keeps it last.
+std::vector<Track> TimelineDoc::automationTracksLast(std::vector<Track> list) {
+    std::stable_partition(list.begin(), list.end(), [](const Track& t) { return t.kind != TrackKind::Automation; });
+    return list;
+}
+
+// The Automation track only exists to hold lanes no single track owns. Callers that take a lane off
+// it (a move, a delete) run this inside the same undo step, so undo brings the track back with it.
+bool TimelineDoc::removeEmptyAutomationTracks() {
+    const auto isEmptyAutomation = [](const Track& t) {
+        return t.kind == TrackKind::Automation && t.lanes.empty() && t.clips.empty();
+    };
+    if (std::none_of(tracks.begin(), tracks.end(), isEmptyAutomation))
+        return false;
+    return applyMutation([&] {
+        for (const auto& t : tracks)
+            if (isEmptyAutomation(t))
+                forgetTrackInVariations(t.id);
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(), isEmptyAutomation), tracks.end());
+        return true;
     });
 }
 
@@ -33,8 +61,73 @@ bool TimelineDoc::removeTrack(TrackId id) {
         return false;
 
     return applyMutation([&] {
+        forgetTrackInVariations(id);
         tracks.erase(tracks.begin() + (track - tracks.data()));
         return true;
+    });
+}
+
+// Inserts a copy of `source` directly below it with fresh ids on the track, its clips, their notes and its lanes:
+// same kind, clips, notes and lane points, a colour of `colourArgb`, never soloed or armed.
+// `uuidRemap` (original node uuid -> its copy's uuid) rebinds the copy's track binding and lanes; a lane whose
+// node is not in the map is left off, because a (node, param) pair carries one lane doc-wide. Invalid TrackId
+// when `source` is missing, is the Automation track, or the doc is at kMaxTracks.
+TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, juce::uint32 colourArgb,
+                                    const std::map<juce::String, juce::String>& uuidRemap) {
+    const auto* original = findTrack(source);
+    if (original == nullptr || original->kind == TrackKind::Automation || static_cast<int>(tracks.size()) >= kMaxTracks)
+        return {};
+
+    return applyMutation([&] {
+        const auto remap = [&uuidRemap](const juce::String& uuid) {
+            const auto it = uuidRemap.find(uuid);
+            return it != uuidRemap.end() ? it->second : juce::String();
+        };
+
+        // Copied field by field, not by struct assignment: every id must be new.
+        Track copy;
+        copy.id = TrackId{nextTrackId++};
+        copy.kind = original->kind;
+        copy.name = name;
+        copy.colourArgb = colourArgb;
+        copy.muted = original->muted;
+        copy.heightScale = original->heightScale;
+        copy.midiInputId = original->midiInputId;
+        copy.midiInputName = original->midiInputName;
+        copy.midiInputChannel = original->midiInputChannel;
+        copy.audioInput = original->audioInput;
+        copy.monitorMode = original->monitorMode;
+        copy.bindingUuid = remap(original->bindingUuid);
+        // Linked clips on the copy stay linked to each other, in fresh groups, never to the originals.
+        std::map<std::int64_t, std::int64_t> groupRemap;
+        for (const auto& clip : original->clips) {
+            Clip dup = clip;
+            dup.id = ClipId{nextClipId++};
+            if (dup.linkGroup != 0) {
+                const auto [it, added] = groupRemap.try_emplace(dup.linkGroup, 0);
+                if (added)
+                    it->second = nextClipId++;
+                dup.linkGroup = it->second;
+            }
+            for (auto& note : dup.notes)
+                note.id = NoteId{nextNoteId++};
+            copy.clips.push_back(std::move(dup));
+        }
+        for (const auto& lane : original->lanes) {
+            const auto uuid = remap(lane.nodeUuid);
+            if (uuid.isEmpty())
+                continue;
+            AutomationLane dup = lane;
+            dup.id = LaneId{nextLaneId++};
+            dup.nodeUuid = uuid;
+            dup.orphaned = false;
+            copy.lanes.push_back(std::move(dup));
+        }
+
+        const TrackId id = copy.id;
+        const auto at = tracks.begin() + (original - tracks.data()) + 1;
+        tracks.insert(at, std::move(copy));
+        return id;
     });
 }
 
@@ -43,8 +136,14 @@ bool TimelineDoc::moveTrack(TrackId id, int newIndex) {
     if (track == nullptr)
         return false;
 
+    if (track->kind == TrackKind::Automation)
+        return true; // pinned after every other track: never moves, and nothing moves below it
     const int oldIndex = (int)(track - tracks.data());
-    const int clampedIndex = juce::jlimit(0, (int)tracks.size() - 1, newIndex);
+    // The other tracks stay above the Automation track(s), so the last index they may take is the
+    // last non-Automation slot.
+    const int movable = (int)std::count_if(tracks.begin(), tracks.end(),
+                                           [](const Track& t) { return t.kind != TrackKind::Automation; });
+    const int clampedIndex = juce::jlimit(0, std::max(0, movable - 1), newIndex);
     if (clampedIndex == oldIndex)
         return true; // already there: no revision bump, no notification
 
@@ -84,6 +183,31 @@ bool TimelineDoc::setTrackColour(TrackId id, juce::uint32 colourArgb) {
     });
 }
 
+bool TimelineDoc::setTrackHeightScale(TrackId id, double scale) {
+    auto* track = findTrack(id);
+    if (track == nullptr || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, Track::kMinHeightScale, Track::kMaxHeightScale);
+    if (track->heightScale == clamped)
+        return true;
+    return applyMutation([&] {
+        track->heightScale = clamped;
+        return true;
+    });
+}
+
+bool TimelineDoc::resetTrackHeightScales() {
+    const bool anyDiffers =
+        std::any_of(tracks.begin(), tracks.end(), [](const Track& t) { return t.heightScale != 1.0; });
+    if (!anyDiffers)
+        return false;
+    return applyMutation([&] {
+        for (auto& track : tracks)
+            track.heightScale = 1.0;
+        return true;
+    });
+}
+
 bool TimelineDoc::setTrackMuted(TrackId id, bool muted) {
     auto* track = findTrack(id);
     if (track == nullptr)
@@ -116,6 +240,64 @@ bool TimelineDoc::setTrackArmed(TrackId id, bool armed) {
         return true;
     return applyMutation([&] {
         track->armed = armed;
+        return true;
+    });
+}
+
+// The input is a recording setting of the track, so it is refused on a track that cannot record MIDI rather than
+// stored where nothing would read it. With no device the display name is meaningless and is dropped.
+bool TimelineDoc::setTrackMidiInput(TrackId id, const juce::String& deviceId, const juce::String& deviceName,
+                                    int channel) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Midi || channel < 0 || channel > Track::kMaxMidiInputChannel)
+        return false;
+    const juce::String name = deviceId.isEmpty() ? juce::String() : deviceName;
+    if (track->midiInputId == deviceId && track->midiInputName == name && track->midiInputChannel == channel)
+        return true;
+    return applyMutation([&] {
+        track->midiInputId = deviceId;
+        track->midiInputName = name;
+        track->midiInputChannel = channel;
+        return true;
+    });
+}
+
+// Same rule as the MIDI input: a recording setting is refused on a track that cannot record audio. Only a Device
+// choice carries channels and a device name and only a Track choice its source, so the others are stored in one
+// canonical form and compare equal. A Track choice must name another, existing track that is not an Automation one
+// (nothing sounds there); it is checked here only, so a source deleted later stays named and reads as removed.
+bool TimelineDoc::setTrackAudioInput(TrackId id, const AudioInputChoice& choice) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Audio || !choice.isValid())
+        return false;
+    if (choice.kind == AudioInputChoice::Kind::Track) {
+        const auto* source = findTrack(choice.sourceTrack);
+        if (source == nullptr || source == track || source->kind == TrackKind::Automation)
+            return false;
+    }
+    AudioInputChoice stored = choice;
+    if (stored.kind == AudioInputChoice::Kind::Track) {
+        stored = AudioInputChoice{stored.kind};
+        stored.sourceTrack = choice.sourceTrack;
+    } else if (stored.kind != AudioInputChoice::Kind::Device) {
+        stored = AudioInputChoice{stored.kind};
+    }
+    if (track->audioInput == stored)
+        return true;
+    return applyMutation([&] {
+        track->audioInput = stored;
+        return true;
+    });
+}
+
+bool TimelineDoc::setTrackMonitorMode(TrackId id, MonitorMode mode) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Audio)
+        return false;
+    if (track->monitorMode == mode)
+        return true;
+    return applyMutation([&] {
+        track->monitorMode = mode;
         return true;
     });
 }

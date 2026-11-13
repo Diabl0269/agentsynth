@@ -97,7 +97,7 @@ inline juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<flo
 // (real screen coordinates don't move just because the dragged component's bounds do) converted
 // into the cell's CURRENT bounds, which the owner may have just changed in response to the
 // previous step. A single-shot drag (one mouseDrag straight from start to end) can't exercise the
-// mid-drag-reposition hazard this ticket is about; only reading the cell's position fresh before
+// mid-drag-reposition hazard; only reading the cell's position fresh before
 // each step can. Leaves the cell mid-drag (call cell.mouseUp(...) with the LAST event this
 // function fires, e.g. via lastStepEvent()) -- see the test suites for the pattern.
 class DragDriver {

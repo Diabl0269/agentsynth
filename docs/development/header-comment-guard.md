@@ -76,6 +76,8 @@ unit, leaving only the short caller-facing constraint (if any) behind in the hea
 brand-new member with its own one-line caller contract is not a violation and never trips the
 ratchet, per the excess-tracking reasoning above.
 
+A one-line forwarder into a collaborator (`macroController_` / `smartConnections_` / `dragDropController_`) is defined out-of-line too, not inline in the header, so the header does not recompile every includer when a body changes. This split is what brought `GraphEditor.h` under the cap (1,489 -> 944 lines) and cleared the last ratchet entry.
+
 ## Strict ratchet baseline
 
 `scripts/header-comment-baseline.txt` (`<excess> <path>` per entry — the same one-integer-plus-path

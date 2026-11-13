@@ -1,0 +1,74 @@
+# The command palette's plugin-track row has a window button that opens and closes that track's REAL hosted plugin
+# window (by click, and by Tab then Return).
+#
+# What a user does:
+#   1. Starts a new project and adds a plugin track for Apple's DLSMusicDevice (listed through the seeded scan list,
+#      because test mode does not scan) with Cmd+T and the Plugins group.
+#   2. Presses Cmd+K, types the track's name: the row shows the window button.
+#   3. Clicks the button: the plugin's window opens. Opens the palette again, clicks it again: the window closes.
+#   4. Opens the palette once more and, with the track row highlighted (Down), presses Tab (onto the button) and Return: the window
+#      opens; the same keys again close it.
+record: true
+save_project: plugin-window
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="DLSMusicDevice" descriptiveName="DLSMusicDevice" format="AudioUnit" category="Synth" manufacturer="Apple" version="1" file="AudioUnit:Synths/aumu,dls ,appl" uniqueId="0" isInstrument="1" numInputs="0" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: add-track-plugins}
+  - key: {keys: return}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 3000}
+  - wait: {}
+  - screenshot: {name: plugin-track-added}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - expect: {id: "commandPalette > rowAction", showing: true, within_ms: 2000}
+  - screenshot: {id: commandPalette, name: palette-row-with-window-button}
+  - click: {id: "commandPalette > rowAction"}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}
+  - expect: {id: "hostedPluginWindow:DLSMusicDevice", showing: true, within_ms: 8000}
+  - wait: {}
+  - screenshot: {name: window-open-by-click}
+  - screenshot: {id: "hostedPluginWindow:DLSMusicDevice", name: window-open-by-click-plugin}
+  - click: {id: window, x: 900, y: 500}     # the plugin window holds the keys; a click on the main window takes them back
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - click: {id: "commandPalette > rowAction"}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}
+  - expect: {id: "hostedPluginWindow:DLSMusicDevice", exists: false, within_ms: 3000}
+  - screenshot: {name: window-closed-by-click}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - key: {keys: down}                        # the top match is the module; the track row is next
+  - key: {keys: tab}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-button-highlighted-by-tab}
+  - key: {keys: return}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}
+  - expect: {id: "hostedPluginWindow:DLSMusicDevice", showing: true, within_ms: 8000}
+  - wait: {}
+  - screenshot: {name: window-open-by-keys}
+  - screenshot: {id: "hostedPluginWindow:DLSMusicDevice", name: window-open-by-keys-plugin}
+  - click: {id: window, x: 900, y: 500}     # the plugin window holds the keys; a click on the main window takes them back
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: DLSMusic}
+  - wait: {}
+  - key: {keys: down}                        # the top match is the module; the track row is next
+  - key: {keys: tab}
+  - key: {keys: return}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}
+  - expect: {id: "hostedPluginWindow:DLSMusicDevice", exists: false, within_ms: 3000}
+  - screenshot: {name: window-closed-by-keys}

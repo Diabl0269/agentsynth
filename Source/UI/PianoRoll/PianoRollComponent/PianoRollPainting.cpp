@@ -22,10 +22,7 @@ using namespace synth::ui::detail;
 
 void PianoRollComponent::paint(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour bg = juce::Colours::black;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel()))
-        bg = lf->getTheme().colors.bg0;
-    g.fillAll(bg);
+    g.fillAll(themeOf(*this).colors.bg0);
 
     if (doc_ == nullptr || !clipId_.isValid())
         return;
@@ -34,7 +31,9 @@ void PianoRollComponent::paint(juce::Graphics& g) {
     // Over the notes (both are about a note that is there or about to be), still under the keys
     // column and the header so everything is clipped by the same gutter.
     paintDrawPreview(g);
+    paintCopyGhosts(g);
     paintSplitPreview(g);
+    paintFocusedNoteRing(g);
     // Before the keys column and the header, so both clip the line the same way they clip a note
     // that has scrolled off to the left.
     paintPlayhead(g);
@@ -102,7 +101,7 @@ void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColo
     // are magnetic; it has no business deciding what the canvas shows. Only Snap::Off (no division
     // chosen at all) has no sub-beat level, which is what the > 0.0 test still covers.
     const double division = drawnGridBeats();
-    if (division > 0.0 && division < 1.0)
+    if (TimelineViewState::linesFallOffBeats(division))
         drawLevel(division, GridLineLevel::Subdivision);
     drawLevel(1.0, GridLineLevel::Beat);
     drawLevel(currentBeatsPerBar(), GridLineLevel::Bar);
@@ -110,22 +109,14 @@ void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColo
 
 void PianoRollComponent::paintGrid(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour whiteRow, blackRow, rowSep, dimColour;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        whiteRow = c.bg1;
-        blackRow = c.surfaceHi;
-        rowSep = c.border;
-        dimColour = c.bg0;
-    } else {
-        whiteRow = juce::Colours::darkgrey.darker(0.3f);
-        blackRow = juce::Colours::darkgrey.darker(0.6f);
-        rowSep = juce::Colours::grey;
-        dimColour = juce::Colours::black;
-    }
+    const auto& c = themeOf(*this).colors;
+    const auto whiteRow = c.bg1;
+    const auto blackRow = c.surfaceHi;
+    const auto rowSep = c.border;
+    const auto dimColour = c.bg0;
 
     const int width = getWidth();
-    const int height = getHeight();
+    const int height = canvasBottom(); // the grid ends where the velocity strip (if shown) begins
     const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
     const int visibleRows = std::max(0, (height - canvasTop()) / rowHeight) + 2;
     const long long totalRows = (long long)visiblePitches_.size();
@@ -202,9 +193,7 @@ void PianoRollComponent::paintDrawPreview(juce::Graphics& g) {
     if (clip == nullptr)
         return;
 
-    juce::Colour accent = juce::Colours::cyan;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
 
     const auto rect = computeNoteRect(clip->startBeat + drawStartBeat_, drawLengthBeats_, drawPitch_);
     const auto bounds = rect.toFloat().reduced(0.5f, 1.0f);
@@ -222,9 +211,7 @@ void PianoRollComponent::paintSplitPreview(juce::Graphics& g) {
     if (clip == nullptr || note == nullptr)
         return;
 
-    juce::Colour accent = juce::Colours::cyan;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
 
     const float x = (float)beatToX(clip->startBeat + splitPreviewBeat_);
     const float y = (float)yForPitch(note->pitch);
@@ -241,9 +228,7 @@ void PianoRollComponent::paintPlayhead(juce::Graphics& g) {
     if (grid.isEmpty() || x < grid.getX() || x > grid.getRight())
         return;
 
-    juce::Colour accent = juce::Colours::cyan;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent);
     g.fillRect((float)x - kPlayheadLineWidth * 0.5f, (float)grid.getY(), kPlayheadLineWidth, (float)grid.getHeight());
@@ -251,22 +236,14 @@ void PianoRollComponent::paintPlayhead(juce::Graphics& g) {
 
 void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour whiteKey, blackKey, sep, pressed;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        whiteKey = c.pianoKeyWhite;
-        blackKey = c.pianoKeyBlack;
-        sep = c.border;
-        // The SAME token every other "this control is switched on" state in the timeline uses (the
-        // edit-tool strip, the follow-playhead button, the roll's own Snap chip), so a held key reads
-        // as lit rather than as a differently-coloured key.
-        pressed = c.toolActive;
-    } else {
-        whiteKey = juce::Colours::whitesmoke;
-        blackKey = juce::Colours::black;
-        sep = juce::Colours::grey;
-        pressed = juce::Colours::cyan;
-    }
+    const auto& c = themeOf(*this).colors;
+    const auto whiteKey = c.pianoKeyWhite;
+    const auto blackKey = c.pianoKeyBlack;
+    const auto sep = c.border;
+    // The SAME token every other "this control is switched on" state in the timeline uses (the
+    // edit-tool strip, the follow-playhead button, the roll's own Snap chip), so a held key reads
+    // as lit rather than as a differently-coloured key.
+    const auto pressed = c.toolActive;
 
     // White fills the FULL column width first; every black-key row then overlays a narrower rect
     // flush left, leaving its own right portion showing the white fill underneath — the "gap
@@ -353,8 +330,12 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
 
 void PianoRollComponent::paintHeader(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour bg, border, restingFill, activeFill;
-    float pillRadius = 3.0f;
+    const auto& theme = themeOf(*this);
+    const auto& c = theme.colors;
+    const auto bg = c.surface;
+    const auto border = c.border;
+    const auto mutedText = c.textMuted;
+    const float cornerRadius = theme.metrics.cornerRadiusSmall;
     // The header's drawn button labels ("Clips", "Q", "Scale") used to share the theme's micro
     // size (~8.5px) with the keys column's captions — unreadably small for text meant to be READ
     // rather than glanced at as a row hint. Bumped to the theme's next size up: TimelineTransportBar
@@ -362,55 +343,33 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     // position readout), so this reuses that precedent rather than inventing a second "one size
     // above micro" constant. The header stays 20px tall and every button rect is reduced to ~16px,
     // comfortably clearing an 11px font with room to spare.
-    float buttonFontPx = 11.0f;
-    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        bg = c.surface;
-        border = c.border;
-        // Resting chip fill is surfaceHi ("raised surface"), never `surface` again — the header
-        // strip itself is filled with `surface` (bg above), and a chip painted in the SAME colour
-        // as what is behind it would be invisible. The active/toggled fill is toolActive — the
-        // SAME token the timeline's edit-tool strip and follow-playhead button use for their own
-        // lit state (see TimelinePanelComponent::applyToolStripTheme), so "this control is switched
-        // on" reads identically everywhere in the timeline.
-        restingFill = c.surfaceHi;
-        activeFill = c.toolActive;
-        buttonFontPx = lf->getTheme().type.value + 1.0f;
-        pillRadius = lf->getTheme().metrics.pillRadius;
-    } else {
-        bg = juce::Colours::darkslategrey;
-        border = juce::Colours::grey;
-        restingFill = juce::Colours::darkslategrey.brighter(0.15f);
-        activeFill = juce::Colours::cyan;
-    }
+    const float buttonFontPx = theme.type.value + 1.0f;
 
     g.setColour(bg);
     g.fillRect(0, 0, getWidth(), kToolbarHeight);
     g.setColour(border);
     g.drawHorizontalLine(kToolbarHeight - 1, 0.0f, (float)getWidth());
 
-    // Every drawn header control gets the SAME chip treatment a real juce::TextButton gets from
-    // AppLookAndFeel::drawButtonBackground (resting = a raised surface, hover = .brighter(0.12f),
-    // always the theme's border token as the outline) — so "Clips"/"Q"/"Scale" read as buttons
-    // rather than bare text with a hairline outline. Returns the fill actually painted, so the
-    // caller's text/glyph colour can contrast against THAT rather than a fixed textCol that could
-    // sit invisible on the active (toolActive) fill.
-    const auto paintChip = [&](juce::Rectangle<int> bounds, bool active, bool hovered) {
-        juce::Colour fill = active ? activeFill : restingFill;
-        if (hovered)
-            fill = fill.brighter(0.12f);
-        g.setColour(fill);
-        g.fillRoundedRectangle(bounds.toFloat(), pillRadius);
-        g.setColour(border);
-        g.drawRoundedRectangle(bounds.toFloat(), pillRadius, 1.0f);
-        return fill;
+    // Every drawn header control is the shared chip (synth::theme::paintChip), so "Clips"/"Q"/"Scale" read
+    // as buttons and look like every other chip in the app. Raised: the header strip itself is filled with
+    // `surface`, and a chip in the SAME colour as what is behind it would be invisible. The active fill is
+    // toolActive, the token the timeline's edit-tool strip and follow-playhead button use for their lit
+    // state, so "this control is switched on" reads identically everywhere in the timeline. Returns the
+    // fill actually painted, so the caller's text/glyph colour can contrast against THAT.
+    const auto paintHeaderChip = [&](juce::Rectangle<int> bounds, bool active, bool hovered) {
+        ChipState state;
+        state.hovered = hovered;
+        state.active = active;
+        state.raised = true;
+        return paintChip(g, bounds.toFloat(), theme, state);
     };
 
     // Back button: chip background first, then the arrow triangle + "Clips" text on top (never a
     // Unicode glyph through a themed font — the same "draw it, don't asset it" rule
     // TimelineTransportBar's GlyphButton follows for its own one-off shapes). No active state: it
     // is an action, not a toggle.
-    const auto backFill = paintChip(backButtonBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Back);
+    const auto backFill =
+        paintHeaderChip(backButtonBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Back);
     const auto backTextCol = backFill.contrasting(0.9f);
     auto arrowArea = backButtonBounds_.withWidth(9).reduced(0, 4);
     juce::Path arrow;
@@ -421,15 +380,23 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Clips", backButtonBounds_.withTrimmedLeft(12), juce::Justification::centredLeft, false);
 
+    if (drumKitTrack_) {
+        const auto drumFill =
+            paintHeaderChip(drumMachineChipBounds_, false, hoveredHeaderButton_ == HeaderButtonId::DrumMachine);
+        g.setColour(drumFill.contrasting(0.9f));
+        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
+        g.drawText("Drum machine", drumMachineChipBounds_, juce::Justification::centred, false);
+    }
+
     // QUANTISE (note starts -> grid): an ACTION, never lit, but dimmed when it would do nothing (no
     // division chosen, or an empty clip). The momentary press flash — ended by the one-shot timer in
     // timerCallback() — sits ON TOP of whichever base fill is showing, so every press is acknowledged
     // even when the click is a no-op.
     const auto quantiseFill =
-        paintChip(quantiseButtonBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Quantise);
+        paintHeaderChip(quantiseButtonBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Quantise);
     if (quantiseFlash_) {
-        g.setColour(juce::Colours::white.withAlpha(0.25f));
-        g.fillRoundedRectangle(quantiseButtonBounds_.toFloat(), pillRadius);
+        g.setColour(c.textPrimary.withAlpha(0.25f));
+        g.fillRoundedRectangle(quantiseButtonBounds_.toFloat(), cornerRadius);
     }
     drawQuantiseGlyph(g, quantiseButtonBounds_,
                       quantiseFill.contrasting(0.9f).withMultipliedAlpha(isQuantiseEnabled() ? 1.0f : 0.45f));
@@ -437,11 +404,11 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     // QUANTISE LENGTH (note lengths -> grid): Alt+Q's visible twin, and the length twin of the chip
     // above — same action-and-dimmed treatment, SAME isQuantiseEnabled() gate (performQuantiseLength()
     // uses it too), and the same momentary press flash.
-    const auto lengthFill = paintChip(quantiseLengthButtonBounds_, /*active=*/false,
-                                      hoveredHeaderButton_ == HeaderButtonId::QuantiseLength);
+    const auto lengthFill = paintHeaderChip(quantiseLengthButtonBounds_, /*active=*/false,
+                                            hoveredHeaderButton_ == HeaderButtonId::QuantiseLength);
     if (quantiseLengthFlash_) {
-        g.setColour(juce::Colours::white.withAlpha(0.25f));
-        g.fillRoundedRectangle(quantiseLengthButtonBounds_.toFloat(), pillRadius);
+        g.setColour(c.textPrimary.withAlpha(0.25f));
+        g.fillRoundedRectangle(quantiseLengthButtonBounds_.toFloat(), cornerRadius);
     }
     drawQuantiseLengthGlyph(g, quantiseLengthButtonBounds_,
                             lengthFill.contrasting(0.9f).withMultipliedAlpha(isQuantiseEnabled() ? 1.0f : 0.45f));
@@ -449,8 +416,8 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     // QUANTISE PITCHES (note pitches -> scale): the same action-and-dimmed treatment, and a glyph
     // that differs from the one above on the AXIS it snaps along — horizontal blocks onto vertical
     // gridlines up there, a note head onto horizontal rows here.
-    const auto pitchFill = paintChip(quantisePitchButtonBounds_, /*active=*/false,
-                                     hoveredHeaderButton_ == HeaderButtonId::QuantisePitches);
+    const auto pitchFill = paintHeaderChip(quantisePitchButtonBounds_, /*active=*/false,
+                                           hoveredHeaderButton_ == HeaderButtonId::QuantisePitches);
     drawQuantisePitchGlyph(g, quantisePitchButtonBounds_,
                            pitchFill.contrasting(0.9f).withMultipliedAlpha(isPitchQuantiseEnabled() ? 1.0f : 0.45f));
 
@@ -459,7 +426,7 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     // LOGICAL target (scalePanelVisible_ — what the panel is animating TOWARDS) rather than the child
     // component's own on-screen flag, which stays true for the whole close slide too.
     const auto scaleFill =
-        paintChip(scaleButtonBounds_, scalePanelVisible_, hoveredHeaderButton_ == HeaderButtonId::Scale);
+        paintHeaderChip(scaleButtonBounds_, scalePanelVisible_, hoveredHeaderButton_ == HeaderButtonId::Scale);
     g.setColour(scaleFill.contrasting(0.9f));
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Scale", scaleButtonBounds_, juce::Justification::centred, false);
@@ -467,11 +434,29 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     // SHOW ONLY SCALE NOTES: a toggle, so it paints lit like Snap does. Dimmed with no scale chosen —
     // the flag is still remembered (arm it first, pick the scale second), it simply has no visible
     // effect yet, and saying so is better than a control that looks live and does nothing.
-    const auto filterFill =
-        paintChip(scaleFilterButtonBounds_, isScaleFilterOn(), hoveredHeaderButton_ == HeaderButtonId::ScaleFilter);
+    const auto filterFill = paintHeaderChip(scaleFilterButtonBounds_, isScaleFilterOn(),
+                                            hoveredHeaderButton_ == HeaderButtonId::ScaleFilter);
     drawScaleFilterGlyph(
         g, scaleFilterButtonBounds_,
         filterFill.contrasting(0.9f).withMultipliedAlpha(activeScaleForOpenClip().has_value() ? 1.0f : 0.45f));
+
+    // VELOCITY (a toggle, lit while the strip is shown) and HUMANIZE (an action that opens its
+    // amount menu). Words, like "Scale": each names a thing, and a glyph for either would be a guess.
+    // One outline round the Velocity chip, the Humanize chip and the value box, with "Set" captioning
+    // the box ("Set [ 100 ]"). Drawn first so the chips sit inside it; it is not a hit target.
+    g.setColour(border);
+    g.drawRoundedRectangle(velocityGroupBounds_.toFloat().reduced(0.5f), cornerRadius + 2.0f, 1.0f);
+    g.setColour(mutedText);
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
+    g.drawText("Set", velocityCaptionBounds_, juce::Justification::centredLeft, false);
+    const auto velocityFill =
+        paintHeaderChip(velocityChipBounds_, velocityLaneVisible_, hoveredHeaderButton_ == HeaderButtonId::Velocity);
+    g.setColour(velocityFill.contrasting(0.9f));
+    g.drawText("Velocity", velocityChipBounds_, juce::Justification::centred, false);
+    const auto humanizeFill =
+        paintHeaderChip(humanizeChipBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Humanize);
+    g.setColour(humanizeFill.contrasting(0.9f));
+    g.drawText("Humanize", humanizeChipBounds_, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -611,9 +596,9 @@ void PianoRollComponent::paintMarquee(juce::Graphics& g) {
     // TimelineClipLaneArea::paintMarquee: accent fill at low alpha + a brighter accent border at
     // the theme's guideLineWidth. Previously a flat white at low alpha, easy to lose against a
     // light theme's background; this keeps all three marquees moving together on a theme change.
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
-    const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
+    const auto& theme = synth::theme::themeOf(*this);
+    const juce::Colour accentColour = theme.colors.accent;
+    const float lineWidth = theme.metrics.guideLineWidth;
 
     const auto bandF = marqueeRect_.toFloat();
     g.setColour(accentColour.withAlpha(0.12f));
@@ -633,7 +618,7 @@ int PianoRollComponent::getPlayheadLineX() const noexcept {
 }
 
 juce::Rectangle<int> PianoRollComponent::playheadStripFor(int x) const noexcept {
-    return {x - kPlayheadStripHalfWidth, 0, 2 * kPlayheadStripHalfWidth + 1, getHeight()};
+    return {x - kPlayheadStripHalfWidth, 0, 2 * kPlayheadStripHalfWidth + 1, canvasBottom()};
 }
 
 // requestRepaintStrip/requestRepaintPreviewStrip/requestRepaintHeaderButtonStrip are the paint-count
@@ -645,6 +630,12 @@ void PianoRollComponent::requestRepaintStrip(juce::Rectangle<int> strip) { repai
 void PianoRollComponent::requestRepaintPreviewStrip(juce::Rectangle<int> strip) { repaint(strip); }
 
 void PianoRollComponent::requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip) { repaint(strip); }
+
+// Public twin of headerButtonBoundsFor: the shortcut-hint overlay anchors a bubble on each painted chip
+// (the chips are not child components), re-reading this each time so a resize never leaves it stale.
+juce::Rectangle<int> PianoRollComponent::getHeaderChipBounds(HeaderButtonId which) const noexcept {
+    return headerButtonBoundsFor(which);
+}
 
 juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId which) const noexcept {
     switch (which) {
@@ -660,6 +651,12 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return scaleFilterButtonBounds_;
     case HeaderButtonId::Scale:
         return scaleButtonBounds_;
+    case HeaderButtonId::Velocity:
+        return velocityChipBounds_;
+    case HeaderButtonId::Humanize:
+        return humanizeChipBounds_;
+    case HeaderButtonId::DrumMachine:
+        return drumMachineChipBounds_;
     case HeaderButtonId::None:
         break;
     }
@@ -667,19 +664,7 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
 }
 
 void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
-    HeaderButtonId next = HeaderButtonId::None;
-    if (backButtonBounds_.contains(pos))
-        next = HeaderButtonId::Back;
-    else if (quantiseButtonBounds_.contains(pos))
-        next = HeaderButtonId::Quantise;
-    else if (quantiseLengthButtonBounds_.contains(pos))
-        next = HeaderButtonId::QuantiseLength;
-    else if (quantisePitchButtonBounds_.contains(pos))
-        next = HeaderButtonId::QuantisePitches;
-    else if (scaleFilterButtonBounds_.contains(pos))
-        next = HeaderButtonId::ScaleFilter;
-    else if (scaleButtonBounds_.contains(pos))
-        next = HeaderButtonId::Scale;
+    const HeaderButtonId next = headerButtonAt(pos);
 
     if (next == hoveredHeaderButton_)
         return; // state-change gate: hovering the SAME chip (or none) costs nothing
@@ -713,7 +698,14 @@ void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
         const auto grid = gridRegion();
         if (!grid.isEmpty() && rollView_.pixelsPerBeat > 0.0) {
             const int rawX = (int)std::llround(beatToX(absoluteBeat));
-            if (rawX < grid.getX() || rawX > grid.getRight()) {
+            if (followMode_ == FollowMode::Smooth) {
+                // Pinned at the chosen point; the sub-pixel guard keeps an unmoved view from repainting.
+                const double origin =
+                    followViewOrigin(FollowMode::Smooth, followPointPercent_, absoluteBeat, rollView_.firstVisibleBeat,
+                                     (double)grid.getWidth() / rollView_.pixelsPerBeat);
+                if (std::abs(origin - rollView_.firstVisibleBeat) * rollView_.pixelsPerBeat >= 0.5)
+                    setHorizontalView(rollView_.pixelsPerBeat, origin);
+            } else if (rawX < grid.getX() || rawX > grid.getRight()) {
                 // Land the beat a TENTH of the visible span past the gutter rather than flush
                 // against it — a beat sitting exactly on the edge would immediately re-trigger the
                 // same flip on the very next tick once it advances one more sample.
@@ -746,6 +738,9 @@ void PianoRollComponent::resized() {
     //   2. the RULER band        (rulerBandHeight_) — left blank for the panel's ruler, a SIBLING
     //                                                 drawn on top of it (see setRulerBandHeight)
     //   3. the NOTE CANVAS       (the remainder)    — keys column gutter + grid
+    //   4. the VELOCITY STRIP    (velocityLaneHeightPx(), 0 while hidden) — carved from the BOTTOM
+    //                                                 first, full width, so the scale panel, the
+    //                                                 keys column and the grid all stop above it
     //
     // Band 2 is why the toolbar ends up ABOVE the ruler instead of sandwiched between the ruler and
     // the notes: the roll's rect spans the whole unit and simply does not paint that strip.
@@ -758,6 +753,9 @@ void PianoRollComponent::resized() {
     bounds.removeFromTop(rulerBandHeight_);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
+    drumMachineChipBounds_ = drumKitTrack_ ? header.removeFromLeft(96).reduced(3, 2) : juce::Rectangle<int>();
+    if (drumKitTrack_)
+        header.removeFromLeft(4);
     // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one
     // group, so "the three quantise verbs" (position, length, pitch — the order the feature was
     // designed in) read as one cluster and "scale + its row filter" as another. Every glyph chip is
@@ -771,6 +769,9 @@ void PianoRollComponent::resized() {
     scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
     header.removeFromLeft(2);
     scaleFilterButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
+    // The Velocity + Humanize chips (next along), the value box (the header's right end) and the
+    // velocity strip (the canvas's bottom band) — see PianoRollVelocity.cpp.
+    layoutVelocityControls(header, bounds);
 
     // The panel sits WEST of the keys column, below the toolbar and ruler rows (its own controls, not
     // the toolbar's chips, are how the user works it) — carved BEFORE the keys column, at its
@@ -784,6 +785,7 @@ void PianoRollComponent::resized() {
 
     keysColumnBounds_ = bounds.removeFromLeft(kKeysColumnWidth);
     noteGridBounds_ = bounds; // a REAL gutter: beatToX(firstVisibleBeat) == this rect's left edge
+    layoutHeaderChips();
 }
 
 //==============================================================================

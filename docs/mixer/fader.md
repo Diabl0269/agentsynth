@@ -7,6 +7,16 @@ fader sits in is [`docs/mixer/panel.md`](panel.md); the meter's own, separate ta
 
 ---
 
+## How the fader looks
+
+`AppLookAndFeel::drawLinearSlider` draws the slider: the large size (6 px slot, 30x14 pill cap with a
+centre line) because a mixer fader is at least 64 px wide. The look, its states and the size rules are
+in [`theming.md`](../layout/theming.md#themed-widgets). The dB readout is the label under the
+slider, not a bubble on the cap. The fader takes the fader style chosen in Settings > Appearance > Controls (picked apart from the knob style); its
+colour stays `accent` here (family colours apply only on module cards).
+
+---
+
 ## The taper is UI only and the parameter stays linear dB
 
 `MixerFader` binds a `juce::Slider` (LinearVertical) to a `ChannelStripModule`/`MasterModule` `gain`
@@ -66,8 +76,8 @@ overrides it — reduces the slider bounds by the thumb's own radius on each end
 (`sliderBounds.reduce(0, thumbIndent)`) before `juce::Slider::Pimpl` positions the thumb inside them,
 the same quantity that base class's own `sliderRegionSize` uses. Dividing by the raw component height
 instead measures a longer track than the thumb can actually travel, so the thumb lags the cursor over
-a long drag — visible at typical fader widths, where the thumb radius caps at 12 px, so up to 24 px of
-missing travel. `MixerFaderDragFixture::trackLengthPx()` reads the same call so drag tests stay
+a long drag — visible at typical fader widths, where the thumb radius is 9 px (half the 14 px cap
+plus 2), so up to 18 px of missing travel. `MixerFaderDragFixture::trackLengthPx()` reads the same call so drag tests stay
 correct under whatever `LookAndFeel` resolves.
 
 **No jump on toggle.** Whenever Shift's held state changes mid-drag, `mouseDrag` **re-anchors at the
@@ -142,3 +152,9 @@ slider or the taper at all, so keyboard Up and Down behaviour is independent of 
 - [`docs/mixer/mixer.md`](mixer.md) — the `gain` parameter's range and the strip it belongs to.
 - [`docs/development/test-patterns.md`](../development/test-patterns.md) — the real-mouse-path testing
   convention.
+
+## Knob drags
+
+Dragging the strip's pan knob, or a send's level or pan knob, with the mouse is one undo step: a press that moves
+nothing records nothing, and one Cmd+Z puts the old value back (`Tests/UI/Mixer/MixerTopBarRingTests.cpp`). The key
+nudges record their own step.

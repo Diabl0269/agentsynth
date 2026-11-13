@@ -1,0 +1,141 @@
+# FRO1695: the Parametric EQ curve's keys are rebindable actions (Settings > Shortcuts > EQ) and work through the app's
+# real key path: S solos the selected band (again ends it, Escape ends it before it closes the window), T opens the type
+# menu at the dot, + adds a band, Cmd+D duplicates the band (the canvas's own duplicate must not fire), Backspace removes
+# it, Cmd+Z undoes each, Option+arrows move frequency and gain (and must not move the card on the canvas), plain Up/Down
+# change the width (Q).
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve three times (bands 1, 2 and 4),
+# presses S (the dot rings, the others dim), S again, S then Escape (the window stays), T (the type menu opens at the dot),
+# + and Cmd+D and Backspace (each undone with Cmd+Z), then the same keys on the card's own curve with the card focused:
+# Option+arrows and Up/Down, and S and Escape. Last, Settings > Keyboard Shortcuts shows the EQ section with its 13 rows.
+# Every key goes through the window peer's key path to whatever has keyboard focus, as the OS delivers it.
+# The Settings tab's state (`eqRows`) is read with getState on `shortcutsSettingsState`.
+motion: true
+pop_check: {off: "keys here are checked by values; the glides of undo are filmed by eq-undo-glide and eq-bands-strip"}
+record: true
+save_project: eq-keys
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 100, y: 280, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 400, y: 120, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 700, y: 240, clicks: 2}
+  - wait: {settleMs: 600}
+  - expect: {id: eqWindowStrip, bandCount: 3, selectedBand: 4, soloBand: 0}
+  - expect: {id: eqWindowCurve, hasFocus: true}
+  # (a) S solos the selected band in the window; the ring is on and the others dim.
+  - key: {keys: s, target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, soloBand: 4, soloRing: 1.0, othersDimmed: 1.0, within_ms: 2000}
+  - expect: {id: eqWindowSolo, toggleState: true}
+  - expect: {id: eqCardStrip, soloBand: 4}
+  - mark: {check: 1, name: solo-by-s}
+  - key: {keys: s, target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, soloBand: 0, soloRing: 0.0, othersDimmed: 0.0, within_ms: 2000}
+  - expect: {id: eqWindowSolo, toggleState: false}
+  - key: {keys: s, target: eqWindowCurve}
+  - wait: {settleMs: 500}
+  - expect: {id: eqWindowStrip, soloBand: 4}
+  - key: {keys: escape, target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, soloBand: 0, within_ms: 2000}
+  - expect: {id: eqWindowCurve, exists: true}
+  # (b) T opens the type menu next to the dot.
+  - key: {keys: t, target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: "High Cut", exists: true, within_ms: 2000}
+  - mark: {check: 2, name: type-menu-by-t}
+  - key: {keys: escape, target: "High Cut"}
+  - wait: {settleMs: 600}
+  - expect: {id: "High Cut", exists: false, within_ms: 2000}
+  # (c) + adds, Cmd+D duplicates (no canvas duplicate), Backspace removes, Cmd+Z undoes each.
+  - expect: {id: eqWindowCurve, exists: true}
+  - key: {keys: "+", target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, bandCount: 4, within_ms: 2000}
+  - key: {keys: "cmd+z", target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, bandCount: 3, within_ms: 2000}
+  - expect: {count: {prefix: "card:", equals: 13}}
+  - key: {keys: "4", target: eqWindowCurve}
+  - wait: {settleMs: 400}
+  - expect: {id: eqWindowStrip, selectedBand: 4}
+  - key: {keys: "cmd+d", target: eqWindowCurve}
+  - wait: {settleMs: 900}
+  - expect: {id: eqWindowStrip, bandCount: 4, selectedBand: 3, within_ms: 2000}
+  - expect: {count: {prefix: "card:", equals: 13}}
+  - mark: {check: 3, name: duplicate-by-cmd-d}
+  - key: {keys: backspace, target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, bandCount: 3, within_ms: 2000}
+  - key: {keys: "cmd+z", target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, bandCount: 4, within_ms: 2000}
+  - key: {keys: "cmd+z", target: eqWindowCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqWindowStrip, bandCount: 3, within_ms: 2000}
+  - expect: {count: {prefix: "card:", equals: 13}}
+  # Close the window with a second Escape.
+  - key: {keys: escape, target: eqWindowCurve}
+  - wait: {settleMs: 900}
+  - expect: {id: eqWindowCurve, exists: false, within_ms: 3000}
+  # (d) On the card: focus the card's curve, then Option+arrows move the band, Up/Down change Q; the card stays put.
+  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 432"}
+  - click: {id: eqCardCurve, x: 5, y: 5}
+  - wait: {settleMs: 400}
+  - key: {keys: "4", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - expect: {id: eqCardStrip, selectedBand: 4}
+  - expect: {id: eqCardStrip, contains: {freqHz: "8307.7"}}
+  - key: {keys: "alt+right", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - expect: {id: eqCardStrip, contains: {freqHz: "8801."}}
+  - mark: {check: 4, name: option-arrows-move}
+  - key: {keys: "alt+left", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - key: {keys: "alt+up", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - expect: {id: eqCardStrip, contains: {freqHz: "8307.7", gainDb: "-3.44"}}
+  - key: {keys: "alt+down", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - key: {keys: "up", target: eqCardCurve}
+  - wait: {settleMs: 600}
+  - expect: {id: eqCardStrip, contains: {gainDb: "-4.44", q: "0.5946"}}
+  - expect: {id: "card:Parametric EQ 2", canvasBounds: "2371 1072 560 432"}
+  - key: {keys: s, target: eqCardCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqCardStrip, soloBand: 4, within_ms: 2000}
+  - key: {keys: escape, target: eqCardCurve}
+  - wait: {settleMs: 700}
+  - expect: {id: eqCardStrip, soloBand: 0, within_ms: 2000}
+  # (e) Settings > Keyboard Shortcuts lists the EQ section with its 13 rows.
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - expect: {id: "Settings", showing: true, within_ms: 3000}
+  - click: {id: "Keyboard Shortcuts"}
+  - wait: {}
+  - expect: {id: shortcutsSettingsState, contains: {sections: "EQ"}, within_ms: 2000}
+  - click: {id: "Search shortcuts"}
+  - type: {text: "EQ Band"}
+  - wait: {}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Select Previous EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Select Next EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Move EQ Band Down in Frequency"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Move EQ Band Up in Frequency"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Raise EQ Band Gain"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Lower EQ Band Gain"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Widen EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Narrow EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Solo EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Open EQ Band Type Menu"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Add EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Remove EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Duplicate EQ Band"}}
+  - mark: {check: 5, name: eq-shortcuts-section}

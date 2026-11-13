@@ -6,18 +6,21 @@
 // and returns a fresh handler wrapping live state.
 #include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerColumnHeader.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerFader.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeter.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
@@ -79,6 +82,7 @@ TEST(MixerAccessibilityTest, PanTextFromValueFunctionFormatsAsPercentLeftRight) 
 TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -97,9 +101,57 @@ TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
            "have called setTitle(column.name)";
 }
 
+// The header's badges in words -- "Linked to track X" on a plain track channel, plus
+// "Receives sends from: A" once another track sends into it (it stays a track channel, never
+// "Bus"). The same string is the header's tooltip, and the badge area hit-tests to the header
+// itself (not the name label), so hovering the glyph shows that tooltip.
+TEST(MixerAccessibilityTest, HeaderDescribesLinkedAndReceivesBadgesInWords) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* columnA = mixerPanel.getStripColumnForTest(0);
+    auto* columnB = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(columnA, nullptr);
+    ASSERT_NE(columnB, nullptr);
+    const auto nameA = columnA->getTitle();
+    const auto stripA = columnA->getNodeId();
+    const auto stripB = columnB->getNodeId();
+
+    auto& plainHeader = columnB->getHeaderForTest();
+    EXPECT_TRUE(plainHeader.getDescription().startsWith("Linked to track ")) << "got: " << plainHeader.getDescription();
+    EXPECT_FALSE(plainHeader.getDescription().contains("Receives"));
+    EXPECT_EQ(plainHeader.getTooltip(), plainHeader.getDescription());
+
+    ASSERT_EQ(synth::addSend(mc.getAudioEngine().getGraph(), stripA, stripB), 0);
+    mixerPanel.rebuild();
+    auto* receiving = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(receiving, nullptr);
+    ASSERT_EQ(receiving->getNodeId(), stripB);
+    auto& header = receiving->getHeaderForTest();
+    const auto description = header.getDescription();
+    EXPECT_TRUE(description.startsWith("Linked to track ")) << "got: " << description;
+    EXPECT_TRUE(description.contains("Receives sends from: " + nameA)) << "got: " << description;
+    EXPECT_FALSE(description.contains("Bus")) << "a track channel receiving a send is not a bus";
+    EXPECT_EQ(header.getTooltip(), description);
+
+    receiving->setSize(140, 400);
+    ASSERT_GT(header.getWidth(), 40);
+    // The badges sit left of the Edit on canvas button, which takes the header's right end.
+    const juce::Point<int> onBadge(header.getWidth() - 4 - 16 - 6, header.getHeight() / 2);
+    EXPECT_EQ(header.getComponentAt(onBadge), &header)
+        << "the badge area belongs to the header, whose tooltip names the badges";
+}
+
 TEST(MixerAccessibilityTest, MuteSoloButtonsMirrorToggleState) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -168,6 +220,7 @@ TEST(MixerAccessibilityTest, MasterColumnHasOwnAccessibleTitle) {
 TEST(MixerAccessibilityTest, PanAccessibilityValueStaysFormattedAfterBinding) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -190,7 +243,7 @@ TEST(MixerAccessibilityTest, InsertListRowsExposeNameAndBypassedStateAsRealAxChi
     synth::ui::MixerInsertList list;
     list.setEntries(
         {{{}, "gate-uuid", "Gate", /*bypassed=*/true}, {{}, "eq-uuid", "Parametric EQ", /*bypassed=*/false}},
-        /*linear=*/true, {}, {}, {});
+        /*linear=*/true, {}, {});
     list.setSize(140, list.getPreferredHeight());
 
     auto* row0 = list.getRowAccessibilityComponentForTest(0);
@@ -206,6 +259,7 @@ TEST(MixerAccessibilityTest, InsertListRowsExposeNameAndBypassedStateAsRealAxChi
 TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -229,6 +283,7 @@ TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
 TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -274,13 +329,15 @@ TEST(MixerAccessibilityTest, StatusBarButtonsHaveHumanTitlesNotInternalIds) {
         << "same fallback leak, for \"statusBarTransportPlayStop\"";
 }
 
-TEST(MixerAccessibilityTest, BottomDockDetachButtonHasAHumanTitleNotItsComponentId) {
+TEST(MixerAccessibilityTest, BottomDockDetachIconsHaveAHumanTitleNotTheirComponentId) {
     MainComponent mc(std::make_unique<MockProviderMACT>());
-    auto& detachButton = mc.getBottomDock().getDetachButtonForTest();
-    const auto title = detachButton.getTitle();
-    EXPECT_NE(title, juce::String("detachActiveTab"))
-        << "the ctor's component-name argument must never leak through as the AX title";
-    EXPECT_TRUE(title == "Open in window" || title == "Dock back") << "got: " << title;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    for (const Tab tab : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        const auto title = mc.getBottomDock().getDetachIcon(tab)->getTitle();
+        EXPECT_NE(title, juce::String("detachTab"))
+            << "the ctor's component-name argument must never leak through as the AX title";
+        EXPECT_TRUE(title.startsWith("Detach ") && title.endsWith(" to its own window")) << "got: " << title;
+    }
 }
 
 TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
@@ -296,6 +353,7 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
 
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
 
     auto& mixerHost = mc.getBottomDock().getMixerHost();
     mixerHost.setDetached(true);
@@ -305,9 +363,9 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
     EXPECT_EQ(window->getBackgroundColour(), colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface))
         << "the real setDetached(true) path must hand the window the app's OWN AppLookAndFeel, not "
            "a null one silently falling back to the stock ctor colour";
-    // The redock button VoiceOver lands on inside the window is the SAME borrowed
-    // DetachablePanelHost::detachButton_ -- it must not be unnamed just because it's icon-only.
-    EXPECT_TRUE(mixerHost.getDetachButton().getTitle() == "Dock back")
-        << "got: " << mixerHost.getDetachButton().getTitle();
+    // The dock-back button VoiceOver lands on sits on the mixer toolbar -- named although it is icon-only.
+    EXPECT_TRUE(mixerHost.getDockBackButtonForTest().getTitle() == "Dock back")
+        << "got: " << mixerHost.getDockBackButtonForTest().getTitle();
+    EXPECT_TRUE(mixerHost.getDockBackButtonForTest().isShowing() || mixerHost.getDockBackButtonForTest().isVisible());
     mixerHost.setDetached(false);
 }

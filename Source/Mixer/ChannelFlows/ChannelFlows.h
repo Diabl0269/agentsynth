@@ -2,10 +2,12 @@
 
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
 #include <vector>
 
 namespace synth {
 
+class ConnectionIndex;
 class MacroSet;
 struct Macro;
 
@@ -30,11 +32,16 @@ struct DefaultChannel {
  *  ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for the splice-vs-reuse
  *  ordering). */
 struct DefaultChannelLayout {
+    using NewModuleHook = std::function<void(juce::AudioProcessor&, const juce::String& moduleType)>;
+
     juce::Point<int> gate;
     juce::Point<int> eq;
     juce::Point<int> compressor;
     juce::Point<int> strip;
     juce::Point<int> master;
+    /** Applied to each insert FX (Gate/EQ/Compressor), the Channel Strip, and Master when the flow splices one, before
+     * it enters the graph, so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
+    NewModuleHook onNewModule;
 };
 
 /**
@@ -42,7 +49,7 @@ struct DefaultChannelLayout {
  * (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) -> Master (Mix),
  * after `source`. See
  * ChannelFlowsDefaultChannel.cpp for the channel-numbering derivation, the Master-splice ordering,
- * and why Strip->Master is a plain edge.
+ * and why Core builds Strip->Master as a plain edge (the app then moves it behind the track macro's output port).
  *
  * NO UNDO — a plain graph mutation; the caller must already be inside its own undo transaction.
  *
@@ -107,6 +114,8 @@ struct EnvelopeAndVCA {
  * @param chainSource the node the caller would otherwise pass to buildDefaultAudioChannel as
  *                `source` (the raw instrument — never a Voice Mixer's sum any more, see above)
  *                — becomes the VCA's audio input instead.
+ * @param onNewModule optional new-module hook (the library drop path's Dual I/O default) run on each
+ *                created module before it enters the graph, so the ADSR matches a library-made one.
  * @param chainSourceRightChannel the raw channel carrying `chainSource`'s right leg (same meaning as
  *                buildDefaultAudioChannel's `sourceRightChannel`).
  * @return the created nodes' uuids and the VCA node itself — pass the VCA as the new `chainSource`
@@ -117,7 +126,8 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
                                                  juce::AudioProcessorGraph::Node& trackIn,
                                                  juce::AudioProcessorGraph::Node& chainSource,
                                                  int chainSourceRightChannel, juce::Point<int> adsrPosition,
-                                                 juce::Point<int> vcaPosition);
+                                                 juce::Point<int> vcaPosition,
+                                                 const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
 /** The nodes addPolyEnvelopeAndVCAForInstrument() created; `vca` is null (every uuid empty) on a
  *  partial factory/addNode failure — same "nothing usable was built" contract as EnvelopeAndVCA. */
@@ -149,7 +159,8 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::AudioProcessorGraph::Node& trackIn,
                                                       juce::AudioProcessorGraph::Node& instrument,
                                                       juce::Point<int> polyMidiPosition, juce::Point<int> adsrPosition,
-                                                      juce::Point<int> vcaPosition);
+                                                      juce::Point<int> vcaPosition,
+                                                      const DefaultChannelLayout::NewModuleHook& onNewModule = {});
 
 /**
  * BFS forward from `start` along every signal edge to find every point where `start`'s own signal
@@ -283,6 +294,28 @@ bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c);
 
+/** The same, asking a ConnectionIndex built once for the caller's whole pass. */
+bool isSignalEdge(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                  const juce::AudioProcessorGraph::Connection& c);
+
+/** The pin a cable into `pin` ultimately lands on, following macro port nodes (at most 16 hops);
+ *  `pin` itself when it is not a port. Pure query over `connections`. */
+juce::AudioProcessorGraph::NodeAndChannel
+resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                    const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                    juce::AudioProcessorGraph::NodeAndChannel pin);
+juce::AudioProcessorGraph::NodeAndChannel resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                                                              const ConnectionIndex& cables,
+                                                              juce::AudioProcessorGraph::NodeAndChannel pin);
+
+/** The BACKWARD twin of resolveThroughPorts: the pin that ultimately drives `pin`, following macro
+ *  port nodes upstream (each passes channel k straight to channel k; at most 16 hops). `pin` itself
+ *  when it is not a port, or when a port has nothing feeding it. Pure query over `connections`. */
+juce::AudioProcessorGraph::NodeAndChannel
+resolveSourceThroughPorts(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                          juce::AudioProcessorGraph::NodeAndChannel pin);
+
 // ---- Track presets (docs/mixer/track-presets.md) ----------------------------------------------------------
 
 /**
@@ -321,6 +354,22 @@ bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessorGraph& graph,
                                                             juce::AudioProcessorGraph::NodeID trackSourceId);
 
+/** True for a macro's own port node (Macro In/Out, Macro MIDI In/Out): boundary plumbing, never a module. */
+bool isMacroPortNode(const juce::AudioProcessor* p);
+
+/** One node a MIDI walk reached, and the connection (the walk's last leg) that lands on it. A node reached
+ *  by two paths appears once per path. */
+struct MidiReachLeg {
+    juce::AudioProcessorGraph::NodeID node;
+    juce::AudioProcessorGraph::Connection lastLeg;
+};
+
+/** Forward from `sourceId`'s MIDI output over MIDI edges, expanding ONLY through macro port nodes (so a
+ *  cable that enters or leaves a macro still counts as reaching what is behind it). Returns every
+ *  non-port node reached with the leg that lands on it; `sourceId` itself is never reported. */
+std::vector<MidiReachLeg> findMidiNodesReachedFrom(juce::AudioProcessorGraph& graph,
+                                                   juce::AudioProcessorGraph::NodeID sourceId);
+
 /** Backward from a strip, collecting every distinct track-source node whose signal reaches it,
  *  transitively through the instrument/macro chain. Never expands PAST another ChannelStripModule
  *  reached upstream (that strip is another channel's terminus -- whatever feeds IT is not this
@@ -331,5 +380,31 @@ juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessor
  * computed once for both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
 std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                             juce::AudioProcessorGraph::NodeID stripId);
+
+/** A one-pass snapshot of the graph's track-link signal edges (the same edge rule as the two queries above), so
+ *  every track of a timeline rebuild is answered from ONE connection scan instead of two BFS walks each (every
+ *  BFS step re-scans the whole connection list: a per-track walk is quadratic in the track count).
+ *
+ *  Answers are identical to findStripFedByTrackSource / findTrackSourcesFeedingStrip (same visit order). The map
+ *  is a SNAPSHOT: valid only while the graph is not edited; build one per rebuild, never keep it across edits. */
+class TrackChannelReachMap {
+public:
+    explicit TrackChannelReachMap(juce::AudioProcessorGraph& graph);
+
+    /** Same result as findStripFedByTrackSource(graph, trackSourceId). */
+    juce::AudioProcessorGraph::NodeID stripFedByTrackSource(juce::AudioProcessorGraph::NodeID trackSourceId) const;
+
+    /** Same result as findTrackSourcesFeedingStrip(graph, stripId); computed once per strip. */
+    const std::vector<juce::AudioProcessorGraph::NodeID>&
+    trackSourcesFeedingStrip(juce::AudioProcessorGraph::NodeID stripId) const;
+
+private:
+    using NodeID = juce::AudioProcessorGraph::NodeID;
+    juce::AudioProcessorGraph& graph_;
+    std::map<NodeID, std::vector<NodeID>> out_; // signal edges, in connection order
+    std::map<NodeID, std::vector<NodeID>> in_;
+    mutable std::map<NodeID, NodeID> stripBySource_;
+    mutable std::map<NodeID, std::vector<NodeID>> feedersByStrip_;
+};
 
 } // namespace synth

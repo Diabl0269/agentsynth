@@ -117,3 +117,23 @@ TEST_F(WavetableOscillatorModuleTest, OctaveParameterTransposesInPolyMode) {
     EXPECT_GT(magnitudeAt(out, 0, 880.0f, kSampleRate), 0.4f) << "one octave up should sound at 880 Hz";
     EXPECT_LT(magnitudeAt(out, 0, 440.0f, kSampleRate), 0.1f);
 }
+
+// Regression test for FRO750: a Level CV that idles at 0 and starts in the second half of a block
+// was read as an unpatched jack, so the block ignored it.
+TEST_F(WavetableOscillatorModuleTest, LevelCVThatStartsMidBlockActsWithinThatBlock) {
+    juce::AudioBuffer<float> block(13, kBlockSize);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 3; ++b) { // let the voice and its level smoother settle
+        block.clear();
+        module->processBlock(block, midi);
+    }
+
+    block.clear();
+    for (int i = kBlockSize / 2; i < kBlockSize; ++i)
+        block.setSample(5, i, -1.0f);
+    module->processBlock(block, midi);
+
+    const int half = kBlockSize / 2;
+    EXPECT_GT(block.getMagnitude(0, 0, half), 0.05f);
+    EXPECT_LT(block.getMagnitude(0, half + 8, half - 8), 1.0e-3f);
+}

@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include <algorithm>
@@ -17,10 +18,19 @@ namespace synth::ui {
 
 using namespace synth::ui::detail;
 
+namespace {
+// A pen or ramp on the velocity strip follows the roll's view sideways only: the strip sits under the grid, so the
+// grid's vertical zones would read its pointer as held at the bottom edge.
+bool velocityLaneFollows(const std::unique_ptr<PianoRollVelocityLane>& lane) {
+    return lane != nullptr && lane->followsView();
+}
+} // namespace
+
 //==============================================================================
 // ---- Mouse ----
 
 void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
+    wheelTween_.stop();
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
@@ -30,9 +40,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     moveUnquantized_ = false;
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;
+    setCopyDrag(false);
+    clearGhostSettle();
 
     if (doc_ == nullptr || !clipId_.isValid() || doc_->getClip(clipId_) == nullptr)
         return;
+    // A macOS Ctrl+left-click still arrives as the LEFT button with ctrlModifier set (JUCE only maps
+    // buttonNumber 1 to the right button), so the velocity-scrub chord below is not filtered here.
     if (!e.mods.isLeftButtonDown())
         return; // no right-click menu in v1
 
@@ -46,39 +60,15 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     mouseDownBeat_ = xToBeat((double)pos.x);
     mouseDownPitch_ = pitchForY(pos.y);
     lastDragPointer_ = pos;
-    if (backButtonBounds_.contains(pos)) {
-        requestClose();
-        return;
-    }
-    // Each chip now does exactly ONE thing on a plain click — no modifier variants anywhere in the
-    // header. Snap and quantise used to share the single "Q" chip (plain click vs Shift+click), which
-    // is precisely the ambiguity the split into separate glyph chips removes. The Snap chip itself
-    // was later removed (FRO108) — it duplicated the timeline toolbar's own Snap button on the same
-    // shared TimelineViewState::snapEnabled; toggleSnap() and the J key still work unchanged.
-    if (quantiseButtonBounds_.contains(pos)) {
-        flashQuantiseButton(); // feedback even when the click is a no-op
-        performQuantise();
-        return;
-    }
-    if (quantiseLengthButtonBounds_.contains(pos)) {
-        flashQuantiseLengthButton(); // mirrors the Quantise chip above: same isQuantiseEnabled() gate
-        performQuantiseLength();
-        return;
-    }
-    if (quantisePitchButtonBounds_.contains(pos)) {
-        quantisePitchesToActiveScale(); // silently a no-op with no scale chosen, like the chip's dim
-        return;
-    }
-    if (scaleButtonBounds_.contains(pos)) {
-        toggleScalePanel();
-        return;
-    }
-    if (scaleFilterButtonBounds_.contains(pos)) {
-        toggleScaleFilter();
+    // Each header chip does exactly ONE thing on a plain click; see activateHeaderButton.
+    if (const auto chip = headerButtonAt(pos); chip != HeaderButtonId::None) {
+        activateHeaderButton(chip);
         return;
     }
     if (pos.y < canvasTop())
         return; // rest of the header strip: inert
+    if (pos.y >= canvasBottom())
+        return; // the velocity strip's band: its own child component handles it
     if (pos.x < leftGutterWidth()) {
         // KEYS COLUMN = a virtual keyboard. Pressing a key auditions that pitch through the SAME
         // onAuditionNote path a note click uses, so it reaches the same destination modules the
@@ -109,10 +99,21 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
             startAudition(note->pitch, note->velocity);
     }
 
+    // Velocity scrub is tested BEFORE the Cmd and Option branches: on Windows/Linux Cmd IS Ctrl, so
+    // the Ctrl+Alt chord must win over both, and on macOS Ctrl alone is free of either. Still
+    // ADDITIVE, never a toggle: the drag scrubs the whole selection's velocity, so yanking the
+    // grabbed note out of it mid-gesture is never what was wanted.
+    if (hit && isVelocityScrubChord(e.mods) && !e.mods.isShiftDown()) {
+        selection_.add(hit->id);
+        beginVelocityScrub(pos);
+        repaint();
+        return;
+    }
+
     // CMD now means ONE thing on a note, whichever part of it you grab: "do this without the grid".
     // Right edge -> unsnapped resize, body -> unsnapped move. That consistency is why velocity scrub
-    // moved off Cmd and onto Option below; a single modifier meaning "smooth" on one half of a note
-    // and "change the volume" on the other half was the thing worth fixing.
+    // lives on the Ctrl chord above; a single modifier meaning "smooth" on one half of a note and
+    // "change the volume" on the other half was the thing worth fixing.
     if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
         if (hit->onRightEdge) {
             if (!selection_.contains(hit->id))
@@ -135,15 +136,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (hit && e.mods.isAltDown() && !e.mods.isShiftDown()) {
-        // Velocity scrub, moved here from Cmd (see above). Option is free for a mouse drag on this
-        // surface: the only other Option bindings the roll owns are KEY chords (Alt+arrows navigate
-        // notes, Option+S toggles the row filter), and a modifier can mean one thing for the keyboard
-        // and another for the mouse without either being ambiguous. Still ADDITIVE, never a toggle —
-        // the drag scrubs the whole selection's velocity, so yanking the grabbed note out of it
-        // mid-gesture is never what was wanted.
-        selection_.add(hit->id);
-        beginVelocityScrub(pos);
+    if (hit && !hit->onRightEdge && e.mods.isAltDown() && !e.mods.isShiftDown()) {
+        // Option+drag on a note body is a copy drag (see PianoRollCopyDrag.cpp). The grabbed note
+        // becomes the selection first, exactly like a plain move.
+        if (!selection_.contains(hit->id))
+            selection_.setSelection({hit->id});
+        setCopyDrag(true);
+        beginMoveOrResize(*hit, pos);
         repaint();
         return;
     }
@@ -210,8 +209,13 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
     }
 
+    // Option is re-read on every drag event so pressing or releasing it mid-drag switches copy <-> move
+    // in place.
+    if (dragMode_ == DragMode::Move)
+        setCopyDrag(e.mods.isAltDown());
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
+    updateMoveCursor();
     updateAutoScrollArming();
 }
 
@@ -349,7 +353,8 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
 }
 
 void PianoRollComponent::updateAutoScrollArming() {
-    const bool dragging = dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
+    const bool lane = velocityLaneFollows(velocityLane_);
+    const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
     const auto grid = gridRegion();
     // maxPerTick=1.0 on both axes here only probes zero-vs-nonzero — the REAL, axis-specific
@@ -357,7 +362,8 @@ void PianoRollComponent::updateAutoScrollArming() {
     const bool insideEdgeZone =
         dragging &&
         (edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(), synth::ui::kEdgeZonePx, 1.0) != 0.0 ||
-         edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(), synth::ui::kEdgeZonePx, 1.0) != 0.0);
+         (!lane &&
+          edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(), synth::ui::kEdgeZonePx, 1.0) != 0.0));
     if (insideEdgeZone && !autoScrollTimer_.isTimerRunning())
         autoScrollTimer_.startTimer(1000 / synth::ui::kEdgeScrollHz);
     else if (!insideEdgeZone && autoScrollTimer_.isTimerRunning())
@@ -369,7 +375,8 @@ void PianoRollComponent::autoScrollTick() {
     // The drag can have ended (mouseUp) or moved out of the zone since the last arming check
     // without another tick having run updateAutoScrollArming() itself — re-check both here rather
     // than trusting the timer's own "it was armed a tick ago" state.
-    const bool dragging = dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
+    const bool lane = velocityLaneFollows(velocityLane_);
+    const bool dragging = lane || dragMode_ == DragMode::Move || dragMode_ == DragMode::Resize ||
                           dragMode_ == DragMode::Marquee || dragMode_ == DragMode::DrawNew;
     if (!dragging) {
         autoScrollTimer_.stopTimer();
@@ -379,16 +386,21 @@ void PianoRollComponent::autoScrollTick() {
     const auto grid = gridRegion();
     const double hVelocityPxPerTick = edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(),
                                                          synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
-    const double vVelocityRowsPerTick = edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
-                                                           synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
+    const double vVelocityRowsPerTick = lane
+                                            ? 0.0
+                                            : edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
+                                                                 synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
     if (hVelocityPxPerTick == 0.0 && vVelocityRowsPerTick == 0.0) {
         autoScrollTimer_.stopTimer(); // the pointer drifted back into the dead middle band
         return;
     }
 
     bool horizontalMoved = false;
+    double movedPx = 0.0;
     if (hVelocityPxPerTick != 0.0 && rollView_.pixelsPerBeat > 0.0) {
+        const double before = rollView_.firstVisibleBeat;
         rollView_.scrollBeats(hVelocityPxPerTick / rollView_.pixelsPerBeat);
+        movedPx = (rollView_.firstVisibleBeat - before) * rollView_.pixelsPerBeat;
         horizontalMoved = true;
     }
     if (vVelocityRowsPerTick != 0.0 && !visiblePitches_.empty()) {
@@ -410,7 +422,10 @@ void PianoRollComponent::autoScrollTick() {
     // the same last-known pointer position. Every branch of updateDragPreviewFromLastPointer
     // already repaints on a real change, so nothing further is needed here for that half of it —
     // only the scroll itself (which touched no note geometry) needs its own repaint below.
-    updateDragPreviewFromLastPointer();
+    if (lane)
+        velocityLane_->followScroll(movedPx);
+    else
+        updateDragPreviewFromLastPointer();
     if (horizontalMoved && onHorizontalViewChanged)
         onHorizontalViewChanged();
     repaint();
@@ -477,11 +492,15 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         dragMode_ = DragMode::None;
         dragNotes_.clear();
         moveUnquantized_ = false;
+        setCopyDrag(false);
+        updateMoveCursor();
         repaint();
         return;
     }
 
-    if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
+    if (dragMode_ == DragMode::Move && copyDrag_) {
+        commitCopyDrag();
+    } else if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
         const auto notes = dragNotes_;
         const double delta = previewDeltaBeats_;
         // A ROW delta (see previewDeltaPitch_) — resolved through the SAME rowShiftedPitch the
@@ -552,6 +571,8 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
     previewLengthDelta_ = 0.0;
+    setCopyDrag(false);
+    updateMoveCursor();
     repaint();
 }
 
@@ -564,7 +585,7 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (activeTool_ != EditTool::Select)
         return;
     const auto pos = e.getPosition();
-    if (pos.y < canvasTop() || pos.x < leftGutterWidth())
+    if (pos.y < canvasTop() || pos.y >= canvasBottom() || pos.x < leftGutterWidth())
         return;
 
     // JUCE dispatches this AFTER the second mouseDown/mouseUp pair, so whatever those did (select a
@@ -629,13 +650,14 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     const bool shift = e.mods.isShiftDown();
     const auto pos = e.getPosition();
 
-    if (command && shift) {
-        // Vertical zoom. Direction is the PHYSICAL gesture (up zooms in by default — see
-        // wheelZoomFactor below), not the raw delta sign, so it reads the same whether or not the
-        // OS has natural scrolling on. The amount comes from dominantWheelDelta, NOT from
+    if ((command && shift) || isOptionVerticalZoom(e.mods, wheel)) {
+        // Vertical zoom (Cmd+Shift, or Option plus a vertical scroll, the same key the timeline uses). Direction is the
+        // PHYSICAL gesture (up zooms in by default — see wheelZoomFactor below), not the raw delta sign, so it reads
+        // the same whether or not the OS has natural scrolling on. The amount comes from dominantWheelDelta, NOT from
         // wheel.deltaY: macOS folds a Shift-held wheel gesture into deltaX, so reading deltaY here
         // meant this branch received exactly 0.0 and the vertical zoom was dead on the platform it
         // was written on.
+        wheelTween_.stop();
         zoomVerticalAroundY(wheelZoomFactor(wheel), (double)pos.y);
         return;
     }
@@ -648,10 +670,14 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // (wheelZoomFactor) — a modifier-decided branch must never depend on which axis the OS
         // parked the gesture on, and the two zoom branches must never disagree about which way is
         // "in".
+        wheelTween_.stop();
         zoomHorizontalAroundX(wheelZoomFactor(wheel), std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
         return;
     }
 
+    // A plain mouse-wheel notch (neither smooth nor inertial) eases over ~120 ms; a trackpad keeps
+    // the direct path, where every event is already a small step.
+    const bool eased = !wheel.isSmooth && !wheel.isInertial;
     // Shift+wheel is horizontal scroll; so is a trackpad's own horizontal delta.
     const bool horizontal = shift || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
@@ -667,12 +693,9 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         const double amountPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
         if (amountPx != 0.0) {
             // The user is deliberately looking elsewhere -- follow must not undo it on the next
-            // playhead tick. See followSuspended_'s comment.
+            // playhead tick (see followSuspended_'s comment); applyWheelScroll sets it per step.
             followSuspended_ = true;
-            rollView_.scrollBeats(amountPx / rollView_.pixelsPerBeat);
-            repaint();
-            if (onHorizontalViewChanged)
-                onHorizontalViewChanged();
+            scrollByWheel(0, amountPx / rollView_.pixelsPerBeat, eased);
         }
         return;
     }
@@ -700,9 +723,35 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         const double deltaRows = -amountY * kPitchScrollSemitonesPerWheelUnit;
         // Gated on whether the CLAMPED result actually moved, not on the delta being non-zero: a
         // wheel that keeps pushing past the top/bottom row must cost zero repaints.
-        if (deltaRows != 0.0 && setTopRowPosition(topRowPosition_ + deltaRows))
-            repaint();
+        if (deltaRows != 0.0)
+            scrollByWheel(1, deltaRows, eased);
     }
+}
+
+// Not showing (headless tests) or a direct event: apply now, and end any tween first so it can't
+// fight this move. Otherwise ScrollTweenRunner eases the amount in, retargeting mid-flight.
+void PianoRollComponent::scrollByWheel(int axis, double amount, bool eased) {
+    const auto read = [this](int a) { return a == 0 ? rollView_.firstVisibleBeat : topRowPosition_; };
+    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
+    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
+        return;
+    wheelTween_.stop();
+    applyWheelScroll(axis, amount);
+}
+
+// The pitch axis is gated on the CLAMPED result moving (a wheel pushing past the top/bottom row
+// must cost zero repaints); the horizontal one repaints and notifies per applied step.
+void PianoRollComponent::applyWheelScroll(int axis, double amount) {
+    if (axis == 1) {
+        if (setTopRowPosition(topRowPosition_ + amount))
+            repaint();
+        return;
+    }
+    followSuspended_ = true;
+    rollView_.scrollBeats(amount);
+    repaint();
+    if (onHorizontalViewChanged)
+        onHorizontalViewChanged();
 }
 
 //==============================================================================
@@ -717,5 +766,10 @@ void PianoRollComponent::setFollowPlayhead(bool follow) noexcept {
     followSuspended_ = false;
 }
 bool PianoRollComponent::isFollowPlayhead() const noexcept { return followPlayhead_; }
+
+void PianoRollComponent::setFollowStyle(FollowMode mode, int pointPercent) noexcept {
+    followMode_ = mode;
+    followPointPercent_ = clampFollowPointPercent(pointPercent);
+}
 
 } // namespace synth::ui

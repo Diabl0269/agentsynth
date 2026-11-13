@@ -15,16 +15,15 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/LimiterModule.h"
 #include "Modules/FX/PhaserModule.h"
-#include "Modules/FX/ReverbModule.h"
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
-#include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include "TestPaths.h"
 #include <bit>
 #include <gtest/gtest.h>
 

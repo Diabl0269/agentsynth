@@ -7,7 +7,7 @@
 
 // Populates `combo` with the "Factory Default" sentinel (kMixerDefaultPresetFactoryComboId) plus
 // every saved `kind` preset (kMixerDefaultPresetComboIdBase + index) — same snapshot-at-populate-
-// time posture the "+ Track" menu's own preset submenus take, since this combo is populated once
+// time posture the "Add Track" menu's own preset submenus take, since this combo is populated once
 // at construction rather than re-collected live. Declared extern in
 // PreferencesSettingsTabInternal.h (the constructor, in PreferencesSettingsTabLifecycle.cpp, is
 // where it's actually called) — same "one definition, several callers" pattern as comboIdFromMode.
@@ -77,13 +77,15 @@ void PreferencesSettingsTab::setMixerDefaultTrackPresetInstrument(const juce::St
 // Constructs/wires the two combos — pulled out of PreferencesSettingsTab's constructor
 // (PreferencesSettingsTabLifecycle.cpp) into its own named step so that constructor stays under
 // the function-size ratchet; populateMixerDefaultPresetCombo() lists "Factory Default" plus every
-// saved preset of that type, snapshotted once here (same posture the "+ Track" menu's own
+// saved preset of that type, snapshotted once here (same posture the "Add Track" menu's own
 // submenus take).
 void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioLabel);
     mixerDefaultTrackPresetAudioLabel.setText("Default Audio track preset:", juce::dontSendNotification);
     mixerDefaultTrackPresetAudioLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioCombo);
+    mixerDefaultTrackPresetAudioCombo.setTitle("Default Audio track preset");
+    mixerDefaultTrackPresetAudioCombo.setTooltip("The preset a new Audio track starts from.");
     populateMixerDefaultPresetCombo(mixerDefaultTrackPresetAudioCombo, synth::TrackPresetKind::Audio);
     // setMixerDefaultTrackPresetAudio also re-persists the value it just read, which is harmless
     // (idempotent) and keeps this to one code path rather than duplicating the combo-selection walk.
@@ -96,6 +98,8 @@ void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     mixerDefaultTrackPresetInstrumentLabel.setText("Default Instrument track preset:", juce::dontSendNotification);
     mixerDefaultTrackPresetInstrumentLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentCombo);
+    mixerDefaultTrackPresetInstrumentCombo.setTitle("Default Instrument track preset");
+    mixerDefaultTrackPresetInstrumentCombo.setTooltip("The preset a new Instrument track starts from.");
     populateMixerDefaultPresetCombo(mixerDefaultTrackPresetInstrumentCombo, synth::TrackPresetKind::Instrument);
     setMixerDefaultTrackPresetInstrument(
         appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {}));
@@ -177,6 +181,9 @@ void PreferencesSettingsTab::setupMixerPlacementControls() {
     mixerPlacementLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(mixerPlacementCombo);
+    mixerPlacementCombo.setTitle("Mixer placement");
+    mixerPlacementCombo.setTooltip(
+        "Where the mixer shows: as a tab beside the Timeline, in its own panel, or in a window.");
     mixerPlacementCombo.addItem("Tab beside the Timeline", kMixerPlacementTabComboId);
     mixerPlacementCombo.addItem("Own panel", kMixerPlacementOwnPanelComboId);
     mixerPlacementCombo.addItem("Window", kMixerPlacementWindowComboId);
@@ -205,7 +212,7 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     if (previousGroupWasVisible) {
         // Same divider math as layoutContent's own addDivider() closure -- inlined rather than
         // shared, since that closure (and the pendingDivider local it tracks) lives inside a
-        // baselined function this ticket must not grow; dividerBounds is a plain member field,
+        // baselined function (function-size ratchet) that must not grow; dividerBounds is a plain member field,
         // reachable directly.
         y += 10;
         dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
@@ -217,4 +224,25 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     mixerPlacementCombo.setBounds(row.removeFromLeft(160));
     y += 24;
     chainNext();
+}
+
+// Lays out the Mixer category's rows, then the chain it heads: the placement row, the Panels &
+// Windows row and the MIDI Remote rows each set their own category as they lay out.
+void PreferencesSettingsTab::layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider,
+                                               const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
+                                               const BeginGroupFn& beginGroup) {
+    enterCategory(Category::Mixer, y);
+    // Group 4d: mixer auto-create-channel-on-connect toggle.
+    {
+        const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
+        setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            mixerAutoCreateChannelOnConnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+    // Group 9; chains the placement, panel-detach-mode and MIDI Remote groups itself -- see that function.
+    layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
 }

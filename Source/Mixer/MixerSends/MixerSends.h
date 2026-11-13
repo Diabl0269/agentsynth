@@ -18,6 +18,7 @@
 
 namespace synth {
 
+class ConnectionIndex;
 class MacroSet;
 
 // ---- Buses -------------------------------------------------------------------------------------
@@ -30,8 +31,13 @@ class MacroSet;
  *  the first strip it meets (that strip IS a source, not something to expand through). Pure query. */
 std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                       juce::AudioProcessorGraph::NodeID stripId);
+/** The same over an index built once for the caller's pass (the graph must not change while it is used). */
+std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
+                                                                      const ConnectionIndex& cables,
+                                                                      juce::AudioProcessorGraph::NodeID stripId);
 
-/** True when `stripId` is a group/send bus (its "isBus" flag, or a strip among its signal predecessors). */
+/** True when `stripId` is a group/send bus: its "isBus" flag, or strips among its signal predecessors
+ *  and no track source among them (a track channel that receives a send stays a track channel). */
 bool isBusStrip(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId);
 
 /** "Bus N", N = `stripId`'s 1-based position among the graph's bus strips in ascending NodeID. */
@@ -54,6 +60,9 @@ juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& grap
 
 /** Strip or Key target of slot `slot` (findSendTarget is its strip-only view). Invalid when unwired. */
 SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
+/** The same over an index built once for the caller's pass (the graph must not change while it is used). */
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                             juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
 /** The first strip `module`'s own output reaches -- the channel a Key target sits on. Invalid if none. */
 juce::AudioProcessorGraph::NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph,
@@ -89,7 +98,7 @@ int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID 
 /** addSend for either kind: a Key target is wired onto the module's Key L/R inputs. Same refusals. */
 int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, const SendTarget& target);
 
-/** Clears slot `slot`'s cables and its active bit (and its mute/mono bits). Higher slots keep
+/** Clears slot `slot`'s cables and its active bit (and its mute/bypass/mono bits). Higher slots keep
  *  their own raw channels, so nothing else is re-wired (only the VISIBLE jack indices renumber).
  *  False when `sourceStrip` is not a strip or the slot was not active. */
 bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
@@ -98,6 +107,11 @@ bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Nod
  *  is not a strip or `slot` is not active. */
 bool setSendMuted(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
                   bool muted);
+
+/** Bypasses/restores an active slot (its audio ramps out and back in), never its level parameter. False (no
+ *  change) when `sourceStrip` is not a strip or `slot` is not active. */
+bool setSendBypassed(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
+                     bool bypassed);
 
 /** Sums/unsums an active slot's L/R to mono. False when `sourceStrip`/`slot` don't resolve. */
 bool setSendMono(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot, bool mono);

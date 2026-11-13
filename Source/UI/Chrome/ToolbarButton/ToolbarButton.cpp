@@ -1,0 +1,247 @@
+// ToolbarButton.cpp -- the top-bar button's state: its art (rebuilt per theme) and its hover, press and
+// lit tweens. Painting lives in AppLookAndFeel::drawToolbarButton (AppLookAndFeelToolbarButton.cpp).
+#include "ToolbarButton.h"
+
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
+
+namespace synth::ui {
+
+namespace {
+// Motion timings (docs/layout/animation.md#motion-rules): hover in / out, press, a lit chip filling / emptying.
+constexpr double kHoverInMs = 110.0;
+constexpr double kHoverOutMs = 90.0;
+constexpr double kPressMs = 80.0;
+constexpr double kLitInMs = 160.0;
+constexpr double kLitOutMs = 110.0;
+// The looping glyph fading its keyframes in and out against the rest glyph.
+constexpr double kLoopInMs = 140.0;
+constexpr double kLoopOutMs = 220.0;
+// How far the glyph lifts on hover (px) and how much the chip squashes when pressed.
+constexpr float kHoverLiftPx = 1.0f;
+constexpr float kPressSquashX = 0.08f;
+constexpr float kPressSquashY = 0.14f;
+// The lit glyph's soft shapes are ink at this alpha.
+constexpr float kLitSoftAlpha = 0.4f;
+} // namespace
+
+ToolbarChipSpec toolbarChipSpec(ToolbarButtonLayout layout) {
+    switch (layout) {
+    case ToolbarButtonLayout::Inline:
+        return {30.0f, 24.0f, 7.0f, 19.0f, 11.5f, 1.0f, 6.0f, 4.0f};
+    case ToolbarButtonLayout::InlineCompact:
+        return {24.0f, 20.0f, 6.0f, 15.0f, 11.5f, 1.0f, 6.0f, 4.0f};
+    case ToolbarButtonLayout::InlineStrip:
+        return {24.0f, 17.0f, 5.0f, 13.0f, 11.0f, 1.0f, 5.0f, 4.0f};
+    case ToolbarButtonLayout::Stacked:
+        break;
+    }
+    return {30.0f, 24.0f, 7.0f, 19.0f, 10.5f, 0.0f, 0.0f, 0.0f};
+}
+
+ToolbarButton::ToolbarButton(const juce::String& name)
+    : juce::DrawableButton(name, juce::DrawableButton::ImageAboveTextLabel) {}
+
+ToolbarButton::~ToolbarButton() {
+    hover_.driver.stop(updater_);
+    press_.driver.stop(updater_);
+    lit_.driver.stop(updater_);
+    loop_.driver.stop(updater_);
+    cycle_.stop(updater_);
+}
+
+void ToolbarButton::setLayout(ToolbarButtonLayout layout) {
+    if (layout == layout_)
+        return;
+    layout_ = layout;
+    repaint();
+}
+
+void ToolbarButton::setContentCentred(bool centred) {
+    contentCentred_ = centred;
+    repaint();
+}
+
+float ToolbarButton::getInlineContentOffset() const {
+    if (!contentCentred_ || !isInline() || getButtonText().isEmpty())
+        return 0.0f;
+    return juce::jmax(0.0f, (float)(getWidth() - getPreferredWidth()) * 0.5f);
+}
+
+void ToolbarButton::setLabel(const juce::String& name, bool captionShown) {
+    setTitle(name);
+    setButtonText(captionShown ? name : juce::String());
+    repaint();
+}
+
+int ToolbarButton::getPreferredWidth() const { return getPreferredWidthFor(getButtonText()); }
+
+int ToolbarButton::getPreferredWidthFor(const juce::String& text) const {
+    const auto spec = toolbarChipSpec(layout_);
+    if (text.isEmpty() || !isInline())
+        return (int)std::ceil(spec.chipWidth) + 4;
+    const auto font = synth::theme::AppLookAndFeel::uiSemiBoldFont(spec.captionSize);
+    const int textWidth = juce::GlyphArrangement::getStringWidthInt(font, text);
+    return (int)std::ceil(spec.inlineLeftInset + spec.chipWidth + spec.inlineGap + spec.inlineRightPad) + textWidth + 1;
+}
+
+void ToolbarButton::setIcon(synth::theme::Icon icon, ToolbarGroup group) {
+    icon_ = icon;
+    group_ = group;
+    motion_ = toolbarIconMotion(icon);
+    refreshArt();
+}
+
+// Both arts are rebuilt from the icon library's untinted original on every call, so a theme switch
+// (applyToolbarIcons, or a look-and-feel change) never recolours an already-recoloured glyph. On a
+// lit chip the roles invert: the colour and paper shapes turn ink, soft shapes ink at 40 percent, and
+// ink details take the group colour, so the glyph reads dark on its filled chip.
+void ToolbarButton::refreshArt() {
+    restArt_ = {};
+    litArt_ = {};
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    if (lf != nullptr && icon_ != synth::theme::Icon::kCount) {
+        const auto& c = lf->getTheme().colors;
+        const auto hue = toolbarGroupHue(lf->getTheme(), group_);
+        const synth::theme::IconRoleColours rest{hue, hue.withMultipliedAlpha(synth::theme::kRoleSoftAlpha), c.iconInk,
+                                                 c.iconPaper};
+        const synth::theme::IconRoleColours lit{c.iconInk, c.iconInk.withMultipliedAlpha(kLitSoftAlpha), hue,
+                                                c.iconInk};
+        restArt_ = splitToolbarIconArt(lf->getRoleIcon(icon_, rest));
+        litArt_ = splitToolbarIconArt(lf->getRoleIcon(icon_, lit));
+    }
+    repaint();
+}
+
+void ToolbarButton::lookAndFeelChanged() {
+    juce::DrawableButton::lookAndFeelChanged();
+    refreshArt();
+}
+
+// Hover, press and lit each follow the button's own state, so a real mouse enter / exit / press and a
+// setToggleState() (which JUCE reports through buttonStateChanged) all drive them. Reduce Motion is
+// read once when a hover starts.
+void ToolbarButton::buttonStateChanged() {
+    juce::DrawableButton::buttonStateChanged();
+    const bool enabled = isEnabled();
+    const float hoverTarget = enabled && getState() != buttonNormal ? 1.0f : 0.0f;
+    if (hoverTarget > hover_.target)
+        motionEnabled_ = !prefersReducedMotion();
+    retarget(hover_, hoverTarget, kHoverInMs, kHoverOutMs);
+    retarget(press_, enabled && getState() == buttonDown ? 1.0f : 0.0f, kPressMs, kPressMs);
+    retarget(lit_, getToggleState() ? 1.0f : 0.0f, kLitInMs, kLitOutMs);
+    updateLoop();
+}
+
+void ToolbarButton::visibilityChanged() {
+    juce::DrawableButton::visibilityChanged();
+    updateLoop();
+}
+
+void ToolbarButton::parentHierarchyChanged() {
+    juce::DrawableButton::parentHierarchyChanged();
+    updateLoop();
+}
+
+void ToolbarButton::setBusy(bool busy) {
+    if (busy == busy_)
+        return;
+    busy_ = busy;
+    if (busy)
+        motionEnabled_ = !prefersReducedMotion();
+    setDescription(busy ? "Assistant is working" : juce::String());
+    setHelpText(busy ? "Assistant is working" : juce::String());
+    updateLoop();
+}
+
+// The loop wants to play while the glyph loops at all and the button is busy or hovered, unless Reduce
+// Motion is on. Its keyframes fade in over the rest glyph and out again; the cycle driver runs only
+// while some of them show, so an idle button schedules no frames.
+void ToolbarButton::updateLoop() {
+    const bool wanted = hasLoopingGlyph() && motionEnabled_ && isEnabled() && (busy_ || hover_.target > 0.5f);
+    retarget(loop_, wanted ? 1.0f : 0.0f, kLoopInMs, kLoopOutMs);
+    if (wanted && isShowing() && !cycle_.isRunning())
+        startLoopCycle();
+    if (!isLoopActive()) {
+        cycle_.stop(updater_);
+        loopPhase_ = 0.0f;
+    }
+}
+
+void ToolbarButton::startLoopCycle() {
+    cycle_.start(
+        updater_, kToolbarAiCycleMs, [](float t) { return t; },
+        [this](float t) {
+            loopPhase_ = t;
+            repaint();
+        },
+        [this] {
+            loopPhase_ = 0.0f;
+            if (isLoopActive() && isShowing())
+                startLoopCycle();
+        });
+}
+
+ToolbarAiFrame ToolbarButton::getLoopFrame() const {
+    if (!hasLoopingGlyph())
+        return {};
+    return toolbarAiBlend(toolbarAiRestFrame(), toolbarAiFrame(loopPhase_), loop_.value);
+}
+
+void ToolbarButton::setLoopPhaseForTest(float phase) {
+    loopPhase_ = phase;
+    repaint();
+}
+
+// A retarget runs from the CURRENT value, eases out arriving and in leaving, and lands at once when
+// the button is not on screen (no VBlank reaches it: headless tests, a hidden window).
+void ToolbarButton::retarget(Fade& fade, float target, double inMs, double outMs) {
+    if (target == fade.target)
+        return;
+    fade.target = target;
+    if (!isShowing()) {
+        fade.driver.stop(updater_);
+        fade.value = target;
+        repaint();
+        return;
+    }
+    const float from = fade.value;
+    const bool arriving = target > from;
+    fade.driver.start(
+        updater_, arriving ? inMs : outMs, arriving ? easeOutCubic : easeInCubic,
+        [this, &fade, from, target](float t) {
+            fade.value = from + (target - from) * t;
+            repaint();
+        },
+        [this, &fade] {
+            fade.value = fade.target;
+            repaint();
+            if (&fade == &loop_)
+                updateLoop(); // the keyframes are gone: stop the cycle
+        });
+}
+
+juce::AffineTransform ToolbarButton::getPartTransform(int index) const {
+    const auto i = (size_t)index;
+    if (!motionEnabled_ || index < 0 || index > 1 || restArt_.parts[i] == nullptr)
+        return {};
+    return toolbarPartTransform(motion_[i], restArt_.partBounds[i], hover_.value, hover_.target > 0.5f);
+}
+
+float ToolbarButton::getIconLift() const { return motionEnabled_ ? kHoverLiftPx * hover_.value : 0.0f; }
+
+juce::Point<float> ToolbarButton::getChipSquash() const {
+    if (!motionEnabled_)
+        return {1.0f, 1.0f};
+    return {1.0f - kPressSquashX * press_.value, 1.0f - kPressSquashY * press_.value};
+}
+
+void ToolbarButton::paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        lf->drawToolbarButton(g, *this, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+    else
+        synth::theme::paintToolbarButton(g, *this, synth::theme::themeOf(*this));
+}
+
+} // namespace synth::ui

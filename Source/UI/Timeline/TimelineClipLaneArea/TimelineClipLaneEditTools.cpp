@@ -5,9 +5,17 @@
 // TimelineClipLaneArea.h; sibling TimelineClipLane*.cpp files in this directory hold the
 // rest of the class.
 
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include "TimelineClipLaneArea.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/ClipKey.h"
+#include "Timeline/FitClipsToKey.h"
+#include "Timeline/FitToKey.h"
+#include "Transport/TransportService.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
@@ -103,6 +111,12 @@ void TimelineClipLaneArea::applyToolCursor() {
     if (!toolCursorsBuilt_)
         rebuildToolCursors();
     setMouseCursor(toolCursors_[(std::size_t)activeTool_]);
+}
+
+void TimelineClipLaneArea::updateMoveCursor() {
+    const bool started = dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewRowDelta_ != 0);
+    if (started)
+        showDragCursor(*this, copyDrag_);
 }
 
 // Split/Glue/Erase/Mute act immediately on press (a DAW's tool click is expected to land under
@@ -206,6 +220,15 @@ void TimelineClipLaneArea::updateDrawGesture(const juce::MouseEvent& e) {
     drawEndBeat_ = end;
     drawDragged_ = true;
     requestToolPreviewRepaint(before.getUnion(getDrawGhostRectForTest()));
+}
+
+void TimelineClipLaneArea::cancelDrawGesture() {
+    const auto ghost = getDrawGhostRectForTest();
+    drawDragged_ = false;
+    drawRow_ = -1;
+    drawTrack_ = {};
+    if (!ghost.isEmpty())
+        requestToolPreviewRepaint(ghost);
 }
 
 void TimelineClipLaneArea::commitDrawGesture() {
@@ -317,7 +340,7 @@ std::optional<TimelineClipLaneArea::SplitPreview> TimelineClipLaneArea::getSplit
 juce::Rectangle<int> TimelineClipLaneArea::getDrawGhostRectForTest() const {
     if (dragMode_ != DragMode::Draw || !drawDragged_ || drawRow_ < 0)
         return {};
-    return computeClipRect(viewState_, drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_, getRowHeight());
+    return computeClipRect(viewState_, getRowLayout(), drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_);
 }
 
 //---- Inline rename ------------------------------------------------------------
@@ -392,11 +415,33 @@ void TimelineClipLaneArea::finishRename(bool commit) {
 // instead — but a test that right-clicked an actual clip would SIGSEGV there while passing
 // locally.
 void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
-    if (doc_ == nullptr)
+    auto menu = buildClipContextMenu(id, localPos);
+    if (menu.getNumItems() == 0)
         return;
+    const auto options = synth::ui::contextMenuOptions(keyboardMenuAnchor_);
+    menu.showMenuAsync(options);
+}
+
+std::vector<synth::ClipId> TimelineClipLaneArea::clipsForMenuAction(synth::ClipId clicked) const {
+    auto ids = selection_.getSelected();
+    if (ids.size() < 2 || std::find(ids.begin(), ids.end(), clicked) == ids.end())
+        return {clicked};
+    return ids;
+}
+
+std::optional<synth::MusicalScale> TimelineClipLaneArea::resolvedKeyFor(const synth::Clip& clip) const {
+    const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+    return synth::resolveClipKey(clip, songKey).key;
+}
+
+// The menu itself, apart from showing it, so a test can walk the real items (and run their actions)
+// without the display a shown menu needs.
+juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
+    if (doc_ == nullptr)
+        return {};
     const auto* clip = doc_->getClip(id);
     if (clip == nullptr)
-        return;
+        return {};
 
     const double pointerBeat = viewState_.xToBeat((double)localPos.x);
     const double snappedPointer = snappedBeatAt(pointerBeat);
@@ -421,6 +466,38 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.addItem(glue);
 
     menu.addItem("Duplicate", [this, id] { applyClipContextChoice(id, ClipContextChoice::Duplicate, 0.0); });
+    // Greyed for an audio clip (only MIDI clips link). "Make unique" shows only on a linked clip.
+    juce::PopupMenu::Item linkedDup("Duplicate linked");
+    linkedDup.setEnabled(clip->assetRef.isEmpty());
+    const juce::KeyPress linkedKey('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    const auto boundKey = shortcuts_ != nullptr ? shortcuts_->getBinding("timelineClipDuplicateLinked") : linkedKey;
+    if (boundKey.isValid())
+        linkedDup.shortcutKeyDescription = boundKey.getTextDescriptionWithIcons();
+    linkedDup.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::DuplicateLinked, 0.0); };
+    menu.addItem(linkedDup);
+    if (doc_->countLinkedClips(id) > 0)
+        menu.addItem("Make unique", [this, id] { applyClipContextChoice(id, ClipContextChoice::MakeUnique, 0.0); });
+    if (doc_->placementForClip(id) != nullptr)
+        menu.addItem("New variation of this part",
+                     [this, id] { applyClipContextChoice(id, ClipContextChoice::NewVariationOfPart, 0.0); });
+    // Greyed, not hidden, unless the clip is a MIDI clip with notes and a key (its own or the song's) to fit to.
+    juce::PopupMenu::Item fitToKey("Fit to key");
+    fitToKey.setEnabled(clip->assetRef.isEmpty() && !clip->notes.empty() && resolvedKeyFor(*clip).has_value());
+    fitToKey.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::FitToKey, 0.0); };
+    menu.addItem(fitToKey);
+    // Beside it when the right-clicked clip is one of several selected: each clip fits to its own key. Greyed unless
+    // one of them is a MIDI clip with notes and a key; audio clips and clips with no key are left alone.
+    const auto selected = clipsForMenuAction(id);
+    if (selected.size() > 1) {
+        const bool anyFittable = std::any_of(selected.begin(), selected.end(), [this](synth::ClipId clipId) {
+            const auto* c = doc_->getClip(clipId);
+            return c != nullptr && c->assetRef.isEmpty() && !c->notes.empty() && resolvedKeyFor(*c).has_value();
+        });
+        juce::PopupMenu::Item fitAll("Fit all clips to key");
+        fitAll.setEnabled(anyFittable);
+        fitAll.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::FitSelectionToKey, 0.0); };
+        menu.addItem(fitAll);
+    }
     // One toggling item rather than two, labelled for what the click will DO.
     menu.addItem(clip->muted ? "Unmute" : "Mute",
                  [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
@@ -441,8 +518,22 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
         menu.addSeparator();
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
+    addRenderToAudioItem(menu, renderSpansForClips(id));
+    return menu;
+}
 
-    menu.showMenuAsync(juce::PopupMenu::Options());
+bool TimelineClipLaneArea::showContextMenuForKeyboardFocus() {
+    if (selection_.isEmpty())
+        return false;
+    const auto id = selection_.getSelected().front();
+    const auto rect = getClipRect(id);
+    if (rect.isEmpty())
+        return false;
+    // The pointer position is the clip's middle, so "Split at pointer" is offered the way a click there would.
+    keyboardMenuAnchor_ = localAreaToGlobal(rect);
+    showClipContextMenu(id, rect.getCentre());
+    keyboardMenuAnchor_.reset();
+    return true;
 }
 
 void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextChoice choice, double pointerBeat) {
@@ -480,6 +571,28 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
             selection_.setSelection({newId});
         break;
     }
+    case ClipContextChoice::DuplicateLinked: {
+        synth::ClipId newId;
+        auto mutate = [this, id, &newId] { newId = doc_->duplicateClipLinked(id); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        if (newId.isValid())
+            selection_.setSelection({newId});
+        break;
+    }
+    case ClipContextChoice::MakeUnique: {
+        auto mutate = [this, id] { doc_->makeClipUnique(id); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        break;
+    }
+    case ClipContextChoice::NewVariationOfPart:
+        addVariationOfPart(id);
+        break;
     case ClipContextChoice::Delete: {
         auto mutate = [this, id] { doc_->removeClip(id); };
         if (undoManager_)
@@ -519,6 +632,35 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
         selection_.remove(target);
         break;
     }
+    case ClipContextChoice::FitToKey: {
+        const auto* clip = doc_->getClip(id);
+        if (clip == nullptr || clip->assetRef.isNotEmpty())
+            return;
+        const auto key = resolvedKeyFor(*clip);
+        if (!key.has_value())
+            return;
+        // The key is copied and the ids taken before the mutation: both would otherwise point into the clip being
+        // edited.
+        const auto ids = synth::fitToKeyTargets(*clip, {});
+        auto mutate = [this, ids, scale = *key] { synth::fitNotesToKey(*doc_, ids, scale); };
+        // recordTimelineChange pushes no undo step when nothing moved.
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        break;
+    }
+    case ClipContextChoice::FitSelectionToKey: {
+        const auto ids = clipsForMenuAction(id);
+        const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+        auto mutate = [this, ids, songKey] { synth::fitClipsToTheirKeys(*doc_, ids, songKey); };
+        // One step for the whole selection; recordTimelineChange pushes none when nothing moved.
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        break;
+    }
     case ClipContextChoice::Rename:
         // Deliberately inert: the rename UI has no headless meaning, and its commit path is
         // renameClip() (see ClipContextChoice). The case exists so the menu's whole vocabulary is
@@ -527,6 +669,30 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
     }
 
     repaint();
+}
+
+// The clip's track becomes its own in a new variation of the section, which this placement now plays. One undo step.
+// The host is told which placement and what to say, so the strip can outline it and a toast can name the new letter.
+void TimelineClipLaneArea::addVariationOfPart(synth::ClipId id) {
+    const auto* placement = doc_->placementForClip(id);
+    const auto* track = doc_->getTrackForClip(id);
+    const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
+    if (section == nullptr || track == nullptr)
+        return;
+    const auto placementId = placement->id;
+    const auto sectionName = section->name;
+    const auto trackName = track->name;
+    int letter = -1;
+    auto mutate = [this, id, &letter] { letter = doc_->addVariationForTrack(id); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    if (letter < 0 || !onVariationAdded)
+        return;
+    const auto name = synth::variationLetter(letter);
+    onVariationAdded(placementId, sectionName + " " + name + ": " + trackName +
+                                      " has its own part now. Switch with the " + name + " chip.");
 }
 
 } // namespace synth::ui

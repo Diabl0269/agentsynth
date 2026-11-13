@@ -9,15 +9,23 @@ break in ways that look exactly like a healthy build, just slower — which is w
   language), with `CCACHE_DIR` pinned explicitly to `${{ github.workspace }}/.ccache` on every
   platform. Max size is set per OS, measured from what a warm main build actually uses: **2 GB on
   Linux** (the Debug+coverage+AI-harness job — a seeded `Linux-ccache-main` entry measured 1.96 GB,
-  already saturating a smaller cap) and **512 MB on macOS and Windows** (Release+tests jobs measured
-  117 MB and 160 MB respectively, so 512 MB is headroom, not the real requirement — every configured
-  byte is a byte a save could write toward the 10 GB repo budget). Keyed `<os>-ccache-<ref>-<sha>`;
+  already saturating a smaller cap), **1 GB on macOS** (one Release+tests build measured 238 MB with
+  the precompiled headers that job turns on) and **1 GB on Windows** (unity batches). An entry
+  fills to its cap over time as merges add objects, so the cap is a few builds' worth rather than
+  the measured size — every configured byte is a byte a save could write toward the 10 GB repo
+  budget). Keyed `<os>-ccache-<ref>-<sha>`;
   the restore-keys fall back this ref → `main` → anything. It also sets `compiler_check=content` and
   `sloppiness=time_macros,include_file_mtime,include_file_ctime`, because `actions/checkout`
   rewrites every file's mtime each run and the compiler binary's mtime changes whenever GitHub
   rebuilds the runner image — under ccache's mtime-based defaults both produce false misses.
 - **FetchContent** — `build/_deps` (JUCE and GoogleTest sources), keyed on
-  `hashFiles('cmake/DependencyVersions.cmake')`.
+  `hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch')`:
+  the cached JUCE tree is the *patched* one ([`juce-patches.md`](juce-patches.md)), so a patch change must
+  change the key. The generation prefix was bumped for it (`deps4` → `deps5`, `release-deps-ninja4` →
+  `release-deps-ninja5`), because the `restore-keys` prefix fallback would otherwise restore an unpatched
+  `juce-src` that nothing re-patches. The JUCE 9.0.3 upgrade bumped it again (`deps5` → `deps6`, `release-deps-ninja5` →
+  `release-deps-ninja6`) for the same reason: the fallback would restore a JUCE 8 `juce-src` that FetchContent
+  would not move to the new tag.
 
 ## Six rules, each learned from an outage
 
@@ -122,7 +130,7 @@ break in ways that look exactly like a healthy build, just slower — which is w
    `ci.yml`'s (see below for why), just no longer exempt from cleanup.
 
    **FRO341 also made JUCE's `FetchContent_Declare` a shallow clone** (`GIT_SHALLOW TRUE` in
-   `CMakeLists.txt` — valid because `SYNTH_JUCE_GIT_TAG` pins a tag, `8.0.3`, not a bare SHA):
+   `CMakeLists.txt` — valid because `SYNTH_JUCE_GIT_TAG` pins a tag, `9.0.3`, not a bare SHA):
    JUCE's own `.git` directory measured ~294 of each ~376 MB deps entry (~80%), pure history no
    build ever reads. `build/_deps`'s cache key hashes only `cmake/DependencyVersions.cmake`, which
    this change does not touch, so the key had to be bumped by hand for the shallow clone to take

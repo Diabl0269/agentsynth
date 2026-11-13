@@ -1,4 +1,4 @@
-// ModuleComponentHostedPluginCard.cpp -- the Hosted Plugin card body: the Open Editor / Choose knobs...
+// ModuleComponentHostedPluginCard.cpp -- the Hosted Plugin card body: the Open Editor / Edit Layout...
 // chrome, and the knobs, toggles and choice combos the resolved layout puts on the card, each bound live
 // to its hosted parameter through a HostedParameterAttachment. ModuleComponent is declared in
 // ModuleComponent.h; this is the per-type unit next to ModuleComponentEQCard.cpp and
@@ -6,11 +6,18 @@
 // at the function-size ratchet ceiling. See docs/control/plugin-card-layout.md#card-rendering-as-built-fro128.
 #include "ModuleComponentHostedPluginCard.h"
 #include "AudioEngine/AudioEngine.h"
+#include "CardKnobSlider.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
+#include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
 using synth::ui::HostedParameterAttachment;
@@ -37,6 +44,10 @@ synth::CardSlotKind resolvedKind(const synth::ResolvedCardSlot& resolved) {
     return kind == synth::CardSlotKind::Auto ? synth::CardSlotKind::Knob : kind;
 }
 
+constexpr float kHostedStatusFontSize = 12.0f;
+constexpr int kHostedStatusLineHeight = 15; // fits one line of the font above; the label wraps and ellipsises at 2
+constexpr int kHostedStatusLines = 2;
+
 } // namespace
 
 // ---- HostedCardBinding ------------------------------------------------------------------------------------
@@ -56,6 +67,18 @@ ModuleComponent::HostedCardBinding::HostedCardBinding(ModuleComponent& card, syn
         card_.rebuildHostedPluginCard();
         card_.relayoutHostedPluginCard();
     };
+    // Showing, hiding or joining an output re-lays the card the way a Dual I/O change does; the cables left on an
+    // output that went hidden are dropped first (an invisible jack cannot be unplugged).
+    module.onOutputsChanged = [this] {
+        card_.owner.dropRoutingsOnHiddenJacks(card_.nodeId);
+        if (card_.hostedOutputs_ != nullptr) // the aux jacks glide, then the card is re-laid at its final rows
+            card_.hostedOutputs_->modelChanged([this] { card_.applyDualIOLayoutChange(); });
+        else
+            card_.applyDualIOLayoutChange();
+    };
+    module.onParameterContextMenu = [this](const juce::String& paramId, juce::PopupMenu& menu) {
+        appendParameterMenuItems(paramId, menu);
+    };
     registered_ = true;
 }
 
@@ -73,9 +96,21 @@ void ModuleComponent::HostedCardBinding::shutdown() {
     if (auto* module = module_.get()) {
         module->removeInstanceObserver(this);
         module->onCardLayoutChanged = nullptr;
+        module->onOutputsChanged = nullptr;
+        module->onParameterContextMenu = nullptr;
     }
     if (store_ != nullptr)
         store_->removeListener(this);
+}
+
+// The plugin window's right-click on one of its controls: "Add to card" (or "On the card") for that
+// parameter. The item's action reaches the module weakly, so a menu left open past a node delete is harmless.
+void ModuleComponent::HostedCardBinding::appendParameterMenuItems(const juce::String& paramId, juce::PopupMenu& menu) {
+    auto* module = module_.get();
+    if (module == nullptr)
+        return;
+    synth::ui::appendAddToCardMenuItem(menu, *module, store_, card_.owner.getAudioEngine().getGraph(), card_.nodeId,
+                                       card_.undoManager, paramId);
 }
 
 // The instance is still alive for this whole call (HostedPluginModule fires the gone edge before it can be
@@ -86,7 +121,12 @@ void ModuleComponent::HostedCardBinding::shutdown() {
 // The deferred step checks the module is still there. A swap to a new instance follows with the live edge,
 // which rebuilds and re-measures itself; the extra pass is harmless.
 void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
+    card_.setPluginTouchToAdd(false); // its capture listens to this instance's parameters
     card_.unbindHostedPluginCard(/*paramsAlive*/ true);
+    if (card_.dualIOButton != nullptr)
+        card_.dualIOButton->setVisible(false); // nothing to split until the next instance publishes
+    if (card_.hostedOutputs_ != nullptr)
+        card_.hostedOutputs_->routingButton().setVisible(false);
 
     juce::Component::SafePointer<ModuleComponent> safeCard(&card_);
     juce::MessageManager::callAsync([safeCard] {
@@ -96,9 +136,15 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
 }
 
 void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
+    card_.repaint(); // the shown name can change when the plugin publishes
+    card_.syncHostedRoutingButtons();
+    card_.reconcileHostedModKnobs();
     card_.rebuildHostedPluginCard();
+    card_.refreshHostedLoadStatus(); // a success clears the reason; it re-measures only when it changed
     card_.relayoutHostedPluginCard();
 }
+
+void ModuleComponent::HostedCardBinding::hostedLoadFailed() { card_.refreshHostedLoadStatus(); }
 
 void ModuleComponent::HostedCardBinding::layoutChangedForPlugin(const synth::PluginIdentity& identity) {
     auto* module = module_.get();
@@ -134,7 +180,8 @@ void ModuleComponent::HostedCardBinding::addControl(const synth::ResolvedCardSlo
 }
 
 void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* slider = card_.sliders.add(new juce::Slider());
+    auto* slider = card_.adoptBespokeWidget(new synth::ui::CardKnobSlider()); // keyboard steps with gestures
+    card_.sliders.add(slider);
     slider->setComponentID("hostedKnob:" + resolved.slot.paramId);
     styleHostedKnob(*slider);
     card_.addAndMakeVisible(slider);
@@ -144,21 +191,33 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     // "Not yet wired" note).
     slider->addMouseListener(&card_, false);
     card_.sliderParams.add(nullptr); // a hosted parameter is not a RangedAudioParameter
+    slider->setTitle(text);          // named before registering: the MIDI Learn tooltip builds on this one
+    slider->setTooltip(text);
     card_.registerHostedMidiLearnable(*slider, *resolved.param, resolved.slot.paramId);
 
-    auto* label = card_.sliderLabels.add(new juce::Label(text, text));
+    auto* label = card_.adoptBespokeWidget(new juce::Label(text, text));
+    card_.sliderLabels.add(label);
     label->setJustificationType(juce::Justification::centred);
     card_.addAndMakeVisible(label);
 
-    wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *slider)),
-                 *resolved.param);
+    auto& attachment = *card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *slider));
+    wireGestures(attachment, *resolved.param);
+    // Takes a mod cable like any card knob: drop target, ring, mod dot, ring drag and cable pickup.
+    card_.wireCardControlGestures(*slider, *slider, nullptr);
+    attachment.restingValue = [module = module_, paramId = resolved.slot.paramId]() -> std::optional<float> {
+        if (auto* hosted = module.get())
+            return hosted->modSlotBase(paramId);
+        return std::nullopt;
+    };
 }
 
 void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* toggle = card_.toggles.add(new detail::MidiLearnableToggleButton(text));
+    auto* toggle = card_.adoptBespokeWidget(new detail::MidiLearnableToggleButton(text));
+    card_.toggles.add(toggle);
     toggle->setComponentID("hostedToggle:" + resolved.slot.paramId);
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false); // See addKnob()'s own comment
+    toggle->setTooltip(text);
     card_.registerHostedMidiLearnable(*toggle, *resolved.param, resolved.slot.paramId);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *toggle)),
@@ -166,14 +225,19 @@ void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot
 }
 
 void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* combo = card_.comboBoxes.add(new juce::ComboBox());
+    auto* combo = card_.adoptBespokeWidget(new juce::ComboBox());
+    card_.comboBoxes.add(combo);
     combo->setComponentID("hostedChoice:" + resolved.slot.paramId);
     card_.addAndMakeVisible(combo);
     combo->addMouseListener(&card_, false); // See addKnob()'s own comment
     card_.comboParams.add(nullptr);         // a hosted parameter is not a RangedAudioParameter
+    combo->setTitle(text);
+    combo->setTooltip(text);
     card_.registerHostedMidiLearnable(*combo, *resolved.param, resolved.slot.paramId);
 
-    card_.addAndMakeVisible(card_.comboLabels.add(new juce::Label(text, text)));
+    auto* label = card_.adoptBespokeWidget(new juce::Label(text, text));
+    card_.comboLabels.add(label);
+    card_.addAndMakeVisible(label);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *combo)),
                  *resolved.param);
@@ -207,26 +271,135 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     };
     addAndMakeVisible(openPluginEditorButton.get());
 
-    chooseKnobsButton = std::make_unique<juce::TextButton>("Choose knobs...");
-    chooseKnobsButton->setComponentID("chooseKnobs");
-    chooseKnobsButton->setTooltip("Choose which plugin parameters show on this card");
-    chooseKnobsButton->onClick = [this] {
+    hostedStatusLabel = std::make_unique<juce::Label>("hostedLoadStatus");
+    hostedStatusLabel->setComponentID("hostedLoadStatus");
+    hostedStatusLabel->setTitle("Plugin load status");
+    hostedStatusLabel->setFont(juce::FontOptions(kHostedStatusFontSize));
+    hostedStatusLabel->setJustificationType(juce::Justification::topLeft);
+    hostedStatusLabel->setMinimumHorizontalScale(1.0f);
+    hostedStatusLabel->setInterceptsMouseClicks(false, false);
+    hostedStatusLabel->setWantsKeyboardFocus(false);
+    hostedStatusLabel->setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    hostedStatusLabel->setVisible(false);
+    addChildComponent(hostedStatusLabel.get());
+
+    // "Turn on": the way back after "Open without it" switched this plugin off for the open. It reloads the
+    // plugin into this module, which still holds its saved state, card layout and mod slots, so it is not an undo
+    // step (it restores what the project already holds). Same button kind as Open Editor.
+    turnPluginBackOnButton = std::make_unique<juce::TextButton>("Turn on");
+    turnPluginBackOnButton->setComponentID("turnPluginBackOn");
+    turnPluginBackOnButton->setTitle("Turn this plugin back on"); // named after the plugin when it shows
+    turnPluginBackOnButton->setTooltip("Load this plugin again in this project");
+    turnPluginBackOnButton->onClick = [this] {
+        if (auto* hostedModule = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr) {
+            hostedModule->turnBackOn();
+            refreshHostedLoadStatus(); // loading now: the status and this button go, the card re-measures
+        }
+    };
+    addChildComponent(turnPluginBackOnButton.get());
+
+    // One split button for adding controls: the list picker on the left, "add by moving a control in the
+    // plugin" on the right (the same split button as the mod dot panel's "Add source").
+    addControlsSplit = std::make_unique<synth::ui::SplitButton>(
+        synth::ui::SplitButtonHalfSpec{synth::ui::ModDotGlyph::List, {}, "Add from list", {}, "Add from list"},
+        synth::ui::SplitButtonHalfSpec{synth::ui::ModDotGlyph::Hand,
+                                       {},
+                                       "Add by moving a control in the plugin",
+                                       "Add by moving a control in the plugin, on",
+                                       "Add by moving a control in the plugin"},
+        "Add controls");
+    addControlsSplit->setComponentID("addControls");
+    addControlsSplit->leftHalf().setComponentID("addControlsFromList");
+    addControlsSplit->rightHalf().setComponentID("addControlsByMoving");
+    addControlsSplit->leftHalf().onClick = [this] {
         if (onChooseKnobsRequested)
             onChooseKnobsRequested();
     };
-    addAndMakeVisible(chooseKnobsButton.get());
+    addControlsSplit->rightHalf().onClick = [this] { setPluginTouchToAdd(!isPluginTouchToAdd()); };
+    addAndMakeVisible(addControlsSplit.get());
 
+    hostedOutputs_ = std::make_unique<synth::ui::HostedOutputsStrip>(
+        *this, hosted,
+        synth::ui::HostedOutputsStrip::Callbacks{[this] {
+                                                     updateLayout();
+                                                     owner.notifyModuleContentChanged();
+                                                     repaint();
+                                                 },
+                                                 [this] { owner.handleModuleResized(this); },
+                                                 [this] { synth::ui::showHostedOutputsPanel(*this); },
+                                                 [this] { synth::ui::toggleHostedOutputsFold(*this); }});
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        hostedOutputs_->setIcon(lf->getIcon(synth::theme::Icon::ModuleDualIO).get());
     hostedCard_ = std::make_unique<HostedCardBinding>(*this, hosted, owner.getPluginCardLayoutStore());
+    syncHostedRoutingButtons();
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
-    if (hosted.hasInstance())
+    if (hosted.hasInstance()) {
+        reconcileHostedModKnobs();
         rebuildHostedPluginCard();
+    } else
+        refreshHostedLoadStatus(/*relayoutOnChange*/ false); // createControls() ends with the measure
 }
 
-// Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Choose knobs..."
-// button (createHostedPluginControls() above wires onChooseKnobsRequested to this very function)
-// and from buildModuleContextMenu()'s own "Choose knobs..." item (ModuleComponentInteraction.cpp),
-// both of which just call onChooseKnobsRequested() -- so this is the ONE place that actually builds
-// the popover (see docs/control/plugin-card-layout.md#choosing-knobs).
+// Load-time reconciliation, once per publish (not a user edit, so no undo step): a project saved before a mod cable on
+// a plugin parameter always added its knob can hold a slot whose parameter is not on the card, so the cable would
+// end at nothing. Every such parameter gets its knob, through the same source bindHostedModTarget uses. That writes
+// this instance's layout override (the card only, never the plugin's shared default). The module's layout hook is
+// off while it runs: the caller rebuilds and re-measures right after, once.
+void ModuleComponent::reconcileHostedModKnobs() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || !hosted->hasInstance() || !hosted->takeModKnobReconcile())
+        return;
+
+    synth::ui::HostedCardLayoutSource source(*hosted, owner.getPluginCardLayoutStore(),
+                                             owner.getAudioEngine().getGraph(), nodeId, /*undoManager=*/nullptr);
+    auto onLayoutChanged = std::move(hosted->onCardLayoutChanged);
+    hosted->onCardLayoutChanged = nullptr;
+    for (int k = 0; k < synth::HostedPluginModule::kMaxModSlots; ++k) {
+        const auto paramId = hosted->modSlotParamId(synth::HostedPluginModule::kModChannelBase + k);
+        if (paramId.isNotEmpty() &&
+            source.parameterState(paramId) == synth::ui::HostedCardLayoutSource::ParameterState::Available)
+            source.showParameter(paramId);
+    }
+    hosted->onCardLayoutChanged = std::move(onLayoutChanged);
+}
+
+// The reason applies while there is no instance, no load is in flight and the module holds a message. It is
+// the label under the Open Editor row and that button's tooltip; when the instance publishes both go back.
+// Re-measures only when the label appears or disappears, so the card's 15 Hz poll can call it freely.
+void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || hostedStatusLabel == nullptr || openPluginEditorButton == nullptr)
+        return;
+
+    const bool show = !hosted->hasInstance() && !hosted->isLoading() && hosted->getStatusMessage().isNotEmpty();
+    const juce::String message = show ? hosted->getStatusMessage() : juce::String();
+    const bool showTurnOn = show && hosted->isSwitchedOffAfterCrash() && turnPluginBackOnButton != nullptr;
+    const bool turnOnChanged = turnPluginBackOnButton != nullptr && showTurnOn != turnPluginBackOnButton->isVisible();
+    const bool visibilityChanged = show != hostedStatusLabel->isVisible() || turnOnChanged;
+
+    if (hostedStatusLabel->getText() != message)
+        hostedStatusLabel->setText(message, juce::dontSendNotification);
+    const juce::String tooltip = show ? message : juce::String("Open this plugin's editor window");
+    if (openPluginEditorButton->getTooltip() != tooltip)
+        openPluginEditorButton->setTooltip(tooltip);
+    if (visibilityChanged) {
+        hostedStatusLabel->setVisible(show);
+        if (turnPluginBackOnButton != nullptr) {
+            turnPluginBackOnButton->setVisible(showTurnOn);
+            if (showTurnOn) {
+                turnPluginBackOnButton->setTitle("Turn " + hosted->getPluginName() + " back on");
+                turnPluginBackOnButton->setTooltip("Load " + hosted->getPluginName() + " again in this project");
+            }
+        }
+        if (relayoutOnChange)
+            relayoutHostedPluginCard();
+    }
+}
+
+// Opens the parameter list picker as a juce::CallOutBox anchored to the split button's list half. Reached from
+// that half (createHostedPluginControls() above wires onChooseKnobsRequested to this) and from the context
+// menu's "Edit Layout..." item (ModuleComponentInteraction.cpp), so this is the ONE place that builds the popover
+// (docs/control/plugin-card-layout.md#choosing-knobs).
 void ModuleComponent::showPluginKnobPicker() {
     if (hostedCard_ == nullptr)
         return;
@@ -235,23 +408,49 @@ void ModuleComponent::showPluginKnobPicker() {
         return;
 
     auto picker = std::make_unique<synth::ui::PluginKnobPickerComponent>(
-        *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager);
-    // Same callback the card's own "Open Editor" button uses (createHostedPluginControls() above) --
-    // MainComponent wires owner.onOpenPluginEditorRequested to HostedPluginWindowManager::openEditorFor,
-    // which is idempotent (brings an already-open window to front), so touch-to-add can call it freely.
-    picker->onOpenPluginEditorRequested = [this] {
-        if (owner.onOpenPluginEditorRequested)
-            owner.onOpenPluginEditorRequested(nodeId);
-    };
-
-    const auto anchor = chooseKnobsButton != nullptr ? chooseKnobsButton->getScreenBounds() : getScreenBounds();
-    launchPluginKnobPickerCallOutBox(std::move(picker), anchor);
+        *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager,
+        owner.getCardKeyboard().getShortcutManager());
+    const auto anchor =
+        addControlsSplit != nullptr ? addControlsSplit->leftHalf().getScreenBounds() : getScreenBounds();
+    launchCardLayoutEditorCallOutBox(std::move(picker), anchor);
 }
 
-// Default: a real juce::CallOutBox. See the header's doc comment on this virtual for why it exists.
-void ModuleComponent::launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker,
-                                                       juce::Rectangle<int> anchor) {
-    juce::CallOutBox::launchAsynchronously(std::move(picker), anchor, nullptr);
+bool ModuleComponent::isPluginTouchToAdd() const {
+    return hostedCard_ != nullptr && hostedCard_->touchToAdd != nullptr;
+}
+
+// "Add by moving a control in the plugin". On: the plugin's own window opens through the owner's editor callback
+// (no popover is built, so nothing covers the plugin) and the owner is told to show the window's tab. The mode
+// stays on until it is turned off here: the hand half again, Done on the tab, Esc, or closing the window (the owner
+// reaches this through GraphEditor::endPluginAddingControls). Every path ends in the split button showing the
+// truth, including a refusal (no live instance).
+void ModuleComponent::setPluginTouchToAdd(bool on) {
+    if (hostedCard_ == nullptr)
+        return;
+    const bool wasOn = isPluginTouchToAdd();
+    auto* hosted = hostedCard_->getModule();
+    if (on && !wasOn && hosted != nullptr && hosted->hasInstance()) {
+        hostedCard_->touchToAdd = std::make_unique<synth::ui::PluginTouchToAdd>(
+            *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager);
+        hostedCard_->touchToAdd->onRequestOpenEditor = [this] {
+            if (owner.onOpenPluginEditorRequested)
+                owner.onOpenPluginEditorRequested(nodeId);
+        };
+        hostedCard_->touchToAdd->start(); // opens the window, so the tab has a window to hang from
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, true);
+        juce::AccessibilityHandler::postAnnouncement(
+            "Adding controls. Move a control in the plugin window to add it. Escape stops.",
+            juce::AccessibilityHandler::AnnouncementPriority::medium);
+    } else if (!on && wasOn) {
+        hostedCard_->touchToAdd.reset();
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, false);
+        juce::AccessibilityHandler::postAnnouncement("Stopped adding controls.",
+                                                     juce::AccessibilityHandler::AnnouncementPriority::medium);
+    }
+    if (addControlsSplit != nullptr)
+        addControlsSplit->setRightLit(isPluginTouchToAdd());
 }
 
 // Only ever runs with the instance the resolver reads still live: from the live edge, from a layout change
@@ -275,7 +474,7 @@ void ModuleComponent::rebuildHostedPluginCard() {
 // Attachments first, then the widgets they point at. `paramsAlive` false abandons each attachment instead of
 // detaching it, so a parameter that may already be freed is never touched. Every slider/combo/toggle on a
 // hosted card is a hosted control (the branch builds no generic ones), so the member arrays are emptied
-// whole.
+// whole and the widgets they point at destroyed.
 void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
     for (auto* attachment : hostedAttachments_) {
         attachment->onGestureChanged = nullptr;
@@ -296,6 +495,7 @@ void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
     comboBoxes.clear();
     comboParams.clear();
     toggles.clear();
+    ownedBespokeWidgets_.clear(); // a hosted card's widgets are the only bespoke ones it has
 
     if (hostedCard_ != nullptr) {
         hostedCard_->boundInstance = nullptr;
@@ -315,8 +515,15 @@ void ModuleComponent::releaseHostedPluginCard() {
     const bool paramsAlive = hosted != nullptr && hosted->getActiveInstanceForEditor() == hostedCard_->boundInstance;
 
     hostedCard_->shutdown();
+    if (hostedCard_->touchToAdd != nullptr) {
+        // Same teardown as turning it off, minus the split button, which goes with the card.
+        hostedCard_->touchToAdd.reset();
+        if (owner.onPluginAddingControlsChanged)
+            owner.onPluginAddingControlsChanged(nodeId, false);
+    }
     unbindHostedPluginCard(paramsAlive);
-    chooseKnobsButton.reset();
+    addControlsSplit.reset();
+    hostedOutputs_.reset();
     hostedCard_.reset();
 }
 
@@ -350,6 +557,8 @@ void ModuleComponent::handleHostedGesture(const juce::AudioProcessorParameter& p
 // Both buttons share one row at the top of the body, each half of the narrow band. The knobs, toggles and
 // combos the layout put on the card are placed by the generic grid in layoutDefaultContent, below this.
 int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply) {
+    if (apply && hostedOutputs_ != nullptr)
+        hostedOutputs_->layout();
     if (openPluginEditorButton == nullptr)
         return y;
 
@@ -357,8 +566,42 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
     const int half = (narrowW - kGap) / 2;
     if (apply) {
         openPluginEditorButton->setBounds(narrowX, y, half, kRowHeight);
-        if (chooseKnobsButton != nullptr)
-            chooseKnobsButton->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
+        if (addControlsSplit != nullptr)
+            addControlsSplit->setBounds(narrowX + half + kGap, y, narrowW - half - kGap, kRowHeight);
     }
-    return y + kRowHeight + 6;
+    y += kRowHeight + 6;
+    if (hostedStatusLabel != nullptr && hostedStatusLabel->isVisible()) {
+        if (apply)
+            hostedStatusLabel->setBounds(narrowX, y, narrowW, kHostedStatusLines * kHostedStatusLineHeight);
+        y += kHostedStatusLines * kHostedStatusLineHeight + 6;
+    }
+    if (turnPluginBackOnButton != nullptr && turnPluginBackOnButton->isVisible()) {
+        if (apply)
+            turnPluginBackOnButton->setBounds(narrowX, y, (narrowW - 4) / 2, kRowHeight);
+        y += kRowHeight + 6;
+    }
+    return y;
+}
+
+void ModuleComponent::reflectHostedRestingValues() {
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
+    if (hosted == nullptr || hosted->getModulationTargets().empty())
+        return;
+    for (auto* attachment : hostedAttachments_)
+        attachment->reflectRestingValue();
+}
+
+// ---- Outputs ----------------------------------------------------------------------------------------------
+
+// A plugin with more than one output bus replaces the Dual I/O button with the Outputs button (the main bus's
+// Joined | L/R switch lives in the panel); a plain stereo pair keeps the Dual I/O flip.
+void ModuleComponent::syncHostedRoutingButtons() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || hostedOutputs_ == nullptr)
+        return;
+    const bool multi = hosted->hasMultipleOutputBuses();
+    if (dualIOButton != nullptr)
+        dualIOButton->setVisible(hosted->hasStereoPairInstance() && !multi);
+    hostedOutputs_->syncButton();
+    hostedOutputs_->snapToModel();
 }

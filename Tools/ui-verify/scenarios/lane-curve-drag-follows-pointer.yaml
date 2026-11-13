@@ -1,0 +1,47 @@
+# Dragging the line between two lane dots bent the curve the wrong way: pulling up on a rising segment made it sag, and
+# the curve never followed the pointer. A segment dragged all the way down to its start value could never become a step.
+#
+# What a user does: opens a project whose Cutoff lane has a low dot at bar 2 and a higher dot at bar 6 (fixture
+# lane-two-points.agsproj, the lane made taller), presses the line between them and drags up: the curve bulges up
+# under the pointer. Keeps going down past the bottom: the curve sags to its limit, 12 px further the segment turns into a
+# step and the bubble says "Hold". Lets go: one undo step; Cmd+Z puts back the bulge.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo is what it checks
+save_project: "FRO1777 test"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-two-points.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  # a taller dock and lane, so the bend is plain to see in the clip
+  - mouseDown: {id: dockResizeHandle, y: 2}
+  - mouseMoveHeld: {id: dockResizeHandle, y: -330}
+  - mouseUp: {id: dockResizeHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - mouseDown: {id: laneHeightHandle, y: 2}
+  - mouseMoveHeld: {id: laneHeightHandle, y: 182}
+  - mouseUp: {id: laneHeightHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - click: {id: timelineToolSelect, instant: "the lane height handle's hover line clears as the pointer leaves it"}
+  - expect: {id: automationLaneState, points: 2, firstBend: straight}
+  # press the middle of the line and pull up: the curve bulges up under the pointer, filmed while the button is held
+  - mouseDown: {id: automationLaneEditor, x: 288, y: 80}
+  - glide: {name: bulge-up, frames: 6, crop: {x: 290, y: 440, w: 500, h: 200}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 55, captured: true}}}
+  - expect: {id: automationLaneState, dragging: true, bendHold: false}
+  - mark: {check: 1, name: rising-bulges-up}
+  # down to the bottom: the curve sags, then past it by 12 px the segment turns into a step with the "Hold" bubble
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 100, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 116, captured: true}
+  - glide: {name: drag-to-hold, frames: 4, crop: {x: 290, y: 440, w: 500, h: 200}, do: {mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 140, captured: true}}}
+  - mark: {check: 2, name: drag-to-hold}
+  - expect: {id: automationLaneState, dragging: true, bendHold: true}
+  # back up: the curve returns; down again: the hold returns; then let go
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 120, captured: true}
+  - mouseMoveHeld: {id: automationLaneEditor, x: 288, y: 140, captured: true}
+  - mouseUp: {id: automationLaneEditor, x: 288, y: 140}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: step, holdSegments: 1, dragging: false}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, firstBend: straight, holdSegments: 0}

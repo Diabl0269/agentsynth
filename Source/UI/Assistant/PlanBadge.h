@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AccountService.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -31,6 +32,13 @@ public:
     // Non-owning, nullable. Pass nullptr to detach — the badge goes invisible again.
     void setAccountService(AccountService* service);
 
+    // "Pro · 1,203 / 10,000 this month" (the badge's text); `spelledOut` gives the longer "Pro · 42 of 500
+    // requests this month" the Account tab shows. Empty until the entitlement is known.
+    static juce::String formatText(const AccountSnapshot& snapshot, bool spelledOut = false);
+
+    // "Renews 18 Aug 2026" / "Ends 18 Aug 2026" for a Pro account with a known period end, else empty.
+    static juce::String formatPeriodLine(const AccountSnapshot& snapshot);
+
     // Re-reads accountService->getSnapshot() and updates this badge's text/visibility. Called by
     // AIChatComponent from the single AccountService::onStateChanged callback it owns.
     void refresh();
@@ -48,6 +56,10 @@ private:
     bool hasContent = false;
 
     juce::Label textLabel;
+
+    // The badge fades in and out and its strip height follows (160 ms in, 110 ms out); each frame asks the
+    // parent to lay out again. Lands at once headless and off screen.
+    synth::ui::FadeVisibility fade_{this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlanBadge)
 };

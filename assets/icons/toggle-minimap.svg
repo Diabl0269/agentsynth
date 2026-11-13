@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-  <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
-  <rect x="8" y="8" width="9" height="6" rx="1" fill="#FFFFFF"/>
+  <!-- Toolbar icon, view group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. The groups with id mv / mv2 move on hover. -->
+  <rect x="2.5" y="4.5" width="19" height="15" rx="3" fill="#FF00FF" fill-opacity=".45" />
+  <rect x="5" y="7" width="3" height="2" rx=".6" fill="#FFFF00" />
+  <rect x="5" y="15" width="4" height="2" rx=".6" fill="#FFFF00" />
+  <g id="mv">
+    <rect x="10" y="8.5" width="8" height="7" rx="1.6" fill="#FF00FF" />
+    <rect x="12" y="11" width="4" height="2" rx=".6" fill="#FFFF00" />
+  </g>
 </svg>

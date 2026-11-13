@@ -25,10 +25,14 @@ TimelineOpsResult AIIntegrationService::previewTimelineOps(const juce::var& enve
     if (timelineDoc == nullptr)
         return {false, "This build has no timeline wired in, so timeline changes cannot be checked or applied.", {}};
 
-    return TimelineOps::validate(envelope, *timelineDoc, audioGraph);
+    // The host only has to EXIST for validation (addInstrumentTrack's graph side cannot be dry-run);
+    // the same host is what the apply callback hands TimelineOps::apply.
+    return TimelineOps::validate(envelope, *timelineDoc, audioGraph, timelineOpsHost);
 }
 
 TimelineOpsResult AIIntegrationService::applyTimelineOps(const juce::var& envelope) {
+    if (editsRefused())
+        return {false, "Still loading", {}};
     if (!timelineOpsApply)
         return {false, "Timeline changes cannot be applied from here.", {}};
 

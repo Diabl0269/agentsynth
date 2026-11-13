@@ -1,0 +1,15 @@
+# Audit of the panel-slide anchoring fix (Add Track and the song key wait for the Timeline's slide): Focus Library Search (Cmd+F)
+# lands where it should once the panel has slid in, not where the panel was when the key was pressed.
+#
+# What a user does: with the bottom panel closed, hides the Library with its toolbar button, then presses Cmd+F. The panel slides open (hence `motion: true`) and the Library column is open at full width with the focus ring on its search field.
+# The PNG is taken after the slide landed.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: toggleLibrary}
+  - expect: {id: Library, showing: false, within_ms: 1500}
+  - key: {keys: cmd+f}
+  - expect: {id: Library, bounds: {x: 0, y: 44, w: 200, h: 832}, within_ms: 1500}
+  - expect: {id: Search library, hasFocus: true}
+  - screenshot: {name: focus-library-search-closed-window}

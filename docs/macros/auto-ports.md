@@ -128,10 +128,24 @@ retroactively distort.
 the same group-time pass (`buildMacroPortCrossingPlan` before `macros.add`, then
 `spliceMacroPorts`), always creating ports regardless of the preference above — a shared module
 reaching into the channel is exactly what a port is for — with ONE filter: **a group whose internal
-node is the new Channel Strip and whose direction is outward is dropped**, so Strip to Master (and
-Strip to a merge point's bus) stays a plain edge that `spliceMasterNode`'s Mix-versus-Direct
-classification can see. The plan builders themselves are unchanged. See
+node is the new Channel Strip and whose direction is outward is dropped** from the group-time plan, so Strip
+to a merge point's bus stays a plain edge. Strip to Master is routed separately, right after the splice
+(see [Track outputs](#track-outputs)). The plan builders themselves are unchanged. See
 [`docs/mixer/mixer.md`](../mixer/mixer.md#make-channel-and-shared-modules).
+
+## Track outputs
+
+A channel strip's output leaves its track macro through ONE auto-created outlet instead of two plain edges
+across the collapsed card. `MacroGroupController::routeStripOutputThroughMacroPort(stripUuid, splitJacks)`
+runs inside the caller's undo transaction after the macro exists and before `updateComponents()`: it
+sweeps a preset's captured one-sided outlet of that strip (`sweepOneSidedMacroPorts`, ignoring the
+auto-delete preference), collects the strip's connections into a Master (both legs: ch0 and
+`ChannelStripModule::kRightBase`), and hands them to `routeFreshEdgesThroughMacroPorts` with a stereo shape.
+The shape is **`StereoCollapsed` by default** (one stereo jack: a single cable carries both legs, raw
+channels 0 and 1) and **`Stereo` when the Split Left/Right jacks preference is on** (two jacks, raw 0 and
+`kRightBase`). The outlet is named "Output" (the default port name). A send or a strip-to-bus edge is never moved. The jack count can be changed afterwards from the
+port's right-click menu
+([`docs/macros/ports.md`](ports.md#switching-a-stereo-port-between-one-jack-and-two)).
 
 ## A modulation cable through an attenuverter
 
@@ -229,7 +243,7 @@ and rewires connections — a real graph edit — so it calls `updateComponents(
 `recordGraphAndMacroChange` transaction that does the splicing, exactly as `deleteSelection()` does.
 That fires `onGraphStructureChanged` to `MainComponent::reconcileTimelineBindingsOnly()`, the seam
 that keeps a timeline binding from surviving stale, keyed to a now-deleted node's uuid, into the next
-audio-thread render pass (root `CLAUDE.md`, and the hook inventory in
+audio-thread render pass (`Source/CLAUDE.md`, and the hook inventory in
 [`docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step`](../architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)).
 
 ### A port node is directly deletable
@@ -243,7 +257,7 @@ opening the whole dialog to retype one name) and "Configure I/O..." when the por
 live macro.
 
 **FRO235 (2026-09-27 founder decision): both manual delete affordances now agree by default.**
-Right-click "Delete Port" and the Configure I/O dialog's own "Delete Port" button both call
+Right-click "Delete Port", the port connections panel's "Delete port" and the Configure I/O dialog's own "Delete Port" button all call
 `MacroGroupController::deleteMacroPortManually`, which drops the cable by default — the same
 behaviour as any other node delete — rather than splicing it. A Preferences toggle, **"When
 deleting a macro port by hand, splice the cable back together instead of dropping it"**
@@ -284,6 +298,10 @@ wired port-to-port for the boundary leg. When only one endpoint needs a port, th
 final connection lands directly on the plain module (or on the existing port, if that is what it
 resolved to), never a second port.
 
+**One output per source.** A source leaving a macro through an outlet that is already fed by the same jack
+(`existingOutletFedBy`) reuses that outlet: a second cable from the same LFO or oscillator output gives one macro
+output with two destinations, not a second output. The same holds at every nesting level.
+
 **A mod or CV-routed drag goes through the SAME mint-and-wire path as a plain audio drag** — no
 separate scope cut and no mirrored CV-detection helper. `connectPorts()`'s own CV and mod-routing
 detection (`resolvePolyLink`, single-voice, the destination's `getModulationTargets()`) naturally
@@ -318,8 +336,14 @@ identically to before. See
 `GraphEditor::autoDeleteOrphanedMacroPort`. When a mutation drops a connection touching a macro port
 node down to **zero** remaining connections, the port is spliced out (`spliceOutMacroPort`, the same
 helper ungroup and direct deletion share) and the macro is dissolved too if that was its last member.
-A port with one of its two legs still wired — or one of several fan-in or fan-out connections still
-wired — survives; only reaching zero triggers the splice.
+A plain port with one of several fan-in or fan-out connections still wired survives.
+
+**A cut that leaves a port with nothing on its OUTER side takes the port with it**
+(`GraphEditor::pruneMacroPortsAfterCut`, run by `disconnectCable` and `disconnectPort`): an inlet nothing
+feeds, or an outlet feeding nothing, is removed together with its inside leg, even though that leg is
+still wired. If a modulation hangs off the port (port to attenuverter to knob), the modulation is removed
+too, whatever the auto-delete preference says. A plain one-sided port follows the auto-delete preference.
+A port wired outside but not yet inside stays, waiting to be patched.
 
 **Hooked at explicit user-gesture call sites, each checked BEFORE mutating so the right undo
 transaction is chosen up front:**
@@ -327,9 +351,11 @@ transaction is chosen up front:**
 - `GraphEditor::disconnectCable` — upgraded from its graph-only `recordStructuralChange` to
   `recordGraphAndMacroChange` ONLY when at least one of the cable's two logical endpoints
   (`cable.id.srcUid`/`dstUid` — the REAL endpoints even for an `AttenuverterChain` cable, never the
-  hidden attenuverter itself) resolves to a macro port. An ordinary cable's removal is unchanged.
+  hidden attenuverter itself) resolves to a macro port. An ordinary cable's removal is unchanged. A far-end macro port counts
+  regardless of the auto-delete preference, since the cut can prune it (above).
 - `GraphEditor::disconnectPort` — the same treatment, upgraded only when the clicked jack's own node,
-  or the far end of any connection about to be removed, resolves to a macro port.
+  or the far end of any connection about to be removed, resolves to a macro port (the far end counting
+  regardless of the auto-delete preference).
 - `deleteSelection`, `deleteModule` and `requestDeleteModule` — deleting an ORDINARY member can
   strand a *different* port cableless (the member was that port's only remaining connection), which
   neither call site above can catch, since neither the port nor its cable is directly involved in the
@@ -401,6 +427,10 @@ A third macro toggle, **"Drag modules into and out of macros without Cmd"** (`"m
 is unrelated to ports but lives in the same Preferences group and is likewise a plain on/off; unlike
 these two it defaults ON. See [`docs/macros/menu-and-membership.md`](menu-and-membership.md#dragging-without-cmd-the-preference).
 
+Beside them sits **"Drag inside a macro's outline to move the macro instead of panning"**
+(`"moveMacroOnHullDrag"`, defaults OFF), also a plain on/off; see
+[`docs/layout/macro-cards.md`](../layout/macro-cards.md#the-expanded-hull).
+
 A fourth, **"When deleting a macro port by hand, splice the cable back together instead of
 dropping it"** (`"macroSpliceCableOnPortDelete"`, FRO235), governs the two MANUAL delete
 affordances above (Configure I/O's own Delete Port, and the port's own right-click Delete Port) —
@@ -421,6 +451,133 @@ goes through the same `connectPorts()`/`buildVisibleCables()` path as any other 
 splice-out on auto-delete is the identical `spliceOutMacroPort` call direct deletion makes, so the
 resulting graph and macro state is indistinguishable from a port deleted that way — nothing in
 [`docs/macros/ports.md`](ports.md#cable-rendering-across-the-boundary)'s table changes.
+
+### Removing a modulation takes its whole chain
+
+Every canvas way of removing a modulation that crosses a macro boundary clears the chain through the
+ports, not just the attenuverter: right-click **Disconnect Cable**, double-clicking the cable's amount
+knob, **Disconnect** on the modulated knob's jack, the Mod Matrix's delete button and the timeline's
+**Remove modulator**. Each reads the chain (`GraphEditor::modulationChainPorts`, the ports on both
+sides of the attenuverter, however many macros deep) before it cuts, then runs
+`sweepOneSidedMacroPorts(ports, ignorePreference=true)` in the same undo step. Without that, an LFO
+outside a macro that modulated a member's knob kept `LFO -> inlet` after the removal, because the
+single-port auto-delete keeps a port that still has any cable. The sweep ignores the auto-delete
+preference: the removal is the request, so a port left behind would be the bug. `GraphEditor::removeModulationChain`
+is the one entry point for removing a chain from its attenuverter id. A second chain from the same
+source keeps working, and one undo restores the cable, the attenuverter and the ports.
+
+## Nested macros
+
+A macro can sit inside another (`Macro::parentId`; made by Create Macro or Cmd+G on whole macros or on modules inside
+an open macro, see [menu-and-membership](menu-and-membership.md)). A child's port nodes are direct members of the child and a parent's ports are direct members of
+the parent, so a cable that reaches a member of the child from outside the parent crosses **two** boundaries and is
+rebuilt as a chain: external -> parent inlet -> child inlet -> member (an outlet chain mirrors it).
+
+- **Cable drag.** `maybeAutoCreateMacroPortsForDrag` takes each endpoint's owner chain (its macro, then that macro's
+  ancestors) and drops every macro both endpoints share, down to their lowest common ancestor. Each macro left on a
+  side gets one new port, innermost first, wired port to port: inner -> outer on the source side, outer -> inner on the
+  destination side. A cable between a parent member and a child member therefore mints only the child's port. An
+  endpoint that is itself a port never crosses its own macro's boundary, only its ancestors'.
+- **Dropped on a collapsed card.** `createMacroPortFromDroppedCable` chains through the other end's own boundaries
+  first, then wires the last of them to the new port. A port that already carries the same jack (`existingPortLinkedTo`,
+  on this macro and on each macro of the chain) is reused, so a repeated drop changes nothing. A drop on an existing
+  port jack goes through the cable-drag path above, so it crosses the same borders. A card nested in a macro the other
+  end sits outside of also gets a port on that outer macro (outermost first), so the cable never crosses its border bare.
+- **Crossing plans.** Every plan's "inside" set is `MacroSet::descendantMembers` (minus the macro's own ports), so an
+  edge between a parent member and a child member is never read as crossing the parent. This covers grouping-time
+  plans, `macroPortsThatBecomeInteriorOnAdd` and `macroPortsThatBecomeObsoleteOnRemove`. A child's port counts as
+  inside the parent, which is what lets the parent mint its own port for a cable that lands on the child's inlet.
+- **Programmatic connections.** `routeFreshEdgesThroughMacroPorts` handles the innermost boundaries first; the parent
+  then sees the child's new inlet as the crossing and mints its own.
+- **Sweeping.** The one-sided-port sweep re-checks each neighbour of a removed port, so removing the outer cable
+  cascades along the whole port chain. A macro left with no modules but with children is not dissolved.
+
+## Programmatic connections
+
+**FRO354: a connection made by code follows the same rule as a dragged cable.** With
+"Auto-create macro ports when a cable or mixer send crosses a boundary" on
+(`autoCreateMacroPortsOnDragEnabled`, the same toggle as a cable drag, default ON), a connection whose one end is an ordinary member of a macro and whose other end is
+outside it enters or leaves that macro through a new port. Off, it is wired straight through, as
+before. The first caller is the mixer's send list: adding a send between two tracks (each strip sits
+in its own channel macro) mints an outlet on the source's macro and an inlet on the target's, wired
+strip to outlet to inlet to strip.
+
+**One seam, diff-based: `MacroGroupController::applyProgrammaticConnectionChange(autoCreatePorts,
+mutation)`.** The caller passes its mutation — for sends, a headless `Source/Mixer/MixerSends` flow
+that knows nothing about macros — and the seam compares the graph's connection set before and after
+it. It runs inside the caller's own `recordGraphAndMacroChange`, so the connection, every port it
+minted and every port it removed are ONE undo step; the caller calls `updateComponents()` after, which
+lays out the new port widgets (splice before layout, the same order grouping keeps).
+
+**Added connections** are routed per macro by the grouping path's own machinery —
+`buildMacroPortCrossingPlan` over the macro's members, then `spliceMacroPorts` — narrowed first:
+
+- only to the connections the mutation just ADDED, so an older crossing the user chose to leave as it
+  is on the same jack is never ported behind their back;
+- only to groups whose inside end is an ORDINARY member, so a connection landing on an existing port
+  never mints a second one (the drag path's rule).
+
+A stereo pair that lands on two SEPARATE mono jacks of one module — a Channel Strip's L and R inputs,
+or a send's L and R outputs, both from the same outside node — is folded into one two-jack `Stereo`
+port rather than two mono ports (the grouping-time merge pass does this only for Dual-I/O modules; a
+strip has the same split-jack layout without the switch). A leg landing on a channel no jack shows (a
+Mono strip's unused right input, which the strip never reads) is dropped instead of ported. After
+each macro's splice the set of fresh connections is re-read, so a connection between two macros gets
+an outlet on one and an inlet on the other, wired port to port, whichever macro is visited first.
+
+**Removed connections** are swept for ports left carrying nothing: an inlet nothing feeds any more,
+or an outlet that feeds nothing. `autoDeleteOrphanedMacroPort`'s zero-connections test can never fire
+here, because a removed send's port keeps its interior leg into the member it fronts; this is the same
+"only the interior leg is left" reading `autoDeleteOrphanedAttenuverter` applies. A spliced-out port's
+port neighbours are re-checked, so removing a send between two macros removes both its ports. Gated on
+the auto-delete toggle, like the cable-gesture sweep. Retargeting a send is both halves at once: the
+old target's ports go, the new target gets its own.
+
+**Reordering sends mints nothing.** `swapSends` re-wires only the SOURCE channel of a slot's cables;
+the destination (an existing port) is unchanged, and a connection landing on a port is never ported.
+
+**The mixer still sees through the ports.** `resolveSendTarget` walks along `isSignalEdge`, which
+already resolves a cable's destination through port nodes (`resolveThroughPorts`, now public in
+`ChannelFlows.h`), and its Key check resolves the same way, so a Key send into a macro still names its
+Compressor. Solo, stems and bus detection walk the same edges.
+
+### Which programmatic connections route
+
+| Caller | Routes? | Why |
+|---|---|---|
+| Mixer send add / retarget / remove (`MixerSendList`) | Yes | A user action in the mixer that draws a cable across a boundary. |
+| Timeline MIDI destinations picker / routing pane (`MainComponent::setMidiDestinationConnected`) | Yes | A user action that draws (or removes) a Track In cable to a destination that may sit in a macro; removal takes the last leg onto the target. |
+| Mixer send reorder (`swapSends` / `moveSendRow`) | No-op | Only the source channel moves; the destination port is kept. |
+| Master splice | No | Core re-routes feeds into Master; it never makes ports. |
+| A channel strip's Master-bound edges (`routeStripOutputThroughMacroPort`: track, instrument, Make channel, presets, Add bus) | Yes | Moved behind ONE outlet of the strip's macro, `StereoCollapsed` by default, `Stereo` with the Split Left/Right jacks preference. |
+| Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after, then the strip's Master edges are routed through its port (row above). |
+| Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
+| `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
+| `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |
+| Mod matrix source/destination re-point, row delete, "Add Modulation" | Yes | A user action that draws (or removes) a routing across a boundary, like a dragged mod cable; "Add" only creates an unconnected row and is its own undo step. See [the matrix paragraph](#the-mod-matrix-re-points-like-a-drag) below. |
+| Canvas rewiring (stereo leg moves, Replace module, copy channel, delete heal) | No | Re-points existing edges; delete heal never touches a port by design. |
+
+### The Mod Matrix re-points like a drag
+
+A `ModMatrixComponent` row re-point goes through `applyProgrammaticConnectionChange` inside
+`recordGraphAndMacroChange` (then `updateComponents()`), the same shape `MixerSendList` uses, so a routing
+from an LFO outside a macro to a module inside it enters through a minted inlet instead of cutting into the
+macro, and the edge and its ports are one undo step. The panel reaches the seam through the `GraphEditor`
+it is a child of; a bare panel (no editor) stays a plain graph edit. Turning the drag preference off wires
+straight through, as before.
+
+**It builds the dragged cable's topology, not the seam's raw one.** A dragged mod cable puts the hidden
+attenuverter next to the REAL destination, after any port: source, then inlet, then attenuverter, then the
+member. The seam alone would treat the attenuverter as the outside endpoint (the grouping-time shape) and
+produce source, attenuverter, inlet, member, leaving the port as the row's destination. So after the seam
+the row slides the attenuverter past every inlet it feeds. A source inside a macro needs no adjustment
+(member, outlet, attenuverter, destination is already what the seam builds). Either way the row names the
+real destination, and the source is the port when one is crossed, as for a dragged cable.
+
+**The side the user did not touch is re-resolved through this routing's own ports** (a port with exactly
+one edge in and one out), so re-pointing away removes the port it no longer needs (the one-sided sweep,
+gated on the auto-delete toggle) and a new path mints its own. A port shared with another routing is left
+alone.
 
 ## Related
 

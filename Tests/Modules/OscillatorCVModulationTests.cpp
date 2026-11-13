@@ -232,15 +232,16 @@ TEST(OscillatorPolyModulationTest, PolyWaveformCVCrossfadeNoClick) {
     osc.prepareToPlay(sr, N);
 
     // Build buffer: voice 0 at 220 Hz constant pitch (ch0).
-    // Waveform CV (ch8): 0.0f for first half, 0.34f for second half.
-    //   round(0.0  * 3) = 0  -> waveform index = base (0, Sine)
-    //   round(0.34 * 3) = 1  -> waveform index = base+1 (1, Square)
-    // This forces exactly one boundary crossing at sample N/2.
+    // Waveform CV (ch8): 0.0f for first half, 1.0f for second half.
+    //   round(0.0 * 3) = 0  -> waveform index = base (0, Sine)
+    //   round(1.0 * 3) = 3  -> waveform index = base+3 (3, Triangle)
+    // This forces exactly one boundary crossing at sample N/2. Triangle, not Square: a square's own
+    // edges are full-scale steps, which would hide a click from the crossfade.
     juce::AudioBuffer<float> buf(14, N);
     buf.clear();
     for (int i = 0; i < N; ++i) {
         buf.setSample(0, i, 220.0f);
-        buf.setSample(8, i, (i < N / 2) ? 0.0f : 0.34f);
+        buf.setSample(8, i, (i < N / 2) ? 0.0f : 1.0f);
     }
 
     osc.processBlock(buf, emptyMidi);
@@ -300,4 +301,18 @@ TEST(OscillatorPolyModulationTest, PolyZeroCVEqualsBaseline) {
         EXPECT_NEAR(bufA.getSample(0, i), bufB.getSample(0, i), 1e-5f)
             << "Sample " << i << " differs: A=" << bufA.getSample(0, i) << " B=" << bufB.getSample(0, i);
     }
+}
+
+// Regression test for FRO750: a Level CV that idles at 0 and starts in the second half of a block
+// was read as an unpatched jack, so the block ignored it and the level only dropped a block later.
+TEST_F(OscillatorCVModulationTest, LevelCVThatStartsMidBlockActsWithinThatBlock) {
+    juce::AudioBuffer<float> buf(14, blockSize);
+    buf.clear();
+    for (int i = blockSize / 2; i < blockSize; ++i)
+        buf.setSample(5, i, -1.0f); // Level CV: silent for the first half, fully closed after
+    juce::MidiBuffer emptyMidi;
+    osc->processBlock(buf, emptyMidi);
+
+    EXPECT_GT(buf.getMagnitude(0, 0, blockSize / 2), 0.1f);
+    EXPECT_LT(buf.getMagnitude(0, blockSize / 2 + 8, blockSize / 2 - 8), 1.0e-3f);
 }

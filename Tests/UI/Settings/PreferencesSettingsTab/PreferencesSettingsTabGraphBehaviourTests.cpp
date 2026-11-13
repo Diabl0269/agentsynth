@@ -123,6 +123,69 @@ TEST_F(PreferencesSettingsTabTest, MacroDragWithoutCmdToggleDefaultsOnAndRoundTr
     }
 }
 
+// Default OFF, persisted under its own key, reading the default must not write it, and it reaches an attached editor.
+TEST_F(PreferencesSettingsTabTest, MoveMacroOnHullDragToggleDefaultsOffAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMoveMacroOnHullDragEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("moveMacroOnHullDrag"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_FALSE(editor.getMoveMacroOnHullDragEnabled());
+
+        tab.setMoveMacroOnHullDragEnabled(true);
+        EXPECT_TRUE(tab.isMoveMacroOnHullDragEnabled());
+        EXPECT_TRUE(editor.getMoveMacroOnHullDragEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("moveMacroOnHullDrag"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMoveMacroOnHullDragEnabled());
+        tab.setMoveMacroOnHullDragEnabled(false);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("moveMacroOnHullDrag"), "0");
+    }
+}
+
+// Default ON, persisted under its own key, reading the default must not write it, and it reaches an attached editor.
+TEST_F(PreferencesSettingsTabTest, PackMacrosOnCollapseToggleDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isPackMacrosOnCollapseEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("packMacrosOnCollapse"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_TRUE(editor.getMacroController().getPackMacrosOnCollapse());
+
+        tab.setPackMacrosOnCollapseEnabled(false);
+        EXPECT_FALSE(tab.isPackMacrosOnCollapseEnabled());
+        EXPECT_FALSE(editor.getMacroController().getPackMacrosOnCollapse());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("packMacrosOnCollapse"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isPackMacrosOnCollapseEnabled());
+        tab.setPackMacrosOnCollapseEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("packMacrosOnCollapse"), "1");
+    }
+}
+
+TEST_F(PreferencesSettingsTabTest, TidyCanvasOnPackToggleDefaultsOnAndRoundTrips) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.isTidyCanvasOnPackEnabled());
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("tidyCanvasOnPack"));
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    tab.setGraphEditor(&editor);
+    EXPECT_TRUE(editor.getMacroController().getTidyCanvasOnPack());
+    tab.setTidyCanvasOnPackEnabled(false);
+    EXPECT_FALSE(editor.getMacroController().getTidyCanvasOnPack());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("tidyCanvasOnPack"), "0");
+}
+
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
@@ -751,4 +814,59 @@ TEST_F(PreferencesSettingsTabTest, LoadMacroAutoPortPreferenceParsesWithoutATabI
     appProperties.getUserSettings()->setValue("macroAutoCreatePorts", "nonsense");
     EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
               GraphEditor::MacroAutoPortPreference::Unset);
+}
+
+// "Connect side by side": Always by default (nothing written until it is changed), persisted under its own key,
+// restored by a fresh tab, and pushed to the editor's engine.
+TEST_F(PreferencesSettingsTabTest, SideBySideDefaultsToAlwaysAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSideBySideMode(), SmartConnectionEngine::SideBySideMode::Always);
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("smartConnectionSideBySide"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(), SmartConnectionEngine::SideBySideMode::Always);
+
+        tab.setSideBySideMode(SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("smartConnectionSideBySide"), "OnlyWithCtrl");
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(),
+                  SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSideBySideMode(), SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_EQ(editor.getSmartConnections().getSideBySideMode(),
+                  SmartConnectionEngine::SideBySideMode::OnlyWithCtrl);
+    }
+}
+
+// OFF by default, persisted under its own key, reading the default must not write it, a fresh tab restores what was
+// written, and the editor reads it when the tab is wired to it.
+TEST_F(PreferencesSettingsTabTest, CablesOnTopToggleDefaultsOffRoundTripsAndReachesTheEditor) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isCablesOnTopEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("cablesOnTop"));
+
+        tab.setCablesOnTopEnabled(true);
+        EXPECT_TRUE(tab.isCablesOnTopEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("cablesOnTop"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isCablesOnTopEnabled());
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        EXPECT_FALSE(editor.cablesOnTop);
+        tab.setGraphEditor(&editor);
+        EXPECT_TRUE(editor.cablesOnTop);
+        tab.setCablesOnTopEnabled(false);
+        EXPECT_FALSE(editor.cablesOnTop);
+    }
 }

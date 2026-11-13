@@ -1,6 +1,7 @@
 #include "TimelineValidator.h"
 
 #include "AutomationBinding.h"
+#include "TimelineValidatorSections.h"
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -234,6 +235,10 @@ TimelineValidationResult validateClip(const juce::var& clipVar, const juce::Stri
                                                 "\". Audio assets and the clips that reference them are created by "
                                                 "the app (recording, import), never supplied here - send a MIDI clip "
                                                 "with an empty \"assetRef\" instead.");
+    if (cObj->hasProperty("stretchOrigin"))
+        return fail(Error::AssetNotAllowed, clipText + " has a \"stretchOrigin\", which names an audio asset. It is "
+                                                       "written by the app when it stretches a clip, never supplied "
+                                                       "here.");
 
     double gainDb = 0.0;
     double fadeInBeats = 0.0;
@@ -591,6 +596,10 @@ juce::String timelineValidationErrorName(TimelineValidationError error) {
         return "TooManyMarkers";
     case TimelineValidationError::MarkerTextTooLong:
         return "MarkerTextTooLong";
+    case TimelineValidationError::TooManySections:
+        return "TooManySections";
+    case TimelineValidationError::SectionOverlap:
+        return "SectionOverlap";
     case TimelineValidationError::BeatOutOfBounds:
         return "BeatOutOfBounds";
     case TimelineValidationError::NoteOutOfRange:
@@ -641,10 +650,12 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     for (int i = 0; i < rootObj->getProperties().size(); ++i) {
         const juce::String key = rootObj->getProperties().getName(i).toString();
         if (key != "version" && key != "tracks" && key != "markers" && key != "nextTrackId" && key != "nextClipId" &&
-            key != "nextLaneId" && key != "nextNoteId" && key != "nextMarkerId")
-            return fail(Error::MalformedRoot, "Unknown top-level timeline key \"" + key +
-                                                  "\". Only \"version\", \"tracks\", \"markers\" and the next-id "
-                                                  "counters are accepted.");
+            key != "nextLaneId" && key != "nextNoteId" && key != "nextMarkerId" && key != "sections" &&
+            key != "nextSectionId")
+            return fail(Error::MalformedRoot,
+                        "Unknown top-level timeline key \"" + key +
+                            "\". Only \"version\", \"tracks\", \"markers\", \"sections\" and the next-id "
+                            "counters are accepted.");
     }
 
     const auto graphByUuid = indexGraphByUuid(graph);
@@ -691,6 +702,16 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
                 return result;
         }
     }
+
+    // A variation's stored clips pass the same clip checks as a track's (so a stored clip never names an asset); their
+    // ids only need to be unique within the clip, since a stored copy is re-issued ids when it is played.
+    const StoredClipValidator storedClipValidator = [](const juce::var& clip, const juce::String& where,
+                                                       std::int64_t& notes) {
+        std::set<std::int64_t> clipIds, noteIds;
+        return validateClip(clip, where, clipIds, noteIds, notes);
+    };
+    if (const auto result = validateTimelineSections(*rootObj, storedClipValidator, totalNotes); !result.ok)
+        return result;
 
     // The whole-document note budget, checked after the per-clip caps so the more specific
     // message wins when a single clip is the culprit.

@@ -1,6 +1,6 @@
 // ChannelFlowInstrumentTests.cpp
 //
-// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
+// "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
 // mirror of the Audio Track flow in ChannelFlowTests.cpp. Shared ChannelFlowTest fixture and
 // helpers live in ChannelFlowTestFixture.h.
 
@@ -24,7 +24,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -35,7 +35,7 @@
 #include <thread>
 
 // ---------------------------------------------------------------------------------------------
-// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
+// "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
 //
 //     Track In -> instrument -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //              -> Channel Strip (Stereo) -> Master (Mix)
@@ -89,6 +89,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // Split jacks: the Right legs have jacks, so the chain wires them (collapsed, they are left out;
+    // ChannelFlowVcaSignalPathTests.cpp pins that half).
+    mc.getGraphEditor().setDefaultDualIOForNewModules(true);
     auto& graph = mc.getAudioEngine().getGraph();
     auto& macros = mc.getGraphEditor().getMacros();
 
@@ -167,8 +170,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
                     << "the auto-wired ADSR must be non-poly — its poly branch ignores MIDI entirely";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "sustain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f)
-                    << "sustain must be overridden so a held note doesn't decay to silence";
+                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f)
+                    << "the auto-wired ADSR keeps the library's stock sustain, so a held note holds";
     }
     for (auto* param : vca->getProcessor()->getParameters()) {
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
@@ -176,8 +179,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
                 EXPECT_FALSE(boolParam->get()) << "the auto-wired VCA must be non-poly";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "gain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f)
-                    << "gain must be overridden so the envelope alone governs level";
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.5f)
+                    << "gain is the chain's per-voice headroom, the same as the poly chain";
     }
 }
 
@@ -229,7 +232,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNo
     EXPECT_GT(lastEnv, 0.5f) << "a held note must sustain, not decay to silence while still held";
 
     // Note off: after enough blocks for the release stage, the envelope must return to silence —
-    // this is the drone this ticket exists to fix.
+    // a stuck envelope would leave a drone.
     juce::MidiBuffer noteOff;
     noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
     lastEnv = renderAdsrBlock(noteOff);
@@ -320,6 +323,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expected.push_back(
+        nodeUuid(outletsFedByStripCFT(graph, findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)).front()));
     auto actual = macro.members;
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());
@@ -354,6 +360,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expected.push_back(
+        nodeUuid(outletsFedByStripCFT(graph, findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)).front()));
     auto actual = macro.members;
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());

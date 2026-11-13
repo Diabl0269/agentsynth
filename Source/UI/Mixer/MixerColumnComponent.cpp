@@ -4,12 +4,14 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -22,7 +24,9 @@ namespace {
 // exact pixel budget this must cover. Kept as narrow as that budget allows so the column itself
 // doesn't grow wider than necessary.
 constexpr int kMeterWidth = 32;
-constexpr int kMeterReadoutHeight = 12;
+
+static_assert(synth::ui::MixerFader::kClearBelowReadout == synth::ui::MixerSectionLayout::kFaderToButtonsGap,
+              "the fader leaves the gap the layout reckons with under its readout");
 
 // applyPanAccessibilityText moved to MixerPanAccessibilityText.h so MixerSendList's
 // own per-send pan knobs can share the exact same "Center"/"50% left"/"50% right" phrasing instead
@@ -48,60 +52,6 @@ juce::AudioParameterBool* findBoolParam(juce::AudioProcessor& processor, const j
     return nullptr;
 }
 
-constexpr int kPanHeight = 28;
-constexpr int kEqThumbnailHeight = 28;
-constexpr int kMsRowHeight = 20;
-
-// The heights resized() gives the insert list, send list, EQ thumbnail and pan knob --
-// everything ABOVE the M/S row/meter readout/fader in the column's priority order (highest first:
-// header + source line, M/S row, meter readout + fader/meter with its guaranteed kMinFaderHeight,
-// then pan, then inserts, then sends, then the EQ thumbnail). See docs/mixer/panel.md.
-struct ColumnBudgets {
-    int insertHeight = 0;
-    int sendHeight = 0;
-    int eqHeight = 0;
-    int panHeight = 0;
-};
-
-// `heightAfterHeaderAndSource`: the column's height once header_/sourceLineLabel_ are already
-// carved off -- everything this function returns is taken out of that. With plenty of room the base
-// layout stands as is (insert/send each capped to a third of what's left; EQ and pan at their fixed
-// heights): the reclaim loop below only ever touches something when the column is too short to also
-// leave kMinFaderHeight for the fader, and even then it takes from the LOWEST-priority part first
-// (EQ, then sends, then inserts, then pan) so the fader is the last thing to give up space, never
-// the first.
-ColumnBudgets computeColumnBudgets(int heightAfterHeaderAndSource, int insertPreferredHeight, int sendPreferredHeight,
-                                   bool eqVisible, int minFaderHeight) {
-    ColumnBudgets budgets;
-    int remaining = juce::jmax(0, heightAfterHeaderAndSource);
-
-    budgets.insertHeight = juce::jmin(remaining / 3, insertPreferredHeight);
-    remaining -= budgets.insertHeight;
-    budgets.sendHeight = juce::jmin(remaining / 3, sendPreferredHeight);
-    remaining -= budgets.sendHeight;
-    budgets.eqHeight = eqVisible ? kEqThumbnailHeight : 0;
-    remaining -= budgets.eqHeight;
-    budgets.panHeight = kPanHeight;
-    remaining -= budgets.panHeight;
-
-    // What's left after the above must still cover the M/S row, the meter readout and the fader's
-    // own minimum -- reclaim any shortfall from the budgets above, lowest priority first, rather
-    // than letting the fader (sized from whatever remains once resized() lays these back out) drop
-    // under minFaderHeight.
-    int deficit = (kMsRowHeight + kMeterReadoutHeight + minFaderHeight) - remaining;
-    auto reclaim = [&deficit](int& budget) {
-        if (deficit <= 0)
-            return;
-        const int taken = juce::jmin(budget, deficit);
-        budget -= taken;
-        deficit -= taken;
-    };
-    reclaim(budgets.eqHeight);
-    reclaim(budgets.sendHeight);
-    reclaim(budgets.insertHeight);
-    reclaim(budgets.panHeight);
-    return budgets;
-}
 } // namespace
 
 MixerColumnComponent::MixerColumnComponent() {
@@ -111,19 +61,29 @@ MixerColumnComponent::MixerColumnComponent() {
             onColumnClicked();
     };
     header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
-    addAndMakeVisible(sourceLineLabel_);
-    sourceLineLabel_.setFont(juce::Font(juce::FontOptions(10.0f)));
-    sourceLineLabel_.setJustificationType(juce::Justification::centredLeft);
-    sourceLineLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));
+    header_.onColourClicked = [this](juce::Rectangle<int> dotScreenBounds) {
+        if (onColourPickRequested)
+            onColourPickRequested(dotScreenBounds);
+    };
 
-    addAndMakeVisible(insertList_);
-    insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
+    insertViewport_.setList(insertList_);
+    addAndMakeVisible(insertViewport_);
+    header_.onEditOnCanvasClicked = [this] {
         if (onEditOnCanvas)
-            onEditOnCanvas(uuid);
+            onEditOnCanvas(editOnCanvasTarget_);
     };
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();
+    };
+    auto focusModule = [this](const juce::String& uuid) {
+        if (onFocusModule)
+            onFocusModule(uuid);
+    };
+    insertList_.onFocusModule = focusModule;
+    sendList_.onFocusModule = focusModule;
+    insertList_.onPreferredHeightChanged = [this] {
+        insertViewport_.setContentHeight(insertList_.getPreferredHeight());
     };
     // A live "Remove" from the row menu frees the removed node's processor
     // synchronously (see MixerInsertList::onBeforeNodeRemoved's own comment), before the eventual
@@ -141,11 +101,25 @@ MixerColumnComponent::MixerColumnComponent() {
             onEditOnCanvas(eqNodeUuid_);
     };
 
-    addAndMakeVisible(sendList_);
+    sendViewport_.setList(sendList_);
+    addAndMakeVisible(sendViewport_);
     sendList_.onMutated = [this] {
         if (onMutated)
             onMutated();
     };
+
+    for (size_t i = 0; i < dividers_.size(); ++i) {
+        addAndMakeVisible(dividers_[i]);
+        addChildComponent(collapsed_[i]);
+        sectionSwaps_[i] = std::make_unique<MixerSectionSwap>(i == 0   ? &insertViewport_
+                                                              : i == 1 ? &sendViewport_
+                                                                       : nullptr,
+                                                              collapsed_[i]);
+    }
+    // A standalone column (no panel) still reacts to its own dividers and strips.
+    ownSectionLayout_.onGeometryChanged = [this] { resized(); };
+    ownSectionLayout_.onAppearanceChanged = [this] { repaintSectionDividers(); };
+    setSectionLayout(ownSectionLayout_);
 
     panSlider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     panSlider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -179,6 +153,7 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     graphEditor_ = &graphEditor;
     graph_ = &graph;
     undoManager_ = &undoManager;
+    eqThumbnail_.setUndoManager(&undoManager);
     audioEngine_ = &audioEngine;
     macros_ = &macros;
     meterReader_ = meterReader;
@@ -193,22 +168,32 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     };
 }
 
-void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sourceLine) {
+void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sources) {
     nodeId_ = column.nodeId;
     uuid_ = column.uuid;
-    sourceLine_ = sourceLine;
+    shownColumn_ = column;
+    shownSources_ = sources;
 
     header_.setColour(column.colour);
     header_.setDisplayName(column.name);
-    header_.setLinkedBadgeVisible(column.linkedToTrack);
+    // A linked column has exactly one feeding track, so `sources` is that track's name.
+    header_.setLinkedTrack(column.linkedToTrack, column.linkedToTrack ? sources : juce::String());
     header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
+    juce::StringArray receivesFrom;
+    for (const auto& name : column.receivesFrom)
+        receivesFrom.add(name);
+    header_.setReceivesFrom(receivesFrom);
 
-    // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
-    // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
-    // single-source column.
-    sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
-                           column.sourceNodeId, column.nodeId);
+    // `sources` is the caller-resolved (comma-joined) names of column.feedingTracks, or a bus's feeding strips.
+    // A linked channel's single track usually carries the channel's own name, and the link glyph already says so,
+    // so the badge shows only when the sources differ from it. It lives in the header, so a channel without one
+    // costs no row and the columns' faders stay level without any reserved space.
+    showsSources_ = sources.isNotEmpty() && sources != column.name;
+    header_.setSources(showsSources_ ? sources : juce::String());
+    // A branching chain names its own target (the first boxed module's macro); any other column edits its channel.
+    editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId,
+                           column.dangling);
 
     // The first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -229,6 +214,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
         }
     }
     eqThumbnail_.setEqModule(firstEq, graph_, eqNodeId_);
+    refreshCollapsedSummaries(synth::countInsertModules(column.inserts), (int)column.sends.size(), firstEq != nullptr);
 
     // Accessible names -- "<name> fader"/"pan", e.g. "Lead 1 fader, -3.0 dB" (JUCE speaks
     // the minus sign as "minus"). setTitle() on `this` is what createAccessibilityHandler()'s
@@ -236,7 +222,13 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     setTitle(column.name);
     fader_.setChannelName(column.name);
     panSlider_.setTitle(column.name + " pan");
+    setPanShortcutText(panShortcutText_);
     meter_.setTitle(column.name + " meter");
+    meter_.setTooltip("Output level meter");
+    meterReadout_.setTitle(column.name + " peak");
+    meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
+    eqThumbnail_.setTitle(column.name + " EQ curve");
+    // Its tooltip and description carry the live band count (MixerEqThumbnail::refreshBandCount).
 
     rebindControls();
     // Must run AFTER rebindControls() -- it clears midiLearnableEntries_ and would wipe out
@@ -244,6 +236,24 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // setEntries()) if this ran first.
     sendList_.setEntries(column.sends, column.nodeId);
     resized();
+}
+
+// Everything setColumn() shows is read from `column` and `sources`, and the controls it binds stay live through their
+// own parameter listeners, so an equal pair means the column already shows what a fresh one would (the panel's
+// incremental rebuild keeps it; MixerPanelComponent::rebuild).
+bool MixerColumnComponent::showsColumn(const synth::MixerColumn& column, const juce::String& sources) const {
+    return column == shownColumn_ && sources == shownSources_;
+}
+
+// The nodes whose processors this column holds pointers into: the strip (fader, pan, mute, solo, meter, send rows,
+// MIDI Learn entries) and its inserts (the EQ thumbnail binds the first Parametric EQ among them).
+bool MixerColumnComponent::bindsAnyOf(const std::set<juce::uint32>& uids) const {
+    if (uids.count(nodeId_.uid) != 0)
+        return true;
+    for (const auto& insert : shownColumn_.inserts)
+        if (uids.count(insert.nodeId.uid) != 0)
+            return true;
+    return false;
 }
 
 // header_'s inline rename commits here. A boxed strip's column name already comes from its MACRO
@@ -261,7 +271,7 @@ void MixerColumnComponent::commitHeaderRename(const juce::String& rawNewName) {
         return;
     }
 
-    if (const auto* macro = macros_ != nullptr ? macros_->findByMember(uuid_) : nullptr) {
+    if (const auto* macro = macros_ != nullptr ? synth::nearestChannelMacro(*graph_, *macros_, uuid_) : nullptr) {
         if (graphEditor_ != nullptr && newName.isNotEmpty())
             graphEditor_->getMacroController().renameMacro(macro->id, newName);
         else
@@ -284,6 +294,23 @@ void MixerColumnComponent::commitHeaderRename(const juce::String& rawNewName) {
     undoManager_->recordNodeExtraStateChange(*graph_, nodeId_, before, after);
     if (onMutated)
         onMutated(); // refreshes the column from a fresh buildMixerSnapshot, same as any other edit here
+}
+
+// Through the slider, so the attachment writes the parameter and the knob and its screen-reader value follow; the
+// capture/push pair around it makes each press one undo step, the same bracket toggleMuted uses.
+bool MixerColumnComponent::nudgePan(float delta) {
+    if (panAttachment_ == nullptr || graph_ == nullptr || undoManager_ == nullptr)
+        return false;
+    undoManager_->captureBeforeState(*graph_);
+    panSlider_.setValue(juce::jlimit(panSlider_.getMinimum(), panSlider_.getMaximum(), panSlider_.getValue() + delta),
+                        juce::sendNotificationSync);
+    undoManager_->pushSnapshotFromCapture(*graph_);
+    return true;
+}
+
+void MixerColumnComponent::setPanShortcutText(const juce::String& keys) {
+    panShortcutText_ = keys;
+    panSlider_.setTooltip(formatShortcutHint("Pan: drag to change", keys));
 }
 
 void MixerColumnComponent::rebindControls() {
@@ -341,10 +368,12 @@ void MixerColumnComponent::refreshMuteSoloAccessibility(ModuleBase* module, Chan
     const bool muted = module != nullptr && module->isMuted();
     muteButton_.setToggleState(muted, juce::dontSendNotification);
     muteButton_.setTitle(name + " mute, " + (muted ? "on" : "off"));
+    muteButton_.setTooltip("Mute this channel");
     if (strip != nullptr) {
         const bool soloed = strip->isSoloed();
         soloButton_.setToggleState(soloed, juce::dontSendNotification);
         soloButton_.setTitle(name + " solo, " + (soloed ? "on" : "off"));
+        soloButton_.setTooltip("Solo this channel");
     }
 }
 
@@ -433,6 +462,7 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     // already uses (Source/UI/CLAUDE.md's no-unconditional-repaint rule), mirroring
     // ModuleComponent's own gated-timer precedent for its badge refresh.
     refreshMidiLearnBadges();
+    refreshAutomatedMarkers();
     // Same tick also keeps the armed breathing outline animating -- see that method's own
     // comment for why nothing did before this.
     repaintArmedMidiLearnOutline();
@@ -459,14 +489,30 @@ std::unique_ptr<juce::AccessibilityHandler> MixerColumnComponent::createAccessib
 }
 
 void MixerColumnComponent::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto bg = synth::theme::themeOf(*this).colors.surface;
+    const auto border = synth::theme::themeOf(*this).colors.border;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(selected_ ? accent : border);
     g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
+}
+
+void MixerColumnComponent::setReorderHooks(MixerColumnHeader::ReorderHooks hooks) {
+    header_.reorderHooks = std::move(hooks);
+}
+
+void MixerColumnComponent::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
+// A no-op when the strength is unchanged, so the panel can call it every layout without repainting
+// the column's controls.
+void MixerColumnComponent::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
 }
 
 void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
@@ -474,6 +520,16 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
     // ModuleComponent's paintMidiLearnOverlays() -- must run before the keyboard-focus outline
     // below returns early so a mapped/armed control still shows its overlay on an unfocused column.
     paintMidiLearnOverlays(g);
+    paintAutomatedMarkers(g);
+
+    // A dragged column reads as raised: a faint light wash and an accent border, both fading with lift_.
+    if (lift_ > 0.0f) {
+        const auto liftAccent = synth::theme::themeOf(*this).colors.accent;
+        g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
+        g.fillRect(getLocalBounds());
+        g.setColour(liftAccent.withMultipliedAlpha(lift_));
+        g.drawRect(getLocalBounds(), 1);
+    }
 
     // The focused column's OWN outline, distinct from setSelected()'s reveal highlight --
     // they may co-paint (a revealed column can also be the keyboard-focused one). Real
@@ -482,44 +538,123 @@ void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
     // paintFocusRegionOutline (that paints the REGION root -- the panel itself).
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }
 
+// Every part's y comes from the panel's shared MixerSectionLayout, resolved against this column's
+// height -- never from this column's own content -- so every column's sections, and so every fader,
+// sit on the same lines (see MixerSectionLayout::resolve for the order parts give way in a short
+// column; the fader keeps kMinFaderHeight).
 void MixerColumnComponent::resized() {
-    auto bounds = getLocalBounds().reduced(2);
-    header_.setBounds(bounds.removeFromTop(24));
-    sourceLineLabel_.setBounds(bounds.removeFromTop(14));
+    const auto geometry = sectionLayout_->resolve(getHeight());
+    const auto inner = getLocalBounds().reduced(MixerSectionLayout::kColumnInset);
+    auto top = inner;
+    header_.setBounds(top.removeFromTop(MixerSectionLayout::kHeaderHeight));
+    layoutSections(geometry, inner);
 
-    // The bottom dock's default height starves the fader down to ~0px -- see
-    // computeColumnBudgets()'s own comment for the priority order this enforces.
-    const auto budgets =
-        computeColumnBudgets(bounds.getHeight(), insertList_.getPreferredHeight(), sendList_.getPreferredHeight(),
-                             eqThumbnail_.isVisible(), kMinFaderHeight);
-    insertList_.setBounds(bounds.removeFromTop(budgets.insertHeight));
-    sendList_.setBounds(bounds.removeFromTop(budgets.sendHeight));
+    auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
+    // A part gap above and below keeps the pan slider off the divider over it and the peak readout under it.
+    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight)
+                             .reduced(8, 0)
+                             .withTrimmedTop(MixerSectionLayout::kPartGap)
+                             .withTrimmedBottom(MixerSectionLayout::kPartGap));
 
-    // Reserves 0 px when there is no EQ to show (or none fit) -- MixerEqThumbnail::setEqModule(nullptr)
-    // already hid it when there's no EQ insert at all, this just keeps the layout from leaving a gap
-    // behind it either way; isVisible() itself is never toggled here (it means "has EQ").
-    if (eqThumbnail_.isVisible())
-        eqThumbnail_.setBounds(bounds.removeFromTop(budgets.eqHeight));
-
-    auto controls = bounds;
-    panSlider_.setBounds(controls.removeFromTop(budgets.panHeight).reduced(8, 0));
-
-    auto msRow = controls.removeFromBottom(20);
-    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(2));
-    soloButton_.setBounds(msRow.reduced(2));
+    auto msRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight);
+    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(MixerSectionLayout::kMsButtonInset));
+    soloButton_.setBounds(msRow.reduced(MixerSectionLayout::kMsButtonInset));
 
     // The clip readout sits directly above the meter+fader row it reports on (Cubase's own
     // "Meter Peak Level" placement).
-    meterReadout_.setBounds(controls.removeFromTop(kMeterReadoutHeight));
-    meter_.setBounds(controls.removeFromRight(kMeterWidth));
-    controls.removeFromRight(2);
-    fader_.setBounds(controls);
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight)
+                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
+    auto faderRow = row(geometry.faderTop, geometry.faderHeight);
+    meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
+    faderRow.removeFromRight(2);
+    fader_.setBounds(faderRow);
+}
+
+// A hidden section swaps its content for the 14 px summary strip, the two cross-fading while the shared layout
+// slides the section's height (MixerSectionSwap). The insert and send viewports are hidden once they have faded
+// (so their rows are neither clickable nor in the accessibility tree); the EQ thumbnail only gets empty bounds
+// and an opacity that follows the height, because its isVisible() means "this column has an EQ".
+void MixerColumnComponent::layoutSections(const MixerSectionLayout::Geometry& geometry, juce::Rectangle<int> inner) {
+    for (size_t i = 0; i < dividers_.size(); ++i) {
+        const auto section = (MixerSection)(int)i;
+        const bool hidden = sectionLayout_->isHidden(section);
+        const juce::Rectangle<int> area(inner.getX(), geometry.sectionTop[i], inner.getWidth(),
+                                        geometry.sectionHeight[i]);
+        sectionSwaps_[i]->setHidden(hidden);
+        // The strip stays its own 14 px at the section's top while the section is still sliding shut or open.
+        collapsed_[i].setBounds(area.withHeight(juce::jmin(area.getHeight(), MixerSectionLayout::kCollapsedHeight)));
+        dividers_[i].setBounds(inner.getX(), geometry.dividerTop[i], inner.getWidth(),
+                               MixerSectionLayout::kDividerHeight);
+        if (section == MixerSection::Eq) {
+            const float open = sectionLayout_->getShownAmount(section);
+            eqThumbnail_.setAlpha(open);
+            // A part gap above and below keeps the curve off the two dividers around its section.
+            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0)
+                                                          : area.withTrimmedTop(MixerSectionLayout::kPartGap)
+                                                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
+            continue;
+        }
+        auto& viewport = section == MixerSection::Inserts ? insertViewport_ : sendViewport_;
+        viewport.setBounds(area);
+    }
+    insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    sendViewport_.setContentHeight(sendList_.getPreferredHeight());
+}
+
+// The old column's rows (and, for a removal, the picture of the section they were drawn in) for the column that
+// replaces it; the replacement's lists are new objects, so the rows themselves cannot carry the motion over.
+MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::MixerColumn& next) {
+    std::vector<juce::String> insertKeys, sendKeys;
+    for (const auto& entry : next.inserts)
+        insertKeys.push_back(MixerRowsMotion::insertKey(entry));
+    for (const auto& entry : next.dangling)
+        insertKeys.push_back(MixerRowsMotion::danglingKey(entry));
+    for (const auto& entry : next.sends)
+        sendKeys.push_back(MixerRowsMotion::sendKey(entry));
+    MixerRowsMotion::Snapshot snapshot;
+    snapshot.inserts = MixerRowsMotion::capture(*this, insertViewport_, insertList_.motionRows(), insertKeys);
+    snapshot.sends = MixerRowsMotion::capture(*this, sendViewport_, sendList_.motionRows(), sendKeys);
+    return snapshot;
+}
+
+void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before) {
+    const auto background = synth::theme::themeOf(*this).colors.surface;
+    const auto insertsAfter = MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows());
+    const bool played = rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts, insertsAfter, background);
+    // A module that only joined or left the chain keeps its row: it slides and dims (or brightens) in place.
+    if (!played && !insertsAfter.rows.empty())
+        insertList_.startKindFlip(MixerRowsMotion::kindFlips(before.inserts, insertsAfter));
+    rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
+                     MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
+}
+
+void MixerColumnComponent::setSectionLayout(MixerSectionLayout& layout) {
+    sectionLayout_ = &layout;
+    for (size_t i = 0; i < dividers_.size(); ++i) {
+        dividers_[i].setLayout(sectionLayout_, (MixerSection)(int)i);
+        collapsed_[i].setLayout(sectionLayout_, (MixerSection)(int)i);
+    }
+    resized();
+}
+
+void MixerColumnComponent::repaintSectionDividers() {
+    for (auto& divider : dividers_)
+        divider.repaint();
+}
+
+MixerSectionViewport& MixerColumnComponent::getSectionViewportForTest(MixerSection section) noexcept {
+    return section == MixerSection::Sends ? sendViewport_ : insertViewport_;
+}
+
+void MixerColumnComponent::refreshCollapsedSummaries(int insertCount, int sendCount, bool hasEq) {
+    collapsed_[(size_t)MixerSection::Inserts].setSummary(mixerSectionCountSummary(insertCount, "insert", "inserts"));
+    collapsed_[(size_t)MixerSection::Sends].setSummary(mixerSectionCountSummary(sendCount, "send", "sends"));
+    collapsed_[(size_t)MixerSection::Eq].setSummary(hasEq ? "EQ" : "no EQ");
 }
 
 void MixerColumnComponent::mouseUp(const juce::MouseEvent&) {

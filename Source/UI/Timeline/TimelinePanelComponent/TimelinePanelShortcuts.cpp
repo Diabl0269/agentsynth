@@ -6,14 +6,27 @@
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyRing.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/ClipSizingButton.h"
+#include "UI/Timeline/TimelinePanelComponent/MakeSectionKey.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
 namespace {
 // A bare (unmodified) keypress — the shape every one of this panel's own default bindings has.
 juce::KeyPress plainKey(int keyCode) noexcept { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
+
+// The follow-mode key with no manager installed: the same per-platform chord resetToDefaults() gives it.
+juce::KeyPress followModeCycleDefault() noexcept {
+    const auto mods = ShortcutManager::hostDefaultsPlatform() == ShortcutManager::DefaultsPlatform::Mac
+                          ? juce::ModifierKeys(juce::ModifierKeys::ctrlModifier)
+                          : juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
+    return juce::KeyPress('f', mods, 0);
+}
 
 // The ShortcutManager action id that picks `tool`. Derived from editToolName() rather than written
 // out as a second table, so adding a tool cannot leave a digit unbound here while EditTool.h,
@@ -24,7 +37,31 @@ juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" +
 // Item: P (loop the selection) also ARMS looping by default; Preferences can turn the arming off
 // so P only places the locators (Cubase's behaviour). Read at key time — no cached copy to drift.
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
+
+// The Select tool's own key, by the same two paths keyPressed's tool digits use: the rebindable action with a
+// manager (matchesAction's rule), the typed character without one (Shift or Cmd make it some other key).
+bool isSelectToolKey(const ShortcutManager* shortcuts, const juce::KeyPress& key) {
+    const auto selectKey = plainKey('0' + editToolKeyDigit(EditTool::Select));
+    if (shortcuts != nullptr)
+        return ShortcutManager::keyPressMatches(shortcuts->getBinding(toolActionIdFor(EditTool::Select)), key);
+    if (key.getModifiers().isCommandDown() || key.getModifiers().isShiftDown())
+        return false;
+    const int typed = (int)key.getTextCharacter();
+    return (typed != 0 ? typed : key.getKeyCode()) == selectKey.getKeyCode();
+}
 } // namespace
+
+std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::getShortcutHintTargets() {
+    std::vector<std::pair<juce::Component*, juce::String>> targets;
+    for (auto tool : kAllEditTools)
+        targets.emplace_back(getToolButton(tool), toolActionIdFor(tool));
+    targets.emplace_back(penButton_, "timelineShapeMenu");
+    targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
+    targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
+    targets.emplace_back(&addTrackButton_, "openAddTrackMenu");
+    targets.emplace_back(&transportBar_.getSongKeyField(), "setSongKey");
+    return targets;
+}
 
 // The same three lines PianoRollComponent::matchesAction runs -- deliberately duplicated rather
 // than shared, because factoring it out would mean a header both surfaces include just to hold a
@@ -44,23 +81,30 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
-    // Escape closes the strip when it's open and idle (the editor's own keyPressed already
-    // consumed it if there was tool-drag state to cancel -- see AutomationLaneEditor's class
-    // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
-    if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
-        closeAutomationStrip();
+    if (topBarKeys_->handleKey(key))
         return true;
-    }
+    if (handleAddTrackButtonKey(key))
+        return true;
 
-    // Bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
-    // Cmd+Shift+T / Tab land here (docs/control/shortcuts.md's Focus regions section — every region root
-    // wants its own focus, deterministically), not on any row, so without this a keyboard-only user
-    // could never reach a track header at all. Scoped to REAL focus being on THIS exact component
-    // (never "focus is somewhere in the panel") so it can't steal an arrow key the clip lane or piano
-    // roll haven't claimed for themselves — those two still own every other keystroke that reaches
-    // this method by bubbling up from wherever real focus actually is.
-    if (key.isKeyCode(juce::KeyPress::downKey) && juce::Component::getCurrentlyFocusedComponent() == this) {
-        moveFocusedTrack(1);
+    // Cmd+Shift+T / Tab land on the panel ROOT, not on any row (docs/control/shortcuts.md's Focus
+    // regions section), so the keys that carry a keyboard-only user into the track headers and clips
+    // are claimed here. Scoped to REAL focus being on THIS exact component (never "focus is somewhere
+    // in the panel") so it can't steal a key the clip lane or piano roll haven't claimed for
+    // themselves -- those two still own every other keystroke that reaches this method by bubbling.
+    if (juce::Component::getCurrentlyFocusedComponent() == this && handleRootFocusKey(key))
+        return true;
+
+    // Cmd+Left / Cmd+Right glide the cursor while held (TimelinePanelCursorGlide.cpp).
+    if (handleCursorGlideKey(key))
+        return true;
+
+    // Shift+digit shapes, Draw-again and the lane range's keys, before the bare tool digits below.
+    if (handleDrawShapeKey(key))
+        return true;
+
+    // The Select key while Select is already the tool steps the clip edge Sizing mode, as in Cubase.
+    if (activeTool_ == EditTool::Select && isSelectToolKey(shortcuts_, key)) {
+        clipSizingButton_->choose(synth::nextClipSizingMode(clipSizingButton_->getMode()));
         return true;
     }
 
@@ -102,6 +146,8 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // which timeline surface happened to have focus.
     if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         setSnapEnabled(!viewState_.snapEnabled);
+        if (onShowMessage)
+            onShowMessage(viewState_.snapEnabled ? "Snap on" : "Snap off");
         return true;
     }
 
@@ -110,6 +156,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
         ruler_.repaint();
+        sectionStrip_->repaint();
         return true;
     }
 
@@ -118,6 +165,16 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // (setFollowPlayheadEnabled already persists the choice and forwards the flag into the roll).
     if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
         setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
+        if (onShowMessage)
+            onShowMessage(isFollowPlayheadEnabled() ? "Follow playhead on" : "Follow playhead off");
+        return true;
+    }
+
+    // Ctrl+F (Ctrl+Alt+F off the Mac) = switch the follow mode between Page and Smooth; follow itself stays as it is.
+    if (matchesAction(key, "timelineFollowModeCycle", followModeCycleDefault())) {
+        setFollowMode(otherFollowMode(getFollowMode()));
+        if (onShowMessage)
+            onShowMessage(juce::String("Follow: ") + followModeName(getFollowMode()));
         return true;
     }
 
@@ -143,6 +200,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
             const auto snap = transport_->getPositionSnapshot();
             if (!(snap.loopEndPpq > snap.loopStartPpq))
                 return false;
+            playhead_.armLocateGlide();
             transport_->locateBeat(toStart ? snap.loopStartPpq : snap.loopEndPpq);
             // The playhead overlay picks the new position up on the panel's next 10 Hz poll; the
             // ruler needs no repaint (the locators themselves did not move).
@@ -150,13 +208,36 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         }
     }
 
+    // Shift+Cmd+J = make a section, whichever timeline surface has focus (the clip lane takes it first when it holds a
+    // range; the strip and the panel root bubble here, and MainComponent forwards it from outside the timeline): from
+    // the Range tool's span, else the loop locators. The new block opens its name for typing. With nothing to make it
+    // from, a toast says what to do, so the key never does nothing silently.
+    if (matchesAction(
+            key, "timelineMakeSection",
+            juce::KeyPress('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0))) {
+        if (clipEditorOpen())
+            return false;
+        const auto span = makeSectionKeySpan(clipLaneArea_, transport_, doc_);
+        if (span && span->blocked) {
+            if (onShowMessage)
+                onShowMessage("Those bars already hold a section: pick bars outside it to make a new one");
+        } else if (span && span->fromRange)
+            clipLaneArea_.applyRangeChoice(TimelineClipLaneArea::RangeChoice::MakeSection);
+        else if (span)
+            sectionStrip_->makeSectionFromRange(span->startBeat, span->endBeat);
+        else if (onShowMessage)
+            onShowMessage("Select bars with the Range tool or set the loop, then press it again to make a section");
+        return true;
+    }
+
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
     // lane area already handles P itself when focused — this is the fallback for other focus
     // targets inside the panel (same span, same setLoop the lane's callback performs).
     if (matchesAction(key, "timelineLoopSelection", plainKey('p')) && transport_ != nullptr) {
         std::optional<std::pair<double, double>> span;
-        if (pianoRoll_.isOpen() && doc_ != nullptr) {
-            if (const auto* clip = doc_->getClip(pianoRoll_.getClipId()))
+        if (clipEditorOpen() && doc_ != nullptr) {
+            const auto openClip = pianoRoll_.isOpen() ? pianoRoll_.getClipId() : drum_->grid.getClipId();
+            if (const auto* clip = doc_->getClip(openClip))
                 span = std::make_pair(clip->startBeat, clip->startBeat + clip->lengthBeats);
         } else {
             span = clipLaneArea_.getSelectedClipSpan();
@@ -170,6 +251,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
             arm = appProperties_->getUserSettings()->getBoolValue(kTimelineLoopSelectionArmsPropertyKey, true);
         transport_->setLoop(span->first, span->second, arm || transport_->getPositionSnapshot().looping);
         ruler_.repaint();
+        sectionStrip_->repaint();
         return true;
     }
 

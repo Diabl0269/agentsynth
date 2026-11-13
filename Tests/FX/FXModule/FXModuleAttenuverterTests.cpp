@@ -1,5 +1,7 @@
 // FXModuleAttenuverterTests.cpp — Attenuverter module coverage
 #include "Modules/AttenuverterModule.h"
+#include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -95,4 +97,58 @@ TEST_F(AttenuverterModuleTest, ProcessBlockEmptyBufferDoesNotCrash) {
     juce::MidiBuffer midi;
     // Should return early without crashing
     EXPECT_NO_THROW(module->processBlock(buffer, midi));
+}
+
+// A steady Amount with no CV takes the vector-multiply path: every sample must be exactly input * Amount, and the
+// reported peak the block's largest magnitude.
+TEST_F(AttenuverterModuleTest, SteadyAmountScalesEverySampleExactly) {
+    auto* amt = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[1]);
+    ASSERT_NE(amt, nullptr);
+    amt->setValueNotifyingHost(amt->convertTo0to1(-0.37f));
+    module->prepareToPlay(44100.0, 512); // snaps the smoother: no ramp this block
+
+    juce::AudioBuffer<float> buffer(2, 256);
+    buffer.clear();
+    std::vector<float> input(256);
+    for (int i = 0; i < 256; ++i) {
+        input[(size_t)i] = std::sin(0.05f * (float)i) * 0.9f;
+        buffer.setSample(0, i, input[(size_t)i]);
+    }
+    juce::MidiBuffer midi;
+    module->processBlock(buffer, midi);
+
+    float peak = 0.0f;
+    for (int i = 0; i < 256; ++i) {
+        const float expected = input[(size_t)i] * amt->get();
+        ASSERT_EQ(buffer.getSample(0, i), expected) << "sample " << i;
+        peak = std::max(peak, std::abs(expected));
+    }
+    EXPECT_EQ(module->getLastOutputPeak(), peak);
+}
+
+// A changed Amount still glides: the block after the change ramps rather than stepping, and once the ramp is done the
+// output is the new Amount exactly.
+TEST_F(AttenuverterModuleTest, AmountChangeStillRampsThenSettles) {
+    auto* amt = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[1]);
+    ASSERT_NE(amt, nullptr);
+    amt->setValueNotifyingHost(amt->convertTo0to1(0.0f));
+    module->prepareToPlay(44100.0, 512);
+    amt->setValueNotifyingHost(amt->convertTo0to1(1.0f));
+
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i)
+        buffer.setSample(0, i, 1.0f);
+    module->processBlock(buffer, midi);
+    EXPECT_GT(buffer.getSample(0, 0), 0.0f);
+    EXPECT_LT(buffer.getSample(0, 0), 0.1f) << "the first sample after the change is still near the old Amount";
+    EXPECT_EQ(buffer.getSample(0, 511), amt->get()) << "the 10 ms ramp ends inside a 512-sample block at 44.1 kHz";
+
+    buffer.clear();
+    for (int i = 0; i < 512; ++i)
+        buffer.setSample(0, i, 1.0f);
+    module->processBlock(buffer, midi);
+    for (int i = 0; i < 512; ++i)
+        ASSERT_EQ(buffer.getSample(0, i), amt->get()) << "sample " << i;
 }

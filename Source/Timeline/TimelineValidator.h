@@ -23,6 +23,8 @@ enum class TimelineValidationError {
     TooManyBreakpoints,
     TooManyMarkers,
     MarkerTextTooLong,
+    TooManySections,
+    SectionOverlap,
     BeatOutOfBounds,
     NoteOutOfRange,
     ValueOutOfParamRange,

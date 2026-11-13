@@ -1,9 +1,12 @@
 #pragma once
 
 #include "BlockTimeInfo.h"
+#include "MonitorGuardReports.h"
 #include "TempoMap.h"
+#include "TransportDoc.h"
 #include <array>
 #include <atomic>
+#include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -42,6 +45,26 @@ public:
     bool setLoop(double startBeat, double endBeat, bool enabled);
     bool setBpm(double newBpm);
     bool setTimeSignature(int numerator, int denominator);
+
+    // Message thread only. Fires after a time signature that differs from the last requested one was queued, from
+    // every path (the transport bar, a project load, undo), so an owner can republish what depends on the bar length.
+    std::function<void()> onTimeSignatureChanged;
+
+    // Message thread only. Sets or clears (nullopt = No key) the song key; never touches the audio thread or any note.
+    void setSongKey(const std::optional<MusicalScale>& key);
+    // Message thread only. Fires after the song key changed, from every path (the picker, a project load, undo).
+    std::function<void()> onSongKeyChanged;
+
+    // Any thread. The song key last set, packed: 0 = No key, else bit 16 set, root in bits 12-15, mask in bits 0-11.
+    // The name is not carried; a message-thread reader takes getDocumentState().songKey instead.
+    std::uint32_t getSongKeyPacked() const noexcept { return songKeyPacked_.load(std::memory_order_acquire); }
+    static std::uint32_t packSongKey(const std::optional<MusicalScale>& key) noexcept;
+    static std::optional<MusicalScale> unpackSongKey(std::uint32_t packed);
+
+    // Message thread only. The tempo, time signature, loop and song key last requested, valid immediately.
+    const TransportDoc& getDocumentState() const noexcept { return documentState_; }
+    // Message thread only. Sets the song key and posts time signature, bpm and loop; true if all three were queued.
+    bool applyDocumentState(const TransportDoc& doc);
 
     // -- Audio-thread API ----------------------------------------------------
     // Called from the engine's prepareToPlay path (never concurrently with
@@ -127,6 +150,27 @@ public:
     /** How many samples of each channel above are valid — the current render pass's length. */
     int getNumDeviceInputSamples() const noexcept { return numDeviceInputSamples; }
 
+    // -- This pass's TRACK INPUT MONITORING context ----------------------------
+    // What an audio track's Track Audio node needs to play its own input live (TimelineAudioSourceModule): which
+    // packed channel above each device input landed in, whether a take is being recorded (Auto monitors while
+    // stopped or recording), which input device is open, and where the track's feedback guard reports a trip.
+    // Same audio-thread-only, set-before-the-graph contract as the device input above. The default is "no input
+    // mapped", what a bare TransportService in a unit test should give.
+    struct InputMonitorContext {
+        std::array<int, kMaxDeviceInputChannels> deviceToPacked{-1, -1, -1, -1, -1, -1, -1, -1}; // -1 = input off
+        bool recording = false;
+        int inputDeviceHash = 0; // juce::String::hashCode() of the open input device; 0 = unnamed, matches any choice
+        MonitorGuardReports* guardReports = nullptr; // engine-owned; null outside an engine
+    };
+    void setInputMonitorContextForBlock(const InputMonitorContext& context) noexcept { inputMonitorContext = context; }
+    const InputMonitorContext& getInputMonitorContext() const noexcept { return inputMonitorContext; }
+    /** This pass's samples for 0-based DEVICE input `channel` (not a packed index), or null when it is off. */
+    const float* getDeviceInputForDeviceChannel(int channel) const noexcept {
+        return channel >= 0 && channel < kMaxDeviceInputChannels
+                   ? getDeviceInputChannel(inputMonitorContext.deviceToPacked[(std::size_t)channel])
+                   : nullptr;
+    }
+
     // -- This block's INPUT MONITORING flag -------------------------------------
     // The same carrier idea as the device input above, for a different reason: AudioEngine decides,
     // once per render pass, whether AudioInputModule's graph output should be gated (recording taps
@@ -171,6 +215,12 @@ public:
         bool looping = false;
         double loopStartPpq = 0.0;
         double loopEndPpq = 0.0;
+        // Counts the locates the audio thread has applied; a change between two snapshots is a jump, not playback.
+        std::uint32_t locateCount = 0;
+        double lastLocateBeat = 0.0; // where the latest of them put the transport
+        // juce::Time::getMillisecondCounterHiRes() when the audio thread published this snapshot (0 = never stamped,
+        // as in a hand-built snapshot). The UI uses it to extrapolate the position between blocks.
+        double publishedAtMs = 0.0;
     };
 
     // Consistent snapshot of the position at the start of the current block.
@@ -204,10 +254,16 @@ private:
     void applyCommand(const Command& command) noexcept;
     void publishSnapshot() noexcept;
 
+    // Message thread only; see getDocumentState.
+    TransportDoc documentState_;
+    std::atomic<std::uint32_t> songKeyPacked_{0};
+
     // -- Audio-thread state ---------------------------------------------------
     ConstantTempoMap tempoMap;
     double ppqPosition = 0.0;        // canonical position, in beats
     std::int64_t samplePosition = 0; // always consistent with ppqPosition under tempoMap
+    std::uint32_t locateCount = 0;   // LocateBeat commands applied so far (published in the snapshot)
+    double lastLocateBeat = 0.0;
     bool playing = false;
     bool looping = false;
     double loopStartPpq = 0.0;
@@ -231,6 +287,7 @@ private:
 
     // Audio thread only; see setInputMonitoringEnabledForBlock.
     bool inputMonitoringEnabledForBlock = false;
+    InputMonitorContext inputMonitorContext; // audio thread only; see setInputMonitorContextForBlock
 
     // Audio thread only; see setMixerSoloActiveForBlock.
     bool mixerSoloActiveForBlock = false;
@@ -258,6 +315,9 @@ private:
         std::atomic<bool> looping{false};
         std::atomic<double> loopStartPpq{0.0};
         std::atomic<double> loopEndPpq{4.0};
+        std::atomic<std::uint32_t> locateCount{0};
+        std::atomic<double> lastLocateBeat{0.0};
+        std::atomic<double> publishedAtMs{0.0};
     };
     SharedPosition shared;
     std::atomic<std::uint32_t> sharedVersion{0}; // odd while a write is in flight

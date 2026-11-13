@@ -9,6 +9,12 @@
 
 namespace {
 
+// Height for a muted hint label under a preference row enough for TWO lines at the
+// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed
+// (a one-line height would squeeze it, and neither hint's text is short enough to be one line at
+// the tab's real width).
+constexpr int kHintHeight = 32;
+
 // Duplicated from the constexpr GraphEditor::requestGroupSelectionIntoMacro() writes through
 // propertiesFile_ directly for the "remember my choice" case (that modal can fire before this tab,
 // or any Settings window, has ever been constructed) — the same "one-line string not worth a
@@ -42,6 +48,26 @@ constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 // just set is the whole point of the feature, so it ships on and the toggle exists to turn it OFF
 // for anyone who wants the plain one-bar clip back.
 constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
+
+// Read at use time by MainComponent::removeModulator (kAskBeforeRemovingLfoKey in RemoveLfoConfirm.h is the
+// same string, duplicated for the reason above). DEFAULT TRUE: removing the last thing an LFO moves deletes the
+// LFO and its settings, so the timeline asks first; the dialog's "Don't ask again" box turns this off too.
+constexpr const char* kTimelineAskBeforeRemovingLfoKey = "timelineAskBeforeRemovingLfo";
+// The answer the dialog's "Remember my choice" box stored ("keep" or "remove"; kRemoveLastSourceChoiceKey in
+// RemoveLfoConfirm.h is the same string). Turning the question back on forgets it.
+constexpr const char* kTimelineRemoveLastSourceChoiceKey = "timelineRemoveLastSourceChoice";
+
+// Read at use time by MainComponent::deleteTrackAfterConfirm and deleteMacrosOfTracks (kAskBeforeDeletingTrackKey in
+// DeleteTrackConfirm.h is the same string). DEFAULT TRUE: Cmd+Backspace on a track row, and deleting a track's macro,
+// ask first; the dialogs' "Don't ask again" / "Remember my choice" boxes turn this off.
+constexpr const char* kTimelineAskBeforeDeletingTrackKey = "timelineAskBeforeDeletingTrack";
+// The answer the macro-delete dialog's "Remember my choice" box stored ("keep" or "remove";
+// kDeleteMacroChoiceKey in DeleteTrackConfirm.h is the same string). Turning the question back on forgets it.
+constexpr const char* kTimelineDeleteMacroChoiceKey = "timelineDeleteMacroChoice";
+
+// Read at use time by MainComponent::handleRecordToggle (and the record button's tooltip). DEFAULT TRUE: every major
+// DAW's Record also rolls the transport, so an install that never opens this tab is unaffected.
+constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
 
 // Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
@@ -94,6 +120,8 @@ constexpr int kPanelDetachModeBothComboId = 2;
 // inside one here could never actually resolve to the single definition living in another .cpp.
 extern int comboIdFromMode(GraphEditor::SmartConnectionMode mode);
 extern GraphEditor::SmartConnectionMode modeFromComboId(int id);
+extern int comboIdFromSideBySide(SmartConnectionEngine::SideBySideMode mode);
+extern SmartConnectionEngine::SideBySideMode sideBySideFromComboId(int id);
 extern int comboIdFromMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromComboId(int id);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juce::String& s);

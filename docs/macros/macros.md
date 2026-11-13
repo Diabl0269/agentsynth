@@ -26,8 +26,12 @@ processing of its own and no graph edges beyond the ones its ports carry.
   only valid for the lifetime of one loaded graph.
 - `synth::MacroSet` is the live set for the current patch, owned by `GraphEditor` and serialised by
   `ProjectBundle` under the `"macros"` key alongside the graph, timeline and `PatchDocument`.
+- A channel macro a track plays shares that track's colour in both directions
+  ([`docs/mixer/mixer.md`](../mixer/mixer.md#a-track-and-its-macro-share-a-colour)); any other macro keeps its own.
 - Collapsed, a macro draws as a `MacroCardComponent` and its member `ModuleComponent`s are hidden.
-  Expanded, it draws as a dashed hull around the union of its members' bounds.
+  Expanded, it draws as a dashed hull around the union of its members' bounds. Toggling between the two folds the
+  modules into the card's preview boxes and back out, instead of swapping at once
+  ([Macro fold](../layout/animation.md#macro-fold)); the model change is still instant.
 - Selection, drag and delete are **not** a parallel mechanism: selecting a macro selects its members
   in the ordinary `SelectionModel`, so the existing group-drag and delete paths do the work
   unchanged.
@@ -39,9 +43,31 @@ visible set. This is a **rendering** rule — the underlying graph edges are unt
 
 ## The macro model
 
-**The model is flat.** A node in one macro cannot be grouped into a second one; `Cmd+G` refuses that
-with a status message rather than doing something ad hoc. A macro inside a macro is refused the same
-way.
+Each macro knob takes a knob-only cable on the input channel of its number (Macro 1 on channel 0 through Macro 16 on 15); the cable moves the knob inside its own range, live, and the output follows. `macroCount` and the per-knob Bipolar switches take none.
+
+**Macros nest.** Create Macro and `Cmd+G` group whole macros, or modules inside an open macro, into a
+macro inside a macro; a selection spread across different macros is refused with a status message
+rather than doing something ad hoc. The rules are in
+[menu and membership](menu-and-membership.md#grouping-rules).
+
+**The data model already supports nesting.** `Macro::parentId` (empty = top level) links a macro to
+the one that contains it; `members` stays the *direct* members only, and every node uuid is a direct
+member of exactly one macro (`MacroSet::findByMember` returns that innermost owner). A macro is valid
+if it has direct members or children, so a container-only parent is fine, and one that loses its last
+member and last child dissolves (`retainOnly`, `removeMemberEverywhere`), cascading up the chain.
+Removing a macro re-parents its children to its own parent. `MacroSet` carries the hierarchy queries
+(`parentOf`, `childrenOf`, `depth`, `ancestorChain`, `descendantMembers`, `outermostOf`,
+`outermostCollapsedAncestorOf`, `isEffectivelyCollapsed`, `isVisible`) and `setParent`, which rejects
+cycles and unknown parents. The optional `"parent"` key is written only when set, so flat saves are
+byte-identical and older files load as top level; `fromVar` rejects a dangling or cyclic parent.
+The canvas draws, hides, hit-tests and re-anchors cables around nested macros
+([macro-cards](../layout/macro-cards.md#nested-macros)), and cables into or out of a nested member are routed through a port
+at each boundary ([auto-ports](auto-ports.md#nested-macros)).
+
+**Older builds and nested saves.** An older build ignores `"parent"` and loads nested macros as flat
+ones, with one exception: a parent with children but no direct members (made by grouping two whole
+macros) saves an empty `"members"` list, which an older build rejects, and its `fromVar` is
+all-or-nothing, so it drops that file's whole macro set (the modules and cables still load).
 
 **Nodes are addressed by uuid, everywhere.** Timeline bindings, automation lanes
 (`synth::resolveLaneParameter`), the AI patch format and the undo system all address a node by its
@@ -133,9 +159,25 @@ bounded retry, narrow repair, prompt), measured with `Tools/AIPatchHarness`
 the correct shape is an app-side **tool or action** the model invokes, with the app authoring the
 macro from a validated node set — never a `"macros"` key the model writes directly.
 
+## Deleting a card inside an open macro
+
+Deleting a member card closes the hole it leaves: the cards after it in the macro slide into its place and the
+border shrinks with them, in the same undo step (Cmd+Z puts everything back). On the open canvas the hole stays. The
+rule for "after" and the glide are in [layout.md](../layout/layout.md#making-room-when-something-grows) ("Deleting a
+card") and [animation.md](../layout/animation.md#delete-and-undo-animation).
+
+## Adding a module between others inside an open macro
+
+Dragging a module (from the library, or a member card) between two members of an open macro opens a gap there: the
+members after it slide aside, the border grows to hold them (pushing what it then covers outside the macro, in
+chain), and the module lands between them as a member, one undo step. Deleting it later brings the others back and
+the border shrinks again. So after deleting the Filter from Osc, Filter, VCA (the VCA closes up to the Osc), dropping a
+new module between Osc and VCA slides the VCA back out and puts the module where the Filter was. The rule and the
+motion are in [layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others) and
+[animation.md](../layout/animation.md#adding-a-module-between-others).
+
 ## Deliberate limits
 
-- **Nested macros.** The flat model stands; a macro inside a macro is refused with a status message.
 - **A macro is not a saveable library item.** Snippets already cover "save this group and paste it
   again" (`SnippetManager`); a macro-as-preset is a different feature.
 - **No per-voice macro instancing.** One macro instantiated per voice is the case that would justify

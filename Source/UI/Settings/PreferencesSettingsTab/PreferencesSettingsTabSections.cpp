@@ -1,0 +1,225 @@
+#include "PreferencesSettingsTab.h"
+#include "UI/Layout/FoldSectionHeader.h"
+#include "UI/Settings/SettingsFoldState.h"
+#include "UI/Settings/ShortcutsSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+// Concern: the "All" category view. Every category sits under a clickable header (chevron + name)
+// that folds its rows, and the one fold-all button acts on every header at once. The rows
+// themselves are laid out by the usual layout*Groups units; this unit only decides which categories
+// contribute rows (categoryShown) and, once the pass is done, slots each header above its rows.
+
+namespace {
+constexpr int kHeaderHeight = synth::ui::kFoldSectionHeaderHeight;
+constexpr int kHeaderGap = 4;          // between a header and its first row
+constexpr int kSectionGap = 8;         // above every header but the first
+constexpr int kDividerLeadHeight = 21; // the 10 + 1 + 10 a group divider occupies (see layoutContent)
+
+constexpr PreferencesSettingsTab::Category kSections[] = {
+    PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
+    PreferencesSettingsTab::Category::Files,  PreferencesSettingsTab::Category::Mixer,
+    PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote,
+    PreferencesSettingsTab::Category::Privacy};
+
+int indexOf(PreferencesSettingsTab::Category c) { return static_cast<int>(c); }
+
+constexpr const char* kFoldedKey = "preferencesFolded";
+} // namespace
+
+PreferencesSettingsTab::SectionHeader::SectionHeader(PreferencesSettingsTab& o, Category c)
+    : juce::Button(categoryName(c))
+    , owner(o)
+    , category(c) {
+    setWantsKeyboardFocus(true);
+    refreshTitle();
+    setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    onClick = [this] { owner.setSectionCollapsed(category, !owner.isSectionCollapsed(category)); };
+}
+
+bool PreferencesSettingsTab::SectionHeader::isFolded() const { return owner.isSectionCollapsed(category); }
+
+void PreferencesSettingsTab::SectionHeader::setFolded(bool folded) { owner.setSectionCollapsed(category, folded); }
+
+// The accessible name carries the state ("Graph, expanded"), so a screen reader hears it change.
+void PreferencesSettingsTab::SectionHeader::refreshTitle() {
+    setTitle(categoryName(category) + (owner.isSectionCollapsed(category) ? ", collapsed" : ", expanded"));
+    turn.setOpen(!owner.isSectionCollapsed(category));
+}
+
+void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool hot, bool /*down*/) {
+    synth::ui::paintFoldSectionHeader(g, *this, categoryName(category), turn, hot);
+}
+
+void PreferencesSettingsTab::setupSectionControls() {
+    for (auto category : kSections) {
+        auto& header = sectionHeaders[indexOf(category)];
+        header = std::make_unique<SectionHeader>(*this, category);
+        header->setTooltip("Fold or unfold " + categoryName(category) + " (Left/Right)");
+        contentHost.addChildComponent(*header);
+    }
+    // Restored before the first layout, so the view opens folded as it was left: no fold animates in.
+    const auto folded = synth::ui::settingsfold::load(&appProperties, kFoldedKey);
+    for (auto category : kSections)
+        sectionCollapsed[indexOf(category)] = folded.contains(persistedCategoryName(category));
+    refreshSectionTitles();
+    addChildComponent(foldAllButton);
+    foldAllButton.onClick = [this] { setAllSectionsCollapsed(!areAllSectionsCollapsed()); };
+
+    // The headers and the strip fade as the view shows or hides them; each frame lays out again (coalesced).
+    std::vector<juce::Component*> headerComponents;
+    for (auto& header : sectionHeaders)
+        if (header != nullptr)
+            headerComponents.push_back(header.get());
+    sectionHeaderFade_ = std::make_unique<synth::ui::FadeVisibility>(headerComponents);
+    foldAllFade_ = std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{&foldAllButton});
+    relayoutUpdater_.run = [this] { resized(); };
+    sectionHeaderFade_->onFrame = [this] { relayoutUpdater_.triggerAsyncUpdate(); };
+    foldAllFade_->onFrame = [this] { relayoutUpdater_.triggerAsyncUpdate(); };
+}
+
+// What is there when the tab is first laid out does not fade; after that the chrome fades in and out.
+void PreferencesSettingsTab::steerSectionChrome(bool headersAndStrip) {
+    if (!chromeLaidOut_) {
+        sectionHeaderFade_->snapTo(headersAndStrip);
+        foldAllFade_->snapTo(headersAndStrip);
+        chromeLaidOut_ = true;
+        return;
+    }
+    sectionHeaderFade_->setShown(headersAndStrip);
+    foldAllFade_->setShown(headersAndStrip);
+}
+
+float PreferencesSettingsTab::getSectionChevronOpennessForTest(Category category) const {
+    return sectionHeaders[indexOf(category)]->turn.openness();
+}
+
+bool PreferencesSettingsTab::isSectionChevronTurningForTest(Category category) const {
+    return sectionHeaders[indexOf(category)]->turn.isTurning();
+}
+
+void PreferencesSettingsTab::saveSectionFolds() {
+    juce::StringArray folded;
+    for (auto category : kSections)
+        if (sectionCollapsed[indexOf(category)])
+            folded.add(persistedCategoryName(category));
+    synth::ui::settingsfold::save(&appProperties, kFoldedKey, folded);
+}
+
+void PreferencesSettingsTab::refreshSectionTitles() {
+    for (auto& header : sectionHeaders)
+        if (header != nullptr)
+            header->refreshTitle();
+}
+
+bool PreferencesSettingsTab::isSectionCollapsed(Category category) const {
+    return category != Category::All && sectionCollapsed[indexOf(category)];
+}
+
+void PreferencesSettingsTab::setSectionCollapsed(Category category, bool collapsed) {
+    if (category == Category::All || sectionCollapsed[indexOf(category)] == collapsed)
+        return;
+    sectionCollapsed[indexOf(category)] = collapsed;
+    saveSectionFolds();
+    refreshSectionTitles();
+    resized();
+    repaint();
+}
+
+bool PreferencesSettingsTab::areAllSectionsCollapsed() const {
+    for (auto flag : sectionCollapsed)
+        if (!flag)
+            return false;
+    return true;
+}
+
+void PreferencesSettingsTab::setAllSectionsCollapsed(bool collapsed) {
+    for (auto& flag : sectionCollapsed)
+        flag = collapsed;
+    saveSectionFolds();
+    refreshSectionTitles();
+    resized();
+    repaint();
+}
+
+juce::Button& PreferencesSettingsTab::getSectionHeaderForTest(Category category) {
+    return *sectionHeaders[indexOf(category)];
+}
+
+// With no filter: the picked category only, or (All) every category that is not folded.
+bool PreferencesSettingsTab::categoryShown(Category category) const {
+    if (selectedCategory == Category::All)
+        return !isSectionCollapsed(category);
+    return category == selectedCategory;
+}
+
+// Called first by every layout*Groups unit (Files is entered twice: only the first counts).
+void PreferencesSettingsTab::enterCategory(Category category, int y) {
+    layoutCategory = category;
+    auto& start = sectionStartY[indexOf(category)];
+    if (start < 0)
+        start = y;
+}
+
+// After layoutContent: each category's rows occupy a band [start, nextStart) of the content. Walk the
+// bands in order, put a header where each begins, drop the group divider that would sit directly under
+// a header, and shift the band's rows and dividers down to make room. Positions are snapshotted first
+// so a shifted row is never mistaken for a member of the next band.
+void PreferencesSettingsTab::placeSectionHeaders(int contentWidth) {
+    const bool active = sectionHeadersActive();
+    if (!active)
+        return;
+
+    struct Placed {
+        juce::Component* component;
+        int oldY;
+    };
+    std::vector<Placed> rows;
+    for (auto* child : contentHost.getChildren()) {
+        bool isHeader = false;
+        for (auto& header : sectionHeaders)
+            isHeader = isHeader || child == header.get();
+        if (!isHeader && child->isVisible())
+            rows.push_back({child, child->getY()});
+    }
+    const auto oldDividers = dividerBounds;
+    dividerBounds.clear();
+
+    const int totalHeight = contentHost.getHeight();
+    int cursor = 0;
+    for (int i = 0; i < kNumSections; ++i) {
+        const int bandTop = sectionStartY[i];
+        int bandEnd = totalHeight;
+        for (int j = i + 1; j < kNumSections; ++j)
+            if (sectionStartY[j] >= 0) {
+                bandEnd = sectionStartY[j];
+                break;
+            }
+        if (bandTop < 0)
+            continue;
+
+        if (i > 0)
+            cursor += kSectionGap;
+        sectionHeaders[i]->setBounds(0, cursor, contentWidth, kHeaderHeight);
+        cursor += kHeaderHeight;
+        if (bandEnd <= bandTop)
+            continue; // folded: the header stands alone
+
+        // The divider between the previous visible group and this band's first row would now sit
+        // right under the header, so the band's content starts after it.
+        int contentOrigin = bandTop;
+        for (const auto& d : oldDividers)
+            if (d.getY() == bandTop + 10)
+                contentOrigin = bandTop + kDividerLeadHeight;
+        cursor += kHeaderGap;
+        const int shift = cursor - contentOrigin;
+        for (const auto& r : rows)
+            if (r.oldY >= contentOrigin && r.oldY < bandEnd)
+                r.component->setTopLeftPosition(r.component->getX(), r.oldY + shift);
+        for (const auto& d : oldDividers)
+            if (d.getY() >= contentOrigin && d.getY() < bandEnd)
+                dividerBounds.push_back(d.translated(0, shift));
+        cursor += bandEnd - contentOrigin;
+    }
+    contentHost.setSize(contentHost.getWidth(), juce::jmax(cursor, 1));
+    contentHost.repaint();
+}

@@ -1,5 +1,6 @@
 #include "MacroPortConfigDialog.h"
 #include "MacroPortConfigDialogInternal.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -62,20 +63,30 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newDirectionBox_.addItem("Input", kDirectionInputId);
     newDirectionBox_.addItem("Output", kDirectionOutputId);
     newDirectionBox_.setSelectedId(kDirectionInputId, juce::dontSendNotification);
+    newDirectionBox_.setTitle("New port direction");
+    newDirectionBox_.setTooltip("Whether the new port is an input or an output");
     addAndMakeVisible(newDirectionBox_);
 
     newKindBox_.addItem("Audio / CV", kKindAudioCVId);
     newKindBox_.addItem("MIDI", kKindMidiId);
     newKindBox_.setSelectedId(kKindAudioCVId, juce::dontSendNotification);
     newKindBox_.onChange = [this] {
-        newShapeBox_.setVisible(newKindBox_.getSelectedId() != kKindMidiId);
+        newShapeFade_.setShown(newKindBox_.getSelectedId() != kKindMidiId);
         updateNewPortVoicesVisibility();
+        resized();
     };
+    newKindBox_.setTitle("New port kind");
+    newKindBox_.setTooltip("Audio / CV, or MIDI");
     addAndMakeVisible(newKindBox_);
 
     populateShapeBox(newShapeBox_);
     newShapeBox_.setSelectedId(kShapeMonoId, juce::dontSendNotification);
-    newShapeBox_.onChange = [this] { updateNewPortVoicesVisibility(); };
+    newShapeBox_.onChange = [this] {
+        updateNewPortVoicesVisibility();
+        resized();
+    };
+    newShapeBox_.setTitle("New port shape");
+    newShapeBox_.setTooltip("Mono, stereo or poly");
     addAndMakeVisible(newShapeBox_);
 
     newVoicesLabel_.setJustificationType(juce::Justification::centredRight);
@@ -86,28 +97,38 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
     newVoicesEditor_.setJustification(juce::Justification::centred);
     newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // same as newNameEditor_
-    newVoicesEditor_.onEscapeKey = [this] { requestClose(); };
+    newVoicesEditor_.onEscapeKey = [this] { escapePressed(); };
+    newVoicesEditor_.setTitle("New port voice count");
+    newVoicesEditor_.setTooltip("Number of voices of the new poly port");
+    removeHiddenTabStops(newVoicesEditor_);
     addAndMakeVisible(newVoicesEditor_);
-    updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
+    newVoicesFade_.snapTo(false); // Mono is the default shape: starts hidden
 
     newNameEditor_.setTextToShowWhenEmpty("Port name", juce::Colours::grey);
     // Return commits the in-progress "Add a port" field the same way it already does for a
     // row's rename/voices fields — pressing Return here is the keyboard equivalent of clicking Add.
     newNameEditor_.onReturnKey = [this] { triggerAddPortForTest(); };
     newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
-        requestClose();
+        escapePressed();
     };
+    newNameEditor_.setTitle("New port name");
+    newNameEditor_.setTooltip("Name of the new port. Press Return to add it.");
+    removeHiddenTabStops(newNameEditor_);
     addAndMakeVisible(newNameEditor_);
 
+    addButton_.setTooltip("Add the port (Return in the name field)");
     addButton_.onClick = [this] { triggerAddPortForTest(); };
     addAndMakeVisible(addButton_);
 
+    closeButton_.setTooltip("Close this window and keep every change (Esc)");
     closeButton_.onClick = [this] { requestClose(); };
     addAndMakeVisible(closeButton_);
 
     addAndMakeVisible(rowsViewport_);
     rowsViewport_.setViewedComponent(&rowsContent_, false);
     rowsViewport_.setScrollBarsShown(true, false);
+    rowsViewport_.setWantsKeyboardFocus(false);
+    arrowKeys_.watchViewport(rowsViewport_); // ahead of the viewport's own Up/Down scrolling
 
     inputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     outputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
@@ -119,9 +140,13 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     rowsContent_.addAndMakeVisible(inputsEmptyHint_);
     rowsContent_.addAndMakeVisible(outputsEmptyHint_);
 
+    for (auto* fade : {&newShapeFade_, &newVoicesFade_, &inputsHintFade_, &outputsHintFade_})
+        fade->onFrame = [this] { resized(); }; // the hints also tween their section's height
+
     rebuildRowComponents();
     setSize(kDialogWidth, idealDialogHeight());
     resized();
+    hintFadesPrimed_ = true;
 }
 
 MacroPortConfigDialog::~MacroPortConfigDialog() = default;
@@ -133,7 +158,7 @@ MacroPortConfigDialog::~MacroPortConfigDialog() = default;
 // ALSO gets its own onEscapeKey wired directly rather than relying on this alone.
 bool MacroPortConfigDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
-        requestClose();
+        escapePressed();
         return true;
     }
     return false;
@@ -173,14 +198,13 @@ void MacroPortConfigDialog::requestClose() {
 void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
     const bool isMidi = newKindBox_.getSelectedId() == kKindMidiId;
     const bool poly = !isMidi && newShapeBox_.getSelectedId() == kShapePolyId;
-    newVoicesEditor_.setVisible(poly);
-    newVoicesLabel_.setVisible(poly);
+    newVoicesFade_.setShown(poly);
 }
 
 void MacroPortConfigDialog::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 
-    const auto& c = liveThemeColours(*this);
+    const auto& c = synth::theme::themeOf(*this).colors;
 
     // "Add a port" panel — a faintly bordered, rounded group so the row of controls above the Add
     // button reads as one tied-together block rather than floating loose
@@ -235,6 +259,24 @@ void MacroPortConfigDialog::resized() {
     area.removeFromBottom(6);
     rowsViewport_.setBounds(area);
     layOutOrMeasureRows(/*apply=*/true, area.getWidth() - 2);
+    if (rowDrag_.isReordering())
+        placeDragRows();
+}
+
+// The height an empty-section hint takes, and (when applying) its fade. The hint's slot follows the fade, so the
+// section below it slides instead of jumping; a measure answers with the settled height.
+int MacroPortConfigDialog::emptyHintHeight(bool apply, synth::ui::FadeVisibility& fade, bool wanted, juce::Label& hint,
+                                           int y, int width) {
+    if (!apply)
+        return wanted ? kEmptyHintHeight : 0;
+    if (!hintFadesPrimed_)
+        fade.snapTo(wanted);
+    else
+        fade.setShown(wanted);
+    const int height = juce::roundToInt((float)kEmptyHintHeight * fade.progress());
+    if (height > 0)
+        hint.setBounds(0, y, width, height);
+    return height;
 }
 
 int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
@@ -254,13 +296,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
             rowControls_[i]->setBounds(0, y, width, kRowHeight);
         y += kRowHeight + kRowGap;
     }
-    if (apply)
-        inputsEmptyHint_.setVisible(!anyInput);
-    if (!anyInput) {
-        if (apply)
-            inputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
-        y += kEmptyHintHeight;
-    }
+    y += emptyHintHeight(apply, inputsHintFade_, !anyInput, inputsEmptyHint_, y, width);
 
     y += kSectionGap;
     if (apply)
@@ -276,13 +312,7 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
             rowControls_[i]->setBounds(0, y, width, kRowHeight);
         y += kRowHeight + kRowGap;
     }
-    if (apply)
-        outputsEmptyHint_.setVisible(!anyOutput);
-    if (!anyOutput) {
-        if (apply)
-            outputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
-        y += kEmptyHintHeight;
-    }
+    y += emptyHintHeight(apply, outputsHintFade_, !anyOutput, outputsEmptyHint_, y, width);
 
     if (apply)
         rowsContent_.setSize(width, y);
@@ -299,7 +329,12 @@ int MacroPortConfigDialog::idealDialogHeight() {
     return juce::jlimit(kMinDialogHeight, kMaxDialogHeight, chromeHeight + rowsHeight);
 }
 
+// A row rebuilt under a live drag takes the drag with it (a lifted row cannot outlive its component,
+// and its mouseUp would never arrive). A settle in flight keeps going: the commit's own refreshPorts()
+// lands here, and the new rows pick the glide up by uuid (placeDragRows).
 void MacroPortConfigDialog::rebuildRowComponents() {
+    if (rowDrag_.animator().isPressed() || rowDrag_.animator().isDragging())
+        rowDrag_.discard();
     rowControls_.clear();
 
     for (const auto& row : rows_) {

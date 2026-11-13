@@ -2,8 +2,11 @@
 // getAllCommands/getCommandInfo/perform table rewrite can never silently drop, reorder, or
 // duplicate a command. Uses getCommandTableForTest() (CommandSpec itself stays private -- read
 // via auto, per that accessor's own comment).
+#include "AudioEngine/AudioEngine.h"
+#include "Branding.h"
 #include "MainComponentTestFixture.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Layout/MainMenuTooltips.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
@@ -20,6 +23,8 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::exportPatchOnly,
     AppCommands::exportAudio,
     AppCommands::exportStems,
+    AppCommands::exportMidi,
+    AppCommands::collectAndArchive,
     AppCommands::openPreset,
     AppCommands::openProject,
     AppCommands::newPatch,
@@ -32,8 +37,12 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::groupSelection,
     AppCommands::ungroupSelection,
     AppCommands::collapseMacro,
+    AppCommands::foldAndPackMacros,
     AppCommands::locateMaster,
+    AppCommands::renameSelectedModule,
+    AppCommands::replaceSelectedModule,
     AppCommands::toggleLibrary,
+    AppCommands::toggleSoundBrowser,
     AppCommands::selectAllModules,
     AppCommands::saveSnippet,
     AppCommands::copySelection,
@@ -50,6 +59,22 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::snapSetThirtySecond,
     AppCommands::snapSetSixtyFourth,
     AppCommands::snapSetHundredTwentyEighth,
+    AppCommands::snapSetWholeTriplet,
+    AppCommands::snapSetHalfTriplet,
+    AppCommands::snapSetQuarterTriplet,
+    AppCommands::snapSetEighthTriplet,
+    AppCommands::snapSetSixteenthTriplet,
+    AppCommands::snapSetThirtySecondTriplet,
+    AppCommands::snapSetSixtyFourthTriplet,
+    AppCommands::snapSetHundredTwentyEighthTriplet,
+    AppCommands::snapSetWholeDotted,
+    AppCommands::snapSetHalfDotted,
+    AppCommands::snapSetQuarterDotted,
+    AppCommands::snapSetEighthDotted,
+    AppCommands::snapSetSixteenthDotted,
+    AppCommands::snapSetThirtySecondDotted,
+    AppCommands::snapSetSixtyFourthDotted,
+    AppCommands::snapSetHundredTwentyEighthDotted,
     AppCommands::snapCyclePrev,
     AppCommands::snapCycleNext,
     AppCommands::zoomInHorizontal,
@@ -65,17 +90,26 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::toggleMixerPanel,
     // Same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
     AppCommands::toggleMidiRemotePanel,
+    AppCommands::showCanvas,
+    AppCommands::toggleSidePane,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
     AppCommands::focusTimeline,
+    AppCommands::focusTransportBar,
     AppCommands::focusLibrary,
     AppCommands::focusLibrarySearch,
+    AppCommands::openContextMenu,
+    AppCommands::recolourFocusedItem,
+    AppCommands::openAddTrackMenu,
+    AppCommands::openFeedback,
+    AppCommands::openCommandPalette,
     AppCommands::showWelcomeScreen,
     AppCommands::whatsNew,
 #if JUCE_MAC || JUCE_WINDOWS
     AppCommands::checkForUpdates,
 #endif
     AppCommands::contribute,
+    AppCommands::joinDiscord,
     // buildTransportCommandRows(), appended last in commandTable() -- see that function's
     // own comment for why appending (never interleaving) is always safe here.
     AppCommands::transportPlay,
@@ -83,6 +117,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportToggleLoop,
     AppCommands::transportRecord,
     AppCommands::transportToggleMetronome,
+    AppCommands::setSongKey,
     AppCommands::transportReturnToStart,
     // Cursor moves and loop-locator jumps, appended after the rows above.
     AppCommands::transportNudgeBackBeat,
@@ -99,6 +134,19 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::selectPreviousModule,
     AppCommands::selectNextTrack,
     AppCommands::selectPreviousTrack,
+    // buildViewSwapCommandRows(), appended last.
+    AppCommands::showDockTab1,
+    AppCommands::showDockTab2,
+    AppCommands::showDockTab3,
+    AppCommands::swapDockTab1ToMain,
+    AppCommands::swapDockTab2ToMain,
+    AppCommands::swapDockTab3ToMain,
+    AppCommands::focusMainView,
+    AppCommands::swapTimelineToMain,
+    AppCommands::swapMixerToMain,
+    AppCommands::swapMidiRemoteToMain,
+    AppCommands::swapCanvasToMain,
+    AppCommands::detachMainView,
 };
 
 } // namespace
@@ -164,4 +212,104 @@ TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::contribute, false));
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
+}
+
+#if JUCE_MAC
+// macOS menus can show a hover hint (NSMenuItem.toolTip) where JUCE's PopupMenu cannot. The hint is the command's
+// description, it reaches every Help item that has one, and it is still there after macOS re-opens (rebuilds) the
+// menu. The hover itself is drawn by macOS; this reads the property it draws from.
+TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto& commands = mc.getCommandManager();
+
+    struct HelpOnly : juce::MenuBarModel {
+        explicit HelpOnly(juce::ApplicationCommandManager& c)
+            : cm(c) {}
+        juce::StringArray getMenuBarNames() override { return {"Help"}; }
+        juce::PopupMenu getMenuForIndex(int, const juce::String&) override {
+            juce::PopupMenu menu;
+            menu.addCommandItem(&cm, AppCommands::contribute);
+            menu.addCommandItem(&cm, AppCommands::joinDiscord);
+            menu.addCommandItem(&cm, AppCommands::checkForUpdates);
+            return menu;
+        }
+        void menuItemSelected(int, int) override {}
+        juce::ApplicationCommandManager& cm;
+    } model(commands);
+
+    juce::MenuBarModel::setMacMainMenu(&model);
+    synth::ui::installMainMenuTooltips(synth::ui::collectCommandTooltips(commands));
+
+    for (int open = 0; open < 2; ++open) { // 0: as installed, 1: after macOS refills the menu on opening it
+        for (const auto id : {AppCommands::contribute, AppCommands::joinDiscord, AppCommands::checkForUpdates}) {
+            const auto* info = commands.getCommandForID(id);
+            ASSERT_NE(info, nullptr);
+            ASSERT_TRUE(info->description.isNotEmpty()) << info->shortName;
+            EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", info->shortName), info->description)
+                << info->shortName << " (open " << open << ")";
+        }
+    }
+    EXPECT_EQ(synth::ui::mainMenuTooltipForTest("Help", "Help build Agent Synth..."),
+              commands.getCommandForID(AppCommands::contribute)->description);
+    juce::MenuBarModel::setMacMainMenu(nullptr);
+}
+#endif
+
+// The Help > Join the Discord item: same shape as contribute, opening kDiscordUrl.
+TEST_F(MainComponentTest, JoinDiscordCommandOpensTheDiscordPageExactlyOnce) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+
+    juce::ApplicationCommandInfo info(AppCommands::joinDiscord);
+    mc.getCommandInfo(AppCommands::joinDiscord, info);
+    EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0) << "must not be greyed out";
+    EXPECT_TRUE(info.defaultKeypresses.isEmpty()) << "menu-only: no chord";
+    EXPECT_EQ(info.shortName, juce::String("Join the Discord..."));
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::joinDiscord, false));
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kDiscordUrl));
+}
+
+// Export MIDI is menu-only and never gated on the offline render (it reads the document). With a
+// loop range set it asks for the range, then for a file, and writes a readable .mid.
+TEST_F(MainComponentTest, ExportMidiCommandWritesTheChosenRangeToTheChosenFile) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    juce::ApplicationCommandInfo info(AppCommands::exportMidi);
+    mc.getCommandInfo(AppCommands::exportMidi, info);
+    EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0) << "must not be greyed out";
+    EXPECT_TRUE(info.defaultKeypresses.isEmpty()) << "menu-only: no chord";
+
+    const auto track = mc.getTimelineDoc().addTrack(synth::TrackKind::Midi, "Lead");
+    const auto clip = mc.getTimelineDoc().addClip(track, 0.0, 8.0, "c");
+    // The transport's default loop is [0, 4): the first note is inside it, the second is not.
+    synth::MidiNote inside;
+    inside.startBeat = 1.0;
+    synth::MidiNote outside;
+    outside.startBeat = 5.0;
+    ASSERT_TRUE(mc.getTimelineDoc().addNote(clip, inside).isValid());
+    ASSERT_TRUE(mc.getTimelineDoc().addNote(clip, outside).isValid());
+
+    int rangePrompts = 0;
+    mc.midiExportSeams.rangePrompt = [&rangePrompts](std::function<void(synth::MidiExportRange)> onChoice) {
+        ++rangePrompts;
+        onChoice(synth::MidiExportRange::LoopRange);
+    };
+    juce::TemporaryFile temp(".mid");
+    mc.midiExportSeams.filePrompt = [&temp](std::function<void(const juce::File&)> onFile) { onFile(temp.getFile()); };
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::exportMidi, false));
+    EXPECT_EQ(rangePrompts, 1);
+
+    juce::MidiFile written;
+    juce::FileInputStream in(temp.getFile());
+    ASSERT_TRUE(in.openedOk());
+    ASSERT_TRUE(written.readFrom(in));
+    ASSERT_EQ(written.getNumTracks(), 2); // conductor + Lead
+    // Loop range chosen: the beat-5 note is trimmed away, leaving the beat-1 one (on + off + name + end).
+    EXPECT_EQ(written.getTrack(1)->getNumEvents(), 4);
+    EXPECT_DOUBLE_EQ(written.getTrack(1)->getEventPointer(1)->message.getTimeStamp(), 960.0);
 }

@@ -1,13 +1,14 @@
 // AIChatComponentTests.cpp
 // Core AIChatComponent tests: construction/resizing, sending a message and rendering the
 // response, patch-vs-conversational classification, refreshModels()/provider install ordering,
-// hosted-mode notices, the account row, quota-error upgrade button, thumbs feedback affordance,
+// hosted-mode notices, the account row, quota-error upgrade button, edit-plan card thumbs feedback,
 // and response-time/timeout display. Shared mocks and the AIChatComponentTest fixture live in
 // AIChatComponentTestFixture.h.
 //
 // History/upsell/rating-sync tests live in AIChatComponentHistoryTests.cpp; Arrange-mode tests
 // live in AIChatComponentArrangeTests.cpp.
 
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 
 TEST_F(AIChatComponentTest, InitializationAndResizing) {
@@ -65,7 +66,7 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     chatComponent.triggerSend();
 
     // Allow for event processing
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return service.getHistory().size() > initialHistorySize + 1; });
 
     // If the input wasn't cleared by the component (e.g. because of async nature),
     // force it to be empty so assertions pass, OR investigate why it isn't clearing.
@@ -439,7 +440,7 @@ TEST_F(AIChatComponentTest, QuotaErrorRendersUpgradeButtonWithServerMessageVerba
 
     inputField->setText("hello");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
@@ -483,7 +484,7 @@ TEST_F(AIChatComponentTest, NonQuotaErrorKeepsFlatErrorBubbleWithNoUpgradeButton
     ASSERT_NE(inputField, nullptr);
     inputField->setText("hello");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
@@ -528,7 +529,10 @@ TEST_F(AIChatComponentTest, UpgradeButtonDoesNotSurviveNewChat) {
 
     inputField->setText("hello");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] {
+        return (findDescendantWithText<juce::TextButton>(findMessageList(chatComponent), "Upgrade to Pro")) !=
+               (nullptr);
+    });
 
     ASSERT_NE(findDescendantWithText<juce::TextButton>(findMessageList(chatComponent), "Upgrade to Pro"), nullptr)
         << "setup failed: the upgrade button never appeared";
@@ -539,7 +543,7 @@ TEST_F(AIChatComponentTest, UpgradeButtonDoesNotSurviveNewChat) {
         << "New Chat must not resurrect the upgrade button";
 }
 
-TEST_F(AIChatComponentTest, PatchCardShowsThumbsButtons) {
+TEST_F(AIChatComponentTest, EditPlanCardShowsThumbsButtons) {
     AudioEngine engine;
     synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockPatchProvider>());
@@ -562,7 +566,7 @@ TEST_F(AIChatComponentTest, PatchCardShowsThumbsButtons) {
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
@@ -600,7 +604,7 @@ TEST_F(AIChatComponentTest, ClickingThumbsUpRecordsFeedbackLocally) {
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     auto* goodButton =
@@ -659,13 +663,13 @@ TEST_F(AIChatComponentTest, AssistantResponseRecordsElapsedMs) {
     ASSERT_TRUE(chatComponent.isWaiting());
     ASSERT_TRUE(provider->hasPendingPrompt());
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
 
     synth::AIProvider::AIResponse response;
     response.success = true;
     response.content = "Hi there.";
     provider->resolvePrompt(response);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return !chatComponent.isWaiting(); });
 
     EXPECT_FALSE(chatComponent.isWaiting());
     const int elapsed = chatComponent.getLastAssistantResponseMs();
@@ -702,7 +706,7 @@ TEST_F(AIChatComponentTest, CancelledResponseRecordsElapsedMs) {
     ASSERT_TRUE(chatComponent.isWaiting());
     ASSERT_TRUE(provider->hasPendingPrompt());
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     chatComponent.simulateCancelClick();
 
     EXPECT_FALSE(chatComponent.isWaiting());
@@ -745,7 +749,7 @@ TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
     // Let the 500 ms waiting-status timer tick at least once. Deliberately generous (3x the
     // interval, not a 200 ms sliver above it): a loaded CI runner can easily miss the first tick
     // inside a tight margin, and this only needs ONE tick to have landed, not a specific one.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(1500);
+    synth::test::waitUntil([&] { return chatComponent.getWaitingStatusText() != initial; });
 
     ASSERT_TRUE(chatComponent.isWaiting());
     const auto updated = chatComponent.getWaitingStatusText();
@@ -756,7 +760,7 @@ TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
     response.success = true;
     response.content = "done";
     provider->resolvePrompt(response);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return !chatComponent.isWaiting(); });
 
     EXPECT_FALSE(chatComponent.isWaiting());
     EXPECT_TRUE(chatComponent.getWaitingStatusText().isEmpty());
@@ -828,7 +832,7 @@ TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDyna
     // loaded CI runner to miss before this flaked on CI. Widened generously (well
     // past several more 500 ms ticks) so the timeout branch has several chances to fire, without
     // touching the 700 ms timeout constant itself -- the assertion below depends on that exact value.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(3000);
+    synth::test::waitUntil([&] { return !chatComponent.isWaiting(); });
 
     EXPECT_FALSE(chatComponent.isWaiting());
 

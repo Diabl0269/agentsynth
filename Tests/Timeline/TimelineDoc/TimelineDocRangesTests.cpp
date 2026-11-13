@@ -2,6 +2,7 @@
 // both range edges, deleting a range (with and without closing the gap) and the detached clipped
 // copy a range copy captures.
 
+#include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "TimelineDocTestHelpers.h"
 
 namespace {
@@ -269,4 +270,162 @@ TEST_F(TimelineDocTest, ClipToRangeMatchesWhatDeleteRangeRemoves) {
         remainingNotes += (int)c.notes.size();
     EXPECT_EQ(copiedNotes, 3);    // every note overlaps [2, 6)
     EXPECT_EQ(remainingNotes, 2); // the two halves outside it
+}
+
+TEST_F(TimelineDocTest, ResizeClipLeftShrinkDropsAndCutsNotesKeepingAbsoluteBeats) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 2.0, 4.0, "c");              // [2, 6)
+    doc.addNote(clip, makeNote(0.0, 60, 1.0));                        // abs [2, 3): dropped
+    const auto straddler = doc.addNote(clip, makeNote(0.5, 62, 2.0)); // abs [2.5, 4.5): cut at 3
+    doc.addNote(clip, makeNote(3.0, 64, 1.0));                        // abs [5, 6)
+
+    ASSERT_TRUE(doc.resizeClipLeft(clip, 3.0));
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_DOUBLE_EQ(c->startBeat, 3.0);
+    EXPECT_DOUBLE_EQ(c->lengthBeats, 3.0);
+    ASSERT_EQ(c->notes.size(), 2u);
+    EXPECT_EQ(c->notes[0].id, straddler) << "the straddler's right half keeps the original id";
+    EXPECT_DOUBLE_EQ(c->notes[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(c->notes[0].lengthBeats, 1.5);
+    EXPECT_DOUBLE_EQ(c->notes[1].startBeat, 2.0);
+}
+
+TEST_F(TimelineDocTest, ResizeClipLeftGrowShiftsNotesAndResortsTheTrack) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto before = doc.addClip(track, 1.0, 1.0, "before");
+    const auto clip = doc.addClip(track, 6.0, 2.0, "c"); // [6, 8)
+    doc.addNote(clip, makeNote(1.0, 60, 0.5));           // abs 7
+
+    ASSERT_TRUE(doc.resizeClipLeft(clip, 2.0));
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_DOUBLE_EQ(c->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(c->startBeat + c->lengthBeats, 8.0);
+    ASSERT_EQ(c->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(c->startBeat + c->notes[0].startBeat, 7.0);
+    const auto* t = doc.getTrack(track);
+    ASSERT_EQ(t->clips.size(), 2u);
+    EXPECT_EQ(t->clips[0].id, before);
+    EXPECT_EQ(t->clips[1].id, clip);
+}
+
+TEST_F(TimelineDocTest, ResizeClipLeftRejectsAudioAndBadEdges) {
+    const auto midiTrack = doc.addTrack(TrackKind::Midi, "T");
+    const auto midi = doc.addClip(midiTrack, 2.0, 4.0, "m");
+    EXPECT_FALSE(doc.resizeClipLeft(midi, 6.0)) << "the new start must stay before the end";
+    EXPECT_FALSE(doc.resizeClipLeft(midi, -1.0));
+    EXPECT_FALSE(doc.resizeClipLeft(midi, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.resizeClipLeft(ClipId{}, 3.0));
+    EXPECT_DOUBLE_EQ(doc.getClip(midi)->startBeat, 2.0);
+
+    const auto audioTrack = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(audioTrack, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 0.0));
+    EXPECT_FALSE(doc.resizeClipLeft(audio, 3.0));
+}
+
+// ---- resizeClipEdge: the three sizing modes (ClipEdgeSizing.h) ----
+
+namespace {
+std::vector<double> noteStarts(const synth::Clip& clip) {
+    std::vector<double> starts;
+    for (const auto& note : clip.notes)
+        starts.push_back(note.startBeat);
+    return starts;
+}
+} // namespace
+
+TEST_F(TimelineDocTest, ResizeClipEdgeAppliesEachModeToEachEdge) {
+    using synth::ClipEdge;
+    using synth::ClipSizingMode;
+    struct Case {
+        ClipEdge edge;
+        ClipSizingMode mode;
+        double edgeBeat, start, length;
+        std::vector<double> starts;
+    };
+    const Case cases[] = {
+        {ClipEdge::Left, ClipSizingMode::Trim, 3.0, 3.0, 3.0, {0.0, 2.0}}, // notes stay on beat 4 and 5
+        {ClipEdge::Left, ClipSizingMode::CarryContents, 3.0, 3.0, 3.0, {0.0, 1.0, 3.0}},
+        {ClipEdge::Left, ClipSizingMode::Stretch, 4.0, 4.0, 2.0, {0.0, 0.5, 1.5}},
+        {ClipEdge::Right, ClipSizingMode::Trim, 4.0, 2.0, 2.0, {0.0, 1.0, 3.0}}, // past the end: kept, unheard
+        {ClipEdge::Right, ClipSizingMode::CarryContents, 4.0, 2.0, 2.0, {0.0, 1.0, 3.0}},
+        {ClipEdge::Right, ClipSizingMode::Stretch, 10.0, 2.0, 8.0, {0.0, 2.0, 6.0}},
+    };
+    for (const auto& c : cases) {
+        TimelineDoc d;
+        const auto track = d.addTrack(TrackKind::Midi, "T");
+        const auto clip = d.addClip(track, 2.0, 4.0, "c"); // [2, 6), notes at 0, 1 and 3
+        for (const double start : {0.0, 1.0, 3.0})
+            d.addNote(clip, makeNote(start, 60));
+        ASSERT_TRUE(d.resizeClipEdge(clip, c.edge, c.mode, c.edgeBeat)) << synth::clipSizingModeName(c.mode);
+        const auto* got = d.getClip(clip);
+        EXPECT_DOUBLE_EQ(got->startBeat, c.start) << synth::clipSizingModeName(c.mode);
+        EXPECT_DOUBLE_EQ(got->lengthBeats, c.length) << synth::clipSizingModeName(c.mode);
+        EXPECT_EQ(noteStarts(*got), c.starts) << synth::clipSizingModeName(c.mode);
+    }
+}
+
+TEST_F(TimelineDocTest, ResizeClipEdgeRejectsAudioAndAnEdgePastTheOtherOne) {
+    using synth::ClipEdge;
+    using synth::ClipSizingMode;
+    const auto midiTrack = doc.addTrack(TrackKind::Midi, "T");
+    const auto midi = doc.addClip(midiTrack, 2.0, 4.0, "m");
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Right, ClipSizingMode::Stretch, 2.0));
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Left, ClipSizingMode::CarryContents, 6.0));
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Left, ClipSizingMode::Stretch, -1.0));
+    EXPECT_DOUBLE_EQ(doc.getClip(midi)->lengthBeats, 4.0);
+
+    const auto audioTrack = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(audioTrack, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 0.0));
+    EXPECT_FALSE(doc.resizeClipEdge(audio, ClipEdge::Right, ClipSizingMode::Stretch, 8.0));
+}
+
+TEST(ClipEdgeSizingTest, ModesCycleAndRoundTripThroughTheSettingsKey) {
+    using synth::ClipSizingMode;
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::Trim), ClipSizingMode::CarryContents);
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::CarryContents), ClipSizingMode::Stretch);
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::Stretch), ClipSizingMode::Trim);
+    for (const auto mode : {ClipSizingMode::Trim, ClipSizingMode::CarryContents, ClipSizingMode::Stretch})
+        EXPECT_EQ(synth::clipSizingModeFromKey(synth::clipSizingModeKey(mode)), mode);
+    EXPECT_FALSE(synth::clipSizingModeFromKey("sideways").has_value());
+}
+
+TEST_F(TimelineDocTest, AnAudioStretchWindowIsTheAudioTheClipPlaysNow) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(track, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 1.5));
+
+    const auto window = synth::audioStretchWindow(*doc.getClip(audio), 8.0, kSecondsPerBeat);
+    ASSERT_TRUE(window.has_value());
+    EXPECT_DOUBLE_EQ(window->startSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(window->lengthSeconds, 2.0); // 4 beats at 0.5 s
+    EXPECT_DOUBLE_EQ(window->tempoRatio, 0.5) << "twice as long plays half as fast";
+
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(audio), 0.0, kSecondsPerBeat).has_value());
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(audio), 8.0, 0.0).has_value());
+    const auto midi = doc.addClip(doc.addTrack(TrackKind::Midi, "M"), 0.0, 4.0, "m");
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(midi), 8.0, kSecondsPerBeat).has_value());
+}
+
+TEST_F(TimelineDocTest, ApplyingAnAudioStretchPointsTheClipAtItsCopyAndScalesItsFades) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(track, 4.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 1.5));
+    ASSERT_TRUE(doc.setClipFades(audio, 0.5, 1.0));
+
+    ASSERT_TRUE(synth::applyAudioClipStretch(doc, audio, 2.0, 6.0, "Audio/take-stretch150.wav"));
+    const auto* c = doc.getClip(audio);
+    EXPECT_EQ(c->assetRef, "Audio/take-stretch150.wav");
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0) << "the copy holds only the clip's window";
+    EXPECT_DOUBLE_EQ(c->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(c->lengthBeats, 6.0);
+    EXPECT_DOUBLE_EQ(c->fadeInBeats, 0.75);
+    EXPECT_DOUBLE_EQ(c->fadeOutBeats, 1.5);
+
+    const auto midi = doc.addClip(doc.addTrack(TrackKind::Midi, "M"), 0.0, 4.0, "m");
+    EXPECT_FALSE(synth::applyAudioClipStretch(doc, midi, 0.0, 8.0, "Audio/x.wav"));
+    EXPECT_FALSE(synth::applyAudioClipStretch(doc, audio, 2.0, 6.0, "/abs/path.wav")) << "refs stay bundle-relative";
 }

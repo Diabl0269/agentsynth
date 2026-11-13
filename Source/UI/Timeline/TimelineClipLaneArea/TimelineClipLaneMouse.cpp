@@ -16,12 +16,6 @@
 namespace synth::ui {
 
 namespace {
-// The fastest an edge-drag can scroll the view, in pixels per kEdgeScrollHz tick (at the pointer
-// pinned to or beyond the component's edge). Chosen to feel brisk without outrunning the eye at a
-// typical zoom — the same "fast but still readable" target TimelinePlayheadOverlay's 30 Hz line
-// aims for.
-constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
-
 // Whether a double-click inside the loop locators authors a clip spanning them instead of the
 // one-bar default. Duplicated as a string rather than shared with PreferencesSettingsTab (which
 // WRITES it) for the same reason "timelineLoopSelectionArms" is: a one-line string constant is not
@@ -34,6 +28,8 @@ using namespace detail;
 
 //==============================================================================
 void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
+    if (onPressed)
+        onPressed();
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
@@ -106,6 +102,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     if (hit->zone == ClipHit::Zone::RightEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
             dragMode_ = DragMode::ResizeRight;
+            stretchOnce_ = e.mods.isAltDown();
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewLength_ = resizeOriginalLength_;
@@ -113,6 +110,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     } else if (hit->zone == ClipHit::Zone::LeftEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
             dragMode_ = DragMode::ResizeLeft;
+            stretchOnce_ = e.mods.isAltDown();
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewStart_ = resizeOriginalStart_;
@@ -126,7 +124,9 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
         // Alt turns the whole gesture into a copy-drag: the originals stay exactly where they are
         // (in the doc AND on screen) and the release commits duplicates at the destination. There
         // is deliberately no Alt-click action — a copy of a clip on top of itself is not something
-        // anyone asks for by clicking.
+        // anyone asks for by clicking. Alt is re-read on every drag event (and on a bare modifier
+        // change, see modifierKeysChanged), so pressing or releasing it mid-drag flips copy <-> move
+        // in place; the value read here only covers a press that never becomes a drag.
         dragMode_ = DragMode::Move;
         copyDrag_ = e.mods.isAltDown();
         dragClips_.clear();
@@ -178,15 +178,36 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
 
+    if (dragMode_ == DragMode::Move)
+        copyDrag_ = e.mods.isAltDown();
+    else
+        stretchOnce_ = e.mods.isAltDown(); // an edge drag: Option stretches this one drag
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
+    updateMoveCursor();
     updateAutoScrollArming();
     repaint();
 }
 
+// Option flips a live drag on its own, without the pointer moving: a body drag between move and copy, an edge drag
+// between the Sizing field's mode and a one-off stretch.
+void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
+    if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
+        copyDrag_ = mods.isAltDown();
+        updateMoveCursor();
+        repaint();
+    } else if ((dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight) &&
+               stretchOnce_ != mods.isAltDown()) {
+        stretchOnce_ = mods.isAltDown();
+        repaint();
+    }
+    juce::Component::modifierKeysChanged(mods); // keep the default bubbling to the parent
+}
+
 // Runs against the (possibly just-scrolled) view state, factored out of mouseDrag() so a real
-// pointer move and an auto-scroll tick (which has no MouseEvent of its own) can't drift apart.
-void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
+// pointer move and an auto-scroll tick (which has no MouseEvent of its own) can't drift apart. The glide of the
+// drawn clips onto each new snapped step wraps it in updateDragPreviewFromLastPointer (TimelineClipLaneDragGlide.cpp).
+void TimelineClipLaneArea::stepDragPreview() {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
 
@@ -227,9 +248,13 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
         // it could cross tracks — rather than dropping the clips that would have fitted.
         // Clamping the whole group rather than dropping just the clips that would fit is
         // deliberate: a partial drop would silently tear a selection apart.
-        const int rowHeight = getRowHeight();
-        int rowDelta =
-            rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
+        // How many rows the pointer has moved: the track whose top is nearest the press row's top
+        // plus the pointer's travel (-1 = dragged past either end, which is an illegal drop: no row move).
+        const auto layout = getRowLayout();
+        const int pressRow = layout.trackIndexAtY(mouseDownPos_.y + (int)std::llround(viewState_.trackScrollY));
+        const int destPressRow =
+            pressRow < 0 ? -1 : layout.trackIndexNearestTop(pressRow, lastDragPointer_.y - mouseDownPos_.y);
+        int rowDelta = (pressRow < 0 || destPressRow < 0) ? 0 : destPressRow - pressRow;
         if (rowDelta != 0) {
             const auto& tracks = doc_->getTracks();
             for (const auto& origin : dragClips_) {
@@ -308,6 +333,45 @@ void TimelineClipLaneArea::autoScrollTick() {
     if (onViewScrolledByDrag)
         onViewScrolledByDrag();
     repaint();
+}
+
+// Every drag keeps its state apart from the document until the release, so abandoning one is a reset: the document is
+// never touched, nothing reaches the undo manager, and the release that follows finds no drag mode and does nothing.
+// The clip selection is view state and stays as the press left it (a marquee puts back what it replaced).
+bool TimelineClipLaneArea::cancelDrag() {
+    if (dragMode_ == DragMode::None)
+        return false;
+    stopTimer();
+
+    switch (dragMode_) {
+    case DragMode::Range:
+        cancelRangeGesture();
+        break;
+    case DragMode::Draw:
+        cancelDrawGesture();
+        break;
+    case DragMode::Marquee:
+        selection_.setSelection(marqueeBaseSelection_);
+        endMarquee();
+        break;
+    case DragMode::Move:
+    case DragMode::ResizeLeft:
+    case DragMode::ResizeRight:
+        break;
+    case DragMode::None:
+        break;
+    }
+
+    dragMode_ = DragMode::None;
+    dragClips_.clear();
+    previewDeltaBeats_ = 0.0;
+    previewRowDelta_ = 0;
+    copyDrag_ = false;
+    stretchOnce_ = false;
+    pendingEmptyClick_ = false;
+    applyToolCursor();
+    repaint();
+    return true;
 }
 
 void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
@@ -394,10 +458,18 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             // just made, and the next drag should move it rather than the original.
             if (copying && !newIds.empty())
                 selection_.setSelection(newIds);
+        } else if (const auto stretch = audioStretchDrop()) {
+            onAudioClipStretchRequested(activeClip_, stretch->first, stretch->second);
         } else if (dragMode_ == DragMode::ResizeRight && std::abs(previewLength_ - resizeOriginalLength_) > 1e-9) {
+            // ONE undo step, through the sizing rule the preview painted with. An audio clip only changes length.
             const auto id = activeClip_;
             const double newLength = previewLength_;
-            auto mutate = [this, id, newLength] { doc_->resizeClip(id, newLength); };
+            const double newEnd = resizeOriginalStart_ + previewLength_;
+            const auto mode = dragSizingMode();
+            auto mutate = [this, id, newLength, newEnd, mode] {
+                if (!doc_->resizeClipEdge(id, synth::ClipEdge::Right, mode, newEnd))
+                    doc_->resizeClip(id, newLength);
+            };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
@@ -406,12 +478,14 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             const auto id = activeClip_;
             const double newStart = previewStart_;
             const double newLength = previewLength_;
-            // Two doc calls, ONE undo step: the left edge moves the clip's start (its
-            // clip-relative notes travel with it — a divergence from per-note-anchored trimming,
-            // deferred) and resizes it so the end stays fixed.
-            auto mutate = [this, id, newStart, newLength] {
-                doc_->moveClip(id, newStart);
-                doc_->resizeClip(id, newLength);
+            // ONE undo step, through the sizing rule the preview painted with (TimelineDoc::resizeClipEdge); an
+            // audio clip moves its start and resizes so the end stays fixed.
+            const auto mode = dragSizingMode();
+            auto mutate = [this, id, newStart, newLength, mode] {
+                if (!doc_->resizeClipEdge(id, synth::ClipEdge::Left, mode, newStart)) {
+                    doc_->moveClip(id, newStart);
+                    doc_->resizeClip(id, newLength);
+                }
             };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
@@ -420,11 +494,14 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
         }
     }
 
+    if (dragMode_ == DragMode::Move)
+        applyToolCursor(); // the grab/copy cursor ends with the move
     dragMode_ = DragMode::None;
     dragClips_.clear();
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    stretchOnce_ = false;
     repaint();
 }
 
@@ -603,39 +680,67 @@ int TimelineClipLaneArea::dropRowFor(const juce::StringArray& files, int x, int 
 void TimelineClipLaneArea::setFileDropRow(int row) {
     if (row == fileDropRow_)
         return; // repaint ONLY on a row change — a drag reports every pixel of movement
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const int previous = fileDropRow_;
     fileDropRow_ = row;
     if (previous >= 0)
-        repaint(rowBounds(previous, rowHeight));
+        repaint(rowBounds(layout, previous));
     if (fileDropRow_ >= 0)
-        repaint(rowBounds(fileDropRow_, rowHeight));
+        repaint(rowBounds(layout, fileDropRow_));
 }
 
 bool TimelineClipLaneArea::isInterestedInFileDrag(const juce::StringArray& files) {
     return firstAudioFileIn(files) != juce::File();
 }
 
+// The empty space under the last track (or the whole area when there are no tracks): a drop there makes a new audio
+// track. It needs the owner's callback, so a lane area with none shows no hint and takes no drop there.
+bool TimelineClipLaneArea::isBelowTracks(juce::Point<int> pos) const {
+    return doc_ != nullptr && onAudioFileDroppedBelowTracks && pos.y >= 0 &&
+           pos.y + (int)std::llround(viewState_.trackScrollY) >= getRowLayout().totalHeight();
+}
+
+juce::Rectangle<int> TimelineClipLaneArea::belowTracksStrip() const {
+    if (doc_ == nullptr)
+        return {};
+    constexpr int kInset = 3;
+    const int top = getRowLayout().totalHeight() - (int)std::llround(viewState_.trackScrollY);
+    return juce::Rectangle<int>(kInset, top + kInset, getWidth() - 2 * kInset, getRowHeight() - 2 * kInset)
+        .getIntersection(getLocalBounds());
+}
+
+void TimelineClipLaneArea::setBelowTracksHint(bool on) {
+    if (on == belowTracksHint_)
+        return;
+    belowTracksHint_ = on;
+    repaint(belowTracksStrip());
+}
+
 void TimelineClipLaneArea::fileDragMove(const juce::StringArray& files, int x, int y) {
     setFileDropRow(dropRowFor(files, x, y));
+    setBelowTracksHint(firstAudioFileIn(files) != juce::File() && isBelowTracks({x, y}));
 }
 
 void TimelineClipLaneArea::fileDragExit(const juce::StringArray& files) {
     juce::ignoreUnused(files);
     setFileDropRow(-1);
+    setBelowTracksHint(false);
 }
 
 void TimelineClipLaneArea::filesDropped(const juce::StringArray& files, int x, int y) {
+    const auto file = firstAudioFileIn(files);
+    const bool below = file != juce::File() && isBelowTracks({x, y});
     const int row = dropRowFor(files, x, y);
     setFileDropRow(-1);
-    if (row < 0 || doc_ == nullptr || !onAudioFileDropped)
+    setBelowTracksHint(false);
+    if (file == juce::File() || doc_ == nullptr)
         return;
 
-    const auto file = firstAudioFileIn(files);
-    if (file == juce::File())
-        return;
-
-    onAudioFileDropped(doc_->getTracks()[(std::size_t)row].id, floorSnappedBeatAt(viewState_.xToBeat((double)x)), file);
+    const double startBeat = floorSnappedBeatAt(viewState_.xToBeat((double)x));
+    if (below)
+        onAudioFileDroppedBelowTracks(startBeat, file);
+    else if (row >= 0 && onAudioFileDropped)
+        onAudioFileDropped(doc_->getTracks()[(std::size_t)row].id, startBeat, file);
 }
 
 void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {

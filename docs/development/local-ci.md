@@ -12,6 +12,8 @@ bash scripts/ci-local.sh --skip-tests   # skip the Tests suite for a faster loca
 bash scripts/ci-local.sh --help         # usage
 ```
 
+A gate skips what has not changed, never what might have: see [What a gate skips](#what-a-gate-skips).
+
 ## What it does, in order
 
 Fast checks first, so a lint failure does not wait on a full build.
@@ -23,6 +25,8 @@ Fast checks first, so a lint failure does not wait on a full build.
    UTF-8 escapes" step, run directly rather than only via its unit test.
 3. `bash scripts/check-file-sizes.sh` against the real tree — see
    [`file-size-guard.md`](file-size-guard.md).
+3a. `bash scripts/check-unity-clashes.sh` against the real tree: a name declared in an anonymous namespace in
+   two sources of one Windows unity group (see [`ci-pipeline.md`](ci-pipeline.md), "Unity groups on Windows").
 3b. `bash scripts/ci-cache-budget.sh` against the real `ci.yml`/`build-artifacts.yml` — the Lint
    job's "Check CI cache budget" step (FRO341): sums one cache generation's worth of configured
    `ccache` `max_size` values plus a `build/_deps` allowance and fails over an 8 GiB budget — see
@@ -33,11 +37,25 @@ Fast checks first, so a lint failure does not wait on a full build.
    [`header-comment-guard.md`](header-comment-guard.md).
 5b. `bash scripts/check-comment-provenance.sh` against the real tree — see
    [`comment-provenance-guard.md`](comment-provenance-guard.md).
+5c. `bash scripts/check-fixed-waits.sh` against the real tree — tests that pump the message loop for a
+   fixed time and then assert; see [`testing.md`](testing.md#waiting-for-async-work).
+5d. `bash scripts/check-header-reach.sh` against the real tree — how many `.cpp` files reach each
+   header; see [Header reach guard](#header-reach-guard) below.
 6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
 7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
-   editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
+   editing this script. A test that checks a script against fixtures reruns only when it, a file it
+   names, or what those name changed since it last passed (see
+   [What a gate skips](#what-a-gate-skips)); the ones that scan the real tree below run every time. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
+   `no-pipe-into-grep-q.test.sh` scans `scripts/` for `echo`/`printf` piped into `grep -q` in a script
+   that sets `pipefail`: grep exits at its first match, the writer dies of SIGPIPE, and pipefail turns the
+   match into a failure only on a busy machine, so script tests pass text to grep as a here-string
+   (`grep -qF "text" <<<"$output"`).
+   `no-bare-array-expansion.test.sh` scans `scripts/` for a bare `"${NAME[@]}"` in a script that sets `-u`: bash 3.2 (macOS `/bin/bash`) treats an empty array as unbound there, so scripts write `${NAME[@]+"${NAME[@]}"}`.
+   `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
+   ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
+   written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).
 8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
    -DENABLE_AI_HARNESS=ON` and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,
@@ -47,20 +65,51 @@ Fast checks first, so a lint failure does not wait on a full build.
    cold one. On the **first** configure only, and only when this checkout is a git worktree, it also
    reuses the main checkout's already-fetched dependency sources — see
    [Worktree dependency-source reuse](#worktree-dependency-source-reuse) below.
+8b. Configure a scratch `build-ci-local-ci-flags/` with CI's own macOS/Windows flags (`-DAGENTSYNTH_PCH=ON`
+   and the explicit ccache compiler launchers, with the ccache `base_dir` cleared because `cmake/Pch.cmake` refuses
+   a precompiled header beside one) and build nothing. The build above configures the way a developer does, so a
+   configure problem that only CI's flags hit (JUCE 9's `juceaide` bootstrap choking on the list-valued launcher)
+   went green here and red on all three CI jobs. It reuses the dependency sources the build above fetched, so it
+   adds about 25 s warm. `scripts/tests/ci-local-ci-flags.test.sh` fails when `ci.yml`'s macOS configure gains a
+   `-D` flag this step lacks.
 9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
    surfaces early rather than after a multi-minute test run.
-10. Run the full suite: `build-ci-local/Tests/Tests`, behind the shared test lock described in
+10. Run the full suite: `build-ci-local/Tests/Tests --gtest_brief=1` (only failures and the summary print), behind the shared test lock described in
    [Running suites in parallel](#running-suites-in-parallel) below. Skippable with `--skip-tests`
    (default off — the pre-push hook and CI both expect the full suite) for a faster local loop;
    every earlier step, including dev-signing, still runs, so a `--skip-tests` rebuild keeps the
-   same TCC identity for a live or manual app run.
+   same TCC identity for a live or manual app run. The suite's native windows and dialogs are invisible,
+   click-through and never take focus (macOS), so you can keep using the machine; set
+   `AGENTSYNTH_TESTS_VISIBLE=1` to see them ([`test-mode.md`](test-mode.md#hidden-windows)).
 
 On success it prints the path to the built `Agent Synth.app` bundle under `build-ci-local/`, found
 the same way the release workflow locates it for packaging, so a green terminal is not the only
 thing you are left with — you can open and try the real app. `--open` does that automatically
 (macOS only; a no-op notice elsewhere, since the flag also has to be safe to leave on in a
 headless run).
+
+## Header reach guard
+
+`scripts/check-header-reach.sh` counts, for every header under `Source/`, how many `.cpp` files in
+`Source/` and `Tests/` include it, directly or through other headers. Editing a header that reaches
+a thousand files recompiles a thousand files, which is what turns a small change into a 30-minute CI
+run. It reads the `#include` lines (no build, about two seconds), resolving each include next to the
+including file and then under `Source/`, as the build does; JUCE and system headers are ignored.
+
+Headers reached by more than 100 files are listed in `scripts/header-reach-baseline.txt` at their
+current count, plus the total number of `.cpp` files at that time. As the tree gains `.cpp` files every
+header's reach grows with it, so each entry is scaled by the tree's growth first. The check fails
+when a listed header grows past that scaled count by more than 5 files or 3%, whichever is more, and when any header not listed passes 100. The failure names the header, old and new count,
+and the files that include it directly, widest first; the fix is usually to forward-declare, or to
+include the header only in the `.cpp` that uses it.
+
+A ratchet stops growth. It does not shrink anything: the listed headers stay as wide as they are
+until someone cuts their reach. When you do, run `bash scripts/check-header-reach.sh --update` to
+tighten the entries: it lowers what fell, drops what is under the cap and leaves what rose, saying
+how many (`--allow-raise` is the reviewed exception for raising or adding an entry). `--list [N]`
+prints the widest headers. The count is a little higher than the number of object files a build
+recompiles (about 2% on `Source/`), and `scripts/tests/check-header-reach.test.sh` covers the checker.
 
 ## Deliberately not reproduced
 
@@ -83,9 +132,9 @@ Two hooks are registered:
 - **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged
   `Source/` and `Tests/` C/C++ files (skipped entirely when no C++ is staged), then the
   [file-size](file-size-guard.md), [function-size](function-size-guard.md),
-  [header-comment](header-comment-guard.md), [comment-provenance](comment-provenance-guard.md) and
+  [header-comment](header-comment-guard.md), [comment-provenance](comment-provenance-guard.md), [fixed-wait](testing.md#waiting-for-async-work) and
   [docs](docs-guard.md) guards against the whole tree, unconditionally, for any commit with staged
-  changes. Those five scan the whole tree in about a
+  changes. Those six scan the whole tree in about a
   second each, so there is no benefit to staged-file scoping them the way there is for
   clang-format. Fast; mirrors the CI Lint job. It also warns if the local `clang-format` version
   differs from the pin in `.clang-format-version`.
@@ -152,38 +201,103 @@ cmake, no compiler and no real worktree needed:
   checkout>/build-ci-local/_deps/{juce,googletest,sparkle}-src` for whichever of those the main
   checkout has already fetched. Partial reuse is fine — a source CMake still fetches on either side
   is fetched normally.
+- JUCE is reused only when every `cmake/patches/*.patch` of the worktree is already applied to the main
+  checkout's copy (`git apply --check --reverse`): a reused source dir skips FetchContent's patch step, so an
+  unpatched copy would build without the patch ([`juce-patches.md`](juce-patches.md)). The other sources are
+  still reused and the one-line message says JUCE was skipped.
 - `CI_LOCAL_NO_DEPS_REUSE=1` opts out unconditionally, forcing a normal from-scratch fetch.
 - Prints exactly one line saying what was reused, or why not (not a worktree, pins differ, nothing
   fetched yet in the main checkout, or the opt-out env is set).
 
 ## Running suites in parallel
 
-**Two test binaries running at once on the same machine collide through the shared on-disk "Agent
-Synth" `ApplicationProperties` file**, even from separate worktrees with separate build
-directories — see [`test-patterns.md`](test-patterns.md#shared-settings-file-reset-guard). A
-concurrent run can therefore fail a suite that is perfectly healthy: FRO192 hit exactly that, a
-`ProjectLoadStripGainTest` case reported FAILED by one of two sessions running their suites at the
-same time, green alone and green again under a lock.
+**Two test binaries running at once on the same machine used to collide through the shared on-disk
+"Agent Synth" `ApplicationProperties` file.** FRO192 hit exactly that: a `ProjectLoadStripGainTest`
+case reported FAILED by one of two sessions running their suites at the same time, green alone and
+green again under a lock. Every run now gets its own private settings folder (see
+[`test-patterns.md`](test-patterns.md#shared-settings-file-reset-guard)), so that collision is gone
+and a run no longer touches the developer's real settings. Concurrent runs still share the machine's
+audio device, which a stuck run can wedge for everyone.
 
-`scripts/ci-local.sh` therefore takes a lock around its test step (step 10) — `scripts/lib/test-lock.sh`,
-unit-tested by `scripts/tests/ci-local-test-lock.test.sh` in the Lint job:
+`scripts/ci-local.sh` therefore runs the suite as parallel shards (step 10) —
+`scripts/lib/test-shards.sh`, unit-tested by `scripts/tests/ci-local-test-shards.test.sh` in the Lint job:
 
-- **One lock file per repository, shared by every worktree.** The path is resolved from `git
-  rev-parse --git-common-dir`, which every linked worktree of the same checkout shares, so two
-  worktrees serialise against each other without knowing the other exists. Nothing to configure.
-- **Uses the platform's advisory lock tool**: `flock` on Linux, `lockf` on macOS. Neither present
-  (not a supported setup) — the suite runs unlocked with a loud warning rather than failing.
-- **Waits, visibly.** When the lock is held it prints `waiting for another test run to finish`
-  so a session watching the output does not look hung, and gives up after
-  `CI_LOCAL_TEST_LOCK_TIMEOUT` seconds (default 3600) with a distinct message and exit status
-  `75`, never conflated with a red suite.
-- **Only the test run is locked.** Builds run concurrently as before — ccache is safe under
-  contention — so a waiting session still gets its compile errors immediately.
+- **Each shard owns its on-disk state**: its own `AGENTSYNTH_SETTINGS_DIR`, its own `TMPDIR`, and a
+  uniquely named hard link of the binary. The link matters on macOS, where JUCE ignores `TMPDIR` and
+  puts its temp folder at `~/Library/Caches/<executable name>`.
+- **Test slots limit the machine, not the gate.** A shard holds one slot while it runs, an advisory
+  lock (`flock` on Linux, `lockf` on macOS) under `git rev-parse --git-common-dir`, which every
+  worktree shares. Default is three quarters of the cores (`CI_LOCAL_TEST_SLOTS`), with 8 shards per
+  suite (`CI_LOCAL_TEST_SHARDS`). A crashed run frees its slots.
+- **Waiting is bounded.** A shard gives up after `CI_LOCAL_TEST_SLOT_TIMEOUT` seconds (default 3600)
+  with a distinct message and exit status `75`, never conflated with a red suite.
+- **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
+  loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
+  and those tests need fixing. CI doesn't retry.
+- **An app check or a recording can stop test runs.** `scripts/hold-test-slots.sh <got-file> <done-file>`
+  takes every slot, because a running Tests binary can wedge the audio device. Running shards finish, new ones
+  wait, and it lets go when the done file appears.
+- **Builds use half the cores** (`CI_LOCAL_JOBS` overrides). Measured with 60 uncached compiles on a busy
+  16-core machine: about twice as fast as a quarter of the cores for one gate and no slower for six. Every
+  core made six gates 2-3x slower, and a load limit (`-l`) starved a gate whenever other sessions held the
+  load above it.
+- **Builds are limited twice** (`scripts/lib/build-slots.sh`, tested by `scripts/tests/ci-local-build-slots.test.sh`).
+  One gate per build folder: it holds a non-blocking lock on `build-ci-local/.ci-local-build.lock` for the
+  whole build and test run, and a second run there exits at once with `another build is already running in
+  <dir> (pid N)`. And machine-wide build slots, shared by every worktree like the test slots: only a heavy compile
+  step holds one (more than `CI_LOCAL_SLOT_MIN_EDGES` build steps left per `ninja -n`, default 60; a small
+  incremental build starts at once, the folder lock still applies), the count is cores / jobs (2 on 16 cores at 8 jobs) and `CI_LOCAL_BUILD_SLOTS` overrides it.
+  With none free it prints `waiting for a build slot` once and polls every `CI_LOCAL_BUILD_POLL` seconds (default
+  3), giving up after `CI_LOCAL_BUILD_SLOT_TIMEOUT` (default 7200). Both are advisory locks, so a crashed run
+  frees them. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use)
+  to `ci-local-build-times.log` in the git common dir, for tuning the slot count. Without `flock` or `lockf` the gate warns and builds with no limit.
+  Every run, passed or failed, also appends one JSON line to `ci-local-runs.jsonl` in the git common dir (run log for timing history): `at`, `name` (always `ci-local`), `worktree`, `branch`, `sha`, `ok`, `seconds`, `flags` (the arguments) and `steps` (seconds per step, keyed by step name).
 
-So there is no longer a `lockf` wrapper to hand-roll around `build-ci-local/Tests/Tests`; run
-`bash scripts/ci-local.sh` and let it wait. Running the binary directly (a single filtered suite
-while iterating) is still unlocked, so keep such runs short or take the same lock by hand:
-`flock`/`lockf` on the path `test_lock_path` prints.
+Tests must not depend on the order they run in or on another test having run first: shards split the
+order, and a test's neighbours differ from one run to the next. Running the binary directly (a single
+filtered suite while iterating) takes no slot, so keep such runs short.
+
+### `--fast`
+
+`bash scripts/ci-local.sh --fast` is for iterating. It checks formatting of changed files only, builds
+only `Tests`, and runs only the suites whose test files include a changed header or changed themselves
+(`scripts/lib/changed-tests.py`, reading the build's own dependency data). A build-input change, or one
+reaching over 40% of the test files, runs the full suite. It skips the guards and the script self-tests
+entirely and prints that it did, leaving them to the full gate (the pre-push hook) and CI. CI still runs
+everything, so `--fast` passing is not a promise that CI passes.
+
+## What a gate skips
+
+Every skip is keyed by content, so a change that matters changes the key and the work runs. A pass is
+the only thing ever remembered; a failure is never stored. Each skip has a self-test that makes a real
+change and expects the failure ([`guard-cache.test.sh`](../../scripts/tests/guard-cache.test.sh),
+[`ci-local-skip.test.sh`](../../scripts/tests/ci-local-skip.test.sh)).
+
+| What | Skipped when | Never skipped |
+|---|---|---|
+| Per-file scans of `check-function-sizes`, `check-file-sizes`, `check-fixed-waits`, `check-header-comments` | the file's content, the guard script and its scanner are unchanged (and, for fixed waits, the wrapper names every header defines) | the comparison with the baseline and the limits: a changed baseline, a lowered cap or a deleted sibling file fails on the next run |
+| `check-docs` | every scanned file's name and content, the baseline and the guard's own scripts hash the same as the last passing run | a deleted link target, a new doc, a changed baseline: each changes the hash |
+| Script self-tests | the test, the scripts it names (followed through `source` and the like), and anything it reads by name hash the same as when it last passed | the tree-scanning tests (`tree_scanning` in `ci-local.sh`), a test with no resolvable dependency, a test that reaches scripts by glob |
+| The whole gate | the tracked content, uncommitted changes, untracked files, flags and `clang-format` version hash the same as a gate that passed | an `--open` launch, `CI_LOCAL_FORCE=1`, any difference in the tree or flags |
+
+Where things live, all under the git common dir so every worktree shares them:
+
+- `agentsynth-guard-cache/<guard>-<hash>/`: one file per scanned file (`<content hash>_<path>`), written to
+  a temporary name and renamed, so gates writing at once cannot tear an entry. A missing, half-written or
+  unreadable entry is just a rescan; an unwritable folder turns the cache off for that run. The folder name
+  hashes the guard script, its scanner and `scripts/lib/guard-cache.sh`, so editing any of them starts
+  over. Unused folders and entries older than a month are pruned about daily. `GUARD_CACHE=0` turns the
+  cache off.
+- `agentsynth-gate-stamps/`: one small file per passing script test and per passing gate.
+
+A script test's dependencies are read from the text by `scripts/lib/test-deps.py`: file names that
+resolve under the repo, the scripts folders, `.github/workflows` and `cmake`, followed through each
+`.sh`, `.awk` and `.py` it finds (whole-line comments are ignored). It over-approximates on purpose. When
+the mapping is in doubt it gives no key and the test runs.
+
+CI is untouched: its Lint job starts from a fresh checkout with an empty cache, so it runs every guard and
+every script test in full, as before. Restoring the cache there would add steps to a workflow file that is
+at its size cap, for a saving that has not been measured on a runner.
 
 **ccache settings for parallel worktrees.** The dependency-source reuse above only covers the
 FetchContent download; the compiler cache is a separate concern and needs its own configuration to
@@ -205,16 +319,30 @@ to a relative one before hashing, so object code that only differs by which work
 still hits, while paths outside `base_dir` (a stray absolute include from a system header, say) are
 left alone.
 
+This sharing is also why precompiled headers (`-DAGENTSYNTH_PCH=ON`) stay off locally: a
+precompiled header carries its build directory's absolute path, so one served from another
+worktree's build fails every compile that uses it. `cmake/Pch.cmake` refuses to configure with
+the option on while `base_dir` is set. See [ci-pipeline.md](ci-pipeline.md#optimizations).
+
+## Build commit
+
+Every macOS build of `AgentSynth` writes the key `BuildCommit` into the bundle's `Contents/Info.plist` as a `POST_BUILD` step (`cmake/BuildCommit.cmake`, `scripts/write-build-commit.sh`, before dev-signing so the signature covers it): the full `git rev-parse HEAD` of the source tree, `-dirty` appended when tracked files differ from HEAD, `unknown` outside git. Read it with `/usr/libexec/PlistBuddy -c "Print :BuildCommit" "<app>/Contents/Info.plist"`.
+
 ## Dev-signing
 
 `scripts/dev-sign-app.sh` re-signs the built bundle with a stable **Apple Development** identity
-after every local build.
+after every local build: it runs as a `POST_BUILD` step of the `AgentSynth` target on macOS
+whenever the `CI` environment variable is unset (so a plain `cmake --build`, not only
+`ci-local.sh`, gets it), after Sparkle is embedded.
+
+A sandboxed agent shell cannot see the keychain, so the script finds no identity there and leaves
+the bundle ad-hoc signed: re-run it outside the sandbox before launching that build.
 
 **Why.** A local ad-hoc or linker-signed build's designated requirement pins to `cdhash H"..."`,
 which changes on every build — any changed byte mints a new hash. macOS TCC (the
 microphone/camera permission system) keys its grants on the designated requirement, so every fresh
 local build looks like a brand-new app to TCC: it re-prompts for microphone access, and that dialog
-is one automation cannot dismiss, stalling live app testing on a human click.
+is one automation cannot dismiss, stalling live app testing on a human click. The login keychain does the same for the saved sign-in token: an ad-hoc build asks for the keychain password on every launch, while a stable signature keeps the first Always Allow.
 
 ```bash
 bash scripts/dev-sign-app.sh "$APP_PATH"
@@ -264,6 +392,13 @@ still see a prompt on such a launch, it's the combined-I/O-default-device case a
 *stable*, not absent — if computer-use is driving the app (see
 [`docs/architecture/audio-engine.md#automation-launch-no-audio-device`](../architecture/audio-engine.md#automation-launch-no-audio-device)),
 skip the device entirely instead:
+
+**Keychain.** A local (non-CI) Apple build keeps its own sign-in item (`<bundle id>.dev.refreshtoken`,
+the `AGENTSYNTH_DEV_KEYCHAIN` define), apart from the release app's, so it never reads an item whose
+access list does not trust the dev signature: sign in once in the dev build. Automation launches
+(`--no-audio-device`) and `--no-keychain` / `AGENTSYNTH_NO_KEYCHAIN=1` skip the keychain entirely
+(in-memory sign-in), so no login-keychain prompt can block the launch. See
+[`docs/ai/accounts.md`](../ai/accounts.md#keychain-access-and-permission-prompts).
 
 ```bash
 open -n "<path>/Agent Synth.app" --args --no-audio-device

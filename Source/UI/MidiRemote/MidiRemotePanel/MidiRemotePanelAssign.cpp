@@ -3,6 +3,8 @@
 // Learn target menu, the pick-target overlay entry and the action picker.
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
+#include "UI/Layout/PopupHost.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 
 namespace synth::ui {
@@ -41,14 +43,17 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
     picker->setEffectivePageCount(remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(selectedProfileId_)
                                                            : 1);
     juce::Component::SafePointer<MidiRemotePanelComponent> safePanel(this);
-    auto& box = juce::CallOutBox::launchAsynchronously(std::move(picker), anchor.getScreenBounds(), nullptr);
+    auto* boxPtr = synth::ui::launchPopover(std::move(picker), anchor.getScreenBounds(), &anchor, {.trigger = &anchor});
+    if (boxPtr == nullptr)
+        return;
+    auto& box = *boxPtr;
     if (auto* content = dynamic_cast<ActionPickerComponent*>(box.getChildComponent(0))) {
         juce::Component::SafePointer<juce::CallOutBox> safeBox(&box);
         content->onChosen = [safePanel, safeBox](const juce::String& actionId) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToAction(actionId);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         // The picker's "Continuous" group
         // (see docs/control/midi-remote.md#continuous-targets).
@@ -56,14 +61,14 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToContinuous(kind);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         // The picker's "Pages" group.
         content->onPageChosen = [safePanel, safeBox](synth::PageCommand command, int page) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToPage(command, page);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
     }
 }

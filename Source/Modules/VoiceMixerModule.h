@@ -1,22 +1,28 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
+#include "Modules/SoftLimit.h"
 
 class VoiceMixerModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 8; // above the voices; reached through the Level fader, no gutter jack
+
     VoiceMixerModule()
-        : ModuleBase("Voice Mixer", 8, 2) // 8 voice channels in, stereo out
+        : ModuleBase("Voice Mixer", kLevelCvChannel + 1, 2) // 8 voice channels and the Level CV in, stereo out
     {
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.125f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(samplesPerBlock);
+        prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedLevel.reset(sampleRate, 0.01); // 10ms smoothing for anti-click
         smoothedLevel.setCurrentAndTargetValue(*levelParam);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
 
         int numSamples = buffer.getNumSamples();
@@ -25,6 +31,11 @@ public:
 
         if (numSamples == 0 || voiceCount == 0)
             return;
+
+        // Taken and cleared before the sum, so the CV never leaks downstream.
+        const float levelCv = blockCV(buffer, kLevelCvChannel);
+        if (kLevelCvChannel < numChannels)
+            buffer.clear(kLevelCvChannel, 0, numSamples);
 
         // Save all voice input data before overwriting (channels 0-7 are both input and output)
         if (inputCopy.getNumChannels() < voiceCount || inputCopy.getNumSamples() < numSamples)
@@ -38,8 +49,8 @@ public:
             buffer.addFrom(0, 0, inputCopy, ch, 0, numSamples);
         }
 
-        // Apply smoothed level and soft-clip to prevent distortion
-        smoothedLevel.setTargetValue(*levelParam);
+        // Apply smoothed level; the shared soft limiter rounds only what passes 0.9
+        smoothedLevel.setTargetValue(modulateNormalised(*levelParam, *levelParam, levelCv));
         float* outputData = buffer.getWritePointer(0);
         float peakIn = 0.0f;
         for (int s = 0; s < numSamples; ++s) {
@@ -47,7 +58,7 @@ public:
             if (std::abs(raw) > peakIn)
                 peakIn = std::abs(raw);
             float out = raw * smoothedLevel.getNextValue();
-            outputData[s] = std::tanh(out);
+            outputData[s] = synth::softLimit(out);
         }
 
         // Copy to channel 1 for stereo output
@@ -55,8 +66,19 @@ public:
             buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
     }
 
-    juce::String getInputPortLabel(int i) const override { return "Voice " + juce::String(i); }
-    // No output-side overrides and no Dual I/O registration: ModuleBase("Voice Mixer", 8, 2) matches
+    juce::String getInputPortLabel(int i) const override {
+        return i == kLevelCvChannel ? juce::String("Level") : "Voice " + juce::String(i);
+    }
+    LogicalPort mapInputChannel(int raw) const override {
+        auto port = ModuleBase::mapInputChannel(raw);
+        if (raw == kLevelCvChannel)
+            port.role = PortRole::ModCV;
+        return port;
+    }
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Level", kLevelCvChannel, "level", true}};
+    }
+    // No output-side overrides and no Dual I/O registration: ModuleBase("Voice Mixer", 9, 2) matches
     // the StereoAudio::Auto shape, so the toggle and the collapsing "Audio"/Left/Right output jack
     // are inherited. Only the eight INPUT jacks are this module's own — which is exactly why the base
     // infers the output pair and never the input one.

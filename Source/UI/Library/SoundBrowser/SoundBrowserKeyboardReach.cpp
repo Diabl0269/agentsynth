@@ -1,0 +1,154 @@
+// SoundBrowserKeyboardReach.cpp -- how the keyboard reaches the Filters button, the chip row and the open panel's
+// controls and the preview footer from the search box and the list. Tab is the app's region cycle, so inside the Sounds
+// view Up and Down always step focus (the model of Layout/FocusStepWithin.h): search, Filters, the chip row while it
+// shows, every control of the open panel, then the list, then the footer's controls. Past the last header stop Down
+// lands on the list and Up on the first row climbs back; Down on the last row enters the footer and Up on its first
+// control returns to the list. Only a text field keeps its own Up and Down. The footer is a row, so Left and Right
+// step along it too (the volume keeps them for its value: Up and Down leave it), Tab from the list jumps straight to
+// its first control and Shift+Tab from any of them returns to the list.
+//
+// A key reaches us as a key listener on the control (juce::ComponentPeer::handleKeyPress offers a component's key
+// listeners before its own keyPressed), so the steps win over a menu's or slider's own arrows. A menu opens with Return
+// (its own) or Space (here, the macOS pop-up convention) and a handle or the volume moves with Left and Right.
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusStepWithin.h"
+#include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include <algorithm>
+
+namespace synth::ui {
+
+namespace {
+bool keepsUpAndDown(const juce::Component& c) { return dynamic_cast<const juce::TextEditor*>(&c) != nullptr; }
+} // namespace
+
+std::vector<juce::Component*> SoundBrowserComponent::headerStops() {
+    std::vector<juce::Component*> stops{&search_, &filtersButton_};
+    if (chipRow_.isVisible())
+        stops.push_back(&chipRow_);
+    if (filtersOpen_ && panelHost_.isVisible())
+        for (auto* control : focusableDescendants(filterPanel_))
+            stops.push_back(control);
+    return stops;
+}
+
+// Layout changes which controls are visible, never which exist, so listening is re-asserted after every layout.
+void SoundBrowserComponent::attachReachListeners() {
+    std::vector<juce::Component*> controls{&filtersButton_, &chipRow_};
+    for (auto* control : focusableDescendants(filterPanel_))
+        controls.push_back(control);
+    for (auto* control : focusableDescendants(footer_))
+        controls.push_back(control);
+    for (auto* control : controls)
+        if (std::find(reachAttached_.begin(), reachAttached_.end(), control) == reachAttached_.end()) {
+            control->addKeyListener(this);
+            reachAttached_.push_back(control);
+        }
+}
+
+std::vector<juce::Component*> SoundBrowserComponent::footerStops() {
+    return footer_.isVisible() ? focusableDescendants(footer_) : std::vector<juce::Component*>{};
+}
+
+void SoundBrowserComponent::focusStop(juce::Component& stop) {
+    lastFocusRequest_ = &stop;
+    stop.grabKeyboardFocus();
+    if (filterPanel_.isParentOf(&stop))
+        scrollFocusedControlIntoView(&stop); // headless windows raise no focus change to do this for us
+}
+
+bool SoundBrowserComponent::handleFooterTab(const juce::KeyPress& key, bool fromFooter) {
+    const auto cycle = shortcuts_ != nullptr ? resolveFocusCycleKeyPress(key, *shortcuts_)
+                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0)
+                           ? std::optional<bool>(true)
+                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0)
+                           ? std::optional<bool>(false)
+                           : std::nullopt;
+    if (!cycle.has_value() || *cycle == fromFooter)
+        return false; // Tab leaves the list for the footer, Shift+Tab leaves the footer for the list; the rest cycles
+    if (fromFooter) {
+        focusListStop(false);
+        return true;
+    }
+    return enterFooter();
+}
+
+bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* origin) {
+    if (origin == nullptr || keepsUpAndDown(*origin))
+        return false;
+    if (handlePreviewKey(key))
+        return true;
+    const auto footer = footerStops();
+    const auto inFooter = std::find(footer.begin(), footer.end(), origin);
+    if (inFooter != footer.end() && handleFooterTab(key, true))
+        return true;
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    const bool up = key.isKeyCode(juce::KeyPress::upKey);
+    const bool left = key.isKeyCode(juce::KeyPress::leftKey);
+    const bool right = key.isKeyCode(juce::KeyPress::rightKey);
+    if (!up && !left && !right && !key.isKeyCode(juce::KeyPress::downKey))
+        return false;
+    if (inFooter != footer.end()) {
+        if ((left || right) && dynamic_cast<juce::Slider*>(origin) != nullptr)
+            return false; // the volume's own value
+        if ((up || left) && inFooter != footer.begin())
+            focusStop(**(inFooter - 1));
+        else if (up)
+            focusListStop(false);
+        else if (!(up || left) && inFooter + 1 != footer.end())
+            focusStop(**(inFooter + 1));
+        return true;
+    }
+    if (left || right)
+        return false;
+    const auto stops = headerStops();
+    const auto at = std::find(stops.begin(), stops.end(), origin);
+    if (at == stops.end() || origin == &search_)
+        return false;
+    const int index = (int)(at - stops.begin());
+    if (up) {
+        focusStop(*stops[(size_t)(index - 1)]);
+        return true;
+    }
+    if (index + 1 < (int)stops.size()) {
+        focusStop(*stops[(size_t)index + 1]);
+        return true;
+    }
+    focusListStop(true);
+    return true;
+}
+
+// The list takes focus; `selectFirst` also selects its first row when nothing is selected (arriving from above).
+void SoundBrowserComponent::focusListStop(bool selectFirst) {
+    lastFocusRequest_ = this;
+    focusList();
+    if (selectFirst && selected_ < 0)
+        moveSelection(+1);
+}
+
+bool SoundBrowserComponent::enterFooter() {
+    const auto stops = footerStops();
+    if (stops.empty())
+        return false;
+    focusStop(*stops.front());
+    return true;
+}
+
+bool SoundBrowserComponent::climbToHeader() {
+    focusStop(*headerStops().back());
+    return true;
+}
+
+// No row that can be selected lies before (`direction` < 0) or after (> 0) the selection; with nothing selected, true
+// only when no row can be selected at all.
+bool SoundBrowserComponent::atListEnd(int direction) const {
+    const int n = (int)rows_.size();
+    const int from = selected_ < 0 ? (direction < 0 ? n : -1) : selected_;
+    for (int i = from + direction; i >= 0 && i < n; i += direction)
+        if (rows_[(size_t)i].navigable())
+            return false;
+    return true;
+}
+
+} // namespace synth::ui

@@ -1,15 +1,39 @@
 // ModuleComponentLayout.cpp -- the generic auto-layout pass: per-module-type sizing dispatch
 // (updateLayout), the macro-port docked widget's size, the content-top-Y/input-column helpers,
-// and the default body-content layout shared by most module cards. ModuleComponent is declared
+// and the default body-content layout shared by most module cards, plus where a modulation cable ends while its knob
+// is out of view (docs/layout/cables.md#knob-landing). ModuleComponent is declared
 // in ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
-#include "Modules/MacroControlModule.h"
+#include "Modules/DrumKit/DrumKitModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
+#include "MorphShapesCard/MorphShapesCard.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
+#include "UI/Graph/GraphEditor/CableEndGlide.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 
 using namespace detail;
+
+static_assert(ModuleComponent::kMacroPortWidgetRowStep == kMacroPortRowHeight,
+              "a docked port widget's jack rows are the sidebar's rows");
+
+// A knob that moves inside the card (a layout pass, the on-card layout editor) carries a cable's knob landing with it.
+// The canvas keeps its cables between frames rather than rebuilding them every tick, so it has to hear of it. Only a
+// knob: anything else moving on the card (a swap ghost, a header button) lands no cable, and telling the canvas would
+// rebuild every cable for it.
+void ModuleComponent::childBoundsChanged(juce::Component* child) {
+    if (dynamic_cast<juce::Slider*>(child) != nullptr)
+        owner.notifyModuleContentChanged();
+}
 
 void ModuleComponent::updateLayout() {
     if (isMacroPortType(getType(module))) {
@@ -29,27 +53,11 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        // The bank is the only module whose footprint tracks a parameter: the "Knobs" count
-        // decides how many macro rows (knob + output jack) are shown. It grows downward from an
-        // unchanged top-left, so the module the user is turning never jumps under the cursor.
-        setSize(synth::LayoutUtil::kSingleWidth, synth::LayoutUtil::macroBankHeight(macro->getMacroCount()));
-        resized();
-        return;
-    }
+    // The Macros bank is a data-driven card like the rest: its body (the Knobs count and the knobs shown) is the
+    // generic path below, and the Knobs count changes the height through the body's own rules.
 
-    if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        // +26 for the Sync to Transport toggle row — see the ADSR comment above for the pattern.
-        setSize(synth::LayoutUtil::kDoubleWidth, 406);
-        return;
-    }
-
-    // ADSR does not measure itself — its five knobs (attack/hold/decay/sustain/release; the three
-    // curve params live on the envelope graph's bend handles) flow through the generic 3-per-row
-    // knob grid below exactly like every other module's, wrapping into two rows (3+2) at the shared
-    // 280px width. The envelope graph section and its BPM|MS row are generic-layout blocks too (see
-    // layoutDefaultContent, mirroring the scope/frequency-response toggle+component pattern) rather
-    // than a bespoke branch here.
+    // ADSR does not measure itself: its envelope graph is a view of the card body, its stage faders
+    // and Time/Tempo switch items of the body's layout, so it takes the generic path below.
 
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
@@ -58,28 +66,78 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // The Wavetable card carries 15 knobs, 7 combos and 16 input jacks, so it
-    // goes double-width and uses the default body layout's wide-card branches (6 knob columns,
-    // paired combos). At single width the same content would run past 1150px tall.
-    const int cardWidth =
-        (getType(module) == ModuleType::Wavetable) ? synth::LayoutUtil::kDoubleWidth : synth::LayoutUtil::kSingleWidth;
+    // The Wavetable card carries 15 knobs, 8 combos and 16 input jacks, so it goes double-width: its
+    // chrome sits beside a two-column jack gutter and its body's runs take their wide-card branches
+    // (doubled knob columns, paired combos). At single width the same content would run past 1150px.
+    const auto type = getType(module);
+    const int cardWidth = (type == ModuleType::Wavetable || type == ModuleType::Sequencer ||
+                           type == ModuleType::PolySequencer || type == ModuleType::MacroControl)
+                              ? synth::LayoutUtil::kDoubleWidth
+                              : synth::LayoutUtil::kSingleWidth;
 
     // Width must be final before measuring: the slider grid wraps on it.
     if (getWidth() != cardWidth)
         setSize(cardWidth, juce::jmax(getHeight(), 100));
 
     const int bodyHeight = layoutDefaultContent(/*apply*/ false);
-    setSize(cardWidth, std::max(100, bodyHeight));
+    setSize(cardWidth, heightGlide_ ? heightGlide_->heightFor(std::max(100, bodyHeight))
+                                    : std::max(100, bodyHeight)); // the Macros bank's count glides
     resized();
 }
 
-// Compact docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): a small, fixed-shape
-// row — no header chrome, no body, no 100px floor a real module card carries. Sized purely from the module's own
-// visible jack count, which for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side
-// (getVisible* PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
-// declare-max/vary-visible mechanism (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's
-// implementation note) already keeps that in sync with the port's shape, so this needs no shape-aware branching of its
-// own.
+// The Macros bank's height glide (docs/layout/animation.md, "Macros count").
+synth::CardHeightGlide& ModuleComponent::heightGlideForTest() {
+    if (heightGlide_ == nullptr)
+        heightGlide_ = std::make_unique<synth::CardHeightGlide>(*this);
+    return *heightGlide_;
+}
+
+// A Macros bank's height change glides (CardHeightGlide). The neighbours are asked for room as the card is measured at
+// its final height (a growth when the glide starts or is re-aimed higher), and again when it has landed; the routings
+// left on the jacks that vanished go at once. Every other card, and a bank off screen, lands at once like
+// updateLayout().
+bool ModuleComponent::updateLayoutGliding() {
+    if (getType(module) != ModuleType::MacroControl) {
+        updateLayout();
+        return false;
+    }
+    auto& glide = heightGlideForTest();
+    const int from = getHeight();
+    const int aimedBefore = glide.isGliding() ? glide.targetHeight() : from;
+    updateLayout();
+    auto makeRoomAt = [this](int finalHeight) {
+        const int drawn = getHeight();
+        setSize(getWidth(), finalHeight);
+        owner.handleModuleResized(this);
+        setSize(getWidth(), drawn);
+    };
+    if (glide.isGliding()) { // a measure re-aimed it, or an earlier one began it
+        if (glide.targetHeight() > aimedBefore)
+            makeRoomAt(glide.targetHeight());
+        return true;
+    }
+    const int to = getHeight();
+    if (from == to || !glide.canGlide())
+        return false;
+    if (to > from)
+        owner.handleModuleResized(this); // measured at the final height
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    glide.begin(from, to, [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->owner.handleModuleResized(safeThis.getComponent());
+    });
+    if (to < from)
+        owner.handleModuleResized(this); // drawn at the old height: only the routings go now
+    return true;
+}
+
+// Docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): one 16px row per jack
+// row, no header chrome and no body. The row count comes from the module's own visible jack count, which for a
+// Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side and for Stereo is two —
+// MacroInletModule/MacroOutletModule's declare-max/vary-visible mechanism keeps that in sync with the port's shape, so
+// this needs no shape-aware branching of its own. The WIDTH is the sidebar strip's and is set by
+// dockMacroPortWidgets (macroHullPortLayout); before the first dock the widget gets a nominal width so it is never
+// zero-sized.
 void ModuleComponent::layoutMacroPortWidget() {
     int rows = 1;
     if (!(module->acceptsMidi() || module->producesMidi())) {
@@ -90,12 +148,21 @@ void ModuleComponent::layoutMacroPortWidget() {
         }
         rows = juce::jmax(1, numIns, numOuts);
     }
-    const int height = kMacroPortWidgetHeaderY + (rows - 1) * kMacroPortWidgetRowStep + kMacroPortWidgetBottomPad;
-    setSize(kMacroPortWidgetWidth, height);
+    constexpr int kNominalWidth = kMacroCardStripWidth;
+    setSize(getWidth() > 0 ? getWidth() : kNominalWidth, rows * kMacroPortWidgetRowStep);
+}
+
+synth::cardbody::BodyGeometry ModuleComponent::bodyGeometry() const {
+    return synth::cardbody::BodyGeometry::forCardWidth(
+        getWidth(), getType(module) == ModuleType::MacroControl ? synth::cardbody::kMacroJackGutter : 0);
 }
 
 int ModuleComponent::getContentTopY() {
     int y = 38; // below the title bar (header hairline at 24 + 8px breathing room + jack radius)
+    // The Macros card's body sits beside its jacks, in the card's right-edge gutter, so it starts under the header;
+    // the card's height still clears the lowest jack (layoutDefaultContent).
+    if (getType(module) == ModuleType::MacroControl)
+        return y;
     if (module->acceptsMidi())
         y += 30; // the "Midi In"/"Midi Out" row
 
@@ -115,6 +182,8 @@ int ModuleComponent::getContentTopY() {
         y = std::max(y, getPortCenter(i, true).y + kPortLabelClearance);
     if (numOuts > 0)
         y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
+    if (hostedOutputs_ != nullptr) // the fold line and the aux rows, as far down as they are right now
+        y = std::max(y, hostedOutputs_->bottomCentreY() + kPortLabelClearance);
 
     return y;
 }
@@ -146,196 +215,297 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     int y = getContentTopY();
 
-    // --- Hosted Plugin chrome: the Open Editor / Choose knobs... row (no-op on every other module) ---
+    // --- Hosted Plugin chrome: the Open Editor / Edit Layout... row (no-op on every other module) ---
     y = layoutHostedPluginChrome(y, narrowX, narrowW, apply);
 
-    // --- Sampler chrome: waveform overview, then the load button + file-name row ---
-    if (sampleWaveform) {
-        if (apply)
-            sampleWaveform->setBounds(contentX, y, contentW, kWaveformHeight);
-        y += kWaveformHeight + 8;
+    // --- Sampler chrome: the waveform and load row, or the instrument picker and key strip ---
+    if (instrumentChrome_ != nullptr)
+        y = instrumentChrome_->layout(y, contentX, contentW, narrowX, narrowW, apply);
 
-        if (apply) {
-            const int buttonWidth = juce::jmax(96, narrowW / 2);
-            loadSampleButton->setBounds(narrowX, y, buttonWidth, kRowHeight);
-            sampleNameLabel->setBounds(narrowX + buttonWidth + 6, y, narrowW - buttonWidth - 6, kRowHeight);
-        }
-        y += kRowHeight + 8;
-    }
+    // --- Wavetable chrome: the scanned frame view, the Table selector, the load row, the file caption ---
+    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr)
+        y = layoutWavetableChrome(y, contentX, contentW, apply);
 
-    // --- Wavetable chrome: the scanned frame view, the load row, then the folder browser ---
-    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr) {
-        // The port labels only occupy a narrow gutter down each edge, so on a double-width card
-        // this chrome sits BESIDE the 16-jack stack, starting just under the header, instead of
-        // below all of it — the same reclaim the Parametric EQ card makes for its response
-        // curve. It takes ~130px off a card that would otherwise clear 1000px tall.
-        constexpr int kPortGutterWidth = 88;
-        constexpr int kChromeTopY = 60;
+    y = layoutBodyControls(y, width, apply);
+    if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && getType(module) == ModuleType::MacroControl)
+        if (const int outs = mb->getVisibleOutputPortCount(); outs > 0) // beside the gutter, still clear of the jacks
+            y = std::max(y, getPortCenter(outs - 1, false).y + kPortLabelClearance);
 
-        const bool besidePorts = width >= synth::LayoutUtil::kDoubleWidth;
-        // Every input column is on the left, so the chrome has to clear all of them.
-        const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
-        const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
-        const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
-        const int chromeNarrowW = std::min(chromeW, kNarrowContentWidth);
-        const int chromeNarrowX = chromeX + (chromeW - chromeNarrowW) / 2;
-
-        int chromeY = besidePorts ? kChromeTopY : y;
-
-        if (apply)
-            wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
-        chromeY += kWaveformHeight + 8;
-
-        // The Table selector belongs with the display it drives, not buried on a tab page.
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            if (wavetableTabs == nullptr || !wavetableTabs->isChromeCombo(*comboBoxes[i]))
-                continue;
-            if (apply) {
-                comboLabels[i]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
-                comboBoxes[i]->setBounds(chromeX, chromeY + kLabelHeight, chromeW, kRowHeight);
-            }
-            chromeY += kLabelHeight + kRowHeight + 6;
-        }
-
-        // One button row, not two: [Load...] [Folder...] [<] [>], with the file caption on its
-        // own line under them so a long wavetable name is readable instead of ellipsised.
-        if (apply && wavetableFolderButton != nullptr) {
-            constexpr int kStepButtonW = 28;
-            constexpr int kGap = 4;
-            const int stepped = (kStepButtonW + kGap) * 2;
-            const int remaining = std::max(80, chromeW - stepped);
-            const int loadW = remaining / 2 - kGap;
-            const int folderW = remaining - loadW - kGap;
-
-            int x = chromeX;
-            loadWavetableButton->setBounds(x, chromeY, loadW, kRowHeight);
-            x += loadW + kGap;
-            wavetableFolderButton->setBounds(x, chromeY, folderW, kRowHeight);
-            x += folderW + kGap;
-            wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
-            x += kStepButtonW + kGap;
-            wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
-        }
-        chromeY += kRowHeight + 4;
-
-        if (apply)
-            wavetableNameLabel->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
-        chromeY += kLabelHeight + 8;
-
-        // Beside the ports the body still cannot start above the last jack; below them the
-        // chrome simply pushes it down as before.
-        y = besidePorts ? std::max(y, chromeY) : chromeY;
-    }
-
-    // A tabbed card (the Wavetable) replaces the two flat grids below with a pinned row, a tab
-    // strip and one page of controls. Everything after the grids — toggles, scope — is shared.
-    const bool tabbed = wavetableTabs != nullptr;
-    if (tabbed)
-        y = wavetableTabs->layoutBody(y, contentX, contentW, apply);
-
-    // Combos stack one per row on a standard card. A double-width card pairs them up instead —
-    // otherwise a high parameter count alone would add ~180px of dead single-column height.
-    const int comboColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? 2 : 1;
-    if (tabbed) {
-        // handled per page above
-    } else if (comboColumns == 1) {
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            if (apply) {
-                comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
-                comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
-            }
-            y += kLabelHeight + kRowHeight + 6;
-        }
-    } else {
-        const int cellW = contentW / comboColumns;
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            const int row = i / comboColumns;
-            const int col = i % comboColumns;
-            const int cellX = contentX + col * cellW;
-            const int rowY = y + row * (kLabelHeight + kRowHeight + 6);
-            if (apply) {
-                comboLabels[i]->setBounds(cellX, rowY, cellW - 8, kLabelHeight);
-                comboBoxes[i]->setBounds(cellX, rowY + kLabelHeight, cellW - 8, kRowHeight);
-            }
-        }
-        const int comboRows = (comboBoxes.size() + comboColumns - 1) / comboColumns;
-        y += comboRows * (kLabelHeight + kRowHeight + 6);
-    }
-
-    for (int i = 0; i < toggles.size(); ++i) {
-        if (apply)
-            toggles[i]->setBounds(contentX, y, contentW, kRowHeight);
-        y += kRowHeight + 2;
-    }
-
-    // --- Threshold control: Sample & Hold is meter-only above its rotary; ADSR / Comparator
-    // embed the Threshold slider here so the slice sits on the live level bar.
-    if (thresholdControl) {
-        if (apply)
-            thresholdControl->setBounds(contentX, y, contentW, thresholdControl->getPreferredHeight());
-        y += thresholdControl->getPreferredHeight() + 6;
-    }
-
-    if (!tabbed)
-        y = layoutKnobGrid(y, contentX, contentW, width, apply);
-
-    // Envelope (ADSR) graph section: a disclosure toggle sharing its row with the BPM|MS
-    // segmented control, then the curve editor itself when expanded — see
-    // ModuleComponentEnvelopeCard.cpp. A no-op (returns `y` unchanged) for every other module.
-    y = layoutEnvelopeGraphSection(y, contentX, contentW, apply);
+    // --- Drum Kit pads: the count, the pad grid and the picked pad's controls, under the master Level ---
+    if (instrumentChrome_ != nullptr)
+        y = instrumentChrome_->layoutBelowBody(y, contentX, contentW, apply);
 
     // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
     // module (and for an LFO not currently on the Custom shape).
     y = layoutLfoCustomWaveSection(y, contentX, contentW, apply);
 
-    if (freqResponseToggle) {
+    y = layoutChromeRows(y, contentX, contentW, apply);
+
+    // The folded More row sits at the very bottom, under the footer rows.
+    if (cardBody_ != nullptr)
+        y = cardBody_->layoutMoreRow(y, synth::cardbody::BodyGeometry::forCardWidth(width), apply);
+
+    return y + kBottomPadding;
+}
+
+// The Show Response / Spectrum / Scope rows and the panels they open. On a card whose layout has a footer
+// row, the toggles are pills in that row instead, under the open panels.
+int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool apply) {
+    const bool footer = cardBody_ != nullptr && cardBody_->hasFooter();
+    if (envelopeGraphToggle && !footer) {
+        if (apply)
+            envelopeGraphToggle->setBounds(contentX, y, contentW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (freqResponseToggle && !footer) {
         if (apply)
             freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
+    // The panels below fade in and out and take their height in step (blockHeight), so what is under them slides.
+    // With a footer there is no toggle row above a block, so a gap keeps it off the knob value labels above; a block
+    // under another block already has the gap that block leaves.
+    bool blockAbove = lfoCurveEditor != nullptr && lfoCurveEditor->isVisible();
+    const auto gapAfterControls = [&] { return synth::cardbody::gapUnderBodyControls(!footer || blockAbove); };
     if (freqResponseComponent && freqResponseComponent->isVisible()) {
+        y += blockHeight(responseFade_, gapAfterControls());
+        blockAbove = true;
         if (apply)
-            freqResponseComponent->setBounds(contentX, y, contentW, 120);
-        y += 128;
+            freqResponseComponent->setBounds(contentX, y, contentW, blockHeight(responseFade_, 120));
+        y += blockHeight(responseFade_, 120 + synth::cardbody::kBlockGap);
     }
 
-    if (spectrumToggle && spectrumToggle->isVisible()) {
+    if (spectrumToggle && spectrumToggle->isVisible() && !footer) {
         if (apply)
-            spectrumToggle->setBounds(contentX, y, contentW, kRowHeight);
-        y += kRowHeight + 2;
+            spectrumToggle->setBounds(contentX, y, contentW, blockHeight(responseFade_, kRowHeight));
+        y += blockHeight(responseFade_, kRowHeight + 2);
     }
 
-    if (scopeToggle) {
+    if (morphCard_ != nullptr)
+        y = morphCard_->layout(y, contentX, contentW, apply, gapAfterControls());
+
+    if (scopeToggle && !footer) {
         if (apply)
             scopeToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
     if (scopeComponent && scopeComponent->isVisible()) {
+        y += blockHeight(scopeFade_, gapAfterControls());
         if (apply)
-            scopeComponent->setBounds(contentX, y, contentW, 100);
-        y += 100;
+            scopeComponent->setBounds(contentX, y, contentW, blockHeight(scopeFade_, 100));
+        y += blockHeight(scopeFade_, 100);
     }
 
-    return y + kBottomPadding;
+    if (footer)
+        y = cardBody_->layoutFooter(y, synth::cardbody::BodyGeometry::forCardWidth(getWidth()), apply,
+                                    footerChromeToggles(/*visibleOnly*/ true));
+    return y;
 }
 
-int ModuleComponent::layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply) {
-    const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
-    const int knobWidth = contentW / knobColumns;
-    for (int i = 0; i < sliders.size(); ++i) {
-        const int row = i / knobColumns;
-        const int col = i % knobColumns;
-        const int x = contentX + col * knobWidth;
-        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
+    std::vector<juce::ToggleButton*> toggles;
+    juce::ToggleButton* morphToggle = morphCard_ != nullptr ? &morphCard_->getToggle() : nullptr;
+    juce::ToggleButton* curveToggle =
+        morphCard_ != nullptr && morphCard_->hasCurveView() ? &morphCard_->getCurveToggle() : nullptr;
+    for (auto* toggle : {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle,
+                         curveToggle, scopeToggle.get()})
+        if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
+            toggles.push_back(toggle);
+    return toggles;
+}
 
-        if (apply) {
-            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
-            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
-        }
+// The folded More row opens under a modulation cable, so a hidden parameter's knob can still take it.
+bool ModuleComponent::unfoldMoreRowForCableDrag(juce::Point<int> localPoint) {
+    return cardBody_ != nullptr && cardBody_->unfoldForCableDragAt(localPoint);
+}
+
+// A card body lays out its own sections. A card without one (External MIDI's combos, a hosted plugin's
+// slots) stacks its widget arrays in the generic order -- combos, toggles, knobs -- with the same runs.
+int ModuleComponent::layoutBodyControls(int y, int width, bool apply) {
+    using namespace synth::cardbody;
+    const auto g =
+        BodyGeometry::forCardWidth(width, getType(module) == ModuleType::MacroControl ? kMacroJackGutter : 0);
+    if (cardBody_ != nullptr)
+        return cardBody_->layout(y, g, apply);
+
+    std::vector<CaptionedWidget> combos, knobs;
+    for (int i = 0; i < comboBoxes.size(); ++i)
+        combos.emplace_back(comboBoxes[i], comboLabels[i]);
+    for (int i = 0; i < sliders.size(); ++i)
+        knobs.emplace_back(sliders[i], sliderLabels[i]);
+    std::vector<juce::Component*> toggleRow(toggles.begin(), toggles.end());
+    y = layoutChoiceRun(combos, y, g, apply);
+    y = layoutToggleRun(toggleRow, y, g, apply);
+    return layoutKnobRun(knobs, kKnobColumns, y, g, apply);
+}
+
+namespace {
+
+// The Wavetable chrome's rows, top to bottom; its stack starts kWavetableChromeTopY down a double-width
+// card (just under the header, beside the jack gutter).
+constexpr int kWavetableChromeTopY = 60;
+constexpr int kWavetableDisplayStep = kWaveformHeight + 8;
+constexpr int kWavetableTableStep = kLabelHeight + kRowHeight + 6;
+constexpr int kWavetableLoadRowStep = kRowHeight + 4;
+constexpr int kWavetableCaptionStep = kLabelHeight + 8;
+
+} // namespace
+
+int ModuleComponent::wavetableChromeBottomY() {
+    return kWavetableChromeTopY + kWavetableDisplayStep + kWavetableTableStep + kWavetableLoadRowStep +
+           kWavetableCaptionStep;
+}
+
+// The port labels only occupy a narrow gutter down each edge, so on a double-width card this chrome sits
+// BESIDE the jack stack, starting just under the header, instead of below all of it -- the same reclaim
+// the Parametric EQ card makes for its response curve. The Table selector belongs with the display it
+// drives. One button row, not two: [Load...] [Folder...] [<] [>], with the file caption on its own line
+// under them so a long wavetable name is readable instead of ellipsised. Beside the ports the body still
+// cannot start above the last jack; below them the chrome simply pushes it down.
+int ModuleComponent::layoutWavetableChrome(int y, int contentX, int contentW, bool apply) {
+    constexpr int kPortGutterWidth = 88;
+    const bool besidePorts = getWidth() >= synth::LayoutUtil::kDoubleWidth;
+    // Every input column is on the left, so the chrome has to clear all of them.
+    const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
+    const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
+    const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
+    int chromeY = besidePorts ? kWavetableChromeTopY : y;
+
+    if (apply)
+        wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
+    chromeY += kWavetableDisplayStep;
+
+    // The Table selector, built before the body's combos (createWavetableTableSelector).
+    if (apply && !comboParams.isEmpty() && comboParams[0] != nullptr && comboParams[0]->paramID == "table") {
+        comboLabels[0]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+        comboBoxes[0]->setBounds(chromeX, chromeY + kLabelHeight, chromeW, kRowHeight);
     }
-    const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
-    return y + knobRows * (kLabelHeight + kKnobHeight);
+    chromeY += kWavetableTableStep;
+
+    if (apply && wavetableFolderButton != nullptr) {
+        constexpr int kStepButtonW = 28;
+        constexpr int kGap = 4;
+        const int stepped = (kStepButtonW + kGap) * 2;
+        const int remaining = std::max(80, chromeW - stepped);
+        const int loadW = remaining / 2 - kGap;
+        const int folderW = remaining - loadW - kGap;
+        int x = chromeX;
+        loadWavetableButton->setBounds(x, chromeY, loadW, kRowHeight);
+        x += loadW + kGap;
+        wavetableFolderButton->setBounds(x, chromeY, folderW, kRowHeight);
+        x += folderW + kGap;
+        wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+        x += kStepButtonW + kGap;
+        wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+    }
+    chromeY += kWavetableLoadRowStep;
+
+    if (apply)
+        wavetableNameLabel->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+    chromeY += kWavetableCaptionStep;
+
+    return besidePorts ? std::max(y, chromeY) : chromeY;
+}
+
+// ---- Where a cable ends while its knob is out of view ----
+// A knob-only target folded into the More row ends at the More button, one on an unselected tab at the tab strip, one
+// on an unpicked Drum Kit pad at the top of the pad panel, each at the card's left edge; a knob whose jack has a gutter
+// row of its own goes back to that row. A tab or pad pick glides the ends (CableEndGlide), as a More toggle does.
+
+namespace {
+constexpr float kParkedEndX = 10.0f;   // the gutter's x: where a jack would be
+constexpr float kParkedEndStep = 6.0f; // between two parked ends on one card, so their cables never meet
+} // namespace
+
+// A knob-only target draws no jack, so while its knob is folded into the More row a cable has no row to end on: the
+// gutter slot its rank would give it belongs to the next real jack (the Key input, a second Audio row).
+const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return nullptr;
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
+        if (!target.knobOnly || mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
+            continue;
+        const int si = sliderIndexForModTarget(target);
+        if (si >= 0 && sliders[si]->isVisible() && !(cardBody_ != nullptr && cardBody_->isFoldingAway(*sliders[si])))
+            return nullptr;
+        auto* button = findChildWithID("cardMoreRow");
+        return button != nullptr && button->isVisible() ? button : nullptr;
+    }
+    return nullptr;
+}
+
+// A cable landing on a knob whose jack has a gutter row of its own (not knob-only): where that row is once the knob
+// no longer shows, i.e. the drawn column with this jack added back. Null when the cable lands on no such knob.
+std::optional<juce::Point<float>> ModuleComponent::foldedJackCentre(int destChannel) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return std::nullopt;
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
+        if (target.channelIndex != destChannel)
+            continue;
+        const int visible = mb->getVisibleInputPortCount();
+        const int jack = mb->mapInputChannel(destChannel).visibleJackIndex;
+        if (target.knobOnly || jack < 0 || jack >= visible || !isInputJackKnobBound(jack))
+            return std::nullopt;
+        auto drawn = drawnInputJackIndices();
+        drawn.insert(std::lower_bound(drawn.begin(), drawn.end(), jack), jack);
+        return gutterInputJackCentre(drawn, jack).toFloat();
+    }
+    return std::nullopt;
+}
+
+// The knob `target` binds, shown or not, when it sits in a tab section; null for any other target. Only a bound
+// parameter is looked up (every tabbed knob has one).
+const juce::Slider* ModuleComponent::tabbedKnobFor(const ModulationTarget& target) const {
+    const auto* mb = dynamic_cast<const ModuleBase*>(module);
+    const auto* param = mb != nullptr && cardBody_ != nullptr ? mb->parameterForModTarget(target) : nullptr;
+    const int si = param != nullptr ? sliderParams.indexOf(const_cast<juce::RangedAudioParameter*>(param)) : -1;
+    return si >= 0 && cardBody_->isTabbed(*sliders[si]) ? sliders[si] : nullptr;
+}
+
+// A knob-only target has no jack to fall back on, so while its knob is out of view its cable parks at the card's
+// left edge beside what brings the knob back: the tab strip for a knob on another tab, the top of the pad panel for
+// a pad knob of a pad not picked. The re-anchor pass (GraphEditor::reanchorCablesToKnobTargets) ranks the parked ends
+// of one card, and each rank sits one step lower, kept inside the card, so two cables never share an end.
+std::optional<juce::Point<float>> ModuleComponent::parkedCableEnd(int destChannel, int rank) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return std::nullopt;
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
+        if (target.channelIndex != destChannel)
+            continue;
+        if (!target.knobOnly || getModTargetKnobAnchor(destChannel).has_value())
+            return std::nullopt;
+        std::optional<int> y;
+        if (const auto* knob = tabbedKnobFor(target); knob != nullptr && !knob->isVisible())
+            if (const auto* strip = cardBody_->tabStripOf(*knob); strip != nullptr && strip->isVisible())
+                y = strip->getBounds().getCentreY();
+        if (!y.has_value() && DrumKitModule::isPadParamId(target.paramId))
+            for (const auto& entry : midiLearnableRegistry_.entries())
+                if (!entry.hosted && DrumKitModule::isPadParamId(entry.paramId) && entry.component != nullptr)
+                    if (const auto* panel = entry.component->getParentComponent(); panel != nullptr && panel != this) {
+                        y = getLocalArea(panel, panel->getLocalBounds()).getY();
+                        break;
+                    }
+        if (!y.has_value())
+            return std::nullopt;
+        const float lowest = juce::jmax((float)*y, (float)getHeight() - kParkedEndStep);
+        return juce::Point<float>{kParkedEndX, juce::jmin((float)*y + (float)rank * kParkedEndStep, lowest)};
+    }
+    return std::nullopt;
+}
+
+// The one start for a pick that moves cable ends at once (a tab, a Drum Kit pad): CableEndGlide records where every
+// cable on this card is drawn now and glides each to wherever it lands after the pick, under the motion settings.
+void ModuleComponent::glideCableEnds() {
+    if (auto* memo = graph_editor_paint::CanvasMemo::of(owner))
+        memo->cableEndGlide().beginMove(*this);
 }

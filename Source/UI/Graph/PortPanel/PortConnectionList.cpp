@@ -1,0 +1,221 @@
+// PortConnectionList.cpp -- which cables land on a jack and what the far end of each is called.
+// docs/layout/cables.md#port-connections-panel.
+
+#include "PortConnectionList.h"
+
+#include "AudioEngine/AudioEngine.h"
+#include "Modules/ModuleBase.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
+
+#include <algorithm>
+
+namespace synth::ui {
+
+namespace {
+
+juce::String dotSeparator() { return juce::String::fromUTF8(" \xC2\xB7 "); }
+
+// A cable names its jacks by RAW channel; the card, the labels and a click speak in visible jacks.
+int visibleJackOf(juce::AudioProcessor* processor, int rawChannel, bool isInput) {
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        return isInput ? module->mapInputChannel(rawChannel).visibleJackIndex
+                       : module->mapOutputChannel(rawChannel).visibleJackIndex;
+    return rawChannel;
+}
+
+// The same names the card's screen-reader stand-ins use (ModuleComponent::syncPortAccessibility).
+juce::String jackLabel(juce::AudioProcessor* processor, int visibleJack, bool isInput) {
+    juce::String label;
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        label = isInput ? module->getInputPortLabel(visibleJack) : module->getOutputPortLabel(visibleJack);
+    else if (visibleJack == 0)
+        label = "Left";
+    else if (visibleJack == 1)
+        label = "Right";
+    if (label.isEmpty())
+        label = (isInput ? "In " : "Out ") + juce::String(visibleJack);
+    return label;
+}
+
+juce::String midiLabel(bool isInput) { return isInput ? "Midi input" : "Midi output"; }
+
+juce::AudioProcessor* processorFor(GraphEditor& editor, juce::AudioProcessorGraph::NodeID id) {
+    auto* node = editor.getAudioEngine().getGraph().getNodeForId(id);
+    return node != nullptr ? node->getProcessor() : nullptr;
+}
+
+// A jack's name: the module's title and the port, kept apart so a row can leave the module off.
+struct EndName {
+    juce::String module; // empty for a macro port or a plugin slot, whose name already carries what it needs
+    juce::String port;
+    juce::String full() const { return module.isEmpty() ? port : module + dotSeparator() + port; }
+};
+
+// The name of a jack by node and raw channel. A macro port has no module worth naming: it reads as its own name.
+EndName endName(GraphEditor& editor, const GraphEditor::VisibleCable& cable, bool farIsDestination) {
+    const juce::AudioProcessorGraph::NodeID id{farIsDestination ? cable.id.dstUid : cable.id.srcUid};
+    auto* processor = processorFor(editor, id);
+    if (processor == nullptr)
+        return {};
+    if (const auto owner = editor.getMacroController().macroPortOwnerFor(id); owner.port != nullptr)
+        return {{}, owner.port->name};
+    // A plugin's parameter is named the way the Mod Matrix names it, card title included.
+    if (farIsDestination && cable.signal != CableSignal::Midi &&
+        cable.kind != GraphEditor::VisibleCable::Kind::Direct) {
+        const auto slot = hostedSlotLabel(editor.getAudioEngine().getGraph(), id, cable.destChannel);
+        if (slot.isNotEmpty())
+            return {{}, slot};
+    }
+    juce::String port;
+    if (cable.signal == CableSignal::Midi) {
+        port = midiLabel(farIsDestination);
+    } else if (farIsDestination && cable.landsOnKnob) {
+        // Wired to a knob: the knob is what the user sees, the hidden CV jack has no honest name.
+        const auto target = knobModTarget(editor, id, cable.destChannel);
+        port = target.valid() ? target.paramName
+                              : jackLabel(processor, visibleJackOf(processor, cable.id.dstPort, true), true);
+    } else {
+        const int raw = farIsDestination ? cable.id.dstPort : cable.id.srcPort;
+        port = jackLabel(processor, visibleJackOf(processor, raw, farIsDestination), farIsDestination);
+    }
+    return {editor.getModuleTitle(id, processor), port};
+}
+
+bool landsOn(GraphEditor& editor, const GraphEditor::VisibleCable& cable, const PortRef& port) {
+    if ((cable.signal == CableSignal::Midi) != port.isMidi)
+        return false;
+    const uint32_t uid = port.isInput ? cable.id.dstUid : cable.id.srcUid;
+    if (uid != port.node.uid)
+        return false;
+    if (port.isMidi)
+        return true;
+    const int raw = port.isInput ? cable.id.dstPort : cable.id.srcPort;
+    return visibleJackOf(processorFor(editor, port.node), raw, port.isInput) == port.jack;
+}
+
+// The jack at the other end of a cable that lands on `port`.
+PortRef farEnd(GraphEditor& editor, const GraphEditor::VisibleCable& cable, const PortRef& port) {
+    const bool farIsDestination = !port.isInput;
+    const juce::AudioProcessorGraph::NodeID id{farIsDestination ? cable.id.dstUid : cable.id.srcUid};
+    const bool midi = cable.signal == CableSignal::Midi;
+    const int raw = farIsDestination ? cable.id.dstPort : cable.id.srcPort;
+    return {id,
+            midi ? juce::AudioProcessorGraph::midiChannelIndex
+                 : visibleJackOf(processorFor(editor, id), raw, farIsDestination),
+            farIsDestination, midi};
+}
+
+// True when two cables landing on one jack are one connection to the person: the same far module and far jack
+// (visible), signal and kind, and the same knob when they land on one. A collapsed stereo pair keeps a raw edge per
+// leg when one end is split (or a mono source feeds both legs); all of them end on the same visible jacks.
+bool sameConnection(const PortConnection& a, const PortConnection& b) {
+    return a.far == b.far && a.cable.signal == b.cable.signal && a.cable.kind == b.cable.kind &&
+           a.cable.id.attenUid == b.cable.id.attenUid && a.cable.landsOnKnob == b.cable.landsOnKnob &&
+           (!a.cable.landsOnKnob || a.farRawChannel == b.farRawChannel);
+}
+
+// The routings, resolved once per listing and only when a modulation cable needs them: the editor's cache first, the
+// engine itself when a chain made since the cache's last refresh is missing from it.
+struct Chains {
+    std::vector<KnobModChain> list;
+    bool read = false;
+    bool fresh = false;
+};
+
+const KnobModChain* findChain(GraphEditor& editor, Chains& chains, juce::AudioProcessorGraph::NodeID atten) {
+    const auto find = [&chains, atten]() -> const KnobModChain* {
+        for (const auto& c : chains.list)
+            if (c.source.attenuverterId == atten)
+                return &c;
+        return nullptr;
+    };
+    if (!chains.read) {
+        chains.list = knobModChains(editor, false);
+        chains.read = true;
+    }
+    if (const auto* hit = find())
+        return hit;
+    if (chains.fresh)
+        return nullptr;
+    chains.list = knobModChains(editor, true);
+    chains.fresh = true;
+    return find();
+}
+
+// A modulation row edits the chain the knob's sources panel lists, landing on the knob behind any macro port. With no
+// routing for it (a chain being rebuilt) the cable alone describes it, and no knob is named.
+void describeChain(GraphEditor& editor, PortConnection& entry, Chains& chains) {
+    const juce::AudioProcessorGraph::NodeID atten{entry.cable.id.attenUid};
+    entry.attenuverterId = atten;
+    if (const auto* chain = findChain(editor, chains, atten)) {
+        entry.modSource = chain->source;
+        entry.modCard = chain->card;
+        entry.modChannel = chain->destChannel;
+        return;
+    }
+    entry.modSource.attenuverterId = atten;
+    entry.modSource.sourceNodeId = juce::AudioProcessorGraph::NodeID{entry.cable.id.srcUid};
+    entry.modSource.sourceChannel = entry.cable.id.srcPort;
+    entry.modSource.amount = attenuverterAmount(editor.getAudioEngine().getGraph(), atten, entry.cable.attenAmount);
+}
+
+} // namespace
+
+std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port) {
+    std::vector<PortConnection> out;
+    Chains chains;
+    const auto cables = editor.buildVisibleCables(); // a copy: the editor's list is rebuilt under us by an edit
+    for (const auto& cable : cables) {
+        if (!landsOn(editor, cable, port))
+            continue;
+        PortConnection entry;
+        entry.cable = cable;
+        entry.far = farEnd(editor, cable, port);
+        entry.farRawChannel = port.isInput ? cable.id.srcPort : cable.destChannel;
+        const auto name = endName(editor, cable, /*farIsDestination=*/!port.isInput);
+        entry.fullLabel = name.full();
+        // The panel's own card is no news in its own list: only the port is shown.
+        entry.label = entry.far.node == port.node && name.module.isNotEmpty() ? name.port : entry.fullLabel;
+        entry.colour = editor.colourForCable(cable);
+        if (cable.id.attenUid != 0)
+            describeChain(editor, entry, chains);
+        const auto same = std::find_if(out.begin(), out.end(),
+                                       [&entry](const PortConnection& o) { return sameConnection(o, entry); });
+        if (same != out.end()) {
+            same->group.push_back(cable);
+            continue;
+        }
+        entry.group = {cable};
+        out.push_back(std::move(entry));
+    }
+    return out;
+}
+
+juce::String portSeparator() { return dotSeparator(); }
+
+juce::String jackName(GraphEditor& editor, const PortRef& port) {
+    auto* processor = processorFor(editor, port.node);
+    if (processor == nullptr)
+        return {};
+    return port.isMidi ? midiLabel(port.isInput) : jackLabel(processor, port.jack, port.isInput);
+}
+
+juce::String portTitle(GraphEditor& editor, const PortRef& port) {
+    auto* processor = processorFor(editor, port.node);
+    if (processor == nullptr)
+        return {};
+    if (const auto owner = editor.getMacroController().macroPortOwnerFor(port.node); owner.port != nullptr)
+        return owner.port->name;
+    const auto name = port.isMidi ? midiLabel(port.isInput) : jackLabel(processor, port.jack, port.isInput);
+    return editor.getModuleTitle(port.node, processor) + dotSeparator() + name;
+}
+
+juce::String connectionCountText(int count) {
+    if (count <= 0)
+        return "No connections yet";
+    return count == 1 ? juce::String("1 connection") : juce::String(count) + " connections";
+}
+
+} // namespace synth::ui

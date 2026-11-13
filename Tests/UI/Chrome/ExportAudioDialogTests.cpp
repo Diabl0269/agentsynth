@@ -2,6 +2,7 @@
 // AudioEngine/TimelineDoc/BounceRunner, so these tests drive the real controls and read back the
 // BounceOptions/destination Export would send, with no audio device and no message loop needed.
 
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include <gtest/gtest.h>
 
@@ -91,6 +92,27 @@ TEST(ExportAudioDialogTest, SwitchingToAiffStepsDownA32BitSelection) {
     const auto options = dialog.getOptionsForTest();
     EXPECT_EQ(options.format, BounceFormat::Aiff);
     EXPECT_NE(options.bitDepth, 32);
+}
+
+TEST(ExportAudioDialogTest, FlacOffersOnly16And24BitAndDropsAStuck32) {
+    auto dialog = makeDialog();
+    dialog.setBitDepthForTest(32);
+    ASSERT_EQ(dialog.getOptionsForTest().bitDepth, 32);
+
+    dialog.setFormatForTest(BounceFormat::Flac);
+    auto options = dialog.getOptionsForTest();
+    EXPECT_EQ(options.format, BounceFormat::Flac);
+    EXPECT_EQ(options.bitDepth, 24);
+
+    dialog.setBitDepthForTest(16);
+    EXPECT_EQ(dialog.getOptionsForTest().bitDepth, 16);
+    // A "32" request has no matching choice: it must not resolve to an invalid FLAC combination.
+    dialog.setBitDepthForTest(32);
+    EXPECT_NE(dialog.getOptionsForTest().bitDepth, 32);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    dialog.setBitDepthForTest(32);
+    EXPECT_EQ(dialog.getOptionsForTest().bitDepth, 32) << "WAV still offers 32-bit float";
 }
 
 TEST(ExportAudioDialogTest, SampleRateAndDestinationRoundTrip) {
@@ -224,6 +246,47 @@ TEST(ExportAudioDialogTest, SwitchingFormatKeepsTheTypedFileName) {
     auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
     dialog.setFormatForTest(BounceFormat::Aiff);
     EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.aiff");
+}
+
+TEST(ExportAudioDialogTest, SwitchingToFlacRewritesTheDestinationExtension) {
+    auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    dialog.setFormatForTest(BounceFormat::Flac);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.flac");
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.wav");
+}
+
+// ---- MP3 (needs the user's lame) --------------------
+
+TEST(ExportAudioDialogTest, Mp3IsDisabledUntilLameIsFound) {
+    auto dialog = makeDialog();
+    dialog.setLameExecutable(juce::File("/nonexistent/lame"));
+    EXPECT_FALSE(dialog.isMp3AvailableForTest());
+
+    // A disabled choice cannot be reached, so the dialog stays on a format that works.
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    EXPECT_NE(dialog.getOptionsForTest().format, BounceFormat::Mp3);
+}
+
+TEST(ExportAudioDialogTest, Mp3OffersBitratesAndSetsTheMp3Extension) {
+    const auto lame = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_dialog_lame");
+    ASSERT_TRUE(lame.create());
+    auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    dialog.setLameExecutable(lame);
+    ASSERT_TRUE(dialog.isMp3AvailableForTest());
+
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    dialog.setMp3BitrateForTest(256);
+    const auto options = dialog.getOptionsForTest();
+    EXPECT_EQ(options.format, BounceFormat::Mp3);
+    EXPECT_EQ(options.mp3BitrateKbps, 256);
+    EXPECT_EQ(options.lameExecutable, lame);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.mp3");
+    EXPECT_TRUE(synth::validateBounceOptions(options).isEmpty()) << synth::validateBounceOptions(options);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.wav");
+    lame.deleteFile();
 }
 
 // ---- Tail Seconds/Bars --------------------
@@ -403,4 +466,79 @@ TEST(ExportAudioDialogTest, CancelChoiceDoesNotFireOnExport) {
 
     EXPECT_FALSE(fired);
     file.deleteFile();
+}
+
+// ---- Fades (docs/layout/animation.md, "Fading things in and out") ----------------------------------------------
+
+// Bit depth and bitrate share one slot: choosing MP3 fades the bit depth out while the bitrate fades in.
+TEST(ExportAudioDialogTest, TheBitDepthAndBitrateRowsCrossFadeWhenTheFormatChanges) {
+    auto dialog = makeDialog();
+    dialog.setLameExecutable(juce::File::getSpecialLocation(juce::File::currentExecutableFile));
+    ASSERT_TRUE(dialog.isMp3AvailableForTest());
+    auto& bitDepth = dialog.getBitDepthBoxForTest();
+    auto& bitrate = dialog.getBitrateBoxForTest();
+    ASSERT_TRUE(bitDepth.isVisible());
+    ASSERT_FALSE(bitrate.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    EXPECT_TRUE(bitDepth.isVisible()) << "stays on screen while it fades";
+    EXPECT_FALSE(interceptsClicks(bitDepth)) << "a leaving control takes no clicks";
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_FLOAT_EQ(bitrate.getAlpha(), 0.0f);
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(bitDepth.getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(bitrate.getAlpha(), 0.5f, 0.01f);
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(bitDepth.isVisible());
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_FLOAT_EQ(bitrate.getAlpha(), 1.0f);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_TRUE(bitrate.isVisible());
+    EXPECT_TRUE(bitDepth.isVisible());
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(bitrate.isVisible());
+    EXPECT_TRUE(bitDepth.isVisible());
+}
+
+// Export swaps the options page for the progress page by a cross-fade; which page is up is decided at once.
+TEST(ExportAudioDialogTest, TheOptionsPageFadesIntoTheProgressPage) {
+    auto dialog = makeDialog();
+    auto& options = dialog.getOptionsPageForTest();
+    auto& progress = dialog.getProgressPageForTest();
+    ASSERT_TRUE(options.isVisible());
+    ASSERT_FALSE(progress.isVisible());
+
+    FadeAnimateGuard guard;
+    dialog.showProgressPage();
+    EXPECT_TRUE(options.isVisible()) << "the options page stays while it fades out";
+    EXPECT_FALSE(interceptsClicks(options));
+    EXPECT_TRUE(progress.isVisible());
+    EXPECT_FLOAT_EQ(progress.getAlpha(), 0.0f);
+
+    // Return must not start another export while the options page is still on screen.
+    bool exported = false;
+    dialog.onExport = [&](BounceOptions, juce::File) { exported = true; };
+    dialog.keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    EXPECT_FALSE(exported);
+
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(options.getAlpha(), 0.5f, 0.01f);
+    EXPECT_NEAR(progress.getAlpha(), 0.5f, 0.01f);
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(options.isVisible());
+    EXPECT_TRUE(progress.isVisible());
+    EXPECT_FLOAT_EQ(progress.getAlpha(), 1.0f);
+}
+
+TEST(ExportAudioDialogTest, TheFadesLandAtOnceWhenAnimationsAreOff) {
+    auto dialog = makeDialog();
+    FadeAnimateGuard guard(synth::ui::AnimationMode::off);
+    dialog.showProgressPage();
+    EXPECT_FALSE(dialog.getOptionsPageForTest().isVisible());
+    EXPECT_TRUE(dialog.getProgressPageForTest().isVisible());
 }

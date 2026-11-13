@@ -1,14 +1,15 @@
 // TimelinePanelStrips.cpp
 //
 // The edit-tool strip (getToolButton/setActiveTool/applyToolStripTheme), the piano-roll
-// open/close pair, and the automation strip (lane/record-mode selection, show/close).
+// open/close pair and the snap selector's setup.
 // TimelinePanelComponent is declared in TimelinePanelComponent.h; sibling
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
-#include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSnapNames.h"
 
 namespace synth::ui {
 
@@ -57,6 +58,8 @@ void TimelinePanelComponent::setActiveTool(EditTool tool) {
     // reached the visible one would silently change meaning the moment a clip was opened.
     clipLaneArea_.setActiveTool(tool);
     pianoRoll_.setActiveTool(tool);
+    // The automation lanes have no tool row of their own either (see automationToolFor).
+    automationLanes_.setEditTool(tool);
     // Every button is set explicitly rather than leaning on the radio group to untoggle its
     // siblings: this method is also reached from the number keys and from MainComponent, where no
     // button was clicked at all. dontSendNotification, or setting the state would re-enter here
@@ -76,11 +79,13 @@ void TimelinePanelComponent::applyToolStripTheme() {
         // getIcon returns nullptr when the asset library isn't linked in. The button stays
         // imageless but fully functional in either case.
         if (lf != nullptr) {
-            if (auto icon = lf->getIcon(iconForEditTool(tool)))
-                button->setImages(icon.get());
-            // The active tool's highlight is a BACKGROUND colour, not a different icon tint —
-            // the glyph is the same in both states (see AppLookAndFeel::retintIcons).
-            button->setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
+            // The pen paints the current shape's icon itself (DrawPenButton).
+            if (tool != EditTool::Draw)
+                if (auto icon = lf->getIcon(iconForEditTool(tool)))
+                    button->setImages(icon.get());
+            // The active tool's highlight is the look-and-feel's button-on fill (drawButtonBackground), read at paint
+            // time, not a different icon tint: the glyph is the same in both states (see
+            // AppLookAndFeel::retintIcons).
         }
     }
 
@@ -88,8 +93,20 @@ void TimelinePanelComponent::applyToolStripTheme() {
     // LnF in a headless build; getIcon returns nullptr when the asset library isn't linked in), so
     // the button stays imageless but fully functional either way.
     if (lf != nullptr) {
-        if (auto icon = lf->getIcon(synth::theme::Icon::FollowPlayhead))
-            followPlayheadButton_.setImages(icon.get());
+        // Muted at rest, full ink on hover, and the dark `iconInk` while following: a toggled-on
+        // juce::DrawableButton with a background style is filled SOLID accent (TextButton::
+        // buttonOnColourId, via drawButtonBackground), and the glyph on a light fill is `iconInk`
+        // by the same rule the toolbar buttons' lit state follows. An accent glyph on that accent
+        // fill vanished.
+        if (auto base = lf->getIcon(synth::theme::Icon::FollowPlayhead)) {
+            const auto& colours = lf->getTheme().colors;
+            auto hover = base->createCopy();
+            hover->replaceColour(colours.textMuted, colours.textPrimary);
+            auto on = base->createCopy();
+            on->replaceColour(colours.textMuted, colours.iconInk);
+            followPlayheadButton_.setImages(base.get(), hover.get(), hover.get(), nullptr, on.get(), on.get(),
+                                            on.get());
+        }
         followPlayheadButton_.setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
     }
 }
@@ -118,8 +135,11 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     if (!pianoRoll_.isOpen())
         return; // id didn't resolve to a live clip — PianoRollComponent::openClip's own contract
 
-    clipLaneArea_.setVisible(false);
-    pianoRoll_.setVisible(true);
+    // The clip lanes fade out as the roll fades in (FadeVisibility); both are laid out at once, only the opacity runs.
+    clipLaneFade_.setShown(false);
+    rollFade_.setShown(true);
+    playhead_.setLocalPlayheadClient(&pianoRoll_);
+    pianoRoll_.setDrumKitTrack(isDrumKitClip(id));
     pianoRoll_.grabKeyboardFocus();
     // The lanes region is carved DIFFERENTLY once the roll is open — it reserves a toolbar row above
     // the ruler (see resized()) — and isOpen() is what that carve-up branches on, so the layout has
@@ -135,124 +155,37 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     playhead_.repaint();
 }
 
+// Leaving mirrors entering: the roll cross-fades away over the lanes as it was, not as the empty roll closeRoll()
+// leaves behind -- a picture of it is taken first (by the roll's onAboutToClose when the roll closes itself, here when
+// the panel closes it) and fades; the emptied roll itself hides at once.
 void TimelinePanelComponent::closePianoRoll() {
+    if (pianoRoll_.isOpen())
+        rollLeaving_.capture(pianoRoll_);
     pianoRoll_.closeRoll();
-    pianoRoll_.setVisible(false);
-    clipLaneArea_.setVisible(true);
+    if (rollLeaving_.play())
+        rollFade_.snapTo(false);
+    else
+        rollFade_.setShown(false); // the (now empty) roll fades out as the clip lanes fade back in
+    clipLaneFade_.setShown(true);
     clipLaneArea_.grabKeyboardFocus();
     resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above
     ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping
     playhead_.repaint();                   // the overlay owns its whole rect again
 }
 
-//==============================================================================
-// ---- Automation strip ----
-
-void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
-    if (doc_ == nullptr || doc_->getLane(id) == nullptr)
-        return;
-
-    selectedAutomationLane_ = id;
-    automationStripVisible_ = true;
-    automationEditor_.setTimelineDoc(doc_);
-    automationEditor_.setActiveLane(id);
-    syncAutomationLaneCombo();
-    syncAutomationRecordModeCombo();
-    resized();
-    repaint();
-}
-
-void TimelinePanelComponent::closeAutomationStrip() {
-    if (!automationStripVisible_)
-        return;
-    automationStripVisible_ = false;
-    resized();
-    repaint();
-}
-
-// Existing lanes first (in track order then lane order), then "Add lane..." entries -- index i is
-// menu id i + 1, the same convention TimelineTrackHeaderComponent::collectBindingOptions() uses.
-std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent::collectAutomationLaneOptions() const {
-    std::vector<AutomationLaneOption> options;
-    if (doc_ == nullptr)
-        return options;
-
-    for (const auto& track : doc_->getTracks()) {
-        for (const auto& lane : track.lanes) {
-            juce::String nodeLabel =
-                trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
-            if (nodeLabel.isEmpty())
-                nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback
-            juce::String paramLabel = trackHeaderHost_ != nullptr
-                                          ? trackHeaderHost_->getParameterDisplayName(lane.nodeUuid, lane.paramId)
-                                          : juce::String();
-            if (paramLabel.isEmpty())
-                paramLabel = lane.paramId;
-            options.push_back({lane.id, nodeLabel + juce::String::fromUTF8(" \xC2\xB7 ") + paramLabel, false, {}});
-        }
-    }
-
-    // "Add lane..." entries for hosted-plugin instance parameters that have none yet, listed
-    // after every existing lane.
-    if (trackHeaderHost_ != nullptr) {
-        for (auto& addOption : trackHeaderHost_->getAvailablePluginLaneOptions()) {
-            AutomationLaneOption option;
-            option.label = "Add: " + addOption.label;
-            option.isAddEntry = true;
-            option.addOption = addOption;
-            options.push_back(std::move(option));
-        }
-    }
-    return options;
-}
-
-void TimelinePanelComponent::syncAutomationLaneCombo() {
-    laneCombo_.clear(juce::dontSendNotification);
-    const auto options = collectAutomationLaneOptions();
-    int selectedId = 0;
-    for (int i = 0; i < (int)options.size(); ++i) {
-        laneCombo_.addItem(options[(size_t)i].label, i + 1);
-        if (options[(size_t)i].id == selectedAutomationLane_)
-            selectedId = i + 1;
-    }
-    laneCombo_.setSelectedId(selectedId, juce::dontSendNotification);
-}
-
-void TimelinePanelComponent::syncAutomationRecordModeCombo() {
-    int selectedId = 2; // Read — TimelineDoc's own default for a lane with no explicit mode set
-    if (const auto* lane = doc_ != nullptr ? doc_->getLane(selectedAutomationLane_) : nullptr)
-        selectedId = lane->recordMode + 1;
-    recordModeCombo_.setSelectedId(selectedId, juce::dontSendNotification);
-}
-
-void TimelinePanelComponent::applyAutomationLaneMenuChoice(int selectedId) {
-    const auto options = collectAutomationLaneOptions();
-    if (selectedId < 1 || selectedId > (int)options.size())
-        return;
-    const auto& chosen = options[(size_t)(selectedId - 1)];
-    if (chosen.isAddEntry) {
-        // Creates (find-or-create) the lane, then shows it — same shape as choosing an
-        // existing entry, just with one extra step first.
-        if (trackHeaderHost_ == nullptr)
-            return;
-        const auto laneId = trackHeaderHost_->addPluginAutomationLane(chosen.addOption);
-        if (laneId.isValid())
-            showAutomationLane(laneId);
-        return;
-    }
-    showAutomationLane(chosen.id);
-}
-
-void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
-    if (doc_ == nullptr || !selectedAutomationLane_.isValid())
-        return;
-    const int mode = selectedId - 1;
-    const auto laneId = selectedAutomationLane_;
-    auto mutate = [this, laneId, mode] { doc_->setLaneRecordMode(laneId, mode); };
-    if (undoManager_)
-        undoManager_->recordTimelineChange(*doc_, mutate);
-    else
-        mutate();
+// The snap selector's items and change handler. Split out of the constructor, which sits at its function-size ratchet.
+void TimelinePanelComponent::initSnapCombo() {
+    addAndMakeVisible(snapCombo_);
+    snapCombo_.setComponentID("timelineSnapCombo");
+    // Items in enum order, so the item id is the snap value's int plus one and a persisted value maps straight back.
+    snapCombo_.setChoices(snapValueNames());
+    snapCombo_.setTitle("Snap grid");
+    snapCombo_.setTooltip("Snap grid: straight, triplet or dotted note values");
+    snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
+    // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
+    // grid cycle and this menu therefore share ONE writer (which is also the one place the choice
+    // is persisted and the grid painters are repainted).
+    snapCombo_.onChange = [this] { setSnapValue((TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1)); };
 }
 
 } // namespace synth::ui

@@ -1,5 +1,7 @@
 #include "ToolbarComponent.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
@@ -10,16 +12,24 @@ ToolbarComponent::ToolbarComponent() {
     // its own (the buttons are direct children of MainComponent), so there is nothing for descent to
     // find anyway; opting in here is what makes a grab land on the toolbar itself instead of failing.
     setWantsKeyboardFocus(true);
+    setTitle("Toolbar");
 }
 
-void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) { buttons_ = btns; }
+// The buttons give up keyboard focus of their own: the toolbar is the single Tab stop and its roving
+// ring is the only focus indicator, so a focused button could never double the ring or swallow the
+// arrow keys before they reach keyPressed().
+void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) {
+    buttons_ = btns;
+    for (auto* b : buttons_)
+        if (b != nullptr)
+            b->setWantsKeyboardFocus(false);
+}
 
 // ---------------------------------------------------------------------------
 // Sub-group membership per Slot, used both to space groups apart in layoutButtons() and to
 // find the group boundaries paint() draws separator hairlines at. Matches the Slot enum's
-// documented grouping (ToolbarComponent.h:21-22): left [Library]|[New,Save,Load]|
-// [Settings,Feedback]|[Undo,Redo]|[AutoArrange]; right
-// [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
+// documented grouping (ToolbarComponent.h): left [Library]|[New,Save,Load]|
+// [Settings,Feedback]|[Undo,Redo]; right [Search]|[ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
 namespace {
 int groupOf(int slot) {
     switch (slot) {
@@ -35,14 +45,12 @@ int groupOf(int slot) {
     case ToolbarComponent::Undo:
     case ToolbarComponent::Redo:
         return 3;
-    case ToolbarComponent::AutoArrange:
-        return 4;
-    case ToolbarComponent::ToggleMinimap:
-    case ToolbarComponent::ToggleModMatrix:
     case ToolbarComponent::ToggleAiPanel:
     case ToolbarComponent::ToggleBottomPanel:
-        return 5;
+        return 4;
     case ToolbarComponent::ToggleTheme:
+        return 5;
+    case ToolbarComponent::Search:
         return 6;
     default:
         return -1;
@@ -64,12 +72,10 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         112.0f, // Save
         116.0f, // Load
         96.0f,  // Settings
-        40.0f,  // Feedback — always icon-only, never grows a text label
+        84.0f,  // Feedback — wide enough for its caption at full size
         72.0f,  // Undo
         72.0f,  // Redo
-        120.0f, // AutoArrange
-        108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
-        104.0f, // ToggleModMatrix
+        88.0f,  // Search
         92.0f,  // ToggleAiPanel
         100.0f, // ToggleBottomPanel ("Hide Panel"/"Show Panel")
         110.0f  // ToggleTheme
@@ -85,10 +91,10 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // actions read as clusters rather than one flat row.
     static constexpr float kGroupGap = 12.0f;
 
-    // Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange.
+    // Left group: Library, New, Save, Load, Settings, Feedback, Undo, Redo.
     // Invisible buttons yield their slot entirely rather than leaving a reserved gap.
     int lastGroup = -1;
-    for (int slot = Library; slot <= AutoArrange; ++slot)
+    for (int slot = Library; slot <= Redo; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
             if (lastGroup != -1 && groupOf(slot) != lastGroup)
                 fb.items.add(juce::FlexItem().withWidth(kGroupGap));
@@ -103,9 +109,9 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
+    // Right group: Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
     lastGroup = -1;
-    for (int slot = ToggleMinimap; slot <= ToggleTheme; ++slot)
+    for (int slot = Search; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
             if (lastGroup != -1 && groupOf(slot) != lastGroup)
                 fb.items.add(juce::FlexItem().withWidth(kGroupGap));
@@ -141,10 +147,10 @@ void ToolbarComponent::paint(juce::Graphics& g) {
     // grouping cue rather than a hard divider.
     g.setColour(lnf->getTheme().colors.border.withAlpha(0.45f));
 
-    // Sections match the two layoutButtons() loops (left: Library..AutoArrange, right:
-    // ToggleMinimap..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
+    // Sections match the two layoutButtons() loops (left: Library..Redo, right:
+    // Search..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
     // spacer, not a sub-group gap, so it is deliberately excluded here.
-    auto sectionOf = [](int slot) { return slot <= AutoArrange ? 0 : 1; };
+    auto sectionOf = [](int slot) { return slot <= Redo ? 0 : 1; };
 
     int prevGroup = -1;
     int prevSection = -1;
@@ -172,4 +178,106 @@ void ToolbarComponent::paint(juce::Graphics& g) {
 // Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this component uses the same convention as the other five region
 // roots despite owning no children of its own.
-void ToolbarComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
+void ToolbarComponent::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRegionOutline(*this, g);
+
+    // The ring goes in the margin around the button, not on top of it: the buttons are siblings that
+    // paint above this strip, so anything drawn inside their bounds would be covered.
+    const int slot = getFocusedSlot();
+    if (slot < 0)
+        return;
+    constexpr int kRingOutset = 2;
+    const auto area = buttons_[(size_t)slot]->getBounds().translated(-getX(), -getY()).expanded(kRingOutset);
+    synth::ui::paintFocusRing(g, area.toFloat(), *this, 4.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Roving focus.
+bool ToolbarComponent::isNavigable(int slot) const {
+    if (slot < 0 || slot >= NumSlots)
+        return false;
+    const auto* b = buttons_[(size_t)slot];
+    return b != nullptr && b->isVisible() && b->isEnabled();
+}
+
+int ToolbarComponent::navigableSlotFrom(int from, int step) const {
+    for (int slot = from + step; slot >= 0 && slot < NumSlots; slot += step)
+        if (isNavigable(slot))
+            return slot;
+    return -1;
+}
+
+// A last-used button that has since been hidden or disabled (Undo right after it ran out of steps)
+// hands the ring to its nearest navigable neighbour, so it never jumps back to the far left.
+int ToolbarComponent::getFocusedSlot() const {
+    if (isNavigable(focusedSlot_))
+        return focusedSlot_;
+    if (focusedSlot_ < 0)
+        return navigableSlotFrom(-1, 1);
+    const int after = navigableSlotFrom(focusedSlot_, 1);
+    return after >= 0 ? after : navigableSlotFrom(focusedSlot_, -1);
+}
+
+juce::String ToolbarComponent::getFocusedButtonName() const {
+    const int slot = getFocusedSlot();
+    if (slot < 0)
+        return {};
+    const auto* b = buttons_[(size_t)slot];
+    return b->getTitle().isNotEmpty() ? b->getTitle() : b->getButtonText();
+}
+
+void ToolbarComponent::setFocusedSlot(int slot) {
+    if (slot < 0)
+        return;
+    const bool changed = slot != getFocusedSlot();
+    focusedSlot_ = slot;
+    if (!changed)
+        return;
+    repaint();
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+}
+
+bool ToolbarComponent::keyPressed(const juce::KeyPress& key) {
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    const int current = getFocusedSlot();
+    if (current < 0)
+        return false;
+
+    if (key.isKeyCode(juce::KeyPress::leftKey)) {
+        setFocusedSlot(navigableSlotFrom(current, -1));
+    } else if (key.isKeyCode(juce::KeyPress::rightKey)) {
+        setFocusedSlot(navigableSlotFrom(current, 1));
+    } else if (key.isKeyCode(juce::KeyPress::homeKey)) {
+        setFocusedSlot(navigableSlotFrom(-1, 1));
+    } else if (key.isKeyCode(juce::KeyPress::endKey)) {
+        setFocusedSlot(navigableSlotFrom(NumSlots, -1));
+    } else if (key.isKeyCode(juce::KeyPress::spaceKey) || key.isKeyCode(juce::KeyPress::returnKey)) {
+        // Pin the ring to the pressed button first: an action that disables it (Undo's last step)
+        // then hands the ring to a neighbour via getFocusedSlot().
+        focusedSlot_ = current;
+        auto* button = buttons_[(size_t)current];
+        if (button->onClick)
+            button->onClick();
+        repaint();
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void ToolbarComponent::focusGained(FocusChangeType) {
+    repaint();
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+}
+
+void ToolbarComponent::focusLost(FocusChangeType) { repaint(); }
+
+std::unique_ptr<juce::AccessibilityHandler> ToolbarComponent::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::group, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{
+            std::make_unique<synth::ui::ReadOnlyTextValue>([this] { return getFocusedButtonName(); })});
+}

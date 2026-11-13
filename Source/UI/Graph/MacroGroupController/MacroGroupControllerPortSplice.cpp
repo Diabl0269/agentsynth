@@ -8,10 +8,44 @@
 #include "MacroGroupController.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
+#include "MacroNesting.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
+
+namespace {
+/** Every node inside `macro` for crossing purposes: its own modules plus everything in its child macros (a child's
+ *  ports included -- they sit inside the parent), but not the macro's OWN ports, which stay the boundary. Using only
+ *  direct members would make an edge between a parent member and a child member look like it crosses the parent. */
+std::vector<juce::String> insideUuids(const synth::MacroSet& macros, const synth::Macro& macro) {
+    std::vector<juce::String> out;
+    for (const auto& uuid : macros.descendantMembers(macro.id))
+        if (!macro.memberIsPort(uuid))
+            out.push_back(uuid);
+    return out;
+}
+
+/** The node that really sits at the far end of a leg landing on `other`. A modulation's hidden attenuverter is never a
+ *  macro member, so where a leg reaches one, the attenuverter stands for the module on its other channel-0 edge (the
+ *  LFO feeding it, or the module whose knob it drives); any other node is itself. `cameFrom` is the leg's near end,
+ *  so the walk never steps back across it. */
+juce::AudioProcessorGraph::NodeID throughAttenuverter(juce::AudioProcessorGraph& graph,
+                                                      juce::AudioProcessorGraph::NodeID other,
+                                                      juce::AudioProcessorGraph::NodeID cameFrom) {
+    auto* node = graph.getNodeForId(other);
+    if (node == nullptr || dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
+        return other;
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID == other && c.destination.channelIndex == 0 && c.source.nodeID != cameFrom)
+            return c.source.nodeID;
+        if (c.source.nodeID == other && c.source.channelIndex == 0 && c.destination.nodeID != cameFrom)
+            return c.destination.nodeID;
+    }
+    return other;
+}
+} // namespace
 
 juce::String MacroGroupController::macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind) {
     if (kind == synth::MacroPortKind::Midi)
@@ -104,6 +138,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         int headRaw = internalRaw;
         MacroPortShape thisShape = MacroPortShape::Mono;
         int thisSpan = 1;
+        int headStride = 1; // raw channels between the legs of a two-leg jack (a Channel Strip's is kRightBase)
         if (!isMidi) {
             if (internalMb == nullptr)
                 continue; // defensive: a non-ModuleBase node (graph I/O) can't be a macro member
@@ -118,11 +153,13 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
                                             : internalNode->getProcessor()->getTotalNumOutputChannels();
             PortRole headRole = p.role;
             int headSpan = 1;
+            headStride = 1;
             for (int raw = 0; raw < totalCh; ++raw) {
                 const auto hp = portIsInput ? internalMb->mapInputChannel(raw) : internalMb->mapOutputChannel(raw);
                 if (hp.visibleJackIndex == visibleJack && hp.isPolyGroupHead) {
                     headRaw = raw;
                     headSpan = std::max(1, hp.polyVoiceSpan);
+                    headStride = std::max(1, hp.voiceStride);
                     headRole = hp.role;
                     break;
                 }
@@ -168,7 +205,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         edge.externalNodeId = externalId;
         edge.externalRawChannel = externalRaw;
         edge.internalRawChannel = internalRaw;
-        edge.legIndex = isMidi ? 0 : (internalRaw - group->headRawChannel);
+        edge.legIndex = isMidi ? 0 : (internalRaw - group->headRawChannel) / headStride;
         group->edges.push_back(edge);
     }
 
@@ -233,6 +270,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
     if (macro == nullptr)
         return;
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
 
     // The right leg of a Stereo macro port node's own raw layout
     // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's implementation note) — identical on
@@ -253,7 +291,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
                                                                       {group.internalNodeId, internalChannel}}
                               : juce::AudioProcessorGraph::Connection{{group.internalNodeId, internalChannel},
                                                                       {edge.externalNodeId, externalChannel}};
-            graph.removeConnection(c);
+            graph.removeConnection(c, juce::AudioProcessorGraph::UpdateKind::none);
         }
 
         // 2. Construct the port node with the derived shape/kind, named from the internal module +
@@ -278,7 +316,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
         const juce::String portName =
             autoMacroPortName(internalMbForName, group.isInput, group.visibleJack, group.isMidi);
 
-        auto node = graph.addNode(std::move(newProcessor));
+        auto node = graph.addNode(std::move(newProcessor), {}, juce::AudioProcessorGraph::UpdateKind::none);
         if (!node)
             continue;
         node->properties.set("x", macro->bounds.getX());
@@ -307,11 +345,15 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
             const int portChannel = group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : portRaw;
 
             if (group.isInput) {
-                graph.addConnection({{edge.externalNodeId, externalChannel}, {node->nodeID, portChannel}});
-                graph.addConnection({{node->nodeID, portChannel}, {group.internalNodeId, internalChannel}});
+                graph.addConnection({{edge.externalNodeId, externalChannel}, {node->nodeID, portChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
+                graph.addConnection({{node->nodeID, portChannel}, {group.internalNodeId, internalChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
             } else {
-                graph.addConnection({{group.internalNodeId, internalChannel}, {node->nodeID, portChannel}});
-                graph.addConnection({{node->nodeID, portChannel}, {edge.externalNodeId, externalChannel}});
+                graph.addConnection({{group.internalNodeId, internalChannel}, {node->nodeID, portChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
+                graph.addConnection({{node->nodeID, portChannel}, {edge.externalNodeId, externalChannel}},
+                                    juce::AudioProcessorGraph::UpdateKind::none);
             }
         }
     }
@@ -327,12 +369,11 @@ MacroGroupController::buildMacroPortCrossingPlanForNewMembers(const juce::String
         return {};
 
     std::vector<juce::AudioProcessorGraph::NodeID> insideIds;
-    for (const auto& uuid : macro->members)
-        if (!macro->memberIsPort(uuid)) {
-            const auto id = resolveMemberNodeId(uuid);
-            if (id.uid != 0)
-                insideIds.push_back(id);
-        }
+    for (const auto& uuid : insideUuids(host_.getMacros(), *macro)) {
+        const auto id = resolveMemberNodeId(uuid);
+        if (id.uid != 0)
+            insideIds.push_back(id);
+    }
     std::set<uint32_t> addedUids;
     for (const auto& uuid : addedUuids) {
         const auto id = resolveMemberNodeId(uuid);
@@ -350,12 +391,14 @@ MacroGroupController::buildMacroPortCrossingPlanForNewMembers(const juce::String
                        [&](const MacroPortCrossingGroup& g) { return addedUids.count(g.internalNodeId.uid) == 0; }),
         plan.end());
 
-    // Drop any edge whose external endpoint is one of macroId's OWN existing ports —
-    // macroPortsThatBecomeInteriorOnAdd handles that port instead.
+    // Drop any edge whose external endpoint is one of macroId's OWN existing ports (directly, or through a
+    // modulation's attenuverter) — macroPortsThatBecomeInteriorOnAdd handles that port instead.
+    auto& graph = host_.graph();
     for (auto& g : plan)
         g.edges.erase(std::remove_if(g.edges.begin(), g.edges.end(),
                                      [&](const MacroPortCrossingEdge& e) {
-                                         const juce::String extUuid = nodeUuidFor(e.externalNodeId);
+                                         const juce::String extUuid = nodeUuidFor(
+                                             throughAttenuverter(graph, e.externalNodeId, g.internalNodeId));
                                          return extUuid.isNotEmpty() && macro->memberIsPort(extUuid);
                                      }),
                       g.edges.end());
@@ -372,10 +415,8 @@ MacroGroupController::macroPortsThatBecomeInteriorOnAdd(const juce::String& macr
     if (macro == nullptr || addedUuids.empty())
         return {};
 
-    std::set<juce::String> interiorAfterAdd;
-    for (const auto& uuid : macro->members)
-        if (!macro->memberIsPort(uuid))
-            interiorAfterAdd.insert(uuid);
+    const auto inside = insideUuids(host_.getMacros(), *macro);
+    std::set<juce::String> interiorAfterAdd(inside.begin(), inside.end());
     for (const auto& uuid : addedUuids)
         interiorAfterAdd.insert(uuid);
 
@@ -396,7 +437,7 @@ MacroGroupController::macroPortsThatBecomeInteriorOnAdd(const juce::String& macr
             else
                 continue;
             anyEdge = true;
-            const juce::String otherUuid = nodeUuidFor(other);
+            const juce::String otherUuid = nodeUuidFor(throughAttenuverter(graph, other, portId));
             if (otherUuid.isEmpty() || interiorAfterAdd.count(otherUuid) == 0) {
                 anyExternal = true;
                 break;
@@ -417,8 +458,8 @@ MacroGroupController::buildMacroPortCrossingPlanForRemovedMembers(const juce::St
 
     std::set<juce::String> removedSet(removedUuids.begin(), removedUuids.end());
     std::vector<juce::AudioProcessorGraph::NodeID> remainingIds;
-    for (const auto& uuid : macro->members)
-        if (!macro->memberIsPort(uuid) && removedSet.count(uuid) == 0) {
+    for (const auto& uuid : insideUuids(host_.getMacros(), *macro))
+        if (removedSet.count(uuid) == 0) {
             const auto id = resolveMemberNodeId(uuid);
             if (id.uid != 0)
                 remainingIds.push_back(id);
@@ -435,10 +476,15 @@ MacroGroupController::buildMacroPortCrossingPlanForRemovedMembers(const juce::St
         if (id.uid != 0)
             removedUids.insert(id.uid);
     }
+    // An edge whose external end is a modulation's attenuverter counts for the module feeding that attenuverter.
+    auto& graph = host_.graph();
     for (auto& g : plan)
-        g.edges.erase(std::remove_if(
-                          g.edges.begin(), g.edges.end(),
-                          [&](const MacroPortCrossingEdge& e) { return removedUids.count(e.externalNodeId.uid) == 0; }),
+        g.edges.erase(std::remove_if(g.edges.begin(), g.edges.end(),
+                                     [&](const MacroPortCrossingEdge& e) {
+                                         const auto far =
+                                             throughAttenuverter(graph, e.externalNodeId, g.internalNodeId);
+                                         return removedUids.count(far.uid) == 0;
+                                     }),
                       g.edges.end());
     plan.erase(
         std::remove_if(plan.begin(), plan.end(), [](const MacroPortCrossingGroup& g) { return g.edges.empty(); }),
@@ -459,8 +505,8 @@ MacroGroupController::macroPortsThatBecomeObsoleteOnRemove(const juce::String& m
     // interior leg was exactly a departing member — so it is obsolete, not a real crossing.
     std::set<juce::String> interiorAfterRemove;
     std::set<juce::String> removedSet(removedUuids.begin(), removedUuids.end());
-    for (const auto& uuid : macro->members)
-        if (!macro->memberIsPort(uuid) && removedSet.count(uuid) == 0)
+    for (const auto& uuid : insideUuids(host_.getMacros(), *macro))
+        if (removedSet.count(uuid) == 0)
             interiorAfterRemove.insert(uuid);
 
     auto& graph = host_.graph();
@@ -480,7 +526,7 @@ MacroGroupController::macroPortsThatBecomeObsoleteOnRemove(const juce::String& m
             else
                 continue;
             anyEdge = true;
-            const juce::String otherUuid = nodeUuidFor(other);
+            const juce::String otherUuid = nodeUuidFor(throughAttenuverter(graph, other, portId));
             if (otherUuid.isNotEmpty() && interiorAfterRemove.count(otherUuid) != 0) {
                 anyInterior = true;
                 break;
@@ -496,6 +542,7 @@ void MacroGroupController::spliceOutMacroPort(synth::Macro& macro, const juce::S
     const auto nodeId = resolveMemberNodeId(portNodeUuid);
     if (nodeId.uid != 0) {
         auto& graph = host_.graph();
+        const synth::GraphRebuildScope rebuildScope{graph};
 
         // Every connection currently touching the port, split by which side of it they land on.
         struct InEdge {
@@ -520,13 +567,14 @@ void MacroGroupController::spliceOutMacroPort(synth::Macro& macro, const juce::S
         for (const auto& in : ins)
             for (const auto& out : outs)
                 if (in.portChannel == out.portChannel)
-                    graph.addConnection({{in.otherNode, in.otherChannel}, {out.otherNode, out.otherChannel}});
+                    graph.addConnection({{in.otherNode, in.otherChannel}, {out.otherNode, out.otherChannel}},
+                                        juce::AudioProcessorGraph::UpdateKind::none);
 
         // Same cleanup every other node-removal site performs first: removeNode() drops the
         // port's own connections as part of removing it, so nothing above needs an explicit
         // removeConnection pass.
         host_.clearModMatrixRows();
-        graph.removeNode(nodeId);
+        graph.removeNode(nodeId, juce::AudioProcessorGraph::UpdateKind::none);
     }
 
     macro.members.erase(std::remove(macro.members.begin(), macro.members.end(), portNodeUuid), macro.members.end());
@@ -573,6 +621,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
         return {};
 
     auto& graph = host_.graph();
+    const synth::GraphRebuildScope rebuildScope{graph};
     auto* internalNode = graph.getNodeForId(internalNodeId);
     auto* internalMb = internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
 
@@ -590,7 +639,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
             outlet->setPortShape(inferredShape, inferredVoices);
     }
 
-    auto node = graph.addNode(std::move(newProcessor));
+    auto node = graph.addNode(std::move(newProcessor), {}, juce::AudioProcessorGraph::UpdateKind::none);
     if (!node)
         return {};
     node->properties.set("x", macro->bounds.getX());
@@ -609,6 +658,76 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     return node->nodeID;
 }
 
+// A source gets one output per macro (and a destination one input): the drag-created leg other -> outlet (or inlet ->
+// other) is plain and direct, so a port that already has a connection to this jack is the one a second cable should
+// reuse. `otherOutside` flips the direction for a jack in the macro's parent (an input port is fed by it, an output
+// port feeds it).
+juce::AudioProcessorGraph::NodeID MacroGroupController::existingPortLinkedTo(const juce::String& macroId,
+                                                                             bool portIsInput,
+                                                                             juce::AudioProcessorGraph::NodeID otherId,
+                                                                             int visibleJack, bool isMidi,
+                                                                             bool otherOutside) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    auto& graph = host_.graph();
+    auto* otherNode = graph.getNodeForId(otherId);
+    if (macro == nullptr || otherNode == nullptr)
+        return {};
+    auto* otherMb = dynamic_cast<ModuleBase*>(otherNode->getProcessor());
+    const bool portFeedsOther = portIsInput != otherOutside;
+    for (const auto& port : macro->ports) {
+        if (port.isInput != portIsInput || (port.kind == synth::MacroPortKind::Midi) != isMidi)
+            continue;
+        const auto portId = resolveMemberNodeId(port.nodeUuid);
+        if (portId.uid == 0)
+            continue;
+        for (const auto& c : graph.getConnections()) {
+            const auto& portEnd = portFeedsOther ? c.source : c.destination;
+            const auto& farEnd = portFeedsOther ? c.destination : c.source;
+            if (portEnd.nodeID != portId)
+                continue;
+            int otherRaw = farEnd.channelIndex;
+            if (farEnd.nodeID != otherId) {
+                // A mod wire runs through its hidden attenuverter: port -> attenuverter -> jack.
+                auto* farNode = graph.getNodeForId(farEnd.nodeID);
+                if (farNode == nullptr || dynamic_cast<AttenuverterModule*>(farNode->getProcessor()) == nullptr)
+                    continue;
+                bool found = false;
+                for (const auto& c2 : graph.getConnections()) {
+                    const auto& nearEnd2 = portFeedsOther ? c2.source : c2.destination;
+                    const auto& farEnd2 = portFeedsOther ? c2.destination : c2.source;
+                    if (nearEnd2.nodeID == farEnd.nodeID && farEnd2.nodeID == otherId) {
+                        otherRaw = farEnd2.channelIndex;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    continue;
+            }
+            if (isMidi)
+                return portId;
+            // Only the port's first jack counts: a chain continues from jack 0, so a Stereo port's Right jack (raw
+            // kRightBase) is not "the port that carries this jack".
+            auto* portNode = graph.getNodeForId(portId);
+            auto* portMb = portNode != nullptr ? dynamic_cast<ModuleBase*>(portNode->getProcessor()) : nullptr;
+            if (portMb != nullptr) {
+                const auto portLogical = portFeedsOther ? portMb->mapOutputChannel(portEnd.channelIndex)
+                                                        : portMb->mapInputChannel(portEnd.channelIndex);
+                if (portLogical.visibleJackIndex > 0)
+                    continue;
+            }
+            if (otherMb == nullptr)
+                return portId;
+            // The jack's own raw channels (a fan of voices counts), so a modulation jack whose wire lands off the
+            // plain raw==jack identity still matches.
+            for (const auto& t : otherMb->getJackTargets(visibleJack, /*isInput=*/portFeedsOther))
+                if (otherRaw >= t.rawHeadChannel && otherRaw < t.rawHeadChannel + t.voiceSpan * t.rawStride)
+                    return portId;
+        }
+    }
+    return {};
+}
+
 bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                                             juce::AudioProcessorGraph::NodeID dstId, int dstJack,
                                                             bool isMidi, bool recordUndo) {
@@ -617,50 +736,66 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
     // hidden AttenuverterModule via addModRouting() exactly as it always has.
     const juce::String srcUuid = nodeUuidFor(srcId);
     const juce::String dstUuid = nodeUuidFor(dstId);
-    auto* srcMacro = srcUuid.isNotEmpty() ? host_.getMacros().findByMember(srcUuid) : nullptr;
-    auto* dstMacro = dstUuid.isNotEmpty() ? host_.getMacros().findByMember(dstUuid) : nullptr;
+    const auto& macros = host_.getMacros();
 
-    // An endpoint needs a NEW port on its own macro iff it is an ORDINARY member there (not
-    // already a port itself) and the OTHER endpoint is not a member of that same macro at all.
-    const bool srcNeedsPort = srcMacro != nullptr && !srcMacro->memberIsPort(srcUuid) && !srcMacro->hasMember(dstUuid);
-    const bool dstNeedsPort = dstMacro != nullptr && !dstMacro->memberIsPort(dstUuid) && !dstMacro->hasMember(srcUuid);
+    // Each end needs one NEW port per macro boundary it must cross to reach the other end: its owner chain (the
+    // macro it sits in, then that macro's ancestors) minus the macros both ends share, innermost first. Flat, that
+    // is the old "ordinary member of a macro the other end is not in" rule; nested, a member of a child reaching
+    // outside the parent crosses both. An endpoint that is itself a port never crosses its own macro's boundary.
+    const auto srcCrossings =
+        macro_nesting::boundariesCrossed(macros, srcUuid, macro_nesting::ownerChain(macros, dstUuid));
+    const auto dstCrossings =
+        macro_nesting::boundariesCrossed(macros, dstUuid, macro_nesting::ownerChain(macros, srcUuid));
 
-    if (!srcNeedsPort && !dstNeedsPort)
+    if (srcCrossings.empty() && dstCrossings.empty())
         return false;
 
     auto& graph = host_.graph();
-    const juce::String srcMacroId = srcNeedsPort ? srcMacro->id : juce::String();
-    const juce::String dstMacroId = dstNeedsPort ? dstMacro->id : juce::String();
 
-    auto doMutation = [this, srcId, srcJack, dstId, dstJack, isMidi, srcMacroId, dstMacroId, srcNeedsPort,
-                       dstNeedsPort] {
+    auto doMutation = [this, srcId, srcJack, dstId, dstJack, isMidi, srcCrossings, dstCrossings] {
         auto effectiveSrc = srcId;
         int effectiveSrcJack = srcJack;
         auto effectiveDst = dstId;
         int effectiveDstJack = dstJack;
 
-        if (srcNeedsPort) {
-            const auto portId = mintMacroPortForAutoCreate(srcMacroId, /*isInput=*/false, isMidi, srcId, srcJack);
-            if (portId.uid != 0) {
-                host_.connectPorts(srcId, srcJack, portId, 0, isMidi, /*recordUndo=*/false);
-                effectiveSrc = portId;
-                effectiveSrcJack = 0;
-            }
+        // Source side, innermost boundary first: member -> outlet -> the next boundary's outlet -> ...
+        for (const auto& macroId : srcCrossings) {
+            // A source already leaving this macro through an outlet reuses it: one output, many destinations.
+            const auto reused =
+                existingPortLinkedTo(macroId, /*portIsInput=*/false, effectiveSrc, effectiveSrcJack, isMidi);
+            const auto portId = reused.uid != 0
+                                    ? reused
+                                    : mintMacroPortForAutoCreate(macroId, /*isInput=*/false, isMidi, srcId, srcJack);
+            if (portId.uid == 0)
+                continue;
+            if (reused.uid == 0)
+                host_.connectPorts(effectiveSrc, effectiveSrcJack, portId, 0, isMidi, /*recordUndo=*/false);
+            effectiveSrc = portId;
+            effectiveSrcJack = 0;
         }
-        if (dstNeedsPort) {
-            const auto portId = mintMacroPortForAutoCreate(dstMacroId, /*isInput=*/true, isMidi, dstId, dstJack);
-            if (portId.uid != 0) {
-                host_.connectPorts(portId, 0, dstId, dstJack, isMidi, /*recordUndo=*/false);
-                effectiveDst = portId;
-                effectiveDstJack = 0;
-            }
+        // Destination side, mirrored: ... -> the next boundary's inlet -> inlet -> member.
+        for (const auto& macroId : dstCrossings) {
+            const auto portId = mintMacroPortForAutoCreate(macroId, /*isInput=*/true, isMidi, dstId, dstJack);
+            if (portId.uid == 0)
+                continue;
+            host_.connectPorts(portId, 0, effectiveDst, effectiveDstJack, isMidi, /*recordUndo=*/false);
+            effectiveDst = portId;
+            effectiveDstJack = 0;
         }
 
-        // The final leg: direct member<->member if neither side needed a port (never actually
-        // reached — see the early return above), member<->port if only one side did, or
-        // port<->port for a genuine cross-macro-boundary crossing.
+        // The final leg joins the two outermost ends: port<->port across a boundary, member<->port if only one
+        // side needed a port.
         host_.connectPorts(effectiveSrc, effectiveSrcJack, effectiveDst, effectiveDstJack, isMidi,
                            /*recordUndo=*/false);
+    };
+
+    // Every macro that gained a port may now reach past the canvas's top-left (the new input widget overhangs the
+    // hull), so each slides into view, and pushes its neighbours clear, inside the same undo record.
+    auto growHulls = [this, srcCrossings, dstCrossings] {
+        for (const auto& macroId : dstCrossings)
+            makeRoomFor("m:" + macroId);
+        for (const auto& macroId : srcCrossings)
+            makeRoomFor("m:" + macroId);
     };
 
     if (!recordUndo) {
@@ -668,6 +803,7 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
         // transaction and will call updateComponents() itself once, after its own further
         // mutations.
         doMutation();
+        growHulls();
         return true;
     }
 
@@ -675,10 +811,12 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
         host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), [&] {
             doMutation();
             host_.updateComponents();
+            growHulls();
         });
     else {
         doMutation();
         host_.updateComponents();
+        growHulls();
     }
 
     return true;

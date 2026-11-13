@@ -7,19 +7,33 @@ namespace synth {
 
 namespace detail {
 
-// Tests-only settings-dir override, rationale in test-patterns.md's "on-disk path"
-// section. Nothing but Tests/TestMain.cpp ever sets this.
+// Settings-dir override, rationale in test-patterns.md's "on-disk path" section. Only Tests/TestMain.cpp and an
+// automation launch (--settings-dir, AutomationLaunch.h) ever set this.
 inline juce::String& settingsDirOverride() {
     static juce::String dir;
     return dir;
 }
 
+inline bool& automationUserFolders() {
+    static bool on = false;
+    return on;
+}
+
 } // namespace detail
 
-/** Test-only: redirects every later synth::userSettingsOptions()/userSettingsRootDirectory() call
- *  in this process under `dir`. Call once, before any ApplicationProperties is constructed
- *  (Tests/TestMain.cpp, before RUN_ALL_TESTS()). Empty string restores normal behaviour. */
-inline void setSettingsDirOverrideForTests(const juce::String& dir) { detail::settingsDirOverride() = dir; }
+/** Redirects every later synth::userSettingsOptions()/userSettingsRootDirectory() call in this process under `dir`.
+ *  Call once, before any ApplicationProperties is constructed (Tests/TestMain.cpp before RUN_ALL_TESTS(), or an
+ *  automation launch's applySettingsDirForLaunch). Empty string restores normal behaviour. */
+inline void setSettingsDirOverride(const juce::String& dir) { detail::settingsDirOverride() = dir; }
+/** True while a settings-dir override is in force (tests, or an automation launch). */
+inline bool hasSettingsDirOverride() { return detail::settingsDirOverride().isNotEmpty(); }
+/** True only in an automation launch (--automation): the per-user folders other than the settings file (default
+ *  projects folder, stretched-loop cache) then live under the settings directory too. Tests, which also run under a
+ *  settings-dir override, leave it false so those folders keep their normal places. */
+inline void setAutomationUserFolders(bool on) { detail::automationUserFolders() = on; }
+inline bool automationUserFolders() { return detail::automationUserFolders(); }
+/** The same, named for the tests that call it. */
+inline void setSettingsDirOverrideForTests(const juce::String& dir) { setSettingsDirOverride(dir); }
 
 /**
  * The ONE user settings file this product reads and writes, plus the keys more than one owner
@@ -85,5 +99,51 @@ inline constexpr const char* kMidiRemoteShowBadgesSettingKey = "midiRemoteShowBa
  *  GraphEditor::propertiesFile_ -- the same juce::PropertiesFile the macro recolour favourites and
  *  the piano roll's scale assist persist through (see those members' own comments). */
 inline constexpr const char* kModDropHintShownSettingKey = "modDropHintShown";
+
+/** "Share anonymous usage statistics" (bool, default false). The one source of truth for whether usage
+ *  statistics are recorded and sent: written by PreferencesSettingsTab, read by MainComponent, which hands
+ *  it to TelemetryService (docs/development/usage-statistics.md). */
+inline constexpr const char* kShareUsageStatsSettingKey = "shareUsageStats";
+
+/** The Welcome screen's usage statistics card has been answered (bool, default false). Set by the card's two
+ *  buttons and by the Preferences toggle (synth::telemetry::applyShareUsageStatsChoice); the card shows only
+ *  while this and kShareUsageStatsSettingKey are both false, so it asks once. */
+inline constexpr const char* kUsageStatsAskedSettingKey = "usageStatsAsked";
+
+/** The folders of the user's own sounds the sound index scans besides the installed packs: absolute paths, one per
+ *  line. Written by whoever adds a folder, read by the Sounds view's owner (docs/layout/sound-browser.md). */
+inline constexpr const char* kSoundBrowserFoldersSettingKey = "soundBrowserFolders";
+
+/** The names the user gave those folders (display only): a JSON object from absolute path to name, left out while
+ *  none is renamed. */
+inline constexpr const char* kSoundBrowserFolderNamesSettingKey = "soundBrowserFolderNames";
+
+/** The favourite sounds and the sounds used recently (the newest 50): file paths, one per line, newest first for
+ *  the recent list. */
+inline constexpr const char* kSoundBrowserFavouritesSettingKey = "soundBrowserFavourites";
+inline constexpr const char* kSoundBrowserRecentSettingKey = "soundBrowserRecent";
+
+/** The command palette's recent picks (row keys, one per line, newest first) and where its bar was last dragged
+ *  ("x,y" in the main window). */
+inline constexpr const char* kCommandPaletteRecentSettingKey = "commandPaletteRecent";
+inline constexpr const char* kCommandPalettePositionSettingKey = "commandPalettePosition";
+
+/** Which view the left sidebar shows: "modules" (default) or "sounds". Persisted next to librarySidebarVisible. */
+inline constexpr const char* kLibrarySidebarViewSettingKey = "librarySidebarView";
+
+/** The sidebar's width while the Sounds view shows, in pixels (default 280, clamped 200 to 400). */
+inline constexpr const char* kSoundBrowserWidthSettingKey = "soundBrowserWidth";
+
+/** Whether selecting a sound in the Sounds view plays it ("1", the default, or "0"), and the preview's own level in dB
+ *  (default -6, clamped to -60..+6). */
+inline constexpr const char* kSoundBrowserAutoPlaySettingKey = "soundBrowserAutoPlay";
+inline constexpr const char* kSoundBrowserPreviewGainDbSettingKey = "soundBrowserPreviewGainDb";
+
+/** Whether the Sounds view shows the packs under "Get more" ("1", the default) or has folded them away ("0"). */
+inline constexpr const char* kSoundBrowserGetMoreOpenSettingKey = "soundBrowserGetMoreOpen";
+
+/** Whether the Sounds view plays and drops loops in the song's key ("1") or leaves their pitch alone ("0", the
+ *  default); the tempo always follows the song. */
+inline constexpr const char* kSoundBrowserMatchKeySettingKey = "soundBrowserMatchKey";
 
 } // namespace synth

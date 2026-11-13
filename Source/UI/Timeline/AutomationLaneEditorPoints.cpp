@@ -1,0 +1,488 @@
+// AutomationLaneEditor -- point selection: the glue between the editor's gestures and keys and LanePointSelection,
+// LanePointEdits and LanePointGlide. The class is declared in AutomationLaneEditor.h.
+
+#include "AutomationLaneEditor.h"
+#include "Transport/TransportService.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/PianoRoll/NoteAccessibilityText.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
+#include "UI/Timeline/TimelineBeatsPerBar.h"
+#include <algorithm>
+#include <cmath>
+
+namespace synth::ui {
+
+namespace {
+constexpr double kFreeBeatStep = 0.25; // a sixteenth, when snap is off (duplicate and stretch steps)
+
+std::vector<double> beatsOf(const std::vector<LaneBreakpoint>& points) {
+    std::vector<double> beats;
+    beats.reserve(points.size());
+    for (const auto& p : points)
+        beats.push_back(p.beat);
+    return beats;
+}
+} // namespace
+
+std::optional<std::pair<double, double>> AutomationLaneEditor::pointSelectionSpan() const {
+    if (selection_.size() < 2)
+        return std::nullopt;
+    const auto beats = selection_.getSelected(); // ascending
+    return std::make_pair(beats.front(), beats.back());
+}
+
+const std::vector<LaneBreakpoint>* AutomationLaneEditor::lanePoints() const {
+    const auto* lane = doc_ != nullptr && laneId_.isValid() ? doc_->getLane(laneId_) : nullptr;
+    return lane != nullptr ? &lane->points : nullptr;
+}
+
+LanePointMapper AutomationLaneEditor::pointMapper() const {
+    return [this](double beat, double value) {
+        return juce::Point<float>((float)viewState_.beatToX(beat), (float)valueToY(value));
+    };
+}
+
+LaneEditTarget AutomationLaneEditor::editTarget() const { return {doc_, undoManager_, laneId_}; }
+
+//==============================================================================
+// ---- Following the doc ----
+
+// Runs on every doc notification the lane pool forwards, and lazily from paint and the input entry points so an
+// editor without a pool (or between notifications) never shows a stale selection. A selected point that is gone
+// leaves the selection, except while this editor commits its own move (OwnEditScope): the old beats are gone then
+// too, but the selection is about to be set to the new ones and the stretch box must not blink out in between. A
+// change that only removed or only added points glides.
+void AutomationLaneEditor::syncToDoc() {
+    if (doc_ == nullptr)
+        return;
+    const auto revision = doc_->getRevision();
+    if (revision == syncedRevision_)
+        return;
+    const bool first = syncedRevision_ < 0;
+    syncedRevision_ = revision;
+
+    const auto* points = lanePoints();
+    std::vector<LaneBreakpoint> now = points != nullptr ? *points : std::vector<LaneBreakpoint>{};
+    const bool restored = restoreSinceLastSync();
+    if (first) {
+        if (ownEdits_ == 0)
+            selection_.retainOnly(beatsOf(now));
+        glide_.reset(std::move(now));
+    } else {
+        const auto before = glide_.shown();
+        if (ownEdits_ == 0 && restored)
+            carrySelectionThroughRestore(before, now);
+        else if (ownEdits_ == 0)
+            selection_.retainOnly(beatsOf(now));
+        if (restored)
+            meltRestoredCurves(before, now);
+        glide_.pointsChanged(now);
+        if (restored) {
+            glideRestoredPoints(before, now);
+            if (ownEdits_ == 0)
+                followRestoredSelection(before, now);
+        }
+    }
+    refreshDescription();
+    closeValueFieldIfPointGone();
+    if (ownEdits_ == 0)
+        refreshStretchBox();
+}
+
+//==============================================================================
+// ---- Melting a range into a flat line ----
+
+void AutomationLaneEditor::meltRangeNext(double startBeat, double endBeat) {
+    glide_.meltNext(startBeat, endBeat, [this] { return meltRect(); });
+}
+
+// The melting beat range in pixels, a couple of pixels wider for the stroke, over the lane's full height.
+juce::Rectangle<int> AutomationLaneEditor::meltRect() const {
+    const int x0 = (int)std::floor(viewState_.beatToX(glide_.meltStartBeat())) - 3;
+    const int x1 = (int)std::ceil(viewState_.beatToX(glide_.meltEndBeat())) + 3;
+    return juce::Rectangle<int>(x0, 0, x1 - x0, getHeight()).getIntersection(getLocalBounds());
+}
+
+// Outside the range the new curve is already final; inside it the old curve fades out as the new one fades in.
+void AutomationLaneEditor::paintMeltedCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& now,
+                                            const synth::AutomationLane& lane, juce::Colour colour) {
+    const auto area = meltRect();
+    {
+        juce::Graphics::ScopedSaveState outside(g);
+        g.excludeClipRegion(area);
+        strokeCurve(g, now, lane, colour, 1.5f);
+    }
+    juce::Graphics::ScopedSaveState inside(g);
+    g.reduceClipRegion(area);
+    strokeCurve(g, glide_.before(), lane, colour.withMultipliedAlpha(1.0f - glide_.amount()), 1.5f);
+    strokeCurve(g, now, lane, colour.withMultipliedAlpha(glide_.amount()), 1.5f);
+}
+
+void AutomationLaneEditor::laneDocChanged() {
+    syncToDoc();
+    repaint();
+}
+
+void AutomationLaneEditor::selectionChanged() {
+    refreshStretchBox();
+    refreshDescription();
+    repaint();
+    if (onSelectionChanged)
+        onSelectionChanged();
+}
+
+//==============================================================================
+// ---- Accessibility ----
+
+juce::String AutomationLaneEditor::describePoints() const {
+    const auto* points = lanePoints();
+    const int total = points != nullptr ? (int)points->size() : 0;
+    if (total == 0)
+        return "Automation curve with no points. Double-click to add one.";
+
+    juce::String text = juce::String(total) + (total == 1 ? " point" : " points") + ". ";
+    const int selected = selection_.size();
+    if (selected == 0) {
+        text += "None selected.";
+    } else if (const auto cursor = selection_.getCursor(); selected == 1 && cursor.has_value()) {
+        for (const auto& p : *points)
+            if (p.beat == *cursor)
+                text += "Selected: " + describeNotePosition(p.beat, currentBeatsPerBar()) + ", value " +
+                        valueText(p.value) + ".";
+    } else {
+        text += juce::String(selected) + " selected.";
+    }
+    text += " Left and Right pick another point, Shift with them selects several, Up and Down change the value, Alt "
+            "with an arrow moves the selection, Control T inserts a point after the current one, Delete removes it.";
+    if (selected >= 2)
+        text += " Alt and Shift with Left or Right stretch or squeeze the selection in time, with Up or Down they "
+                "scale its values.";
+    return text;
+}
+
+void AutomationLaneEditor::refreshDescription() {
+    const auto text = describePoints();
+    if (text == getDescription())
+        return;
+    setDescription(text);
+    if (isShowing())
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent(juce::AccessibilityEvent::titleChanged);
+}
+
+//==============================================================================
+// ---- Gestures ----
+
+// A plain press on a point keeps a selection it is part of (so the group can be dragged) and otherwise selects just
+// it; either way the drag then moves every selected point.
+void AutomationLaneEditor::grabPoint(const HandleHit& hit) {
+    if (!selection_.contains(hit.beat))
+        selection_.setSelection({hit.beat});
+    selection_.setCursor(hit.beat);
+    dragMode_ = DragMode::MoveHandle;
+    dragPoints_ = selection_.selectedPoints(*lanePoints());
+    dragOriginalBeat_ = hit.beat;
+    dragOriginalValue_ = hit.value;
+    previewBeat_ = hit.beat;
+    previewValue_ = hit.value;
+    hoveredBeat_ = hit.beat;
+    showBubbleAt(previewBeat_, previewValue_);
+    updateMouseCursor();
+}
+
+// Pressing inside the stretch box moves the selection like grabbing one of its points: the drag's delta is how far the
+// pointer has gone from where it was pressed, with the beat snapped on both ends so the block stays on the grid.
+bool AutomationLaneEditor::beginBoxMove(juce::Point<int> pos) {
+    const auto* points = lanePoints();
+    if (points == nullptr || !stretchBoxVisible() || !stretchBox().contains(pos.toFloat()))
+        return false;
+    dragMode_ = DragMode::MoveHandle;
+    dragPoints_ = selection_.selectedPoints(*points);
+    dragOriginalBeat_ = snappedBeatAt(viewState_.xToBeat((double)pos.x));
+    dragOriginalValue_ = clampValue(yToValue((double)pos.y));
+    previewBeat_ = dragOriginalBeat_;
+    previewValue_ = dragOriginalValue_;
+    hoveredBeat_.reset();
+    bubble_.hide();
+    updateMouseCursor();
+    return true;
+}
+
+std::vector<LaneBreakpoint> AutomationLaneEditor::dragMovedPoints() const {
+    double minValue = 0.0, maxValue = 1.0;
+    if (doc_ != nullptr && laneId_.isValid())
+        if (const auto* lane = doc_->getLane(laneId_)) {
+            minValue = lane->range.minValue;
+            maxValue = lane->range.maxValue;
+        }
+    return movePoints(dragPoints_, previewBeat_ - dragOriginalBeat_, previewValue_ - dragOriginalValue_, minValue,
+                      maxValue);
+}
+
+double AutomationLaneEditor::settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const {
+    const auto* points = lanePoints();
+    return points != nullptr ? settleBeatDelta(*points, moving, delta, tickBeats()) : clampBeatDelta(moving, delta);
+}
+
+// The moved points replace the originals in ONE edit, so a multi-point drag is one revision bump and one undo step.
+// The notification the edit fires prunes the selection (the old beats are gone), so the new beats are selected
+// after it returns.
+void AutomationLaneEditor::commitPointMove() {
+    if (std::abs(previewBeat_ - dragOriginalBeat_) <= 1e-9 && std::abs(previewValue_ - dragOriginalValue_) <= 1e-9)
+        return;
+    const auto moved = dragMovedPoints();
+    std::optional<double> cursor;
+    for (std::size_t i = 0; i < dragPoints_.size(); ++i)
+        if (selection_.getCursor() == dragPoints_[i].beat)
+            cursor = moved[i].beat;
+    {
+        OwnEditScope own(*this);
+        commitPointEdit(editTarget(), beatsOf(dragPoints_), moved);
+        selection_.setSelection(beatsOf(moved));
+        selection_.setCursor(cursor);
+    }
+    refreshStretchBox();
+}
+
+//==============================================================================
+// ---- Keys and the edit commands ----
+
+// The key map is decoded once for both point editors (pointKeyAction); a lane consumes Escape and Delete only without
+// modifiers, takes Alt+Shift arrows as a stretch while two or more points are selected, and leaves the Cmd chords to
+// the app's commands.
+bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
+    using Kind = PointKeyAction::Kind;
+    const auto action = pointKeyAction(key);
+    if (action.kind == Kind::clear) {
+        if (!action.plain || selection_.isEmpty())
+            return false;
+        selection_.clear();
+        selection_.setCursor(std::nullopt);
+        return true;
+    }
+    if (action.kind == Kind::remove)
+        return action.plain && deleteSelectedPoints();
+    if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
+        return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
+    if (action.kind == Kind::scale)
+        return scaleKey(action);
+    if (stretchKey(key))
+        return true;
+    if (action.kind == Kind::insert)
+        return insertAfterCursor();
+
+    const auto* points = lanePoints();
+    if (points == nullptr || points->empty())
+        return false;
+    const int code = key.getKeyCode();
+    switch (action.kind) {
+    case Kind::pick:
+        return stepCursor(action.side);
+    case Kind::extend:
+        return extendSelection(action.side);
+    case Kind::value:
+        return nudgePoints(code, 0, action.side,
+                           action.size == PointKeyAction::Size::coarse ? NudgeSize::Coarse : NudgeSize::Normal);
+    case Kind::move: // with one point selected under Alt+Shift (two or more stretch, see stretchKey): the fine move
+        return nudgePoints(code, action.time ? action.side : 0, action.time ? 0 : action.side,
+                           action.size == PointKeyAction::Size::fine ? NudgeSize::Fine : NudgeSize::Normal);
+    default:
+        return false;
+    }
+}
+
+// Inserts a point halfway between the cursor point and the next one, at the level halfway between them, as one edit,
+// and selects it. Consumed only when a point went in: nothing to insert after the last point.
+bool AutomationLaneEditor::insertAfterCursor() {
+    const auto* points = lanePoints();
+    const auto cursor = selection_.getCursor();
+    if (points == nullptr || !cursor.has_value())
+        return false;
+    for (std::size_t i = 0; i + 1 < points->size(); ++i) {
+        const auto& from = (*points)[i];
+        const auto& to = (*points)[i + 1];
+        if (from.beat != *cursor)
+            continue;
+        LaneBreakpoint added = from;
+        added.beat = from.beat + (to.beat - from.beat) * 0.5;
+        added.value = from.value + (to.value - from.value) * 0.5;
+        added.tension = 0.0f;
+        added.curve = static_cast<int>(synth::BreakpointCurve::Linear);
+        if (!commitPointEdit(editTarget(), {}, {added}))
+            return false;
+        selectOnly(added);
+        return true;
+    }
+    return false;
+}
+
+// One grid step, a sixteenth with snap off.
+double AutomationLaneEditor::gridStepBeats() const {
+    const double grid = viewState_.divisionBeats(currentBeatsPerBar());
+    return grid > 0.0 ? grid : kFreeBeatStep;
+}
+
+// One keyboard step in time: a grid step, or four pixels at the current zoom with snap off (a free move should be a
+// nudge, not a jump of a sixteenth).
+double AutomationLaneEditor::keyStepBeats() const {
+    const double grid = viewState_.divisionBeats(currentBeatsPerBar());
+    return grid > 0.0 ? grid : lane_key::kTapPixels / viewState_.pixelsPerBeat;
+}
+
+// A tap moves the block one step (stopping at beat 0 as a unit); Up/Down move every value by a fraction of the lane's
+// range, each clamped on its own. A press whose key is physically down starts a keyboard drag
+// (AutomationLaneEditorKeyGlide.cpp) that the hold carries on; a press that is not (a synthesised event) is this one
+// committed step. Consumed whenever something is selected, even when a limit left nothing to do.
+bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size) {
+    if (keyHold_.active()) {
+        if (keyHold_.anyArrowDown())
+            return true; // auto-repeat or a second key: the running hold picks the direction up
+        keyHold_.end();  // a hold whose key-up was missed
+    }
+    const auto* points = lanePoints();
+    if (points == nullptr || selection_.isEmpty())
+        return false;
+    const auto picked = selection_.selectedPoints(*points);
+    if (picked.empty())
+        return false;
+    if (keyHold_.keyIsDown(keyCode))
+        return beginKeyDrag(keyCode, picked, size);
+
+    const auto& range = doc_->getLane(laneId_)->range;
+    const double fine = size == NudgeSize::Fine ? lane_key::kFineScale : 1.0;
+    const double beatDelta = settledBeatDelta(picked, beatDirection * keyStepBeats() * fine);
+    const double valueStep = size == NudgeSize::Coarse ? lane_key::kCoarseValueStep : lane_key::kFineValueStep * fine;
+    const double valueDelta = valueDirection * valueStep * (double)(range.maxValue - range.minValue);
+    const auto moved = movePoints(picked, beatDelta, valueDelta, range.minValue, range.maxValue);
+
+    bool same = true;
+    for (std::size_t i = 0; i < picked.size(); ++i)
+        same = same && picked[i].beat == moved[i].beat && picked[i].value == moved[i].value;
+    if (same)
+        return true;
+
+    std::optional<double> cursor;
+    for (std::size_t i = 0; i < picked.size(); ++i)
+        if (selection_.getCursor() == picked[i].beat)
+            cursor = moved[i].beat;
+    {
+        OwnEditScope own(*this);
+        commitPointEdit(editTarget(), beatsOf(picked), moved);
+        selection_.setSelection(beatsOf(moved));
+        selection_.setCursor(cursor);
+    }
+    refreshStretchBox();
+    easeMovedPoints(picked, moved, beatsOf(picked), beatsOf(moved));
+    return true;
+}
+
+void AutomationLaneEditor::selectOnly(const LaneBreakpoint& point) {
+    selection_.setSelection({point.beat});
+    selection_.setCursor(point.beat);
+    showBubbleAt(point.beat, point.value);
+}
+
+// The selection keys walk every point of the lane (PointSelectionModel with the lane's rules); the bubble shows the
+// point the cursor reached. Consumed whenever the lane has points, even when the walk stopped at an end.
+bool AutomationLaneEditor::stepCursor(int direction) {
+    const auto* points = lanePoints();
+    if (points == nullptr || points->empty())
+        return false;
+    showBubbleOnCursor(selection_.step(direction, beatsOf(*points)));
+    return true;
+}
+
+bool AutomationLaneEditor::extendSelection(int direction) {
+    const auto* points = lanePoints();
+    if (points == nullptr || points->empty())
+        return false;
+    showBubbleOnCursor(selection_.extend(direction, beatsOf(*points)));
+    return true;
+}
+
+void AutomationLaneEditor::showBubbleOnCursor(std::optional<double> beat) {
+    const auto* points = lanePoints();
+    if (points == nullptr || !beat.has_value())
+        return;
+    for (const auto& p : *points)
+        if (p.beat == *beat)
+            showBubbleAt(p.beat, p.value);
+}
+
+bool AutomationLaneEditor::selectAllPoints() {
+    const auto* points = lanePoints();
+    return points != nullptr && selection_.selectAll(beatsOf(*points));
+}
+
+bool AutomationLaneEditor::deleteSelectedPoints() {
+    if (selection_.isEmpty())
+        return false;
+    const auto removed = selection_.getSelected();
+    commitPointEdit(editTarget(), removed, {});
+    selection_.clear();
+    selection_.setCursor(std::nullopt);
+    // The point after the removed ones (the last one left when none follows) takes over the selection and the cursor.
+    const auto* left = lanePoints();
+    if (left == nullptr || left->empty())
+        return true;
+    const double last = *std::max_element(removed.begin(), removed.end());
+    const auto next = std::find_if(left->begin(), left->end(), [last](const auto& p) { return p.beat > last; });
+    const double beat = (next != left->end() ? *next : left->back()).beat;
+    selection_.setSelection({beat});
+    selection_.setCursor(beat);
+    return true;
+}
+
+bool AutomationLaneEditor::copySelectedPoints() {
+    const auto* points = lanePoints();
+    if (clipboard_ == nullptr || points == nullptr || selection_.isEmpty())
+        return false;
+    *clipboard_ = copyPoints(selection_.selectedPoints(*points));
+    return !clipboard_->isEmpty();
+}
+
+// Copies the selection as ONE undo step, leaving the clipboard alone; the copies become the selection. Where they go
+// is the Duplicate points preference (PointEditorDuplicate.h); the copies keep their spacing.
+bool AutomationLaneEditor::duplicateSelectedPoints() {
+    const auto* points = lanePoints();
+    if (points == nullptr || selection_.isEmpty())
+        return false;
+    const auto picked = selection_.selectedPoints(*points);
+    if (picked.empty())
+        return false;
+    const auto& range = doc_->getLane(laneId_)->range;
+    const DuplicateSteps steps{viewState_.divisionBeats(currentBeatsPerBar()), gridStepBeats(), tickBeats()};
+    const auto anchor = duplicateAnchor(duplicatePlacement(), beatsOf(picked), steps);
+    const auto copies = pastedPoints(copyPoints(picked), anchor, range.minValue, range.maxValue);
+    if (!commitPointEdit(editTarget(), {}, copies))
+        return false;
+    selection_.setSelection(beatsOf(copies));
+    selection_.setCursor(copies.back().beat);
+    return true;
+}
+
+bool AutomationLaneEditor::cutSelectedPoints() { return copySelectedPoints() && deleteSelectedPoints(); }
+
+bool AutomationLaneEditor::canPastePoints() const {
+    return clipboard_ != nullptr && !clipboard_->isEmpty() && lanePoints() != nullptr;
+}
+
+bool AutomationLaneEditor::pasteAtPlayhead() {
+    const double beat = transport_ != nullptr ? transport_->getPositionSnapshot().ppq : 0.0;
+    return pasteAtBeat(beat);
+}
+
+bool AutomationLaneEditor::pasteAtBeat(double beat) {
+    if (!canPastePoints() || !std::isfinite(beat))
+        return false;
+    const auto& range = doc_->getLane(laneId_)->range;
+    const auto pasted = pastedPoints(*clipboard_, std::max(0.0, snappedBeatAt(beat)), range.minValue, range.maxValue);
+    if (!commitPointEdit(editTarget(), {}, pasted))
+        return false;
+    selection_.setSelection(beatsOf(pasted));
+    selection_.setCursor(pasted.front().beat);
+    return true;
+}
+
+} // namespace synth::ui

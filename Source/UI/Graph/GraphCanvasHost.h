@@ -19,12 +19,16 @@ class AudioEngine;
 class AppUndoManager;
 class ModuleComponent;
 class MacroCardComponent;
+class CardGlideAnimator;
 namespace synth {
 class MacroSet;
 struct PluginIdentity;
 } // namespace synth
 namespace synth::ui {
 class SelectionModel;
+}
+namespace graph_editor_types {
+struct VisibleCable;
 }
 
 class GraphCanvasHost {
@@ -42,7 +46,34 @@ public:
     virtual juce::OwnedArray<ModuleComponent>& modules() = 0;
 
     virtual void repaintCanvas() = 0;
+
+    /** The glide overlay for cards a mutation moves; open a CardGlideAnimator::Scope around the mutation. */
+    virtual CardGlideAnimator& cardGlide() = 0;
+
+    /** Re-derives the output dock (Master / Rec Tap / Audio Output) after a layout change that can move content
+     *  (GraphEditor::reflowOutputDock). makeRoomFor calls it last, so a grown macro pushes the dock along. */
+    virtual void reflowOutputDock() = 0;
     virtual void updateComponents() = 0;
+
+    /** Holds back GraphEditor::onGraphStructureChanged (fired at the end of every updateComponents()) while a loop
+     *  of per-item updateComponents() calls runs; when the outermost hold ends, a single notification fires if any
+     *  was held. Default no-op for hosts with no such notification. Use StructureNotifyHold. */
+    virtual void holdStructureNotify(bool /*begin*/) {}
+
+    /** RAII pair for the two calls above; holds nest. */
+    class StructureNotifyHold {
+    public:
+        explicit StructureNotifyHold(GraphCanvasHost& h)
+            : host(h) {
+            host.holdStructureNotify(true);
+        }
+        ~StructureNotifyHold() { host.holdStructureNotify(false); }
+        StructureNotifyHold(const StructureNotifyHold&) = delete;
+        StructureNotifyHold& operator=(const StructureNotifyHold&) = delete;
+
+    private:
+        GraphCanvasHost& host;
+    };
 
     /** Null when the host was constructed with no undo manager (e.g. a headless test). */
     virtual AppUndoManager* undo() = 0;
@@ -120,6 +151,13 @@ public:
      *  behaviour of a bare repaint() with no cable-cache invalidation. */
     virtual void requestRepaint() = 0;
 
+    /** The cables as drawn now, and the retract of every cable no longer drawn since (GraphEditor's own pair, which
+     *  simply gain `override`): a macro-port delete takes cables away and snapshots before, retracts after, like
+     *  every other cable-removing edit. The callers include UI/Graph/GraphEditor/GraphEditorTypes.h. */
+    virtual std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract() = 0;
+    virtual void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before,
+                                        bool growAdded = false) = 0;
+
     /** Cmd+G's real entry point — GraphEditor's own method, not moved into MacroGroupController
      *  (it shows a SafePointer-based async modal, docs/macros/auto-ports.md#auto-creating-ports-when-grouping).
      *  MacroGroupController::groupOrToggleSelectionMacros() calls this for a selection that
@@ -193,16 +231,17 @@ public:
                                            const std::function<void(juce::AudioProcessor&)>& configure,
                                            const juce::String& joinMacroId) = 0;
 
-    /** Whether a library drag over an expanded macro's hull should join that macro: Cmd held, or the
-     *  drag-without-Cmd preference on. The one place the drop-side modifier is read. */
-    virtual bool isMacroJoinModifierDown() const = 0;
-
-    /** The expanded macro a library module dropped with its centre at `canvasCentre` would join, or
-     *  empty when the join modifier is up or the point is over no expanded hull. */
+    /** The expanded macro a library module dropped with its centre at `canvasCentre` would join (the innermost
+     *  one under the point; no modifier needed), or empty when the point is over no expanded hull. */
     virtual juce::String macroJoinTargetAt(juce::Point<int> canvasCentre) const = 0;
 
     /** Emphasises `macroId`'s hull as the live drop target (empty clears it). */
     virtual void setMacroDropCandidate(const juce::String& macroId) = 0;
+
+    /** The macro the live drag would join if released now (a library drag's drop candidate included), empty for
+     *  none; and the macro a reparent drag would leave. GraphEditor's own getters, simply gaining `override`. */
+    virtual juce::String getMacroDragJoinId() const noexcept = 0;
+    virtual juce::String getMacroDragLeaveId() const noexcept = 0;
 
     /** The canvas's active LookAndFeel — plain `Component::getLookAndFeel()`, exposed because
      *  updateDragPreview's grid-metric lookup needs the theme's `AppLookAndFeel` (via dynamic_cast)

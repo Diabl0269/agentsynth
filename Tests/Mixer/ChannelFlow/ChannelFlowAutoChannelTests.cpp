@@ -25,7 +25,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -408,7 +408,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
 
-    // "+ Track -> Instrument" builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
+    // "Add Track -> Instrument" builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
     // Master in one step; the instrument this test's SECOND Track In targets already has a channel.
     addInstrumentTrack(mc, "Oscillator");
     auto& graph = mc.getAudioEngine().getGraph();
@@ -524,10 +524,10 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
     ASSERT_NE(strip, nullptr);
     EXPECT_TRUE(macro->hasMember(nodeUuid(strip)));
 
-    // docs/mixer/mixer.md#the-factory-default-chain: Master stays OUTSIDE the macro, and Strip -> Master is a PLAIN
-    // graph edge, never a macro port — spliceMasterNode/ensureMasterNode classify Mix vs Direct by
-    // checking whether the connection's SOURCE NODE is itself a ChannelStripModule, which a
-    // MacroOutlet sitting in between would defeat.
+    // docs/mixer/mixer.md#the-factory-default-chain: Master stays OUTSIDE the macro, and Core builds Strip -> Master
+    // as a PLAIN graph edge; the app then moves it behind the track macro's output port, and
+    // spliceMasterNode/ensureMasterNode classify Mix vs Direct by looking through macro ports.
+    // (This test drives the Core builder, so the plain edge is what it sees.)
     auto* master = synth::findMasterNode(graph);
     ASSERT_NE(master, nullptr);
     EXPECT_FALSE(macro->hasMember(nodeUuid(master))) << "Master must never join the instrument's macro";

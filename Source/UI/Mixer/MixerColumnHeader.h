@@ -1,27 +1,40 @@
 #pragma once
 
+#include "UI/Layout/DragCursor.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/HelperTooltip.h"
+#include "UI/Mixer/MixerHeader/MixerColourDot.h"
+#include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
+// MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour dot + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
 // MixerMasterColumn, so the three column kinds don't triplicate the same paint code (root
 // CLAUDE.md's "extract a real collaborator class" preference over copy-pasted paint()). Small
 // enough to stay header-only, same as the plan's own budget for this file.
 //
+// Two real buttons sit in the row: the colour dot at the left (click, Return or Space opens the colour picker,
+// docs/mixer/panel.md#the-colour-dot) and, only on a channel something plays into, the sources badge at the right
+// of the name (hover shows who plays into it, docs/mixer/panel.md#the-sources-badge). Both are Tab stops with a
+// screen-reader name and a tooltip. A third sits at the far right of every channel and Master header: the target
+// button of the timeline's track headers, "Edit on canvas" (docs/mixer/edit-on-canvas.md).
+//
 // The name is also double-click-to-rename in place -- nameLabel_ reuses the exact
 // juce::Label(false, true, false) + onTextChange pattern TimelineTrackHeaderComponent::nameLabel_
-// already established (Source/UI/Timeline/TimelineTrackHeaderComponent.cpp), not a bespoke text
-// editor, so the two only "double-click a name to rename it" surfaces in the app behave alike. Same
-// accepted trade-off that file's own comment documents: a click landing ON the label is consumed by
-// it (never reaches mouseUp() below), so onHeaderClicked's "select on canvas" only fires for a click
-// elsewhere in the header. What committing a rename actually MEANS (rename the boxing macro, or the
-// strip's own persisted name) is MixerColumnComponent's call, via onNameEdited -- this class only
-// hosts the edit gesture.
+// already established (Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp), not a bespoke
+// text editor, so the two only "double-click a name to rename it" surfaces in the app behave alike. Same accepted
+// trade-off that file's own comment documents: a click landing ON the label is consumed by it (never reaches mouseUp()
+// below), so onHeaderClicked's "select on canvas" only fires for a click elsewhere in the header. What committing a
+// rename actually MEANS (rename the boxing macro, or the strip's own persisted name) is MixerColumnComponent's call,
+// via onNameEdited -- this class only hosts the edit gesture.
 
 namespace synth::ui {
 
-class MixerColumnHeader : public juce::Component {
+class MixerColumnHeader
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerColumnHeader() {
         setInterceptsMouseClicks(true, false);
@@ -32,6 +45,48 @@ public:
         // setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
         // help text together -- see that method's own comment for why the two must never diverge.
         setRenameEnabled(true);
+        // The name label swallows the mouse, but the whole header is the drag handle of a reorderable
+        // column -- so the header listens to the label's events too (see mouseDown() below).
+        nameLabel_.addMouseListener(this, false);
+        nameLabel_.setCursorSource(this);
+        addAndMakeVisible(colourDot_);
+        colourDotFade_.setShown(false); // faded in once setColour() gives it a colour
+        colourDot_.onClick = [this] {
+            if (colourDot_.consumeDragFlag())
+                return; // the release of a header drag, not a click
+            if (onColourClicked)
+                onColourClicked(colourDot_.getScreenBounds());
+        };
+        colourDot_.dragForwarding = {[this](const juce::MouseEvent& e) { mouseDown(e.getEventRelativeTo(this)); },
+                                     [this](const juce::MouseEvent& e) { mouseDrag(e.getEventRelativeTo(this)); },
+                                     [this](const juce::MouseEvent& e) {
+                                         mouseUp(e.getEventRelativeTo(this)); // may rebuild, and destroy, this header
+                                         return true;
+                                     },
+                                     [this] { return reorderHooks.isDragging && reorderHooks.isDragging(); }};
+        setColourEditable(false);
+
+        addChildComponent(sourcesButton_);
+        sourcesButton_.setIcon(synth::theme::Icon::MixerSources);
+        sourcesButton_.setComponentID("mixerSourcesBadge");
+        // A helper tip: it says who plays into the channel, which nothing else on screen does, so it keeps showing
+        // when Preferences > "Show info tooltips" is off (docs/layout/animation.md#tooltips).
+        synth::ui::markHelperTooltip(sourcesButton_);
+        // Mostly information (its words are the tooltip and the screen-reader text); activating it selects the
+        // channel on the canvas, the same as a click anywhere else on the header.
+        sourcesButton_.onClick = [this] {
+            if (onHeaderClicked)
+                onHeaderClicked();
+        };
+
+        addAndMakeVisible(editOnCanvasButton_);
+        editOnCanvasButton_.setComponentID("mixerEditOnCanvas");
+        editOnCanvasButton_.onClick = [this] {
+            if (onEditOnCanvasClicked)
+                onEditOnCanvasClicked();
+        };
+        refreshEditOnCanvasTexts();
+
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -43,17 +98,67 @@ public:
         };
     }
 
-    /** An unset (default-constructed, alpha 0) colour paints no swatch -- Direct's header has no
+    /** An unset (default-constructed, alpha 0) colour shows no dot -- Direct's header has no
      *  colour of its own (docs/mixer/panel.md#what-the-mixer-shows). */
     void setColour(juce::Colour colour) {
         if (colour_ == colour)
             return;
-        // The swatch presence/absence shifts nameBounds() too, so layout must redo, not
+        // The dot's presence/absence shifts the name's bounds too, so layout must redo, not
         // just repaint.
         colour_ = colour;
+        colourDot_.setColour(colour);
+        colourDotFade_.setShown(colour.getAlpha() > 0);
         resized();
         repaint();
     }
+
+    /** Whether clicking the dot opens a colour picker. A channel with no track or macro to recolour keeps the dot as
+     *  a plain swatch: it still paints and is still named, but takes no click and no focus. */
+    void setColourEditable(bool editable, const juce::String& shortcut = {}) {
+        colourDot_.setEnabled(editable);
+        colourDot_.setWantsKeyboardFocus(editable);
+        colourDot_.setTooltip(editable ? formatShortcutHint("Change this channel's colour", shortcut)
+                                       : "This channel's colour (nothing here to recolour)");
+    }
+
+    /** Where the picker opens, for a click and for the colour key alike. */
+    juce::Rectangle<int> getColourDotScreenBounds() const { return colourDot_.getScreenBounds(); }
+
+    /** Fires when the dot is clicked or activated from the keyboard, with the dot's screen bounds (where the picker
+     *  opens). Left null for Direct/Master, which have no colour. */
+    std::function<void(juce::Rectangle<int>)> onColourClicked;
+
+    /** The names of what plays into this channel, comma-joined (a feeding track, or a bus's feeding strips); empty
+     *  hides the sources badge. */
+    void setSources(const juce::String& sources) {
+        if (sources_ == sources)
+            return;
+        sources_ = sources;
+        const auto words = sources_.isEmpty() ? juce::String() : "Plays into this channel: " + sources_;
+        sourcesButton_.setTitle(words);
+        sourcesButton_.setDescription(words);
+        sourcesButton_.setTooltip(words);
+        sourcesFade_.setShown(sources_.isNotEmpty());
+        badgesChanged();
+    }
+    juce::String getSources() const { return sources_; }
+
+    /** Fires when the "Edit on canvas" button is clicked or activated from the keyboard. */
+    std::function<void()> onEditOnCanvasClicked;
+
+    /** Whether the "Edit on canvas" button shows; off for Direct, which has nothing on the canvas. */
+    void setEditOnCanvasShown(bool shown) {
+        if (editOnCanvasButton_.isVisible() == shown)
+            return;
+        editOnCanvasButton_.setVisible(shown);
+        resized();
+        repaint();
+    }
+
+    /** Test seams: the real buttons, so a test drives them through the clicks and keys a live press produces. */
+    TrackShowModuleButton& getEditOnCanvasButtonForTest() noexcept { return editOnCanvasButton_; }
+    MixerColourDot& getColourDotForTest() noexcept { return colourDot_; }
+    MixerIconButton& getSourcesButtonForTest() noexcept { return sourcesButton_; }
 
     // Named setDisplayName/getDisplayName, not setName/getName -- juce::Component already declares
     // a virtual setName()/getName() pair for its OWN (debug/accessibility) component name, and
@@ -67,6 +172,9 @@ public:
         // pre-edit name after a refused rename) must never re-fire onTextChange/onNameEdited; only
         // the user's own edit does that, from the constructor's lambda above.
         nameLabel_.setText(name_, juce::dontSendNotification);
+        nameLabel_.setTitle(name_ + " name");
+        colourDot_.setTitle(name_ + " colour");
+        refreshEditOnCanvasTexts();
     }
     juce::String getDisplayName() const { return name_; }
 
@@ -84,24 +192,32 @@ public:
      *  undoing a live edit the label is still showing. */
     void restoreDisplayName() { nameLabel_.setText(name_, juce::dontSendNotification); }
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small "+R" badge next to the name when this strip is
-     * linked to a track. */
-    void setLinkedBadgeVisible(bool visible) {
-        if (linkedBadgeVisible_ == visible)
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small link glyph next to the name when this strip is
+     * linked to a track; `trackName` names it in the tooltip/AX text (empty reads "Linked to a track"). */
+    void setLinkedTrack(bool linked, const juce::String& trackName) {
+        if (linkedBadgeVisible_ == linked && linkedTrackName_ == trackName)
             return;
-        linkedBadgeVisible_ = visible;
-        resized(); // the badge claims space out of nameBounds() too -- see setColour()'s own comment
-        repaint();
+        linkedBadgeVisible_ = linked;
+        linkedTrackName_ = trackName;
+        badgesChanged();
     }
 
-    /** A "BUS" badge in place of the linked badge when this column is a group/send bus -- a bus has no track
+    /** A "BUS" badge in place of the link glyph when this column is a group/send bus -- a bus has no track
      * to link to, so the two are mutually exclusive by construction (see docs/mixer/sends-and-buses.md). */
     void setBusBadgeVisible(bool visible) {
         if (busBadgeVisible_ == visible)
             return;
         busBadgeVisible_ = visible;
-        resized(); // see setColour()'s own comment
-        repaint();
+        badgesChanged();
+    }
+
+    /** The strips sending into this track channel (docs/mixer/sends-and-buses.md): a compact arrow + count
+     *  badge when non-empty. Coexists with the link glyph -- receiving a send never unlinks a track channel. */
+    void setReceivesFrom(const juce::StringArray& sources) {
+        if (receivesFrom_ == sources)
+            return;
+        receivesFrom_ = sources;
+        badgesChanged();
     }
 
     /** Whether double-click-to-rename is armed at all. Direct and Master have no
@@ -117,6 +233,14 @@ public:
         nameLabel_.setTooltip(enabled ? "Double-click to rename this channel" : juce::String());
     }
 
+    /** Opens the inline name editor, as a double-click does (Rename key); false when this header cannot be renamed. */
+    bool beginNameEdit() {
+        if (!nameLabel_.isEditableOnDoubleClick())
+            return false;
+        nameLabel_.showEditor();
+        return true;
+    }
+
     /** Test seam: the real juce::Label a double-click opens an editor on -- a test drives it with
      *  Label's own mouseDoubleClick()/showEditor()/getCurrentTextEditor()/hideEditor(), exactly the
      *  gestures a live double-click and Return key produce, rather than calling setDisplayName()
@@ -128,67 +252,204 @@ public:
      * own to select. */
     std::function<void()> onHeaderClicked;
 
+    /** Fires on a right-click release over the header (docs/mixer/panel.md#side-pane-zones-and-visibility's pin menu).
+     * Left null, a right-click behaves like any other click. */
+    std::function<void(const juce::MouseEvent&)> onContextMenu;
+
+    juce::Colour getColour() const noexcept { return colour_; }
+
     void paint(juce::Graphics& g) override {
-        const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
-        const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
-        const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto surface = synth::theme::themeOf(*this).colors.surfaceHi;
+        const auto text = synth::theme::themeOf(*this).colors.textPrimary;
+        const auto accent = synth::theme::themeOf(*this).colors.accent;
 
         g.setColour(surface);
         g.fillRect(getLocalBounds());
 
-        auto bounds = getLocalBounds().reduced(4);
+        // a 2px stripe in the same colour across the top edge, so the channel's track colour reads at a glance
+        // even when the small dot is skimmed past (Cubase-style).
         if (colour_.getAlpha() > 0) {
-            auto swatch = bounds.removeFromLeft(10).reduced(0, 2);
             g.setColour(colour_);
-            g.fillRoundedRectangle(swatch.toFloat(), 2.0f);
-            bounds.removeFromLeft(4);
+            g.fillRect(getLocalBounds().removeFromTop(2));
         }
-        if (busBadgeVisible_ || linkedBadgeVisible_) {
-            auto badge = bounds.removeFromRight(busBadgeVisible_ ? 26 : 20);
-            g.setColour(busBadgeVisible_ ? text.withAlpha(0.7f) : accent);
-            g.setFont(juce::Font(juce::FontOptions(10.0f)));
-            g.drawText(busBadgeVisible_ ? "BUS" : "+R", badge, juce::Justification::centred, false);
+
+        const auto slots = layoutSlots();
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        if (busBadgeVisible_) {
+            g.setColour(text.withAlpha(0.7f));
+            g.drawText("BUS", slots.badge, juce::Justification::centred, false);
+        } else if (linkedBadgeVisible_) {
+            paintLinkGlyph(g, slots.badge.toFloat(), accent);
+        }
+        if (!receivesFrom_.isEmpty()) {
+            // A small right-pointing arrow (audio arriving) followed by the sender count.
+            auto badge = slots.receives.toFloat();
+            const auto arrow = badge.removeFromLeft(9.0f);
+            g.setColour(text.withAlpha(0.7f));
+            g.drawArrow({arrow.getX(), arrow.getCentreY(), arrow.getRight(), arrow.getCentreY()}, 1.2f, 5.0f, 4.0f);
+            g.drawText(juce::String(receivesFrom_.size()), badge, juce::Justification::centred, false);
         }
         // The name itself is nameLabel_ (a real child component, so double-click can turn it into a
         // live text editor) -- resized() positions it over exactly this same reduction of bounds
-        // (nameBounds() below), so the two must stay in step; nothing else is drawn into it here.
+        // (layoutSlots() below), so the two must stay in step; nothing else is drawn into it here.
         nameLabel_.setColour(juce::Label::textColourId, text);
-        nameLabel_.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+        nameLabel_.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
     }
 
-    void resized() override { nameLabel_.setBounds(nameBounds()); }
+    void resized() override {
+        const auto slots = layoutSlots();
+        colourDot_.setBounds(slots.dot);
+        sourcesButton_.setBounds(slots.sources);
+        editOnCanvasButton_.setBounds(slots.editOnCanvas);
+        nameLabel_.setBounds(slots.name);
+    }
 
-    // No drag gesture is meaningful on this header (unlike the fader/pan/insert-list siblings), so
-    // every mouseUp inside it is a click -- deliberately not gated on juce::MouseEvent::
+    /** Drag-to-reorder hooks. All unset (Direct, Master, a pinned column) leaves the header a plain
+     *  click target. `onRelease` returns true when the gesture was a drag, which swallows the click.
+     *  `isDragging` says whether the press has become a real drag, for the cursor. */
+    struct ReorderHooks {
+        std::function<void(const juce::MouseEvent&)> onGrab;
+        std::function<void(const juce::MouseEvent&)> onDrag;
+        std::function<bool(const juce::MouseEvent&)> onRelease;
+        std::function<bool()> isDragging;
+    };
+    ReorderHooks reorderHooks;
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (reorderHooks.onGrab && !e.mods.isPopupMenu())
+            reorderHooks.onGrab(e);
+    }
+    // The normal arrow on hover and press; the grab hand only once the press is a real drag.
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if (reorderHooks.onDrag && !e.mods.isPopupMenu())
+            reorderHooks.onDrag(e);
+        followDragCursor(*this, reorderHooks.isDragging && reorderHooks.isDragging());
+    }
+
+    // A press that never travels is a click. Deliberately not gated on juce::MouseEvent::
     // mouseWasClicked(), which reads the real MouseInputSource's own press-tracking state rather
     // than this event's own fields, and so does not answer correctly for a synthetic event built
     // by hand (a real test's mouseDown()/mouseUp() pair, not a live press) the way it does for a
-    // genuine user gesture.
-    void mouseUp(const juce::MouseEvent&) override {
-        if (onHeaderClicked)
+    // genuine user gesture. A click that lands on the name label is that label's own (double-click
+    // to rename), so only the header background selects the column.
+    void mouseUp(const juce::MouseEvent& e) override {
+        endDragCursor(*this);
+        if (e.mods.isPopupMenu() && onContextMenu) {
+            const auto menu = onContextMenu; // the pick may rebuild, and destroy, this header
+            menu(e);
+            return;
+        }
+        if (reorderHooks.onRelease) {
+            const auto release = reorderHooks.onRelease; // the hook may rebuild, and destroy, this header
+            if (release(e))
+                return;
+        }
+        if (e.eventComponent != &nameLabel_ && onHeaderClicked)
             onHeaderClicked();
     }
 
 private:
-    // The header's content rect after the swatch and the linked/bus badge have each claimed their
-    // space -- exactly what paint() leaves undrawn and nameLabel_ occupies. Kept as one function so
-    // painting the badge and sizing the editable name label can never drift apart (paint() redoes
-    // the same swatch/badge removal on its own copy of the bounds, to draw them).
-    juce::Rectangle<int> nameBounds() const {
+    // Where every part of the row sits, left to right: the colour dot, the name, then (right to left) the
+    // linked/bus badge, the receives badge, the sources button and the Edit on canvas button. Painting the badges
+    // and placing the child components both read this, so they can never drift apart; the name label takes
+    // whatever is left.
+    struct Slots {
+        juce::Rectangle<int> dot, name, editOnCanvas, badge, receives, sources;
+    };
+    Slots layoutSlots() const {
+        Slots slots;
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0)
-            bounds.removeFromLeft(10 + 4);
-        if (busBadgeVisible_ || linkedBadgeVisible_)
-            bounds.removeFromRight(busBadgeVisible_ ? 26 : 20);
-        return bounds;
+            slots.dot = bounds.removeFromLeft(kDotButtonWidth);
+        if (busBadgeVisible_)
+            slots.badge = bounds.removeFromRight(kBusBadgeWidth);
+        else if (linkedBadgeVisible_)
+            slots.badge = bounds.removeFromRight(kLinkBadgeWidth);
+        if (!receivesFrom_.isEmpty())
+            slots.receives = bounds.removeFromRight(kReceivesBadgeWidth);
+        if (!sources_.isEmpty())
+            slots.sources = bounds.removeFromRight(kSourcesBadgeWidth);
+        const bool hasBadges = !slots.badge.isEmpty() || !slots.receives.isEmpty() || !slots.sources.isEmpty();
+        // The button sits left of the badges so the name is its only neighbour on the left, a caption gap away.
+        if (editOnCanvasButton_.isVisible()) {
+            if (hasBadges)
+                bounds.removeFromRight(kPartGap);
+            slots.editOnCanvas = bounds.removeFromRight(kEditOnCanvasWidth);
+        }
+        // The name keeps off the dot (a part gap: the dot's click target is wider than the 10 px it paints) and
+        // a caption gap off the first thing to its right.
+        if (!slots.dot.isEmpty())
+            bounds.removeFromLeft(kPartGap);
+        if (!slots.editOnCanvas.isEmpty() || hasBadges)
+            bounds.removeFromRight(kCaptionGap);
+        slots.name = bounds;
+        return slots;
     }
+
+    // The screen-reader name and the tooltip follow the channel's name, like the colour dot's title.
+    void refreshEditOnCanvasTexts() {
+        const juce::String name = name_.isNotEmpty() ? name_ : juce::String("channel");
+        editOnCanvasButton_.setTexts("Edit " + name + " on canvas",
+                                     "Edit " + name +
+                                         " on the canvas: selects its cards there and brings them into view");
+    }
+
+    // The badges in words: the header's tooltip and its accessible description, one string so the
+    // two can never disagree. Empty when no badge shows.
+    juce::String badgeText() const {
+        juce::StringArray parts;
+        if (busBadgeVisible_)
+            parts.add("Bus");
+        else if (linkedBadgeVisible_)
+            parts.add(linkedTrackName_.isNotEmpty() ? "Linked to track " + linkedTrackName_ : "Linked to a track");
+        if (!receivesFrom_.isEmpty())
+            parts.add("Receives sends from: " + receivesFrom_.joinIntoString(", "));
+        if (sources_.isNotEmpty())
+            parts.add("Plays into this channel: " + sources_);
+        return parts.joinIntoString(". ");
+    }
+
+    void badgesChanged() {
+        const auto words = badgeText();
+        setTooltip(words);
+        setDescription(words);
+        resized(); // a badge claims space out of the name's bounds too -- see setColour()'s own comment
+        repaint();
+    }
+
+    // Two interlocking chain links, centred in `area`.
+    static void paintLinkGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour) {
+        const auto centre = area.getCentre();
+        const juce::Rectangle<float> link(0.0f, 0.0f, 7.0f, 4.5f);
+        g.setColour(colour);
+        g.drawRoundedRectangle(link.withCentre(centre.translated(-2.5f, 0.0f)), 2.2f, 1.2f);
+        g.drawRoundedRectangle(link.withCentre(centre.translated(2.5f, 0.0f)), 2.2f, 1.2f);
+    }
+
+    static constexpr int kBusBadgeWidth = 26;
+    static constexpr int kLinkBadgeWidth = 16;
+    static constexpr int kReceivesBadgeWidth = 22;
+    static constexpr int kSourcesBadgeWidth = 16;
+    static constexpr int kEditOnCanvasWidth = 16;
+    // The least that is not touching, and the design system's space unit a caption keeps to its control (the same
+    // values as MixerSectionLayout's, which this header leaves out to keep its reach small).
+    static constexpr int kPartGap = 1;
+    static constexpr int kCaptionGap = 6;
+    static constexpr int kDotButtonWidth = 16; // the painted dot is 10 px wide, centred, so the target is larger
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
-    juce::Label nameLabel_; // The name itself -- see the class comment's rename design
+    CursorDelegatingLabel nameLabel_; // The name itself -- see the class comment's rename design
     bool linkedBadgeVisible_ = false;
+    juce::String linkedTrackName_;
     bool busBadgeVisible_ = false;
+    juce::StringArray receivesFrom_;
+    juce::String sources_;
+    MixerColourDot colourDot_;
+    MixerIconButton sourcesButton_{"mixerSourcesBadge"};
+    TrackShowModuleButton editOnCanvasButton_;
+    FadeVisibility colourDotFade_{&colourDot_}; // the dot and the badge fade as a colour or sources appear
+    FadeVisibility sourcesFade_{&sourcesButton_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };

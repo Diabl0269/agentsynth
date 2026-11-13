@@ -14,7 +14,7 @@ TEST_F(MainComponentTest, ToolbarFitsInsideMinimumWindowWidth) {
     mc.setSize(480, 400);
 
     auto buttons = collectToolbarButtons(mc);
-    ASSERT_EQ((int)buttons.size(), 9);
+    ASSERT_EQ((int)buttons.size(), 7);
     for (auto* b : buttons) {
         EXPECT_GT(b->getWidth(), 0);
         EXPECT_GE(b->getX(), 0);
@@ -22,11 +22,22 @@ TEST_F(MainComponentTest, ToolbarFitsInsideMinimumWindowWidth) {
     }
 }
 
+TEST_F(MainComponentTest, CanvasToolbarFitsInsideMinimumWindowWidth) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(480, 400);
+    auto& strip = mc.getCanvasToolbar();
+    ASSERT_TRUE(strip.isVisible());
+    for (auto* b : strip.getChildren()) {
+        EXPECT_GT(b->getWidth(), 0);
+        EXPECT_LE(strip.getX() + b->getRight(), 480);
+    }
+}
+
 TEST_F(MainComponentTest, ToolbarFitsAtHalfMinimumWidth) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(640, 480);
     auto buttons = collectToolbarButtons(mc);
-    ASSERT_EQ((int)buttons.size(), 9);
+    ASSERT_EQ((int)buttons.size(), 7);
     for (auto* b : buttons) {
         EXPECT_GE(b->getX(), 0);
         EXPECT_LE(b->getRight(), 640);

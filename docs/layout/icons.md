@@ -7,8 +7,8 @@ CoreText runtime font-family swap corruption described in
 
 ## The icon enum
 
-`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 44 icons, `TransportPlay = 0`
-through `ToolRange`, followed by `kCount`:
+`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 55 icons, `TransportPlay = 0`
+through `MixerAddBus`, followed by `kCount`:
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -22,7 +22,10 @@ WaveformTriangle ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
-CatIO            ActionDetachWindow ToolRange
+CatIO            ActionDetachWindow ToolRange        MixerSources
+TogglePanel      MixerSplit       ActionDockBack
+ToolbarAddTrack  ToolbarSnap      MixerInserts     MixerSends
+MixerEq          MixerResetMeters MixerAddBus
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
@@ -33,11 +36,12 @@ likewise sits after them rather than beside the other `Tool*` glyphs.
 
 Notes on individual entries:
 
-- **`TransportPlay`** (0) has no dedicated glyph of its own. It is reused as the ToggleTimeline
-  toolbar button's icon.
+- **`TransportPlay`** (0) is scaffolding: no button shows it.
 - **`TransportStop`** (1) is the status bar's master-mute button glyph.
-- **`ActionFeedback`** (9) is the toolbar button that opens Settings pre-selected to the Feedback
-  tab, a speech-bubble glyph.
+- **The toolbar set** (`ActionUndo` … `ToggleLibrary`, `ThemeToggle`, `ToggleMinimap`,
+  `TogglePanel`) are [multi-role icons](#multi-role-icons) drawn only by the top bar's
+  `ToolbarButton`; no other surface uses them. `ActionFeedback` (9) opens Settings pre-selected to
+  the Feedback tab.
 - The four **waveform icons** (25-28) are rendered in the Oscillator waveform combo via
   `AppLookAndFeel::drawPopupMenuItem` (a 14x14 glyph left of the item text) and `drawComboBox` (the
   selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when
@@ -60,25 +64,35 @@ Notes on individual entries:
   enum's index order here has no relationship to `EditTool`'s enumerator order; the UI layer looks
   up through a small tool-to-`Icon` mapping, never by casting one enum to the other.
 - **`TrackMidi`, `TrackAudio`, `TrackAutomation`** (37-39) are the timeline track header's
-  kind-badge glyphs, one per `synth::TrackKind`, drawn in place of the `"MIDI"` / `"AUD"` / `"AUTO"`
+  kind-badge glyphs, one per `synth::TrackKind`, drawn in place of the `"MIDI"` / `"AUD"` / `"Auto"`
   text pill when a themed `AppLookAndFeel` and the asset library are both present
   (`TimelineTrackHeaderComponent::kindBadgeIcon`; see
   [tracks](../timeline/tracks.md#kind-badge)). The text pill remains the fallback in a headless
   build, or when the icon asset is missing — the badge is identity chrome either way, never a
   control.
-- **`FollowPlayhead`** (40) is the toolbar-style toggle button next to the timeline panel's snap
-  selector that page-flips the view to keep the playhead on screen while playing — see
-  [playhead](../timeline/playhead.md#follow-playhead).
+- **`FollowPlayhead`** (40) is the toggle button next to the timeline panel's snap selector that
+  page-flips the view to keep the playhead on screen while playing — see
+  [playhead](../timeline/playhead.md#follow-playhead). The glyph is the playhead (a down-pointing
+  head on a line) with two chevrons chasing it from the left. Its colour carries the toggle state:
+  the library tints it `textMuted` and the panel clones a `textPrimary` hover variant and an `iconInk`
+  on variant (the button is filled solid accent while on, so an accent glyph was invisible).
 - **`CatIO`** (41) is the speaker glyph for the module library's "I/O" category header (Audio Input
   and Audio Output), and doubles as the Audio Output card's identity glyph in
   `ModuleComponent::paint()` — see
   [module-card](module-card.md#audio-output-card-identity). Both previously fell back to
   `CatUtility`, which gave the graph's actual source and sink no visual identity of their own.
-- **`ActionDetachWindow`** (42) is the icon-only open-in-window / dock-back control
-  `DetachablePanelHost` uses for both the Timeline and Mixer panels.
+- **`ActionDetachWindow`** (42) is the icon-only open-in-window control
+  `DetachablePanelHost` uses for the Timeline, Mixer and Controllers panels.
+- **`ActionDockBack`** (47) is the "Dock back" button's glyph (`DockBackButton`): an arrow into a window, shown at the
+  right end of a detached panel's toolbar ([mixer/panel](../mixer/panel.md#placement-and-detachable-windows)).
 - **`ToolRange`** (43) is the Range edit tool's glyph (`EditTool::Range`, key 2): two vertical edge
   bars with a double-headed arrow between them — a span of time, not an object. Strip button and
   cursor use it exactly like the other `Tool*` glyphs above.
+- **`MixerSources`** (44) is the mixer column header's sources badge: an arrow running into a bracket,
+  "plays into this channel". It is a muted base the badge (`MixerIconButton`) clones hover and on variants
+  from (muted, `textPrimary` on hover, accent when on).
+- **`TogglePanel`** (45) is the toolbar's Hide/Show panel glyph: a window with its bottom panel
+  filled.
 
 ## Token to tint map
 
@@ -90,21 +104,55 @@ Notes on individual entries:
 | `ModuleBypass`, `ModuleDualIO` | `textMuted` |
 | `ModuleMute` | `warning` |
 | `ModuleDelete` | `error` |
-| Toolbar actions and panel toggles (`ActionNew` … `ActionFeedback`, `ToggleAI`, `ToggleMatrix`, `ToggleLibrary`, `ThemeToggle`, `ToggleMinimap`), plus `TransportPlay` | `textMuted` |
+| `TransportPlay` | `textMuted` |
+| The toolbar set, and the Timeline and Mixer toolbar glyphs (`ToolbarAddTrack`, `ToolbarSnap`, `MixerInserts`, `MixerSends`, `MixerEq`, `MixerResetMeters`, `MixerAddBus`) | not tinted here: recoloured per group by `ToolbarButton` ([multi-role icons](#multi-role-icons)) |
 | `TransportStop` | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` — the same as the combo text colour, so they stay legible across all themes |
-| `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button highlight painted with the `toolActive` token, not a different icon tint; the glyph itself never changes colour |
+| `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button lit fill painted by `drawButtonBackground` (the button-on colour, the theme accent), not a different icon tint; the glyph itself never changes colour |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, the same convention as the category icons |
 | `FollowPlayhead` | `textPrimary` |
-| `ActionDetachWindow` | `textMuted` |
+| `ActionDetachWindow`, `ActionDockBack`, `MixerSources` | `textMuted` |
 
-**The muted tint on the toolbar set is a base, not the drawn colour.**
-`MainComponent::applyToolbarIcons()` clones that base and re-tints it via `Drawable::replaceColour`
-into the hover (`textPrimary`) and toggled-on (`accent`) variants it hands to
-`DrawableButton::setImages()`. **Do not tint those icons `textPrimary` in `retintIcons()`:**
-`applyToolbarIcons()`'s `replaceColour(textMuted, ...)` calls assume this exact starting colour.
-`DetachablePanelHost` clones its own hover variant from `ActionDetachWindow` the same way.
+**A muted tint can be a base, not the drawn colour.** `MixerIconButton` clones the muted
+`MixerSources` base and re-tints it via `Drawable::replaceColour` into the hover (`textPrimary`) and
+toggled-on (`accent`) variants it hands to `DrawableButton::setImages()`, and `DetachablePanelHost`
+clones its hover variant from `ActionDetachWindow` the same way, so those bases must stay
+`textMuted` in `retintIcons()`.
+
+## Multi-role icons
+
+The top bar's glyphs are drawn in four colour roles instead of one white tint. Each SVG paints a
+role in a fixed placeholder colour, which `IconLibrary::createRecoloured(id, IconRoleColours)`
+(through `AppLookAndFeel::getRoleIcon`) maps to real colours:
+
+| Role | Placeholder | Toolbar colour |
+|---|---|---|
+| colour | `#FF00FF` (`kRoleHue`) | the button's group colour |
+| soft | `#FF00FF` at `fill-opacity=".45"` (`kRoleSoftAlpha`) | the group colour at 45 percent |
+| ink | `#00FFFF` (`kRoleInk`) | `iconInk` |
+| paper | `#FFFF00` (`kRolePaper`) | `iconPaper` |
+
+A colour that is not one of the four placeholders is left exactly as the SVG wrote it, so an icon
+can mix role colours with fixed ones. `ActionSave` is drawn entirely in fixed colours (the floppy's
+black, silver and white, with the "Agent / Synth" label as outlines); `ActionFeedback` uses the
+colour, soft and paper roles only, and the top bar gives it its own green group.
+
+The recolour is one pass over every fill and stroke that classifies a colour before writing it, so
+a role colour that equals another placeholder is never mapped twice, and any extra opacity a shape
+has (Save's shutter is paper at 70 percent) carries over. It always starts from the untinted
+original, like `setTintColour`. `setTintColour` on such an icon gives a one-colour version (colour
+and soft take the tint, ink and paper are cut out), so the white-tint path still draws something
+sensible.
+
+A group with `id="mv"` (and `id="mv2"`) is the part that moves on hover. JUCE's SVG parser lists
+the shapes flat under one root and names a shape after its own `id` only, so `IconLibrary::loadSVG`
+first gives every shape inside such a group the id `<group id>#<n>` (`movingPartIndexOf` maps a
+shape's name back to its part). `splitToolbarIconArt` copies the icon without those shapes as the
+body and gathers them into a composite laid out like the root, drawn through the same icon-to-screen
+transform with its motion applied first (a moving part must not carry ids of its own). The parser
+bakes group transforms into the paths, so a nested part (Redo's, inside its mirror group) still draws
+in icon coordinates.
 
 ## The null-fallback contract
 
@@ -153,13 +201,36 @@ accidental underscore collisions.
 
 ## Adding an icon
 
-1. Create `assets/icons/<category>-<name>.svg` — a 24x24 viewBox, `fill="#FFFFFF"` or
-   `stroke="#FFFFFF" fill="none"`, with no gradients, CSS, `<use>` or `<defs>`.
+1. Create `assets/icons/<category>-<name>.svg` — a 24x24 viewBox with `width="24" height="24"`,
+   `fill="#FFFFFF"` or `stroke="#FFFFFF" fill="none"` (or, for a toolbar glyph, the
+   [role placeholders](#multi-role-icons)), with no gradients, CSS classes, `<use>` or `<defs>`.
 2. Add the enum value to `Icon` in `IconLibrary.h`, immediately before `kCount`.
 3. Add the `binaryDataForIcon` entry in `IconLibrary.cpp`'s `kTable` array, in the same order as the
    enum. The symbol name is the filename with hyphens stripped plus an `_svg` suffix.
-4. Add a tint assignment in `AppLookAndFeel::retintIcons()`.
+4. Add a tint assignment in `AppLookAndFeel::retintIcons()` (a multi-role toolbar glyph needs none).
 5. Rebuild `Assets` to regenerate `BinaryData.h`.
 
 `static_assert(std::size(kTable) == (size_t)Icon::kCount, ...)` guards the count: it fails to
 compile if step 3 is omitted.
+
+### The AI button
+
+`ToggleAI` is a spark on a patch cable: a short cable in the group colour (`hueRose`) ending in a jack
+plug whose body takes the colour role and whose metal tip keeps its own greys, in
+`assets/icons/toggle-ai.svg`. It has no `mv` part. The signal pulse that runs along the cable, the glow
+at the plug and the four-point spark are drawn in code (`Source/UI/Chrome/ToolbarButton/ToolbarAiSpark.cpp`)
+because they travel along a path and fade; the pulse follows `juce::Path::getPointAlongPath` on the
+cable's curve. Pulse and glow use the theme's `hueAmber` (a dark gold on Daylight, so they stay visible
+on a light chip); the spark is a fixed pink on dark themes and `hueRose` on light ones. On a lit chip
+all three turn `iconInk`.
+
+At rest the spark shows small and nothing else moves. One cycle is 2.8 s: the pulse leaves the cable's
+start and reaches the plug at 50 percent (faded in by 6, out between 50 and 58 percent), the glow
+swells from 45 to 58 percent and fades by the end, and the spark blooms from 48 to 64 percent (scale
+0.15 to 1.12, turning to 30 degrees, with a bounce), settles to 0.95 / 45 degrees at 82 percent and
+fades to 0.4 / 70 degrees at the end. It loops while the assistant is working
+(`AIChatComponent::onWaitingChanged` -> `ToolbarButton::setBusy`) and while the button is hovered; the
+keyframes cross-fade with the rest drawing over 140 ms in and 220 ms out. Under Reduce Motion it never
+plays. While busy the button's screen-reader description and help text say "Assistant is working"; its
+name and tooltip do not change.
+

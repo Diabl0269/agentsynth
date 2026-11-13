@@ -10,6 +10,7 @@
 // or undo manager to exercise.
 
 #include "../../../StubPluginInstance.h"
+#include "../../../TestWait.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h"
 #include <algorithm>
@@ -41,10 +42,8 @@ bool pumpUntil(Predicate predicate, int timeoutMs = 2000) {
     return predicate();
 }
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(30); }
-
 // Every test closes the burst window itself (forceBurstWindowCloseForTest). The real 200 ms timer
-// must never fire on its own: pump() can overrun its 30 ms on a loaded CI runner, and a timer that
+// must never fire on its own: a loaded CI runner can stall the message loop past 200 ms, and a timer that
 // fires mid-test reports a touch the test expects to still be pending.
 constexpr int kNeverFiresMs = 60 * 60 * 1000;
 
@@ -90,7 +89,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AValueChangeAddsTheParameterAfterTheWind
     capture.setArmed(true);
 
     capture.simulateValueChangeForTest(2);
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(touched.empty()) << "not reported before the burst window closes";
 
     capture.forceBurstWindowCloseForTest();
@@ -110,7 +109,7 @@ TEST(PluginKnobPickerTouchFallbackTest, MoreThanThreeDistinctParamsInTheWindowAd
 
     for (int index : {0, 1, 2, 3})
         capture.simulateValueChangeForTest(index);
-    pump();
+    synth::test::flushMessageQueue();
     capture.forceBurstWindowCloseForTest();
 
     EXPECT_TRUE(touched.empty()) << "4 distinct params within the window is a burst -- none are added";
@@ -128,7 +127,7 @@ TEST(PluginKnobPickerTouchFallbackTest, ExactlyThreeDistinctParamsInTheWindowAre
 
     for (int index : {0, 1, 2})
         capture.simulateValueChangeForTest(index);
-    pump();
+    synth::test::flushMessageQueue();
     capture.forceBurstWindowCloseForTest();
 
     ASSERT_EQ(touched.size(), 3u);
@@ -150,7 +149,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AParameterAlreadyInTheLayoutIsIgnored) {
 
     capture.simulateValueChangeForTest(1); // already in the layout -- must not even open a window
     capture.simulateValueChangeForTest(2);
-    pump();
+    synth::test::flushMessageQueue();
     capture.forceBurstWindowCloseForTest();
 
     ASSERT_EQ(touched.size(), 1u);
@@ -172,7 +171,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AnOffThreadValueChangeIsHoppedToTheMessa
     worker.join();
 
     EXPECT_EQ(touchedIndex, -1) << "must not run on the reporting thread";
-    pump();
+    synth::test::flushMessageQueue();
     capture.forceBurstWindowCloseForTest();
     EXPECT_EQ(touchedIndex, 0);
 
@@ -188,12 +187,12 @@ TEST(PluginKnobPickerTouchFallbackTest, TheGesturePathStillWorksAlongsideTheValu
     capture.setArmed(true);
 
     capture.simulateGestureStartForTest(0); // reported immediately, no burst window involved
-    pump();
+    synth::test::waitUntil([&] { return (touched.size()) == (1u); });
     ASSERT_EQ(touched.size(), 1u);
     EXPECT_EQ(touched[0], 0);
 
     capture.simulateValueChangeForTest(3);
-    pump();
+    synth::test::flushMessageQueue();
     capture.forceBurstWindowCloseForTest();
     ASSERT_EQ(touched.size(), 2u);
     EXPECT_EQ(touched[1], 3);
@@ -210,7 +209,7 @@ TEST(PluginKnobPickerTouchFallbackTest, DisarmingCancelsAPendingBurstWindow) {
     capture.setArmed(true);
 
     capture.simulateValueChangeForTest(1);
-    pump();
+    synth::test::flushMessageQueue();
 
     capture.setArmed(false);
     capture.forceBurstWindowCloseForTest(); // no-op: the window was cancelled by setArmed(false)

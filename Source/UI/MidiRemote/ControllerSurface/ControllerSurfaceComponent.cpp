@@ -14,12 +14,13 @@
 // nothing destructive in response to its own onControlsMoved/onDragEnded: it only computes the
 // clamped new grid position(s) and invokes the callback, then returns. The caller
 // (MidiRemotePanelComponent, one level up) is the one that owns the deferral -- it defers its OWN
-// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlsMoved, per
-// this ticket's brief -- so by the time cells_ is ever rebuilt, the gesture's call stack has long
-// since unwound.
+// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlsMoved -- so by the time cells_ is
+// ever rebuilt, the gesture's call stack has long since unwound.
 
 #include "ControllerSurfaceComponent.h"
 
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <algorithm>
@@ -31,6 +32,8 @@ ControllerSurfaceComponent::ControllerSurfaceComponent()
     // Delete/Backspace/Esc must reach THIS component's keyPressed(), not go looking for a focused
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
+    setTitle("Controller surface");
+    setDescription("The controls of the selected controller");
 
     // content_ never handles a click itself -- an empty-space press must reach THIS
     // component's mouseDown (pan/marquee/deselect), exactly the "fallback clicks to parent" wiring
@@ -48,6 +51,11 @@ ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 // refresh -- Detect, a move, a delete, an undo/redo) instead prunes the existing selection down to
 // whatever ids still exist, so the caller doesn't have to re-apply it after every mutation.
 void ControllerSurfaceComponent::setControls(const juce::String& profileId, const std::vector<CellModel>& cells) {
+    const bool animate = profileId == profileId_ && !profileId.isEmpty() && FadeVisibility::canAnimateIn(this);
+    auto departures = animate ? pictureDepartures(cells) : std::vector<Departure>{};
+    std::vector<juce::String> previousIds;
+    for (auto* cell : cells_)
+        previousIds.push_back(cell->getControlId());
     if (profileId != profileId_) {
         selectedIds_.clear();
         restoreOrResetView(profileId);
@@ -71,6 +79,14 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
             handleCellDragged(controlId, dCols, dRows);
         };
         cell->onDragEnded = [this, controlId]() { handleCellDragEnded(controlId); };
+        cell->onPointer = [this, cell](const juce::MouseEvent& event, bool released) {
+            noteEdgePointer(event);
+            if (released) {
+                endEdgeScroll();
+                edgeScrollStoppedByEscape_ = false;
+            } else
+                beginCellEdgeScroll(*cell);
+        };
 
         cell->setSelected(std::find(selectedIds_.begin(), selectedIds_.end(), controlId) != selectedIds_.end());
         if (controlId == pulseControlId_)
@@ -86,6 +102,7 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         if (onSelectionChanged)
             onSelectionChanged(selectedIds_);
     }
+    startCellMotion(std::move(departures), previousIds, animate);
 }
 
 void ControllerSurfaceComponent::setDetectPulseControlId(const juce::String& controlId) {
@@ -173,6 +190,10 @@ bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {
     // Esc clears the selection regardless of how many are selected -- checked first since
     // it is valid even with nothing selected (a no-op, reported as unhandled below).
     if (key == juce::KeyPress::escapeKey) {
+        // Mid-drag, Esc first stops a pan held at the edge, as it does on every other surface; the drag itself goes
+        // on where it is and commits on release as usual.
+        if (stopEdgeScrollForEscape())
+            return true;
         if (selectedIds_.empty())
             return false;
         setSelectionInternal({});

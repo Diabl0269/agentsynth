@@ -20,9 +20,12 @@ two or more units in `TimelineClipLaneInternal.h`:
 | Unit | Concern |
 |------|---------|
 | `TimelineClipLaneArea.cpp` | Ctor, `TimelineDoc` wiring, row/rect geometry, hit-testing, core `paint()` |
-| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting, live-recording strip |
+| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), the peaks cache, live-recording strip |
+| `TimelineClipLaneWaveform.cpp` | Waveform painting: filled outline and RMS body paths; interpolated peaks zoomed in; the real samples from disk below one bucket per pixel (see app-wiring) |
+| `WaveformSampleCache.*`, `WaveformDraw.h` | The cached raw-sample blocks the zoomed-in waveform reads, the asset-rate sample span, and the filled-path column drawing shared with the live strip |
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
+| `TimelineClipLaneKeyboard.cpp` | Clip keyboard mode: stepping/opening/moving the keyboard clip, its accent ring, its screen-reader description |
 | `TimelineClipLaneEditTools.cpp` | Active tool/cursor/gestures and their previews, clip renaming, clip context menu |
 | `TimelineClipLaneRange.cpp` | The Range tool: the range drag and Shift-extension, range painting, the range verbs and menu |
 
@@ -70,7 +73,7 @@ Selected clips get a brighter border and a slight fill lift.
 Repaints happen only on doc changes (`refreshFromDoc()`, routed in from
 `TimelinePanelComponent::timelineChanged()`, which also calls `ClipSelectionModel::retainOnly` so a
 clip removed by any path can never stay selected), view-state changes (zoom/scroll/snap), and
-interactions — never a timer.
+interactions — never a timer. The one exception is an undo or redo: a clip whose start, length or row it changed glides its rectangle from where it was drawn (`TimelineClipLaneArea::glideRestoredClips`, a `KeyedRectTween` keyed by clip id, 160 ms `easeOutCubic`, off screen and under Reduce Motion at once). The notes glide with it by the sizing rule: a moved or Carry-contents clip shifts them with its left edge, a Stretch clip scales them from the old span to the new, a Trim clip leaves them at their absolute beat so the edge slides over them ([undo-glide.md](../layout/undo-glide.md)).
 
 ## Select-tool gestures
 
@@ -84,16 +87,71 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Click empty lane space | Deferred: only a press that never becomes a drag clears the selection on mouse-up — the same `pendingEmptyCanvasClick` trick `GraphEditor::mouseDown/mouseUp` uses for the canvas, so a drag is never mistaken for a deselect |
 | Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift. There is no drag-to-pan here (scrolling is wheel-only, see [view](view.md#wheel-and-trackpad-bindings)), so a plain drag also starts a non-additive marquee |
 | Drag a clip's body | Moves it, and every other selected clip, by one Snap-quantised beat delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0, **plus** one shared track-row delta (see **Cross-track drag**) |
-| **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking |
-| Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
-| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the clip's notes, being clip-relative, travel with it |
-| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**. It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
+| **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. Alt is re-read on every drag event, so it can be pressed or released mid-drag to switch between copy and move without restarting the drag. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking |
+| Drag within 6 px of the right edge | Resizes the clip's length, Snap-quantised, floored at 1/16 beat; what happens to a MIDI clip's notes is the **Sizing** mode (see **Edge sizing**) |
+| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the notes follow the **Sizing** mode (see **Edge sizing**). One undo step restores geometry and notes |
+| **Option** + drag an edge | Stretches that one drag whatever the Sizing mode says (Logic, Reaper and Bitwig's key). Option is re-read on every drag event and on a bare modifier change, so pressing or releasing it mid-drag switches the drag in place |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Duplicate linked** (greyed for an audio clip) and, on a linked clip only, **Make unique** ([linked clips](linked-clips.md)), **Fit to key** (a MIDI clip with notes and a key; moves every note to the nearest note of the clip's key as one undo step; greyed otherwise), **Fit all clips to key** (only when the clicked clip is one of two or more selected clips: fits each selected MIDI clip to its own key, the song key when it has none, as one undo step; audio clips and clips with no key are skipped; greyed when none can be fitted; `synth::fitClipsToTheirKeys`), **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**, then, below another separator, **Render to audio track** ([render to audio track](render-to-audio.md); greyed with "(no mixer channel)" when the clip's track reaches no channel). It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
 | Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** |
 | Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
-| Escape | Clears the selection; returns `false` when it is already empty |
+| Escape | Mid-drag (move, edge resize, stretch, marquee, range, draw): abandons the drag (`cancelDrag`): the document, preview and undo history are as before the press, the release commits nothing, and the selection is untouched (a marquee puts back the selection it replaced; a range returns to the previous range). Otherwise clears the selection; returns `false` when it is already empty |
 | P | **Loop the selection** — see **Loop the selection** below |
+
+## Edge sizing
+
+What an edge drag does to a MIDI clip's notes is the user setting `timelineClipSizingMode` (`trim`, `carry`,
+`stretch`; Trim when unset), the same in every project and chosen with the **Sizing** field on the edit-tool strip
+([edit tools](edit-tools.md#the-sizing-field)):
+
+| Mode | Left edge | Right edge |
+|---|---|---|
+| **Trim** | Notes keep their absolute beat: a shrink drops the notes before the new edge and cuts a straddling one (it keeps its id), a grow leaves the new space empty. The clip leaves its link group | Notes stay put; a note past the new end is kept, unheard, so growing the edge back brings it back |
+| **Carry contents** | Notes keep their place inside the clip, so they travel with the edge (the behaviour before the left-edge trim existed); the end crops them | Same as Trim (notes are anchored to the clip's start) |
+| **Stretch to fit** | Note starts and lengths scale by new length / old length (a note never shrinks under 1/1024 beat) | Same |
+
+One rule, `synth::clipEdgeResult` (`Source/Timeline/TimelineDoc/ClipEdgeSizing.h`), decides all six: the lanes paint
+the drag's preview from it (`TimelineClipLaneArea::resizePreviewFor`) and the drop commits it through
+`TimelineDoc::resizeClipEdge`, so the last drag frame is the frame after release. A linked copy shares notes and
+length, so it previews and takes every mode's change too, except a left Trim, which unlinks the dragged clip
+([linked clips](linked-clips.md)).
+
+**With snap on, the drawn clip glides from one grid line to the next** instead of popping. The preview jumps to each
+new line at once (hit tests and the drop read it, never the drawn rectangle) and `TimelineClipLaneArea::updateDragPreviewFromLastPointer`
+retargets the clip's `clipGlide_` tween, the one an undo uses, from where the clip is drawn to the new line, for the
+dragged clip and its linked copies. The notes inside follow by the sizing rule (Trim keeps them on their beat under the
+sliding edge, Carry takes them along with the left edge, Stretch scales them), and a whole-clip move drag glides the same
+way. A step under 1 px (snap off, where the preview moves a pixel or less per pointer event) is not eased, so the clip
+stays with the pointer. The glide still running at the drop carries across the commit, and Cmd+Z glides back. An
+Option copy-drag moves ghosts, not the clips, so nothing glides. Plain under Reduce Motion and Animations Off.
+
+While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
+length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
+once it is back at the original length.
+An **audio** clip under Trim or Carry contents keeps its audio and only changes span; its left edge moves the start and
+keeps the end, as it always has. Under **Stretch** (the mode or Option) its audio is time-stretched to the new length at
+the same pitch, with the Signalsmith engine the Sounds view uses for loops: on the drop the lanes hand the new span to
+`onAudioClipStretchRequested`, and `MainComponentAudioImport::stretchAudioClip` renders the audio the clip plays now
+(`synth::audioStretchWindow`: from its source offset for its length at the current tempo) with
+`soundbrowser::renderStretchedWindow`, imports the copy like a dropped file (`<name>-stretch<percent>.wav` in the
+bundle's `Audio/`, or `Recordings/` before the first save) and points the clip at it from 0 s, fades scaled, as one undo
+step (`synth::applyAudioClipStretch`). Undo plays the previous file again; every file stays in the project. The render
+blocks for about a second per minute of audio, so a clip over a minute (`kMaxStretchWindowSeconds`), or one whose file
+is missing, resizes instead and the status bar says why.
+
+**Stretching again starts from the original audio.** The clip saves `Clip::stretchOrigin` (original `assetRef`,
+`offsetSeconds`, `ratio`): time t in the clip's asset is `offsetSeconds + t * ratio` in the original. The next stretch
+maps the clip's window through it (so a trim or split after a stretch keeps just the part shown) and renders the
+original with the cumulative ratio, so 150% and back to 100% never stacks artifacts. At a cumulative ratio of exactly 1
+nothing is rendered: the clip points at the original and its window again, and the origin is cleared. The status bar
+percentage is the cumulative one. If the original file is gone the current asset is the source and starts a new
+origin. `setClipAsset` to a different asset (relink, a destructive edit) clears the origin, so the next stretch starts
+from the audio the clip then plays. Split, duplicate and copy/paste carry it; the unused-asset cleanup and the
+`Recordings/` adoption on save treat the origin ref like `assetRef`. It is saved as an optional `"stretchOrigin":
+{"assetRef", "offsetSeconds", "ratio"}` on the clip (written only when set; a project without it, or with an unreadable
+one, loads as none), and untrusted timeline input may not carry it. The drag previews the stretch already: an audio clip's
+waveform is always drawn from its stored span into the dragged rectangle.
 
 ## Cross-track drag
 
@@ -282,6 +340,43 @@ itself, so a test can assert on it without decoding pixels. `mouseEnter` re-appl
 tool's cursor and `mouseExit` drops the Split preview, so a hover line never survives the pointer
 leaving the lanes.
 
+## Waveform look
+
+An audio clip's waveform is one solid shape in a deep shade of the clip's own colour, with a denser core inside
+it, on a linear amplitude scale. Picked against other DAWs:
+
+| DAW | Default look | Scale |
+|---|---|---|
+| Cubase | Event-colour tint, darker outline, optional interior fill | Linear |
+| Audacity | Peak shape in blue, RMS as a lighter inner layer | Linear (dB optional) |
+| Pro Tools, Reaper, Bitwig | Peak shape in a contrasting shade of the clip colour; RMS optional or absent (from public descriptions, not checked side by side) | Linear by default |
+
+The common thread is that the peak envelope is the solid, readable shape and RMS, when shown, is a quieter
+inner layer; nobody draws the waveform as a grey wash. So:
+
+- **Peak shape** (min to max per column): the clip colour as it shows on the lane (its fill over `bg-1`) moved
+  toward black, or toward white on a dark clip, until it reaches 3:1 contrast with the clip
+  (`kWaveformMinContrast`). It is opaque, so the lane never shows through.
+- **RMS core** (+-rms): the same shade, a further step toward black or white. A sine's core sits at about 70% of
+  its peak, a drum hit's is thin, so the core shows how loud a part sounds, the peak shape how far it swings.
+- **Sample line** (zoomed past 2 samples per pixel) and a version 1 sidecar without RMS: the peak shade.
+- **Scale**: linear, so a part 6 dB quieter draws half as tall. No dB or log display.
+- **Live strip**: the same rule from the strip's own fill (accent over `bg-1`), so a take looks the same while it
+  records and once it is a clip.
+
+`waveformInkFor()` (`TimelineClipLaneWaveform.cpp`) is the one place the colours come from.
+`TimelineClipLaneWaveformLookTests.cpp` checks the contrast for every palette colour (plain, selected, muted) in
+every built-in theme, the core step, the linear scale and live/committed parity.
+
+## Waveform sidecar backfill
+
+An imported or relinked audio clip gets its `Peaks/<stem>.agpk` sidecar when it is imported. A project saved before
+that has audio clips with no sidecar, which draw no waveform. When a project bundle opens,
+`MainComponentAudioImport::backfillMissingPeaks` collects every audio clip whose audio resolves but whose sidecar does
+not, writes each missing sidecar once on a background thread (the load is not held up), then clears the lane area's
+peaks cache and repaints so the waveforms appear. It never touches the document, so the project is not marked
+unsaved. Tests: `Tests/App/MainComponent/MainComponentPeaksBackfillTests.cpp`.
+
 ## Relink audio
 
 Offered whenever the clicked clip's `assetRef` is non-empty, whether the asset currently resolves
@@ -311,6 +406,10 @@ after it, so the clip lands in the cell it was aimed at — one bar long (the tr
 signature, 4 beats with no transport), auto-named `"Clip N"` from the row's clip count, selected,
 and then fired through the SAME `onClipDoubleClicked` hook a clip double-click uses, so the user
 lands straight in the piano roll ready to draw notes.
+
+**Two Sections preferences** sit beside it (Preferences > Timeline), both read at use time: `timelineShowSectionsStrip`
+(default on) shows the [Sections strip](sections.md), and `timelineSectionsCoverOnDrop` (default off) makes dropping a
+section cover the music where it lands instead of pushing it later.
 
 **Except when it spans the loop locators.** `locatorSpanForDoubleClick(clickedBeat)` is the pure
 rule: when the `timelineDoubleClickSpansLocators` preference is on (**default ON**), a transport is
@@ -352,6 +451,8 @@ accent wash, repainting only the rows involved and only when the row actually ch
 last row neither highlight nor accept a drop. `filesDropped` reports the FIRST readable audio file
 — a multi-file drop makes one clip, not N.
 
+**Under the last track.** When `onAudioFileDroppedBelowTracks` is set, the empty space under the last row (the whole area when there are no tracks) takes an audio file too: a "New audio track" strip (an outlined, rounded strip) lights up under the pointer and `MainComponentAudioImport::addAudioTrackWithClip(mc, beat, file)` makes the track, its mixer channel and the clip in ONE undo step (the file is imported first; a failed import changes nothing). A Sound dragged out of the Sounds view takes the same rows and the same strip ([sound-browser](../layout/sound-browser.md#dragging-a-sound)), through `SoundDropAdapter`. The strip needs room under the rows; a lane filled to the bottom has none.
+
 **Who imports.** Neither gesture imports anything here: `onAudioFileDropped(TrackId, snappedBeat,
 File)` hands the decision outwards and `MainComponent::importAudioFileToClip` does the work, for
 the same reason **Relink audio…** does — the lane area owns no `AssetManager` and no bundle root.
@@ -359,7 +460,7 @@ That method reuses `relinkClipAsset`'s policy verbatim: a saved project imports 
 `Audio/` (`AssetManager::importAudioFile`), and an unsaved one into the app-data `Recordings/`
 convention `chooseTakeFiles()` writes takes into, so `saveToFile`'s `adoptRecordingsAssets` sweep
 moves it into the bundle on the first save. The clip's length is the file's own duration in beats
-(`audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip
+(`MainComponentAudioImport::audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip
 plus its asset binding are batched into ONE `recordTimelineChange`. A failed import — unreadable or
 non-audio — reports through the status bar and mutates the document not at all. Headless seam:
 `MainComponent::importAudioFileToClipForTest`.
@@ -367,7 +468,7 @@ non-audio — reports through the status bar and mutates the document not at all
 **Empty-row hint.** A row with no clips paints one dim line, centred, straight from doc state — no
 timer, no animation, `Theme::Colors::textMuted`: **"Double-click to add a clip — or arm (R) and
 record"** on a Midi row, **"Drop an audio file — or arm (R) and record"** on an Audio row, and
-nothing on an Automation row, whose content is breakpoints authored in the automation strip. The
+nothing on an Automation row, whose content is breakpoints authored in its lane rows. The
 line is dropped rather than truncated when the row is shorter than 24 px or narrower than the text
 plus its padding.
 
@@ -394,13 +495,29 @@ wires to `transport.setLoop(start, end, /*enabled=*/true)` — the same "the lan
 owner does it" division as `onAudioFileDropped` / `onRelinkAudioRequested`. Nothing selected, or no
 owner listening, returns `false` so the key keeps its meaning elsewhere.
 
+With the piano roll open, P loops the selected notes instead ([piano-roll](piano-roll.md#arrow-key-editing)); the roll forwards its span into this same callback.
+
+## Exporting the arrangement
+
+**File > Export MIDI...** (`MainComponent::promptExportMidi`, `MidiClipFile::exportArrangement`) writes the whole arrangement as a Standard MIDI File, type 1, 960 ticks per quarter note.
+
+- **Track layout.** Track 0 is a conductor track named "Tempo" holding one tempo event and one time-signature event at tick 0; after it comes one named track per MIDI timeline track, in document order. Audio and automation tracks are skipped. Every note lands at its absolute position (clip start + note start), with its own channel, pitch and velocity.
+- **One constant tempo.** `TimelineDoc` has no tempo map, so the tempo and time signature are the transport's current values at export time; a tempo change made later, or a ramp, is not represented.
+- **Muted content is skipped.** Muted notes, clips and tracks contribute no notes, exactly as they contribute nothing to playback. A muted track still gets its (empty, named) track so the track count matches the timeline.
+- **Range = trim.** When the transport has a loop range (end after start, whether or not looping is armed) the menu item first asks "Whole arrangement" or "Loop range". A loop-range export drops notes wholly outside the range, cuts a note crossing either edge at that edge, and shifts everything so the range start is tick 0. A range with end <= start is rejected.
+- **Empty is valid.** No tracks, no clips or no notes still writes a readable file (the conductor track plus one empty track per MIDI track).
+
+The default destination is `Exports/<patch name>.mid` in an open project bundle, the same folder Export Audio uses. Unlike the audio exports it needs no render, so it is never greyed out while a bounce runs. `MidiClipFile::exportClip` (the per-clip export) is unchanged and still writes no tempo event.
+
 ## Tests
 
 `Tests/UI/Timeline/TimelineClipLane/` — `ClipSelectionModel` and `clipHitTestMarquee` unit coverage
 (`TimelineClipLaneSelectionTests.cpp`), pure-geometry tests for `computeClipRect`
 (`TimelineClipLaneAreaTests.cpp`), mouse interaction driven by hand-built `juce::MouseEvent`s
 against a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed
-(`TimelineClipLaneMouseTests.cpp`), painting (`TimelineClipLanePaintingTests.cpp`), the tool
+(`TimelineClipLaneMouseTests.cpp`), edge sizing in every mode on both edges, Option, the readout, linked copies
+and the painted last-drag-frame-equals-release check (`TimelineClipLaneSizingTests.cpp`, through the fixture's
+`dragEdgeExpectingPreviewEqualsCommit` guard; `DragSurfaces.EveryMouseDragOverrideIsRegistered` fails for a drag class that names no such guard, see [undo-glide.md](../layout/undo-glide.md#registration)), painting (`TimelineClipLanePaintingTests.cpp`), the tool
 layer (`TimelineClipLaneEditToolsTests.cpp`) and the Range tool — the model, the drag and its
 Shift-extension, the repaint gate and every verb (`TimelineClipLaneRangeTests.cpp`). The doc-level
 range edits are `Tests/Timeline/TimelineDoc/TimelineDocRangesTests.cpp`, and the range clipboard is

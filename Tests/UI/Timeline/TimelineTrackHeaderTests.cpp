@@ -16,7 +16,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -142,7 +142,7 @@ dedupedBindingOptions(const std::vector<std::pair<juce::String, juce::String>>& 
     return options;
 }
 
-// T166: hand-built MouseEvent, same pattern as TimelinePanelTests.cpp's makeClickEvent/
+// Hand-built MouseEvent, same pattern as TimelinePanelTests.cpp's makeClickEvent/
 // makeDragEvent — no OS event queue reaches a headless test, so mouseDown/mouseDrag/mouseUp are
 // driven directly with events carrying exactly the position/mouseDownPosition pair the row's own
 // threshold check (e.getDistanceFromDragStart()) reads.
@@ -401,7 +401,27 @@ TEST(TimelineTrackHeaderTest, NameEditWritesThroughToTheDoc) {
 }
 
 // =============================================================================
-// 4b. T166: whole-row drag-to-reorder — the row's own threshold/callback contract, independent
+// The row keeps the normal arrow on hover and press; the dragging hand only during a real drag.
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, RowShowsTheDraggingHandCursorOnlyOnceThePressBecomesADrag) {
+    HeaderFixture f;
+    auto isNormal = [&] { return f.header->getMouseCursor() == juce::MouseCursor::NormalCursor; };
+    EXPECT_TRUE(isNormal()) << "hover";
+
+    f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 20.0f}, {80.0f, 20.0f}));
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 22.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(isNormal()) << "pressed, below the drag threshold";
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "during the drag";
+    EXPECT_TRUE(f.header->getNameLabel().getMouseCursor() == juce::MouseCursor::DraggingHandCursor)
+        << "the name label shows the row's cursor, since a drag can start on it";
+    f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(isNormal()) << "after the drop";
+}
+
+// =============================================================================
+// 4b. whole-row drag-to-reorder — the row's own threshold/callback contract, independent
 // of TimelinePanelComponent (which owns turning these screen positions into an actual reorder;
 // see TimelinePanelTests.cpp's own drag test for that half).
 // =============================================================================
@@ -627,7 +647,7 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextPerTrackKind) {
     EXPECT_EQ(audio.header->getKindBadgeTextForTest(), "AUD");
 
     HeaderFixture automation(TrackKind::Automation);
-    EXPECT_EQ(automation.header->getKindBadgeTextForTest(), "AUTO");
+    EXPECT_EQ(automation.header->getKindBadgeTextForTest(), "Auto");
 }
 
 TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
@@ -637,19 +657,27 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
     EXPECT_EQ(f.header->getKindBadgeTextForTest(), juce::String());
 }
 
-TEST(TimelineTrackHeaderTest, AutomationButtonHiddenUntilTheTrackHasALane) {
+TEST(TimelineTrackHeaderTest, EveryTrackHasTheFoldArrowEvenWithNoLane) {
     HeaderFixture f;
-    EXPECT_FALSE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getFoldArrow().isVisible()) << "an empty track folds out to '+ Add automation...'";
+    EXPECT_TRUE(f.header->getFoldArrow().getWantsKeyboardFocus());
+    EXPECT_EQ(f.header->getFoldArrow().getTitle(), "Show Track 1 automation") << "no lane count to report";
+    EXPECT_EQ(f.header->getFoldArrow().getTooltip(), "Show Track 1 automation");
+}
+
+TEST(TimelineTrackHeaderTest, TheUnassignedSectionHasTheFoldArrowOnlyWhileItHoldsLanes) {
+    HeaderFixture f(TrackKind::Automation);
+    EXPECT_FALSE(f.header->getFoldArrow().isVisible());
 
     synth::AutomationLane::RangeSnapshot range;
     const auto laneId = f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
     ASSERT_TRUE(laneId.isValid());
     f.header->refreshFromDoc();
 
-    EXPECT_TRUE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getFoldArrow().isVisible());
 }
 
-TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleRequestedWithTheTrackId) {
+TEST(TimelineTrackHeaderTest, FoldArrowClickFiresOnAutomationToggleRequestedWithTheTrackId) {
     HeaderFixture f;
     synth::AutomationLane::RangeSnapshot range;
     f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
@@ -662,7 +690,17 @@ TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleReques
         ++calls;
     };
 
-    f.header->getAutomationButton().onClick();
+    // A real left click on the arrow (its own mouseDown/mouseUp), not a direct onClick() call.
+    // juce::Button narrows mouseUp to protected, so it is reached through the Component base.
+    f.header->setBounds(0, 0, 190, 56);
+    auto& arrow = static_cast<juce::Component&>(f.header->getFoldArrow());
+    const juce::Point<float> centre = arrow.getLocalBounds().getCentre().toFloat();
+    const auto event =
+        juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre,
+                         juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                         &arrow, &arrow, juce::Time::getCurrentTime(), centre, juce::Time::getCurrentTime(), 1, false);
+    arrow.mouseDown(event);
+    arrow.mouseUp(event);
     EXPECT_EQ(calls, 1);
     EXPECT_TRUE(requestedTrack == f.trackId);
 }

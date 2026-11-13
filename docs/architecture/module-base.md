@@ -45,6 +45,10 @@ A graph node's `"uuid"` property (see `AIStateMapper::graphToJSON`) is the app's
 
 Modules may opt in to a thread-safe `VisualBuffer` (circular buffer of `std::atomic<float>`) for scope visualization. Enabled/disabled via `enableVisualBuffer(bool)` and accessed via `getVisualBuffer()`.
 
+A module feeds it a block at a time — `pushBlock(samples, n)`, or `pushConstant(value, n)` for an activity LED — never `pushSample` in a per-sample loop. The audio thread is its only writer, so a block publishes its write position once (a release store) instead of a seq_cst load/store pair and an integer modulo per sample; on the Load test project the per-sample form cost about as much as the modules' own DSP ([audio-engine.md](audio-engine.md#measuring-render-cost)). The ring ends up exactly as the same samples pushed one at a time would leave it (`VisualBufferTest.PushBlockMatchesPushSample`).
+
+The early bypass and mute returns still feed it: a muted module pushes silence and a bypassed one the signal that leaves it, so a scope or spectrum falls away instead of freezing on the last audible block (`VisualBufferOnMute.EveryMutedModuleShowsSilence`). A view must also paint that silence: the Filter's response view and shape window analyse every tick, and the EQ curve lets a silent buffer pull its trace down to the floor instead of skipping the frame (`MuteSpectrumFall.*`, `MuteSpectrumFallEQ.*`).
+
 ### Logical-Port API
 
 Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
@@ -57,6 +61,8 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 | `mapOutputChannel(int rawChannel)` | Virtual — returns `LogicalPort` for a raw output channel |
 | `getVisibleInputPortCount()` / `getVisibleOutputPortCount()` | How many jacks the UI renders |
 | `JackTarget` / `getJackTargets(jack, isInput)` | Inverse of `mapInput/OutputChannel` — every poly-group head anchored to a visible jack; drives connection creation in `GraphEditor` |
+
+**A module's channel count is fixed for its lifetime.** JUCE settles the bus layout in the `ModuleBase` constructor, and renegotiating it drops every existing connection. Variable-port modules (Macro bank, Audio Input, Hosted Plugin) declare their **maximum** and vary only `getVisibleInputPortCount()` / `getVisibleOutputPortCount()`, clearing hidden channels each block; when the visible count shrinks, routings on the now-hidden jacks are dropped (`GraphEditor::dropRoutingsOnHiddenJacks`). A hosted plugin wider than `kMaxPluginInputChannels` (16 in) or `kMaxPluginOutputChannels` (64 out) is refused with a message, never truncated; its jacks are a chosen subset of its raw channels, so `GraphEditor::dropRoutingsOnHiddenJacks` asks `getJackTargets` which raw channels a visible jack owns rather than assuming jack index == raw channel. When a module's visible jack count grows, override the default port map: the fallback marks unclaimed channels as phantom poly heads and `getJackTargets` duplicates wires.
 
 `GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modules/modulation.md](../modules/modulation.md#creating-poly-connections).
 
@@ -76,9 +82,22 @@ This matters because preset load — and any undo that has to fall back to a ful
 
 `setExtraState` is only ever called on the **trusted** path (our own snapshots and presets). A module may legitimately read this as a filename, so honouring it for untrusted model output would turn a patch suggestion into an arbitrary file read.
 
+### Legacy parameters (`adoptLegacyParams`)
+
+`virtual void adoptLegacyParams(const juce::NamedValueSet& params)` / `virtual bool isLegacyParamId(const juce::String&) const`
+
+For parameters a module no longer has. `AIStateMapper::applyParamsToProcessor` calls `adoptLegacyParams` with the node's whole `"params"` object once it has applied the real parameters, on the trusted and the untrusted path (a patch, a preset, a saved project, an undo snapshot, a snippet all go through it), so an old file or an AI patch from a backend that still lists the dropped ids keeps working. Values come straight from the file or the model: clamp every one. A params object without the old keys must change nothing. `isLegacyParamId` tells `validateNodeParams` which dropped ids to accept instead of rejecting them as unknown keys. The extra state is applied after the parameters on every load path (`applyJSONToGraph` for new and existing nodes, `applySnapshotPreservingNodes` for kept and created nodes), so a node that carries both ends up with its state; anything the module adopted from old keys and the user then edits is saved as state. The Sequencer and Poly Sequencer use it for their eight old steps ([sequencer-design.md](../modules/sequencer-design.md#legacy-adoption)).
+
 ### Port Labels
 
 `virtual juce::String getInputPortLabel(int channelIndex) const` / `getOutputPortLabel(int channelIndex)` — overridden per-module to provide descriptive jack names (e.g. "CV In", "Audio L") shown in the UI.
+
+### `processBlock` is final
+
+`ModuleBase::processBlock` is `final`. It applies the [stereo down-mix](audio-engine.md#stereo-down-mix-fro326)
+(`applyInputDownMix`: halve every raw input channel `AudioEngine::refreshNormalling` marked as fed only by
+whole L/R pairs) and then calls the module's own `processModuleBlock`, which every module overrides. Doing it
+in the base means no module can forget it. "`processBlock`" in the contracts below means that override.
 
 ### Bypass/Mute Contract
 
@@ -101,10 +120,23 @@ if (isMuted()) {
 
 **Exception:** modules with no dry audio path clear their output on bypass, because there is nothing to pass through. Two shapes qualify:
 
-- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`).
+- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`). A source whose only input is a
+  knob-only Level cable (Drum Kit, Pluck, Mallet) keeps that CV on ch0, shared with its audio output: it reads the
+  CV before the block writes audio there, so the CV never reaches the output.
 - **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV, and `ComparatorModule`, whose outputs are Gate / Inverse). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
 
 Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.
+
+#### The transition around the two branches
+
+A toggle used to be a hard cut: mute cleared the block in one step and bypass swapped wet for dry in one step. `ModuleBase::processBlock` now smooths that without touching any module's two branches (`Source/Modules/ModuleOutputStage.cpp`).
+
+- **The base keeps an effective bypass/mute state that lags the parameter by one transition.** On the block where a parameter changes, the module keeps rendering its ACTIVE branch (normal DSP) while the base ramps over about 5 ms (at least 64 samples; a ramp longer than the block continues into the next blocks). When the ramp ends the effective state reaches the parameter and the module's own bypass/mute branch takes over from the next block.
+- **Mute** fades the audio legs to 0 (mute on) or in from 0 (mute off). **Bypass** captures the dry input of the audio legs before `processModuleBlock`, renders the module wet, and crossfades wet to dry (bypass on) or dry to wet (bypass off). A leg with no dry path (a source, which clears on bypass) fades like mute.
+- **Only audio legs fade** (`mapOutputChannel` heads with `PortRole::Audio` plus `rightAudioLegChannel()`, plus the one channel a module names in `duplicateOutputChannel()`: VCA's legacy ch1 copy of its output); CV and MIDI outputs switch as before.
+- **`isBypassed()` / `isMuted()` answer for the render thread.** Inside `processModuleBlock` they return the effective state; on every other thread (UI, macro fan-out) they return the parameter, so the user's choice shows at once.
+- **No cost when nothing changes**: with the effective state equal to the parameters, no fade and Mix/Pan at rest (below), `processBlock` takes one predictable branch and the output is bit-identical to calling `processModuleBlock` directly.
+- **Dry capture never allocates on the audio thread.** The base owns the storage: the constructor reserves two legs of 1024 samples, and `prepareOutputLevel()` / `prepareOutputStage()` (call it from `prepareToPlay` in a module without an output level) size it to the module's block size and leg count. A block or leg count past that falls back to the old hard switch for that block.
 
 ### Output Level Stage
 
@@ -112,7 +144,7 @@ Both still use two separate branches, never a fused `if (isBypassed() || isMuted
 
 Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [Output Level](../modules/fx-modules.md#output-level-shared-stage).
 
-Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([the toggle-is-inherited rule](../modules/fx-modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
+Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([the toggle-is-inherited rule](../modules/fx-modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. The Hosted Plugin is a `StereoAudio::Declared` module too (default dual ON): its toggle only acts when the published instance has exactly 2 inputs / 2 outputs ([Hosted Plugin](../modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden)). Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`. A choice parameter is also saved by NAME (`<paramID>__name`, `Source/Modules/ModuleChoiceState.h`) and loaded by name first, because its normalised value shifts when choices are appended; a blob without the name decodes over `ModuleBase::legacyChoiceCount(paramId)` (default: the current count; the LFO returns 8 for `rateSync`, whose list grew to 11).
 
 ## Supporting Components
 
@@ -120,7 +152,7 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 `Source/UI/Layout/LayoutUtil.h/.cpp`
 
-Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](../layout/layout.md#layoututil-api) for the full API reference.
+Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, and, in `HierarchicalArrange.h`, `computeHierarchicalArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](../layout/layout.md#layoututil-api) for the full API reference.
 
 ## ModuleComponent
 
@@ -128,16 +160,15 @@ Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `compute
 translation units, none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
 constants/helpers shared by two or more of them. Source layout:
 
-- `ModuleComponent.cpp` — construction/teardown, header/theme helpers, the auto-UI control builder (`createControls`)
+- `ModuleComponent.cpp` — construction/teardown, header/theme helpers, `createControls` (which hands a built-in module's parameter widgets to its `CardBody`)
 - `ModuleComponentEQCard.cpp` — the Parametric EQ card's layout geometry, knob placement, pop-out window, undo-gesture wiring
 - `ModuleComponentAudioDrop.cpp` — Sampler control creation and audio-file drag-and-drop for the Sampler and Wavetable
-- `ModuleComponentWavetable.cpp` — the Wavetable oscillator's control creation, the hookup of its `WavetableTabStrip`, and the wavetable load/browse flow
-- `WavetableTabStrip.h/.cpp` — the Wavetable card's tabbed page strip as its own component (tab buttons, page table, page visibility and layout)
-- `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing)
+- `ModuleComponentWavetable.cpp` — the Wavetable oscillator's card chrome (display, Table selector, load and folder row) and the wavetable load/browse flow; its tabbed controls are card-body layout data
+- `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing); the body's controls are laid out by the card's `CardBody`
 - `ModuleComponentPaint.cpp` — `paint()`, port geometry/hit-testing, `resized()`'s per-module-type dispatch
 - `ModuleComponentInteraction.cpp` — parameter callback reflection, macro/poly/dual-IO state, context menus, mouse handling, title rename
 
-Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleType` switching. Modulation rings read `AudioEngine::getModulationRoutings()`. Uses `setBufferedToImage(true)` and gates its 15 Hz timer repaint so the `GraphEditor`'s 30 Hz connection animation composites cached module images without re-running JUCE text layout every frame.
+A built-in module's parameter widgets, captions, attachments and Threshold view are owned and laid out by a `CardBody` collaborator (`Source/UI/Graph/CardBody/`, [module-card-layout.md](../layout/module-card-layout.md#rendering)); `ModuleComponent` keeps non-owning `sliders`/`comboBoxes`/`toggles` arrays over them for the units that read them. The bespoke cards (Sequencer, Macros, Parametric EQ, Attenuverter) build through the same `CardBody` but place the widgets themselves (the Wavetable is a layout card whose pages are `tab` sections); External MIDI and a hosted plugin build their own widgets. Modulation rings read `AudioEngine::getModulationRoutings()`. Uses `setBufferedToImage(true)` and gates its 15 Hz timer repaint so the `GraphEditor`'s 30 Hz connection animation composites cached module images without re-running JUCE text layout every frame.
 
 ## AttenuverterModule
 
@@ -149,7 +180,16 @@ Intermediary inserted between a modulation source and its destination to scale C
 
 `Source/AppUndoManager.h/.cpp`
 
-Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle — `setGraphEditor(nullptr)` before graph teardown.
+Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle: a `GraphEditor` built with the manager registers itself (`setGraphEditor`), so a restore detaches the cards of the nodes it frees, and the manager holds the editor weakly.
+
+### A snapshot costs what the edit changed, not the project
+
+Every graph snapshot the manager takes goes through `synth::GraphSnapshotCache` (`Source/AudioEngine/GraphSnapshotCache.h`), never a fresh `AIStateMapper::graphToJSON`. Writing, comparing and sizing the whole project as JSON before and after every edit made each edit and each knob gesture grow with the project (a knob edit took about 250 ms at 200 tracks).
+
+- **A node's JSON object is reused while nothing it writes has changed.** The cache keeps, per node uuid, every field `AIStateMapper::nodeToJSON` writes, read cheaply off the live node (parameters by raw value, the rest as the vars it copies), and the object it built from them. A capture reuses that object when every field reads the same and otherwise calls `nodeToJSON` afresh, so its text is always exactly `graphToJSON`'s (`GraphSnapshotCacheTests` checks that after every kind of edit). **A field added to `nodeToJSON` must be added to the cache's check (`GraphSnapshotCache::readNode` / `Entry::sameAs`)**, or a snapshot reuses a stale object. The cable and modulation lists are reused while the graph's cables (and its attenuverters) are unchanged.
+- **Snapshots share objects and are immutable.** Consecutive snapshots share every unchanged node object, so the history holds each unchanged node once. Nothing may modify a snapshot var in place.
+- **Comparing is `synth::sameJson`, sizing is `synth::estimateJsonSize`.** `sameJson` answers whether two values write the same JSON text without writing any (a shared object is equal at once); a step's size is a count of its states, and anything the cache already counted (an unchanged node, the cable list) is taken from it (`undo_size::KnownSizes`, opened around every push).
+- **Copying a track writes only its nodes.** `SnippetManager::extractSnippet` (copy, paste, duplicate) writes the selected nodes through `nodeToJSON`, not the whole graph.
 
 ### Restoring a snapshot is a diff, not a rebuild
 
@@ -159,7 +199,7 @@ Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes 
 - **A parameter-only undo performs zero topology operations.** No node and no connection is added or removed, so JUCE never rebuilds its render sequence and the audio callback never blocks. Mixed restores batch their topology ops (`UpdateKind::none`) and rebuild exactly once at the end. No graph callback lock is taken at any point.
 - **Module runtime state survives.** Sequencer position, envelope stage and sounding voices belong to the processor instance, which is no longer thrown away. This is also what makes hosted plugins and timeline-driven MIDI sources viable: neither can afford to be re-instantiated on every Cmd+Z.
 - **Any doubt falls back to the old full rebuild.** `applySnapshotPreservingNodes` plans the whole restore before mutating anything and returns `false` — graph untouched — on a live or snapshot node with no uuid, a duplicate uuid or id, a uuid whose module type no longer matches, an unknown type, a connection naming an undefined node, or a merge delta (`"remove"` / `"removeModulations"`) rather than a full snapshot. `SnapshotAction` then runs `applyJSONToGraph(..., clearExisting=true, trusted=true)`, which is always correct. Correctness beats preservation.
-- **UI teardown is now conditional.** The action's `preRestore` hook (`GraphEditor::detachAllModuleComponents`, and the AI service's `aiPatchAboutToApply`) exists to detach UI from processors that are about to be freed, so it fires only when a node is actually being removed — or on the fallback, which frees everything. When nothing is freed there is nothing to detach, and `updateComponents()` (the `postRestore` hook) reconciles additively, so a parameter-only undo no longer destroys and re-creates every `ModuleComponent` either.
+- **UI teardown covers exactly the nodes being freed.** `applySnapshotPreservingNodes` hands the nodes it is about to remove to the step's `preRemove` hook, `GraphEditor::detachModuleComponentsFor`, which unbinds the owner's UI (`onBeforeDetachAllModuleComponents`) and detaches and drops only those nodes' cards; every other card stays bound to its surviving processor and `updateComponents()` (the `postRestore` hook) only builds cards for new nodes. Rebuilding every card was most of an undo of a duplicate (about 1.9 s at 200 tracks). The fallback, which frees everything, and an AI patch step (whose hook is the AI service's `aiPatchAboutToApply`) still run `preRestore`, `GraphEditor::detachAllModuleComponents`. When nothing is freed neither runs, so a parameter-only undo keeps every card.
 
 ### Timeline undo
 
@@ -168,7 +208,7 @@ Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes 
 - `recordTimelineChange(doc, mutation)` snapshots `toVar()` before and after the mutation; if the two serialisations are identical (the doc rejected the edit, or it was a genuine no-op) nothing is pushed and it returns `false` — a no-op must not create an undo step.
 - `recordCombinedChange(graph, doc, mutation)` is for edits that touch both domains in one gesture — the canonical case is deleting a module a timeline lane is bound to. It opens ONE transaction, captures graph + timeline "before", runs the single mutation, then pushes a graph `SnapshotAction` and/or a `TimelineSnapshotAction` — only for whichever domain(s) actually changed — inside that same transaction, so one `undo()`/`redo()` reverts or re-applies both together, never half the edit. It reuses the exact same pre/post-restore lambda plumbing (`detachAllModuleComponents` / `updateComponents`) `recordStructuralChange` gives the graph half, factored into a private `createGraphSnapshotAction` helper rather than duplicated.
 - `recordGraphAndMacroChange(graph, macros, mutation)` is `recordCombinedChange`'s twin for the graph + `synth::MacroSet` pair instead of graph + timeline (see [`docs/macros/macros.md`](../macros/macros.md) for its callers). A graph+macro push (`GraphAndMacroSnapshotAction` when both changed, else the lone graph or macro action) is factored into a private `pushGraphAndMacroActions` helper.
-- `recordGraphTimelineAndMacroChange(graph, doc, macros, mutation)` covers all THREE domains in one gesture — today's one caller is `MainComponent::addAudioTrack`, which creates a graph channel, a timeline track and a macro grouping it in a single "+ Track -> Audio Track" click. Same shape as the other two: one transaction, all three "before" states captured up front, the mutation runs once, all three "after" states captured, then the graph+macro half is pushed through the SAME `pushGraphAndMacroActions` helper `recordGraphAndMacroChange` uses (so a graph+macro combination that needs `GraphAndMacroSnapshotAction` gets it here too), followed by a `TimelineSnapshotAction` if the timeline changed — no `beginNewTransaction` between the two pushes, so one `undo()`/`redo()` covers whichever of the three domains actually changed.
+- `recordGraphTimelineAndMacroChange(graph, doc, macros, mutation)` covers all THREE domains in one gesture — today's one caller is `MainComponent::addAudioTrack`, which creates a graph channel, a timeline track and a macro grouping it in a single "Add Track -> Audio Track" click. Same shape as the other two: one transaction, all three "before" states captured up front, the mutation runs once, all three "after" states captured, then the graph+macro half is pushed through the SAME `pushGraphAndMacroActions` helper `recordGraphAndMacroChange` uses (so a graph+macro combination that needs `GraphAndMacroSnapshotAction` gets it here too), followed by a `TimelineSnapshotAction` if the timeline changed — no `beginNewTransaction` between the two pushes, so one `undo()`/`redo()` covers whichever of the three domains actually changed.
 - **Lifetime rule, extended:** exactly like `SnapshotAction` holding the graph, a pushed `TimelineSnapshotAction` holds a reference to the `TimelineDoc` — the doc must outlive the `AppUndoManager`, or `clearUndoHistory()` must run before the doc is destroyed. `MainComponent` satisfies this by declaration order (see [App wiring](app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) above).
 
 ### Restore hooks
@@ -176,7 +216,7 @@ Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes 
 `setRestoreHooks(beforeRestore, afterRestore)` installs one pair of callbacks fired around **every** restore this manager performs — the graph's `SnapshotAction` and the timeline's `TimelineSnapshotAction` alike, on undo and on redo. They are deliberately *not* the same thing as `SnapshotAction`'s existing `preRestore`/`postRestore` pair, which is the GraphEditor's component lifecycle and whose "pre" half fires **lazily** (only when a node is actually being freed). These always fire, which is what the two current users need:
 
 - `beforeRestore` opens an `AutomationRecorder::ScopedProgrammaticApply`. A parameter-only undo frees nothing — and is exactly the case that writes parameter values — so hanging the guard off the lazy hook would miss it entirely.
-- `afterRestore` re-runs the timeline's binding reconciliation and publish. A **graph** restore can strand a track/lane binding; a **timeline** restore comes back out of `TimelineDoc::fromVar` with every `orphaned` flag reset to `false` (it is runtime-derived state, never serialised). Both need the same pass, and a combined step performs both restores, so the hook fires once per restore rather than once per transaction.
+- `afterRestore` re-runs the timeline's binding reconciliation and publish. A **graph** restore can strand a track/lane binding; a **timeline** restore comes back out of `TimelineDoc::fromVar` with every `orphaned` flag reset to `false` (it is runtime-derived state, never serialised). Both need the same pass. Inside `undo()` / `redo()` the pair fires **once per step**, before the first restore and after the last, so a combined step (a duplicate restores graph + macros and the timeline) reconciles, rebuilds the mixer and republishes once, against the finished state, instead of once per action; a restore driven through `juce::UndoManager` directly fires the pair per action.
 
 Actions capture the manager, not the callbacks, so hooks installed after an action was pushed still apply to it.
 

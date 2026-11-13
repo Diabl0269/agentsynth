@@ -35,6 +35,8 @@ juce::String TimelineTransportBar::actionIdForGlyph(GlyphButton::Glyph glyph) {
         return "transportToggleLoop";
     case GlyphButton::Glyph::Metronome:
         return "transportToggleMetronome";
+    case GlyphButton::Glyph::ReturnToStart:
+        return {}; // not a MIDI Learn target
     }
     return {};
 }
@@ -61,6 +63,8 @@ juce::String TimelineTransportBar::displayNameForGlyph(GlyphButton::Glyph glyph)
         return "Loop";
     case GlyphButton::Glyph::Metronome:
         return "Metronome";
+    case GlyphButton::Glyph::ReturnToStart:
+        return "Return to Start";
     }
     return {};
 }
@@ -71,8 +75,8 @@ juce::String TimelineTransportBar::displayNameForGlyph(GlyphButton::Glyph glyph)
 
 void TimelineTransportBar::mouseDown(const juce::MouseEvent& e) {
     auto* button = dynamic_cast<GlyphButton*>(e.eventComponent);
-    if (button == nullptr || !e.mods.isPopupMenu())
-        return; // not one of the four glyph buttons, or a left-click (the button's own business)
+    if (button == nullptr || !e.mods.isPopupMenu() || actionIdForGlyph(button->getGlyph()).isEmpty())
+        return; // not a MIDI-learnable glyph button, or a left-click (the button's own business)
 
     if (!onMidiLearnRequested)
         return; // headless build, or the MIDI Remote host isn't wired
@@ -188,9 +192,8 @@ void TimelineTransportBar::repaintArmedMidiLearnOutline() {
 }
 
 void TimelineTransportBar::paintMidiLearnOverlays(juce::Graphics& g) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
-    const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
+    const juce::Colour armedColour = synth::theme::themeOf(*this).colors.accent;
 
     for (const auto& [glyph, mapped] : midiLearnMappedBadges_) {
         if (!mapped)

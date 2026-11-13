@@ -1,0 +1,321 @@
+#include "ModDotSourceRow.h"
+
+#include "ModDotPalette.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/ModuleViews/ModCurve/ModCurveChip.h"
+
+namespace synth::ui {
+
+namespace {
+constexpr int kSwatch = 10;
+constexpr int kAmountWidth = 44;
+constexpr int kIconGap = 2; // between the two icon buttons, which read as one group
+constexpr int kBarHeight = 22;
+constexpr float kFont = 12.5f;
+} // namespace
+
+// The signed amount as a button: a click or Return opens the inline editor.
+class ModDotSourceRow::AmountButton final : public juce::Button {
+public:
+    AmountButton()
+        : juce::Button({}) {
+        setWantsKeyboardFocus(true);
+        setMouseCursor(juce::MouseCursor::IBeamCursor);
+    }
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey) {
+            triggerClick();
+            return true;
+        }
+        return false;
+    }
+    void paintButton(juce::Graphics& g, bool over, bool) override {
+        const auto p = modDotPaletteFor(*this);
+        if (over) {
+            g.setColour(p.hover);
+            g.fillRoundedRectangle(getLocalBounds().toFloat(), 4.0f);
+        }
+        g.setColour(p.text);
+        g.setFont(p.mono(12.0f));
+        g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredRight);
+        paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);
+    }
+};
+
+// The name's hit area: hovering it shows the full name (the row draws it elided). A press selects the row; hover
+// already reaches it through the row's mouse listener.
+class ModDotSourceRow::NameTip final
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    explicit NameTip(ModDotSourceRow& row)
+        : row_(row) {
+        setInterceptsMouseClicks(true, false);
+    }
+    void mouseDown(const juce::MouseEvent& e) override { row_.mouseDown(e.getEventRelativeTo(&row_)); }
+
+private:
+    ModDotSourceRow& row_;
+};
+
+juce::Component& ModDotSourceRow::nameArea() noexcept { return *nameTip_; }
+
+ModDotSourceRow::ModDotSourceRow(const KnobModSource& source, const juce::String& paramName)
+    : source_(source)
+    , paramName_(paramName)
+    , hover_(*this)
+    , amountButton_(std::make_unique<AmountButton>())
+    , timelineButton_(ModDotGlyph::Timeline, {}, {})
+    , removeButton_(ModDotGlyph::Trash, {}, {}) {
+    nameTip_ = std::make_unique<NameTip>(*this);
+    nameTip_->setTitle("Name");
+    addAndMakeVisible(*nameTip_);
+    addAndMakeVisible(bar_);
+    addAndMakeVisible(*amountButton_);
+    curveChip_ = std::make_unique<ModCurveChip>();
+    addAndMakeVisible(*curveChip_);
+    addAndMakeVisible(timelineButton_);
+    addAndMakeVisible(removeButton_);
+    addMouseListener(this, true); // hover over any child lights the row
+
+    bar_.onFocused = [this] {
+        if (onSelect)
+            onSelect(*this);
+    };
+    bar_.onGestureBegin = [this] {
+        if (onGestureBegin)
+            onGestureBegin(*this);
+    };
+    bar_.onValueChanged = [this](float v) {
+        amountButton_->setButtonText(ModDotAmountBar::percentText(v));
+        if (onAmountDragged)
+            onAmountDragged(*this, v);
+    };
+    bar_.onGestureEnd = [this] {
+        if (onGestureEnd)
+            onGestureEnd(*this);
+    };
+    amountButton_->onClick = [this] { beginAmountEdit(); };
+    timelineButton_.onClick = [this] {
+        if (onShowInTimeline)
+            onShowInTimeline(*this);
+    };
+    removeButton_.onClick = [this] {
+        if (onRemove)
+            onRemove(*this);
+    };
+    bar_.setAmount(source.amount);
+    amountButton_->setButtonText(ModDotAmountBar::percentText(source.amount));
+    applyNames();
+}
+
+ModDotSourceRow::~ModDotSourceRow() = default;
+
+juce::Button& ModDotSourceRow::amountButton() noexcept { return *amountButton_; }
+
+void ModDotSourceRow::setLook(const Look& look) {
+    look_ = look;
+    resized();
+    repaint();
+}
+
+void ModDotSourceRow::applyNames() {
+    const auto& name = source_.spokenName();
+    nameTip_->setTooltip(name);
+    nameTip_->setTitle(name);
+    setTitle(name + ", " + ModDotAmountBar::percentText(source_.amount));
+    bar_.setTitle(name + " amount");
+    bar_.setTooltip("Drag to change " + name + " amount");
+    // The long form is for a screen reader: a tooltip has to fit inside the panel's window.
+    bar_.setDescription("How strongly " + name +
+                        (paramName_.isEmpty() ? juce::String(" modulates this connection") : " moves " + paramName_));
+    amountButton_->setTitle(name + " amount value");
+    amountButton_->setTooltip("Click to type " + name + " amount");
+    timelineButton_.setTitle("Show " + name + " in timeline");
+    timelineButton_.setTooltip("Show " + name + " in timeline");
+    removeButton_.setTitle("Remove " + name);
+    removeButton_.setTooltip("Remove " + name);
+}
+
+void ModDotSourceRow::update(const KnobModSource& source) {
+    const bool renamed = source.sourceName != source_.sourceName || source.fullName != source_.fullName;
+    const bool amountChanged = source.amount != source_.amount;
+    source_ = source;
+    if (!bar_.isMouseButtonDown()) {
+        bar_.setAmount(source.amount);
+        amountButton_->setButtonText(ModDotAmountBar::percentText(source.amount));
+    }
+    if (renamed || amountChanged)
+        applyNames();
+    if (renamed)
+        curveChip_->setSourceName(source.spokenName());
+    curveChip_->refresh();
+    repaint();
+}
+
+juce::Colour ModDotSourceRow::swatchColour() const { return modDotPaletteFor(*this).swatchFor(bar_.amount()); }
+
+void ModDotSourceRow::setSelected(bool selected) {
+    if (selected_ == selected)
+        return;
+    selected_ = selected;
+    repaint();
+}
+
+// A name too wide for its area gives up its module first: the port is what tells two rows of one module apart, and
+// the tooltip still says the whole name.
+juce::String ModDotSourceRow::shownName() const {
+    const auto& name = source_.sourceName;
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(kFont)), name, 0.0f, 0.0f);
+    if (glyphs.getBoundingBox(0, -1, true).getWidth() <= (float)nameArea_.getWidth())
+        return name;
+    const auto separator = juce::String::fromUTF8(" \xC2\xB7 ");
+    const int at = name.indexOf(separator);
+    return at >= 0 ? name.substring(at + separator.length()) : name;
+}
+
+void ModDotSourceRow::paint(juce::Graphics& g) {
+    const auto p = modDotPaletteFor(*this);
+    const auto area = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(), (float)look_.height).reduced(2.0f, 1.0f);
+    if (hover_.value() > 0.0f) {
+        g.setColour(p.hover.withAlpha(hover_.value()));
+        g.fillRoundedRectangle(area, 6.0f);
+    }
+    if (selected_) {
+        g.setColour(p.accent.withAlpha(0.10f));
+        g.fillRoundedRectangle(area, 6.0f);
+    }
+    g.setColour(p.swatchFor(bar_.amount()));
+    g.fillEllipse(swatchArea_.toFloat());
+    g.setColour(p.text);
+    g.setFont(juce::Font(juce::FontOptions(kFont)));
+    g.drawText(shownName(), nameArea_, juce::Justification::centredLeft, true);
+}
+
+void ModDotSourceRow::resized() {
+    // Laid out for the full row height whatever height the page has given it: a row growing in or shrinking out
+    // is revealed and hidden, never squashed.
+    // Left to right: swatch, name, fader, amount, curve, timeline, remove, each group a theme spacing unit from the
+    // next so the icons never touch the fader or the amount.
+    const int gap = modDotPaletteFor(*this).space;
+    timelineButton_.setVisible(look_.timeline);
+    auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+    removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
+                                .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
+    if (look_.timeline)
+        r.removeFromRight(kIconGap);
+    r = layoutControls(r, gap);
+    swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
+    r.removeFromLeft(gap);
+    // An elastic name is kNameMax wide, less what the fader needs to keep kMinBar; every row of a list lines up.
+    const int nameWidth =
+        look_.nameWidth == kElasticName ? juce::jlimit(0, kNameMax, r.getWidth() - gap - kMinBar) : look_.nameWidth;
+    nameArea_ = r.removeFromLeft(nameWidth);
+    nameTip_->setBounds(nameArea_);
+    r.removeFromLeft(gap);
+    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
+    if (editor_ != nullptr)
+        editor_->setBounds(amountButton_->getBounds());
+    setReadingFocusOrder();
+}
+
+// Tab follows reading order, not the controls' top edges: the default traverser sorts siblings by y first, and the
+// controls differ in height (the timeline button fills its line, the fader is thin), so it would visit the timeline
+// button before the fader. The row reads fader, amount, curve, timeline, remove.
+void ModDotSourceRow::setReadingFocusOrder() {
+    int order = 1;
+    for (juce::Component* c :
+         {static_cast<juce::Component*>(&bar_), static_cast<juce::Component*>(amountButton_.get()),
+          static_cast<juce::Component*>(curveChip_.get()), static_cast<juce::Component*>(&timelineButton_),
+          static_cast<juce::Component*>(&removeButton_)})
+        c->setExplicitFocusOrder(order++);
+}
+
+// Timeline (when shown), curve and amount from the right edge of `r`; returns what is left of it.
+juce::Rectangle<int> ModDotSourceRow::layoutControls(juce::Rectangle<int> r, int gap) {
+    if (look_.timeline)
+        timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    r.removeFromRight(gap);
+    curveChip_->setBounds(
+        r.removeFromRight(ModCurveChip::kWidth).withSizeKeepingCentre(ModCurveChip::kWidth, ModCurveChip::kHeight));
+    r.removeFromRight(gap);
+    amountButton_->setBounds(r.removeFromRight(kAmountWidth).withSizeKeepingCentre(kAmountWidth, 20));
+    r.removeFromRight(gap);
+    return r;
+}
+
+void ModDotSourceRow::mouseEnter(const juce::MouseEvent&) { hover_.setHovered(isMouseOver(true)); }
+void ModDotSourceRow::mouseExit(const juce::MouseEvent&) { hover_.setHovered(isMouseOver(true)); }
+
+void ModDotSourceRow::mouseDown(const juce::MouseEvent& e) {
+    if (e.eventComponent == this && onSelect)
+        onSelect(*this);
+}
+
+bool ModDotSourceRow::keyPressed(const juce::KeyPress& key) {
+    if (editor_ == nullptr && onNavigate &&
+        (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey))) {
+        onNavigate(*this, key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    return false;
+}
+
+void ModDotSourceRow::beginAmountEdit() {
+    if (editor_ != nullptr)
+        return;
+    if (onSelect)
+        onSelect(*this);
+    const auto p = modDotPaletteFor(*this);
+    editor_ = std::make_unique<NavigationSearchField>();
+    editor_->setTitle(source_.sourceName + " amount value");
+    editor_->setMultiLine(false);
+    editor_->setJustification(juce::Justification::centredRight);
+    editor_->setFont(p.mono(12.0f));
+    editor_->setBorder(juce::BorderSize<int>(0, 2, 0, 2));
+    editor_->setColour(juce::TextEditor::backgroundColourId, p.field);
+    editor_->setColour(juce::TextEditor::textColourId, p.text);
+    editor_->setColour(juce::TextEditor::outlineColourId, p.border);
+    editor_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
+    editor_->setInputRestrictions(5, "0123456789.-+%");
+    editor_->setText(juce::String(juce::roundToInt(bar_.amount() * 100.0f)), false);
+    editor_->onNavigationKey = [this](const juce::KeyPress& key) {
+        if (key == juce::KeyPress::returnKey) {
+            endAmountEdit(true);
+            return true;
+        }
+        if (key == juce::KeyPress::escapeKey) {
+            endAmountEdit(false);
+            return true;
+        }
+        return false;
+    };
+    editor_->onFocusLost = [this] {
+        juce::Component::SafePointer<ModDotSourceRow> self(this);
+        juce::MessageManager::callAsync([self] {
+            if (self != nullptr && self->editor_ != nullptr && !self->editor_->hasKeyboardFocus(true))
+                self->endAmountEdit(true);
+        });
+    };
+    addAndMakeVisible(*editor_);
+    editor_->setBounds(amountButton_->getBounds());
+    editor_->grabKeyboardFocus();
+    editor_->selectAll();
+}
+
+void ModDotSourceRow::endAmountEdit(bool apply) {
+    if (editor_ == nullptr)
+        return;
+    const auto text = editor_->getText().retainCharacters("0123456789.-+");
+    // Kept alive (hidden) until the next edit: this runs inside the editor's own key handler.
+    editor_->onFocusLost = nullptr;
+    removeChildComponent(editor_.get());
+    retired_ = std::move(editor_);
+    // Focus goes back to the amount button once the editor is gone.
+    amountButton_->grabKeyboardFocus();
+    if (apply && text.containsAnyOf("0123456789") && onAmountTyped)
+        onAmountTyped(*this, juce::jlimit(-1.0f, 1.0f, text.getFloatValue() / 100.0f));
+}
+
+} // namespace synth::ui

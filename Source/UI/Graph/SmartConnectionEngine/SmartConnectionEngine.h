@@ -19,11 +19,20 @@
 #include <optional>
 #include <vector>
 
+namespace synth {
+class MacroOwnerIndex;
+}
+
 class SmartConnectionEngine {
 public:
     // Proximity-based cable suggestions while placing a module. One setting covers Off /
     // library-only / free-main-I/O moves / all moves.
     enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
+
+    /** Whether a module placed beside a wired neighbour connects on its own (Always) or only while
+     *  Ctrl is held (OnlyWithCtrl). It decides what an OCCUPIED destination jack means: Always
+     *  inserts the module in series with no key, OnlyWithCtrl keeps the older hard stop. */
+    enum class SideBySideMode { Always, OnlyWithCtrl };
 
     /** One suggested cable shown as a frosted preview during drag; applied on drop.
      *
@@ -97,6 +106,10 @@ public:
         bool isSnippet = false;
         juce::AudioProcessor* probe = nullptr;
         bool selectionDragBlocksSuggestions = false;
+        /** The card an open insert-between gap sits in front of (the gap's anchor); uid 0 when no gap is open. The
+         *  ghost is then sitting in the slot between two cards, so that card is judged as an insert target the way
+         *  it is under Ctrl (see refreshSmartSuggestions). */
+        juce::AudioProcessorGraph::NodeID gapAnchorId{};
     };
 
     explicit SmartConnectionEngine(GraphCanvasHost& host)
@@ -104,6 +117,9 @@ public:
 
     void refreshSmartSuggestions(const DragPreviewState& drag);
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
+    /** Whether an insert into `neighbor` is judged by the aim, not jack-to-jack distance (see the unit). */
+    bool relaxesFlowForInsert(const DragPreviewState& drag, ModuleComponent* neighbor,
+                              const juce::Rectangle<int>& aim) const;
     void clearSmartSuggestions() { smartSuggestions_.clear(); }
 
     /** Re-evaluates the suggestions when the insert modifier changed since the last drag tick. A
@@ -112,6 +128,15 @@ public:
 
     void setSmartConnectionMode(SmartConnectionMode mode) noexcept { smartConnectionMode_ = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode_; }
+
+    void setSideBySideMode(SideBySideMode mode) noexcept { sideBySideMode_ = mode; }
+    SideBySideMode getSideBySideMode() const noexcept { return sideBySideMode_; }
+    static SideBySideMode sideBySideModeFromString(const juce::String& s);
+    static juce::String sideBySideModeToString(SideBySideMode mode);
+
+    /** Whether an occupied destination may be inserted into right now: always under
+     *  SideBySideMode::Always, otherwise only while Ctrl is down. */
+    bool insertIsAllowedNow() const { return sideBySideMode_ == SideBySideMode::Always || isInsertModifierDown(); }
 
     void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride_ = down; }
 
@@ -175,10 +200,27 @@ public:
      *  also re-checks it before applying, exactly as it did when this lived on GraphEditor. */
     bool shouldOfferSmartConnections(const DragPreviewState& drag) const;
 
+    /** The macro the dragged module sits in once dropped, empty for the open canvas. Only cards whose jacks face that
+     *  container are ever suggested or rerouted. */
+    juce::String dropContainer(const DragPreviewState& drag) const;
+
 private:
+    /** The container `nodeId`'s inputs (`throughInput`) or outputs face. */
+    juce::String containerFacing(const synth::MacroOwnerIndex& owners, juce::AudioProcessorGraph::NodeID nodeId,
+                                 bool throughInput) const;
+    /** Which jack sides of `neighbor` may be wired from `target`; neither for a hidden card. */
+    struct ScopeSides {
+        bool inputs = false, outputs = false;
+    };
+    ScopeSides sidesFacing(const synth::MacroOwnerIndex& owners, const juce::String& target,
+                           const ModuleComponent& neighbor) const;
+    /** The processor of the module being dragged (the probe for a library drag); null when nothing is offered. */
+    juce::AudioProcessor* ghostProcessorFor(const DragPreviewState& drag) const;
+
     GraphCanvasHost& host_;
 
     SmartConnectionMode smartConnectionMode_ = SmartConnectionMode::NewAndUnwired;
+    SideBySideMode sideBySideMode_ = SideBySideMode::Always;
     std::optional<bool> insertModifierOverride_; // tests only; empty means read the real keyboard
     // Last modifier state the drag tick saw, so a press/release that happens WITHOUT a mouse move
     // still re-evaluates the suggestions exactly once (see refreshSuggestionsIfInsertModifierChanged).

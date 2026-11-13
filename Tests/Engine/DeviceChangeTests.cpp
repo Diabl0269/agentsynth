@@ -308,14 +308,19 @@ TEST(DeviceChangeTest, StreamerRefillsAtNewMappingWithoutGarbage) {
     int firstBad = -1;
     int bad = 0;
     for (int i = 0; i < afterPump.getNumSamples(); ++i) {
-        if (std::abs(afterPump.getSample(0, i) - sourceSample(expectedStartFrame + i, 0)) > 0.0f) {
+        // The file is 48 kHz and the engine now runs at kNewSampleRate, so playback frame n reads file
+        // position n * 48000 / kNewSampleRate. The source is a ramp, which the Hermite resampler
+        // reproduces exactly (away from the wrap), so the expectation is the ramp at that position.
+        const double filePosition = (double)(expectedStartFrame + i) * kSampleRate / kNewSampleRate;
+        const float expected = (float)(std::fmod(filePosition, (double)kSourcePeriod) / (double)kSourcePeriod);
+        if (std::abs(afterPump.getSample(0, i) - expected) > 1.0e-5f) {
             if (bad == 0)
                 firstBad = i;
             ++bad;
         }
     }
     EXPECT_EQ(bad, 0) << "first mismatch at sample " << firstBad
-                      << " — the refilled ring must serve the NEW rate's mapping exactly";
+                      << " — the refilled ring must serve the NEW rate's mapping";
 }
 
 // ============================================================================
@@ -462,6 +467,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCommittedAtFormatChange) {
     const int frozenLatency = engine.getRecordingLatencySamples(); // what the commit must have used
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
     mc.timerCallback(); // arms input monitoring so the input reaches the tap
 
@@ -540,6 +546,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCapturesNothingAfterTheRateBoundary) {
     engine.audioDeviceAboutToStart(&fake48);
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
     mc.timerCallback(); // arms input monitoring so the input reaches the tap
 

@@ -1,14 +1,33 @@
 #include "AppLookAndFeel.h"
 
+#include "UI/Layout/FocusRing.h"
+
 namespace synth::theme {
 
 // Concern: combo boxes and popup menus.
+
+// A 2-segment "v" stroked in `colour`; the combo box's own chevron and the routing pane's chip combos share it.
+void paintComboChevron(juce::Graphics& g, juce::Point<float> centre, juce::Colour colour) {
+    constexpr float kArrowSize = 5.0f; // half-width
+    juce::Path chevron;
+    chevron.startNewSubPath(centre.x - kArrowSize, centre.y - kArrowSize * 0.4f);
+    chevron.lineTo(centre.x, centre.y + kArrowSize * 0.6f);
+    chevron.lineTo(centre.x + kArrowSize, centre.y - kArrowSize * 0.4f);
+    g.setColour(colour);
+    g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+namespace {
+bool isCompactCombo(const juce::ComboBox& box) {
+    return (bool)box.getProperties().getWithDefault(AppLookAndFeel::kCompactComboProperty, false);
+}
+} // namespace
 
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
                                   int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
-    const bool enabled = box.isEnabled();
+    const bool enabled = box.isEnabled() && !paintsDimmed(box); // a dimmed combo stays operable, painted greyed
 
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height).reduced(0.5f);
 
@@ -21,21 +40,16 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, m.pillRadius);
 
-    // Outline: accent when focused, else themed border.
-    g.setColour(box.hasKeyboardFocus(false) ? c.accent : box.findColour(juce::ComboBox::outlineColourId));
+    // Outline: the themed border; the keyboard-focus ring is the shared one, painted last (below) so every select in
+    // the app shows the same ring a button does.
+    g.setColour(box.findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 
-    // Chevron: a 2-segment "v" path stroked in the muted arrow colour (dimmed when disabled).
-    const float cx = (float)width - 14.0f;
-    const float cy = (float)height * 0.5f;
-    juce::Path chevron;
-    chevron.startNewSubPath(cx - kComboArrowSize, cy - kComboArrowSize * 0.4f);
-    chevron.lineTo(cx, cy + kComboArrowSize * 0.6f);
-    chevron.lineTo(cx + kComboArrowSize, cy - kComboArrowSize * 0.4f);
-
+    // Chevron: dimmed when disabled.
     auto arrowCol = box.findColour(juce::ComboBox::arrowColourId);
-    g.setColour(enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
-    g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (!isCompactCombo(box))
+        paintComboChevron(g, {(float)width - 14.0f, (float)height * 0.5f},
+                          enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
 
     // Waveform icon: if the selected item carries a Drawable icon, render it inside the closed
     // combo box to the left of the text label (which positionComboBoxText positions at x=8).
@@ -64,6 +78,8 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
             }
         }
     }
+
+    synth::ui::paintFocusRing(g, juce::Rectangle<float>(0, 0, (float)width, (float)height), box, m.pillRadius);
 }
 
 void AppLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box, juce::Label& label) {
@@ -75,7 +91,7 @@ void AppLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce
 void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
     // If the selected item carries a Drawable icon, shift the text label right to leave room
     // for the ~14 px icon (painted in drawComboBox) plus a 4 px gap.
-    int leftOffset = 8;
+    int leftOffset = kComboTextLeftInset;
     const int selectedId = box.getSelectedId();
     if (selectedId > 0) {
         const juce::PopupMenu* rootMenu = box.getRootMenu();
@@ -91,8 +107,38 @@ void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& labe
             }
         }
     }
-    label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - 22, box.getHeight() - 2);
-    label.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f)));
+    if (isCompactCombo(box)) {
+        label.setBounds(1, 1, box.getWidth() - 2, box.getHeight() - 2);
+        label.setJustificationType(juce::Justification::centred);
+        label.setBorderSize(juce::BorderSize<int>(0));
+        label.setFont(getComboBoxFont(box));
+        return;
+    }
+    label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - kComboTextRightInset, box.getHeight() - 2);
+    label.setFont(getComboBoxFont(box));
+}
+
+juce::Font AppLookAndFeel::getComboBoxFont(juce::ComboBox& box) {
+    return juce::Font(juce::FontOptions(theme.type.label + (isCompactCombo(box) ? -1.5f : 2.0f)));
+}
+
+// Width = widest item text + the label's insets, which are whatever the active look-and-feel's
+// positionComboBoxText applies (probed on a scratch combo so a stock look-and-feel works too).
+int AppLookAndFeel::comboBoxWidthToFitItems(juce::ComboBox& box) {
+    auto& lf = box.getLookAndFeel();
+    const auto font = lf.getComboBoxFont(box);
+    int textWidth = 0;
+    for (int i = 0; i < box.getNumItems(); ++i)
+        textWidth = juce::jmax(textWidth, juce::GlyphArrangement::getStringWidthInt(font, box.getItemText(i)));
+
+    constexpr int kProbeWidth = 400;
+    juce::Label probe;
+    probe.setBounds(0, 0, kProbeWidth, 20);
+    juce::ComboBox scratch;
+    scratch.setBounds(0, 0, kProbeWidth, 20);
+    lf.positionComboBoxText(scratch, probe);
+    const int insets = scratch.getWidth() - probe.getWidth() + probe.getBorderSize().getLeftAndRight();
+    return textWidth + insets;
 }
 
 void AppLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width, int height) {

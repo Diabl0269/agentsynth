@@ -29,7 +29,7 @@ public:
     explicit PatchFeedbackStore(juce::File feedbackFile);
 
     // Appends one record. Creates the parent directory if needed. `patchJson` should be the
-    // patch's raw JSON text (the same string PatchCard renders); malformed JSON is stored verbatim
+    // rated answer's plan JSON (the same string the edit-plan card shows); malformed JSON is stored verbatim
     // under "patchRaw" rather than dropped.
     //
     // `conversationId`/`messageId` are the server-side ids this rating corresponds to, when

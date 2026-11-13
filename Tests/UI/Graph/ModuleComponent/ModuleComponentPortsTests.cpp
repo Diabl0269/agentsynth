@@ -134,6 +134,9 @@ TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
         // Header buttons live in the title bar by design; everything else is body content.
         if (dynamic_cast<juce::DrawableButton*>(child) != nullptr)
             continue;
+        // A jack's accessible stand-in sits on the jack on purpose; it paints nothing.
+        if (moduleComponent.getPortAccessiblesForTest().contains(child))
+            continue;
         if (!child->isVisible() || child->getBounds().isEmpty())
             continue;
 

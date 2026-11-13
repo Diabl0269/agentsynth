@@ -1,6 +1,12 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/ChevronTurn.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FoldAllButton.h"
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -20,18 +26,25 @@
 // the timeline and piano-roll surfaces became rebindable, and a flat list that long is unusable —
 // so rows are grouped into one collapsible section per ShortcutCategory, with a search field above
 // them. The idioms are lifted from ModuleLibraryComponent (docs/layout/module-library.md) on purpose, so the
-// two collapsible lists in the app behave identically: clickable header rows with a chevron, a
+// two collapsible lists in the app behave identically: header rows with a chevron, a
 // collapsed-set keyed by the header's name, and a top strip whose label flips between
-// "COLLAPSE ALL" and "EXPAND ALL".
+// "Collapse all" and "Expand all" (the shared synth::ui::FoldAllButton, as in the Preferences All view).
+// Headers, the strip and every rebind button are real buttons,
+// so Tab visits them top to bottom and Space/Return act on them; while a row listens for its new
+// key, that row's button keeps focus and takes every key, Escape cancelling.
 //
-// Two things it deliberately does NOT copy from the library sidebar:
-//   - No fold ANIMATION. The library's accordion is a VBlank-driven AnimationDriver over a
-//     hand-laid-out row list; here the rows are real child components inside a juce::Viewport, so a
-//     fold would have to animate child bounds every frame for no benefit in a modal settings dialog.
-//     Collapsing is instant.
-//   - No PERSISTENCE of the collapse state. This tab is constructed fresh every time the Settings
-//     window opens, and nothing has asked for the folds to survive that; keeping it in memory means
-//     no new settings key to migrate.
+// Folding and filtering animate the way the Preferences groups do (docs/layout/animation.md#fading-things-in-and-out):
+// a row a fold or the search takes out fades (synth::ui::FadeVisibility) while its slot is squeezed to the fade's
+// progress(), so the rows below slide up; a row that comes back does the reverse. Reduce Motion is the plain 80 ms
+// fade, and Animations Off or a tab that is not on screen land at once. A section that the search drops entirely
+// fades its header and gaps the same way. A section header's chevron turns (synth::ui::ChevronTurn) and the "No
+// matching shortcuts" line fades in and out as the rows close up. The animation library's accordion
+// (ModuleLibraryComponent) is laid out by hand and drives its own tween; here the rows are real child components, so
+// the fade and the squeezed slot are what move them.
+//
+// The folds ARE remembered (user setting shortcutsFolded, the folded categories by stable name):
+// the tab is constructed fresh each time the Settings window opens, and it restores them before
+// its first layout, so it opens as it was left, with nothing fading on that first layout.
 //
 // ROW INDEXING IS A CONTRACT: row i is ShortcutManager::getActionIds()[i], sections or no sections.
 // The section headers are separate widgets, never entries in the row vectors, and
@@ -44,15 +57,14 @@
 // the test target in CMakeLists.txt (consolidation pass).
 class ShortcutsSettingsTab : public juce::Component {
 public:
-    explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager);
-    ~ShortcutsSettingsTab() override = default;
+    // appProperties (nullable) is where the folded sections are remembered; null keeps them in memory only.
+    explicit ShortcutsSettingsTab(ShortcutManager& shortcutManager,
+                                  juce::ApplicationProperties* appProperties = nullptr);
+    ~ShortcutsSettingsTab() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
-    void mouseDown(const juce::MouseEvent& e) override;
-    void mouseMove(const juce::MouseEvent& e) override;
-    void mouseExit(const juce::MouseEvent& e) override;
 
     // -------------------------------------------------------------------------
     // Pure decision helpers — no component state, callable headlessly
@@ -125,12 +137,26 @@ public:
      *  this" without decoding pixels. */
     bool isRowVisible(int index) const;
 
+    /** True while any row or header is still fading in or out. */
+    bool anyFadeRunningForTest() const;
+    /** The "No matching shortcuts" line and the fade that shows and hides it. */
+    juce::Component& getNoMatchHintForTest() { return noMatchHint_; }
+    const synth::ui::FadeVisibility& getNoMatchFadeForTest() const { return *noMatchFade_; }
+    /** The chevron of `category`'s header: its openness (0 folded, 1 open) and whether it is still turning. */
+    float getChevronOpennessForTest(ShortcutCategory category) const;
+    bool isChevronTurningForTest(ShortcutCategory category) const;
+    /** Content height of the scrolled rows, so a test can watch the slots squeeze. */
+    int getContentHeightForTest() const { return rowsHost.getHeight(); }
+    /** The on-screen component of row [index] (its rebind button), which fades with the row. */
+    juce::Component& getRowButtonForTest(int index) { return *bindButtons[(size_t)index]; }
+    juce::Component& getRowLabelForTest(int index) { return *descLabels[(size_t)index]; }
+
     /** True when `category`'s header is currently laid out. */
     bool isSectionVisible(ShortcutCategory category) const;
 
     // ---- Row geometry (pixels) ----
     static constexpr int kSearchHeight = 26;
-    static constexpr int kTopStripHeight = 20;
+    static constexpr int kTopStripHeight = synth::ui::FoldAllButton::kStripHeight;
     static constexpr int kSectionHeaderHeight = 22;
     static constexpr int kRowHeight = 26;
     static constexpr int kRowGap = 3;
@@ -143,9 +169,9 @@ private:
     void refreshBindingLabels();
 
     /** Recomputes which rows/headers are on screen and where, then applies the bounds and the
-     *  visibility. THE single layout pass: painting (headers, dividers), hit-testing (header
-     *  clicks) and the child bounds all read `layout`, so they cannot disagree about where a row is
-     *  — the same "one enumeration" rule ModuleLibraryComponent::buildRows follows. */
+     *  visibility. THE single layout pass: the header buttons, the rows and the empty-state text
+     *  all read `layout`, so they cannot disagree about where a row is — the same "one
+     *  enumeration" rule ModuleLibraryComponent::buildRows follows. */
     void rebuildLayout();
 
     // One entry per thing on screen, top to bottom, in CONTENT (scrolled) coordinates.
@@ -157,41 +183,66 @@ private:
         bool isHeader = false;
     };
 
-    /** The scrolled content: a bare host whose paint/mouse handlers delegate straight back to the
-     *  tab, so the section chrome is drawn (and clicked) in the same coordinate space the rows are
-     *  laid out in. */
+    /** The scrolled content: a bare host the rows, headers and the empty-state line are children of. */
     struct RowsHost : juce::Component {
-        explicit RowsHost(ShortcutsSettingsTab& o)
-            : owner(o) {
-            setMouseClickGrabsKeyboardFocus(false);
-        }
-        void paint(juce::Graphics& g) override { owner.paintRows(g); }
-        void mouseDown(const juce::MouseEvent& e) override { owner.rowsMouseDown(e); }
-        void mouseMove(const juce::MouseEvent& e) override { owner.rowsMouseMove(e); }
-        void mouseExit(const juce::MouseEvent&) override { owner.rowsMouseExit(); }
-        ShortcutsSettingsTab& owner;
+        RowsHost() { setMouseClickGrabsKeyboardFocus(false); }
     };
 
-    void paintRows(juce::Graphics& g);
-    void rowsMouseDown(const juce::MouseEvent& e);
-    void rowsMouseMove(const juce::MouseEvent& e);
-    void rowsMouseExit();
+    /** The "No matching shortcuts" line: painted text only, no mouse, no accessibility node (it never had one). */
+    struct NoMatchHint : juce::Component {
+        NoMatchHint() {
+            setInterceptsMouseClicks(false, false);
+            setAccessible(false);
+        }
+        void paint(juce::Graphics& g) override;
+    };
 
-    /** Header bounds of the section at content-space y, or nullopt — the header hit test. */
-    std::optional<ShortcutCategory> sectionHeaderAt(juce::Point<int> contentPos) const;
+    /** A section header: a real button, so Tab reaches it and Space/Return fold the section. */
+    class HeaderButton
+        : public juce::Button
+        , public synth::ui::FoldableHeader {
+    public:
+        explicit HeaderButton(ShortcutCategory c);
+        void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
+        /** `animate` false lands the chevron at once (the first layout, a header that was there from the start). */
+        void setCollapsed(bool isCollapsed, bool animate = true);
+        float chevronOpenness() const noexcept { return turn_.openness(); }
+        bool isChevronTurning() const noexcept { return turn_.isTurning(); }
+        bool isFolded() const override { return collapsed_; }
+        void setFolded(bool folded) override;
 
-    /** True when `tabPos` falls inside the pinned collapse-all strip (tab coordinates). */
-    bool isInTopStrip(juce::Point<int> tabPos) const { return topStripBounds.contains(tabPos); }
+    private:
+        bool collapsed_ = false;
+        synth::ui::ChevronTurn turn_{*this};
+    };
 
-    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, bool collapsed, juce::Colour colour);
+    /** A rebind button. While its row is listening it hands every key to the tab, so any key
+     *  (Space and Return included) becomes the new binding rather than pressing the button. */
+    class RebindButton : public juce::TextButton {
+    public:
+        std::function<bool(const juce::KeyPress&)> onKey;
+        std::function<void()> onFocusLost;
+        bool keyPressed(const juce::KeyPress& key) override {
+            return (onKey && onKey(key)) || juce::TextButton::keyPressed(key);
+        }
+        void focusLost(FocusChangeType type) override {
+            juce::TextButton::focusLost(type);
+            if (onFocusLost)
+                onFocusLost();
+        }
+    };
 
     ShortcutManager& shortcutManager;
+    juce::ApplicationProperties* appProperties = nullptr; // weak, nullable
+    void saveFolds();
 
     juce::Label titleLabel;
     juce::TextEditor searchEditor;
     juce::StringArray actionIds;
     std::vector<std::unique_ptr<juce::Label>> descLabels;
-    std::vector<std::unique_ptr<juce::TextButton>> bindButtons;
+    std::vector<std::unique_ptr<RebindButton>> bindButtons;
+    std::vector<std::unique_ptr<HeaderButton>> headerButtons; // in ShortcutManager::getCategoryOrder() order
+    synth::ui::FoldAllButton foldAllButton;                   // the pinned strip above the rows
     juce::TextButton resetButton;
     juce::TextButton exportButton;
     juce::TextButton importButton;
@@ -199,17 +250,24 @@ private:
     int listeningIndex = -1;
 
     juce::Viewport rowsViewport;
-    RowsHost rowsHost{*this};
+    RowsHost rowsHost;
+    NoMatchHint noMatchHint_;
+    std::unique_ptr<synth::ui::FadeVisibility> noMatchFade_;
     std::vector<LayoutEntry> layout;
-    // Set by resized(); the collapse-all strip is painted and hit-tested from it, so the two can
-    // never drift apart.
+    // Set by resized(): where the collapse-all strip button sits.
     juce::Rectangle<int> topStripBounds;
+    synth::ui::ScrollIntoViewOnFocus followFocus_{rowsViewport};
     // Keyed by category, exactly as ModuleLibraryComponent keys its own set by header name.
     std::set<ShortcutCategory> collapsedSections;
-    // Hover feedback, repainted only on a change (never per mouse-move) — the header the pointer is
-    // over, and the collapse-all strip.
-    std::optional<ShortcutCategory> hoveredHeader;
-    bool topStripHovered = false;
-
+    // One fade per row (label and button together) and per header, made once every widget exists. `fadesReady_`
+    // is false until the first layout, which lands each on its state instead of fading it.
+    std::vector<std::unique_ptr<synth::ui::FadeVisibility>> rowFades_;
+    std::vector<std::unique_ptr<synth::ui::FadeVisibility>> headerFades_;
+    bool laidOutOnce_ = false;
+    // Test mode: a hidden child (id `shortcutsSettingsState`) reports `sections` (the category names of the headers
+    // on screen, top to bottom, comma-separated) and `eqRows` (the descriptions of the rows of the EQ category, in
+    // table order, comma-separated; empty when the section is hidden or folded).
+    class StateProbe;
+    std::unique_ptr<StateProbe> stateProbe_;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutsSettingsTab)
 };

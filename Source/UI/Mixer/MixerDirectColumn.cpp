@@ -8,19 +8,25 @@
 
 namespace synth::ui {
 
+void MixerDirectColumn::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
 MixerDirectColumn::MixerDirectColumn() {
     // grabAccessibilityFocus() grabs focus on `this` (Direct has no fader to
     // target) -- without a title, its default unspecified-role AccessibilityHandler reads nothing.
     setTitle("Direct");
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
-    header_.setRenameEnabled(false); // Direct has no node, so no strip/macro name to write a rename to
+    header_.setRenameEnabled(false);     // Direct has no node, so no strip/macro name to write a rename to
+    header_.setEditOnCanvasShown(false); // ...and nothing on the canvas to edit
     addAndMakeVisible(makeChannelButton_);
     // Explicit, rather than relying on Button::getButtonText()'s fallback (the ctor's
     // "Make channel" argument already IS the button text, but a title makes the AX handler's
     // getTitle() resolve directly instead of falling through ButtonAccessibilityHandler's own
     // getButtonText() fallback).
     makeChannelButton_.setTitle("Make channel");
+    makeChannelButton_.setTooltip("Turn this input into a mixer channel");
     // MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.
     makeChannelButton_.setWantsKeyboardFocus(false);
@@ -60,9 +66,8 @@ void MixerDirectColumn::setKeyboardFocused(bool focused) {
 }
 
 void MixerDirectColumn::paint(juce::Graphics& g) {
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bg = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto border = laf != nullptr ? laf->getTheme().colors.border : juce::Colour(0xff2A2F38);
+    const auto bg = synth::theme::themeOf(*this).colors.surface;
+    const auto border = synth::theme::themeOf(*this).colors.border;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
     g.setColour(border);
@@ -72,8 +77,7 @@ void MixerDirectColumn::paint(juce::Graphics& g) {
 void MixerDirectColumn::paintOverChildren(juce::Graphics& g) {
     if (!keyboardFocused_)
         return;
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(accent.withAlpha(0.85f));
     g.drawRect(getLocalBounds(), 2);
 }

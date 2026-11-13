@@ -2,6 +2,7 @@
 // post-setProvider() refresh regression lock), toolbar button bounds after construction,
 // the Locate Master command reached through the real Cmd+Shift+M key path, and that a
 // test-constructed MainComponent never touches the real MIDI Remote controller profiles folder.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
@@ -95,7 +96,7 @@ TEST_F(MainComponentTest, ToolbarButtonsHaveNonZeroBoundsAfterConstruction) {
     MainComponent mc(std::make_unique<MockProvider>());
     // No extra setSize() or toggle call — bounds must already be set by the constructor.
     auto buttons = collectToolbarButtons(mc);
-    ASSERT_EQ((int)buttons.size(), 9) << "Expected 9 toolbar DrawableButtons";
+    ASSERT_EQ((int)buttons.size(), 7) << "Expected 7 top-bar DrawableButtons";
     for (auto* b : buttons) {
         EXPECT_GT(b->getWidth(), 0) << "Button '" << b->getComponentID() << "' has zero width after construction";
         EXPECT_GT(b->getHeight(), 0) << "Button '" << b->getComponentID() << "' has zero height after construction";
@@ -122,11 +123,30 @@ TEST_F(MainComponentTest, LocateMasterCmdShiftMSelectsMasterThroughTheRealKeyPat
     // Async, like every other command MainComponent::keyPressed dispatches (see
     // FocusRegionTests.cpp's Cmd+Shift+T/L tests for the same pattern) — perform() runs on the
     // next message-loop pump, not synchronously inside keyPressed() itself.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
 
     const auto selected = mc.getGraphEditor().getSelectedNodes();
     ASSERT_EQ(selected.size(), 1u);
     EXPECT_EQ(selected[0], masterNode->nodeID);
+}
+
+// Cmd+Shift+F runs the same action as the top bar's Feedback button, through the real key path, and the button's
+// tooltip names the chord.
+TEST_F(MainComponentTest, CmdShiftFOpensFeedbackThroughTheRealKeyPathAndTheButtonTooltipNamesIt) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1200, 800);
+    int opened = 0;
+    mc.getFeedbackButtonForTest().onClick = [&opened] { ++opened; };
+
+    const auto binding = mc.getShortcutManager().getBinding("openFeedback");
+    ASSERT_TRUE(binding.isValid());
+    EXPECT_TRUE(mc.keyPressed(binding));
+    synth::test::waitUntil([&] { return (opened) == (1); });
+
+    EXPECT_EQ(opened, 1);
+    const auto chord = ShortcutManager::keyPressToDisplayString(binding);
+    EXPECT_NE(mc.getFeedbackButtonForTest().getTooltip().indexOf(chord), -1)
+        << "tooltip \"" << mc.getFeedbackButtonForTest().getTooltip() << "\" should name " << chord;
 }
 
 // MidiLearnController's own ControllerProfileStore ctor param used to default to the REAL,
@@ -146,4 +166,17 @@ TEST_F(MainComponentTest, ConstructedForTestsNeverPointsAtTheRealControllerProfi
     EXPECT_NE(dir, realDir) << "a MainComponent built for a test must never point at the real settings folder";
     EXPECT_TRUE(dir.getFullPathName().contains("agentsynth-tests-controller-profiles"))
         << "expected Tests/TestMain.cpp's test override directory, got: " << dir.getFullPathName();
+}
+
+// Shift+Space belongs to the Sounds view's preview: the window that sees it last neither starts nor stops the song with
+// it (plain Space is the play key).
+TEST_F(MainComponentTest, ShiftSpaceIsNotTheTransportsPlayKey) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1200, 800);
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' ');
+    const juce::KeyPress plainSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, ' ');
+    ASSERT_EQ(mc.getShortcutManager().getBinding("soundPreviewToggle"), shiftSpace);
+    EXPECT_FALSE(mc.keyPressed(shiftSpace)) << "no command is bound to Shift+Space";
+    EXPECT_TRUE(mc.keyPressed(plainSpace)) << "plain Space is still the play key";
+    synth::test::flushMessageQueue();
 }

@@ -396,4 +396,19 @@ TEST_F(EnvelopeFollowerModuleTest, StateRoundTripsThroughGetSetStateInformation)
     EXPECT_NEAR(sensitivity->get(), 0.8f, 0.01f);
 }
 
+// Regression test for FRO750: a Sensitivity CV that idles at 0 and starts in the second half of a
+// block was read as an unpatched jack, so the block ignored it.
+TEST_F(EnvelopeFollowerModuleTest, SensitivityCVThatStartsMidBlockActsWithinThatBlock) {
+    runDC(0.3f, 30);
+
+    juce::AudioBuffer<float> buffer(4, kBlockSize);
+    fillDC(buffer, 0.3f);
+    for (int i = kBlockSize / 2; i < kBlockSize; ++i)
+        buffer.setSample(3, i, 0.25f); // 0.5 default + 0.25 -> 2x gain
+    module->processBlock(buffer, midi);
+
+    EXPECT_NEAR(buffer.getSample(0, kBlockSize / 2 - 1), 0.3f, 0.02f);
+    EXPECT_NEAR(buffer.getSample(0, kBlockSize - 1), 0.6f, 0.02f);
+}
+
 } // namespace

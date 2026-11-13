@@ -15,11 +15,13 @@
 //   6. PNG render hook (PLUGIN_CARD_PNG).
 
 #include "../../../StubPluginInstance.h"
+#include "../../../TestWait.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -278,18 +280,17 @@ TEST(HostedPluginCardTest, AnEmptyLayoutIsJustTheTwoButtons) {
     EXPECT_TRUE(childrenOfType<juce::ToggleButton>(*card).empty());
 
     auto* openEditor = childWithId<juce::TextButton>(*card, "openPluginEditor");
-    auto* chooseKnobs = childWithId<juce::TextButton>(*card, "chooseKnobs");
+    auto* split = childWithId<synth::ui::SplitButton>(*card, "addControls");
     ASSERT_NE(openEditor, nullptr);
-    ASSERT_NE(chooseKnobs, nullptr);
-    EXPECT_EQ(chooseKnobs->getButtonText(), "Choose knobs...");
-    EXPECT_EQ(openEditor->getY(), chooseKnobs->getY()) << "both buttons share one row";
-    EXPECT_LT(openEditor->getRight(), chooseKnobs->getX()) << "Open Editor on the left, Choose knobs... on the right";
+    ASSERT_NE(split, nullptr);
+    EXPECT_EQ(openEditor->getY(), split->getY()) << "both controls share one row";
+    EXPECT_LT(openEditor->getRight(), split->getX()) << "Open Editor on the left, the split button on the right";
     EXPECT_TRUE(openEditor->isVisible());
-    EXPECT_TRUE(chooseKnobs->isVisible());
+    EXPECT_TRUE(split->isVisible());
 
     int requested = 0;
     card->onChooseKnobsRequested = [&requested] { ++requested; };
-    chooseKnobs->onClick();
+    split->leftHalf().onClick();
     EXPECT_EQ(requested, 1);
 }
 
@@ -406,7 +407,7 @@ TEST(HostedParameterAttachmentTest, SliderRoundTripsValueAndText) {
 
     // parameter -> widget, after the async hop
     param->setValueNotifyingHost(0.25f);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.25)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.25, 1e-6);
     EXPECT_EQ(slider.getTextFromValue(0.25), param->getText(0.25f, 1024)) << "the readout is the parameter's own text";
 
@@ -429,7 +430,7 @@ TEST(HostedParameterAttachmentTest, ToggleRoundTripsBothWays) {
     EXPECT_FALSE(toggle.getToggleState());
 
     param->setValueNotifyingHost(1.0f);
-    pump();
+    synth::test::waitUntil([&] { return toggle.getToggleState(); });
     EXPECT_TRUE(toggle.getToggleState());
 
     toggle.setToggleState(false, juce::sendNotificationSync);
@@ -458,7 +459,7 @@ TEST(HostedParameterAttachmentTest, ComboMapsEveryIndexToTheNormalisedValueAndBa
             // parameter -> widget (from a different index first, so a change is really required)
             combo.setSelectedItemIndex((index + 1) % strings.size(), juce::dontSendNotification);
             param->setValueNotifyingHost(normalised);
-            pump();
+            synth::test::waitUntil([&] { return (combo.getSelectedItemIndex()) == (index); });
             EXPECT_EQ(combo.getSelectedItemIndex(), index) << strings.size() << " entries, index " << index;
         }
         // The text the parameter reports for a step is the item shown for it.
@@ -480,7 +481,7 @@ TEST(HostedParameterAttachmentTest, APluginSideChangeReachesTheWidgetOnlyOnTheMe
     std::thread worker([param] { param->setValueNotifyingHost(0.6f); });
     worker.join();
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9) << "the widget must never be touched from the reporting thread";
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.6)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.6, 1e-6);
 
     // A gesture reported from another thread never reaches the gesture callback (which acts on the card).
@@ -496,7 +497,7 @@ TEST(HostedParameterAttachmentTest, APluginSideChangeReachesTheWidgetOnlyOnTheMe
     // From the message thread too: still applied by the async update, never inline in the caller's own write.
     param->setValueNotifyingHost(0.4f);
     EXPECT_NEAR(slider.getValue(), 0.6, 1e-6);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.4)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.4, 1e-6);
 }
 
@@ -507,14 +508,13 @@ TEST(HostedParameterAttachmentTest, AWidgetDrivenWriteIsNotEchoedBackIntoThePara
     HostedParameterAttachment attachment(*param, slider);
 
     slider.setValue(0.3, juce::sendNotificationSync);
-    pump();
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(param->setValueCalls.load(), 1) << "one widget change is exactly one parameter write";
     EXPECT_NEAR(slider.getValue(), 0.3, 1e-6);
 
     // An incoming value does not write back either.
     param->setValueNotifyingHost(0.8f);
-    pump();
+    synth::test::waitUntil([&] { return std::abs(slider.getValue() - 0.8) <= 1e-6; });
     EXPECT_EQ(param->setValueCalls.load(), 2);
     EXPECT_NEAR(slider.getValue(), 0.8, 1e-6);
 }
@@ -556,13 +556,13 @@ TEST(HostedParameterAttachmentTest, DetachRemovesTheListenerAndStopsAllTraffic) 
     param->setValueNotifyingHost(0.9f); // queues an async update...
     attachment.detach();                // ...which detach() drops
     EXPECT_FALSE(attachment.isBound());
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9) << "a queued update must not outlive detach()";
 
     param->beginChangeGesture(); // a listener still registered would be called here
     param->endChangeGesture();
     param->setValueNotifyingHost(0.2f);
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(gestures, 2) << "after detach() the attachment hears nothing";
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9);
 
@@ -637,7 +637,7 @@ TEST(HostedPluginCardTest, AutomationReflectsIntoTheWidgetWithoutWritingTheParam
     card->reflectParameterValue(param, 0.9f);
 
     EXPECT_NEAR(slider->getValue(), 0.9, 1e-6);
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(param->setValueCalls.load(), writesBefore + 1) << "reflecting must not write back";
 }
 
@@ -709,8 +709,8 @@ TEST(HostedPluginCardTest, UnloadingThePluginUnbindsTheCardAndEmptiesItsBody) {
     EXPECT_TRUE(childrenOfType<juce::Slider>(*card).empty());
     EXPECT_TRUE(childrenOfType<juce::ToggleButton>(*card).empty());
     EXPECT_NE(childWithId<juce::TextButton>(*card, "openPluginEditor"), nullptr) << "the chrome stays";
-    EXPECT_NE(childWithId<juce::TextButton>(*card, "chooseKnobs"), nullptr);
-    pump(); // the re-measure is deferred one loop turn
+    EXPECT_NE(childWithId<synth::ui::SplitButton>(*card, "addControls"), nullptr);
+    synth::test::waitUntil([&] { return (card->getHeight()) < (heightWithKnobs); });
     EXPECT_LT(card->getHeight(), heightWithKnobs) << "the card shrinks back";
     (void)param; // the retired parameter may be freed by now: it must not be touched again
 }
@@ -728,12 +728,12 @@ TEST(HostedPluginCardTest, ReplacingThePluginRebindsTheCardToTheNewInstance) {
         return rig.module->hasInstance() && rig.module->getActiveInstanceForEditor() != nullptr &&
                rig.param(0) != oldParam;
     }));
-    pump();
+    synth::test::flushMessageQueue();
 
     auto* slider = childWithId<juce::Slider>(*card, "hostedKnob:k");
     ASSERT_NE(slider, nullptr);
     rig.param(0)->setValueNotifyingHost(0.65f);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider->getValue()) - (0.65)) <= (1e-6); });
     EXPECT_NEAR(slider->getValue(), 0.65, 1e-6) << "the knob follows the NEW instance's parameter";
 }
 
@@ -768,6 +768,115 @@ TEST(HostedPluginCardTest, ClearingTheGraphAfterDetachAllIsSafeWithLiveCards) {
     rig.editor.updateComponents();
     EXPECT_EQ(rig.editor.getModuleComponents().size(), 0);
     pump();
+}
+
+// ============================================================================
+// 5b. A plugin that failed to load says why on the card
+// ============================================================================
+
+namespace {
+juce::Label* statusLabelOf(ModuleComponent& card) { return childWithId<juce::Label>(card, "hostedLoadStatus"); }
+const juce::String kOpenEditorTip = "Open this plugin's editor window";
+} // namespace
+
+TEST(HostedPluginCardTest, AFailedLoadSaysWhyOnTheCardAndAsTheOpenEditorTooltip) {
+    Rig rig;
+    rig.backend.failWith = "Card Plugin could not be opened.";
+    rig.addPlugin({knobSpec("a", "Alpha")}, /*waitForInstance*/ false);
+    auto card = rig.makeCard();
+    ASSERT_NE(statusLabelOf(*card), nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return !rig.module->isLoading() && statusLabelOf(*card)->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    auto* openEditor = childWithId<juce::TextButton>(*card, "openPluginEditor");
+    ASSERT_NE(label, nullptr);
+    ASSERT_NE(openEditor, nullptr);
+    EXPECT_TRUE(label->isVisible());
+    EXPECT_EQ(label->getText(), "Card Plugin could not be opened.");
+    EXPECT_EQ(openEditor->getTooltip(), "Card Plugin could not be opened.");
+    EXPECT_FALSE(openEditor->isEnabled());
+    EXPECT_FALSE(label->getWantsKeyboardFocus()) << "static text is not a tab stop";
+    EXPECT_TRUE(label->getTitle().isNotEmpty());
+    EXPECT_GE(label->getY(), openEditor->getBottom()) << "the reason sits under the Open Editor row";
+    EXPECT_GE(card->getHeight(), label->getBottom()) << "the card was re-measured to hold it";
+
+    // A later successful load clears the label and restores the tooltip.
+    rig.backend.failWith = {};
+    rig.module->loadPlugin(stubDescription(), rig.backend);
+    ASSERT_TRUE(pumpUntil([&] { return rig.module->hasInstance() && !statusLabelOf(*card)->isVisible(); }));
+    EXPECT_FALSE(statusLabelOf(*card)->isVisible());
+    EXPECT_EQ(openEditor->getTooltip(), kOpenEditorTip);
+}
+
+TEST(HostedPluginCardTest, ASwitchedOffPluginsCardSaysItIsSwitchedOffForThisOpen) {
+    Rig rig;
+    rig.backend.skipPluginForNextLoad("Card Plugin", "/Library/Audio/Plug-Ins/VST3/Card Plugin.vst3");
+    auto* hosted = new HostedPluginModule();
+    auto node = rig.engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(hosted));
+    rig.module = hosted;
+    rig.nodeId = node->nodeID;
+    hosted->prepareToPlay(kSampleRate, kBlockSize);
+    auto card = rig.makeCard();
+
+    synth::PluginIdentity identity;
+    identity.name = "Card Plugin";
+    identity.format = "VST3";
+    identity.uid = 0xC0DE01;
+    hosted->loadPlugin(identity, rig.backend);
+    ASSERT_NE(statusLabelOf(*card), nullptr);
+    ASSERT_TRUE(pumpUntil([&] { return !hosted->isLoading() && statusLabelOf(*card)->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    ASSERT_NE(label, nullptr);
+    EXPECT_TRUE(label->isVisible());
+    EXPECT_TRUE(label->getText().contains("switched off for this open"));
+    EXPECT_EQ(rig.backend.createCount, 0) << "the plugin's code is never loaded";
+}
+
+TEST(HostedPluginCardTest, TurnOnShowsOnlyWhileSwitchedOffAndAClickLoadsThePluginAgain) {
+    Rig rig;
+    synth::HostedPluginBackend::ScopedDefault installed(&rig.backend); // the card's button loads through the default
+    rig.backend.skipPluginForNextLoad("Card Plugin", "/Library/Audio/Plug-Ins/VST3/Card Plugin.vst3");
+    auto* hosted = new HostedPluginModule();
+    auto node = rig.engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(hosted));
+    rig.module = hosted;
+    rig.nodeId = node->nodeID;
+    hosted->prepareToPlay(kSampleRate, kBlockSize);
+    auto card = rig.makeCard();
+    auto* turnOn = childWithId<juce::TextButton>(*card, "turnPluginBackOn");
+    ASSERT_NE(turnOn, nullptr);
+    EXPECT_FALSE(turnOn->isVisible()) << "nothing is switched off yet";
+
+    synth::PluginIdentity identity;
+    identity.name = "Card Plugin";
+    identity.format = "VST3";
+    identity.uid = 0xC0DE01;
+    hosted->loadPlugin(identity, rig.backend); // description-less identity load: the skip applies
+    ASSERT_TRUE(pumpUntil([&] { return !hosted->isLoading() && turnOn->isVisible(); }));
+
+    auto* label = statusLabelOf(*card);
+    EXPECT_TRUE(hosted->isSwitchedOffAfterCrash());
+    EXPECT_GE(turnOn->getY(), label->getBottom()) << "the button sits under the reason, nothing overlaps";
+    EXPECT_GE(card->getHeight(), turnOn->getBottom()) << "the card was re-measured to hold it";
+    EXPECT_EQ(turnOn->getTitle(), "Turn Card Plugin back on");
+    EXPECT_EQ(turnOn->getTooltip(), "Load Card Plugin again in this project");
+    EXPECT_TRUE(turnOn->getWantsKeyboardFocus()) << "a Tab stop like Open Editor";
+
+    rig.backend.setFactory([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Card Plugin", 0xC0DE01, "VST3",
+                                                    std::vector<StubParamSpec>{knobSpec("a", "Alpha")});
+    });
+    // A real press and release on the button (the skip is still set: an explicit turn-on clears it).
+    const auto centre = turnOn->getLocalBounds().getCentre().toFloat();
+    auto& asComponent = static_cast<juce::Component&>(*turnOn); // Button's own handlers are protected
+    asComponent.mouseDown(mouseEvent(*turnOn, centre, false, centre));
+    asComponent.mouseUp(mouseEvent(*turnOn, centre, false, centre));
+    EXPECT_FALSE(turnOn->isVisible()) << "hidden as soon as the load is in flight";
+    ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance() && !childrenOfType<juce::Slider>(*card).empty(); }));
+    EXPECT_FALSE(hosted->isSwitchedOffAfterCrash());
+    EXPECT_FALSE(turnOn->isVisible());
+    EXPECT_FALSE(statusLabelOf(*card)->isVisible());
+    EXPECT_FALSE(childrenOfType<juce::Slider>(*card).empty()) << "the card shows its knobs again";
 }
 
 TEST(HostedPluginCardTest, DetachingACardWhoseNodeWasAlreadyFreedTouchesNothing) {

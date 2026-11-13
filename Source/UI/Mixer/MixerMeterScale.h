@@ -18,7 +18,7 @@
 // breakpoints below (== kMeterTickDb's own values) -- the one mapping every caller (ticks, the bar
 // fill via MeterColourStops::forEachBand's band edges, the ballistics-independent peak-hold line,
 // and ChannelChipComponent's horizontal fill) goes through, so a taper change here is a single-file
-// change. A later ticket gives the FADER its own Cubase-style taper -- deliberately a SEPARATE
+// change. The FADER has its own Cubase-style taper -- deliberately a SEPARATE
 // mapping (faders and meters read differently in Cubase itself), so nothing here is reused there.
 
 namespace synth::ui {
@@ -88,7 +88,7 @@ inline float meterDbToFraction(float db) noexcept {
 /** The inverse of meterDbToFraction() -- a 0..1 bar-length fraction back to its dB value, through
  *  the SAME breakpoint table. Not used by any painter today (every caller already has a dB value in
  *  hand); exists so the mapping is provably invertible (see MixerMeterScaleTests.cpp's round-trip
- *  cases) ahead of a later ticket giving the fader its own separate taper. */
+ *  cases) independent of the fader's own separate taper. */
 inline float meterFractionToDb(float fraction) noexcept {
     const float clamped = juce::jlimit(0.0f, 1.0f, fraction);
     const auto& bp = detail::kMeterTaperBreakpoints;
@@ -100,6 +100,20 @@ inline float meterFractionToDb(float fraction) noexcept {
         }
     }
     return kMeterMaxDb; // unreachable -- clamped can never exceed bp.back().fraction (== 1.0f)
+}
+
+/** A tick's printed number: a headroom tick above 0 dB carries its sign ("+3"), so it can't be
+ *  mistaken for a quiet level; 0 and the negative ticks print as-is ("0", "-6"). */
+inline juce::String meterTickLabel(float db) {
+    const int rounded = juce::roundToInt(db);
+    return rounded > 0 ? "+" + juce::String(rounded) : juce::String(rounded);
+}
+
+/** Top edge of a tick's label box (labelHeight tall, centred on tickY), kept inside
+ *  [areaTop, areaBottom] so the outermost ticks (+3 at the very top, -60 at the bottom) draw whole
+ *  instead of having half their glyphs cut off by the component's edge. */
+inline int meterTickLabelTop(int tickY, int labelHeight, int areaTop, int areaBottom) noexcept {
+    return juce::jlimit(areaTop, juce::jmax(areaTop, areaBottom - labelHeight), tickY - labelHeight / 2);
 }
 
 } // namespace synth::ui

@@ -7,7 +7,7 @@
 
 // PatchDocument preserves top-level JSON keys this build doesn't understand (e.g. a
 // future "timeline") across a save/load round-trip, so an older build never destroys a newer
-// build's data just by re-saving. See docs/plans/timeline-plan.html §6.
+// build's data just by re-saving.
 
 class PatchDocumentTest : public ::testing::Test {};
 

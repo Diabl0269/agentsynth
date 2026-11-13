@@ -17,6 +17,11 @@
 # fallback directly. The healthy path is untouched — a working Azure mirror is genuinely faster
 # (same datacenter), which is why this switches on failure instead of hard-coding the fallback.
 #
+# Third tier: on 2026-11-11 BOTH Canonical mirrors (azure.archive.ubuntu.com and archive.ubuntu.com)
+# were down for hours, so dropping Azure alone was not enough. As a last resort the install branch
+# points the mirror list at a non-Canonical mirror (kernel.org by default). apt still verifies
+# every index and package against the Ubuntu archive signing keys, so the mirror is not trusted.
+#
 # Everything the script touches is overridable so the failover path is testable off-CI without
 # root, apt, or a network (see scripts/tests/ci-install-linux-deps.test.sh):
 #   SUDO              command prefix for privileged calls (default "sudo"; "" in tests)
@@ -24,6 +29,7 @@
 #   TIMEOUT_BIN       timeout binary (default "timeout"; "" disables the cap — macOS has none)
 #   MIRROR_FILES      space-separated files to rewrite when dropping the mirror
 #   UPDATE_TIMEOUT    seconds `apt-get update` may take before it counts as stalled (default 60)
+#   FALLBACK_MIRROR   last-resort mirror host (default https://mirrors.edge.kernel.org; path /ubuntu/ kept)
 #   INSTALL_TIMEOUT   seconds `apt-get install` may take before it counts as stalled (default 300)
 #
 # Those two defaults are set from the measured healthy and unhealthy numbers, not guessed. Healthy:
@@ -42,13 +48,14 @@ TIMEOUT_BIN="${TIMEOUT_BIN-timeout}"
 MIRROR_FILES="${MIRROR_FILES:-/etc/apt/apt-mirrors.txt}"
 UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-60}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-300}"
+FALLBACK_MIRROR="${FALLBACK_MIRROR:-https://mirrors.edge.kernel.org}"
 
 # The one package list for every Linux CI job: build-and-test, the ASAN job and the release build.
 PACKAGES=(
     cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev
     libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev
     libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev
-    pkg-config llvm clang lld ccache xvfb
+    libxi-dev libegl1-mesa-dev pkg-config llvm clang lld ccache xvfb
 )
 
 # 15 s per attempt with 2 retries, instead of apt's 120 s default: enough for a slow-but-alive
@@ -62,9 +69,9 @@ apt_run() { # apt_run <seconds> <apt-get args...>
     local secs="$1"
     shift
     if [ -n "$TIMEOUT_BIN" ]; then
-        ${SUDO:+$SUDO} "$TIMEOUT_BIN" "$secs" "$APT_GET" "${APT_OPTS[@]}" "$@"
+        ${SUDO:+$SUDO} "$TIMEOUT_BIN" "$secs" "$APT_GET" ${APT_OPTS[@]+"${APT_OPTS[@]}"} "$@"
     else
-        ${SUDO:+$SUDO} "$APT_GET" "${APT_OPTS[@]}" "$@"
+        ${SUDO:+$SUDO} "$APT_GET" ${APT_OPTS[@]+"${APT_OPTS[@]}"} "$@"
     fi
 }
 
@@ -98,22 +105,55 @@ drop_azure_mirror() {
 Cannot drop the failing mirror; retrying against the existing configuration."
 }
 
+# Last resort: replace both Canonical hosts (any scheme) with FALLBACK_MIRROR. `(azure\.)?` is
+# consumed by the match so no `azure.` remnant is left in front of the new host. Same
+# read-with-sed, write-through-temp-file pattern as drop_azure_mirror (no `sed -i`).
+use_fallback_mirror() {
+    local f tmp found=0
+    for f in $MIRROR_FILES; do
+        [ -f "$f" ] || continue
+        tmp="$(mktemp)"
+        if sed -E "s|(https?://)?(azure\\.)?archive\\.ubuntu\\.com|${FALLBACK_MIRROR}|g" \
+            "$f" >"$tmp" && ${SUDO:+$SUDO} cp "$tmp" "$f"; then
+            printf 'rewrote %s to %s\n' "$f" "$FALLBACK_MIRROR"
+            found=1
+        else
+            annotate warning "Could not rewrite ${f} to the fallback mirror."
+        fi
+        rm -f "$tmp"
+    done
+    [ "$found" -eq 1 ] || annotate warning "No apt mirror list found in: ${MIRROR_FILES}. \
+Cannot switch to the fallback mirror; retrying against the existing configuration."
+}
+
 if ! apt_run "$UPDATE_TIMEOUT" update; then
     annotate warning "apt-get update failed or exceeded ${UPDATE_TIMEOUT}s — the usual cause is a \
 degraded azure.archive.ubuntu.com on the runner. Dropping that mirror and retrying."
     drop_azure_mirror
-    # A second failure is NOT fatal on its own: the runner image ships usable indexes, so the
-    # install below may well succeed without a refresh. Install is the step that has to work, so
-    # let it be the one that decides the exit status.
-    apt_run "$UPDATE_TIMEOUT" update ||
-        annotate warning "apt-get update failed again; continuing to install with the indexes \
-already on the image."
+    # A second failure means archive.ubuntu.com is down too, so switch to the fallback mirror now:
+    # waiting for the install tiers to time out against dead Canonical hosts first would spend
+    # ~11 min of the step's 15 min ceiling before the fallback got a turn. Still NOT fatal on its
+    # own: the runner image ships usable indexes, so install decides the exit status.
+    if ! apt_run "$UPDATE_TIMEOUT" update; then
+        annotate warning "apt-get update failed against archive.ubuntu.com too. Switching to the \
+fallback mirror ${FALLBACK_MIRROR}."
+        use_fallback_mirror
+        apt_run "$UPDATE_TIMEOUT" update ||
+            annotate warning "apt-get update failed on the fallback mirror; continuing to install \
+with the indexes already on the image."
+    fi
 fi
 
-if ! apt_run "$INSTALL_TIMEOUT" install -y "${PACKAGES[@]}"; then
+if ! apt_run "$INSTALL_TIMEOUT" install -y ${PACKAGES[@]+"${PACKAGES[@]}"}; then
     annotate warning "apt-get install failed or exceeded ${INSTALL_TIMEOUT}s. Dropping the Azure \
 mirror (if still configured), refreshing indexes and retrying once."
     drop_azure_mirror
     apt_run "$UPDATE_TIMEOUT" update || true
-    apt_run "$INSTALL_TIMEOUT" install -y "${PACKAGES[@]}"
+    if ! apt_run "$INSTALL_TIMEOUT" install -y ${PACKAGES[@]+"${PACKAGES[@]}"}; then
+        annotate warning "apt-get install failed against archive.ubuntu.com too. Switching to the \
+fallback mirror ${FALLBACK_MIRROR} for a last attempt."
+        use_fallback_mirror
+        apt_run "$UPDATE_TIMEOUT" update || true
+        apt_run "$INSTALL_TIMEOUT" install -y ${PACKAGES[@]+"${PACKAGES[@]}"}
+    fi
 fi

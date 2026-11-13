@@ -27,6 +27,27 @@ void insertBreakpoint(std::vector<AutomationLane::Breakpoint>& points, const Aut
         points.insert(pos, point);
 }
 
+// `points` with every value moved from `from` onto `to` by its position within the range, so a curve keeps its
+// shape on a parameter with other bounds. Identical ranges copy verbatim (no float round trip); a zero-width
+// source range has no position to keep, so every point lands on `to`'s default.
+std::vector<AutomationLane::Breakpoint> rescalePoints(const std::vector<AutomationLane::Breakpoint>& points,
+                                                      const AutomationLane::RangeSnapshot& from,
+                                                      const AutomationLane::RangeSnapshot& to) {
+    auto result = points;
+    if (from.minValue == to.minValue && from.maxValue == to.maxValue)
+        return result;
+    const double fromSpan = (double)from.maxValue - (double)from.minValue;
+    const double toSpan = (double)to.maxValue - (double)to.minValue;
+    for (auto& point : result) {
+        const double value = fromSpan > 0.0
+                                 ? (double)to.minValue +
+                                       juce::jlimit(0.0, 1.0, (point.value - (double)from.minValue) / fromSpan) * toSpan
+                                 : (double)to.defaultValue;
+        point.value = juce::jlimit((double)to.minValue, (double)to.maxValue, value);
+    }
+    return result;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------- lanes --
@@ -65,7 +86,51 @@ bool TimelineDoc::removeLane(LaneId id) {
         return false;
 
     return applyMutation([&] {
+        forgetLaneInVariations(id);
         owner->lanes.erase(owner->lanes.begin() + (lane - owner->lanes.data()));
+        return true;
+    });
+}
+
+// Moves a lane to another track as ONE mutation (one revision bump), keeping its id, points, record mode, range,
+// index hint and orphan flag. False -- nothing changes -- for an unknown lane or track, the lane's own track, or a
+// destination already at kMaxLanesPerTrack. For when a lane's owning track is decided after the fact
+// (docs/timeline/automation.md#which-track-a-lane-lands-on).
+bool TimelineDoc::moveLaneToTrack(LaneId laneId, TrackId destTrack) {
+    Track* from = nullptr;
+    auto* lane = findLane(laneId, &from);
+    auto* dest = findTrack(destTrack);
+    if (lane == nullptr || dest == nullptr || dest == from)
+        return false;
+    if (static_cast<int>(dest->lanes.size()) >= kMaxLanesPerTrack)
+        return false;
+
+    return applyMutation([&] {
+        AutomationLane moved = std::move(*lane);
+        from->lanes.erase(from->lanes.begin() + (lane - from->lanes.data()));
+        dest->lanes.push_back(std::move(moved));
+        return true;
+    });
+}
+
+// Lane order is Track::lanes order, which toVar and fromVar keep as written, so a reorder persists as it stands. The
+// index is where the lane ends up (erase, then insert), so a drag that reads "land in slot N" passes N whatever
+// direction it moved. Hidden amount lanes live in the same list; callers that only show some lanes pass the doc index
+// of the visible lane whose slot they want.
+bool TimelineDoc::moveLane(LaneId laneId, int newIndex) {
+    Track* owner = nullptr;
+    auto* lane = findLane(laneId, &owner);
+    if (lane == nullptr)
+        return false;
+    const int from = static_cast<int>(lane - owner->lanes.data());
+    const int to = juce::jlimit(0, static_cast<int>(owner->lanes.size()) - 1, newIndex);
+    if (to == from)
+        return false;
+
+    return applyMutation([&] {
+        AutomationLane moved = std::move(*lane);
+        owner->lanes.erase(owner->lanes.begin() + from);
+        owner->lanes.insert(owner->lanes.begin() + to, std::move(moved));
         return true;
     });
 }
@@ -149,6 +214,104 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     });
 }
 
+// Clamped to [AutomationLane::kMinHeightScale, kMaxHeightScale]. False for an unknown lane or a non-finite scale; true
+// without a revision bump when the lane already has that scale. A user gesture: wrap in
+// AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setLaneHeightScale(LaneId id, double scale) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    if (lane->heightScale == clamped)
+        return true;
+    return applyMutation([&] {
+        lane->heightScale = clamped;
+        return true;
+    });
+}
+
+// One modulator row's height, stored under its modulatorOrder key (the Attenuverter's uuid), like modulatorOrder; the
+// keys move with the routings through rekeyModulatorHeights. Clamped like the lane's own. False for an unknown lane, an
+// empty key or a non-finite scale; true without a revision bump when the row already has that height. A user gesture:
+// wrap in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setModulatorHeightScale(LaneId id, const juce::String& key, double scale) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || key.isEmpty() || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    if (lane->modulatorRowScale(key) == clamped)
+        return true;
+    return applyMutation([&] {
+        lane->modulatorHeightScales[key] = clamped;
+        return true;
+    });
+}
+
+// Every value is clamped and a non-finite one is dropped (the row falls back to the lane's modulatorHeightScale). False
+// for an unknown lane or the heights it already has.
+bool TimelineDoc::setModulatorHeightScales(LaneId id, std::map<juce::String, double> scales) {
+    auto* lane = findLane(id);
+    if (lane == nullptr)
+        return false;
+    for (auto it = scales.begin(); it != scales.end();) {
+        if (!std::isfinite(it->second) || it->first.isEmpty()) {
+            it = scales.erase(it);
+            continue;
+        }
+        it->second = std::clamp(it->second, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+        ++it;
+    }
+    if (lane->modulatorHeightScales == scales)
+        return false;
+    return applyMutation([&] {
+        lane->modulatorHeightScales = std::move(scales);
+        return true;
+    });
+}
+
+// A carry (Change source, Change parameter, Duplicate) replaces a routing's Attenuverter, so the row's height follows
+// it to the new key, exactly as remapping modulatorOrder does. Keys not in `newKeys` stay as they are.
+bool TimelineDoc::rekeyModulatorHeights(LaneId id, const std::map<juce::String, juce::String>& newKeys) {
+    const auto* lane = getLane(id);
+    if (lane == nullptr || newKeys.empty())
+        return false;
+    std::map<juce::String, double> moved;
+    for (const auto& [key, scale] : lane->modulatorHeightScales) {
+        const auto to = newKeys.find(key);
+        moved[to != newKeys.end() ? to->second : key] = scale;
+    }
+    return setModulatorHeightScales(id, std::move(moved));
+}
+
+// Routing keys are ModulatorInfo's Attenuverter uuid, else its key(). A routing not listed shows after the listed ones
+// in graph order and a stale key is ignored, never pruned. False for an unknown lane or the order it already has (no
+// revision bump, no notification). A user gesture: wrap in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setModulatorOrder(LaneId id, std::vector<juce::String> order) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || lane->modulatorOrder == order)
+        return false;
+    return applyMutation([&] {
+        lane->modulatorOrder = std::move(order);
+        return true;
+    });
+}
+
+// The range default is what playback writes every block while the lane has no breakpoints, so it IS the lane's
+// constant. Clamped into the range; a non-finite value or unknown lane is rejected; the value already held is a
+// no-op. A user edit: callers wrap it in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setLaneConstantValue(LaneId id, double value) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || !std::isfinite(value))
+        return false;
+    const float clamped = juce::jlimit(lane->range.minValue, lane->range.maxValue, static_cast<float>(value));
+    if (lane->range.defaultValue == clamped)
+        return true; // already there: no revision bump, no notification
+    return applyMutation([&] {
+        lane->range.defaultValue = clamped;
+        return true;
+    });
+}
+
 // -------------------------------------------------------- bindings --
 
 bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
@@ -227,7 +390,73 @@ bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
     });
 }
 
-// FRO296: whichever side HAS a lane gets the OTHER paramId; a side with no lane stays that way (no
+// The lane keeps its id, track, position and record mode, so its editor, header and undo history follow it to the
+// new parameter. Points are stored in the parameter's own units, so they move onto the new range by position (a lane
+// with no points takes the new default as its constant). The doc-wide one-lane-per-parameter rule is the same one
+// rebindLane enforces; `orphaned` is cleared optimistically and the next reconcile re-derives it.
+// False, nothing changed, when another lane owns (nodeUuid, paramId) or an input is invalid. A user gesture: wrap in
+// recordTimelineChange.
+bool TimelineDoc::retargetLane(LaneId id, const juce::String& nodeUuid, const juce::String& paramId,
+                               const AutomationLane::RangeSnapshot& range, int paramIndexHint) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || nodeUuid.isEmpty() || paramId.isEmpty() || !isValidRange(range))
+        return false;
+    if (auto* existing = findLaneForParam(nodeUuid, paramId); existing != nullptr && existing->id != id)
+        return false;
+
+    const bool sameBinding = lane->nodeUuid == nodeUuid && lane->paramId == paramId;
+    const bool sameRange = lane->range.minValue == range.minValue && lane->range.maxValue == range.maxValue &&
+                           lane->range.defaultValue == range.defaultValue;
+    if (sameBinding && sameRange && !lane->orphaned && lane->paramIndexHint == paramIndexHint)
+        return true;
+
+    return applyMutation([&] {
+        lane->points = rescalePoints(lane->points, lane->range, range);
+        lane->nodeUuid = nodeUuid;
+        lane->paramId = paramId;
+        lane->range = range;
+        lane->paramIndexHint = paramIndexHint;
+        lane->orphaned = false;
+        return true;
+    });
+}
+
+// Built and inserted inside one mutation: the copy never exists without its parameter and points, so an undo of the
+// step removes it whole. It sits right after its source so the pair reads as one block on the track.
+// A copy of `source` on another parameter, directly below it on its track, as ONE mutation. Invalid id, nothing
+// changed, when the parameter already has a lane, the track is full or an input is invalid.
+LaneId TimelineDoc::duplicateLane(LaneId source, const juce::String& nodeUuid, const juce::String& paramId,
+                                  const AutomationLane::RangeSnapshot& range, int paramIndexHint) {
+    Track* owner = nullptr;
+    auto* original = findLane(source, &owner);
+    if (original == nullptr || nodeUuid.isEmpty() || paramId.isEmpty() || !isValidRange(range))
+        return {};
+    if (findLaneForParam(nodeUuid, paramId) != nullptr)
+        return {};
+    if (static_cast<int>(owner->lanes.size()) >= kMaxLanesPerTrack)
+        return {};
+
+    return applyMutation([&] {
+        AutomationLane copy;
+        copy.id = LaneId{nextLaneId++};
+        copy.nodeUuid = nodeUuid;
+        copy.paramId = paramId;
+        copy.range = range;
+        copy.paramIndexHint = paramIndexHint;
+        copy.recordMode = original->recordMode;
+        copy.modulatorOrder = original->modulatorOrder;
+        copy.heightScale = original->heightScale;
+        copy.modulatorHeightScale = original->modulatorHeightScale;
+        copy.modulatorHeightScales = original->modulatorHeightScales;
+        copy.points = rescalePoints(original->points, original->range, range);
+        const auto id = copy.id;
+        const auto position = (original - owner->lanes.data()) + 1;
+        owner->lanes.insert(owner->lanes.begin() + position, std::move(copy));
+        return id;
+    });
+}
+
+// Whichever side HAS a lane gets the OTHER paramId; a side with no lane stays that way (no
 // lane is created) -- so a mixer send-slot swap (docs/mixer/sends-and-buses.md#reordering-sends)
 // carries an automation lane along with it, without a delete+recreate that would lose its points or
 // record mode. ONE revision bump / one Listener::timelineChanged call for BOTH retargets together,

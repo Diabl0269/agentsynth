@@ -1,0 +1,44 @@
+# FRO1288: the Macros card can draw two of its macros as one XY pad. The Edit Layout Preset menu lists a built-in XY
+# preset (macros 1 and 2 as the pad, the rest as knobs); dragging the dot moves both macros and the readout under the
+# pad shows both values. One undo takes the drag back.
+#
+# What a user does: opens a patch with a Macros card, picks Edit Layout..., opens Preset and picks XY, closes the
+# editor, drags the dot across the pad, and presses Undo.
+record: true
+save_project: fro1288 xy pad macro
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - screenshot: {id: screen, name: preset-menu-lists-xy}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 741, y: 188}
+  - wait: {settleMs: 500}
+  - screenshot: {name: xy-preset}
+  - mark: {check: 1, name: xy-preset-picked}
+  - glide: {name: dot-dragged, frames: 14, do: {drag: {from: "XY pad", fromX: 52, fromY: 52, to: "XY pad", toX: 80, toY: 24}}}
+  - wait: {settleMs: 500}
+  - screenshot: {name: dot-dragged}
+  - mark: {check: 2, name: dot-dragged-both-outputs-move}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - screenshot: {name: undone}

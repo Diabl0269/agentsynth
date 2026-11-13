@@ -5,8 +5,11 @@
 // sibling MainComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/TimelineAudioSourceModule.h"
@@ -14,7 +17,6 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/AutomationBinding.h"
-#include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UserSettings.h"
 #include <algorithm>
@@ -22,19 +24,22 @@
 
 namespace {
 
-// Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
-// session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
-constexpr int kMaxTakeNumber = 10000;
-// Floor on a committed audio clip's length, so a take stopped the instant it started still produces
-// a clip the model accepts (addClip requires a strictly positive length). Same value and same
-// reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
-constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
+constexpr double kMinAudioClipLengthBeats = detail::kMinAudioClipLengthBeats;
 
 } // namespace
 
 // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
 // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
-void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
+void MainComponent::timelineChanged(const synth::TimelineDoc&) {
+    // Inside an undo step or a duplicate the full reconcile that follows republishes and rebuilds the mixer (whose
+    // columns take the track colours), so a doc change in the middle of one leaves both to it.
+    if (fullReconcileFollows())
+        return;
+    publishTimelineAndRebindRecorder();
+    // a track colour edit (including the picker's live preview, which never reaches a rebuild) re-tints the
+    // mixer columns in place; a no-op for every other doc change.
+    bottomDock.refreshMixerTrackColours();
+}
 
 // Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
 // against the CURRENT graph (the same uuid -> node -> parameter resolution
@@ -80,7 +85,12 @@ void MainComponent::publishTimelineAndRebindRecorder() {
 // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
 // mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
-    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a link forming around an already-muted/soloed track
+    // This is the reconcile the deferred passes wait for: a doc change it makes itself is handled in full.
+    const juce::ScopedValueSetter<bool> running(fullReconcileRunning_, true);
+    // Every pass below asks which channel each track plays into; nothing here changes the graph's cables or adds or
+    // removes a macro, so one link map serves the whole reconcile rather than one per pass.
+    const synth::ui::ChannelLinkBatch linkBatch(&trackChannelLink_);
+    // docs/mixer/mixer.md#channels-follow-audio-not-tracks: a link forming around an already-muted/soloed track
     // moves that state onto its channel (and a link can only form or break via a graph change, which is exactly what
     // reaches here). Runs FIRST so the reconcile/publish below already sees the transferred doc flags. Deliberately not
     // undoable — same rule as the orphan flag next to it.
@@ -93,28 +103,36 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
         publishTimelineAndRebindRecorder();
 
-    // FRO127: every assignment's live target is re-resolved against the graph as it now stands —
+    // Every assignment's live target is re-resolved against the graph as it now stands —
     // same "graph changed under us" trigger as the timeline reconcile just above, orphaning
     // whatever no longer resolves rather than silently rebinding
-    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step §8, hook
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step, hook
     // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
 
-    // FRO263: an assignment's target can flip between resolved and orphaned ("(missing module)") by
+    // An assignment's target can flip between resolved and orphaned ("(missing module)") by
     // the reconcile() call just above -- publishAssignments()'s own onChanged notify never reaches
     // this path (it's not a MIDI Remote doc/profile mutation), so the panel needs its own catch-up
     // call here, same "cheap enough for every graph change" contract bottomDock.rebuildMixer() below
     // already relies on.
     bottomDock.rebuildMidiRemote();
 
-    // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
+    // A LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
-    // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
-    for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
-        if (auto* header = timelinePanel.getTrackHeaderAt(i))
-            header->refreshFromDoc();
+    // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap. Each header's Mono/Poly switch
+    // plans its track's voice graph: the poly batch works the track ownership out once for all of them.
+    {
+        const synth::ui::PolyChainController::StateBatch polyBatch(graphEditor.getPolyChain());
+        for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+            if (auto* header = timelinePanel.getTrackHeaderAt(i))
+                header->refreshFromDoc();
+    }
+    // The side pane's routing rows read the graph too (node names, MIDI destinations, the channel): same trigger.
+    timelinePanel.refreshRoutingPane();
+    // A lane's modulator rows are derived from the graph's routings, never stored in the doc: same trigger.
+    timelinePanel.refreshModulators();
 
-    // FRO11 (P9-5): the mixer's own column set (strips/inserts/links) can change from ANY graph
+    // The mixer's own column set (strips/inserts/links) can change from ANY graph
     // edit that reaches here -- undo/redo, a canvas delete, a macro regroup, not just the mixer's
     // own insert-list mutations -- so it rebuilds unconditionally here too, the same "cheap enough
     // to call on every change" contract buildMixerSnapshot documents (a handful of strips, never
@@ -122,13 +140,30 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     bottomDock.rebuildMixer();
 }
 
+// GraphEditor::onGraphStructureChanged's catch-all passes (bindings, modulator rows, the mixer re-bind) and
+// timelineChanged()'s republish and mixer re-tint are each part of reconcileTimelineAfterGraphChange(), and each walks
+// the whole project. While a full reconcile is certain to follow -- inside an undo or redo step, whose after-restore
+// hook runs it once the step has restored everything, or inside an edit that runs it itself (a track duplicate) --
+// they are skipped, so an edit pays for each pass once. A step of actions that fire no restore hooks (a macro-only
+// change, a card move, a MIDI Remote edit) runs no reconcile afterwards, so nothing is skipped in it. The reconcile
+// itself is never deferred: a doc change it makes (an orphan flag flipping) republishes as usual.
+bool MainComponent::fullReconcileFollows() const {
+    return !fullReconcileRunning_ && (undoManager.isRestoringWithAfterHook() || fullReconcileFollowsDepth_ > 0);
+}
+
+// The reconcile re-reads every track header, so the timeline panel leaves its own re-read to it.
+bool MainComponent::everyHeaderRefreshFollows() const { return fullReconcileFollows(); }
+
 // The cheap half of the above, with no republish of its own: installed on
 // GraphEditor::onGraphStructureChanged as the catch-all for graph edits that have no explicit
 // post-apply site (a module deleted from the canvas). See the call site for why publishing
 // there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
-    // FRO127: the 2b/2c catch-all
+    // A channel can form or change owner on any canvas edit (a cable drag that auto-builds a channel, a member moved
+    // between macros); its macro takes the owning track's colour as soon as it does. Not an undo step.
+    trackChannelLink_.syncMacroColoursToTracks();
+    // The 2b/2c catch-all
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) — MIDI
     // Remote's own assignments need the same re-resolve the timeline bindings just got, for the same reasons (a canvas
     // delete with no explicit reconcile site, a hosted plugin's async load completing).
@@ -233,145 +268,6 @@ juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
     return created;
 }
 
-// The live master tap, or nullptr. Resolves the take's NodeID first and falls back to a scan —
-// an undo taken mid-take rebuilds the graph and renumbers nodes, and losing the tap that way
-// must lose the take, not crash.
-RecordTapModule* MainComponent::findMasterRecordTap() const {
-    auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
-    if (auto* node = graph.getNodeForId(audioTake_.tapNode))
-        if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
-            return tap;
-
-    // The id no longer resolves — an undo/redo mid-take rebuilds the graph and renumbers nodes.
-    // The tap is a singleton, so a scan still identifies it unambiguously.
-    for (auto* node : graph.getNodes())
-        if (node != nullptr)
-            if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
-                return tap;
-    return nullptr;
-}
-
-// Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a
-// saved project, `<app data>/Recordings/take-N.wav` + `.../Recordings/take-N.agpk` for one that
-// has never been saved (see the unsaved-project policy on ProjectBundle). N is the first free
-// number in whichever folder. Fills the file/assetRef fields of `take`; returns false if the
-// directories could not be created.
-bool MainComponent::chooseTakeFiles(AudioTake& take) const {
-    juce::File audioDir;
-    juce::File peaksDir;
-    juce::String refPrefix;
-
-    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
-        audioDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kAudioSubdirName);
-        peaksDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kPeaksSubdirName);
-        refPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
-    } else {
-        // An UNSAVED project has no bundle to write into, so takes land in app data and the clip's
-        // assetRef carries the reserved "Recordings/" prefix, which resolves against
-        // <app data>/<settings folder> rather than a bundle root. saveToFile() runs
-        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save, which
-        // moves these into the bundle on the first save and rewrites the refs to "Audio/..." — a
-        // project.json never carries a "Recordings/" ref. Until saved, the ref is still
-        // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
-        // rule — no absolute paths, ever — true for both cases.
-        auto root = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
-        audioDir = root;
-        peaksDir = root;
-        refPrefix = juce::String(detail::kRecordingsFolderName) + "/";
-    }
-
-    if (!audioDir.exists() && !audioDir.createDirectory().wasOk())
-        return false;
-    if (!peaksDir.exists() && !peaksDir.createDirectory().wasOk())
-        return false;
-
-    // First free take number in whichever folder pair this is. Both files are checked so a take
-    // never half-overwrites an earlier one.
-    for (int n = 1; n <= kMaxTakeNumber; ++n) {
-        const juce::String stem = "take-" + juce::String(n);
-        const auto wav = audioDir.getChildFile(stem + ".wav");
-        const auto peaks = peaksDir.getChildFile(stem + ".agpk");
-        if (wav.exists() || peaks.exists())
-            continue;
-        take.wavFile = wav;
-        take.peaksFile = peaks;
-        take.assetRef = refPrefix + stem + ".wav";
-        return true;
-    }
-    return false;
-}
-
-// Counterpart to commitMidiRecording(): the ONE place an audio take ever commits. Stops
-// the tap, then creates the clip in a single recordTimelineChange. A no-op unless a take is
-// actually in flight, so both callers (the Record-off click and the poll's commit-on-stop) can
-// call it unconditionally.
-void MainComponent::commitAudioRecording() {
-    if (!audioTake_.capturing)
-        return;
-
-    // Cleared FIRST: every path out of here means the take is over, and leaving the state set would
-    // let the 10 Hz poll re-enter this on the next tick.
-    const AudioTake take = audioTake_;
-    audioTake_ = {};
-
-    RecordTapModule::TakeResult result;
-    if (auto* tap = findMasterRecordTap())
-        result = tap->stopCapture();
-
-    timelinePanel.getTransportBar().setRecordingState(false);
-    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll — unconditional
-    // and idempotent, exactly like commitMidiRecording's own call.
-    audioEngine.getMetronome().setForcedOn(false);
-
-    // Nothing captured: record was disengaged during the count-in, or the tap never armed. No clip
-    // and no undo step, mirroring MidiRecorder's "an empty take commits nothing" contract.
-    if (!result.ok || result.lengthSamples <= 0)
-        return;
-
-    // Where the take lands. Samples -> beats through the transport's tempo. The rate,
-    // bpm and round-trip latency used here are the ones FROZEN at record-on (take.captureSampleRate /
-    // captureBpm / captureRecordingLatencySamples), not read live off the transport/engine — a
-    // device/sample-rate change mid-take forces an early commit (see
-    // AudioEngine::handleStreamFormatChange), and by the time that commit reaches here the engine may
-    // already be on the NEW rate while every anchor field above (captureStartTimelineSample, the WAV
-    // itself) is still in the OLD one. Reading live values would silently convert an OLD-rate sample
-    // count with a NEW-rate samples-per-beat, which is wrong by exactly the rate ratio. The frozen
-    // fields make this correct unconditionally: for the ordinary take (no rate change), they equal
-    // the live values anyway. The whole of the arithmetic lives in synth::computeTakePlacement so it
-    // can be asserted to the sample without going through this component. See
-    // Source/Timeline/TakePlacement.h.
-    synth::TakePlacementInput placementInput;
-    placementInput.takeLengthSamples = result.lengthSamples;
-    placementInput.captureStartValid = result.captureStartValid;
-    placementInput.captureStartTimelineSample = result.captureStartTimelineSample;
-    placementInput.captureStartBlockOffset = result.captureStartBlockOffset;
-    placementInput.punchInBeat = take.punchInBeat;
-    placementInput.recordingLatencySamples = take.captureRecordingLatencySamples;
-    placementInput.sampleRate = take.captureSampleRate > 0.0 ? take.captureSampleRate : 44100.0;
-    placementInput.bpm = take.captureBpm > 0.0 ? take.captureBpm : 120.0;
-    placementInput.minClipLengthBeats = kMinAudioClipLengthBeats;
-
-    const auto placement = synth::computeTakePlacement(placementInput);
-    // Everything recorded sits before the punch (record disengaged during the count-in): the file
-    // stays, the clip is not created — the same "an empty take commits nothing" rule as above.
-    if (!placement.hasContent)
-        return;
-
-    // ONE undo step for the clip AND its asset binding: recordTimelineChange snapshots the doc
-    // before and after the whole lambda, so the two mutations inside are a single entry.
-    undoManager.recordTimelineChange(timelineDoc, [&] {
-        const auto clip = timelineDoc.addClip(take.track, placement.clipStartBeat, placement.clipLengthBeats, "Take");
-        if (!clip.isValid())
-            return; // the track went away, or it is at kMaxClipsPerTrack: a no-op commit
-        // The pre-roll (and the latency shift's overhang at timeline 0) is excluded by the WINDOW,
-        // not by rewriting the WAV: the file keeps every frame that was captured.
-        timelineDoc.setClipAsset(clip, take.assetRef, placement.sourceStartSeconds);
-    });
-
-    if (result.overran)
-        statusBar.showMessage("Dropped audio during recording");
-}
-
 // New Patch empties the timeline as well as the canvas, as its own undoable step.
 void MainComponent::clearTimelineForNewPatch() {
     if (timelineDoc.isEmpty())
@@ -385,40 +281,43 @@ void MainComponent::clearTimelineForNewPatch() {
 // now reachable directly so guardUnsavedChanges can hand it in as `proceed`.
 void MainComponent::newPatch() {
     ProgrammaticApplyScope guard(*this);
-    // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
-    // recordStructuralChange, and folding the timeline into it would mean either nesting
-    // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
-    // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
-    // and the post-restore reconcile re-derives the bindings after each.
+    // The timeline and graph clears below are recorded as undo steps (each owns its own
+    // transaction), but startFreshUndoHistory() below drops them: New starts an empty history, so
+    // Cmd+Z can't bring back a half of the old project (canvas without its macros or tracks).
     clearTimelineForNewPatch();
     graphEditor.newPatch();
     // A new document is not the old bundle, so the next take goes to app data rather
     // than into a bundle this patch no longer belongs to.
     currentBundleDir_ = juce::File();
     refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
-    // FRO325: a brand-new project always starts Compensated (docs/mixer/mixer.md#pan-law) — this is
+    // A brand-new project always starts Compensated (docs/mixer/mixer.md#pan-law) — this is
     // a direct engine write, not an undo step, the same "not itself undoable, like BPM" posture the
     // graph/timeline resets around it already have (this call runs after both, so nothing above it
     // can leave the law stale on an undo back into THIS document).
     audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
+    // A new song has no key, so nothing snaps until one is chosen; the baseline moves with it, so the transport poll
+    // does not record the reset as an edit.
+    audioEngine.getTransport().setSongKey(std::nullopt);
+    committedTransport_.songKey.reset();
+    pendingTransport_.songKey.reset();
+    // ...and starts with Master pinned right and nothing hidden; the reconcile below rebuilds the mixer.
+    bottomDock.getMixerPanel().getViewDoc() = synth::MixerViewDoc::forNewProject();
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory();
     markDocumentClean();
     setCurrentPatchName("Untitled");
     statusBar.showMessage("New patch");
-    // T114/P8-10: the welcome screen's "New empty project" button reaches this via
+    // The welcome screen's "New empty project" button reaches this via
     // AppCommands::newPatch's own guard — this line is what actually hides it, only once the guard
     // has let the action proceed (a Cancel answer never runs newPatch() at all).
     hideWelcomeScreen();
 }
 
+void MainComponent::startFreshUndoHistory() { undoManager.clearUndoHistory(); }
+
 // The graph node carrying this uuid, or nullptr.
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
-    if (uuid.isEmpty())
-        return nullptr;
-    for (auto* node : audioEngine.getGraph().getNodes())
-        if (node != nullptr && node->properties["uuid"].toString() == uuid)
-            return node;
-    return nullptr;
+    return nodeUuidCache.find(audioEngine.getGraph(), uuid);
 }
 
 // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
@@ -474,7 +373,7 @@ juce::String MainComponent::createTrackInNode() {
 // Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid. Returns its uuid, empty on
 // failure. Called INSIDE the caller's undo transaction.
 //
-// `wireDirectlyToMasterBus` (T173a): true (the default) wires the node stereo straight into the
+// `wireDirectlyToMasterBus`: true (the default) wires the node stereo straight into the
 // master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly, so
 // the two orderings compose (adding an audio track before or after the first take both end up
 // with the track's audio flowing THROUGH the tap) — the behaviour createAndBindTrackInNode()'s
@@ -597,6 +496,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
         statusBar.showMessage("Relink failed: " + error);
         return;
     }
+    MainComponentAudioImport::writePeaksFor(*this, newRef);
 
     // Snapshot every clip sharing the OLD ref BEFORE mutating anything — a TimelineDoc reference
     // does not survive a mutation (see TimelineDoc::getClip's own contract), so the ids and each
@@ -625,7 +525,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
 
 // `file`'s duration in beats at the transport's CURRENT bpm (0.0 when it isn't readable audio).
 // Beats, not seconds, because a clip's length is beats — see synth::Clip.
-double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
+double MainComponentAudioImport::audioFileLengthInBeats(const MainComponent& mc, const juce::File& file) {
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
@@ -633,9 +533,33 @@ double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
         return 0.0;
 
     const double seconds = (double)reader->lengthInSamples / reader->sampleRate;
-    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    const auto snap = mc.audioEngine.getTransport().getPositionSnapshot();
     const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
     return seconds * bpm / 60.0;
+}
+
+// The import half of importAudioFileToClip, also run first by the drop that makes a new track: copies `sourceFile`
+// into the project and returns the asset ref, or an empty ref after saying why on the status bar.
+juce::String MainComponentAudioImport::importAudioAsset(MainComponent& mc, const juce::File& sourceFile) {
+    // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
+    // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
+    // into, which saveToFile() sweeps into the bundle via
+    // synth::AssetManager::adoptRecordingsAssets before it ever writes project.json.
+    juce::String error;
+    juce::String newRef;
+    if (mc.currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(mc.currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(sourceFile, mc.currentBundleDir_, &error);
+    } else {
+        const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
+        const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
+        if (name.isNotEmpty())
+            newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;
+    }
+    if (newRef.isEmpty())
+        mc.statusBar.showMessage("Import failed: " + error);
+    else
+        writePeaksFor(mc, newRef); // before the clip exists, so its first paint finds the sidecar
+    return newRef;
 }
 
 // What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
@@ -650,30 +574,15 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
         return;
 
-    // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
-    // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
-    // into, which saveToFile() sweeps into the bundle via
-    // synth::AssetManager::adoptRecordingsAssets before it ever writes project.json.
-    juce::String error;
-    juce::String newRef;
-    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
-        newRef = synth::AssetManager::importAudioFile(sourceFile, currentBundleDir_, &error);
-    } else {
-        const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
-        const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
-        if (name.isNotEmpty())
-            newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;
-    }
-
-    if (newRef.isEmpty()) {
-        // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
-        statusBar.showMessage("Import failed: " + error);
+    // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
+    const juce::String newRef = MainComponentAudioImport::importAudioAsset(*this, sourceFile);
+    if (newRef.isEmpty())
         return;
-    }
 
     // The clip is as long as the file (never as long as some default), floored at the same minimum
     // an audio take uses so a sub-frame file still produces a grabbable clip.
-    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+    const double lengthBeats =
+        std::max(kMinAudioClipLengthBeats, MainComponentAudioImport::audioFileLengthInBeats(*this, sourceFile));
 
     // ONE undo step for the clip AND its asset binding, exactly like commitAudioRecording().
     undoManager.recordTimelineChange(timelineDoc, [&] {
@@ -687,6 +596,34 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     statusBar.showMessage("Imported " + newRef);
 }
 
+// A file dropped on the empty space under the last track: a new audio track holding a clip of the file at `startBeat`,
+// as ONE undo step. The file is imported first (a failed import changes nothing), then the track, its mixer channel and
+// the clip are one recorded change.
+void MainComponentAudioImport::addAudioTrackWithClip(MainComponent& mc, double startBeat,
+                                                     const juce::File& sourceFile) {
+    const juce::String newRef = importAudioAsset(mc, sourceFile);
+    if (newRef.isEmpty())
+        return;
+    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(mc, sourceFile));
+
+    const MainComponent::TrackGrowInScope growIn(mc);
+    const int index = (int)mc.timelineDoc.getTracks().size();
+    juce::String trackName;
+    const bool pushed = mc.undoManager.recordGraphTimelineAndMacroChange(
+        mc.audioEngine.getGraph(), mc.timelineDoc, mc.graphEditor.getMacros(), [&] {
+            const auto track = buildAudioTrackChannel(mc, index, trackName);
+            if (!track.isValid())
+                return;
+            const auto clip = mc.timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats,
+                                                     sourceFile.getFileNameWithoutExtension());
+            if (clip.isValid())
+                mc.timelineDoc.setClipAsset(clip, newRef, 0.0);
+        });
+    mc.reconcileTimelineAfterGraphChange();
+    mc.statusBar.showMessage(pushed ? "Added " + trackName + " with " + sourceFile.getFileName()
+                                    : "Could not add a track");
+}
+
 // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0
 // outside a saved bundle (nothing to sweep). See cleanUnusedAssetsForTest()'s comment for why
 // this has no menu/shortcut wiring yet.
@@ -698,11 +635,11 @@ int MainComponent::cleanUnusedAssets() {
 
 // Right-click-any-knob's headless hook, and the production entry point
 // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
-// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
-// creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
-// NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
-// status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
-// resolve to a real parameter on it.
+// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), binds a lane
+// for `paramId` with the parameter's real NormalisableRange on the track that plays that module (else the
+// doc's find-or-create Automation-kind track; docs/timeline/automation.md#which-track-a-lane-lands-on), and shows it
+// under its track in the timeline panel. A no-op (with a status-bar message) if `nodeId` doesn't resolve to a live
+// ModuleBase or `paramId` doesn't resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
@@ -731,7 +668,7 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         }
     }
     if (param == nullptr) {
-        // A hosted plugin-card knob (FRO137): its parameter is not a RangedAudioParameter, so hand
+        // A hosted plugin-card knob: its parameter is not a RangedAudioParameter, so hand
         // it to the lane picker's own hosted path, which captures the index hint and the 0..1 range.
         if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
             synth::ui::TrackHeaderHost::PluginLaneOption option;
@@ -745,35 +682,19 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         return;
     }
 
-    // find-or-create the doc's ONE Automation-kind track, then bind the lane — both in the SAME
-    // mutation lambda, so creating the track (when this is the first automated parameter in the
-    // whole patch) and binding the lane is ONE undo step, not two. addLane dedupes doc-wide, so a
-    // repeat call for a parameter that already has a lane mutates nothing and this is a no-op.
-    synth::LaneId laneId;
-    const juce::String uuidCopy = uuid;
-    auto mutate = [this, &laneId, uuidCopy, paramId, param] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
-        if (!trackId.isValid())
-            return; // kMaxTracks reached — nothing to bind onto
-
-        synth::AutomationLane::RangeSnapshot range;
-        range.minValue = param->getNormalisableRange().start;
-        range.maxValue = param->getNormalisableRange().end;
-        range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
-        laneId = timelineDoc.addLane(trackId, uuidCopy, paramId, range);
-    };
-    undoManager.recordTimelineChange(timelineDoc, mutate);
+    // The lane goes on the track that plays this module (else the shared Automation track), picked inside the
+    // same mutation that binds it so a created track and its lane are ONE undo step. A repeat call for a
+    // parameter that already has a lane mutates nothing and returns the existing lane.
+    synth::AutomationLane::RangeSnapshot range;
+    range.minValue = param->getNormalisableRange().start;
+    range.maxValue = param->getNormalisableRange().end;
+    range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
+    const synth::LaneId laneId = addLaneUndoable(uuid, paramId, -1, range, std::nullopt);
     if (!laneId.isValid())
         return;
 
-    ensureBottomDockOpen();
-    timelinePanel.showAutomationLane(laneId);
+    // Switch the dock to the Timeline tab (a Timeline in its own window is brought forward
+    // instead) so a mixer-column or canvas-knob Automate visibly lands on the new lane.
+    showBottomDockTab(synth::ui::BottomDockComponent::Tab::Timeline);
+    detail::showLaneWhenSettled(timelineSlide_, timelinePanel, isBottomDockVisible, laneId, *this);
 }

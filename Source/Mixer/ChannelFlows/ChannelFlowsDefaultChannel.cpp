@@ -53,7 +53,7 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
 }
 
 // Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain) that
-// "+ Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
+// "Add Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
 //
 //     source 0/1 -> Gate 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
 //
@@ -75,13 +75,12 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
 // Strip->Master edges are added: spliceMasterNode() re-routes whatever already feeds the audio
 // output, and nothing of this channel's own should be among that yet.
 //
-// The Strip->Master edge is a PLAIN graph edge, never boxed behind a macro port, on purpose:
-// spliceMasterNode()/ensureMasterNode() (Source/Mixer/MasterSplice.h) classify a re-routed feed as
-// Mix vs Direct by checking whether the connection's SOURCE NODE is itself a ChannelStripModule. A
-// MacroOutlet sitting between the strip and Master would make the source node a MacroOutlet instead,
-// defeating that check — which the later "Create channels" subtask depends on. (MainComponent::
-// addAudioTrack keeps Master OUTSIDE the macro it boxes this channel's other nodes into, for exactly
-// this reason.)
+// Core builds the Strip->Master edge as a PLAIN graph edge because it cannot create macro ports (ports are UI
+// level). The app then moves it behind the track macro's output port (MacroGroupController::
+// routeStripOutputThroughMacroPort), and spliceMasterNode()/ensureMasterNode() (Source/Mixer/MasterSplice.h)
+// classify a re-routed feed as Mix vs Direct by looking backward THROUGH macro ports
+// (resolveSourceThroughPorts), so a strip behind an outlet still lands on Mix. Master itself stays OUTSIDE the
+// macro MainComponent::addAudioTrack boxes this channel's other nodes into.
 //
 // NO UNDO's own reasoning: today's only caller is MainComponent::addAudioTrack, via
 // AppUndoManager::recordGraphTimelineAndMacroChange. Core cannot depend on AppUndoManager or
@@ -105,7 +104,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
 // buildDefaultAudioChannel() instead of `instrument` directly.
 //
 // A factory-created instrument defaults to poly OFF (Oscillator/Wavetable's own `poly` parameter
-// default), so this returns nullptr on the golden "+ Track -> Instrument" path today; it exists so
+// default), so this returns nullptr on the golden "Add Track -> Instrument" path today; it exists so
 // poly instruments are handled correctly wherever they arise (a caller that explicitly turns poly on
 // before building the chain, or a future direct-poly picker), without the strip ever seeing more
 // than one stereo pair.
@@ -149,11 +148,11 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 // before it, so a poly instrument's per-voice audio is summed to one stereo pair before the
 // (necessarily-mono) VCA gates it.
 //
-// ADSR's sustain (stock factory default 1.0; this override is kept
-// for clarity/explicitness) is set to 0.7 so a held note settles at a musical level instead of the
-// full peak; the release stage (stock default, unchanged) is what fixes the drone-after-note-off
-// bug. VCA's gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs
-// perceived level, not an extra silent 50% attenuation stacked under it.
+// The ADSR is left exactly as the module library creates it (stock defaults, and the new-module
+// hook's Dual I/O default), so a 'Add Track' ADSR and a dragged-in one are the same card; the release
+// stage is what fixes the drone-after-note-off bug. VCA's gain is set to 0.5 (-6 dB) in the mono and the poly chain
+// alike: a single note peaks about -6 dB below full scale, leaving headroom so a chord, which sums at unity, stays
+// mostly under the soft limiter's knee.
 //
 // The poly path supersedes this as the poly instrument's ONLY option: when the instrument is poly,
 // the caller now builds addPolyEnvelopeAndVCAForInstrument() below instead of this one (true
@@ -165,29 +164,27 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
                                                  juce::AudioProcessorGraph::Node& trackIn,
                                                  juce::AudioProcessorGraph::Node& chainSource,
                                                  int chainSourceRightChannel, juce::Point<int> adsrPosition,
-                                                 juce::Point<int> vcaPosition) {
+                                                 juce::Point<int> vcaPosition,
+                                                 const DefaultChannelLayout::NewModuleHook& onNewModule) {
     EnvelopeAndVCA result;
 
     juce::String adsrUuid;
-    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid);
+    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid, onNewModule);
     if (adsr == nullptr)
         return result;
     // Forced non-poly regardless of the instrument's own poly flag — see above for why a poly ADSR
     // fed only Track In's MIDI would never fire.
     setBoolParam(*adsr->getProcessor(), "poly", false);
-    // Explicit sustain override so this auto-wired chain's level doesn't depend on ADSR's own
-    // stock default (1.0) — see above.
-    setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;
-    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid);
+    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid, onNewModule);
     if (vca == nullptr) {
         result.adsrUuid = adsrUuid;
         return result;
     }
     setBoolParam(*vca->getProcessor(), "poly", false);
-    // Overrides VCA's stock gain default (0.5) so the envelope alone governs level — see above.
-    setFloatParam(*vca->getProcessor(), "gain", 1.0f);
+    // The per-voice headroom of the default chain — see above.
+    setFloatParam(*vca->getProcessor(), "gain", 0.5f);
 
     // Track In's MIDI, fanned alongside its existing wire to the instrument, drives the ADSR's gate.
     graph.addConnection({{trackIn.nodeID, juce::AudioProcessorGraph::midiChannelIndex},
@@ -236,16 +233,17 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
                                                       juce::AudioProcessorGraph::Node& trackIn,
                                                       juce::AudioProcessorGraph::Node& instrument,
                                                       juce::Point<int> polyMidiPosition, juce::Point<int> adsrPosition,
-                                                      juce::Point<int> vcaPosition) {
+                                                      juce::Point<int> vcaPosition,
+                                                      const DefaultChannelLayout::NewModuleHook& onNewModule) {
     PolyEnvelopeAndVCA result;
 
     juce::String polyMidiUuid;
-    auto* polyMidi = addChainNode(graph, "Poly MIDI", polyMidiPosition, polyMidiUuid);
+    auto* polyMidi = addChainNode(graph, "Poly MIDI", polyMidiPosition, polyMidiUuid, onNewModule);
     if (polyMidi == nullptr)
         return result;
 
     juce::String adsrUuid;
-    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid);
+    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid, onNewModule);
     if (adsr == nullptr) {
         result.polyMidiUuid = polyMidiUuid;
         return result;
@@ -254,19 +252,17 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     // MIDI's per-voice CV below, not raw MIDI, so the poly branch actually fires. See
     // addEnvelopeAndVCAForRawInstrument's own comment above for why the non-poly path can't do this.
     setBoolParam(*adsr->getProcessor(), "poly", true);
-    // Same override as the non-poly path, same reason: a held note should sustain.
-    setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;
-    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid);
+    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid, onNewModule);
     if (vca == nullptr) {
         result.polyMidiUuid = polyMidiUuid;
         result.adsrUuid = adsrUuid;
         return result;
     }
     setBoolParam(*vca->getProcessor(), "poly", true);
-    // Same override as the non-poly path, same reason: the envelope alone should govern level.
-    setFloatParam(*vca->getProcessor(), "gain", 1.0f);
+    // Same per-voice headroom as the non-poly path, so a note is as loud in either mode.
+    setFloatParam(*vca->getProcessor(), "gain", 0.5f);
 
     // Track In's MIDI drives Poly MIDI, not a mono ADSR gate fallback.
     graph.addConnection({{trackIn.nodeID, juce::AudioProcessorGraph::midiChannelIndex},
@@ -275,6 +271,14 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     // Poly MIDI's Pitch fan (ch0-7) -> instrument's poly Pitch CV in (ch0-7).
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{polyMidi->nodeID, voice}, {instrument.nodeID, voice}});
+
+    // The same Gate fan -> the instrument's Gate fan, when it has one (Oscillator, Wavetable): a new note
+    // restarts the voice's phase.
+    if (auto* instrumentProcessor = dynamic_cast<ModuleBase*>(instrument.getProcessor());
+        instrumentProcessor != nullptr && instrumentProcessor->polyGateInputChannel() >= 0)
+        for (int voice = 0; voice < 8; ++voice)
+            graph.addConnection({{polyMidi->nodeID, 8 + voice},
+                                 {instrument.nodeID, instrumentProcessor->polyGateInputChannel() + voice}});
 
     // Poly MIDI's Gate fan (ch8-15) -> ADSR's poly Gate CV in (ch0-7).
     for (int voice = 0; voice < 8; ++voice)

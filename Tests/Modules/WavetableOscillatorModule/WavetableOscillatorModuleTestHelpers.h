@@ -160,6 +160,15 @@ juce::AudioBuffer<float> renderAttack(WavetableOscillatorModule& module, int mid
     return block;
 }
 
+/** Largest magnitude among `count` samples from `from`: the amplitude of a settled sine (Basic Shapes' first frame
+    sits below full scale, because the table is normalised to its loudest frame). */
+float peakOf(const float* data, int from, int count) {
+    float peak = 0.0f;
+    for (int i = from; i < from + count; ++i)
+        peak = std::max(peak, std::abs(data[i]));
+    return peak;
+}
+
 /** Loudest bin in a swept band. */
 float peakInBand(const juce::AudioBuffer<float>& buffer, int channel, float fromHz, float toHz, float stepHz) {
     float peak = 0.0f;

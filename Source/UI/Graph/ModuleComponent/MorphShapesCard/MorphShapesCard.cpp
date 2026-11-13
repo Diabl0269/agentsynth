@@ -1,0 +1,384 @@
+// MorphShapesCard.cpp -- a card's morph-map section: what shows when, the layout, the cables and the editor window.
+#include "MorphShapesCard.h"
+#include "Modules/Shapes/MorphShapes.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Layout/ButtonTooltip.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
+#include "UI/ModuleViews/ShapeEditor/ShapePicker.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
+
+namespace synth::ui {
+
+namespace {
+constexpr int kMapWidth = 252;
+// 150 plus the 9 px the landing dots and modulation bars take from the plot, so the plot keeps its height.
+constexpr int kMapHeight = 159;
+constexpr int kCurveHeight = 110;
+constexpr int kPickButtonWidth = 84; // "Pick shape", beside Edit shapes
+constexpr int kPickButtonGap = 4;
+
+int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
+    return block.isAttached() ? block.height(full, settling) : full;
+}
+} // namespace
+
+MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<ModuleShapesAdapter> adapter,
+                                 int morphXChannel, int morphYChannel)
+    : host_(std::move(host))
+    , module_(module)
+    , adapter_(std::move(adapter))
+    , morphXChannel_(morphXChannel)
+    , morphYChannel_(morphYChannel) {
+    controller_ = std::make_unique<ShapeMapController>(map_, *adapter_);
+    controller_->onEdit = [this](int index) { openEditor(index); };
+    controller_->onChanged = [this] {
+        lastGeneration_ = adapter_->getGeneration();
+        sync(); // the count may have crossed the map's default
+    };
+    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
+    map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); };
+    map_.setShowLabels(false);
+    map_.setLandingDotDiameter(host_.landingDotDiameter);
+    map_.pressGesture = [this](const juce::MouseEvent& e, int phase) { return routeMapPress(e, phase); };
+    map_.onStripHover = [this](MorphMap::Axis axis) { routeStripHover(axis); };
+    map_.extraTooltip = [this](juce::Point<float> point) { return stripTooltipAt(point); };
+    map_.setCursorVisible(true);
+    controller_->refresh();
+
+    editButton_.setTitle("Edit shapes");
+    setButtonTooltip(editButton_, "Open the shape editor window");
+    editButton_.onClick = [this] { openEditor(targetShapeIndex()); };
+    pickButton_.setTitle(actiontext::kPickShape);
+    setButtonTooltip(pickButton_, actiontext::kPickShapeTip);
+    pickButton_.onClick = [this] { openPicker(); };
+    setButtonTooltip(toggle_, "Show the map of shapes and the morph cursor " + host_.mapPlace);
+    toggle_.onClick = [this] {
+        const bool show = toggle_.getToggleState();
+        host_.rememberView([show](synth::CardViewState& state) { state.showMorphMap = show; });
+        sync();
+    };
+    for (juce::Component* part : {static_cast<juce::Component*>(&map_), static_cast<juce::Component*>(&editButton_),
+                                  static_cast<juce::Component*>(&pickButton_), static_cast<juce::Component*>(&toggle_)})
+        host_.card->addChildComponent(part);
+
+    auto attach = [this](synth::CardBlockFade& fade, std::vector<juce::Component*> targets) {
+        fade.attach(
+            std::move(targets), [this] { host_.relayout(); },
+            [this] {
+                host_.relayout();
+                host_.makeRoom();
+            });
+    };
+    if (host_.curveView) {
+        setUpCurveView();
+        attach(editFade_, {&editButton_, &pickButton_, &toggle_, &curveToggle_});
+        attach(curveFade_, {&curveView_});
+    } else {
+        attach(editFade_, {&editButton_, &pickButton_, &toggle_});
+    }
+    attach(mapFade_, {&map_});
+    lastGeneration_ = adapter_->getGeneration();
+}
+
+MorphShapesCard::~MorphShapesCard() { detach(); }
+
+void MorphShapesCard::detach() {
+    if (window_ != nullptr)
+        delete window_.getComponent();
+    window_ = nullptr;
+    editFade_.reset();
+    mapFade_.reset();
+    curveFade_.reset();
+}
+
+/** The remembered choice, else shown from two shapes up (one shape has nothing to arrange). */
+bool MorphShapesCard::mapWanted() const {
+    const auto state = module_.getCardViewState();
+    return state.showMorphMap.value_or(getNumShapes() >= 2);
+}
+
+/** In Custom the button and the pill are there and the map follows the choice; its sliders stand in for the Morph X
+    and Y knobs, which are hidden while it shows and back when it is hidden, so the module's CV targets always have a
+    landing widget. */
+void MorphShapesCard::sync() {
+    const bool custom = host_.customActive();
+    lastCustom_ = custom;
+    const bool wanted = mapWanted();
+    toggle_.setToggleState(wanted, juce::dontSendNotification);
+    editFade_.setShown(custom, *host_.settling, host_.relayout, host_.makeRoom);
+    mapFade_.setShown(custom && wanted, *host_.settling, host_.relayout, host_.makeRoom);
+    if (host_.curveView) {
+        const bool curveWantedNow = curveWanted();
+        curveToggle_.setToggleState(curveWantedNow, juce::dontSendNotification);
+        curveFade_.setShown(custom && curveWantedNow, *host_.settling, host_.relayout, host_.makeRoom);
+        syncCurveView(true);
+    }
+    host_.hideMorphKnobs(custom && wanted);
+}
+
+void MorphShapesCard::poll() {
+    // The type (combo, automation, undo, a preset) is read here rather than from the parameter callback, which may
+    // arrive on the audio thread.
+    if (const bool custom = host_.customActive(); custom != lastCustom_) {
+        lastCustom_ = custom;
+        sync();
+    }
+    if (const int generation = adapter_->getGeneration(); generation != lastGeneration_) {
+        lastGeneration_ = generation;
+        controller_->refresh();
+        sync();
+    }
+    pushStripModulation();
+    controller_->syncCursor();
+    syncCurveView(false);
+}
+
+int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
+    if (!editButton_.isVisible())
+        return y;
+    const bool settling = *host_.settling;
+    y += blockHeight(editFade_, settling, topGap);
+    if (apply) {
+        const int w = juce::jmin(width, synth::cardbody::kNarrowContentWidth);
+        const int h = blockHeight(editFade_, settling, synth::cardbody::kRowHeight);
+        const int left = x + (width - w) / 2;
+        const int pickW = juce::jmin(kPickButtonWidth, w / 2);
+        editButton_.setBounds(left, y, w - pickW - kPickButtonGap, h);
+        pickButton_.setBounds(left + w - pickW, y, pickW, h);
+    }
+    y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + synth::cardbody::kBlockGap);
+    if (host_.curveView && curveFade_.isAttached() && curveView_.isVisible()) {
+        if (apply) {
+            const int w = juce::jmin(width, kMapWidth);
+            curveView_.setBounds(x + (width - w) / 2, y, w, blockHeight(curveFade_, settling, kCurveHeight));
+        }
+        y += blockHeight(curveFade_, settling, kCurveHeight + synth::cardbody::kBlockGap);
+    }
+    if (mapFade_.isAttached() && map_.isVisible()) {
+        if (apply) {
+            const int w = juce::jmin(width, kMapWidth);
+            map_.setBounds(x + (width - w) / 2, y, w, blockHeight(mapFade_, settling, kMapHeight));
+        }
+        y += blockHeight(mapFade_, settling, kMapHeight + synth::cardbody::kBlockGap);
+    }
+    return y;
+}
+
+/** One window per card; asking again selects the shape in the open one. The adapter's title follows a rename. */
+juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
+    if (window_ != nullptr && !window_->isVisible())
+        delete window_.getComponent(); // closed, and only waiting for its own deletion
+    if (window_ != nullptr) {
+        focusShapeEditorWindow(*window_);
+        if (auto* editor = dynamic_cast<ShapeListEditor*>(window_->getContentComponent()))
+            editor->setSelected(shapeIndex);
+        return window_.getComponent();
+    }
+    adapter_->setModuleName(host_.title());
+    adapter_->setApplicationProperties(host_.appProperties ? host_.appProperties() : nullptr);
+    window_ =
+        openShapeEditorWindow(adapter_, shapeIndex, host_.card,
+                              [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); });
+    return window_.getComponent();
+}
+
+/** A right-click on a slider of the card's map or of the window's: the owner's control menu for that slider's
+    parameter, at `screenArea`. */
+void MorphShapesCard::openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea) {
+    if (host_.stripMenu)
+        host_.stripMenu(axisChannel(axis), screenArea);
+}
+
+int MorphShapesCard::getNumShapes() const { return (int)adapter_->getShapes().size(); }
+
+int MorphShapesCard::nearestShapeToCursor() const {
+    const auto cursor = adapter_->getCursor();
+    return synth::morph::nearestShapeIndex(adapter_->getShapes(), cursor.x, cursor.y);
+}
+
+/** What Pick shape and Edit shapes act on: the dot the user selected on the map, else the one nearest the cursor.
+    The cursor being the selection has no dot to act on, so it falls to the nearest one too. */
+int MorphShapesCard::targetShapeIndex() const {
+    const int selected = map_.getSelected();
+    if (!map_.isCursorSelected() && selected >= 0 && selected < getNumShapes())
+        return selected;
+    return nearestShapeToCursor();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Cables
+// ---------------------------------------------------------------------------------------------------------------
+
+bool MorphShapesCard::isMapShown() const { return mapFade_.isShown() && map_.isVisible(); }
+
+std::optional<int> MorphShapesCard::channelAt(juce::Point<int> cardPoint) const {
+    if (!isMapShown())
+        return std::nullopt;
+    const auto axis = map_.stripAt((cardPoint - map_.getPosition()).toFloat());
+    if (axis == MorphMap::Axis::X)
+        return morphXChannel_;
+    if (axis == MorphMap::Axis::Y)
+        return morphYChannel_;
+    return std::nullopt;
+}
+
+MorphMap::Axis MorphShapesCard::axisForChannel(int channel) const {
+    return channel == morphXChannel_   ? MorphMap::Axis::X
+           : channel == morphYChannel_ ? MorphMap::Axis::Y
+                                       : MorphMap::Axis::None;
+}
+
+int MorphShapesCard::axisChannel(MorphMap::Axis axis) const noexcept {
+    return axis == MorphMap::Axis::X ? morphXChannel_ : axis == MorphMap::Axis::Y ? morphYChannel_ : -1;
+}
+
+std::optional<juce::Point<float>> MorphShapesCard::anchorFor(int channel) const {
+    const auto axis = axisForChannel(channel);
+    if (axis == MorphMap::Axis::None || !isMapShown())
+        return std::nullopt;
+    return map_.getPosition().toFloat() + map_.stripAnchor(axis);
+}
+
+juce::Rectangle<int> MorphShapesCard::stripBoundsFor(int channel) const {
+    return map_.getStripBounds(axisForChannel(channel)).toNearestInt() + map_.getPosition();
+}
+
+void MorphShapesCard::setDropChannel(int channel) {
+    map_.setDropHighlight(isMapShown() ? axisForChannel(channel) : MorphMap::Axis::None);
+}
+
+juce::Component* MorphShapesCard::stripControlFor(int channel) const {
+    const auto axis = axisForChannel(channel);
+    return axis == MorphMap::Axis::None || !isMapShown() ? nullptr : map_.getStripStop(axis);
+}
+
+CardControlGestures& MorphShapesCard::stripGestures(int channel) {
+    return stripGestures_[channel == morphYChannel_ ? 1 : 0];
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Modulation
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Offers a press to the strips' gestures in the order a fader's are asked (amount drag, dot, cable pickup); the one
+    that claims it gets the drag and the release, and the map does nothing with that press. */
+bool MorphShapesCard::routeMapPress(const juce::MouseEvent& e, int phase) {
+    if (phase == 0) {
+        pressedStrip_ = -1;
+        for (int i = 0; i < 2 && pressedStrip_ < 0; ++i)
+            if (stripGestures_[i].press(e))
+                pressedStrip_ = i;
+        return pressedStrip_ >= 0;
+    }
+    if (pressedStrip_ < 0)
+        return false;
+    stripGestures_[pressedStrip_].forward(e, phase);
+    if (phase == 2)
+        pressedStrip_ = -1;
+    return true;
+}
+
+/** Hovering a slider or its bar hovers its cable, and back, as hovering a knob does. */
+void MorphShapesCard::routeStripHover(MorphMap::Axis axis) {
+    stripGestures_[0].hover(axis == MorphMap::Axis::X);
+    stripGestures_[1].hover(axis == MorphMap::Axis::Y);
+}
+
+/** The reading is taken on the card's gated tick; the map repaints only when a bar actually changed. */
+void MorphShapesCard::pushStripModulation() {
+    const bool live = host_.stripModulation && isMapShown();
+    map_.setStripModulation(MorphMap::Axis::X,
+                            live ? host_.stripModulation(morphXChannel_) : std::vector<MorphMap::StripModulation>{});
+    map_.setStripModulation(MorphMap::Axis::Y,
+                            live ? host_.stripModulation(morphYChannel_) : std::vector<MorphMap::StripModulation>{});
+}
+
+/** The bar and the landing dot carry the mod dot's tooltip. */
+juce::String MorphShapesCard::stripTooltipAt(juce::Point<float> point) const {
+    if (!host_.modDotTooltip || !isMapShown())
+        return {};
+    for (const int channel : {morphXChannel_, morphYChannel_}) {
+        const auto axis = axisForChannel(channel);
+        const float reach = MorphMap::kModBarThickness * 0.5f + host_.landingDotDiameter;
+        if (map_.modBarAt(point) == axis || map_.stripAnchor(axis).getDistanceFrom(point) <= reach)
+            if (const auto text = host_.modDotTooltip(channel); text.isNotEmpty())
+                return text;
+    }
+    return {};
+}
+
+bool MorphShapesCard::acceptsShapeDrop(synth::shapes::ShapeKind kind) const {
+    return host_.customActive && host_.customActive() &&
+           synth::shapes::kindFromWord(adapter_->getPreferenceKind()) == kind;
+}
+
+void MorphShapesCard::shapeDragOver(bool over, const juce::String& name) {
+    dropOver_ = over;
+    dropName_ = over ? name : juce::String();
+    if (host_.card != nullptr)
+        host_.card->repaint();
+}
+
+// The shape under the cursor is the one the card's curve editor shows, so that is the one a drop replaces.
+void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
+    replaceShapeCurve(nearestShapeToCursor(), shape);
+}
+
+void MorphShapesCard::applyPickedShape(const synth::shapes::LibraryShape& shape) {
+    replaceShapeCurve(targetShapeIndex(), shape);
+}
+
+void MorphShapesCard::replaceShapeCurve(int target, const synth::shapes::LibraryShape& shape) {
+    auto shapes = adapter_->getShapes();
+    if (shapes.empty() || !acceptsShapeDrop(shape.kind))
+        return;
+    const auto index = (size_t)juce::jlimit(0, (int)shapes.size() - 1, target);
+    adapter_->beginEdit();
+    shapes[index].curve = shape.curve;
+    adapter_->setShapes(shapes);
+    adapter_->endEdit();
+    if (host_.card != nullptr)
+        host_.card->repaint();
+}
+
+// The library shapes of this module's kind, each with its picture and badge. A pick is one undo step and counts as a
+// use, like a drop, so Used recently lists it.
+void MorphShapesCard::openPicker() {
+    const auto kind = synth::shapes::kindFromWord(adapter_->getPreferenceKind());
+    if (!kind.has_value() || !(host_.customActive && host_.customActive()))
+        return;
+    juce::Component::SafePointer<juce::Component> card(host_.card);
+    auto menu = makeShapePickerMenu(libraryPickerEntries(synth::shapes::ShapeLibrary::shared(), *kind),
+                                    [this, card](const ShapePickerEntry& entry) {
+                                        if (card == nullptr || !entry.libraryShape.has_value())
+                                            return;
+                                        applyPickedShape(*entry.libraryShape);
+                                        synth::shapes::ShapeLibrary::shared().noteUsed(*entry.libraryShape);
+                                    });
+    if (host_.showMenuAt)
+        host_.showMenuAt(menu, pickButton_.getScreenBounds());
+    else if (host_.showMenu)
+        host_.showMenu(menu);
+}
+
+void MorphShapesCard::paintShapeDropHint(juce::Graphics& g, juce::Rectangle<float> bounds) const {
+    const auto& theme = synth::theme::themeOf(*host_.card);
+    g.setColour(theme.colors.accent.withAlpha(0.12f));
+    g.fillRoundedRectangle(bounds, theme.metrics.cornerRadius);
+    g.setColour(theme.colors.accent);
+    g.drawRoundedRectangle(bounds.reduced(1.0f), theme.metrics.cornerRadius, theme.metrics.borderWidth * 2.0f);
+    const juce::Font font{juce::FontOptions(13.0f)};
+    const auto label = "Stamp " + dropName_ + " here";
+    const float width =
+        juce::jmin(bounds.getWidth() - 16.0f, juce::GlyphArrangement::getStringWidth(font, label) + 20.0f);
+    const auto pill = juce::Rectangle<float>(width, 24.0f).withCentre(bounds.getCentre());
+    g.setColour(theme.colors.surfaceHi.withAlpha(0.95f));
+    g.fillRoundedRectangle(pill, theme.metrics.cornerRadiusSmall);
+    g.setColour(theme.colors.textPrimary);
+    g.setFont(font);
+    g.drawText(label, pill.reduced(8.0f, 0.0f), juce::Justification::centred, true);
+}
+
+} // namespace synth::ui

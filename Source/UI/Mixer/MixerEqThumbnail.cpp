@@ -1,7 +1,9 @@
 // Concern: MixerEqThumbnail's listener/cache lifecycle and its curve paint.
 #include "MixerEqThumbnail.h"
 
+#include "AppUndoManager.h"
 #include "EqResponseCurve.h"
+#include "UI/ModuleViews/EqBandGlide.h"
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -9,7 +11,19 @@ namespace synth::ui {
 
 int MixerEqThumbnail::liveUnbindCallCountForTest_ = 0;
 
-MixerEqThumbnail::MixerEqThumbnail() { setInterceptsMouseClicks(true, false); }
+struct MixerEqThumbnail::LastBands {
+    ParametricEQModule::BandSnapshots bands{};
+};
+
+MixerEqThumbnail::MixerEqThumbnail()
+    : glide_(std::make_unique<EqBandGlide>(*this))
+    , lastBands_(std::make_unique<LastBands>()) {
+    setInterceptsMouseClicks(true, false);
+    glide_->onChange = [this] {
+        recompute();
+        repaint();
+    };
+}
 
 MixerEqThumbnail::~MixerEqThumbnail() {
     // Same ordering as MixerFader's own destructor discipline (unbind before the module pointer
@@ -29,8 +43,12 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     graph_ = graph;
     nodeId_ = nodeId;
 
+    restorePending_ = false;
+    glide_->sync(lastBands_->bands, lastOutputGainDb_, lastBands_->bands, lastOutputGainDb_,
+                 false); // ends any glide of the old EQ
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
+        bandCount_ = 0;
         setVisible(false);
         return;
     }
@@ -39,9 +57,13 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
         if (param != nullptr)
             param->addListener(this);
 
+    lastBands_->bands = eq_->getBandSnapshots();
+    lastOutputGainDb_ = eq_->getOutputGainDb();
     setVisible(true);
     recompute(); // synchronous, so the first paint after binding already has data
 }
+
+KeyedPointTween& MixerEqThumbnail::getBandGlideForTest() noexcept { return glide_->tweenForTest(); }
 
 void MixerEqThumbnail::detachListeners() {
     if (eq_ == nullptr)
@@ -65,6 +87,10 @@ void MixerEqThumbnail::detachListeners() {
 void MixerEqThumbnail::parameterValueChanged(int, float) {
     // May land on any thread -- a CV-modulated band's resolved value is written from the audio
     // thread. The only thing this callback may safely do is coalesce onto the message thread.
+    // A write the undo manager makes while it restores marks the refresh it causes as a restore (asked here, not at
+    // the refresh, so a restore of something else can never make a later knob drag glide).
+    if (undo_ != nullptr && juce::MessageManager::existsAndIsCurrentThread() && undo_->isRestoring())
+        restorePending_ = true;
     triggerAsyncUpdate();
 }
 
@@ -73,16 +99,45 @@ void MixerEqThumbnail::parameterGestureChanged(int, bool) {
 }
 
 void MixerEqThumbnail::handleAsyncUpdate() {
-    recompute();
+    syncFromModule(restorePending_.exchange(false));
     repaint();
+}
+
+void MixerEqThumbnail::syncFromModule(bool restored) {
+    if (eq_ == nullptr)
+        return;
+    const auto bands = eq_->getBandSnapshots();
+    const float outputGainDb = eq_->getOutputGainDb();
+    glide_->sync(lastBands_->bands, lastOutputGainDb_, bands, outputGainDb, restored);
+    lastBands_->bands = bands;
+    lastOutputGainDb_ = outputGainDb;
+    recompute();
 }
 
 void MixerEqThumbnail::recompute() {
     if (eq_ == nullptr)
         return;
-    cachedMagnitudesDb_ = EqResponseCurve::compute(*eq_);
+    // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
+    const auto drawn = glide_->drawn(lastBands_->bands, lastOutputGainDb_);
+    cachedMagnitudesDb_ = EqResponseCurve::compute(drawn.curve, drawn.outputGainDb);
     cachedBypassed_ = eq_->isBypassed();
+    refreshBandCount();
     ++recomputeCount_;
+}
+
+// The count is of the real bands (not the glide's drawn ones). Tooltip and accessibility description say the same.
+void MixerEqThumbnail::refreshBandCount() {
+    int count = 0;
+    for (const auto& band : lastBands_->bands)
+        if (band.enabled)
+            ++count;
+    const bool changed = count != bandCount_;
+    bandCount_ = count;
+    const auto text = "EQ: " + juce::String(count) + (count == 1 ? " band" : " bands") + ".";
+    setTooltip(text + " Click to open.");
+    setDescription(text + " Selects this channel's EQ on the canvas.");
+    if (changed)
+        repaint();
 }
 
 void MixerEqThumbnail::mouseUp(const juce::MouseEvent&) {
@@ -96,10 +151,9 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
     if (w <= 0.0f || h <= 0.0f || cachedMagnitudesDb_.empty())
         return;
 
-    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto surface = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
-    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-    const auto disabled = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
+    const auto surface = synth::theme::themeOf(*this).colors.surface;
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
+    const auto disabled = synth::theme::themeOf(*this).colors.textDisabled;
 
     g.setColour(surface);
     g.fillRect(getLocalBounds());
@@ -126,6 +180,23 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
 
     g.setColour(fillColour);
     g.fillPath(fillPath);
+    paintBadge(g);
+}
+
+// The band count, small, in the top-right corner; nothing while no band is on.
+void MixerEqThumbnail::paintBadge(juce::Graphics& g) const {
+    if (bandCount_ <= 0)
+        return;
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const auto font = synth::theme::AppLookAndFeel::uiFont(9.0f);
+    const auto text = getBadgeText();
+    const int textW = juce::GlyphArrangement::getStringWidthInt(font, text);
+    const auto badge = juce::Rectangle<float>((float)(getWidth() - textW - 10), 2.0f, (float)textW + 8.0f, 12.0f);
+    g.setColour(colors.surface.withAlpha(0.85f));
+    g.fillRoundedRectangle(badge, badge.getHeight() * 0.5f);
+    g.setColour(cachedBypassed_ ? colors.textDisabled : colors.textPrimary);
+    g.setFont(font);
+    g.drawText(text, badge.toNearestInt(), juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

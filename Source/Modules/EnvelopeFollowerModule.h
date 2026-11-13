@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <cmath>
 
 /**
@@ -31,7 +32,9 @@ public:
         // AIStateMapper::applyParamsToProcessor treats an in-[0,1] value on a wider range as a
         // normalized value and rescales it, so a non-unit "gain" would silently misread AI
         // patches. Mapped internally to 0.25x-4.0x detector gain.
-        addParameter(sensitivityParam = new juce::AudioParameterFloat("sensitivity", "Sensitivity", 0.0f, 1.0f, 0.5f));
+        addParameter(sensitivityParam = new juce::AudioParameterFloat("sensitivity", "Sensitivity",
+                                                                      juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                      synth::fractionPercentAttributes()));
         addParameter(detectionParam = new juce::AudioParameterChoice("detection", "Detection", {"Peak", "RMS"}, 0));
         addMuteParameter();
         enableVisualBuffer(true);
@@ -46,7 +49,7 @@ public:
         currentEnvelope.store(0.0f, std::memory_order_relaxed);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
 
         const int numSamples = buffer.getNumSamples();
@@ -63,11 +66,15 @@ public:
         // Kept as two separate branches so the intent is explicit, never a fused condition.
         if (isBypassed()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             resetDetector();
             return;
         }
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             resetDetector();
             return;
         }
@@ -113,8 +120,7 @@ public:
         currentEnvelope.store(out[numSamples - 1], std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(out[i]);
+            vb->pushBlock(out, numSamples);
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
@@ -207,16 +213,12 @@ private:
     }
 
     /** Read pointer for a CV channel, or nullptr when the channel is absent or silent.
-        Mirrors the cheap first-64-sample probe the other CV-aware modules use. */
+        Scans the whole block, like the other CV-aware modules. */
     static const float* readPointerIfActive(const juce::AudioBuffer<float>& buffer, int channel, int numSamples) {
         if (channel >= buffer.getNumChannels())
             return nullptr;
         const float* data = buffer.getReadPointer(channel);
-        const int checkLen = std::min(numSamples, 64);
-        for (int i = 0; i < checkLen; ++i)
-            if (data[i] != 0.0f)
-                return data;
-        return nullptr;
+        return hasAnyNonZero(data, numSamples) ? data : nullptr;
     }
 
     Detector detector;

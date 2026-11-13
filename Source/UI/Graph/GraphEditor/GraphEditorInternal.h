@@ -8,6 +8,7 @@
 #pragma once
 
 #include "GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 #include <algorithm>
 #include <cmath>
 
@@ -39,24 +40,89 @@ inline synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node
 }
 
 // ---- Card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
-// The collapsed card's fixed footprint — deliberately independent of however large or scattered
-// the group it stands in for is; that is the whole point of collapsing. Matches a standard
-// module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left
-// next to macroCardPortLayout(), where it originally lived) because buildVisibleCables()'s
-// directional edge-anchor treatment needs the jack band to clamp a
-// no-port-involved boundary cable's Y into, same as a real port jack's Y is placed in.
+// The collapsed card's minimum height — deliberately independent of however large or scattered
+// the group it stands in for is; that is the whole point of collapsing. The card grows past it only
+// to fit its port rows (macroCardHeightFor). Its width matches a standard module card's so it sits
+// comfortably on the same grid.
 inline constexpr int kMacroCardHeight = 90;
-// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
-// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
-// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
-inline constexpr int kMacroCardJackBandTop = 30;
-inline constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
 // Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
 // identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
 // any other module's.
 inline constexpr int kMacroCardJackInsetX = 10;
 // Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
 inline constexpr float kMacroCardJackHitRadius = 10.0f;
+
+// ---- Macro port sidebars (docs/macros/ports.md#how-a-port-is-drawn) ---------------------------
+// One port per 16px row, on both the collapsed card and the open macro. A strip's width is FIXED: the
+// same on both sides, reserved even with no ports, and never dependent on zoom or on the port names.
+// Zoom only fades the names, the '-' button and each strip's inner divider, so every layout below is
+// zoom-independent.
+inline constexpr int kMacroPortRowHeight = 16;
+inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card, below the title row
+inline constexpr int kMacroPortStripFooter = 22;       // room below the last row for the '+'/'-' pair
+inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
+inline constexpr int kMacroPortStripPadding = 8;       // after the name column
+inline constexpr int kMacroPortNameRoom = 62;          // the name column's width; a longer name is ellipsised
+inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
+// A card strip's width (88px): on the 280px card two strips leave 104px for the title, preview and
+// member count. The open macro's strip adds room for its inner jack.
+inline constexpr int kMacroCardStripWidth = kMacroPortStripInset + kMacroPortNameRoom + kMacroPortStripPadding;
+inline constexpr int kMacroHullStripWidth = kMacroCardStripWidth + kMacroHullStripInnerJackRoom;
+// Height reserved above an open macro's members for its name chip row, and the port rows' first-row
+// offset from the hull's top (the rows start 6px below the chip row).
+inline constexpr int kMacroChipRowHeight = 24;
+inline constexpr int kMacroPortRowsBelowChip = 6;
+// Port names fade in over this zoom range (docs/layout/animation.md): fully hidden at or below Lo,
+// fully drawn at or above Hi.
+inline constexpr float kMacroPortNamesFadeLo = 0.5f;
+inline constexpr float kMacroPortNamesFadeHi = 0.7f;
+inline constexpr float kMacroPortNameFontSize = 9.5f;
+/** Card height that fits `portsOnBusiestSide` rows, never below the fixed footprint. */
+inline int macroCardHeightFor(int portsOnBusiestSide) {
+    return juce::jmax(kMacroCardHeight,
+                      kMacroPortRowsTop + portsOnBusiestSide * kMacroPortRowHeight + kMacroPortStripFooter);
+}
+/** Opacity of the port names, the '-' glyph and the strips' inner dividers: a pure function of zoom. */
+inline float macroPortNameAlphaAtZoom(float zoom) {
+    return synth::ui::easeInOutCubic(
+        juce::jlimit(0.0f, 1.0f, (zoom - kMacroPortNamesFadeLo) / (kMacroPortNamesFadeHi - kMacroPortNamesFadeLo)));
+}
+/** The '-' button is clickable only once it is at least half faded in. */
+inline bool macroPortRemoveClickableAtZoom(float zoom) { return macroPortNameAlphaAtZoom(zoom) >= 0.5f; }
+/** The strip fill's opacity: recedes as the names fade out. */
+inline float macroStripFillAlpha(float nameAlpha) { return 0.25f + 0.30f * nameAlpha; }
+/** Zoomed out, an open macro's strip narrows to this rail along the outline and each port's interior jack slides
+ *  onto its boundary jack (both driven by the one name-fade factor `t`; docs/macros/ports.md). Canvas geometry
+ *  (hull, strip widths, widget bounds) never changes. */
+inline constexpr float kMacroStripRailWidth = 10.0f;
+/** A strip's painted width: the rail at t = 0, the full `fullWidth` at t = 1. */
+inline float macroStripPaintedWidth(float fullWidth, float t) {
+    return kMacroStripRailWidth + (fullWidth - kMacroStripRailWidth) * t;
+}
+/** The interior jack's x: on the boundary jack at t = 0, at its own `interiorX` at t = 1. */
+inline float macroPortInteriorJackX(float boundaryX, float interiorX, float t) {
+    return boundaryX + (interiorX - boundaryX) * t;
+}
+inline constexpr float kMacroPortFooterButtonSize = 8.0f;
+inline constexpr float kMacroPortFooterButtonFromBottom = 12.0f; // button top, up from the strip's bottom edge
+inline constexpr float kMacroPortAddButtonInset = 4.0f;          // '+' x from its strip's outer edge
+inline constexpr float kMacroPortRemoveButtonInset = 16.0f;      // '-' x from its strip's outer edge
+/** The glyph shared by the '+' and '-' buttons on the card and on the open macro's hull: a ring, and one
+ *  horizontal stroke ('-') or a horizontal and a vertical one ('+'). */
+inline void paintMacroPortFooterButton(juce::Graphics& g, juce::Rectangle<float> b, juce::Colour colour, bool isAdd) {
+    g.setColour(colour);
+    g.drawEllipse(b, 1.2f);
+    const auto cross = b.reduced(b.getWidth() * 0.28f);
+    if (isAdd)
+        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
+    g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
+}
+/** Paints both sidebar strips and their '+'/'-' buttons for every expanded macro, under the port widgets
+ *  (GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale, deciding whether '-' shows. */
+void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom);
+/** Every macro as the canvas draws it now, for the border that leaves or returns with a delete or its undo
+ *  (CardGlideAnimator::Border; GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale. */
+std::vector<CardGlideAnimator::Border> captureMacroBorders(GraphEditor& editor, float zoom);
 
 /** True when a source channel carries a structural, absolute-valued signal rather than normalised
  *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever
@@ -134,8 +200,9 @@ inline bool isKnownMidiSourceName(const juce::String& name) {
 }
 
 inline bool isKnownMidiDestName(const juce::String& name) {
-    return name == "Oscillator" || name == "Sampler" || name == "Wavetable" || name == "ADSR" || name == "Sequencer" ||
-           name == "Poly Sequencer" || name == "Poly MIDI";
+    return name == "Oscillator" || name == "Sampler" || name == "Drum Kit" || name == "Pluck" || name == "Mallet" ||
+           name == "Wavetable" || name == "ADSR" || name == "Sequencer" || name == "Poly Sequencer" ||
+           name == "Poly MIDI";
 }
 
 inline bool isStereoLegLabel(const juce::String& label) {
@@ -254,6 +321,26 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
     return pairs;
 }
 
+/** True when `left` and `right` are the labels of a stereo pair's two jacks ("Left"/"Right",
+ *  "Audio L"/"Audio R", "Mix L"/"Mix R", "Direct L"/"Direct R"). */
+inline bool isLeftOfLabelledPair(const juce::String& left, const juce::String& right) {
+    const auto l = left.trim().toLowerCase();
+    const auto r = right.trim().toLowerCase();
+    if (l == "left" || l == "audio l")
+        return r == (l == "left" ? "right" : "audio r");
+    return l.length() > 2 && l.endsWith(" l") && r == l.dropLastCharacters(1) + "r";
+}
+
+/** True when visible jack `jack` of `mb` is the Left of a Left/Right pair of separate jacks, i.e. the
+ *  module shows its pair split and `jack + 1` is the Right. */
+inline bool jackIsLeftOfSplitPair(const ModuleBase& mb, int jack, bool isInput) {
+    const int visible = isInput ? mb.getVisibleInputPortCount() : mb.getVisibleOutputPortCount();
+    if (jack < 0 || jack + 1 >= visible)
+        return false;
+    return isInput ? isLeftOfLabelledPair(mb.getInputPortLabel(jack), mb.getInputPortLabel(jack + 1))
+                   : isLeftOfLabelledPair(mb.getOutputPortLabel(jack), mb.getOutputPortLabel(jack + 1));
+}
+
 } // namespace detail
 
 // Delete heal (GraphEditorDeleteHeal.cpp): one healable audio splice, captured BEFORE
@@ -262,10 +349,10 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
 // in/-out nodes. Applying it wires upstreamId's `upstreamJack` to downstreamId's `downstreamJack`
 // the same way a user-drawn cable would (resolvePolyLink's L->L/R->R mapping), re-validated with
 // graph.isAnInputTo()/canConnect() once the deletion has actually happened.
-// `upstreamDualPair`/`downstreamDualPair`: true when that side is one half of a genuine Dual-I/O
-// L/R pair on BOTH the splice's own endpoint and its peer (mergeDualIoStereoPairLegs' own comment
-// in GraphEditorDeleteHeal.cpp) -- healDeletedChain then also heals jack+1 explicitly on that side,
-// since resolvePolyLink has no notion of "two separate jacks" within one PolyLink.
+// `upstreamDualPair`/`downstreamDualPair`: true when that survivor shows the cable as a Left/Right pair
+// of separate jacks (mergeStereoPairLegs' own comment in GraphEditorDeleteHeal.cpp) -- healDeletedChain
+// then also heals jack+1 explicitly, since resolvePolyLink has no notion of "two separate jacks"
+// within one PolyLink.
 struct GraphEditor::HealSplice {
     juce::AudioProcessorGraph::NodeID upstreamId, downstreamId;
     int upstreamJack = 0, downstreamJack = 0;

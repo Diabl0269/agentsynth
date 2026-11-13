@@ -2,14 +2,20 @@
 // cable rendering, plus module auto-naming.
 
 #include "AudioEngine.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/MacroControlModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include <algorithm>
 #include <map>
 #include <set>
+#include <utility>
 
+// The cables are taken once (synth::ConnectionIndex): a scan of getConnections() per attenuverter made every caller --
+// the canvas tick, the timeline's modulator rows, each edit's track-ownership pass -- O(routings x cables log cables).
 std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings() const {
     std::vector<ModulationRouting> routings;
-
+    const synth::ConnectionIndex cables(mainProcessorGraph);
     // --- Pass 1: AttenuverterChain routings (unchanged) ---
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* atten = dynamic_cast<AttenuverterModule*>(node->getProcessor())) {
@@ -20,8 +26,8 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
             r.role = PortRole::ModCV;
 
             // Find source: first connection whose destination is (node, channel 0)
-            for (auto& conn : mainProcessorGraph.getConnections()) {
-                if (conn.destination.nodeID == node->nodeID && conn.destination.channelIndex == 0) {
+            for (auto& conn : cables.into(node->nodeID)) {
+                if (conn.destination.channelIndex == 0) {
                     r.sourceNodeID = conn.source.nodeID;
                     r.sourceChannelIndex = conn.source.channelIndex;
                     r.hasSource = true;
@@ -30,8 +36,8 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
             }
 
             // Find dest: first connection whose source is (node, channel 0)
-            for (auto& conn : mainProcessorGraph.getConnections()) {
-                if (conn.source.nodeID == node->nodeID && conn.source.channelIndex == 0) {
+            for (auto& conn : cables.outOf(node->nodeID)) {
+                if (conn.source.channelIndex == 0) {
                     r.destNodeID = conn.destination.nodeID;
                     r.destChannelIndex = conn.destination.channelIndex;
                     r.hasDest = true;
@@ -76,7 +82,7 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
     };
     std::vector<CandidateEdge> candidates;
 
-    for (auto& conn : mainProcessorGraph.getConnections()) {
+    for (auto& conn : cables.all()) {
         if (conn.source.isMIDI())
             continue;
 
@@ -256,8 +262,11 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
         if (!r.hasSource)
             return true;
         auto* node = mainProcessorGraph.getNodeForId(r.sourceNodeID);
-        if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr)
+        if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr) {
+            if (auto* macros = dynamic_cast<MacroControlModule*>(mb)) // each Macros knob has its own polarity
+                return macros->isModSourceBipolarAt(r.sourceChannelIndex);
             return mb->isModSourceBipolar();
+        }
         return true;
     };
 
@@ -334,6 +343,29 @@ void AudioEngine::addEmptyModRouting() { mainProcessorGraph.addNode(std::make_un
 
 void AudioEngine::removeModRouting(juce::AudioProcessorGraph::NodeID attenuverterNodeID) {
     mainProcessorGraph.removeNode(attenuverterNodeID);
+    releaseUnconnectedHostedModSlots();
+}
+
+// A modulation slot (hosted plugin parameter, Drum Kit pad knob) lives as long as a cable reaches its channel. Removing
+// the last one frees the slot and puts the parameter back at its resting value; this sweep is what notices, whichever
+// path removed it.
+void AudioEngine::releaseUnconnectedHostedModSlots() {
+    std::vector<juce::AudioProcessorGraph::Connection> connections;
+    bool connectionsRead = false;
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        auto* module = dynamic_cast<synth::ModSlotHost*>(node->getProcessor());
+        auto* base = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module == nullptr || base == nullptr || base->getModulationTargets().empty())
+            continue;
+        if (!std::exchange(connectionsRead, true))
+            connections = mainProcessorGraph.getConnections();
+        const auto id = node->nodeID;
+        module->releaseUnconnectedModSlots([&connections, id](int channel) {
+            return std::any_of(connections.begin(), connections.end(), [id, channel](const auto& c) {
+                return c.destination.nodeID == id && c.destination.channelIndex == channel;
+            });
+        });
+    }
 }
 
 void AudioEngine::toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID) {
@@ -364,11 +396,18 @@ void AudioEngine::updateModuleNames() {
     // incidentally fires, then keep it forever after (recomputed the same way every time).
     std::vector<std::pair<ModuleBase*, juce::String>> nameable;
     std::map<juce::String, int> typeCounts;
+    std::map<juce::String, int> hostedOrdinals;
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
             if (module->getModuleType() == ModuleType::ExternalMidi)
                 continue; // Do not rename External MIDI modules as their name matches the device name
 
+            if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module)) {
+                // Numbered by the plugin it hosts, not by the "Hosted Plugin" type: two Divas are "Diva" and
+                // "Diva 2" (the first stays bare), a Diva and a Serum are both bare.
+                hosted->setInstanceOrdinal(++hostedOrdinals[hosted->getPluginName()]);
+                continue;
+            }
             juce::String baseName = module->getName();
             int lastSpace = baseName.lastIndexOf(" ");
             if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))

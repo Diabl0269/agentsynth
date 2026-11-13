@@ -1,0 +1,160 @@
+{
+  "nodes": [
+    {
+      "id": 110,
+      "type": "LFO",
+      "params": {
+        "shape": "Sine",
+        "rateHz": 0.2,
+        "level": 0.5,
+        "mode": false
+      }
+    }
+  ],
+  "connections": [],
+  "mode": "merge",
+  "modulations": [
+    {
+      "source": 110,
+      "dest": 102,
+      "amount": 0.15,
+      "destParam": "cutoff"
+    }
+  ],
+  "timelineOps": [
+    {
+      "op": "addInstrumentTrack",
+      "name": "Strings",
+      "instrument": "Wavetable",
+      "poly": true,
+      "instrumentId": 100,
+      "instrumentParams": {
+        "table": "Basic Shapes",
+        "level": 0.9,
+        "unison": 4,
+        "detune": 18,
+        "spread": 0.6,
+        "width": 0.7
+      },
+      "inserts": [
+        {
+          "type": "Filter",
+          "id": 102,
+          "params": {
+            "filterType": "LPF12",
+            "cutoff": 2400,
+            "resonance": 0.15,
+            "keyTrack": 30
+          }
+        },
+        {
+          "type": "Reverb",
+          "id": 103,
+          "params": {
+            "roomSize": 0.7,
+            "damping": 0.5,
+            "wet": 0.3,
+            "dry": 0.8,
+            "width": 0.9,
+            "preDelay": 20
+          }
+        }
+      ],
+      "envelope": {
+        "id": 101,
+        "params": {
+          "attack": 1.2,
+          "decay": 0.6,
+          "sustain": 0.8,
+          "release": 2.5
+        }
+      },
+      "sound": "core/string-section"
+    },
+    {
+      "op": "setTempo",
+      "bpm": 84
+    },
+    {
+      "op": "placeClips",
+      "track": "Strings",
+      "clips": [
+        {
+          "startBeat": 0,
+          "lengthBeats": 32,
+          "name": "Intro",
+          "notes": [
+            {
+              "startBeat": 0,
+              "lengthBeats": 4,
+              "pitch": 55,
+              "velocity": 36
+            },
+            {
+              "startBeat": 0,
+              "lengthBeats": 4,
+              "pitch": 58,
+              "velocity": 36
+            },
+            {
+              "startBeat": 0,
+              "lengthBeats": 4,
+              "pitch": 62,
+              "velocity": 36
+            },
+            {
+              "startBeat": 4,
+              "lengthBeats": 4,
+              "pitch": 51,
+              "velocity": 36
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "writeLane",
+      "paramId": "level",
+      "points": [
+        {
+          "beat": 0,
+          "value": 0.25,
+          "curve": 1
+        },
+        {
+          "beat": 32,
+          "value": 0.18,
+          "curve": 1
+        },
+        {
+          "beat": 40,
+          "value": 0.3,
+          "curve": 1
+        }
+      ],
+      "nodeId": 100
+    },
+    {
+      "op": "writeLane",
+      "paramId": "cutoff",
+      "points": [
+        {
+          "beat": 0,
+          "value": 600,
+          "curve": 1
+        },
+        {
+          "beat": 32,
+          "value": 1500,
+          "curve": 1
+        },
+        {
+          "beat": 80,
+          "value": 3000,
+          "curve": 1
+        }
+      ],
+      "nodeId": 102
+    }
+  ]
+}

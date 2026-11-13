@@ -1,3 +1,4 @@
+#include "../UniqueTempDir.h"
 #include "Auth/DeviceIdStore.h"
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
@@ -6,12 +7,7 @@ namespace {
 
 class DeviceIdStoreTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        parentDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                        .getChildFile("DeviceIdStoreTest")
-                        .getNonexistentChildFile("run", "", false);
-        parentDir.createDirectory();
-    }
+    void SetUp() override { parentDir = synth::test::makeUniqueTempDir("DeviceIdStoreTest"); }
 
     void TearDown() override { parentDir.deleteRecursively(); }
 

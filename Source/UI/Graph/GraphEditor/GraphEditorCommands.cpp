@@ -8,11 +8,19 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/ReducedMotion.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/ModCurve.h"
 #include "SnippetManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 
 using namespace detail;
 
@@ -189,7 +197,7 @@ bool GraphEditor::duplicateSelection() {
 
 // Right-click on empty canvas: paste / select-all. Built here rather than inline in mouseDown
 // so the menu stays out of the hit-testing path.
-void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
+void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos, std::optional<juce::Rectangle<int>> screenAnchor) {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
 
     juce::PopupMenu m;
@@ -212,7 +220,7 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     // Discoverable regardless of where auto-arrange or a drag left Master/Audio Output.
     // Disabled (mirroring the Paste item's setEnabled idiom above) rather than hidden, so the row
     // stays in a stable place whether or not the patch has a channel yet.
-    juce::PopupMenu::Item locateMaster("Locate Master");
+    juce::PopupMenu::Item locateMaster("Go to Output");
     locateMaster.setEnabled(hasLocatableMasterOrOutput());
     locateMaster.action = [safeThis] {
         if (safeThis != nullptr)
@@ -240,14 +248,57 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
         showCanvasContextMenuHook_(m);
         return;
     }
-    m.showMenuAsync(juce::PopupMenu::Options());
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
+    m.showMenuAsync(options);
+}
+
+bool GraphEditor::showContextMenuForKeyboardFocus() {
+    if (modMatrix.hasKeyboardFocus(true))
+        return false;
+
+    if (selection.size() == 1) {
+        const auto selectedId = selection.getSelected().front();
+        for (auto* card : getModuleComponents()) {
+            if (card->getNodeId() == selectedId && card->isVisible()) {
+                card->showContextMenu(card->getScreenBounds());
+                return true;
+            }
+        }
+    }
+
+    // Anchored at the middle of the view, where "Paste Here" lands a paste.
+    const auto centre = getLocalBounds().getCentre();
+    const auto screenCentre = localPointToGlobal(centre);
+    showCanvasContextMenu(content.getLocalPoint(this, centre),
+                          juce::Rectangle<int>(screenCentre, screenCentre).expanded(1));
+    return true;
 }
 
 // Canvas-scoped keys: Delete/Backspace removes the selection, Escape clears it. Deliberately
 // NOT routed through ShortcutManager — an unmodified Delete binding registered app-wide would
-// fire from any panel that doesn't consume the key first.
+// fire from any panel that doesn't consume the key first. The card keys (arrows, Alt+arrows,
+// Return) are rebindable and live on CanvasCardKeyboard.
 bool GraphEditor::keyPressed(const juce::KeyPress& key) {
+    // While a project is still loading the canvas's edit keys wait (card moves, delete); every other key passes on.
+    const int code = key.getKeyCode();
+    if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey ||
+         code == juce::KeyPress::returnKey || code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey ||
+         code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) &&
+        getLoadReveal().refuseEdit())
+        return true;
+    if (key == juce::KeyPress::escapeKey && isDraggingConnection) {
+        // Escape is a release over nothing: no cable lands, the rows the drag opened fold, the keyboard goes back.
+        endConnectionDrag({-100000, -100000});
+        return true;
+    }
+    if (cardKeyboard_->keyPressed(key))
+        return true;
+
     if (key == juce::KeyPress::escapeKey) {
+        if (macroController_.insertGap().cancel()) // a drag's gap between cards closes first; the drag goes on
+            return true;
+        if (cancelMacroUnitDrag()) // a whole macro being dragged goes back where it was
+            return true;
         if (selection.isEmpty())
             return false;
         clearSelection();
@@ -257,7 +308,7 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) {
         if (selection.isEmpty())
             return false;
-        deleteSelection();
+        macroController_.requestDeleteSelection();
         return true;
     }
 
@@ -278,21 +329,15 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
         if (macroChipDragId.isNotEmpty()) {
             cancelSelectionDrag();
             macroChipDragId.clear();
+            macroController_.clearMacroNestCandidate();
         }
         promptRenameMacro(macroId);
         return;
     }
 
     auto attenId = getAttenuverterNodeAt(localPos.toFloat());
-    if (attenId.uid != 0) {
-        if (undoManager) {
-            undoManager->recordStructuralChange(audioEngine.getGraph(),
-                                                [this, attenId] { audioEngine.removeModRouting(attenId); });
-        } else {
-            audioEngine.removeModRouting(attenId);
-        }
-        repaintCanvas();
-    }
+    if (attenId.uid != 0)
+        modDot_->removeChain(attenId);
 }
 
 juce::AudioProcessorGraph::NodeID GraphEditor::getAttenuverterNodeAt(juce::Point<float> localPos) {
@@ -342,9 +387,14 @@ void GraphEditor::deleteModule(ModuleComponent* module) {
 
 // Request deletion by NodeID (called from ModuleComponent's delete button).
 // Resolves the module component and delegates to the single removal path.
-void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) {
+void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, bool recordUndo) {
     if (nodeId.uid == 0)
         return;
+    if (const auto refusal = outputDockDeleteRefusal(nodeId); refusal.isNotEmpty()) {
+        if (onStatusMessage)
+            onStatusMessage(refusal);
+        return;
+    }
 
     auto& graph = audioEngine.getGraph();
 
@@ -362,6 +412,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         // connections still in the graph to classify. See GraphEditor::deleteSelection's matching
         // comment.
         const auto healSplices = captureHealSplices({nodeId});
+        const auto reflow = macroController_.captureDeleteReflow({nodeId}); // see GraphEditor::deleteSelection
         // graph.removeNode() frees this node's processor -- and its AudioProcessorParameters --
         // synchronously, and a module card's own Delete is just as able to remove a
         // ChannelStripModule/MasterModule as a canvas "Delete" is. Nothing on this path rebuilds
@@ -369,8 +420,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         // which deliberately never does), so a mixer column's fader/pan/send-row bindings into
         // this node would dangle until an unrelated later graph edit finally dereferenced them.
         // Same seam, same pre-removal ordering as GraphEditor::deleteSelection().
-        if (onBeforeDetachAllModuleComponents)
-            onBeforeDetachAllModuleComponents();
+        fireBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
         // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a
         // fresh cable to is no longer orphaned by the time they run.
@@ -381,223 +431,19 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedMacroPort(n);
         updateComponents();
+        macroController_.applyDeleteReflow(reflow);
     };
 
-    if (undoManager)
+    const auto cablesBefore = snapshotCablesForRetract();
+    CardGlideAnimator::Scope glideScope(cardGlide_); // shrinks away (noteCardExits)
+    noteCardExits({nodeId});
+    // recordUndo=false: a bigger gesture (removing a timeline modulator) already holds the undo record.
+    if (undoManager && recordUndo)
         undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
     else
         doDelete();
+    morphCablesSince(cablesBefore); // the neighbours the delete healed run together into one cable
     repaint();
-}
-
-void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String& newModuleType) {
-    auto& graph = audioEngine.getGraph();
-
-    // Find the old node by processor pointer (same pattern as deleteModule)
-    juce::AudioProcessorGraph::NodeID oldNodeId;
-    for (auto* n : graph.getNodes()) {
-        if (n->getProcessor() == moduleComp->getModule()) {
-            oldNodeId = n->nodeID;
-            break;
-        }
-    }
-    if (oldNodeId.uid == 0)
-        return;
-
-    // Use shared_ptr to make the lambda copyable (std::function requires it)
-    auto newModuleTypeCopy = newModuleType;
-
-    auto doReplace = [this, &graph, oldNodeId, newModuleTypeCopy] {
-        auto* oldNode = graph.getNodeForId(oldNodeId);
-        if (!oldNode)
-            return;
-
-        // 1. Create the new module
-        auto newProcessor = synth::AIStateMapper::createModule(newModuleTypeCopy);
-        if (!newProcessor)
-            return;
-
-        // 2. Snapshot old module's properties
-        int posX = oldNode->properties.getWithDefault("x", 0);
-        int posY = oldNode->properties.getWithDefault("y", 0);
-        // Captured before removeNode() frees this node, so onModuleReplaced below can
-        // still tell MidiLearnController which uuid its assignments used to target. Empty is a
-        // normal case (a node MIDI Remote never touched) -- retargetNode() below is a no-op then.
-        const juce::String oldNodeUuid = oldNode->properties["uuid"].toString();
-        auto* oldProc = oldNode->getProcessor();
-        int oldNumInputs = oldProc->getTotalNumInputChannels();
-        int oldNumOutputs = oldProc->getTotalNumOutputChannels();
-        bool oldAcceptsMidi = oldProc->acceptsMidi();
-        bool oldProducesMidi = oldProc->producesMidi();
-
-        // 3. Get new module capabilities before addNode moves it
-        int newNumInputs = newProcessor->getTotalNumInputChannels();
-        int newNumOutputs = newProcessor->getTotalNumOutputChannels();
-        bool newAcceptsMidi = newProcessor->acceptsMidi();
-        bool newProducesMidi = newProcessor->producesMidi();
-
-        // 4. Collect all connections involving the old node
-        struct ConnectionInfo {
-            juce::AudioProcessorGraph::NodeID otherNodeId;
-            int otherChannelIndex;
-            int oldChannelIndex;
-            bool isIncoming; // true = other->old, false = old->other
-            bool isMidi;
-        };
-        std::vector<ConnectionInfo> directConnections;
-
-        struct ModRoutingRewire {
-            juce::AudioProcessorGraph::NodeID attenuverterId;
-            int channelOnOldModule;
-            bool oldModuleIsSource;
-        };
-        std::vector<ModRoutingRewire> modRoutings;
-
-        for (auto& conn : graph.getConnections()) {
-            bool srcIsOld = (conn.source.nodeID == oldNodeId);
-            bool dstIsOld = (conn.destination.nodeID == oldNodeId);
-            if (!srcIsOld && !dstIsOld)
-                continue;
-
-            // Check if this involves an attenuverter
-            if (srcIsOld) {
-                auto* dstNode = graph.getNodeForId(conn.destination.nodeID);
-                if (dstNode && dynamic_cast<AttenuverterModule*>(dstNode->getProcessor())) {
-                    ModRoutingRewire rw;
-                    rw.attenuverterId = conn.destination.nodeID;
-                    rw.channelOnOldModule = conn.source.channelIndex;
-                    rw.oldModuleIsSource = true;
-                    modRoutings.push_back(rw);
-                    continue;
-                }
-            }
-            if (dstIsOld) {
-                auto* srcNode = graph.getNodeForId(conn.source.nodeID);
-                if (srcNode && dynamic_cast<AttenuverterModule*>(srcNode->getProcessor())) {
-                    ModRoutingRewire rw;
-                    rw.attenuverterId = conn.source.nodeID;
-                    rw.channelOnOldModule = conn.destination.channelIndex;
-                    rw.oldModuleIsSource = false;
-                    modRoutings.push_back(rw);
-                    continue;
-                }
-            }
-
-            // Direct connection (not attenuverter-mediated)
-            ConnectionInfo ci;
-            bool isMidiConn =
-                (srcIsOld && conn.source.channelIndex == juce::AudioProcessorGraph::midiChannelIndex) ||
-                (dstIsOld && conn.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex);
-            ci.isMidi = isMidiConn;
-            if (srcIsOld) {
-                ci.otherNodeId = conn.destination.nodeID;
-                ci.otherChannelIndex = conn.destination.channelIndex;
-                ci.oldChannelIndex = conn.source.channelIndex;
-                ci.isIncoming = false;
-            } else {
-                ci.otherNodeId = conn.source.nodeID;
-                ci.otherChannelIndex = conn.source.channelIndex;
-                ci.oldChannelIndex = conn.destination.channelIndex;
-                ci.isIncoming = true;
-            }
-            directConnections.push_back(ci);
-        }
-
-        // 5. Add the new node to the graph
-        auto newNode = graph.addNode(std::move(newProcessor));
-        if (!newNode)
-            return;
-        auto newNodeId = newNode->nodeID;
-        newNode->properties.set("x", posX);
-        newNode->properties.set("y", posY);
-
-        // 6. Remove the old node (this removes all its connections)
-        modMatrix.clearRows();
-        // removeNode() frees the old processor and its AudioProcessorParameters synchronously.
-        // "Replace with..." is offered for every module except the singleton Audio Input/Output,
-        // so the node being replaced can be the very ChannelStripModule/MasterModule a mixer
-        // column's fader, pan attachment or send rows are bound to -- and nothing on this path
-        // rebuilds the mixer afterwards (updateComponents() only reaches
-        // reconcileTimelineBindingsOnly(), which deliberately never does), so those bindings
-        // would dangle until an unrelated later graph edit dereferenced them. Same seam and same
-        // pre-removal ordering as GraphEditor::deleteSelection().
-        //
-        // This sits here rather than at the top of doReplace deliberately: every early return
-        // above (unknown module type, addNode failure) leaves the graph untouched, and unbinding
-        // the whole mixer for a replace that never happened would leave every fader inert until
-        // the next rebuild. Nothing between the checks above and this line touches a mixer
-        // column -- steps 1-5 read only the old node and the graph -- so unbinding here is no
-        // later, in ordering terms, than unbinding there.
-        if (onBeforeDetachAllModuleComponents)
-            onBeforeDetachAllModuleComponents();
-        graph.removeNode(oldNodeId);
-
-        // 7. Re-create compatible direct connections
-        for (auto& ci : directConnections) {
-            if (ci.isMidi) {
-                if (ci.isIncoming && newAcceptsMidi) {
-                    graph.addConnection({{ci.otherNodeId, juce::AudioProcessorGraph::midiChannelIndex},
-                                         {newNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
-                } else if (!ci.isIncoming && newProducesMidi) {
-                    graph.addConnection({{newNodeId, juce::AudioProcessorGraph::midiChannelIndex},
-                                         {ci.otherNodeId, juce::AudioProcessorGraph::midiChannelIndex}});
-                }
-            } else {
-                if (ci.isIncoming && ci.oldChannelIndex < newNumInputs) {
-                    graph.addConnection({{ci.otherNodeId, ci.otherChannelIndex}, {newNodeId, ci.oldChannelIndex}});
-                } else if (!ci.isIncoming && ci.oldChannelIndex < newNumOutputs) {
-                    graph.addConnection({{newNodeId, ci.oldChannelIndex}, {ci.otherNodeId, ci.otherChannelIndex}});
-                }
-            }
-        }
-
-        // 8. Re-create compatible modulation routings
-        // removeNode(oldNodeId) only removes connections TO/FROM oldNodeId.
-        // For mod routings: source->attenuverter->dest
-        // If old was source: old->atten connection is removed, atten->dest survives
-        // If old was dest: atten->old connection is removed, source->atten survives
-        // We only need to re-add the destroyed leg.
-        for (auto& rw : modRoutings) {
-            if (rw.oldModuleIsSource) {
-                if (rw.channelOnOldModule < newNumOutputs) {
-                    graph.addConnection({{newNodeId, rw.channelOnOldModule}, {rw.attenuverterId, 0}});
-                }
-            } else {
-                if (rw.channelOnOldModule < newNumInputs) {
-                    graph.addConnection({{rw.attenuverterId, 0}, {newNodeId, rw.channelOnOldModule}});
-                }
-            }
-        }
-
-        // 9. Refresh UI
-        updateComponents();
-        audioEngine.updateModuleNames();
-
-        // Re-target the old node's MIDI Remote assignments onto the new one, INSIDE this mutation
-        // -- so whichever undo recorder wraps doReplace (below) sees the doc's own before/after
-        // JSON bracket this call exactly like it brackets the graph edit above, and one Cmd+Z
-        // reverts both together (see docs/control/midi-remote.md#replace-and-duplicate).
-        if (onModuleReplaced)
-            onModuleReplaced(oldNodeUuid, newNodeId);
-    };
-
-    if (undoManager)
-        recordReplaceModuleUndo(graph, doReplace);
-    else
-        doReplace();
-    repaint();
-}
-
-// A plain recordStructuralChange here would leave onModuleReplaced's MIDI Remote doc edit
-// either unrecorded or, if MidiLearnController pushed its own undo action, a second undo step the
-// user would have to Cmd+Z separately -- so this folds the doc into the SAME transaction as the
-// graph replace whenever MainComponent has wired one up (setMidiRemoteProjectDocForUndo). Headless
-// callers/tests that never call it keep the original graph-only behaviour.
-void GraphEditor::recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace) {
-    if (midiRemoteDocForUndo_ != nullptr)
-        undoManager->recordGraphAndMidiRemoteChange(graph, *midiRemoteDocForUndo_, doReplace, onMidiRemoteDocRestored);
-    else
-        undoManager->recordStructuralChange(graph, doReplace);
 }
 
 void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) {
@@ -613,6 +459,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
 
     if (nodeId.uid == 0)
         return;
+    const auto cablesBefore = snapshotCablesForRetract();
 
     // A visible jack can front an N-voice fan (and Poly MIDI's single jack fronts two), so gather every
     // raw channel it owns — otherwise "Disconnect" would leave 7 of 8 voices still wired.
@@ -622,7 +469,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     } else if (auto* modBase = dynamic_cast<ModuleBase*>(module->getModule())) {
         for (const auto& t : modBase->getJackTargets(portIndex, isInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                targetChannels.push_back(t.rawHeadChannel + v);
+                targetChannels.push_back(t.rawHeadChannel + v * t.rawStride);
     } else {
         targetChannels.push_back(portIndex);
     }
@@ -630,10 +477,10 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     // Decide BEFORE mutating whether this disconnect can leave a macro port cableless — nodeId's own jack, or the far
     // end of any plain (non-attenuverter) connection about to be removed. Only then does the transaction upgrade to
     // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only recordStructuralChange path.
-    // Gated on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false
-    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
+    // A far-end port counts whatever the preference says: the cut can strand a modulation behind it
+    // (see docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
     bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
-    if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {
+    if (!touchesMacroPort) { // a modulation cable counts whatever the preference says
         auto isTargetChannelPrescan = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
         };
@@ -645,7 +492,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 farNode = c.destination.nodeID;
             else
                 continue;
-            if (macroController_.nodeIsMacroPort(farNode)) {
+            if (macroController_.nodeIsMacroPort(farNode) || !modulationChainPorts(farNode).empty()) {
                 touchesMacroPort = true;
                 break;
             }
@@ -654,8 +501,13 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
 
     // Same connection-removal logic either way — the macro-port branch below just also collects
     // which nodes were touched, for the auto-delete scan run afterwards.
-    std::vector<juce::AudioProcessorGraph::NodeID> touchedNodes;
-    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput, &touchedNodes] {
+    std::vector<juce::AudioProcessorGraph::NodeID> touchedNodes, chainPorts; // chainPorts: read before each cut
+    auto cutChain = [this, &chainPorts](juce::AudioProcessorGraph::NodeID attenId) {
+        const auto ports = modulationChainPorts(attenId);
+        chainPorts.insert(chainPorts.end(), ports.begin(), ports.end());
+        audioEngine.removeModRouting(attenId);
+    };
+    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput, &touchedNodes, cutChain] {
         std::vector<juce::AudioProcessorGraph::Connection> toRemove;
         auto isTargetChannel = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
@@ -666,7 +518,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 if (c.destination.nodeID == nodeId && isTargetChannel(c.destination.channelIndex)) {
                     if (auto* srcNode = graph.getNodeForId(c.source.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) != nullptr)
-                            audioEngine.removeModRouting(srcNode->nodeID);
+                            cutChain(srcNode->nodeID);
                         else {
                             toRemove.push_back(c);
                             touchedNodes.push_back(c.source.nodeID);
@@ -677,7 +529,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 if (c.source.nodeID == nodeId && isTargetChannel(c.source.channelIndex)) {
                     if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr)
-                            audioEngine.removeModRouting(dstNode->nodeID);
+                            cutChain(dstNode->nodeID);
                         else {
                             toRemove.push_back(c);
                             touchedNodes.push_back(c.destination.nodeID);
@@ -691,11 +543,10 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     };
 
     if (touchesMacroPort) {
-        auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes] {
+        auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes, &chainPorts] {
             doDisconnect();
             touchedNodes.push_back(nodeId);
-            for (auto touched : touchedNodes)
-                macroController_.autoDeleteOrphanedMacroPort(touched);
+            pruneMacroPortsAfterCut(touchedNodes, chainPorts);
             updateComponents();
         };
         if (undoManager)
@@ -708,6 +559,8 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         doDisconnect();
     }
     repaint();
+    repaintCanvas(); // drops the cable memo, or the retract below would diff against the cables as they were
+    retractCablesGoneSince(cablesBefore);
 }
 
 // True when the visible jack already has at least one graph edge or mod routing.
@@ -776,6 +629,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         bool ownIsSource = false;
         juce::AudioProcessorGraph::NodeID attenuverterNodeId; // invalid when the cable is direct
         float attenuverterAmount = 1.0f;
+        synth::ModCurve attenuverterCurve;
         std::vector<juce::AudioProcessorGraph::Connection> rawEdges;
     };
     std::vector<Wire> wires;
@@ -798,12 +652,14 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         int farChannel = farRaw;
         juce::AudioProcessorGraph::NodeID attenuverterNodeId;
         float attenuverterAmount = 1.0f;
+        synth::ModCurve attenuverterCurve;
 
         // An attenuverter is an implementation detail of one mod cable — step over it to the module
         // the user actually patched, and remember its amount so a rebuild can restore it.
         if (auto* attenNode = graph.getNodeForId(farNodeId)) {
-            if (dynamic_cast<AttenuverterModule*>(attenNode->getProcessor()) != nullptr) {
+            if (auto* attenModule = dynamic_cast<AttenuverterModule*>(attenNode->getProcessor())) {
                 attenuverterNodeId = farNodeId;
+                attenuverterCurve = attenModule->getCurve();
                 const auto& attenParams = attenNode->getProcessor()->getParameters();
                 if (attenParams.size() > 1)
                     if (auto* amount = dynamic_cast<juce::AudioParameterFloat*>(attenParams[1]))
@@ -855,6 +711,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             w.ownIsSource = ownIsSource;
             w.attenuverterNodeId = attenuverterNodeId;
             w.attenuverterAmount = attenuverterAmount;
+            w.attenuverterCurve = attenuverterCurve;
             w.rawEdges.push_back(c);
             wires.push_back(std::move(w));
         } else {
@@ -892,9 +749,10 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 
         // Only a single mono cable may sit behind an attenuverter; a fan is always direct, and a
         // structural pitch/gate source is never wrapped (see carriesStructuralSignal).
-        const bool useAttenuverter = link.voiceCount == 1 && destModule != nullptr &&
-                                     !carriesStructuralSignal(sourceModule, link.sourceRawChannel) &&
-                                     destModule->isAutoPromotableModTarget(link.destRawChannel);
+        const bool useAttenuverter =
+            link.voiceCount == 1 && destModule != nullptr &&
+            !carriesStructuralSignal(sourceModule, link.sourceRawChannel) &&
+            (w.attenuverterNodeId.uid != 0 || destModule->isAutoPromotableModTarget(link.destRawChannel));
 
         if (useAttenuverter) {
             const auto newAttenId =
@@ -906,12 +764,13 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
                     if (attenParams.size() > 1)
                         if (auto* amount = dynamic_cast<juce::AudioParameterFloat*>(attenParams[1]))
                             amount->setValueNotifyingHost(amount->convertTo0to1(w.attenuverterAmount));
+                    if (auto* newAtten = dynamic_cast<AttenuverterModule*>(newAttenNode->getProcessor()))
+                        newAtten->setCurve(w.attenuverterCurve);
                 }
             }
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection(
-                    {{sourceId, link.sourceRawChannel + v * link.sourceStride}, {destId, link.destRawChannel + v}});
+                graph.addConnection({{sourceId, link.sourceChannel(v)}, {destId, link.destChannel(v)}});
         }
     }
 
@@ -919,13 +778,25 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 }
 
 void GraphEditor::timerCallback() {
-    // Compute the routing traversal once; derive display info from the same snapshot.
     cachedModRoutings = audioEngine.getModulationRoutings();
     cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
-    content.connectionAnimPhase += 0.02f;
+    // Mod dots follow the routing set; layout changes re-sync from the card's own layout pass.
+    if (modDot_->recountIfRoutingsChanged(cachedModRoutings))
+        for (auto* card : content.getModules())
+            if (card != nullptr)
+                card->syncModDotButtons();
+    modDot_->tickPopover();
+    // A modulated plugin knob shows its resting value, which the audio thread moves without telling anyone.
+    for (auto* card : content.getModules())
+        if (card != nullptr)
+            card->reflectHostedRestingValues();
+    // The flow dots follow the Animations preference (Reduced slower, Off held where they are).
+    constexpr float kCableFlowStepPerTick = 0.02f; // a full lap of the cable in 50 ticks (about 1.7 s at 30 Hz)
+    content.connectionAnimPhase += kCableFlowStepPerTick * static_cast<float>(synth::ui::loopRate());
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
-    repaintCanvas();
+    canvasMemo_->tick(); // keeps the cable memo, refreshes cable activity, repaints, refits the frame if cards moved
+    portPanel_->tick();  // after the memo, so the open panel lists the cables as they are now
 
     // Pressing or RELEASING Ctrl is not a mouse move, and suggestions were only recomputed from
     // updateDragPreview — so a drag that stopped moving kept showing a stale insert preview after
@@ -933,7 +804,7 @@ void GraphEditor::timerCallback() {
     // still). Re-evaluate on this existing 30 Hz tick rather than a new timer, and only when the
     // sampled state actually flipped: a drag that holds its modifier costs one bool compare, and
     // refreshSmartSuggestions repaints only when the suggestion set really changed.
-    smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
+    refreshSmartSuggestionsForModifierChange();
 
     // Minimap: only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a

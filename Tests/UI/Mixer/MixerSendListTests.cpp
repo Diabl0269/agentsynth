@@ -8,7 +8,7 @@
 //   * level knob     -- attached to the strip's own sendNLevel parameter, so moving it moves the
 //                        parameter (and therefore host automation) with no lane plumbing
 //   * PRE/POST       -- one undo step, restored by undo
-//   * bus column     -- "+ Bus" on the dock adds a Kind::Bus column
+//   * bus column     -- "Add Bus" on the dock adds a Kind::Bus column
 //   * unbind         -- a document replacement tears the row attachments down FIRST, the same
 //                        crash MixerPanelUndoUnbindTests.cpp pins for the fader and pan, plus a
 //                        full undo drain as the crash pin
@@ -16,9 +16,11 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -81,6 +83,7 @@ struct SendRig {
     SendRig() {
         mc = std::make_unique<MainComponent>(std::make_unique<MockProviderMSLT>());
         mc->setSize(1400, 900);
+        mc->getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
         mc->getAudioEngine().suspendDeviceCallback();
         mc->newPatchForTest();
         mc->simulateAddAudioTrackClick();
@@ -127,9 +130,19 @@ TEST(MixerSendListTests, AddingASendWiresTheCableAndShowsARow) {
     auto* strip = stripAt(rig.graph(), sourceId);
     ASSERT_NE(strip, nullptr);
     EXPECT_TRUE(strip->isSendActive(0));
-    EXPECT_TRUE(rig.graph().isConnected({{sourceId, ChannelStripModule::sendLeftChannel(0)}, {rig.bus, 0}}));
-    EXPECT_TRUE(rig.graph().isConnected(
-        {{sourceId, ChannelStripModule::sendRightChannel(0)}, {rig.bus, ChannelStripModule::kRightBase}}));
+    // Both strips sit in channel macros, so each leg reaches the bus through macro ports
+    // (docs/macros/auto-ports.md#programmatic-connections); follow each leg through them.
+    const auto connections = rig.graph().getConnections();
+    const auto landing = [&](int sourceChannel) {
+        for (const auto& c : connections)
+            if (c.source.nodeID == sourceId && c.source.channelIndex == sourceChannel)
+                return synth::resolveThroughPorts(rig.graph(), connections, c.destination);
+        return juce::AudioProcessorGraph::NodeAndChannel{};
+    };
+    EXPECT_EQ(landing(ChannelStripModule::sendLeftChannel(0)), (juce::AudioProcessorGraph::NodeAndChannel{rig.bus, 0}));
+    EXPECT_EQ(landing(ChannelStripModule::sendRightChannel(0)),
+              (juce::AudioProcessorGraph::NodeAndChannel{rig.bus, ChannelStripModule::kRightBase}));
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 0), rig.bus);
     EXPECT_EQ(rig.sourceColumn()->getSendListForTest().getRowCountForTest(), 1);
 }
 

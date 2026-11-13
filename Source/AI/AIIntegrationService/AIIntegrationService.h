@@ -2,6 +2,7 @@
 
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/SongSteps/SongSteps.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -15,6 +16,23 @@
 class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
 
 namespace synth {
+
+/** The outcome of previewing or applying one edit plan (a patch plus a sibling "timelineOps" list). */
+struct ProjectEditResult {
+    bool ok = true;
+    juce::String message;           // on failure the first problem found, worded for the model
+    juce::String previewText;       // on success: the patch phase, then the timeline ops, as sentences
+    juce::StringArray previewLines; // the same sentences, one per phase, for a UI that lists them
+    bool merge = false;             // the mode the patch phase ran in
+    juce::var patchBefore;          // graphToJSON around the patch phase (preview: of the scratch); void without one
+    juce::var patchAfter;
+    // Small mistakes the plan was repaired around instead of being refused for, in plain words
+    // (docs/ai/timeline-ops.md#one-bad-detail-does-not-sink-the-plan): `skippedCount` of them dropped an op or an
+    // id, `adjustedCount` moved a value into its range. Empty for a plan with nothing to repair.
+    juce::StringArray notes;
+    int skippedCount = 0;
+    int adjustedCount = 0;
+};
 
 /**
  * @class AIIntegrationService
@@ -72,6 +90,9 @@ public:
         timelineToolsEnabled = enabled;
         refreshSystemPrompt();
     }
+
+    // 0 = the shipped pin; see kProjectGeneratePromptVersion.
+    void setProjectPromptVersion(int version) { projectPromptVersionOverride = version; }
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
@@ -102,6 +123,9 @@ public:
     using TimelineOpsApplyCallback = std::function<TimelineOpsResult(const juce::var& envelope)>;
     void setTimelineOpsApplyCallback(TimelineOpsApplyCallback callback) { timelineOpsApply = std::move(callback); }
 
+    /** The app's graph-side builder for addInstrumentTrack ops; null (the default) rejects them. Not owned. */
+    void setTimelineOpsHost(TimelineOpsHost* host) { timelineOpsHost = host; }
+
     /** Applies a previously previewed envelope through the host callback. One undo step. */
     TimelineOpsResult applyTimelineOps(const juce::var& envelope);
 
@@ -112,13 +136,66 @@ public:
      *  buildAutomationTargetsSection()'s character cap. */
     static constexpr int kMaxRemoteParamTargets = 64;
 
-    /** Sends an arrange-mode request; the answer is a `{"timelineOps": [...]}` envelope consumed by
-     *  the same extractTimelineOps() -> previewTimelineOps() -> user-gated Apply flow as any other
-     *  timelineOps response — this method adds a way to ASK, never a second way to APPLY. Same
-     *  history contract as sendMessage(): the user's raw text is recorded as the user turn (the
-     *  composed arrange context exists only on the wire). Fails synchronously, like sendMessage(),
-     *  with no provider installed. */
-    AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+    // -- Edit plans (AIIntegrationServiceProjectEdit.cpp) ---------------------------------------
+
+    /** Checks a plan on scratch copies, mutating nothing live. */
+    ProjectEditResult previewProjectEdit(const juce::var& root) const;
+
+    /** Previews, then applies the whole plan as ONE undo step through the host; all or nothing.
+     *  With no host installed (a plugin build or a test without a timeline), a plan that carries no
+     *  timeline ops still applies: its patch goes through applyPatch() in the mode the preview chose. */
+    ProjectEditResult applyProjectEdit(const juce::var& root);
+
+    /** Asks for an edit plan: hosted `project.generate`, or the local model with the same fields. */
+    AIProvider::RequestId sendProjectMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+
+    // -- Song steps (AIIntegrationServiceSongSteps.cpp, docs/ai/song-steps.md)
+    // ------------------------------------------ A whole song asked of the hosted service: a free, priced plan first,
+    // then a build streamed step by step that ends in the same edit plan sendProjectMessage() returns. Only a hosted
+    // provider whose service has the routes offers it; everything else keeps the single project.generate request.
+
+    /** What a plan request came back with: a plan to show, "the service has no song routes" (the caller falls back to
+     *  sendProjectMessage()), or a failure to word for the user. */
+    struct SongPlanOutcome {
+        enum class Kind { plan, unsupported, failed };
+        Kind kind = Kind::failed;
+        songsteps::PlanReply reply;
+        AIProvider::AIError error;
+    };
+    using SongPlanCallback = std::function<void(const SongPlanOutcome&)>;
+
+    /** True while a hosted provider is installed and has not answered a plan request with "no such route" (404). */
+    bool canPlanSongs() const { return provider != nullptr && provider->isHosted() && !songRoutesMissing; }
+
+    /** Asks for a priced plan (free). `length` is "short", "medium" or "long" and `detail` "light", "full" or "rich",
+     *  each empty to let the prompt decide; `previousPlan` (the plan object of an earlier reply, or void) makes `text`
+     *  a change request to that plan. The callback fires once, on the message thread. A 404 sets canPlanSongs() false
+     *  for this provider and answers `unsupported`. */
+    AIProvider::RequestId planSong(const juce::String& text, const juce::String& length, const juce::String& detail,
+                                   const juce::var& previousPlan, SongPlanCallback callback);
+
+    struct SongBuildOutcome {
+        enum class Kind { applied, rejected, failed, cancelled, expired, quotaExceeded };
+        Kind kind = Kind::failed;
+        juce::String message;        // failed, rejected, expired and quotaExceeded: the reason, in words for the user
+        bool refunded = false;       // failed: the server gave the uses back
+        ProjectEditResult edit;      // applied: what the one undo step did
+        songsteps::StreamEvent done; // applied and rejected: the final event (notes, summary)
+    };
+    struct SongBuildCallbacks {
+        std::function<void(const songsteps::StreamEvent&)> onEvent; // every event of the stream, in order
+        std::function<void(const SongBuildOutcome&)> onFinished;    // exactly once
+    };
+
+    /** Spends the plan's price and builds it: streams the steps to `callbacks.onEvent`, and on the final `done`
+     * previews and applies its edit plan as one undo step. `requestText` is the user's own words, kept in the chat
+     * history with a one-line answer so later edits have the context. cancelRequest() on the returned id closes the
+     * stream; the server gives the uses back. */
+    AIProvider::RequestId buildSong(const juce::String& requestText, const songsteps::PlanReply& reply,
+                                    SongBuildCallbacks callbacks);
+
+    /** The `project.generate` request body for `text`; public so tests reproduce the real request. */
+    juce::var buildProjectRequestBody(const juce::String& text) const;
 
     /** Builds the `timeline.generate` request body for `text`. Public for the same reason
      *  extractTimelineOps() is: tests and harnesses reproduce the real request rather than
@@ -169,6 +246,11 @@ public:
      *  fires exactly once, with AIErrorKind::Cancelled, and no assistant turn is added to the
      *  history. A stale or unknown handle is a safe no-op. */
     void cancelRequest(AIProvider::RequestId requestId);
+
+    /** Installed by the app: true (after saying why, in the status bar) while edits must wait, i.e. a project is still
+     *  loading. applyPatch, applyProjectEdit and applyTimelineOps then change nothing and fail with "Still loading";
+     *  the caller may apply again once it is done. Unset (a test, a plugin) never refuses. */
+    void setEditGate(std::function<bool()> refusesEdit) { editGate = std::move(refusesEdit); }
 
     /** Applies a JSON patch to the graph. */
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
@@ -253,6 +335,9 @@ public:
     bool isCurrentProviderHosted() const { return provider != nullptr && provider->isHosted(); }
 
 private:
+    /** The project's song key as the requests carry it ("D Dorian (D E F G A B C)"); empty when it has none. */
+    juce::String songKeyContext() const;
+
     std::unique_ptr<AIProvider> provider;
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;
@@ -260,6 +345,7 @@ private:
     juce::String currentAuthToken;
     juce::String currentConversationId;
     int currentRequestTimeoutMs = 240000;
+    bool songRoutesMissing = false; // the hosted service answered a plan request with 404
     juce::String lastPatchError;
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;
@@ -273,10 +359,14 @@ private:
 
     // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
+    std::function<bool()> editGate; // see setEditGate()
+    bool editsRefused() const { return editGate && editGate(); }
+    TimelineOpsHost* timelineOpsHost = nullptr; // see setTimelineOpsHost()
 
     // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt
     // section, schema extension and targets context only exist once the app explicitly opts in.
     bool timelineToolsEnabled = false;
+    int projectPromptVersionOverride = 0;
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite
@@ -302,8 +392,11 @@ private:
     // AIIntegrationServiceRequestSending.cpp's definition for what's included/excluded.
     std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
 
-    // See its definition in AIIntegrationServiceRequestSending.cpp for what this composes.
-    juce::String buildArrangeAugmentedContent(const juce::String& text) const;
+    juce::String buildProjectAugmentedContent(const juce::String& text) const; // the local project message
+    ProjectEditResult applyPatchOnlyPlan(const juce::var& root); // applyProjectEdit with no host installed
+
+    // The live graph as the model sees it: graphToJSON without the trusted-only node fields.
+    juce::var buildStrippedPatchJson() const;
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
     // a timeline context is installed.
@@ -320,7 +413,7 @@ private:
     juce::String buildPatchAugmentedContent(const juce::String& text);
 
     // Wraps a caller's completion callback with shared success bookkeeping (assistant-turn
-    // history, conversation-id re-push). Shared by sendMessage() and sendArrangeMessage().
+    // history, conversation-id re-push). Shared by sendMessage() and sendProjectMessage().
     AIProvider::CompletionCallback wrapCompletionForHistory(AIProvider::CompletionCallback callback);
 
     // Keeps chatHistory bounded to kMaxHistoryTurns pairs; see its definition for the invariant it

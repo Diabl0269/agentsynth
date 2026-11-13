@@ -19,8 +19,10 @@
 #include "UI/Timeline/TrackColour.h"
 #include "UserSettings.h"
 #include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 
 // ============================================================================
 // 8. Follow-playhead: the toggle (state + button mirror + persistence) and the page-flip it
@@ -169,10 +171,54 @@ TEST(TimelineFollowPlayheadTest, AttachingUnderAnAncestorThatAlreadyHasAThemedLo
     parent.setLookAndFeel(nullptr);
 }
 
+namespace {
+// True when the snapshot holds an opaque-ish pixel within `tol` of `target` per channel.
+bool snapshotHasColour(const juce::Image& img, juce::Colour target, int tol = 12) {
+    for (int y = 0; y < img.getHeight(); ++y)
+        for (int x = 0; x < img.getWidth(); ++x) {
+            const auto p = img.getPixelAt(x, y);
+            if (p.getAlpha() >= 200 && std::abs((int)p.getRed() - (int)target.getRed()) <= tol &&
+                std::abs((int)p.getGreen() - (int)target.getGreen()) <= tol &&
+                std::abs((int)p.getBlue() - (int)target.getBlue()) <= tol)
+                return true;
+        }
+    return false;
+}
+} // namespace
+
+// The glyph paints in the muted ink at rest and in the dark icon ink while following (never the
+// accent: the lit state's own fill is the accent, so an accent glyph vanished on it), and in both
+// states it actually draws pixels.
+TEST(TimelineFollowPlayheadTest, IconPaintsMutedWhenOffAndIconInkWhenOn) {
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    const auto theme = synth::theme::makeObsidian();
+    lf.applyTheme(theme);
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true);
+    panel.setSize(1200, 320);
+
+    auto& button = panel.getFollowPlayheadButtonForTest();
+    ASSERT_FALSE(button.getLocalBounds().isEmpty());
+
+    panel.setFollowPlayheadEnabled(false);
+    const auto off = button.createComponentSnapshot(button.getLocalBounds(), false, 2.0f);
+    panel.setFollowPlayheadEnabled(true);
+    const auto on = button.createComponentSnapshot(button.getLocalBounds(), false, 2.0f);
+
+#ifdef HAS_FONT_ASSETS
+    EXPECT_TRUE(snapshotHasColour(off, theme.colors.textMuted)) << "off: glyph in the muted ink";
+    EXPECT_TRUE(snapshotHasColour(on, theme.colors.iconInk)) << "on: glyph in the ink for a light fill";
+    EXPECT_FALSE(snapshotHasColour(on, theme.colors.textMuted)) << "on: the muted ink is gone";
+#endif
+
+    panel.setLookAndFeel(nullptr);
+}
+
 // The three explicit checks the bug report asked for: real (non-empty, in-panel, non-overlapping)
 // bounds at a realistic launch size, and visibility all the way up to the panel. Arithmetic-only
 // coverage — TimelinePanelComponentTest.PanelRegionsTile-style — for resized()'s transport-bar
-// carve order, which the strip-width audit in this task's report shows has headroom today but is
+// carve order, which has headroom today but is
 // exactly the kind of change that could silently zero this button out again.
 TEST(TimelineFollowPlayheadTest, ButtonHasRealNonOverlappingBoundsAndIsVisibleAtRealisticSize) {
     synth::ui::TimelinePanelComponent panel;
@@ -373,4 +419,115 @@ TEST(TimelineFollowPlayheadTest, NoScrollWhileAClipDragIsInProgress) {
     EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
 
     lane.mouseUp(leftButtonEventOnLane(lane, dragged, anchor, true));
+}
+
+namespace {
+double relativeLuminance(juce::Colour c) {
+    const auto lin = [](float v) {
+        return v <= 0.03928f ? (double)v / 12.92 : std::pow(((double)v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * lin(c.getFloatRed()) + 0.7152 * lin(c.getFloatGreen()) + 0.0722 * lin(c.getFloatBlue());
+}
+
+double contrastRatio(juce::Colour a, juce::Colour b) {
+    const double la = relativeLuminance(a), lb = relativeLuminance(b);
+    return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
+// Paints the WHOLE panel (so the parent's pill behind the button is part of what is measured) into
+// a software-backed bitmap and returns the strongest contrast between any pixel inside the button
+// and the button's own fill (its most common colour: the glyph covers far less than the fill).
+double followButtonGlyphContrast(synth::ui::TimelinePanelComponent& panel) {
+    juce::Image img(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        panel.paintEntireComponent(g, true);
+    }
+    const auto area = panel.getFollowPlayheadButtonForTest().getBounds().reduced(4);
+    std::map<juce::uint32, int> histogram;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            ++histogram[img.getPixelAt(x, y).getARGB()];
+    const auto fill =
+        juce::Colour(std::max_element(histogram.begin(), histogram.end(), [](const auto& l, const auto& r) {
+                         return l.second < r.second;
+                     })->first);
+    double best = 1.0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            best = std::max(best, contrastRatio(img.getPixelAt(x, y), fill));
+    return best;
+}
+} // namespace
+
+// The reported bug: with follow ON the glyph took the theme accent over the accent-washed lit
+// fill and disappeared. In every built-in theme, on AND off, the glyph must stand out of the
+// button's fill by at least the WCAG 3:1 ratio for graphical objects.
+TEST(TimelineFollowPlayheadTest, GlyphContrastsWithItsFillOnAndOffInEveryBuiltInTheme) {
+#ifdef HAS_FONT_ASSETS
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::ui::TimelinePanelComponent panel;
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+        panel.setLookAndFeel(&lf);
+        panel.setVisible(true);
+        panel.setSize(1200, 320);
+
+        for (const bool on : {false, true}) {
+            panel.setFollowPlayheadEnabled(on);
+            EXPECT_GE(followButtonGlyphContrast(panel), 3.0)
+                << "theme '" << theme.name << "', follow " << (on ? "on" : "off");
+        }
+        panel.setLookAndFeel(nullptr);
+    }
+#else
+    GTEST_SKIP() << "needs the icon assets";
+#endif
+}
+
+// Scrolling the timeline sideways by hand means "stop following" -- the flag and the
+// button go off together; vertical scrolling and zoom leave it alone, and follow's own page-flip
+// (a programmatic scroll) never clears it.
+TEST(TimelineFollowPlayheadTest, HorizontalWheelScrollTurnsFollowOff) {
+    FollowPlayheadFixture f;
+    ASSERT_TRUE(f.panel.isFollowPlayheadEnabled());
+    ASSERT_TRUE(f.panel.getFollowPlayheadButtonForTest().getToggleState());
+
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaX = -0.5f; // a trackpad's own sideways swipe, towards later beats
+    wheel.isSmooth = true;
+    f.panel.mouseWheelMove(makeClickEvent(f.panel, {400.0f, 100.0f}), wheel);
+
+    EXPECT_GT(f.panel.getViewState().firstVisibleBeat, 0.0) << "the scroll itself still happened";
+    EXPECT_FALSE(f.panel.isFollowPlayheadEnabled());
+    EXPECT_FALSE(f.panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+TEST(TimelineFollowPlayheadTest, ShiftWheelScrollTurnsFollowOffToo) {
+    FollowPlayheadFixture f;
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.5f;
+    wheel.isSmooth = true;
+    f.panel.mouseWheelMove(
+        makeClickEvent(f.panel, {400.0f, 100.0f}, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)), wheel);
+    EXPECT_FALSE(f.panel.isFollowPlayheadEnabled());
+}
+
+TEST(TimelineFollowPlayheadTest, VerticalWheelScrollLeavesFollowOn) {
+    FollowPlayheadFixture f;
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.5f;
+    wheel.isSmooth = true;
+    f.panel.mouseWheelMove(makeClickEvent(f.panel, {400.0f, 100.0f}), wheel);
+    EXPECT_TRUE(f.panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+TEST(TimelineFollowPlayheadTest, ProgrammaticFollowScrollLeavesFollowOn) {
+    FollowPlayheadFixture f;
+    const double playheadBeat = f.visibleBeats() + 1.0;
+    f.panel.updateFromTransport(f.playingSnapshotAt(playheadBeat), 0.0);
+    ASSERT_GT(f.panel.getViewState().firstVisibleBeat, 0.0) << "follow did page-flip the view";
+    EXPECT_TRUE(f.panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getToggleState());
 }

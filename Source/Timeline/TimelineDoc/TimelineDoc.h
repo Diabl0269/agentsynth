@@ -1,113 +1,19 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
+#include "Timeline/TimelineDoc/TimelineTypes.h"
+
 #include <cstdint>
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <optional>
+#include <set>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace synth {
-
-namespace detail {
-
-// Strongly-typed timeline id. Tagged so a ClipId can never be passed where a TrackId is
-// expected: the whole point is that ids are opaque handles the doc hands out, not indices.
-// Ids are assigned monotonically per doc, never reused within a doc's lifetime (removing a
-// track does not free its id), and survive a toVar/fromVar round trip — the doc persists its
-// next-id counters, so anything holding an id across a save/load still resolves.
-// value == 0 is the "invalid / not found" sentinel every failing factory returns.
-template <typename Tag>
-struct TimelineId {
-    std::int64_t value = 0;
-
-    constexpr bool isValid() const noexcept { return value > 0; }
-
-    constexpr bool operator==(const TimelineId& other) const noexcept { return value == other.value; }
-    constexpr bool operator!=(const TimelineId& other) const noexcept { return value != other.value; }
-    constexpr bool operator<(const TimelineId& other) const noexcept { return value < other.value; }
-    constexpr bool operator>(const TimelineId& other) const noexcept { return other.value < value; }
-    constexpr bool operator<=(const TimelineId& other) const noexcept { return !(other.value < value); }
-    constexpr bool operator>=(const TimelineId& other) const noexcept { return !(value < other.value); }
-};
-
-struct TrackIdTag {};
-struct ClipIdTag {};
-struct LaneIdTag {};
-struct NoteIdTag {};
-struct MarkerIdTag {};
-
-} // namespace detail
-
-using TrackId = detail::TimelineId<detail::TrackIdTag>;
-using ClipId = detail::TimelineId<detail::ClipIdTag>;
-using LaneId = detail::TimelineId<detail::LaneIdTag>;
-using NoteId = detail::TimelineId<detail::NoteIdTag>;
-using MarkerId = detail::TimelineId<detail::MarkerIdTag>;
-
-// Serialised as an int, so these numbers are format. Values 3..15 are reserved for future
-// kinds; a file carrying one is rejected by fromVar rather than coerced into a kind this
-// build understands.
-enum class TrackKind : int {
-    Midi = 0,
-    Audio = 1,      // Track Audio clip: docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden
-    Automation = 2, // reserved: lanes may live on their own track row later
-};
-
-static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(TrackKind::Audio) == 1, "TrackKind is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(TrackKind::Automation) == 2,
-              "TrackKind is serialised as an int - renumbering breaks files");
-
-// Interpolation from a breakpoint to the next one. Serialised as an int (same contract as
-// TrackKind: the numbers are format).
-enum class BreakpointCurve : int {
-    Hold = 0,
-    Linear = 1,
-    Bezier = 2, // reserved — reads/writes the `tension` field, no evaluator yet
-};
-
-static_assert(static_cast<int>(BreakpointCurve::Hold) == 0,
-              "BreakpointCurve is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
-              "BreakpointCurve is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
-              "BreakpointCurve is serialised as an int - renumbering breaks files");
-
-// Per-lane automation record mode. Serialised as an int (same contract as TrackKind and
-// BreakpointCurve: the numbers are format), and flattened into TimelineSnapshot::LaneInfo so the
-// audio thread's applier can honour it without touching the doc.
-//
-// Semantics (the applier implements the audio half, synth::AutomationRecorder the capture half):
-//   Off   — the lane is inert. Automation never plays back and nothing is ever recorded into it.
-//   Read  — playback only. The default, and what a lane with no stored mode loads as.
-//   Touch — plays back, but the user's hand wins WHILE a parameter gesture is in flight: the
-//           applier skips a claimed parameter, and the gesture is captured and committed when the
-//           user lets go. Let go and playback resumes immediately.
-//   Latch — like Touch, except the capture span stays open after the gesture ends and only closes
-//           on stop (or when global record is disabled) — the last value the user set "latches".
-//   Write — while the transport is playing and global record is enabled, the lane does not play
-//           back at all and its whole play-to-stop span is overwritten. With global record OFF a
-//           Write lane behaves exactly like Read. Auto-drops to Touch on stop (Cubase behaviour).
-enum class LaneRecordMode : int {
-    Off = 0,
-    Read = 1,
-    Touch = 2,
-    Latch = 3,
-    Write = 4,
-};
-
-static_assert(static_cast<int>(LaneRecordMode::Off) == 0,
-              "LaneRecordMode is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(LaneRecordMode::Read) == 1,
-              "LaneRecordMode is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(LaneRecordMode::Touch) == 2,
-              "LaneRecordMode is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(LaneRecordMode::Latch) == 3,
-              "LaneRecordMode is serialised as an int - renumbering breaks files");
-static_assert(static_cast<int>(LaneRecordMode::Write) == 4,
-              "LaneRecordMode is serialised as an int - renumbering breaks files");
 
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
 // so moving a clip moves its notes with it and never rewrites them. `id` is a stable,
@@ -121,40 +27,39 @@ struct MidiNote {
     int velocity = 100;
     int channel = 1;
 
-    // Per-note mute (the Mute tool's note-level half). The note keeps its id, its fields and its
-    // place in the sorted list; it is simply not flattened into TimelineSnapshot. Deliberately
-    // NOT modelled as velocity 0 or as a delete: a mute has to be exactly reversible, and both of
-    // those destroy information the user expects back when they un-mute. The flag travels with the
-    // note through every structural edit — a split re-bases it, a duplicate copies it, a join
-    // merges it — because it is part of the note, not of the clip that happens to hold it.
-    // Additive field: absent in a file loads as false, and kFormatVersion stays 1.
+    // Skipped when the clip is flattened; keeps its id and fields. Additive: absent in a file loads as false.
     bool muted = false;
+
+    // Per-hit drum settings, named and ranged like the Poly Sequencer's step settings. Applied only when the
+    // snapshot is built (and by Track In), never written into the notes' timing. Additive; each is saved only
+    // when not its default.
+    static constexpr bool isValidChance(int chance) noexcept { return chance >= 0 && chance <= 100; }
+    static constexpr bool isValidRepeat(int repeat) noexcept { return repeat >= 1 && repeat <= 8; }
+    static constexpr bool isValidNudge(double nudge) noexcept { return nudge >= -0.5 && nudge <= 0.5; }
+    static constexpr bool isValidCondition(int hit, int of) noexcept {
+        return of >= 1 && of <= 8 && hit >= 1 && hit <= of;
+    }
+    int chance = 100;   // percent chance the hit plays, rolled per pass
+    int repeat = 1;     // hits spread evenly over one grid step (a roll / ratchet)
+    bool flam = false;  // a softer grace hit just before the hit
+    double nudge = 0.0; // of the clip's grid step; negative = early
+    int condHit = 1;    // plays on pass condHit of every condOf passes; 1/1 = always
+    int condOf = 1;
 };
 
-// Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
-// audio-thread snapshot build a flatten instead of a sort. The id is only a tiebreaker
-// (startBeat/pitch collisions are legal — e.g. a chord). TimelineDoc's mutation API maintains
-// the order on every path and fromVar re-establishes it defensively.
-//
-// One Clip type covers both MIDI and audio: a MIDI clip is one
-// whose `assetRef` is empty and whose notes carry the music; an audio clip is one that names a
-// rendered asset instead. Nothing forbids a clip from carrying both — the model is deliberately
-// permissive, and it is the track's TrackKind that says which half a player reads. Every audio
-// field is ADDITIVE (absent in a file => the default below) and the format version stays 1.
+// Notes stay sorted by (startBeat, pitch, id). A new field must be added to sameClipContent
+// (TimelineDocSectionSync.cpp), or sections will not notice it changed. One Clip type covers MIDI and audio; the
+// track's TrackKind says which half a player reads. Audio fields are additive.
 struct Clip {
     ClipId id;
     juce::String name;
+    std::int64_t linkGroup = 0; // 0 = not linked; MIDI clips sharing a non-zero value share notes and length
     double startBeat = 0.0;
     double lengthBeats = 4.0;
     std::vector<MidiNote> notes;
 
-    // The clip's audio asset, as a path RELATIVE TO THE BUNDLE ROOT ("Audio/take-1.wav").
-    // EMPTY for a MIDI clip. The relative-only rule is a security boundary, not a convenience:
-    // a bundle can be handed to someone else, and an absolute (or `..`-escaping) path baked into
-    // one would read whatever happens to sit at that path on their machine — the same reasoning
-    // that keeps a provider-authored patch's `"state"` on the trusted path only (see
-    // ModuleBase::setExtraState and the asset policy on ProjectBundle). setClipAsset and fromVar
-    // both REJECT anything that is not bundle-relative; there is no sanitising fallback.
+    // The audio asset, relative to the bundle root; empty for a MIDI clip. Anything else is rejected: a security
+    // boundary.
     juce::String assetRef;
 
     // Playback gain applied to the asset, in dB. 0 dB = unity, and the value is deliberately
@@ -169,19 +74,56 @@ struct Clip {
     // because it indexes a recorded file, whose samples do not move when the tempo map does.
     double sourceStartSeconds = 0.0;
 
-    // Per-clip mute (the Mute tool's clip-level half). A muted clip keeps its id, its position,
-    // its notes and every audio field, and contributes NOTHING to TimelineSnapshot — no note
-    // events, no AudioClipInfo entry. Doing the exclusion at flatten time is what keeps every
-    // downstream consumer (TimelineMidiSource, the AudioClipStreamer's assignment table) unaware
-    // that mute exists at all: they simply never see the clip.
-    //
-    // Independent of Track::muted — un-muting a track does not un-mute a clip the user muted, and
-    // the two are ORed by omission (a muted track's whole run is silenced by its consumers, a
-    // muted clip is missing from the run in the first place). It survives every structural edit:
-    // both halves of a split inherit it, a duplicate copies it, and a join keeps the SURVIVING
-    // clip's flag (see splitClip / duplicateClip / joinClips). Additive field: absent in a file
-    // loads as false, and kFormatVersion stays 1.
+    // A muted clip contributes nothing to TimelineSnapshot. Independent of Track::muted. Additive.
     bool muted = false;
+
+    // Drum-machine view of the clip: grid resolution and per-pitch mute/solo. Mute/solo is applied
+    // when the snapshot is built and never touches MidiNote::muted. Additive; written only when
+    // non-default.
+    static constexpr int kDefaultStepsPerBar = 16;
+    static constexpr bool isValidStepsPerBar(int steps) noexcept {
+        return steps == 8 || steps == 16 || steps == 32 || steps == 64;
+    }
+    int stepsPerBar = kDefaultStepsPerBar; // 8, 16, 32 or 64
+    // Swing: every second step of the grid (the odd ones, counting from 0) starts later. 0.5 is straight, 0.75 a
+    // shuffle; applied in TimelineSnapshot::buildFrom, never written into the notes.
+    static constexpr double kStraightSwing = 0.5;
+    static constexpr double kMaxSwing = 0.75;
+    static constexpr bool isValidSwing(double swing) noexcept { return swing >= kStraightSwing && swing <= kMaxSwing; }
+    double swing = kStraightSwing;
+    // Humanise: small deterministic random loudness and timing per hit, applied in the snapshot only.
+    double humanise = 0.0; // 0..1
+    // A drum's own pattern length and swing; absent = follows the clip. Sorted by pitch, unique; an entry with
+    // both defaults is removed.
+    static constexpr int kMaxRowLengthSteps = 256;
+    struct DrumRow {
+        int pitch = 0;
+        int lengthSteps = 0; // 0 = the clip's length
+        double swing = -1.0; // < 0 = the clip's swing
+    };
+    static constexpr bool isValidHumanise(double amount) noexcept { return amount >= 0.0 && amount <= 1.0; }
+    static constexpr bool isValidRowLength(int steps) noexcept { return steps >= 0 && steps <= kMaxRowLengthSteps; }
+    std::vector<DrumRow> drumRows;
+    std::vector<int> mutedPitches; // sorted, unique, 0..127
+    std::vector<int> soloPitches;  // sorted, unique, 0..127
+
+    // Piano roll scale choice (nullopt = none made) and "show only scale notes". Per clip; additive.
+    std::optional<synth::MusicalScale> scale;
+    bool scaleVisible = false;
+    // The note range the piano roll's scale panel shows (lowest, highest; 0..127, low <= high); nullopt = never moved.
+    std::optional<std::pair<int, int>> noteRange;
+
+    // Where a stretched audio clip's sound came from: the original asset, and how `assetRef` relates to it.
+    // Time t seconds into `assetRef` is `offsetSeconds + t * ratio` seconds into the original (ratio > 1: the
+    // original was sped up to make the copy). A new stretch renders from here, never from the stretched copy.
+    // Saved only when set; cleared whenever the clip points at another asset.
+    struct StretchOrigin {
+        juce::String assetRef;
+        double offsetSeconds = 0.0;
+        double ratio = 1.0;
+        bool operator==(const StretchOrigin&) const = default;
+    };
+    std::optional<StretchOrigin> stretchOrigin;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -212,14 +154,7 @@ struct AutomationLane {
     std::vector<Breakpoint> points; // sorted by beat; beats are unique (a second insert at the
                                     // same beat replaces the existing point)
 
-    // The target parameter's index within its processor's getParameters(), captured ONCE at
-    // lane-creation time (never re-derived afterwards). -1 means "no hint" — every lane on a
-    // non-plugin module (the resolver only ever consults this for
-    // a HostedPluginModule node; see Source/Timeline/AutomationBinding.h). It exists to let a lane
-    // whose hosted plugin has no stable parameter ids at all (a legacy format) still re-bind after a
-    // reload, WITHOUT ever letting an index match paper over a plugin update that moved a DIFFERENT,
-    // still-stably-identified parameter into that slot — that case orphans instead. Additive field:
-    // absent in a file loads as -1.
+    // The parameter's index, captured once at lane creation; -1 = no hint. Additive.
     int paramIndexHint = -1;
 
     // A LaneRecordMode value, stored as an int because it is serialised as one. Read is the
@@ -228,19 +163,30 @@ struct AutomationLane {
     // reach the snapshot, where the applier switches on it.
     int recordMode = static_cast<int>(LaneRecordMode::Read);
 
-    // RUNTIME-ONLY: true when nodeUuid is non-empty but does not resolve to any live
-    // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
-    // is the only writer, driven by synth::TimelineReconciler against a real graph. NOT written by
-    // toVar and always reset to false by fromVar (a freshly-loaded doc has no graph to check
-    // against, so the very next reconcile is what re-derives the truth — this field is derived
-    // state, not part of the document's persistent identity).
-    //
-    // Distinct from "unbound": an EMPTY nodeUuid never was bound to anything and is merely
-    // unbound, not orphaned. Orphaned means it WAS bound and no longer resolves — a deleted
-    // module, a rejected restore — and the lane is retained regardless: an
-    // orphaned binding is surfaced for the user to re-bind (see rebindLane), never auto-deleted.
+    // Routing keys of the lane's modulator rows, in display order (saved; empty = graph order).
+    std::vector<juce::String> modulatorOrder;
+
+    // The lane's own row height on top of the shared zoom (its modulator rows have their own); saved, omitted at 1.0.
+    static constexpr double kMinHeightScale = 0.5;
+    static constexpr double kMaxHeightScale = 4.0;
+    double heightScale = 1.0;
+    // Each modulator row's own height, by modulatorOrder key, within [kMinHeightScale, kMaxHeightScale]; saved.
+    std::map<juce::String, double> modulatorHeightScales;
+    // The height of a modulator row with no entry above; a file without it loads it as heightScale.
+    double modulatorHeightScale = 1.0;
+    double modulatorRowScale(const juce::String& key) const {
+        const auto it = modulatorHeightScales.find(key);
+        return it != modulatorHeightScales.end() ? it->second : modulatorHeightScale;
+    }
+
+    // Runtime only: nodeUuid is set but resolves to no live node. Only TimelineDoc::reconcileBindings writes it;
+    // it is never saved, and an orphaned lane is kept for re-binding.
     bool orphaned = false;
 };
+
+// Declared in ClipEdgeSizing.h, which needs Clip complete.
+enum class ClipSizingMode;
+enum class ClipEdge;
 
 // Clips within a track stay sorted by (startBeat, id). Overlapping clips are legal in the
 // model — whether the UI allows drawing them is a policy decision made higher up.
@@ -252,8 +198,21 @@ struct Track {
     bool muted = false;
     bool soloed = false;
     bool armed = false;
+    // The clip row's height relative to the timeline's shared row height (1 = default). Display
+    // data only, saved with the project; always within [kMinHeightScale, kMaxHeightScale].
+    static constexpr double kMinHeightScale = 0.5;
+    static constexpr double kMaxHeightScale = 4.0;
+    double heightScale = 1.0;
     juce::String bindingUuid; // MIDI tracks: uuid of the Track In node this track feeds.
                               // May be empty — an unbound track is legal, it just plays nowhere.
+    // MIDI tracks: the input that records into the track. Both at their defaults = every input, any channel.
+    static constexpr int kMaxMidiInputChannel = 16;
+    juce::String midiInputId;   // the device's stable identifier; empty = all MIDI inputs
+    juce::String midiInputName; // the device's display name, kept to name it while it is not connected
+    int midiInputChannel = 0;   // 0 = any channel, else 1..kMaxMidiInputChannel
+    bool recordsEveryMidiInput() const noexcept { return midiInputId.isEmpty() && midiInputChannel == 0; }
+    AudioInputChoice audioInput;                 // Audio tracks only; None records nothing
+    MonitorMode monitorMode = MonitorMode::Auto; // Audio tracks only
     std::vector<Clip> clips;
     std::vector<AutomationLane> lanes;
 
@@ -263,14 +222,7 @@ struct Track {
     bool orphaned = false;
 };
 
-// One named position in the arrangement — a cue point the ruler draws a flag for. Deliberately
-// NOT a track: a marker has no clips, no binding and no audible effect, it is a label on the
-// timebase, so it lives on the document rather than in the track list (a "marker track" would
-// otherwise have to be excluded from every place that iterates tracks to make sound).
-//
-// `beat` is absolute (unlike a note's clip-relative start), `text` is free-form and may be empty
-// (a flag with no label is legal), and `colourArgb` is inert display data. Markers stay sorted by
-// (beat, id) — the same rule clips follow, so a ruler paint is a walk rather than a sort.
+// One named position in the arrangement, drawn as a flag on the ruler.
 struct Marker {
     MarkerId id;
     double beat = 0.0;
@@ -278,24 +230,48 @@ struct Marker {
     juce::uint32 colourArgb = 0xffE0A33D; // amber; the editor overwrites this from the theme
 };
 
-// The timeline's message-thread document model: tracks, clips, notes, automation
-// lanes and markers, in beats. Mutable and serialisable, with no GUI or editor dependency.
-//
-// Beats are canonical — nothing here stores samples, and tempo/time signature deliberately
-// live on TransportService, not in this document (a tempo map moves in here only when real
-// tempo maps arrive).
-//
-// Single mutation choke point: every public mutator validates its arguments, then funnels the
-// actual edit through the private applyMutation(), which bumps the revision counter and fires
-// one change notification. Everything downstream hangs off that one seam — the audio-thread
-// snapshot republish, undo capture and dirty-marking for .agsproj save.
-// A call that changes nothing (a rejected note, addLane finding an existing lane, a setter
-// given the value already stored) returns without entering applyMutation, so it neither bumps
-// the revision nor notifies.
-//
-// Threading: message thread only. It is not safe to read this doc from the audio thread; that
-// is what the immutable snapshot exists for. Listeners must treat the doc as const
-// for the duration of timelineChanged().
+// A placement's music, relative to its start and ignoring ids: clips by track, breakpoints by lane.
+struct PlacementContent {
+    std::map<std::int64_t, std::vector<Clip>> clips;
+    std::map<std::int64_t, std::vector<AutomationLane::Breakpoint>> points;
+};
+
+// One take of a section's music. Letter 0 (A) owns every track; any other variation holds only `ownTracks` itself
+// and shares every other track with A, so an edit to a shared track reaches every placement that shares it.
+// `stored` keeps the music while no placement plays the variation (all tracks for A, own tracks otherwise).
+struct SectionVariation {
+    int letter = 0;
+    std::set<std::int64_t> ownTracks;
+    PlacementContent stored;
+};
+
+// A named stretch of bars across every track. It plays at one or more placements; each placement plays one of the
+// section's variations, and placements that play the same variation hold the same music on the tracks it owns.
+struct Section {
+    SectionId id;
+    juce::String name;
+    juce::uint32 colourArgb = 0xff4FC1FF;
+    double lengthBeats = 16.0;
+    std::vector<SectionVariation> variations = std::vector<SectionVariation>(1); // never empty; [0] is letter 0
+};
+
+// One place a section plays: [startBeat, startBeat + the section's length). Placements never overlap.
+struct SectionPlacement {
+    PlacementId id;
+    SectionId section;
+    double startBeat = 0.0;
+    int variation = 0; // a letter present in its section
+};
+
+// What to do with the music already at a drop target.
+enum class SectionDropMode { MakeRoom, Cover };
+
+// True when two clips hold the same music and settings, ignoring ids and link groups; startBeat is compared as given.
+bool sameClipContent(const Clip& a, const Clip& b);
+// True when two contents are equal as above.
+bool samePlacementContent(const PlacementContent& a, const PlacementContent& b);
+
+// The timeline's message-thread document model: tracks, clips, notes, automation lanes, markers and sections.
 class TimelineDoc {
 public:
     TimelineDoc() = default;
@@ -322,6 +298,11 @@ public:
     static constexpr int kMaxLanesPerTrack = 512;
     static constexpr int kMaxBreakpointsPerLane = 16384;
     static constexpr int kMaxMarkers = 1024;
+    static constexpr int kMaxSections = 256;
+    static constexpr int kMaxPlacements = 1024;
+    static constexpr int kMaxVariations = 26; // letters A..Z
+    // Clips held by variations no placement plays, across the whole document (they are not on any track).
+    static constexpr int kMaxStoredVariationClips = 100000;
     // Longest marker label the model holds. A label is a cue name, not a document: an over-long
     // one is REJECTED (by the mutation API, by fromVar and by synth::validateTimeline alike),
     // never truncated — truncating would silently store something other than what was asked for.
@@ -337,23 +318,38 @@ public:
     static constexpr int kFormatVersion = 1;
 
     // -- Tracks ---------------------------------------------------------------
-    // Appends a track. Returns an invalid TrackId if the doc is already at kMaxTracks.
+    // Appends a track; Automation tracks stay last on every path. Invalid TrackId at kMaxTracks.
     TrackId addTrack(TrackKind kind, const juce::String& name);
     // Removes the track and everything on it. The id is retired, never reissued.
     bool removeTrack(TrackId id);
     // Moves the track to newIndex in tracks[] — display/serialization order only; the track's id,
     // clips, lanes and binding are untouched, and nothing downstream (the audio-thread snapshot,
     // TimelineClipLaneArea) keys a track by its position, only by id/uuid, so this is safe to call
-    // at any time. newIndex is clamped to [0, tracks.size() - 1]. No-op (no revision bump, no
-    // notification) when id doesn't resolve or is already at newIndex.
+    // at any time. newIndex is clamped to the non-Automation slots (an Automation track never
+    // moves). No-op (no revision bump, no notification) when id doesn't resolve or is at newIndex.
     bool moveTrack(TrackId id, int newIndex);
+    // Removes every lane-less, clip-less Automation track as one mutation; false when none.
+    bool removeEmptyAutomationTracks();
     bool setTrackName(TrackId id, const juce::String& name);
     bool setTrackColour(TrackId id, juce::uint32 colourArgb);
     bool setTrackMuted(TrackId id, bool muted);
     bool setTrackSoloed(TrackId id, bool soloed);
     bool setTrackArmed(TrackId id, bool armed);
+    // Clamped to [Track::kMinHeightScale, Track::kMaxHeightScale]; non-finite is refused.
+    bool setTrackHeightScale(TrackId id, double scale);
+    // Puts every track back at the default height scale as one mutation; false when none differed.
+    bool resetTrackHeightScales();
+    // MIDI tracks only; `channel` in [0, Track::kMaxMidiInputChannel]. An empty `deviceId` means all inputs.
+    bool setTrackMidiInput(TrackId id, const juce::String& deviceId, const juce::String& deviceName, int channel);
+    // Audio tracks only; refuses an invalid choice. A non-Device choice drops the channels and device name.
+    bool setTrackAudioInput(TrackId id, const AudioInputChoice& choice);
+    // Audio tracks only.
+    bool setTrackMonitorMode(TrackId id, MonitorMode mode);
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
+    // Copies `source` directly below it with fresh ids; `uuidRemap` rebinds the copy (see the definition).
+    TrackId duplicateTrack(TrackId source, const juce::String& name, juce::uint32 colourArgb,
+                           const std::map<juce::String, juce::String>& uuidRemap);
 
     // nullptr once the track is gone. The pointer is invalidated by the next mutation — never
     // hold it across one.
@@ -406,6 +402,21 @@ public:
     // Mutes / un-mutes the clip: a muted clip is excluded WHOLESALE from TimelineSnapshot (see
     // Clip::muted). Setting the flag it already has is a no-op — no revision bump, no notification.
     bool setClipMuted(ClipId id, bool muted);
+    // Drum-machine settings. stepsPerBar must be 8, 16, 32 or 64 and pitch 0..127, else false; a
+    // no-op change returns true without bumping the revision.
+    bool setClipStepsPerBar(ClipId id, int stepsPerBar);
+    // Swing must be 0.5 to 0.75, else false.
+    bool setClipSwing(ClipId id, double swing);
+    // Humanise 0..1.
+    bool setClipHumanise(ClipId id, double amount);
+    // A drum's own length in steps (0 clears, else 1..kMaxRowLengthSteps) and swing (< 0 clears, else
+    // Clip::isValidSwing). pitch 0..127.
+    bool setClipRowLength(ClipId id, int pitch, int lengthSteps);
+    bool setClipRowSwing(ClipId id, int pitch, double swing);
+    bool setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible);
+    bool setClipNoteRange(ClipId id, std::optional<std::pair<int, int>> range);
+    bool setClipPitchMuted(ClipId id, int pitch, bool muted);
+    bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 
     const Clip* getClip(ClipId id) const;
     const Track* getTrackForClip(ClipId id) const;
@@ -437,6 +448,12 @@ public:
     // notes — each of which keeps its own muted flag. Rejects if the track is already at
     // kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
+    // duplicateClip whose copy shares the source's link group. MIDI clips only (invalid id for audio).
+    ClipId duplicateClipLinked(ClipId id);
+    // Takes the clip out of its link group, keeping its notes; false when it is not linked.
+    bool makeClipUnique(ClipId id);
+    // How many OTHER clips share this clip's link group; 0 when it is unlinked or missing.
+    int countLinkedClips(ClipId id) const;
 
     // -- Ranges (the Range tool's composed edits; see TimelineDocRanges.cpp) -----------------
     // Every call below takes the caller's `secondsPerBeat` (finite, > 0, else rejected) — this doc
@@ -445,6 +462,10 @@ public:
     std::pair<ClipId, ClipId> splitClipAtTempo(ClipId id, double atBeat, double secondsPerBeat);
     // Left edge to absolute `newStartBeat`, strictly inside the clip; the end stays put.
     bool trimClipStart(ClipId id, double newStartBeat, double secondsPerBeat);
+    // MIDI clips only: left edge to `newStartBeat`, end fixed, notes keep their absolute beat.
+    bool resizeClipLeft(ClipId id, double newStartBeat);
+    // MIDI clips only: the dragged edge to absolute `edgeBeat` (the other edge fixed), notes per `mode`.
+    bool resizeClipEdge(ClipId id, ClipEdge edge, ClipSizingMode mode, double edgeBeat);
     // Right edge to absolute `newEndBeat`, strictly inside the clip; notes past it are cut.
     bool trimClipEnd(ClipId id, double newEndBeat);
     // Splits `tracks`' clips at both edges; returns the clips then wholly inside [start, end).
@@ -464,6 +485,9 @@ public:
     // default); `sourceStartSeconds` must be finite and >= 0. Setting exactly what the clip
     // already has is a no-op, like every other setter here.
     bool setClipAsset(ClipId id, const juce::String& assetRef, double sourceStartSeconds);
+    // Records (or, with nullopt, forgets) the original a stretched clip's asset came from. Rejects a non-bundle-
+    // relative or empty ref, a negative or non-finite offset and a non-finite or non-positive ratio.
+    bool setClipStretchOrigin(ClipId id, const std::optional<Clip::StretchOrigin>& origin);
     // Playback gain in dB. Rejects a non-finite value; otherwise unbounded (see Clip::gainDb).
     bool setClipGainDb(ClipId id, double gainDb);
     // Fade lengths in beats from the clip's start / end. Both must be finite and >= 0; they are
@@ -493,6 +517,11 @@ public:
     bool moveNote(NoteId id, double newStartBeat, int newPitch);
     bool resizeNote(NoteId id, double newLengthBeats); // rejects non-positive/non-finite
     bool setNoteVelocity(NoteId id, int velocity);     // rejects outside 1..127
+    // Per-hit drum settings (see MidiNote); each rejects an out-of-range value, a no-op returns true.
+    bool setNoteChance(NoteId id, int chance);
+    bool setNoteRepeat(NoteId id, int repeat, bool flam);
+    bool setNoteNudge(NoteId id, double nudge);
+    bool setNoteCondition(NoteId id, int hit, int of);
     // Mutes / un-mutes a single note inside its clip: the note is skipped when the clip is
     // flattened into TimelineSnapshot, and is otherwise untouched (see MidiNote::muted). Setting
     // the flag it already has is a no-op — no revision bump, no notification. Note that a muted
@@ -525,6 +554,8 @@ public:
     LaneId addLane(TrackId trackId, const juce::String& nodeUuid, const juce::String& paramId,
                    const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
     bool removeLane(LaneId id);
+    bool moveLaneToTrack(LaneId laneId, TrackId destTrack);
+    bool moveLane(LaneId laneId, int newIndex);
     // Sorted insert. A point at the exact same beat REPLACES the existing one. `value` is
     // denormalised and clamped into the lane's range snapshot; `tension` is clamped to [-1, 1];
     // `curve` must be a BreakpointCurve value.
@@ -563,11 +594,28 @@ public:
     // not silently re-arm the lane.
     bool setLaneRecordMode(LaneId id, int mode);
 
+    // Replaces the lane's modulatorOrder; false when unchanged (see the .cpp).
+    bool setModulatorOrder(LaneId id, std::vector<juce::String> order);
+
+    // Sets the lane's height scale (clamped); a user edit (see the .cpp).
+    bool setLaneHeightScale(LaneId id, double scale);
+    // Sets one modulator row's height scale (clamped), by modulatorOrder key; a user edit (see the .cpp).
+    bool setModulatorHeightScale(LaneId id, const juce::String& key, double scale);
+    // Replaces every modulator row's own height scale; false when unchanged (see the .cpp).
+    bool setModulatorHeightScales(LaneId id, std::map<juce::String, double> scales);
+    // Moves each row height stored under an old key of `newKeys` to its new key; false when nothing moved.
+    bool rekeyModulatorHeights(LaneId id, const std::map<juce::String, juce::String>& newKeys);
+
+    // The value an automation lane holds while it has no breakpoints; a user edit (see the .cpp).
+    bool setLaneConstantValue(LaneId id, double value);
+
     const AutomationLane* getLane(LaneId id) const;
     const Track* getTrackForLane(LaneId id) const;
     // The lane bound to (nodeUuid, paramId), or nullptr — the doc-wide identity lookup addLane
     // dedupes against.
     const AutomationLane* getLaneForParam(const juce::String& nodeUuid, const juce::String& paramId) const;
+    // The paramIds of every lane bound to `nodeUuid` (the knob markers' source). Empty for an empty uuid.
+    std::set<juce::String> automatedParamIds(const juce::String& nodeUuid) const;
 
     // -- Bindings / reconciliation -----------------------------------------------
     // Recomputes EVERY track's and lane's `orphaned` flag: orphaned = binding is non-empty AND
@@ -608,7 +656,14 @@ public:
     // it in recordTimelineChange).
     bool rebindLane(LaneId id, const juce::String& newNodeUuid);
 
-    // FRO296: rebinds whichever of (nodeUuid, paramA)/(nodeUuid, paramB) has a lane to the other paramId, in place.
+    // See TimelineDocAutomation.cpp.
+    bool retargetLane(LaneId id, const juce::String& nodeUuid, const juce::String& paramId,
+                      const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
+
+    LaneId duplicateLane(LaneId source, const juce::String& nodeUuid, const juce::String& paramId,
+                         const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
+
+    // Rebinds whichever of (nodeUuid, paramA)/(nodeUuid, paramB) has a lane to the other paramId, in place.
     bool swapLaneParams(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB);
 
     // -- Markers ---------------------------------------------------------------
@@ -631,6 +686,86 @@ public:
     const Marker* getMarker(MarkerId id) const;
     const std::vector<Marker>& getMarkers() const noexcept { return markers; }
 
+    // -- Sections -------------------------------------------------------------
+    // Every op validates first and changes nothing when it rejects. `secondsPerBeat` must be finite and > 0.
+    // Splits clips at both edges on every non-Automation track, then adds the section and its first placement.
+    SectionId makeSection(double startBeat, double endBeat, const juce::String& name, juce::uint32 colourArgb,
+                          double secondsPerBeat);
+    // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none).
+    PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat, int letter = 0);
+    // Moves a placement, music and all; the placement keeps its id. `newStartBeat` is its start after the move (with
+    // MakeRoom, counted with its old bars already closed up).
+    bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
+    // Moves the placements as one group, back to back in time order from `landingBeat` (its start after the move, as
+    // for movePlacement). False, with nothing changed, when an id is unknown.
+    bool movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
+                                double secondsPerBeat);
+    // placeSection (variation A) for each placement's section, back to back in time order from atBeat; returns the new
+    // placements in that order, or none when an id is unknown or the placement cap would be passed.
+    std::vector<PlacementId> placeSectionsTogether(const std::vector<PlacementId>& ids, double atBeat,
+                                                   SectionDropMode mode, double secondsPerBeat);
+    // Removes the placement only; the section goes with its last placement.
+    bool removePlacementKeepMusic(PlacementId id);
+    // Removes the placement and its bars, closing the gap on every track.
+    bool deletePlacementAndBars(PlacementId id, double secondsPerBeat);
+    // Moves the placement to a new section of the same length. Rejected for a section's only placement.
+    SectionId makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb);
+    bool renameSection(SectionId id, const juce::String& name);
+    bool setSectionColour(SectionId id, juce::uint32 colourArgb);
+    // Variations. A new one is a full copy of the placement's music that the placement then plays; returns its
+    // letter, or -1 on rejection (unknown placement, 26 variations).
+    int addVariation(PlacementId placement);
+    // Like addVariation, but the new variation owns only the placement's current own tracks plus the clip's track.
+    // -1 when the clip is in no placement.
+    int addVariationForTrack(ClipId clip);
+    // Rewrites only this placement's music to variation `letter`; false for the letter it already plays.
+    bool setPlacementVariation(PlacementId placement, int letter);
+    // setPlacementVariation on every placement of the section, as one mutation.
+    bool playVariationEverywhere(SectionId section, int letter);
+    // Placements playing it switch to A first. Rejected for A.
+    bool removeVariation(SectionId section, int letter);
+    const SectionVariation* getVariation(SectionId section, int letter) const;
+    // Calls `visit` for every clip held by a variation that no placement plays (its audio files must be kept).
+    void forEachStoredVariationClip(const std::function<void(const Clip&)>& visit) const;
+    // Rewrites the audio refs of those clips (and their stretch origins) through `rewrite`; false when none matched.
+    bool remapStoredAssetRefs(const std::map<juce::String, juce::String>& rewrite);
+    // Turns each marker into a section up to the next marker (the last up to endBeat); returns placements made.
+    int makeSectionsFromMarkers(double endBeat, const std::function<juce::uint32(int index)>& colourFor,
+                                double secondsPerBeat);
+    // Whole-song time edits on every track, lane, marker and placement.
+    bool insertTime(double atBeat, double lengthBeats, double secondsPerBeat);
+    bool deleteTime(double startBeat, double endBeat, double secondsPerBeat);
+
+    const std::vector<Section>& getSections() const noexcept { return sections; }
+    const std::vector<SectionPlacement>& getPlacements() const noexcept { return placements; }
+    const Section* getSection(SectionId id) const;
+    const SectionPlacement* getPlacement(PlacementId id) const;
+    const SectionPlacement* placementAt(double beat) const;
+    std::vector<PlacementId> placementsOf(SectionId id) const;
+    // 1-based position of the placement among its section's placements; 0 when unknown.
+    int placementOrdinal(PlacementId id) const;
+    const SectionPlacement* placementForClip(ClipId id) const;
+    // Runtime only: counts syncs that rewrote a placement, and names the placements the last mutation rewrote.
+    std::int64_t getSectionStampRevision() const noexcept { return sectionStampCount; }
+    const std::vector<PlacementId>& getLastStampedPlacements() const noexcept { return lastStampedPlacements; }
+    // Runtime only: bumped once by the last step of a section move, place or delete-with-bars that changed the doc.
+    std::int64_t getSectionEditRevision() const noexcept { return sectionEditCount; }
+    // True between the steps of such an op: a notification then shows a state halfway through it.
+    bool isSectionEditUnfinished() const noexcept { return sectionEditOpen; }
+
+    // While one is alive, edits do not copy between placements; the last one to end runs a single sync, and only
+    // when it would change something.
+    class SectionEditScope {
+    public:
+        explicit SectionEditScope(TimelineDoc& d);
+        ~SectionEditScope();
+        SectionEditScope(const SectionEditScope&) = delete;
+        SectionEditScope& operator=(const SectionEditScope&) = delete;
+
+    private:
+        TimelineDoc& doc;
+    };
+
     // -- Document-level --------------------------------------------------------
     // Drops every track AND every marker. Id counters are NOT reset — ids stay unique for the
     // doc's lifetime. No-op (and no notification) on an already-empty doc.
@@ -644,6 +779,8 @@ public:
     // Bumped once per effective mutation. Starts at 0 on a fresh doc; consumers cache it to
     // tell "nothing happened" from "something did" without diffing the model.
     std::int64_t getRevision() const noexcept { return revision; }
+    // Bumped by every fromVar that lands (a project load, an undo or redo restore): the whole doc was replaced.
+    std::int64_t getReplaceCount() const noexcept { return replaceCount; }
 
     // -- Serialisation ---------------------------------------------------------
     // The dialect PatchDocument embeds under the reserved top-level "timeline" key.
@@ -689,8 +826,42 @@ private:
     }
 
     void finishMutation();
+    // `list` with its Automation tracks moved last, each group keeping its order.
+    static std::vector<Track> automationTracksLast(std::vector<Track> list);
     // splitClip's body; `secondsPerBeat` 0 keeps sourceStartSeconds unchanged.
     std::pair<ClipId, ClipId> splitClipImpl(ClipId id, double atBeat, double secondsPerBeat);
+    ClipId duplicateClipImpl(ClipId id, bool linked);
+    void syncLinkedClips(const Clip& source);
+    void dissolveLoneLinkGroups();
+    void syncSections();
+    void writeSections(juce::DynamicObject& root) const;
+    static bool readSections(const juce::DynamicObject& root, const std::vector<Track>& parsedTracks,
+                             std::vector<Section>& sectionsOut, std::vector<SectionPlacement>& placementsOut,
+                             std::int64_t& nextIdOut);
+    bool sectionsNeedSync() const;
+    PlacementContent contentOf(double startBeat, double lengthBeats) const;
+    double sectionLength(SectionId id) const;
+    // Clip and note ids in the doc; a stamp given one keeps a source clip's ids that are free and claims them.
+    struct UsedIds {
+        std::set<std::int64_t> clips, notes;
+    };
+    void stampContent(const PlacementContent& source, double targetStart, double length, bool keepFreeIds = false);
+    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length,
+                    UsedIds* keepFree = nullptr);
+    bool deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit);
+    void beginSectionEdit() noexcept { sectionEditOpen = true; }
+    void finishSectionEdit() noexcept;
+    // Section variations (TimelineDocSectionVariations.cpp).
+    void refreshStoredVariations(Section& section);
+    PlacementContent variationContent(const Section& section, int letter) const;
+    bool switchPlacementVariation(PlacementId placement, int letter);
+    int newVariation(const SectionPlacement& placement, const std::set<std::int64_t>& ownTracks);
+    void forgetTrackInVariations(TrackId track);
+    void forgetLaneInVariations(LaneId lane);
+    void eraseLanePoints(double startBeat, double endBeat);
+    std::vector<TrackId> trackIds(bool includeAutomation) const;
+    void removePlacementsOverlapping(double startBeat, double endBeat, PlacementId except);
+    void insertPlacementSorted(const SectionPlacement& placement);
 
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;
@@ -702,13 +873,24 @@ private:
 
     std::vector<Track> tracks;
     std::vector<Marker> markers;
+    std::vector<Section> sections;                                // creation order
+    std::vector<SectionPlacement> placements;                     // sorted by (startBeat, id)
+    std::map<std::int64_t, PlacementContent> sectionContentCache; // runtime only, by placement id
+    int sectionSyncSuspended = 0;
+    std::int64_t sectionStampCount = 0;
+    std::vector<PlacementId> lastStampedPlacements;
+    std::int64_t sectionEditCount = 0;
+    bool sectionEditOpen = false;
+    std::set<std::int64_t> storedStale; // runtime only: sections whose variations' stored music needs a refresh
 
     std::int64_t nextTrackId = 1;
     std::int64_t nextClipId = 1;
     std::int64_t nextLaneId = 1;
     std::int64_t nextNoteId = 1;
     std::int64_t nextMarkerId = 1;
+    std::int64_t nextSectionId = 1; // one counter for section and placement ids
     std::int64_t revision = 0;
+    std::int64_t replaceCount = 0;
 
     juce::ListenerList<Listener> listeners;
 

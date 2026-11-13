@@ -1,0 +1,69 @@
+# Feature (FRO1182): the Custom filter's Cutoff knob can snap to notes. Right-click Cutoff > Snap to notes > Notes and the
+# knob steps one semitone per Up/Down press and a drag lands on a note, and its readout names the note and the whole
+# hertz ("A#4 466"), all of it: the value box squeezes the text instead of cutting it with "...".
+#
+# What a user does: sets a Filter to Custom, right-clicks the Cutoff knob, picks Snap to notes > Notes, then turns the knob
+# with the arrow keys and a drag. The note is asserted through the knob's value (each value is the note's frequency: A#4 466.16, B4
+# 493.88, C5 523.25) and through the text of the knob's value box ("valueBox"), and shown in the screenshots.
+record: true
+record_target: {id: "card:Filter > Cutoff", scale: 4}   # the knob and its readout, zoomed
+save_project: cutoff-snap-to-notes
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: custom-card}
+  - click: {id: "card:Filter > Cutoff", button: right}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: knob-menu}
+  # Arrow keys reach the popup: Automate, MIDI Learn, Snap to notes (opens its Free / Notes / By key submenu).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: right}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:Filter > Cutoff", name: notes-on-a4, scale: 3}
+  - expect: {id: "card:Filter > Cutoff", value: 440.0}
+  - expect: {id: "card:Filter > Cutoff > valueBox", text: "A4 440"}
+  - click: {id: "card:Filter > Cutoff"}
+  - key: {keys: up}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Cutoff", value: 466.1600036621094}
+  - expect: {id: "card:Filter > Cutoff > valueBox", text: "A#4 466"}
+  - screenshot: {id: "card:Filter > Cutoff", name: up-1-a-sharp-4, scale: 3}
+  - key: {keys: up}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Cutoff", value: 493.8799743652344}
+  - expect: {id: "card:Filter > Cutoff > valueBox", text: "B4 494"}
+  - screenshot: {id: "card:Filter > Cutoff", name: up-2-b4, scale: 3}
+  - key: {keys: up}
+  - wait: {settleMs: 300}
+  - expect: {id: "card:Filter > Cutoff", value: 523.25}
+  - expect: {id: "card:Filter > Cutoff > valueBox", text: "C5 523"}
+  - screenshot: {id: "card:Filter > Cutoff", name: up-3-c5, scale: 3}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - wait: {settleMs: 300}
+  - getState: {id: "card:Filter > Cutoff"}
+  - screenshot: {id: "card:Filter > Cutoff", name: down-4, scale: 3}
+  - drag: {from: "card:Filter > Cutoff", to: "card:Filter > Cutoff", fromX: 42, fromY: 40, toX: 42, toY: 20}
+  - wait: {settleMs: 400}
+  - getState: {id: "card:Filter > Cutoff"}
+  - mark: {check: 1, name: cutoff-readout-fits}   # the note and its whole Hz after a turn, no "..."
+  - screenshot: {id: "card:Filter > Cutoff", name: after-drag, scale: 3}
+  - screenshot: {id: "card:Filter", name: card-after}

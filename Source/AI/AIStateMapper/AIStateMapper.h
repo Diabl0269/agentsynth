@@ -5,8 +5,11 @@
 #include <juce_core/juce_core.h>
 #include <map>
 #include <memory>
+#include <set>
+#include <vector>
 
 namespace synth {
+class ConnectionIndex; // Source/AudioEngine/ConnectionIndex.h
 
 /** Hard cap on a module's user-set card title, applied wherever a "displayName" is accepted —
  *  including the untrusted patch path, where it is the only thing stopping a hostile patch from
@@ -54,6 +57,8 @@ enum class PatchValidationError {
     MidiRemoteNotAllowed,
     InternalModuleNotAllowed,
     MixerPanLawNotAllowed,
+    MixerViewNotAllowed,
+    ViewNotAllowed,
 };
 
 /**
@@ -74,12 +79,20 @@ struct PatchValidationResult {
  */
 juce::String patchValidationErrorName(PatchValidationError error);
 
+/** Node ids an earlier step of the same edit plan created, for a MERGE patch that refers to them. */
+struct PatchIdScope {
+    std::map<juce::uint32, juce::AudioProcessorGraph::NodeID> boundIds; // plan id -> the node it denotes
+    std::set<juce::AudioProcessorGraph::NodeID> hiddenNodes; // never addressable by raw uid (bound ones neither)
+};
+
 /**
  * @class AIStateMapper
  * @brief Handles conversion between AI-friendly JSON and juce::AudioProcessorGraph.
  */
 class AIStateMapper {
 public:
+    using NodeRemovalHook = std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)>;
+
     // Limits enforced against untrusted (network/AI-authored) patches — see validatePatch().
     // Chosen generously above anything this app would author itself, while still bounding the
     // worst case an adversarial or misbehaving remote model could throw at applyJSONToGraph
@@ -89,6 +102,13 @@ public:
     static constexpr int kMaxModulations = 512;
     static constexpr int kMaxRemovals = 256;
     static constexpr int kMaxRemoveModulations = 256;
+    // The same bounds for the app's own data (a project, a plugin session, a snippet: the callers that pass
+    // allowInternalModuleTypes). A big project goes past the model bounds legitimately (80 tracks is over a thousand
+    // nodes), so these only bound a tampered file; they are not a cap on how big a project may grow.
+    static constexpr int kMaxAppDataNodes = 16384;
+    static constexpr int kMaxAppDataConnections = 65536;
+    static constexpr int kMaxAppDataModulations = 32768;
+    static constexpr int kMaxAppDataRemovals = 16384;
     static constexpr int kMaxTypeNameLength = 64;
     // No module in this codebase exposes anywhere near this many raw channels (poly buses top
     // out at 16 — see PolyMidiModule); this just bounds how large a port index we'll accept.
@@ -108,7 +128,16 @@ public:
      * unchanged graph emit the same identity. That uuid — not the integer "id", which merge-mode
      * apply can renumber — is what long-lived references (automation lanes, track bindings) key on.
      */
-    static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
+    static juce::var graphToJSON(juce::AudioProcessorGraph& graph, bool forModel = false);
+    /** One node's entry in graphToJSON's "nodes" (assigning its uuid the same way); void for a node with no processor.
+     */
+    static juce::var nodeToJSON(juce::AudioProcessorGraph::Node& node, bool forModel = false);
+    /** graphToJSON's "connections" array from one index of the graph's cables; only those `include` accepts, if set. */
+    static juce::var
+    connectionsToJSON(const ConnectionIndex& cables,
+                      const std::function<bool(const juce::AudioProcessorGraph::Connection&)>& include = {});
+    /** graphToJSON's "modulations" array (every attenuverter wired at both ends), from the same cable index. */
+    static juce::var modulationsToJSON(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables);
 
     /** Returns `node`'s persistent "uuid", generating and persisting a fresh one first if it
      *  doesn't have one yet — the same lazy-generation graphToJSON above uses, exposed so a
@@ -145,9 +174,11 @@ public:
      *
      * @return true if the patch was applied successfully.
      */
+    /** @param scope null (the default) keeps the plain patch namespace; merge mode only otherwise. */
     static bool applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting = true,
                                  bool trusted = false, bool autoConnectNewNodes = true,
-                                 std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap = nullptr);
+                                 std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap = nullptr,
+                                 const PatchIdScope* scope = nullptr);
 
     /**
      * @brief Restores one of OUR OWN graphToJSON snapshots by diffing it against the live graph.
@@ -177,16 +208,16 @@ public:
      * verbatim by "nodes" and "connections". For the same reason no auto-promotion, auto-connect
      * or value rescaling happens here — a snapshot is reproduced exactly, not interpreted.
      *
-     * @param beforeNodeRemoval Invoked at most once, immediately before the first node is removed,
-     *        i.e. before any processor is freed. This is the caller's only chance to detach UI that
-     *        points into those processors (GraphEditor::detachAllModuleComponents). It is NOT
-     *        called when the restore removes no nodes, which is exactly when the UI has nothing to
-     *        detach from and can keep its components.
+     * @param beforeNodeRemoval Invoked at most once, with the nodes about to go, immediately before
+     *        the first is removed, i.e. before any processor is freed: the caller's only chance to
+     *        detach UI that points into exactly those processors (GraphEditor::detachModuleComponentsFor).
+     *        It is NOT called when the restore removes no nodes, which is exactly when the UI has
+     *        nothing to detach from and can keep its components.
      *
      * @return true if the snapshot was applied; false if the caller must fall back (graph untouched).
      */
     static bool applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
-                                             std::function<void()> beforeNodeRemoval = {});
+                                             NodeRemovalHook beforeNodeRemoval = {});
 
     /**
      * @brief Validates a patch JSON without applying it, returning a reason on failure.
@@ -209,13 +240,18 @@ public:
      *              ranges and tampering, just not authorship. Defaults to false so a new
      *              model-facing caller is protected without having to know this exists.
      */
+    /** @param scope null (the default) keeps the plain patch namespace; ignored in replace mode. */
     static PatchValidationResult validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                               bool clearExisting, bool trusted, bool allowInternalModuleTypes = false);
+                                               bool clearExisting, bool trusted, bool allowInternalModuleTypes = false,
+                                               const PatchIdScope* scope = nullptr);
 
     /**
      * @brief Gets a Markdown-formatted string of all available modules and their parameters.
      */
     static juce::String getModuleSchema();
+
+    /** @brief JSON twin of getModuleSchema(): the authorable modules' exact parameters, in a stable order. */
+    static juce::String getModuleCatalogJson();
 
     /**
      * @brief Generates a JSON schema for patch validation and structured AI output.
@@ -228,7 +264,7 @@ public:
      *        (AIIntegrationService::setTimelineToolsEnabled).
      *
      * The ops item schema is deliberately PERMISSIVE (one object shape, only "op" required, every
-     * per-op field optional): it is a GRAMMAR that lets the model express any of the four ops, not
+     * per-op field optional): it is a GRAMMAR that lets the model express any of the five ops, not
      * a validator — `TimelineOps::validate` is the gate, and it rejects unknown fields, bad
      * shapes and out-of-range values whole-batch regardless of what the grammar allowed through.
      * A strict discriminated union here would double-maintain the validator's rules in a dialect
@@ -239,21 +275,17 @@ public:
      */
     static juce::var getPatchSchemaWithTimelineOps();
 
-    /**
-     * @brief An envelope-ONLY structured-output contract: a top-level REQUIRED "timelineOps"
-     *        array and nothing else — the local (Ollama) transport for arrange mode
-     *        (AIIntegrationService::sendArrangeMessage), mirroring the hosted
-     *        timeline.generate capability's output schema so the two providers answer arrange
-     *        requests in the same shape.
-     *
-     * Shares getPatchSchemaWithTimelineOps' permissive ops grammar (one item schema, one source),
-     * and the same posture: the grammar lets the model express the four ops,
-     * TimelineOps::validate is the gate. Unlike the patch-mode extension, "timelineOps" is
-     * required — an arrange answer with no ops is not an answer.
-     */
-    static juce::var getTimelineOpsEnvelopeSchema();
-
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
+
+    // Validates JSON-provided parameter values for one node against its actual processor
+    // instance. The strict/untrusted path only: validatePatch, and a timelineOps insert's params.
+    static PatchValidationResult validateNodeParams(juce::AudioProcessor* processor,
+                                                    const juce::DynamicObject* paramsObj);
+
+    /** Applies `paramsObj` to a processor not yet in a graph, untrusted (in-[0,1] values rescale). */
+    static void applyUntrustedParams(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj);
+
+    static void applyUntrustedState(juce::AudioProcessor* processor, const juce::var& state);
 
     /**
      * @brief The factory key graphToJSON writes for a live processor.
@@ -305,14 +337,14 @@ private:
     static void applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                        bool trusted = false, bool skipUnchanged = false);
 
+    // A node's "params" onto the module just created for it (none: the module keeps its defaults), then
+    // ModuleBase::applyStoredParamDefaults: a stored node keeps its saved defaults, a model-authored one the current.
+    static void applyParamsToNewProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                          bool trusted);
+
     // Feeds a node's "state" property back into ModuleBase::setExtraState — trusted callers only.
     static void applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                            bool trusted);
-
-    // Validates JSON-provided parameter values for one node against its actual processor
-    // instance. Only used on the strict/untrusted validation path.
-    static PatchValidationResult validateNodeParams(juce::AudioProcessor* processor,
-                                                    const juce::DynamicObject* paramsObj);
 };
 
 } // namespace synth

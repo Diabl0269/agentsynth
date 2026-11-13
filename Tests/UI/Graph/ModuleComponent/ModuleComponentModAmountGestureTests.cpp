@@ -13,6 +13,8 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -36,6 +38,19 @@ juce::AudioParameterFloat* attenuverterAmountParam(juce::AudioProcessorGraph& gr
     return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount"));
 }
 
+// The VCA's Gain as the rotary knob this gesture is about (its designed default draws a fader).
+void showGainAsKnob(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
+    synth::CardParamItem gain;
+    gain.paramId = "gain";
+    gain.widget = synth::CardWidget::Knob;
+    synth::CardSection section;
+    section.id = "main";
+    section.items.emplace_back(gain);
+    synth::CardLayout layout;
+    layout.sections = {section};
+    synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
+}
+
 struct Fixture {
     AudioEngine engine;
     AppUndoManager undo;
@@ -44,7 +59,7 @@ struct Fixture {
     ModuleComponent* vcaCard = nullptr;
     juce::Slider* gainKnob = nullptr;
 
-    Fixture() {
+    explicit Fixture(bool gainAsKnob = true) {
         engine.initialise();
         engine.getGraph().clear();
         editor = std::make_unique<GraphEditor>(engine, &undo);
@@ -55,6 +70,8 @@ struct Fixture {
         lfoId = lfoNode->nodeID;
         vcaId = vcaNode->nodeID;
         attenId = engine.addModRouting(lfoId, 0, vcaId, 1); // LFO CV -> atten -> VCA.gain (ch1)
+        if (gainAsKnob)
+            showGainAsKnob(graph, vcaId);
 
         editor->updateComponents();
         sizeModuleComponents(*editor);
@@ -170,7 +187,7 @@ TEST_F(ModuleComponentTest, PlainDragInTheKnobCentreStillMovesTheKnob) {
 // on a second LFO's output jack, must wire that new source in exactly like a real (visible) input
 // jack always could -- proving the pickup gesture reaches the SAME GraphEditor::beginConnectionDrag/
 // dragConnection/endConnectionDrag machinery, not a bespoke stand-in.
-TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDrag) {
+TEST_F(ModuleComponentTest, CmdPickupGestureOnTheLandingDotStartsARealConnectionDrag) {
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
     ASSERT_NE(f.vcaCard, nullptr);
@@ -210,12 +227,13 @@ TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDra
     const auto lfo2OutputGlobal = lfo2Comp->getBounds().getPosition() + lfo2Comp->getPortCenter(0, /*isInput*/ false);
     const auto knobLocalDrop = f.gainKnob->getLocalPoint(nullptr, lfo2OutputGlobal);
 
-    const auto plain = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    // Cmd: a plain press on the dot of a modulated knob drags the amount instead (ModDotGestureTests.cpp).
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
     const int connectionsBefore = (int)graph.getConnections().size();
 
-    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, knobLocalDown, plain));
-    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
-    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
+    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, knobLocalDown, cmd));
+    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, cmd));
+    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, cmd));
 
     EXPECT_GT((int)graph.getConnections().size(), connectionsBefore)
         << "the pickup gesture must start a real INPUT connection drag and wire the new source when dropped";
@@ -223,4 +241,36 @@ TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDra
     // The pre-existing LFO1 -> atten -> Gain routing is a separate thing entirely -- picking up
     // the landed cable to redirect it is a NEW drag, never a teardown of what was already there.
     EXPECT_NE(attenuverterAmountParam(graph, f.attenId), nullptr);
+}
+
+// The VCA's designed default draws Gain as a horizontal fader, whose dot sits left of the
+// bar. A press there, delivered through the card the way a mouse delivers it, must drag the amount like a knob's dot.
+TEST_F(ModuleComponentTest, DraggingTheDotOfTheDefaultGainFaderAdjustsTheAmountNotTheFader) {
+    Fixture f(/*gainAsKnob=*/false);
+    ASSERT_NE(f.gainKnob, nullptr);
+    ASSERT_NE(dynamic_cast<synth::ui::CardFader*>(f.gainKnob), nullptr) << "the default layout is a fader";
+    auto* amount = attenuverterAmountParam(f.engine.getGraph(), f.attenId);
+    ASSERT_NE(amount, nullptr);
+    amount->setValueNotifyingHost(amount->convertTo0to1(0.5f));
+    const float amountBefore = amount->get();
+    const double gainBefore = f.gainKnob->getValue();
+
+    int gainChannel = -1;
+    for (const auto& t : dynamic_cast<ModuleBase*>(f.vcaCard->getModule())->getModulationTargets())
+        if (t.paramId == "gain")
+            gainChannel = t.channelIndex;
+    const auto anchor = f.vcaCard->getModTargetKnobAnchor(gainChannel);
+    ASSERT_TRUE(anchor.has_value());
+    auto* content = f.editor->getChildComponent(0);
+    const auto down = content->getLocalPoint(f.vcaCard, anchor->roundToInt());
+    auto* hit = content->getComponentAt(down);
+    ASSERT_NE(hit, nullptr);
+
+    const auto plain = plainLeftClick();
+    hit->mouseDown(makeModuleClickWithMods(*hit, hit->getLocalPoint(content, down), plain));
+    hit->mouseDrag(makeModuleClickWithMods(*hit, hit->getLocalPoint(content, down + juce::Point<int>(0, -30)), plain));
+    hit->mouseUp(makeModuleClickWithMods(*hit, hit->getLocalPoint(content, down + juce::Point<int>(0, -30)), plain));
+
+    EXPECT_GT(amount->get(), amountBefore) << "dragging up on the dot raises the amount";
+    EXPECT_DOUBLE_EQ(f.gainKnob->getValue(), gainBefore) << "the fader's own value never moves";
 }

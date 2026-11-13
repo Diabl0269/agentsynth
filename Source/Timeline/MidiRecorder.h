@@ -1,11 +1,13 @@
 #pragma once
 
 #include "../Transport/BlockTimeInfo.h"
+#include "AudioEngine/MidiInputSources.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
+#include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 
@@ -32,8 +34,11 @@ namespace synth {
  * only data crossing threads besides that is the SPSC ring.
  *
  * -- What a "take" is --
- * stopAndCommit() pairs NoteOn/NoteOff events by (pitch, channel) into notes, then creates ONE new
- * clip on the armed track spanning the captured notes, named "Take". A note still held down when
+ * A take records into one or more targets, each a track with its input filter
+ * (docs/timeline/transport.md#recording-from-one-input): the merged stream (every input), or one
+ * device's notes from the engine's MidiInputSources lanes, optionally on one channel only.
+ * stopAndCommit() pairs NoteOn/NoteOff events by (target, pitch, channel) into notes, then creates
+ * one new clip per target that captured notes, named "Take", all in one undo step. A note still held down when
  * recording stops is closed at the last event beat seen, with a floor of 1/32 beat so it is never
  * emitted with zero or negative length. A stray NoteOff with no matching NoteOn is ignored. An
  * empty take commits nothing and returns false.
@@ -52,6 +57,23 @@ public:
     // note recorded right at the moment of stopping is never emitted with zero length.
     static constexpr double kMinNoteLengthBeats = 1.0 / 32.0;
 
+    static constexpr int kMaxTargets = 16;
+    static constexpr int kAnySource = -2; // a target's source: the merged stream of every input
+    // A target's source is kAnySource, a MidiInputSources lane, or MidiInputSources::kNoSource (records nothing).
+    struct TakeTarget {
+        TrackId track;
+        int source = kAnySource;
+        int channel = 0; // 0 = any channel, else 1..16
+    };
+
+    /** One device callback's per-device notes, windowed to the render pass `offset`..`offset + length`. */
+    struct SourcedNotes {
+        const MidiInputSources::Event* events = nullptr;
+        int count = 0;
+        int offset = 0;
+        int length = 0;
+    };
+
     // -- Audio thread --------------------------------------------------------
     // Called once per callback (see AudioEngine::renderNextBlock). A no-op unless armed-and-
     // recording AND the transport is playing. For every NoteOn/NoteOff in `midi`, computes its
@@ -59,7 +81,11 @@ public:
     // post-wrap range); an event whose beat is BEFORE `punchInBeat` (a count-in pre-roll) is
     // dropped rather than pushed — the pre-roll bars a performer plays along with the click must
     // never land in the committed take. Never allocates, never blocks, never logs.
-    void captureBlock(const juce::MidiBuffer& midi, const BlockTimeInfo& info) noexcept;
+    // `sourced` feeds the targets filtered to one device; the merged `midi` feeds the others.
+    void captureBlock(const juce::MidiBuffer& midi, const BlockTimeInfo& info, const SourcedNotes& sourced) noexcept;
+    void captureBlock(const juce::MidiBuffer& midi, const BlockTimeInfo& info) noexcept {
+        captureBlock(midi, info, SourcedNotes());
+    }
 
     // -- Message thread --------------------------------------------------------
     // Clears the ring and any prior take's state, arms recording onto `armedTrack`. `punchInBeat` is
@@ -71,6 +97,8 @@ public:
     // "now" can arrive anyway, so the filter is then a no-op. The committed clip's bounds are still
     // derived from the captured notes themselves, never from this value.
     void startRecording(TrackId armedTrack, double punchInBeat);
+    // The same, recording into every target at once (at most kMaxTargets; the rest are ignored).
+    void startRecording(const std::vector<TakeTarget>& targets, double punchInBeat);
 
     // Message thread (or any thread — see the class comment: this is the one piece of "message-
     // thread-only" bookkeeping a caller also needs to read live, to know when a count-in pre-roll is
@@ -96,6 +124,7 @@ public:
 
 private:
     struct Event {
+        int target = 0;
         double beat = 0.0;
         int pitch = 0;
         int velocity = 0;
@@ -111,9 +140,16 @@ private:
     juce::AbstractFifo ring{kRingCapacity};
     std::array<Event, kRingCapacity> ringSlots;
 
-    // Message-thread-only bookkeeping, set by startRecording and read by stopAndCommit. Never
-    // touched by the audio thread.
-    TrackId armedTrack;
+    void captureNote(int source, const std::uint8_t* bytes, int samplePosition, const BlockTimeInfo& info,
+                     double punchInBeat) noexcept;
+    void pushEvent(const Event& event) noexcept;
+
+    // Message-thread-only: each target's track, set by startRecording and read by stopAndCommit.
+    std::array<TrackId, kMaxTargets> targetTracks_;
+    // Each target's filter, read by the audio thread; atomics so a new take never tears one.
+    std::array<std::atomic<int>, kMaxTargets> targetSources_{};
+    std::array<std::atomic<int>, kMaxTargets> targetChannels_{};
+    std::atomic<int> targetCount_{0};
 
     // Written by startRecording() (message thread), read by BOTH stopAndCommit() (message
     // thread, informational) and captureBlock() (audio thread, the actual pre-roll filter) — a

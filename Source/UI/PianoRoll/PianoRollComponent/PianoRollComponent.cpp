@@ -58,7 +58,11 @@
 // openClip so "copy in one clip, paste in another" works.
 
 #include "PianoRollComponent.h"
+#include "AppUndoManager.h"
+#include "PianoRollHeaderChip.h"
 #include "PianoRollInternal.h"
+#include "UI/Layout/EditorTabWalk.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -78,42 +82,70 @@ int medianPitchOf(const std::vector<synth::MidiNote>& notes) {
     std::sort(pitches.begin(), pitches.end());
     return pitches[pitches.size() / 2];
 }
+
+// True when the band disagrees with the clip: a different saved range, or a saved range the clip no longer has.
+bool noteRangeShownDiffers(const ScaleAssistPanel& panel, const synth::Clip& clip) {
+    if (!clip.noteRange.has_value())
+        return panel.isShowingSavedRange();
+    return panel.getMinPitchSelection() != clip.noteRange->first ||
+           panel.getMaxPitchSelection() != clip.noteRange->second;
+}
+
 } // namespace
 
 //==============================================================================
 PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     : viewState_(viewState) {
+    tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: initHeaderChips and focusLost use it
     setComponentID("pianoRollComponent");
+    addTestModeProbe();
+    setTitle("Piano roll");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
+    initHeaderChips();
+    setOpaque(true); // paint() starts with an opaque g.fillAll(bg0), so the parent need not repaint behind us
     // No scale context yet, so this just fills visiblePitches_ with every pitch — see the class
     // comment and rebuildVisiblePitches.
     rebuildVisiblePitches();
 
     addChildComponent(scalePanel_); // starts INVISIBLE; the header button / persisted flag show it
     scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
-        if (clipId_.isValid())
-            clipScaleMemory_[clipId_].scale = scale;
-        pushScaleContextFromMemory();
+        commitClipScale(std::move(scale), isScaleFilterOn(), /*carryRange=*/true);
     };
+    // One finished range gesture is saved on the clip as one undo step (every timeline undo restores a whole-document
+    // snapshot, so a range kept outside the doc would be lost or reverted by undoing something else).
+    scalePanel_.onRangeGestureEnd = [this](int lo, int hi) {
+        if (doc_ == nullptr || !clipId_.isValid())
+            return;
+        auto mutate = [this, id = clipId_, lo, hi] { doc_->setClipNoteRange(id, std::make_pair(lo, hi)); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+    };
+    scalePanel_.onFollowSongKey = [this] {
+        commitClipScale(std::nullopt, isScaleFilterOn()); // no own scale = follow
+        restoreScaleForOpenClip();
+    };
+    // The OWN scale, never the resolved one: toggling the filter must not turn a follower into an own key.
     scalePanel_.onPitchVisibilityChanged = [this](bool on) {
-        if (clipId_.isValid())
-            clipScaleMemory_[clipId_].pitchVisibilityOn = on;
-        pushScaleContextFromMemory();
+        const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+        commitClipScale(clip != nullptr ? clip->scale : std::nullopt, on);
     };
     // Pitch-quantize has NO panel button any more — the header chip and "pianoRollQuantisePitches"
     // are its only entry points (see the ScaleAssistPanel class comment).
     scalePanel_.onGenerate = [this](int minPitch, int maxPitch, bool addToExisting) {
         if (!clipId_.isValid())
             return;
-        // Copied out rather than kept as a pointer into the map: generateRandomNotesIntoClip
+        // Copied out rather than kept as a pointer into the clip: generateRandomNotesIntoClip
         // mutates the doc (and can therefore repaint/rebuild things this lambda has no business
-        // reasoning about the lifetime of), so the scale it reads must not depend on the map
-        // entry surviving the call.
+        // reasoning about the lifetime of), so the scale it reads must not depend on the clip
+        // surviving the call.
         const auto scale = activeScaleForOpenClip();
         juce::Random rng; // default-seeded — the panel's Generate button always wants a fresh draw
         generateRandomNotesIntoClip(scale.has_value() ? &*scale : nullptr, minPitch, maxPitch, rng, addToExisting);
     };
+    initVelocityControls();
 }
 
 PianoRollComponent::~PianoRollComponent() {
@@ -122,22 +154,33 @@ PianoRollComponent::~PianoRollComponent() {
     // Before the animation teardown, because the callback is the thing with a deadline.
     stopAudition();
     keysColumnPressing_ = false; // no repaint from a dying component; the note-off above is the point
+    // The value box can lose focus while it is being destroyed; nothing may call back into a
+    // half-destroyed roll from there.
+    velocityBox_.onFocusLost = nullptr;
+    selection_.onChange = nullptr;
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
-    if (scalePanelVblankUpdater_.has_value())
+    if (scalePanelVblankUpdater_.has_value()) {
         scalePanelAnim_.stop(*scalePanelVblankUpdater_);
+        ghostAnim_.stop(*scalePanelVblankUpdater_);
+    }
 }
 
 //==============================================================================
 // ---- Entry/exit ----
 
 void PianoRollComponent::openClip(synth::ClipId id) {
+    wheelTween_.stop();
+    tabWalk_->reset();
+    clearVelocityPreview(); // a strip gesture on the OLD clip commits nothing
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
@@ -171,7 +214,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     }
     clipId_ = id;
 
-    const int visibleRows = std::max(1, (getHeight() - canvasTop()) / (int)pixelsPerSemitone_);
+    const int visibleRows = std::max(1, (canvasBottom() - canvasTop()) / (int)pixelsPerSemitone_);
     const int median = medianPitchOf(clip->notes);
     firstVisiblePitch_ = juce::jlimit(0, 127, median + visibleRows / 2);
     // A fresh, freshly-computed landing for the clip just opened — never a continuation of
@@ -184,20 +227,23 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // row set has to be rebuilt against THIS clip before anything below reads visiblePitches_.
     rebuildVisiblePitches();
 
-    // Restores THIS clip's remembered scale/pitch-visibility (or "No scale" for a clip never
-    // opened before) into the panel and the roll's own scale context — rebuilds visiblePitches_
-    // again, correctly this time (the call above ran against whichever clip was open previously).
-    restoreScaleMemoryForOpenClip();
+    // Shows THIS clip's saved scale/pitch-visibility (or "No scale" for a clip that has none) in the
+    // panel and the roll's own scale context — rebuilds visiblePitches_ again, correctly this time
+    // (the call above ran against whichever clip was open previously).
+    restoreScaleForOpenClip();
 
     // Frame the clip: its start at the keys column's right edge, zoomed so the whole clip fits the
     // grid width (subject to the shared zoom clamps).
     const double gridWidth = std::max(1.0, (double)(getWidth() - leftGutterWidth()));
     const double fitted = clip->lengthBeats > 0.0 ? gridWidth / clip->lengthBeats : rollView_.pixelsPerBeat;
     setHorizontalView(fitted, clip->startBeat);
+    syncHeaderChipStates();
+    refreshAccessibilityValue();
     repaint();
 }
 
 void PianoRollComponent::closeRoll() {
+    wheelTween_.stop();
     // BEFORE clipId_ is cleared, exactly like openClip's ordering — and load-bearing, not just
     // symmetry: stopAudition() calls out to the owner, and the owner resolves which track to send the
     // note-off to FROM THE OPEN CLIP. Clearing clipId_ first made isOpen() false while that note-off
@@ -205,6 +251,7 @@ void PianoRollComponent::closeRoll() {
     // deliberately exempt from every positional flush — see TimelineMidiSourceModule).
     stopAudition();
     endKeysColumnPress();
+    clearVelocityPreview();
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
@@ -212,6 +259,8 @@ void PianoRollComponent::closeRoll() {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 
@@ -221,6 +270,7 @@ void PianoRollComponent::closeRoll() {
     // No animation across the roll closing — see openClip's identical guard.
     if (scalePanelAnim_.isRunning())
         finishScalePanelAnimation();
+    refreshAccessibilityValue();
     repaint();
 }
 
@@ -228,6 +278,8 @@ void PianoRollComponent::requestClose() {
     // Self-contained: closes immediately (so isOpen() reflects it even with no owner listening —
     // a bare PianoRollComponent in a test) AND notifies the owner, which is what makes
     // TimelinePanelComponent swap the clip-lane area back in.
+    if (onAboutToClose)
+        onAboutToClose();
     closeRoll();
     if (onCloseRequested)
         onCloseRequested();
@@ -253,9 +305,18 @@ void PianoRollComponent::refreshFromDoc() {
         hasSplitPreview_ = false;
         splitPreviewNote_ = {};
     }
-    // A note add/remove can change which out-of-scale pitches pitch-visibility mode is keeping
-    // visible on the note's account alone.
-    rebuildVisiblePitches();
+    // An undo/redo can change the clip's scale: re-show it, but only when the panel disagrees, since
+    // setSelection also closes the panel's custom-scale editor, which a note edit must not do.
+    // Otherwise a note add/remove can still change which out-of-scale pitches pitch-visibility mode
+    // is keeping visible on the note's account alone.
+    const auto resolved = resolvedKeyForOpenClip();
+    if (!synth::sameKey(scalePanel_.getSelectedScale(), resolved.key) ||
+        scalePanel_.isFollowingSongKey() != resolved.following ||
+        scalePanel_.isPitchVisibilityOn() != clip->scaleVisible || noteRangeShownDiffers(scalePanel_, *clip))
+        restoreScaleForOpenClip();
+    else
+        rebuildVisiblePitches();
+    refreshAccessibilityValue(); // a nudge or velocity edit changes what the focused note reads as
     repaint();
 }
 
@@ -374,7 +435,7 @@ double PianoRollComponent::minTopRowPosition() const noexcept {
     // loop bounds; here kept exact, since a fractional row of headroom is exactly what should let
     // the lowest row land a fraction short of the bottom edge rather than snapping early).
     const double gridRows =
-        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - canvasTop()) / pixelsPerSemitone_ : 0.0;
+        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, canvasBottom() - canvasTop()) / pixelsPerSemitone_ : 0.0;
     return std::max(0.0, maxTopRowPosition() - std::max(0.0, totalRows - gridRows));
 }
 
@@ -424,22 +485,23 @@ void PianoRollComponent::rebuildVisiblePitches() {
 bool PianoRollComponent::isScaleFilterOn() const noexcept {
     if (!clipId_.isValid())
         return false;
-    const auto it = clipScaleMemory_.find(clipId_);
-    return it != clipScaleMemory_.end() && it->second.pitchVisibilityOn;
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    return clip != nullptr && clip->scaleVisible;
 }
 
 void PianoRollComponent::toggleScaleFilter() {
     if (!clipId_.isValid())
         return;
     const bool next = !isScaleFilterOn();
-    // The clip's memory is the single source of truth (see clipScaleMemory_); the panel's checkbox and
-    // this chip are both VIEWS of it, which is what stops the two from drifting apart.
-    clipScaleMemory_[clipId_].pitchVisibilityOn = next;
-    pushScaleContextFromMemory();
+    // The clip in the doc is the single source of truth; the panel's checkbox and this chip are both
+    // VIEWS of it, which is what stops the two from drifting apart.
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    commitClipScale(clip != nullptr ? clip->scale : std::nullopt, next); // the own scale: a follower stays one
     // Reflect it back into the panel. setSelection fires NO callback by contract — it is a reflection
     // of state the owner already applied, not a user edit — so this cannot loop back through
     // onPitchVisibilityChanged into here again.
-    scalePanel_.setSelection(activeScaleForOpenClip(), next);
+    const auto resolved = resolvedKeyForOpenClip();
+    scalePanel_.setSelection(resolved.key, next, resolved.following);
     repaint(); // the chip's lit state, plus whatever rows just appeared or collapsed
 }
 
@@ -447,6 +509,7 @@ void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, boo
     isInScale_ = std::move(isInScale);
     pitchVisibilityOn_ = pitchVisibilityOn;
     rebuildVisiblePitches();
+    syncHeaderChipStates();
     repaint();
 }
 
@@ -456,7 +519,11 @@ void PianoRollComponent::setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_
 synth::TimelineDoc* PianoRollComponent::getTimelineDoc() const noexcept { return doc_; }
 void PianoRollComponent::setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
 AppUndoManager* PianoRollComponent::getUndoManager() const noexcept { return undoManager_; }
-void PianoRollComponent::setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+// A transport wired after a clip opened brings the song key a following clip uses: re-read it now.
+void PianoRollComponent::setTransport(synth::TransportService* transport) noexcept {
+    transport_ = transport;
+    refreshSongKey();
+}
 
 bool PianoRollComponent::isOpen() const noexcept { return clipId_.isValid(); }
 synth::ClipId PianoRollComponent::getClipId() const noexcept { return clipId_; }

@@ -1,0 +1,166 @@
+#pragma once
+
+// AutomationLanesModulatorFixture.h -- a real MainComponent with a MIDI track, a module on it and an open
+// automation lane for one of its parameters, plus the graph queries the modulator tests assert with.
+// Header-only; not registered in Tests/CMakeLists.txt.
+
+#include "../TimelinePanel/TimelinePanelTestFixture.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AutomationLanesTestFixture.h"
+#include "MacroSet.h"
+#include "Modules/LFOModule.h"
+#include "Modules/ModuleBase.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
+
+namespace modulator_test {
+
+using NodePtr = juce::AudioProcessorGraph::Node::Ptr;
+
+inline NodePtr addNodeWithUuid(MainComponent& mc, const juce::String& type) {
+    auto node = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule(type));
+    if (node == nullptr)
+        return node;
+    const auto uuid = juce::Uuid().toDashedString();
+    node->properties.set("uuid", uuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        module->setNodeUuid(uuid);
+    return node;
+}
+
+// `type`'s `paramId` automated on a MIDI track, the timeline open with its lane row. Close the audio device so a render
+// in the test is the only thing processing the graph.
+struct Scene {
+    MainComponent mc{std::make_unique<MockProviderTL>()};
+    synth::TrackId track;
+    NodePtr target;
+    juce::String targetUuid;
+    synth::LaneId lane;
+
+    explicit Scene(const juce::String& type = "Filter", const juce::String& paramId = "cutoff") {
+        mc.setSize(1600, 1000);
+        mc.simulateToggleBottomPanelClick(); // the timeline open and laid out, as a person would see it
+        mc.getAudioEngine().getDeviceManager().closeAudioDevice();
+        mc.simulateAddMidiTrackClick();
+        track = doc().getTracks().front().id;
+        target = addNodeWithUuid(mc, type);
+        targetUuid = target->properties["uuid"].toString();
+        mc.getGraphEditor().updateComponents();
+        lane = doc().addLane(track, targetUuid, paramId, {0.0f, 1.0f, 0.5f});
+        panel().setTrackAutomationExpanded(track, true);
+        for (auto* node : graph().getNodes())
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                baseAttenuverters += module->getModuleType() == ModuleType::Attenuverter ? 1 : 0;
+        synth::ui::test_hooks::removeLfoConfirmHookForTest() = [this](const auto& text, auto done) {
+            ++confirmAsked;
+            lastConfirm = text;
+            done(!confirmAnswer ? synth::ui::RemoveLfoChoice::cancel
+                 : confirmKeep  ? synth::ui::RemoveLfoChoice::keepModule
+                                : synth::ui::RemoveLfoChoice::removeModule,
+                 confirmDontAsk);
+        };
+    }
+
+    size_t baseAttenuverters = 0; // the track's own chain may already hold some
+
+    // The "Remove LFO?" dialog, answered without a window: every question is counted and recorded, and
+    // answered with `confirmAnswer` / `confirmDontAsk`. The hook lives as long as the scene.
+    int confirmAsked = 0;
+    synth::ui::RemoveLfoConfirmText lastConfirm;
+    bool confirmAnswer = true;
+    bool confirmDontAsk = false; // the "Remember my choice" box
+    bool confirmKeep = false;    // answer with "Keep module" instead of "Remove LFO"
+
+    ~Scene() {
+        synth::ui::test_hooks::removeLfoConfirmHookForTest() = nullptr;
+        mc.getAppPropertiesForTest().getUserSettings()->removeValue(synth::ui::kAskBeforeRemovingLfoKey);
+        mc.getAppPropertiesForTest().getUserSettings()->removeValue(synth::ui::kRemoveLastSourceChoiceKey);
+    }
+
+    synth::TimelineDoc& doc() { return mc.getTimelineDoc(); }
+    synth::ui::TimelinePanelComponent& panel() { return mc.getTimelinePanel(); }
+    juce::AudioProcessorGraph& graph() { return mc.getAudioEngine().getGraph(); }
+    AppUndoManager& undo() { return mc.getUndoManager(); }
+
+    // The lane menu's "Add modulator..." as a person reaches it: the picker the header opens (nullptr when it
+    // opens none, as for a parameter with no CV jack).
+    std::unique_ptr<synth::ui::ModMatrixPicker> openAddModulatorPicker() {
+        auto* header = panel().laneHeaderForTest(lane);
+        std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+        if (header == nullptr)
+            return picker;
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+        header->applyMenuChoice(synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId);
+        synth::ui::test_hooks::addModulatorPickerHookForTest() = nullptr;
+        return picker;
+    }
+
+    // Menu, then Return on the first row, which is "New LFO".
+    void addLfoFromLaneMenu() {
+        auto picker = openAddModulatorPicker();
+        if (picker != nullptr)
+            picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    }
+
+    synth::ui::ModulatorRow* row(int index = 0) { return panel().modulatorRowForTest(lane, index); }
+
+    template <typename T>
+    std::vector<juce::AudioProcessorGraph::Node*> nodesOf() {
+        std::vector<juce::AudioProcessorGraph::Node*> found;
+        for (auto* node : graph().getNodes())
+            if (dynamic_cast<T*>(node->getProcessor()) != nullptr)
+                found.push_back(node);
+        return found;
+    }
+
+    juce::AudioProcessorGraph::Node* byUuid(const juce::String& uuid) {
+        for (auto* node : graph().getNodes())
+            if (node->properties["uuid"].toString() == uuid)
+                return node;
+        return nullptr;
+    }
+
+    float parameter(const juce::String& uuid, const juce::String& paramId) {
+        auto* node = byUuid(uuid);
+        auto* p = node != nullptr ? findParameterByID(node->getProcessor(), paramId) : nullptr;
+        return p != nullptr ? p->convertFrom0to1(p->getValue()) : -999.0f;
+    }
+
+    // The target's CV channel for `paramId` (-1 when it has none).
+    int channelFor(const juce::String& paramId) {
+        auto* t = byUuid(targetUuid);
+        return t != nullptr ? mc.getGraphEditor().modulationChannelFor(t->nodeID, paramId) : -1;
+    }
+
+    // The attenuverter chains from the node `sourceUuid` into the target's CV channel `raw`. Looked up by
+    // uuid: an undo restore rebuilds the graph, and node ids need not survive it.
+    std::vector<ModulationRouting> chainsInto(const juce::String& sourceUuid, int raw) {
+        std::vector<ModulationRouting> found;
+        auto* source = byUuid(sourceUuid);
+        auto* t = byUuid(targetUuid);
+        if (source == nullptr || t == nullptr)
+            return found;
+        for (const auto& r : mc.getAudioEngine().getModulationRoutings())
+            if (r.kind == ModulationRoutingKind::AttenuverterChain && r.sourceNodeID == source->nodeID &&
+                r.destNodeID == t->nodeID && r.destChannelIndex == raw)
+                found.push_back(r);
+        return found;
+    }
+
+    float depthOf(const ModulationRouting& r) {
+        auto* atten = graph().getNodeForId(r.attenuverterNodeID);
+        auto* p = atten != nullptr ? findParameterByID(atten->getProcessor(), "amount") : nullptr;
+        return p != nullptr ? p->convertFrom0to1(p->getValue()) : -999.0f;
+    }
+
+    ModuleComponent* cardFor(juce::AudioProcessorGraph::NodeID id) {
+        for (auto* comp : mc.getGraphEditor().getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == id)
+                return comp;
+        return nullptr;
+    }
+};
+
+} // namespace modulator_test

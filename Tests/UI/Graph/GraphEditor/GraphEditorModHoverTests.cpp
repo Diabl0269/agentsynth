@@ -7,6 +7,7 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -49,7 +50,7 @@ HoverFixture wireLfoToFlangerRate(AudioEngine& engine, GraphEditor& editor) {
     editor.beginConnectionDrag(f.lfoComp, 0, false, false, {0, 0});
     editor.dragConnection(knobPoint);
     editor.endConnectionDrag(knobPoint);
-    editor.timerCallback(); // refreshes cachedModDisplayInfo, which firstAttenuverterForParam reads
+    editor.timerCallback(); // refreshes cachedModDisplayInfo, which firstAttenuverterForChannel reads
     return f;
 }
 
@@ -128,6 +129,65 @@ TEST_F(GraphEditorTest, HoveringTheKnobItselfSetsAndClearsTheHoveredModTarget) {
     EXPECT_FALSE(knobCableHovered());
 }
 
+// Regression test for FRO791: hovering one of several cables into a knob lit every cable into that knob.
+TEST_F(GraphEditorTest, HoveringOneOfSeveralCablesIntoAKnobLightsOnlyThatCable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    auto f = wireLfoToFlangerRate(engine, editor);
+
+    // A second LFO, far below the first, onto the same knob.
+    auto lfo2Node = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    editor.updateComponents();
+    ModuleComponent* lfo2 = nullptr;
+    juce::Slider* rate = nullptr;
+    for (auto* mod : editor.getModuleComponents()) {
+        if (mod->getModule() == lfo2Node->getProcessor())
+            lfo2 = mod;
+    }
+    for (auto* c : f.flangerComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(c); s != nullptr && s->getComponentID() == "Rate (Hz)")
+            rate = s;
+    ASSERT_NE(lfo2, nullptr);
+    ASSERT_NE(rate, nullptr);
+    lfo2->setTopLeftPosition(0, 500);
+    const auto knobPoint = f.flangerComp->getBounds().getPosition() + rate->getBounds().getCentre();
+    editor.beginConnectionDrag(lfo2, 0, false, false, {0, 0});
+    editor.dragConnection(knobPoint);
+    editor.endConnectionDrag(knobPoint);
+    editor.timerCallback();
+
+    std::vector<GraphEditor::VisibleCable> onKnob;
+    for (const auto& c : editor.buildVisibleCables())
+        if (c.landsOnKnob && c.destNodeId == f.flangerId.uid)
+            onKnob.push_back(c);
+    ASSERT_EQ(onKnob.size(), 2u);
+    ASSERT_NE(onKnob[0].id, onKnob[1].id);
+
+    // The pointer on the first cable, well clear of the second.
+    const auto curve = GraphEditor::buildCablePath(onKnob[0].p1, onKnob[0].p2);
+    const auto onCable = curve.getPointAlongPath(curve.getLength() * 0.3f);
+    const auto inEditor = editor.getLocalPoint(editor.getChildComponent(0), onCable.toInt());
+    juce::MouseEvent e(juce::Desktop::getInstance().getMainMouseSource(), inEditor.toFloat(), juce::ModifierKeys(),
+                       0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &editor, &editor, juce::Time::getCurrentTime(), inEditor.toFloat(),
+                       juce::Time::getCurrentTime(), 0, false);
+    editor.mouseMove(e);
+
+    ASSERT_TRUE(editor.hasHoveredCable());
+    ASSERT_TRUE(editor.getHoveredModTarget().has_value()) << "the knob's ring still lights";
+    EXPECT_TRUE(editor.isCableHovered(onKnob[0]));
+    EXPECT_FALSE(editor.isCableHovered(onKnob[1])) << "a sibling cable into the same knob stays unlit";
+
+    // The other direction is unchanged: the knob under the pointer lights every cable into it.
+    editor.mouseExit(e);
+    rate->mouseEnter(juce::MouseEvent(
+        juce::Desktop::getInstance().getMainMouseSource(), rate->getLocalBounds().getCentre().toFloat(),
+        juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, rate, rate, juce::Time::getCurrentTime(),
+        rate->getLocalBounds().getCentre().toFloat(), juce::Time::getCurrentTime(), 0, false));
+    EXPECT_TRUE(editor.isCableHovered(onKnob[0]));
+    EXPECT_TRUE(editor.isCableHovered(onKnob[1]));
+}
+
 // Renders the LFO -> Flanger Rate patch (cable landing on the knob, depth band, hover chip)
 // headlessly so a human can eyeball it without driving the GUI app. The PNG is only written when
 // MOD_KNOB_PNG is set, so a normal CI run never touches the filesystem.
@@ -165,7 +225,7 @@ TEST_F(GraphEditorTest, ModulatedKnobRendersToPngForVisualInspection) {
 // the Level CV jack is knob-bound, so its gutter jack is hidden and the cable's own drop endpoint
 // is the pushed-out landing dot on the ring. Mirrors ModulatedKnobRendersToPngForVisualInspection's
 // own pattern (headless render, only written to disk when an env var names a path) but keyed off
-// AGENTSYNTH_SNAPSHOT_DIR/osc-card.png per this task's ask, rather than a per-test path var.
+// AGENTSYNTH_SNAPSHOT_DIR/osc-card.png, rather than a per-test path var.
 TEST_F(GraphEditorTest, OscillatorLevelKnobLandingRendersToPngForVisualInspection) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -218,6 +278,55 @@ TEST_F(GraphEditorTest, OscillatorLevelKnobLandingRendersToPngForVisualInspectio
     if (snapshotDir == nullptr || juce::String(snapshotDir).isEmpty())
         GTEST_SKIP() << "set AGENTSYNTH_SNAPSHOT_DIR=<dir> to write osc-card.png for visual inspection";
     juce::File outFile = juce::File(snapshotDir).getChildFile("osc-card.png");
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    juce::PNGImageFormat().writeImageToStream(img, stream);
+}
+
+// Visual check: two Oscillator cards with the More row unfolded, Rate on Follow notes (Glide in the Pitch row) and on
+// Fixed (the Fixed rate knob in Glide's cell). Written to AGENTSYNTH_SNAPSHOT_DIR/osc-rate-modes.png when that is set.
+TEST_F(GraphEditorTest, OscillatorRateModesRenderToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    synth::theme::AppLookAndFeel lf;
+    editor.setLookAndFeel(&lf);
+
+    auto followNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto fixedNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    for (auto* p : fixedNode->getProcessor()->getParameters())
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p);
+            choice && choice->getParameterID() == "rateMode")
+            choice->setValueNotifyingHost(choice->convertTo0to1(1.0f));
+    editor.updateComponents();
+
+    int placed = 0;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                const bool fixed = mod->getModule() == fixedNode->getProcessor();
+                if (!fixed && mod->getModule() != followNode->getProcessor())
+                    continue;
+                mod->setTopLeftPosition(fixed ? 320 : 0, 0);
+                if (auto* body = mod->getCardBody()) {
+                    body->flushPendingConditionUpdate();
+                    if (body->hasMoreRow())
+                        body->setMoreUnfolded(true);
+                }
+                ++placed;
+            }
+    ASSERT_EQ(placed, 2);
+    editor.timerCallback();
+
+    juce::Image img(juce::Image::ARGB, 640, 900, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(editor.paintEntireComponent(g, true));
+    editor.setLookAndFeel(nullptr);
+
+    const char* snapshotDir = std::getenv("AGENTSYNTH_SNAPSHOT_DIR");
+    if (snapshotDir == nullptr || juce::String(snapshotDir).isEmpty())
+        GTEST_SKIP() << "set AGENTSYNTH_SNAPSHOT_DIR=<dir> to write osc-rate-modes.png for visual inspection";
+    juce::File outFile = juce::File(snapshotDir).getChildFile("osc-rate-modes.png");
     outFile.deleteFile();
     juce::FileOutputStream stream(outFile);
     juce::PNGImageFormat().writeImageToStream(img, stream);

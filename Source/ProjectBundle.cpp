@@ -1,6 +1,10 @@
 #include "ProjectBundle.h"
+
 #include "Branding.h"
+#include "MacroPortRepair.h"
+#include "Project/ModuleFileRefs.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UserSettings.h"
 #include <utility>
 #include <vector>
 
@@ -11,6 +15,9 @@ constexpr const char* kTimelineKey = "timeline";
 constexpr const char* kMacrosKey = "macros";
 constexpr const char* kMidiRemoteKey = "midiRemote";
 constexpr const char* kMixerPanLawKey = "mixerPanLaw";
+constexpr const char* kMixerViewKey = "mixerView";
+constexpr const char* kTransportKey = "transport";
+constexpr const char* kViewKey = "view";
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -21,10 +28,15 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
     return dir.getChildFile(kProjectFileName).existsAsFile();
 }
 
-juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                          PatchDocument& patchDocument, const MacroSet& macros,
-                                          const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
+juce::var ProjectBundle::buildProjectJson(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                          const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                          const MacroSet& macros, const MidiRemoteProjectDoc& midiRemote,
+                                          MixerPanLaw panLaw, const MixerViewDoc* mixerView,
+                                          const TransportDoc* transport, const ViewDoc* view) {
     auto json = AIStateMapper::graphToJSON(graph);
+    // Module files already inside this bundle are written bundle-relative, so the project keeps
+    // working after it is moved, renamed or unzipped elsewhere; outside files stay absolute.
+    ModuleFileRefs::relativizeForSave(json, bundleDir);
     // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
     // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
     // plain .json that already carried one) is overwritten below: the live TimelineDoc is
@@ -42,6 +54,13 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
         rootObj->setProperty(kMacrosKey, macros.toVar());
         rootObj->setProperty(kMidiRemoteKey, midiRemote.toVar());
         rootObj->setProperty(kMixerPanLawKey, mixerPanLawToString(panLaw));
+        // Written only when the caller has a view document; the live one is authoritative over any stash.
+        if (mixerView != nullptr)
+            rootObj->setProperty(kMixerViewKey, mixerView->toVar());
+        if (transport != nullptr)
+            rootObj->setProperty(kTransportKey, transport->toVar());
+        if (view != nullptr)
+            rootObj->setProperty(kViewKey, view->toVar());
     }
 
     return json;
@@ -49,7 +68,9 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
 
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
-                                      const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
+                                      const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw,
+                                      const MixerViewDoc* mixerView, const TransportDoc* transport,
+                                      const ViewDoc* view) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
         return {false, "io: could not create bundle directory \"" + bundleDir.getFullPathName() + "\"."};
 
@@ -61,7 +82,8 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
+    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView,
+                                 transport, view);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -101,7 +123,9 @@ void ProjectBundle::rotateAutosaveBackups(const juce::File& bundleDir, int maxBa
 ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               const TimelineDoc& timeline, PatchDocument& patchDocument,
                                               const MacroSet& macros, int maxBackups,
-                                              const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
+                                              const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw,
+                                              const MixerViewDoc* mixerView, const TransportDoc* transport,
+                                              const ViewDoc* view) {
     // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
     // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
     // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
@@ -109,7 +133,8 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
+    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView,
+                                 transport, view);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -129,9 +154,11 @@ bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
 
 ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
+                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
+                                              MixerViewDoc* outMixerView, TransportDoc* outTransport,
+                                              ViewDoc* outView) {
     return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros, midiRemote,
-                        outPanLaw);
+                        outPanLaw, outMixerView, outTransport, outView);
 }
 
 void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
@@ -142,14 +169,17 @@ void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
 
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                      MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
+                                      MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
+                                      MixerViewDoc* outMixerView, TransportDoc* outTransport, ViewDoc* outView) {
     return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros, midiRemote,
-                        outPanLaw);
+                        outPanLaw, outMixerView, outTransport, outView);
 }
 
 ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
+                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
+                                              MixerViewDoc* outMixerView, TransportDoc* outTransport,
+                                              ViewDoc* outView) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
@@ -201,8 +231,34 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         mixerPanLawText = rootObj->getProperty(kMixerPanLawKey).toString();
         rootObj->removeProperty(kMixerPanLawKey);
     }
-    // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote- and
-    // mixerPanLaw-stripped.
+    // "mixerView" is detached for the same reason and validated into a LOCAL doc below, but a malformed
+    // one reads as empty rather than rejecting the file: it only says which columns are pinned or hidden.
+    const bool hasMixerViewKey = rootObj->hasProperty(kMixerViewKey);
+    juce::var detachedMixerViewVar;
+    if (hasMixerViewKey) {
+        detachedMixerViewVar = rootObj->getProperty(kMixerViewKey);
+        rootObj->removeProperty(kMixerViewKey);
+    }
+    // "transport" is detached for the same reason; unlike mixerView a malformed one rejects the file (below).
+    const bool hasTransportKey = rootObj->hasProperty(kTransportKey);
+    juce::var detachedTransportVar;
+    if (hasTransportKey) {
+        detachedTransportVar = rootObj->getProperty(kTransportKey);
+        rootObj->removeProperty(kTransportKey);
+    }
+    // "view" is detached for the same reason and rejects the file when malformed, like "transport" (below).
+    const bool hasViewKey = rootObj->hasProperty(kViewKey);
+    juce::var detachedViewVar;
+    if (hasViewKey) {
+        detachedViewVar = rootObj->getProperty(kViewKey);
+        rootObj->removeProperty(kViewKey);
+    }
+    // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote-, mixerPanLaw-,
+    // mixerView-, transport- and view-stripped.
+
+    // Bundle-relative module file refs become absolute paths in this bundle before anything reads
+    // them; a ref that escapes the bundle is dropped here (see ModuleFileRefs::resolveOnLoad).
+    ModuleFileRefs::resolveOnLoad(json, projectFile.getParentDirectory());
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.
@@ -229,11 +285,22 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 
     // Step 2c: validate "midiRemote" into a LOCAL MidiRemoteProjectDoc, same all-or-nothing rule.
     // Deliberately NO reconcile-against-graph-nodes pass here — that is RemoteEngine's runtime
-    // job (a later ticket), not this load path's.
+    // job, not this load path's.
     MidiRemoteProjectDoc localMidiRemote;
     if (hasMidiRemoteKey && !localMidiRemote.fromVar(detachedMidiRemoteVar))
         return {false,
                 "midiRemote validation failed: malformed \"midiRemote\" in \"" + projectFile.getFullPathName() + "\"."};
+
+    // Step 2d: "transport" into a LOCAL doc, same all-or-nothing rule as the timeline.
+    TransportDoc localTransport;
+    if (hasTransportKey && !localTransport.fromVar(detachedTransportVar))
+        return {false,
+                "transport validation failed: malformed \"transport\" in \"" + projectFile.getFullPathName() + "\"."};
+
+    // Step 2e: "view" into a LOCAL doc, same all-or-nothing rule.
+    ViewDoc localView;
+    if (hasViewKey && !localView.fromVar(detachedViewVar))
+        return {false, "view validation failed: malformed \"view\" in \"" + projectFile.getFullPathName() + "\"."};
 
     // All validations passed — only now does anything mutate.
     if (!AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true))
@@ -273,6 +340,29 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         }
         macros.retainOnly(aliveUuids);
     }
+    // A port module no macro lists (an older save can hold one) goes back to the one macro its cables meet.
+    adoptStrayMacroPorts(graph, macros);
+
+    if (outMixerView != nullptr) {
+        MixerViewDoc localView;
+        if (!hasMixerViewKey || !localView.fromVar(detachedMixerViewVar))
+            localView = MixerViewDoc();
+        std::vector<juce::String> alive;
+        for (auto* node : graph.getNodes()) {
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty())
+                alive.push_back(uuid);
+        }
+        localView.retainOnly(alive);
+        *outMixerView = std::move(localView);
+    }
+
+    if (outTransport != nullptr)
+        *outTransport = localTransport;
+    // Only written when the file has a view, so a caller that seeds `*outView` with the current view keeps it
+    // for a project that never saved one.
+    if (outView != nullptr && hasViewKey)
+        *outView = localView;
 
     if (outPanLaw != nullptr)
         *outPanLaw = hasMixerPanLawKey ? mixerPanLawFromString(mixerPanLawText) : MixerPanLaw::Balance;
@@ -281,8 +371,11 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 }
 
 juce::File ProjectBundle::getDefaultProjectsDirectory() {
-    juce::File folder =
-        juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(branding::kProjectsFolderName);
+    // An automation launch keeps even this folder under its own settings directory.
+    juce::File folder = synth::automationUserFolders()
+                            ? synth::userSettingsRootDirectory().getChildFile(branding::kProjectsFolderName)
+                            : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                  .getChildFile(branding::kProjectsFolderName);
 
     if (!folder.exists())
         folder.createDirectory();

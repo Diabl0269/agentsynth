@@ -21,7 +21,7 @@
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -312,6 +312,61 @@ TEST(DragStateReset, MacroCardDragClearsAllStateOnMouseUp) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The grab cursor shows on a module or macro card only once its move drag has really started, and
+// the release puts the normal cursor back.
+// ---------------------------------------------------------------------------------------------
+
+TEST(DragStateReset, ModuleCardDragShowsTheGrabCursorUntilRelease) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto* comp = compFor(editor, oscId);
+    ASSERT_NE(comp, nullptr);
+
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(40, 30);
+
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    comp = compFor(editor, oscId);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+TEST(DragStateReset, MacroCardDragShowsTheGrabCursorUntilRelease) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    const juce::Point<int> pressPos(card->getWidth() / 2, card->getHeight() - 20);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(30, 15);
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+
+    card->mouseDown(realMouseEvent(*card, pressPos, pressPos, leftClick));
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    card->mouseDrag(realMouseEvent(*card, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    card->mouseUp(realMouseEvent(*card, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Regression coverage for the two ALREADY-FIXED "modal rename swallows the drag's mouseUp" bugs —
 // both fixes drop the armed drag unconditionally inside mouseDoubleClick rather than depending on
 // a mouseUp that a modal AlertWindow's enterModalState(true, ...) will steal. These pin that fix.
@@ -427,4 +482,78 @@ TEST(DragStateReset, MarqueeReleasedFarOutsideCanvasBoundsStillClearsState) {
     editor.mouseUp(realMouseEvent(editor, farOutside, pressPos, shiftClick, /*wasDragged=*/true));
 
     expectNoStuckDragState(editor, "marquee released far outside canvas bounds");
+}
+
+// ---------------------------------------------------------------------------------------------
+// A plain click on one module of a multi-selection picks just that module; a drag keeps
+// the group; Shift-click is unaffected.
+// ---------------------------------------------------------------------------------------------
+
+TEST(DragStateReset, PlainClickOnOneSelectedModuleCollapsesTheSelectionOntoIt) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    auto* comp = compFor(editor, a);
+    ASSERT_NE(comp, nullptr);
+
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
+    EXPECT_EQ(editor.getSelectionCount(), 2) << "still the group while pressed, so a drag can move it";
+    comp->mouseUp(realMouseEvent(*comp, pressPos, pressPos, leftClick));
+
+    EXPECT_EQ(editor.getSelectionCount(), 1);
+    EXPECT_TRUE(editor.isNodeSelected(a));
+    EXPECT_FALSE(editor.isNodeSelected(b));
+    expectNoStuckDragState(editor, "plain click collapse");
+}
+
+TEST(DragStateReset, DraggingOneSelectedModuleMovesTheWholeGroupAndKeepsItSelected) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    auto* compA = compFor(editor, a);
+    auto* compB = compFor(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto bBefore = compB->getPosition();
+    const auto aBefore = compA->getPosition();
+
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(compA->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(80, 60);
+    compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, leftClick));
+    compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    compA->mouseUp(realMouseEvent(*compA, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+
+    compA = compFor(editor, a);
+    compB = compFor(editor, b);
+    EXPECT_NE(compA->getPosition(), aBefore);
+    EXPECT_NE(compB->getPosition(), bBefore) << "the other member followed the drag";
+    EXPECT_EQ(editor.getSelectionCount(), 2);
+}
+
+TEST(DragStateReset, ShiftClickOnASelectedModuleStillTogglesItOut) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    auto* comp = compFor(editor, a);
+    ASSERT_NE(comp, nullptr);
+
+    const juce::ModifierKeys shiftClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, shiftClick));
+    comp->mouseUp(realMouseEvent(*comp, pressPos, pressPos, shiftClick));
+
+    EXPECT_EQ(editor.getSelectionCount(), 1);
+    EXPECT_TRUE(editor.isNodeSelected(b));
 }

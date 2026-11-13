@@ -3,11 +3,10 @@
 // caller-facing contract.
 //
 // Test seams below (test_hooks namespace) are free functions with EXTERNAL linkage, not hook
-// members on the class -- ControllersListComponent.h's contract is locked for this ticket (other
-// agents are concurrently wiring the panel around it), so a member can't be added here. Each hook
-// mirrors an existing hook-member idiom elsewhere in this codebase, just relocated to a free
-// function so Tests/UI/MidiRemote/ControllersListTests.cpp can reach in via its own forward
-// declaration of the same signature instead of widening the class:
+// members on the class -- ControllersListComponent.h's contract stays fixed (the panel is wired around it), so a member
+// isn't added here. Each hook mirrors an existing hook-member idiom elsewhere in this codebase, just relocated to a
+// free function so Tests/UI/MidiRemote/ControllersListTests.cpp can reach in via its own forward declaration of the
+// same signature instead of widening the class:
 //   - contextMenuHookForTest()   mirrors ModuleComponent::setShowContextMenuHookForTest (a real
 //     juce::PopupMenu::showMenuAsync() segfaults on a headless Linux CI runner with no display).
 //   - renamePromptHookForTest()  mirrors GraphEditor::promptRenameMacroForTest.
@@ -16,6 +15,8 @@
 // mouseDown()/right-click path, then clears the stub so it never leaks into a later test sharing
 // the process.
 #include "ControllersListComponent.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/PopupMotion.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -174,6 +175,7 @@ void beginRename(ControllersListComponent& self, const juce::String& profileId, 
     window->addTextEditor("name", currentName, "Controller name:");
     window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    synth::ui::PopupMotion::attach(*window);
     window->enterModalState(true, juce::ModalCallbackFunction::create([window, onChoice](int result) {
                                 std::unique_ptr<juce::AlertWindow> owned(window);
                                 if (result == 1)
@@ -218,7 +220,27 @@ void appendFeedbackOutputSubmenu(ControllersListComponent& self, juce::PopupMenu
 
 } // namespace
 
+namespace {
+
+class ControllersValueInterface : public juce::AccessibilityTextValueInterface {
+public:
+    explicit ControllersValueInterface(const ControllersListComponent& list)
+        : list_(list) {}
+
+    bool isReadOnly() const override { return true; }
+    juce::String getCurrentValueAsString() const override { return list_.getAccessibilityValueText(); }
+    void setValueAsString(const juce::String&) override {}
+
+private:
+    const ControllersListComponent& list_;
+};
+
+} // namespace
+
 ControllersListComponent::ControllersListComponent() {
+    setTitle("Controllers");
+    setDescription("The controller profiles of this project");
+    addControllerButton_.setTooltip("Add a controller: pick a device and start from detect, a template or empty");
     addControllerButton_.setComponentID("addControllerButton");
     addControllerButton_.onClick = [this] {
         if (onAddControllerRequested)
@@ -249,6 +271,7 @@ void ControllersListComponent::setRows(const std::vector<RowModel>& rows) {
     if (!selectionStillPresent)
         selectedProfileId_.clear();
 
+    refreshAccessibilityValue();
     repaint();
 }
 
@@ -269,7 +292,34 @@ void ControllersListComponent::setSelectedProfileId(const juce::String& profileI
     if (selectedProfileId_ == profileId)
         return;
     selectedProfileId_ = profileId;
+    refreshAccessibilityValue();
     repaint();
+}
+
+juce::String ControllersListComponent::getAccessibilityValueText() const {
+    const auto it =
+        std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == selectedProfileId_; });
+    const auto count = static_cast<int>(rows_.size());
+    if (it == rows_.end())
+        return count == 1 ? juce::String("1 controller") : juce::String(count) + " controllers";
+    return rowDisplayName(*it) + ", " + juce::String(static_cast<int>(it - rows_.begin()) + 1) + " of " +
+           juce::String(count);
+}
+
+std::unique_ptr<juce::AccessibilityHandler> ControllersListComponent::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::list, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{std::make_unique<ControllersValueInterface>(*this)});
+}
+
+// A value-changed event is posted only when the text differs from the last one handed out.
+void ControllersListComponent::refreshAccessibilityValue() {
+    const auto text = getAccessibilityValueText();
+    if (text == announcedValueText_)
+        return;
+    announcedValueText_ = text;
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
 }
 
 void ControllersListComponent::paint(juce::Graphics& g) {
@@ -277,7 +327,7 @@ void ControllersListComponent::paint(juce::Graphics& g) {
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
     const juce::Colour mutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
     const juce::Colour warningColour = lf != nullptr ? lf->getTheme().colors.warning : juce::Colours::orange;
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
 
     for (int i = 0; i < static_cast<int>(rows_.size()); ++i) {
         const auto& row = rows_[static_cast<size_t>(i)];
@@ -293,7 +343,7 @@ void ControllersListComponent::resized() {
     addControllerButton_.setBounds(getLocalBounds().removeFromBottom(kFooterHeight).reduced(8, 4));
 }
 
-void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerButton_.setVisible(visible); }
+void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerFade_.setShown(visible); }
 
 void ControllersListComponent::setHosted(bool hosted) {
     hosted_ = hosted;
@@ -326,7 +376,17 @@ juce::String ControllersListComponent::getRowDisplayNameForTest(const juce::Stri
     return it == rows_.end() ? juce::String() : rowDisplayName(*it);
 }
 
-void ControllersListComponent::showContextMenuForRow(int rowIndex) {
+bool ControllersListComponent::showContextMenuForSelectedRow() {
+    const auto it =
+        std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == selectedProfileId_; });
+    if (it == rows_.end())
+        return false;
+    const int rowIndex = static_cast<int>(it - rows_.begin());
+    showContextMenuForRow(rowIndex, localAreaToGlobal(boundsForRow(rowIndex)));
+    return true;
+}
+
+void ControllersListComponent::showContextMenuForRow(int rowIndex, std::optional<juce::Rectangle<int>> screenAnchor) {
     if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size()))
         return;
 
@@ -357,13 +417,15 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex) {
     if (!hosted_)
         appendFeedbackOutputSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
 
-    // Bare Options() -- menu at the mouse position, desktop-level (ModuleComponent's own default
-    // hook uses the same). A withParentComponent(this) would parent the popup INSIDE the 240px-wide
-    // list instead, clipping it at the dock edge for any row near the bottom.
-    if (auto& hook = test_hooks::contextMenuHookForTest())
+    // Desktop-level, at the mouse or at the anchor. A withParentComponent(this) would parent the
+    // popup INSIDE the 240px-wide list instead, clipping it at the dock edge for any row near the
+    // bottom.
+    if (auto& hook = test_hooks::contextMenuHookForTest()) {
         hook(menu);
-    else
-        menu.showMenuAsync(juce::PopupMenu::Options());
+        return;
+    }
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
+    menu.showMenuAsync(options);
 }
 
 juce::Rectangle<int> ControllersListComponent::boundsForRow(int rowIndex) const {

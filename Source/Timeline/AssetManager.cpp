@@ -122,10 +122,19 @@ juce::StringArray AssetManager::collectUnusedAssets(const TimelineDoc& doc, cons
         return unused;
 
     std::set<juce::String> referenced;
+    const auto reference = [&](const Clip& clip) {
+        if (clip.assetRef.isNotEmpty()) {
+            referenced.insert(clip.assetRef);
+            // A stretched clip keeps its original: the next stretch and undo both read it.
+            if (clip.stretchOrigin)
+                referenced.insert(clip.stretchOrigin->assetRef);
+        }
+    };
     for (const auto& track : doc.getTracks())
         for (const auto& clip : track.clips)
-            if (clip.assetRef.isNotEmpty())
-                referenced.insert(clip.assetRef);
+            reference(clip);
+    // A section variation no placement plays keeps its music off the tracks; its files are still in use.
+    doc.forEachStoredVariationClip(reference);
 
     for (const auto& file : audioDir.findChildFiles(juce::File::findFiles, false)) {
         const juce::String ref = juce::String(ProjectBundle::kAudioSubdirName) + "/" + file.getFileName();
@@ -161,10 +170,15 @@ int AssetManager::adoptRecordingsAssets(TimelineDoc& doc, const juce::File& reco
     std::vector<juce::String> oldRefs;
     {
         std::set<juce::String> seen;
+        const auto collect = [&](const Clip& clip) {
+            for (const auto* ref : {&clip.assetRef, clip.stretchOrigin ? &clip.stretchOrigin->assetRef : nullptr})
+                if (ref != nullptr && ref->startsWith(prefix) && seen.insert(*ref).second)
+                    oldRefs.push_back(*ref);
+        };
         for (const auto& track : doc.getTracks())
             for (const auto& clip : track.clips)
-                if (clip.assetRef.startsWith(prefix) && seen.insert(clip.assetRef).second)
-                    oldRefs.push_back(clip.assetRef);
+                collect(clip);
+        doc.forEachStoredVariationClip(collect);
     }
     if (oldRefs.empty())
         return 0;
@@ -213,20 +227,30 @@ int AssetManager::adoptRecordingsAssets(TimelineDoc& doc, const juce::File& reco
         ClipId id;
         juce::String newRef;
         double sourceStartSeconds;
+        std::optional<Clip::StretchOrigin> origin; // its ref rewritten too
     };
     std::vector<Update> updates;
     for (const auto& track : doc.getTracks())
         for (const auto& clip : track.clips) {
-            auto it = rewrite.find(clip.assetRef);
-            if (it != rewrite.end())
-                updates.push_back({clip.id, it->second, clip.sourceStartSeconds});
+            const auto it = rewrite.find(clip.assetRef);
+            const auto originIt = clip.stretchOrigin ? rewrite.find(clip.stretchOrigin->assetRef) : rewrite.end();
+            if (it == rewrite.end() && originIt == rewrite.end())
+                continue;
+            Update update{clip.id, it != rewrite.end() ? it->second : clip.assetRef, clip.sourceStartSeconds,
+                          clip.stretchOrigin};
+            if (originIt != rewrite.end())
+                update.origin->assetRef = originIt->second;
+            updates.push_back(std::move(update));
         }
 
     // 4. Rewrite. A PLAIN, direct mutation per clip — deliberately NOT wrapped in
     //    AppUndoManager::recordTimelineChange: saving must never create undo history (see the
     //    class comment and MainComponent::saveToFile, the one caller).
-    for (const auto& update : updates)
+    for (const auto& update : updates) {
         doc.setClipAsset(update.id, update.newRef, update.sourceStartSeconds);
+        doc.setClipStretchOrigin(update.id, update.origin); // setClipAsset forgot it
+    }
+    doc.remapStoredAssetRefs(rewrite);
 
     return (int)rewrite.size();
 }

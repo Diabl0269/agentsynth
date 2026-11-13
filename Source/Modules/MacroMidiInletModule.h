@@ -46,14 +46,13 @@ public:
         juce::ignoreUnused(sampleRate, samplesPerBlock);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed())
             return;
 
         if (auto* vb = getVisualBuffer()) {
             const float activity = midiMessages.isEmpty() ? 0.0f : 1.0f;
-            for (int i = 0; i < buffer.getNumSamples(); ++i)
-                vb->pushSample(activity);
+            vb->pushConstant(activity, buffer.getNumSamples());
         }
     }
 

@@ -1,0 +1,37 @@
+# Bug: the section titles in a Drum Kit pad's Sound menu ("Audio file", "Built-in sounds", "Instruments on your canvas",
+# the kit's name) used the pop-up menu's default colour, which is near-white and vanished on the light theme's menu.
+# They now use the theme's muted text.
+#
+# What a user does (Daylight Studio, the light theme):
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track (an instrument on the canvas).
+#   2. Adds a Drum Kit from the library (Cmd+F).
+#   3. Right-clicks pad 1: its Sound menu opens, and every section title can be read on the light menu.
+# The menu is left open while the proof frame is taken and is not closed afterwards.
+settings:
+  themeId: daylight
+  themeMode: Light
+record: true
+save_project: fro1391 pad menu light theme
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 8, pickedPad: 1}
+  - glide: {name: menu-open, frames: 12, do: {click: {id: "card:Drum Kit > drumPads", x: 30, y: 22, button: right}}}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: pad-menu-headers}

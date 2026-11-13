@@ -136,8 +136,26 @@ void HostedParameterAttachment::parameterGestureChanged(int, bool starting) {
 }
 
 void HostedParameterAttachment::handleAsyncUpdate() {
-    if (param_ != nullptr)
-        showValue(pendingValue_.load(std::memory_order_relaxed));
+    if (param_ == nullptr)
+        return;
+    float value = pendingValue_.load(std::memory_order_relaxed);
+    // A modulated parameter's own value moves with the modulation; the widget shows where it rests instead.
+    // Not while the user is turning this widget: the value they set becomes the resting value a block later, and
+    // until then the old one would pull the knob back under their hand.
+    if (restingValue && !isBeingEdited())
+        value = restingValue().value_or(value);
+    showValue(value);
+}
+
+void HostedParameterAttachment::reflectRestingValue() {
+    if (param_ == nullptr || !restingValue || isBeingEdited())
+        return;
+    if (const auto resting = restingValue())
+        showValue(*resting);
+}
+
+bool HostedParameterAttachment::isBeingEdited() const {
+    return gestureOpen_ || (slider_ != nullptr && slider_->isMouseButtonDown());
 }
 
 // Widget update, never a write back: the guard stops a widget that notifies regardless of the flag it is

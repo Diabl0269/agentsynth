@@ -16,10 +16,12 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
+#include "Modules/ModCurve.h"
 #include "SnippetManager.h"
 
 using namespace detail;
@@ -83,18 +85,21 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     const int eqX = gateX + estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
-    const int masterX = stripX + estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
+    // Master clears the channel macro's open hull (its right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX =
+        stripX + estimateModuleSize("Channel Strip").x + synth::LayoutUtil::kMacroHullSideOutset + kAutoChannelCardGapX;
     const synth::DefaultChannelLayout layout{
         /*gate=*/{gateX, originPos.y},
         /*eq=*/{eqX, originPos.y},
         /*compressor=*/{compressorX, originPos.y},
         /*strip=*/{stripX, originPos.y},
         /*master=*/{masterX, originPos.y},
+        // A Master spliced here follows the Split Left/Right jacks preference like the gate/EQ/compressor do.
+        /*onNewModule=*/
+        [this](juce::AudioProcessor& processor, const juce::String& moduleType) {
+            applyDualIODefaultTo(processor, moduleType);
+        },
     };
-
-    // Known BEFORE the build below, the same reason the Audio Output relocation check needs it: whether
-    // this call is the one that splices Master for the first time.
-    const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
 
     // Every exit's distinct source node, gathered before buildChannelForFeeds removes the exit
     // edges — used for the macro-boxing decision below.
@@ -107,22 +112,13 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     if (channel.stripUuid.isEmpty())
         return; // a factory/addNode failure partway — same contract as buildDefaultAudioChannel
 
-    // Mirrors MainComponent::addAudioTrack: on the very first channel, relocate
-    // a bare Audio Output to terminate the row instead of leaving the finished chain cabling back
-    // across the whole canvas to reach wherever it already sat.
-    if (!masterExistedBefore && channel.master != nullptr) {
-        const int outputX = masterX + estimateModuleSize("Master").x + kAutoChannelCardGapX;
-        for (auto* node : graph.getNodes())
-            if (node != nullptr && node->getProcessor() != nullptr &&
-                node->getProcessor()->getName() == "Audio Output") {
-                node->properties.set("x", outputX);
-                node->properties.set("y", originPos.y);
-            }
-    }
+    // Master joins the output dock, which reflowOutputDock derives right of everything (updateComponents below).
 
     // Boxing: only when EVERY exit source is an ORDINARY (non-port) member of the SAME macro —
     // never insert between an inner node and its outlet (a MacroOutlet source refuses), and never
-    // guess when sources span more than one macro or none at all.
+    // guess when sources span more than one macro or none at all. "The same macro" is each source's
+    // DIRECT owner on purpose (findByMember, not nearestChannelMacro): the new chain nodes join the
+    // innermost group the sources sit in, as direct members beside them.
     juce::String commonMacroId;
     bool boxable = true;
     for (const auto& sourceId : sourceNodeIds) {
@@ -176,7 +172,8 @@ namespace {
 
 // The same left-to-right card row maybeAutoCreateChannelAfterConnect lays out, starting right of
 // `node` — synth::ChannelLayoutFn for buildMakeChannel (Core cannot size cards itself).
-synth::DefaultChannelLayout channelLayoutRightOf(juce::AudioProcessorGraph::Node& node) {
+synth::DefaultChannelLayout channelLayoutRightOf(juce::AudioProcessorGraph::Node& node,
+                                                 const synth::DefaultChannelLayout::NewModuleHook& onNewModule) {
     const int originX = static_cast<int>(node.properties.getWithDefault("x", 0));
     const int originY = static_cast<int>(node.properties.getWithDefault("y", 0));
     const juce::String originType = synth::AIStateMapper::getFactoryTypeName(node.getProcessor());
@@ -184,8 +181,11 @@ synth::DefaultChannelLayout channelLayoutRightOf(juce::AudioProcessorGraph::Node
     const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
-    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
-    return {{gateX, originY}, {eqX, originY}, {compressorX, originY}, {stripX, originY}, {masterX, originY}};
+    // Master clears the channel macro's open hull (see maybeAutoCreateChannelAfterConnect).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kAutoChannelCardGapX;
+    return {{gateX, originY},  {eqX, originY},     {compressorX, originY},
+            {stripX, originY}, {masterX, originY}, onNewModule};
 }
 
 bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
@@ -209,9 +209,9 @@ bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGr
 // Ports come from the same group-time crossing plan groupSelectionIntoMacro(true) uses
 // (buildMacroPortCrossingPlan + spliceMacroPorts) — always created, regardless of the auto-port
 // preference, since a shared LFO reaching into the channel is exactly what the port is for —
-// except the new strip's own outputs, which stay plain edges (Strip -> Master must never be a
-// port; see ChannelFlows.h). Master stays outside every macro; a first-ever Master relocates
-// Audio Output.
+// except the new strip's own outputs: Core built Strip -> Master as plain edges and
+// routeChannelOutputThroughMacroPort moves them behind the macro's output port afterwards (see ChannelFlows.h).
+// Master stays outside every macro; a first-ever Master relocates Audio Output.
 bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName) {
     auto& graph = audioEngine.getGraph();
     const auto plan = synth::planMakeChannel(graph, source, macros);
@@ -223,26 +223,16 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         return false;
     }
 
-    const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
     const auto made = synth::buildMakeChannel(
-        graph, plan, [](juce::AudioProcessorGraph::Node& node) { return channelLayoutRightOf(node); });
+        graph, plan,
+        [hook = synth::DefaultChannelLayout::NewModuleHook(
+             [this](juce::AudioProcessor& processor, const juce::String& moduleType) {
+                 applyDualIODefaultTo(processor, moduleType);
+             })](juce::AudioProcessorGraph::Node& node) { return channelLayoutRightOf(node, hook); });
     if (made.memberUuids.empty() && made.buses.empty())
         return false;
 
-    // As in maybeAutoCreateChannelAfterConnect: the first-ever Master pulls a
-    // bare Audio Output in to terminate the row.
-    if (!masterExistedBefore)
-        if (auto* master = synth::findMasterNode(graph)) {
-            const int outputX = static_cast<int>(master->properties.getWithDefault("x", 0)) +
-                                estimateModuleSize("Master").x + kAutoChannelCardGapX;
-            const int outputY = static_cast<int>(master->properties.getWithDefault("y", 0));
-            for (auto* node : graph.getNodes())
-                if (node != nullptr && node->getProcessor() != nullptr &&
-                    node->getProcessor()->getName() == "Audio Output") {
-                    node->properties.set("x", outputX);
-                    node->properties.set("y", outputY);
-                }
-        }
+    // A first-ever Master joins the output dock; reflowOutputDock derives its place (updateComponents below).
 
     // One collapsed macro per channel, ports from the group-time crossing plan (computed before the
     // macro exists, exactly as groupSelectionIntoMacro does) minus the strip's own outlets.
@@ -274,6 +264,8 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         const auto macroId = macros.add(macro);
         if (!portPlan.empty())
             macroController_.spliceMacroPorts(macroId, portPlan);
+        // Core left Strip -> Master Mix as plain edges; move them behind the macro's output port.
+        routeChannelOutputThroughMacroPort(stripUuid);
     };
 
     if (!made.memberUuids.empty())
@@ -287,6 +279,12 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         box(bus.memberUuids, headName + " Bus", bus.channel.stripUuid);
     }
     return true;
+}
+
+// The strip's Master-bound edges move behind its macro's output port (one stereo jack, or two with the split
+// preference), so a channel's sound visibly leaves its card. Inside the caller's undo transaction.
+void GraphEditor::routeChannelOutputThroughMacroPort(const juce::String& stripUuid) {
+    macroController_.routeStripOutputThroughMacroPort(stripUuid, defaultDualIOForNewModules);
 }
 
 // True when "Make channel" on `source` would build something — the menu items' enabled state.
@@ -365,15 +363,7 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
         return {};
     const juce::String uuid = macroController_.nodeUuidFor(nodeId);
     if (uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr)
-        return {}; // already inside a macro — not "shared from outside"
-
-    auto isChannelMacro = [&](const synth::Macro& macro) {
-        for (const auto& member : macro.members)
-            if (auto* memberNode = graph.getNodeForId(macroController_.resolveMemberNodeId(member)))
-                if (dynamic_cast<ChannelStripModule*>(memberNode->getProcessor()) != nullptr)
-                    return true;
-        return false;
-    };
+        return {}; // inside any macro, at any depth — not "shared from outside"
 
     // Every consumer, looking through a modulation attenuverter to what it modulates.
     const auto connections = graph.getConnections();
@@ -398,8 +388,9 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
     bool feedsElsewhere = false;
     for (const auto id : consumers) {
         const juce::String consumerUuid = macroController_.nodeUuidFor(id);
-        const auto* macro = consumerUuid.isNotEmpty() ? macros.findByMember(consumerUuid) : nullptr;
-        if (macro != nullptr && isChannelMacro(*macro)) {
+        // The CHANNEL the consumer is in, which may be an ancestor of a plain group around it.
+        const auto* macro = synth::nearestChannelMacro(graph, macros, consumerUuid);
+        if (macro != nullptr && synth::isChannelMacro(*macro, graph)) {
             if (std::find(targets.begin(), targets.end(), macro->id) == targets.end())
                 targets.push_back(macro->id);
         } else {
@@ -439,14 +430,19 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
     const int step = synth::ui::ModuleClipboard::kOffsetStep;
     const juce::Point<int> position(static_cast<int>(original->properties.getWithDefault("x", 0)) + step,
                                     static_cast<int>(original->properties.getWithDefault("y", 0)) + step);
-    const auto added = synth::SnippetManager::insertSnippet(payload, graph, position, /*includeExtraState=*/true);
+    // The original sits in no macro (duplicateIntoChannelTargets refuses one that does) and extractSnippet only
+    // captures a macro whose every member was extracted, so this one-node payload never carries a macro.
+    std::vector<synth::Macro> payloadMacros;
+    const auto added =
+        synth::SnippetManager::insertSnippet(payload, graph, position, /*includeExtraState=*/true, &payloadMacros);
+    jassert(payloadMacros.empty());
     if (added.empty())
         return false;
     const auto copyId = added.front();
 
-    auto inThisChannel = [this, &macroId](juce::AudioProcessorGraph::NodeID id) {
-        const juce::String uuid = macroController_.nodeUuidFor(id);
-        const auto* macro = uuid.isNotEmpty() ? macros.findByMember(uuid) : nullptr;
+    // A node anywhere inside the channel, a nested group's member or port included.
+    auto inThisChannel = [this, &graph, &macroId](juce::AudioProcessorGraph::NodeID id) {
+        const auto* macro = synth::nearestChannelMacro(graph, macros, macroController_.nodeUuidFor(id));
         return macro != nullptr && macro->id == macroId;
     };
     const auto connections = graph.getConnections(); // before any rewiring below
@@ -480,6 +476,10 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
                 auto* toAmount = findAmount(to->getProcessor());
                 if (fromAmount != nullptr && toAmount != nullptr)
                     toAmount->setValueNotifyingHost(fromAmount->getValue());
+                auto* fromAtten = dynamic_cast<AttenuverterModule*>(from->getProcessor());
+                auto* toAtten = dynamic_cast<AttenuverterModule*>(to->getProcessor());
+                if (fromAtten != nullptr && toAtten != nullptr)
+                    toAtten->setCurve(fromAtten->getCurve());
             }
         }
     }

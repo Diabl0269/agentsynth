@@ -4,6 +4,7 @@
 // Duplicate/Select All/Repeat commands delegate to. Panel level, ungated. ToolPanelFixture is
 // local to this file.
 
+#include "../../../ShortcutDisplayText.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -315,7 +316,9 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
         ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
 
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw  (8)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(),
+              juce::String::fromUTF8("Draw  (8) \xc2\xb7 shapes: ") +
+                  synth::test::keyText('8', juce::ModifierKeys::shiftModifier));
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
     for (auto tool : synth::ui::kAllEditTools)
@@ -355,6 +358,34 @@ TEST(TimelineToolStripTest, ToolButtonsNeverGrabKeyboardFocusFromTheEditSurfaces
 
 // ---- Clipboard: the audio-field regression ----
 
+TEST(TimelineClipClipboardTest, CopyPasteCarriesTheDrumLaneSettings) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Drums");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Beat");
+    const auto note = f.doc.addNote(clip, synth::MidiNote{});
+    ASSERT_TRUE(f.doc.setNoteChance(note, 40));
+    ASSERT_TRUE(f.doc.setNoteCondition(note, 2, 4));
+    ASSERT_TRUE(f.doc.setClipHumanise(clip, 0.3));
+    ASSERT_TRUE(f.doc.setClipRowLength(clip, 42, 12));
+    ASSERT_TRUE(f.doc.setClipRowSwing(clip, 42, 0.7));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_DOUBLE_EQ(copy->humanise, 0.3);
+    ASSERT_EQ(copy->drumRows.size(), 1u);
+    EXPECT_EQ(copy->drumRows[0].lengthSteps, 12);
+    EXPECT_DOUBLE_EQ(copy->drumRows[0].swing, 0.7);
+    ASSERT_EQ(copy->notes.size(), 1u);
+    EXPECT_EQ(copy->notes[0].chance, 40);
+    EXPECT_EQ(copy->notes[0].condOf, 4);
+}
+
 TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag) {
     ToolPanelFixture f;
     const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
@@ -388,6 +419,48 @@ TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag
     // And it landed on an AUDIO row, which is the only kind that plays an asset.
     ASSERT_NE(f.doc.getTrackForClip(copy->id), nullptr);
     EXPECT_EQ(f.doc.getTrackForClip(copy->id)->kind, synth::TrackKind::Audio);
+}
+
+// Regression test for FRO1147: a pasted stretched clip must still render a later stretch from the original audio.
+TEST(TimelineClipClipboardTest, CopyPasteCarriesTheStretchOrigin) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    const auto clip = f.doc.addClip(track, 8.0, 6.0, "Loop");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/loop-stretch150.wav", 0.0));
+    const synth::Clip::StretchOrigin origin{"Audio/loop.wav", 0.25, 2.0 / 3.0};
+    ASSERT_TRUE(f.doc.setClipStretchOrigin(clip, origin));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_NE(copy->id, clip);
+    EXPECT_EQ(copy->assetRef, "Audio/loop-stretch150.wav");
+    ASSERT_TRUE(copy->stretchOrigin.has_value());
+    EXPECT_EQ(*copy->stretchOrigin, origin);
+}
+
+TEST(TimelineClipClipboardTest, CopyPasteCarriesThePianoRollScale) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Keys");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Chords");
+    const auto scale = synth::makeScaleFromMask(2, 0x06AD, "Dorian");
+    ASSERT_TRUE(f.doc.setClipScale(clip, scale, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    EXPECT_NE(pasted[0], clip);
+    EXPECT_EQ(f.doc.getClip(pasted[0])->scale, scale);
+    EXPECT_TRUE(f.doc.getClip(pasted[0])->scaleVisible);
 }
 
 TEST(TimelineClipClipboardTest, PasteFallsBackToTheFirstTrackOfTheRequiredKind) {
@@ -625,4 +698,53 @@ TEST(TimelineRangeClipboardTest, LeavingTheRangeToolDropsTheRange) {
     ASSERT_TRUE(f.panel.hasRangeSelection());
     f.panel.setActiveTool(synth::ui::EditTool::Select);
     EXPECT_FALSE(f.panel.hasRangeSelection());
+}
+
+namespace {
+// The fill of a tool button once the panel has painted: the pixel at the middle of its top edge, clear of the glyph
+// and of the pen's corner mark.
+juce::Colour toolButtonFill(synth::ui::TimelinePanelComponent& panel, synth::ui::EditTool tool) {
+    juce::Image img(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        panel.paintEntireComponent(g, true);
+    }
+    auto* button = panel.getToolButton(tool);
+    const auto bounds = panel.getLocalArea(button, button->getLocalBounds()); // the button may sit in a child strip
+    return img.getPixelAt(bounds.getCentreX(), bounds.getY() + 3);
+}
+} // namespace
+
+// Regression test for FRO1101: the pen filled itself from `toolActive`, a literal the built-in themes do not override,
+// so it kept the first theme's blue after a theme switch while its neighbours followed the theme.
+TEST(TimelineToolStripTest, ThePenLitAndUnlitFillsEqualItsNeighboursAfterASwitchToEveryBuiltInTheme) {
+#ifdef HAS_FONT_ASSETS
+    const auto themes = synth::theme::builtInThemes();
+    ASSERT_FALSE(themes.empty());
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themes.back());
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true);
+    panel.setSize(1200, 320);
+
+    for (const auto& theme : themes) {
+        lf.applyTheme(theme);
+        panel.sendLookAndFeelChange(); // what the theme switch broadcasts
+
+        panel.setActiveTool(synth::ui::EditTool::Select);
+        const auto penUnlit = toolButtonFill(panel, synth::ui::EditTool::Draw);
+        EXPECT_EQ(penUnlit, toolButtonFill(panel, synth::ui::EditTool::Range)) << "theme '" << theme.name << "' unlit";
+
+        panel.setActiveTool(synth::ui::EditTool::Range);
+        const auto neighbourLit = toolButtonFill(panel, synth::ui::EditTool::Range);
+        panel.setActiveTool(synth::ui::EditTool::Draw);
+        const auto penLit = toolButtonFill(panel, synth::ui::EditTool::Draw);
+        EXPECT_EQ(penLit, neighbourLit) << "theme '" << theme.name << "' lit";
+        EXPECT_NE(penLit, penUnlit) << "theme '" << theme.name << "': lit must differ from unlit";
+    }
+    panel.setLookAndFeel(nullptr);
+#else
+    GTEST_SKIP() << "needs the icon assets";
+#endif
 }

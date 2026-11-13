@@ -1,20 +1,29 @@
 // TimelinePanelTrackHeaders.cpp
 //
 // Track header column: the add-track menu (instrument/plugin submenu, marker creation),
-// TimelineDoc::Listener::timelineChanged, header sync/layout, focus movement and the
-// header drag-to-reorder gesture. TimelinePanelComponent is declared in
+// TimelineDoc::Listener::timelineChanged, header sync/layout and focus movement (the
+// drag-to-reorder gesture lives in TimelinePanelTrackDrag.cpp). TimelinePanelComponent is declared in
 // TimelinePanelComponent.h; sibling TimelinePanel*.cpp files in this directory hold the
 // rest of the class.
 
+#include "AddTrackPicker.h"
 #include "TimelinePanelComponent.h"
+#include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "AppUndoManager.h"
+#include "UI/Layout/KeyRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TrackSelectionModel.h"
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <utility>
 
 namespace synth::ui {
 
 namespace {
-// FRO42 review fix: the Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
+// The Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
 // build of the same product (e.g. "Massive") don't show as two identical, unlabelled rows — same
 // "disambiguate by format" job ModuleLibraryComponent's plugin sub-headers do for the library
 // sidebar, just inline on the row instead of a separate group label (this submenu is flat, with no
@@ -31,11 +40,19 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 // whole conversation with the app goes through one seam.
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
+    clipLaneArea_.kitRowsProvider = [this](synth::TrackId track, KitRows& rows) {
+        return trackHeaderHost_ != nullptr && trackHeaderHost_->drumKitRows(track, &rows);
+    };
+    clipLaneArea_.kitsExistProvider = [this] { return trackHeaderHost_ == nullptr || trackHeaderHost_->anyDrumKit(); };
+    clipLaneArea_.refreshKitRows();
+    routingPane_.setHost(host);
+    automationLanes_.setHost(host); // lane headers name their parameter and module through it
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
     syncTrackHeaders();
-    // FRO14: the channel-chip meter tick. Started here rather than in the constructor -- there is
+    refreshRoutingPane();
+    // The channel-chip meter tick. Started here rather than in the constructor -- there is
     // nothing to meter until an app host exists, and the constructor is already at its size cap.
     if (host != nullptr)
         startTimerHz(15);
@@ -43,7 +60,7 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
         stopTimer();
 }
 
-// FRO14: ONE shared 15 Hz timer for every header row's channel chip -- never one per row (up to
+// ONE shared 15 Hz timer for every header row's channel chip -- never one per row (up to
 // TimelineDoc::kMaxTracks of them). Unconditional iteration, deliberately GATED repaints:
 // TimelineTrackHeaderComponent::tickChannelMeter() only repaints when the drawn level actually
 // moved (ChannelChipComponent::kMeterRepaintThreshold), which is the same shape ModuleComponent's
@@ -58,6 +75,10 @@ void TimelinePanelComponent::timerCallback() {
     for (auto* header : trackHeaderList_.headers)
         if (header != nullptr)
             header->tickChannelMeter();
+    tickRoutingPane();
+    clipLaneArea_.refreshKitRows();
+    if (drum_ != nullptr && drum_->grid.isOpen())
+        drum_->grid.refreshKitRows(); // a pad switched on or off on the Drum Kit card
 }
 
 // The headless test seam for a menu that never runs in a test process -- the same split
@@ -84,6 +105,14 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addInstrumentTrack("Wavetable", false);
     else if (menuId == kAddInstrumentSamplerMenuId)
         trackHeaderHost_->addInstrumentTrack("Sampler", false);
+    else if (menuId == kAddInstrumentDrumKitMenuId)
+        trackHeaderHost_->addInstrumentTrack("Drum Kit", false);
+    else if (menuId == kAddInstrumentPluckMenuId)
+        trackHeaderHost_->addInstrumentTrack("Pluck", false);
+    else if (menuId == kAddInstrumentMalletMenuId)
+        trackHeaderHost_->addInstrumentTrack("Mallet", false);
+    else if (menuId == kAddInstrumentNoiseMenuId)
+        trackHeaderHost_->addInstrumentTrack("Noise", false);
     else if (menuId == kAddInstrumentOscillatorPolyMenuId)
         trackHeaderHost_->addInstrumentTrack("Oscillator", true);
     else if (menuId == kAddInstrumentWavetablePolyMenuId)
@@ -93,14 +122,14 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
     else if (menuId == kInsertTrackPresetFromFileMenuId)
         trackHeaderHost_->addTrackFromPresetFile();
     else if (menuId >= kAddTrackPresetBusMenuIdBase) {
-        // FRO297: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // Resolved against the snapshot buildAddTrackMenu() captured, same reason the
         // Audio/Instrument submenus are — see busTrackPresetMenuSnapshot_'s own comment. Checked
         // BEFORE kAddTrackPresetInstrumentMenuIdBase since its base (7000) sits above it (6000).
         const int index = menuId - kAddTrackPresetBusMenuIdBase;
         if (index >= 0 && index < (int)busTrackPresetMenuSnapshot_.size())
             trackHeaderHost_->addBusFromPreset(busTrackPresetMenuSnapshot_[(size_t)index].name);
     } else if (menuId >= kAddTrackPresetInstrumentMenuIdBase) {
-        // FRO13: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // Resolved against the snapshot buildAddTrackMenu() captured, same reason the
         // plugin list is (a preset can be saved/deleted between menu-open and click) — see
         // instrumentTrackPresetMenuSnapshot_'s own comment.
         const int index = menuId - kAddTrackPresetInstrumentMenuIdBase;
@@ -113,7 +142,7 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
             trackHeaderHost_->addTrackFromPreset(audioTrackPresetMenuSnapshot_[(size_t)index].name,
                                                  synth::TrackPresetKind::Audio);
     } else if (menuId >= kAddInstrumentPluginMenuIdBase) {
-        // FRO42: resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
+        // Resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
         // built, never by re-running collectInstrumentPluginMenuOptions() here — the known-plugin
         // list can be mutated by a background scan between the menu opening and this click landing
         // (see instrumentPluginMenuSnapshot_'s own comment). kAddInstrumentPluginNoneMenuId itself
@@ -179,19 +208,23 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
-    // T183 (P9-3b): a submenu rather than three flat entries — these are all "Instrument Track",
+    // A submenu rather than three flat entries — these are all "Instrument Track",
     // differing only by which audio-producing MIDI instrument drives it.
     juce::PopupMenu instrumentMenu;
     instrumentMenu.addItem(kAddInstrumentOscillatorMenuId, "Oscillator");
     instrumentMenu.addItem(kAddInstrumentWavetableMenuId, "Wavetable");
     instrumentMenu.addItem(kAddInstrumentSamplerMenuId, "Sampler");
-    // FRO48 (P9-3k): poly variants below a separator — Sampler has no "poly" parameter, so it has
+    instrumentMenu.addItem(kAddInstrumentDrumKitMenuId, "Drum Kit");
+    instrumentMenu.addItem(kAddInstrumentPluckMenuId, "Pluck");
+    instrumentMenu.addItem(kAddInstrumentMalletMenuId, "Mallet");
+    instrumentMenu.addItem(kAddInstrumentNoiseMenuId, "Noise");
+    // Poly variants below a separator — Sampler has no "poly" parameter, so it has
     // no poly entry.
     instrumentMenu.addSeparator();
     instrumentMenu.addItem(kAddInstrumentOscillatorPolyMenuId, "Oscillator (Poly)");
     instrumentMenu.addItem(kAddInstrumentWavetablePolyMenuId, "Wavetable (Poly)");
 
-    // FRO42 (P9-3h): a hosted plugin as the instrument, in its own sub-submenu rather than a flat
+    // A hosted plugin as the instrument, in its own sub-submenu rather than a flat
     // "Plugin..." entry — effects are filtered out host-side (getInstrumentPluginOptions), so
     // everything listed here really is choosable.
     instrumentMenu.addSeparator();
@@ -216,7 +249,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 
     menu.addSubMenu("Instrument Track", instrumentMenu);
 
-    // FRO13 (P9-7, docs/mixer/track-presets.md): every saved track preset, grouped by type — independent of
+    // docs/mixer/track-presets.md: every saved track preset, grouped by type — independent of
     // the per-type default (Preferences -> Mixer), which only steers the two plain entries above.
     // Snapshotted at build time, same reason instrumentPluginMenuSnapshot_ is: a preset can be
     // saved/deleted between the menu opening and the click landing.
@@ -242,9 +275,9 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
                                          instrumentTrackPresetMenuSnapshot_[(size_t)i].name);
         menu.addSubMenu("Instrument Track from Preset", instrumentPresetMenu);
     }
-    // FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a Bus preset creates no timeline track
+    // docs/mixer/track-presets.md#a-third-kind-bus: a Bus preset creates no timeline track
     // at all, just the bus chain — still listed here, grouped like the other two kinds, since
-    // "+ Track" is where every saved chain (track-bearing or not) is inserted from.
+    // "Add Track" is where every saved chain (track-bearing or not) is inserted from.
     const auto busPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Bus);
     busTrackPresetMenuSnapshot_.assign(busPresets.begin(), busPresets.end());
     if (!busTrackPresetMenuSnapshot_.empty()) {
@@ -263,58 +296,106 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 }
 
 // Protected virtual for the same display-less-runner reason as
-// `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
-// positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
-// today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
-// seam), but a test that clicked the button would crash exactly the way the marker menu did -- so
-// the override point exists before someone writes that test.
+// `TimelineRulerComponent::openMarkerContextMenu`: opening a call-out needs a display to be positioned
+// on. Tests reach the picker through addTrackPickerHookForTest() instead.
 void TimelinePanelComponent::openAddTrackMenu() {
+    const bool fromKeyboard = isAddTrackButtonFocused();
+    if (trackHeaderHost_ != nullptr && trackHeaderHost_->openAddList(addTrackButton_, fromKeyboard))
+        return;
+    showAddTrackPickerFor(fromKeyboard);
+}
+
+// The shortcut lands focus on "Add" first, then opens the list as a keyboard open. Focus is passed on
+// explicitly because a real grab may not have taken effect by the time the list is built.
+void TimelinePanelComponent::openAddTrackMenuFromShortcut() {
+    focusAddTrackButton();
+    if (trackHeaderHost_ != nullptr && trackHeaderHost_->openAddList(addTrackButton_, true))
+        return;
+    showAddTrackPickerFor(true);
+}
+
+// The add menu with "Create Channels", the one source of the track rows and of the build-time snapshots.
+juce::PopupMenu TimelinePanelComponent::buildAddMenuWithChannels() {
     juce::PopupMenu menu = buildAddTrackMenu();
 
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): disabled rather than hidden when
-    // every track already has a channel (or there are no tracks at all) — a hidden entry would look like the feature
+    // docs/mixer/mixer.md#creating-channels-in-an-existing-project: disabled rather than hidden when
+    // every track already has a channel (or there are no tracks at all) -- a hidden entry would look like the feature
     // disappeared; a disabled one still tells the user it exists and why it's greyed out.
     menu.addSeparator();
     const bool canCreateChannels = trackHeaderHost_ != nullptr && trackHeaderHost_->hasTracksNeedingChannels();
     menu.addItem(kCreateChannelsMenuId, "Create Channels", canCreateChannels);
+    return menu;
+}
+
+// Shows the add menu flattened as a searchable track-only picker. A pick resolves by the menu item's id, exactly as a
+// menu click did.
+void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
+    juce::PopupMenu menu = buildAddMenuWithChannels();
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
+    // finishAddTrackMenu hands focus back after a pick; a close without one (Escape, a click away) does it here.
+    // The flag keeps it to exactly one hand-back.
+    auto picked = std::make_shared<bool>(false);
+    auto picker = synth::ui::buildAddTrackPicker(
+        synth::ui::flattenAddTrackMenu(menu),
+        [safeThis, picked, fromKeyboard](int id) {
+            *picked = true;
+            if (auto* self = safeThis.getComponent())
+                self->finishAddTrackMenu(id, fromKeyboard);
+        },
+        [safeThis, picked, fromKeyboard] {
+            if (*picked || !fromKeyboard)
+                return;
+            if (auto* self = safeThis.getComponent())
+                self->finishAddTrackMenu(0, true);
+        });
+    synth::ui::showAddTrackPicker(addTrackButton_, std::move(picker));
+}
+
+// Picked or dismissed, a menu opened from the keyboard hands focus back to "Add Track"; otherwise focus
+// would be left nowhere and the next Tab would restart at the toolbar.
+void TimelinePanelComponent::finishAddTrackMenu(int result, bool openedFromKeyboard) {
+    applyAddTrackMenuChoice(result);
+    if (!openedFromKeyboard)
+        return;
+    // The callback runs while the menu's own window still holds key focus, so a grab here is lost when
+    // it closes; take focus back once the menu is gone. Test mode records the move at once.
+    if (recordFocusForTest_) {
+        focusAddTrackButton();
+        return;
+    }
+    juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
         if (auto* self = safeThis.getComponent())
-            self->applyAddTrackMenuChoice(result);
+            self->focusAddTrackButton();
     });
 }
 
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
+    // The lane pools first: the header rebuild below lays rows out with their geometry.
+    automationLanes_.sync();
+    pushAutomationGeometry();
     syncTrackHeaders();
+    refreshRoutingPane(); // a binding, name or colour change shows in the routing pane too
     clipLaneArea_.refreshFromDoc();
     // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
     // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
     // lanes rect goes with it, because this component paints each marker's stem down through the
     // clips (see paint()); bounded to that rect rather than the whole panel.
     ruler_.repaint();
+    sectionStrip_->refresh(); // its blocks come off the doc too
     if (!gridLanesBounds_.isEmpty())
         repaint(gridLanesBounds_);
     // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
+    drum_->grid.refreshFromDoc();
 
-    // If the strip is open, re-derive it from the doc — the SAME "refresh, don't poll"
-    // discipline every other timeline sub-component follows. A mutation that removed the selected
-    // lane closes the strip outright (there is nothing left to show); anything else just repaints
-    // the curve and re-syncs the two pickers (a lane could have been added/removed elsewhere, or
-    // its recordMode could have changed from under us — AutomationRecorder's own Write-drops-to-
-    // Touch-on-stop).
-    if (automationStripVisible_) {
-        if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr) {
-            closeAutomationStrip();
-        } else {
-            syncAutomationLaneCombo();
-            syncAutomationRecordModeCombo();
-            automationEditor_.repaint();
-        }
-    }
+    // Fold arrows, row positions and editor positions all follow the lanes' new state.
+    if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr)
+        selectedAutomationLane_ = {};
+    layoutAutomationRows();
 }
 
 void TimelinePanelComponent::syncTrackHeaders() {
@@ -327,6 +408,11 @@ void TimelinePanelComponent::syncTrackHeaders() {
     }
 
     const auto& tracks = doc_->getTracks();
+    // Every header below reads its channel link from ONE node-to-channel map instead of a graph walk per header.
+    const synth::ui::ChannelLinkBatch linkBatch(trackHeaderHost_ != nullptr ? trackHeaderHost_->getChannelLinkSurface()
+                                                                            : nullptr);
+    // Likewise each header's Mono/Poly switch reads one voice-graph pass, not one per header (tracks x graph).
+    const auto polyStates = trackHeaderHost_ != nullptr ? trackHeaderHost_->holdTrackPolyStates() : nullptr;
 
     // Rebuild only when the SET of tracks changed. A mute toggle, a rename or a re-bind must not
     // destroy and re-create every row (it would drop an in-progress name edit and churn the UI).
@@ -340,13 +426,19 @@ void TimelinePanelComponent::syncTrackHeaders() {
         }
     }
 
+    // Inside an edit whose reconcile re-reads every header (TrackHeaderHost::everyHeaderRefreshFollows), the rows are
+    // not re-read here as well: the edit would pay for every row twice.
+    const bool refreshFollows = trackHeaderHost_ != nullptr && trackHeaderHost_->everyHeaderRefreshFollows();
     if (sameTracks) {
-        for (auto* header : trackHeaderList_.headers)
-            header->refreshFromDoc();
+        if (!refreshFollows)
+            for (auto* header : trackHeaderList_.headers)
+                header->refreshFromDoc();
         return;
     }
 
-    // T161: preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
+    noteTrackSetChange(tracks); // which rows went and which came back (delete and undo motion)
+
+    // Preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
     // point of resolving by id is that a track deleted ABOVE the focused one must not silently hand
     // focus to whatever track now sits at the old numeric index). Invalid (default-constructed) when
     // nothing was focused, and the loop below never matches an invalid id against a real track.
@@ -355,85 +447,216 @@ void TimelinePanelComponent::syncTrackHeaders() {
             ? trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId()
             : synth::TrackId();
 
-    trackHeaderList_.headers.clear();
+    auto reorderedRows = rowsToGlideAfterUndo();
+    // A row whose track is still there is kept (its state, keyboard focus included, goes with it) and only re-read:
+    // re-creating every row made a duplicate, a delete or an undo of either cost a new row per track.
+    std::map<std::int64_t, std::unique_ptr<TimelineTrackHeaderComponent>> previous;
+    while (!trackHeaderList_.headers.isEmpty()) {
+        std::unique_ptr<TimelineTrackHeaderComponent> header(
+            trackHeaderList_.headers.removeAndReturn(trackHeaderList_.headers.size() - 1));
+        previous.emplace(header->getTrackId().value, std::move(header));
+    }
     focusedTrackIndex_ = -1;
-    // T166: a drag's OWN completion (endTrackDrag) already clears these before this rebuild ever
-    // runs — this is for the other case, some UNRELATED mutation (e.g. an AI patch apply) landing
-    // mid-drag: without this, a rebuild would orphan the drop indicator against a header column
-    // it no longer describes, and it would paint forever (nothing left to fire onRowDragEnded).
-    draggingTrackId_ = {};
-    dragInsertionIndex_ = -1;
+    // A drag's OWN commit (commitTrackDrag) sets committingTrackDrag_ and finishes the gesture
+    // itself after this rebuild. Any OTHER rebuild (an AI patch apply, an undo) landing mid-drag
+    // would orphan the lifted row and the animator against rows that no longer exist, and nothing
+    // would fire onRowDragEnded for them, so the gesture is discarded.
+    if (!committingTrackDrag_)
+        discardTrackDrag();
     for (const auto& track : tracks) {
-        auto* header =
-            trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
-        header->setShortcutManager(shortcuts_);
-        // The header only ever reports "the A button was clicked" — this panel is the one that
-        // knows whether the strip is already open on this track's lane, so it's the one that
-        // decides open vs. close.
-        const auto trackId = track.id;
-        header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
-        // T161: click-to-select and Up/Down between rows — see the two callbacks' own doc comments
-        // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
-        // focusGained() round trip.
-        header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
-        header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
-        // T166: whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
-        // own comment for the division of labour (the row detects the gesture, this panel resolves
-        // screen Y against the ordered header list). The row hands us raw screen Y rather than
-        // computing an insertion index itself because it doesn't know where its siblings are;
-        // trackHeaderList_.headers is the ordered list and this panel is the one place that owns it.
-        header->onRowDragStarted = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
-        header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
-        header->onRowDragEnded = [this](int screenY) { endTrackDrag(screenY); };
-        if (trackId == previouslyFocusedTrackId)
+        TimelineTrackHeaderComponent* header = nullptr;
+        if (const auto kept = previous.find(track.id.value); kept != previous.end()) {
+            header = trackHeaderList_.headers.add(kept->second.release());
+            previous.erase(kept);
+            if (!refreshFollows)
+                header->refreshFromDoc();
+        } else {
+            header = trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
+            wireTrackHeader(*header);
+            ++trackHeadersBuilt_;
+        }
+        if (track.id == previouslyFocusedTrackId)
             focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);
     }
+    previous.clear(); // the rows of tracks that are gone
+    trackSelection_->retainOnly(trackOrder());
+    applyTrackSelectionToHeaders();
     layoutTrackHeaders();
+    glideTrackRowsFrom(reorderedRows);
 }
 
-void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
-    if (doc_ == nullptr)
-        return;
-    const auto* t = doc_->getTrack(trackId);
-    if (t == nullptr || t->lanes.empty())
-        return; // no-op: the button is hidden in this case anyway (see refreshFromDoc())
-
-    // Already open on one of THIS track's lanes -> close. Anything else (closed, or open on a
-    // different track) -> open this track's first lane, switching the strip if needed.
-    const bool openOnThisTrack = automationStripVisible_ && doc_->getTrackForLane(selectedAutomationLane_) == t;
-    if (openOnThisTrack)
-        closeAutomationStrip();
-    else
-        showAutomationLane(t->lanes.front().id);
+// The callbacks a new row needs; a kept row already has them.
+void TimelinePanelComponent::wireTrackHeader(TimelineTrackHeaderComponent& row) {
+    auto* header = &row;
+    const auto trackId = row.getTrackId();
+    header->setShortcutManager(shortcuts_);
+    // The header only reports a fold-arrow press; this panel owns the fold state.
+    header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+    header->onDrumMachineRequested = [this](synth::TrackId id) { openDrumMachineOnTrack(id); };
+    header->onAutomationToggleSelectionRequested = [this](synth::TrackId id) { toggleAutomationForSelection(id); };
+    header->onSelectAllTracksRequested = [this] { selectAllTracks(); };
+    // The header menu's "Add automation...": the picker opens anchored on the header row.
+    header->onAddAutomationRequested = [this, header](synth::TrackId track) {
+        openAddAutomationPicker(track, *header);
+    };
+    // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
+    // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
+    // focusGained() round trip.
+    header->onSelectRequested = [this, trackId](const juce::ModifierKeys& mods) {
+        selectTrackFromClick(trackId, mods);
+    };
+    header->onRowClickReleased = [this] {
+        if (const auto id = std::exchange(pendingClickCollapse_, synth::TrackId{}); id.isValid())
+            setFocusedTrack(id);
+    };
+    header->onExtendSelectionRequested = [this](int direction) { extendTrackSelection(direction); };
+    header->onToggleSelectionRequested = [this] { toggleFocusedTrackSelection(); };
+    header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
+    header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
+    // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
+    // own comment for the division of labour (the row detects the gesture, this panel resolves
+    // screen Y against the ordered header list). The row hands us raw screen Y rather than
+    // computing an insertion index itself because it doesn't know where its siblings are;
+    // trackHeaderList_.headers is the ordered list and this panel is the one place that owns it.
+    header->onRowPressed = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
+    header->onRowDragStarted = [this](int screenY) { updateTrackDrag(screenY); };
+    header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
+    header->onRowDragEnded = [this](int) { endTrackDrag(); };
+    header->isRowDragging = [this] { return trackReorder_.isDragging(); };
+    header->onHeightDragStarted = [this](synth::TrackId id) { beginTrackHeightDrag(id); };
+    header->onHeightDragged = [this](synth::TrackId id, int delta) { dragTrackHeight(id, delta); };
+    header->onHeightDragEnded = [this](synth::TrackId id) { endTrackHeightDrag(id); };
+    header->onHeightStepRequested = [this](synth::TrackId id, int direction) { stepTrackHeight(id, direction); };
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {
-    // Themed with a literal fallback, same pattern as resized() above — and the SAME value
-    // (token x vertical-zoom scale) synth::ui::TimelineClipLaneArea reads for its own row height,
-    // so header rows and clip rows never drift apart.
-    const int rowHeight = currentRowHeight();
+    // Row geometry comes from rowLayout() — the SAME model synth::ui::TimelineClipLaneArea paints
+    // and hit-tests with, so header rows and clip rows never drift apart.
+    const auto layout = rowLayout();
 
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
-    trackHeaderList_.setSize(width, std::max(count * rowHeight, trackHeaderViewport_.getMaximumVisibleHeight()));
-    for (int i = 0; i < count; ++i)
-        trackHeaderList_.headers.getUnchecked(i)->setBounds(0, i * rowHeight, width, rowHeight);
+    // Any height the header viewport has over the lanes region is carried as slack below the last row: without it the
+    // viewport clamps the shared scroll short of maxTrackScrollPx() and the last lane row can never be scrolled fully
+    // into the lanes.
+    const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    const int slack = std::max(0, viewHeight - gridLanesBounds_.getHeight());
+    trackHeaderList_.setSize(width, std::max(layout.trackTop(count) + slack, viewHeight));
+    placeTrackHeaders();
 }
 
 // The row itself is the real focus target (TimelineTrackHeaderComponent::setWantsKeyboardFocus);
 // focusedTrackIndex_ exists so Up/Down and ensureTrackVisible() below have somewhere to read
 // "where am I" without walking the component tree asking each row whether it
 // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
+// Focusing a track on its own (a plain click, an add, a duplicate) selects just that track.
 void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
+    focusTrackKeepingSelection(id);
+    trackSelection_->selectOnly(focusedTrackIndex_ >= 0 ? id : synth::TrackId());
+    applyTrackSelectionToHeaders();
+}
+
+void TimelinePanelComponent::focusTrackKeepingSelection(synth::TrackId id) {
+    addTrackFocusRecorded_ = false;
+    keyboardStop_ = nullptr;
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
             focusedTrackIndex_ = i;
+            refreshRoutingPane();
             return;
         }
     }
     focusedTrackIndex_ = -1; // id no longer resolves (deleted between the click and this call)
+    refreshRoutingPane();
+}
+
+std::vector<synth::TrackId> TimelinePanelComponent::trackOrder() const {
+    std::vector<synth::TrackId> order;
+    order.reserve((std::size_t)trackHeaderList_.headers.size());
+    for (const auto* header : trackHeaderList_.headers)
+        order.push_back(header->getTrackId());
+    return order;
+}
+
+bool TimelinePanelComponent::isTrackSelected(synth::TrackId id) const { return trackSelection_->contains(id); }
+
+std::vector<synth::TrackId> TimelinePanelComponent::selectedTracks() const {
+    return trackSelection_->ordered(trackOrder());
+}
+
+void TimelinePanelComponent::applyTrackSelectionToHeaders() {
+    for (auto* header : trackHeaderList_.headers)
+        header->setSelected(trackSelection_->contains(header->getTrackId()));
+}
+
+void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary) {
+    focusTrackKeepingSelection(primary);
+    trackSelection_->selectAll(ids);
+    applyTrackSelectionToHeaders();
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+        ensureTrackVisible(focusedTrackIndex_);
+    }
+}
+
+// Cmd+A on a track row: every track is selected and focus stays on the row that had it.
+void TimelinePanelComponent::selectAllTracks() {
+    const auto order = trackOrder();
+    const auto primary = juce::isPositiveAndBelow(focusedTrackIndex_, (int)order.size())
+                             ? order[(std::size_t)focusedTrackIndex_]
+                             : synth::TrackId{};
+    selectTracks(order, primary);
+}
+
+void TimelinePanelComponent::selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods) {
+    pendingClickCollapse_ = {};
+    if (mods.isShiftDown()) {
+        trackSelection_->extendTo(id, trackOrder());
+    } else if (mods.isCommandDown()) {
+        trackSelection_->toggle(id);
+    } else if (trackSelection_->contains(id) && trackSelection_->size() > 1) {
+        pendingClickCollapse_ = id; // see the member: the release (or a drag) decides
+    } else {
+        setFocusedTrack(id);
+        return;
+    }
+    focusTrackKeepingSelection(id);
+    applyTrackSelectionToHeaders();
+}
+
+void TimelinePanelComponent::extendTrackSelection(int direction) {
+    const int count = trackHeaderList_.headers.size();
+    if (count == 0)
+        return;
+    if (focusedTrackIndex_ < 0) {
+        moveFocusedTrack(direction); // nothing focused yet: lands on row 0 as a plain move
+        return;
+    }
+    const auto current = trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId();
+    if (!trackSelection_->anchor().isValid())
+        trackSelection_->selectOnly(current);
+    const int target = juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
+    focusTrackRowAt(target);
+    trackSelection_->extendTo(trackHeaderList_.headers.getUnchecked(target)->getTrackId(), trackOrder());
+    applyTrackSelectionToHeaders();
+}
+
+void TimelinePanelComponent::toggleFocusedTrackSelection() {
+    if (!juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size()))
+        return;
+    trackSelection_->toggle(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    applyTrackSelectionToHeaders();
+}
+
+// Moves keyboard focus to `id`'s row and scrolls it into view.
+void TimelinePanelComponent::focusTrackRow(synth::TrackId id) {
+    setFocusedTrack(id);
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())) {
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+        ensureTrackVisible(focusedTrackIndex_);
+    }
 }
 
 // Nothing focused yet starts at row 0 either direction (there is no "current position" for a
@@ -443,14 +666,116 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     const int count = trackHeaderList_.headers.size();
     if (count == 0)
         return;
-    focusedTrackIndex_ = focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
-    // Best-effort: without a native peer (headless tests) this is a harmless no-op, same as every
-    // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
-    trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
-    ensureTrackVisible(focusedTrackIndex_);
+    focusTrackRowAt(focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction));
+    trackSelection_->selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    applyTrackSelectionToHeaders();
 }
 
-// FRO278: moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
+void TimelinePanelComponent::focusTrackRowAt(int index) {
+    addTrackFocusRecorded_ = false;
+    keyboardStop_ = nullptr;
+    focusedTrackIndex_ = index;
+    // Best-effort: without a native peer (headless tests) this is a harmless no-op, same as every
+    // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
+    trackHeaderList_.headers.getUnchecked(index)->grabKeyboardFocus();
+    ensureTrackVisible(index);
+    refreshRoutingPane();
+}
+
+// "Add Track" sits above the rows but is also the stop below the last one, so it is entered from both
+// ends: Up off the first row lands on it from the top, Down off the last row from the bottom. Anything
+// else is the clamped row step. selectAdjacentTrack deliberately does not come through here: it
+// selects a track and must keep clamping.
+void TimelinePanelComponent::stepTrackFocusFromHeader(int direction) {
+    const int count = trackHeaderList_.headers.size();
+    // A track row with open lanes: Down enters the first one, and Up off the next track's row lands on the last one.
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, count)) {
+        const auto stops = keyboardStops();
+        const auto* current = trackHeaderList_.headers.getUnchecked(focusedTrackIndex_);
+        const auto at = std::find(stops.begin(), stops.end(), current);
+        const auto next = direction > 0 ? at + 1 : at - 1;
+        if (at != stops.end() && next >= stops.begin() && next < stops.end() &&
+            dynamic_cast<TimelineTrackHeaderComponent*>(*next) == nullptr) {
+            focusKeyboardStop(**next);
+            return;
+        }
+    }
+    keyboardStop_ = nullptr;
+    if (direction > 0 && count > 0 && focusedTrackIndex_ == count - 1) {
+        addTrackFromTop_ = false;
+        focusAddTrackButton();
+        return;
+    }
+    if (direction < 0 && count > 0 && focusedTrackIndex_ == 0) {
+        addTrackFromTop_ = true;
+        focusAddTrackButton();
+        return;
+    }
+    moveFocusedTrack(direction);
+}
+
+// Best-effort like every grabKeyboardFocus() here: without a native peer the grab is a no-op, so
+// test mode records the move instead.
+void TimelinePanelComponent::focusAddTrackButton() {
+    if (recordFocusForTest_)
+        addTrackFocusRecorded_ = true;
+    else
+        addTrackButton_.grabKeyboardFocus();
+}
+
+bool TimelinePanelComponent::isAddTrackButtonFocused() const {
+    return recordFocusForTest_ ? addTrackFocusRecorded_ : addTrackButton_.hasKeyboardFocus(false);
+}
+
+// Entered from the top, Up goes to the panel root and Down to the first row. Entered from the last row,
+// Up goes back to it (to the panel root when there are no tracks) and Down is consumed (the button is
+// the last stop). Return/Space press it. Space is claimed here because juce::Button only
+// presses on Return and a bare Space would otherwise bubble up and toggle playback.
+bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) {
+    if (!isAddTrackButtonFocused() || key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return false;
+    if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
+        addTrackButton_.triggerClick();
+        return true;
+    }
+    const int count = trackHeaderList_.headers.size();
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        if (addTrackFromTop_ && count > 0) {
+            focusedTrackIndex_ = -1; // moveFocusedTrack seeds row 0 from "nothing focused"
+            moveFocusedTrack(1);
+        }
+        return true;
+    }
+    if (!key.isKeyCode(juce::KeyPress::upKey))
+        return false;
+    if (count == 0 || addTrackFromTop_) {
+        if (recordFocusForTest_)
+            addTrackFocusRecorded_ = false;
+        else
+            grabKeyboardFocus();
+        // The panel root alone shows no ring, so Up there looked like it went nowhere. Put the ring on
+        // the top bar at once; the root keeps focus, as after Up on the root itself.
+        topBarKeys_->enter();
+        return true;
+    }
+    focusedTrackIndex_ = count - 1;
+    addTrackFocusRecorded_ = false;
+    trackSelection_->selectOnly(trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId());
+    applyTrackSelectionToHeaders();
+    const auto stops = keyboardStops();
+    if (!stops.empty() && dynamic_cast<TimelineTrackHeaderComponent*>(stops.back()) == nullptr) {
+        focusKeyboardStop(*stops.back()); // the last track's last open lane
+        return true;
+    }
+    keyboardStop_ = nullptr;
+    if (!recordFocusForTest_)
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+    ensureTrackVisible(focusedTrackIndex_);
+    refreshRoutingPane();
+    return true;
+}
+
+// Moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
 // own Up/Down keys take, so M/S/R then act on that track. Clamps at the ends. Returns false when the
 // timeline has no tracks.
 bool TimelinePanelComponent::selectAdjacentTrack(int direction) {
@@ -468,119 +793,15 @@ bool TimelinePanelComponent::selectAdjacentTrack(int direction) {
 void TimelinePanelComponent::ensureTrackVisible(int index) {
     if (!juce::isPositiveAndBelow(index, trackHeaderList_.headers.size()))
         return;
-    const int rowHeight = currentRowHeight();
-    const int rowTop = index * rowHeight;
-    const int rowBottom = rowTop + rowHeight;
+    const auto span = rowLayout().trackSpan(index);
+    const int rowTop = span.getStart();
+    const int rowBottom = span.getEnd();
     const int viewTop = (int)std::llround(viewState_.trackScrollY);
     const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
     if (rowTop < viewTop)
         scrollTrackRows((double)(rowTop - viewTop));
     else if (rowBottom > viewTop + viewHeight)
         scrollTrackRows((double)(rowBottom - (viewTop + viewHeight)));
-}
-
-int TimelinePanelComponent::trackDropBoundaryForScreenY(int screenY) const {
-    const int count = trackHeaderList_.headers.size();
-    if (count == 0)
-        return 0;
-    // getLocalPoint with a null source component treats the point as already being in SCREEN
-    // coordinates (see its own JUCE doc comment) — the same "compare against something that isn't
-    // this row" idiom PanelResizeHandle::desiredHeightFor uses, just resolved against the list instead
-    // of the panel.
-    const int localY = trackHeaderList_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y;
-    const int rowHeight = currentRowHeight();
-    if (rowHeight <= 0)
-        return 0;
-    // Rounds to the NEAREST row boundary (not the row the pointer is over) so the drop indicator
-    // reads as "insert here between these two rows" rather than "replace this row".
-    return juce::jlimit(0, count, (localY + rowHeight / 2) / rowHeight);
-}
-
-void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY) {
-    draggingTrackId_ = trackId;
-    dragInsertionIndex_ = trackDropBoundaryForScreenY(screenY);
-    trackHeaderList_.repaint();
-}
-
-void TimelinePanelComponent::updateTrackDrag(int screenY) {
-    if (!draggingTrackId_.isValid())
-        return;
-    const int newBoundary = trackDropBoundaryForScreenY(screenY);
-    if (newBoundary == dragInsertionIndex_)
-        return;
-    dragInsertionIndex_ = newBoundary;
-    trackHeaderList_.repaint();
-}
-
-void TimelinePanelComponent::endTrackDrag(int screenY) {
-    if (!draggingTrackId_.isValid())
-        return;
-
-    // Read everything drag-related out of member state and reset it FIRST: performTrackEdit below
-    // fires TimelineDoc::Listener::timelineChanged synchronously, which drives syncTrackHeaders(),
-    // which — for an actual reorder — rebuilds trackHeaderList_.headers from scratch (see its own
-    // "rebuild only when the SET of tracks changed" comment; a reorder changes the id at each
-    // index, so it counts). That destroys every TimelineTrackHeaderComponent, INCLUDING the one
-    // whose mouseUp is still on the call stack below this function (see
-    // TimelineTrackHeaderComponent::onRowDragEnded's own ordering-hazard comment) — so this panel's
-    // own state must already be consistent before that happens, not after.
-    const synth::TrackId trackId = draggingTrackId_;
-    const int dropBoundary = trackDropBoundaryForScreenY(screenY);
-    draggingTrackId_ = {};
-    dragInsertionIndex_ = -1;
-    trackHeaderList_.repaint();
-
-    if (doc_ == nullptr)
-        return;
-    const auto& tracks = doc_->getTracks();
-    int fromIndex = -1;
-    for (int i = 0; i < (int)tracks.size(); ++i) {
-        if (tracks[(size_t)i].id == trackId) {
-            fromIndex = i;
-            break;
-        }
-    }
-    if (fromIndex < 0)
-        return; // the dragged track is gone (deleted mid-drag) — nothing to move
-
-    // dropBoundary is "insert before row N" counted in the array WITH the dragged track still in
-    // it; TimelineDoc::moveTrack wants the track's final resting index. Below its own old slot the
-    // boundary already IS that index; above it, removing the track shifts everything after it down
-    // by one, so the boundary overshoots by exactly one.
-    const int targetIndex = dropBoundary > fromIndex ? dropBoundary - 1 : dropBoundary;
-
-    // Same no-host fallback TimelineTrackHeaderComponent::performEdit uses — a panel driven
-    // directly against a doc (no MainComponent/undo wiring) still works, e.g. every ungated
-    // panel-level test in TimelinePanelTests.cpp.
-    auto mutate = [this, trackId, targetIndex] { doc_->moveTrack(trackId, targetIndex); };
-    if (trackHeaderHost_ != nullptr)
-        trackHeaderHost_->performTrackEdit(mutate);
-    else
-        mutate();
-}
-
-// T166: also draws the track-reorder drop indicator, in paintOverChildren() rather than paint() --
-// the header rows are children painted AFTER this component, and each fills its own bounds
-// (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so a line drawn in paint()
-// would be painted over at every interior row boundary. Same trap this file already documents
-// twice (TimelineTrackHeaderComponent::paintOverChildren, TimelinePanelComponent::
-// paintOverChildren). Needs the owner's drag state (dragInsertionIndex_) and row height, so this
-// holds a reference to the owning panel.
-void TimelinePanelComponent::TrackHeaderList::paintOverChildren(juce::Graphics& g) {
-    if (owner_.dragInsertionIndex_ < 0)
-        return;
-
-    const int rowHeight = owner_.currentRowHeight();
-    // Clamped so the full 2px line stays visible at both the top boundary (0) and the bottom one
-    // (getHeight()), rather than being clipped in half by this component's own edge.
-    const int centreY = juce::jlimit(1, std::max(1, getHeight() - 1), owner_.dragInsertionIndex_ * rowHeight);
-
-    juce::Colour line = juce::Colours::white;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        line = lf->getTheme().colors.accent;
-
-    g.setColour(line);
-    g.fillRect(0, centreY - 1, getWidth(), 2);
 }
 
 } // namespace synth::ui

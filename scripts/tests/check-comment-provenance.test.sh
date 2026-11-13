@@ -109,7 +109,7 @@ assert_fail() {
     if output="$(run_check 2>&1)"; then
         record 1 "$desc (expected non-zero exit, got success)"
         echo "$output"
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         record 0 "$desc"
     else
         record 1 "$desc (exited non-zero but output didn't mention '$expect_grep')"
@@ -147,7 +147,7 @@ make_clean "Source/Bar.cpp"
 commit_all
 assert_fail "a new file with a ticket id and no baseline entry fails, naming the file and count" "Source/Foo.cpp has 2 comment line(s) carrying provenance"
 output="$(run_check 2>&1)"
-if echo "$output" | grep -qF "Source/Foo.cpp:1: // note 1: see FRO1 for context" && echo "$output" | grep -qF "comment-provenance-guard.md"; then
+if grep -qF "Source/Foo.cpp:1: // note 1: see FRO1 for context" <<<"$output" && grep -qF "comment-provenance-guard.md" <<<"$output"; then
     record 0 "the failure prints the offending lines and points at the fix doc"
 else
     record 1 "the failure prints the offending lines and points at the fix doc"
@@ -313,7 +313,7 @@ set_baseline "2 Source/A.cpp"
 if output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"; then
     record 1 "--update refuses to raise an entry (expected failure)"
 else
-    if echo "$output" | grep -qF "would raise the baseline from 2 to 3"; then
+    if grep -qF "would raise the baseline from 2 to 3" <<<"$output"; then
         record 0 "--update refuses to raise an entry"
     else
         record 1 "--update refuses to raise an entry (wrong message)"
@@ -330,7 +330,7 @@ set_baseline "1 Source/A.cpp"
 if output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"; then
     record 1 "--update refuses to add a new file (expected failure)"
 else
-    if echo "$output" | grep -qF "Source/New.cpp is a new file with provenance comments (2 lines)"; then
+    if grep -qF "Source/New.cpp is a new file with provenance comments (2 lines)" <<<"$output"; then
         record 0 "--update refuses to add a new file"
     else
         record 1 "--update refuses to add a new file (wrong message)"
@@ -344,7 +344,7 @@ make_dirty "Source/A.cpp" 3
 make_dirty "Source/New.cpp" 2
 commit_all
 set_baseline "2 Source/A.cpp"
-if output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)" && echo "$output" | grep -qF "::warning::Source/A.cpp raised from 2 to 3" && echo "$output" | grep -qF "::warning::Source/New.cpp is a new file"; then
+if output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)" && grep -qF "::warning::Source/A.cpp raised from 2 to 3" <<<"$output" && grep -qF "::warning::Source/New.cpp is a new file" <<<"$output"; then
     record 0 "--update --allow-growth lets a raise and a new file through, with a ::warning:: each"
 else
     record 1 "--update --allow-growth lets a raise and a new file through, with a ::warning:: each"
@@ -370,7 +370,7 @@ make_dirty "Source/Foo.cpp" 2
 commit_all
 hook_output="$(GIT_DIR="$TMPROOT/does-not-exist" GIT_WORK_TREE="$TMPROOT" bash "$CHECK" --root "$REPO" 2>&1)"
 hook_status=$?
-if [ "$hook_status" -ne 0 ] && echo "$hook_output" | grep -qF "Source/Foo.cpp has 2 comment line(s)"; then
+if [ "$hook_status" -ne 0 ] && grep -qF "Source/Foo.cpp has 2 comment line(s)" <<<"$hook_output"; then
     record 0 "an exported GIT_DIR/GIT_WORK_TREE (git hook env) does not blind the scan"
 else
     record 1 "an exported GIT_DIR/GIT_WORK_TREE (git hook env) does not blind the scan"
@@ -390,7 +390,7 @@ git clone -q --no-checkout "$REPO" "$clone_dir"
 (cd "$clone_dir" && git read-tree HEAD)
 failsafe_output="$(bash "$CHECK" --root "$clone_dir" 2>&1)"
 failsafe_status=$?
-if [ "$failsafe_status" -ne 0 ] && echo "$failsafe_output" | grep -qF -- "::error::check-comment-provenance read every one of 2 scanned files as empty"; then
+if [ "$failsafe_status" -ne 0 ] && grep -qF -- "::error::check-comment-provenance read every one of 2 scanned files as empty" <<<"$failsafe_output"; then
     record 0 "the vacuous-pass fail-safe catches every scanned file reading as empty"
 else
     record 1 "the vacuous-pass fail-safe catches every scanned file reading as empty"

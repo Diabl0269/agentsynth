@@ -1,6 +1,8 @@
 #include "AuthClient.h"
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include "WinHttpTransport.h"
+#else
 #include <curl/curl.h>
 #endif
 
@@ -140,11 +142,18 @@ AuthClient::HttpResult performHttpWithCurl(const juce::String& method, const juc
     return result;
 }
 #else
-AuthClient::HttpResult performHttpUnavailable(const juce::String&, const juce::String&, const juce::StringPairArray&,
-                                              const juce::String&, int, const std::atomic<bool>&) {
+/** WinHTTP-backed HttpPerformer for Windows (see WinHttpTransport.h). */
+AuthClient::HttpResult performHttpWithWinHttp(const juce::String& method, const juce::String& url,
+                                              const juce::StringPairArray& requestHeaders, const juce::String& body,
+                                              int timeoutMs, const std::atomic<bool>& cancelled) {
+    auto r = performWinHttpRequest(method, url, requestHeaders, body, timeoutMs, cancelled);
     AuthClient::HttpResult result;
-    result.transportFailed = true;
-    result.errorMessage = "Error: AuthClient is not available on Windows yet (no libcurl backend).";
+    result.httpStatus = r.httpStatus;
+    result.body = std::move(r.body);
+    result.headers = std::move(r.headers);
+    result.transportFailed = r.transportFailed;
+    result.timedOut = r.timedOut;
+    result.errorMessage = std::move(r.errorMessage);
     return result;
 }
 #endif
@@ -158,7 +167,7 @@ AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, juce::Strin
 #ifndef _WIN32
     , performHttp(performHttpWithCurl)
 #else
-    , performHttp(performHttpUnavailable)
+    , performHttp(performHttpWithWinHttp)
 #endif
 {
 }
@@ -168,6 +177,14 @@ AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, HttpPerform
     , clientId(std::move(clientIdIn))
     , deviceId(std::move(deviceIdIn))
     , performHttp(std::move(performer)) {}
+
+AuthClient::HttpPerformer AuthClient::defaultHttpPerformer() {
+#ifndef _WIN32
+    return performHttpWithCurl;
+#else
+    return performHttpWithWinHttp;
+#endif
+}
 
 AuthClient::DeviceCodeResult AuthClient::requestDeviceCode(const std::atomic<bool>& cancelled) const {
     DeviceCodeResult result;
@@ -654,6 +671,73 @@ AuthClient::SubmitGeneralFeedbackResult AuthClient::submitGeneralFeedback(const 
 
     if (http.httpStatus != 200) {
         result.transportError = "Error: POST " + url + " failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    result.ok = true;
+    return result;
+}
+
+AuthClient::DeleteAccountResult AuthClient::deleteAccount(const juce::String& accessToken,
+                                                          const std::atomic<bool>& cancelled) const {
+    DeleteAccountResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http = performHttp("DELETE", host + "/v1/account", headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    result.httpStatus = http.httpStatus;
+    if (http.httpStatus == 204) { // success has no body to parse
+        result.ok = true;
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    if (auto* error = obj != nullptr ? obj->getProperty("error").getDynamicObject() : nullptr) {
+        result.errorCode = error->getProperty("code").toString();
+        result.errorMessage = error->getProperty("message").toString();
+    }
+    return result;
+}
+
+AuthClient::SubmitExitSurveyResult AuthClient::submitExitSurvey(const juce::String& accessToken,
+                                                                const juce::String& kind,
+                                                                const std::vector<juce::String>& reasons,
+                                                                const juce::String& comment,
+                                                                const std::atomic<bool>& cancelled) const {
+    SubmitExitSurveyResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+    headers.set("Content-Type", "application/json");
+
+    juce::Array<juce::var> reasonList;
+    for (const auto& reason : reasons)
+        reasonList.add(reason);
+
+    juce::DynamicObject::Ptr bodyObj = new juce::DynamicObject();
+    bodyObj->setProperty("kind", kind);
+    bodyObj->setProperty("reasons", juce::var(reasonList));
+    if (comment.isNotEmpty())
+        bodyObj->setProperty("comment", comment);
+    const juce::String body = juce::JSON::toString(juce::var(bodyObj.get()), true);
+
+    const auto http = performHttp("POST", host + "/v1/exit-survey", headers, body, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus < 200 || http.httpStatus >= 300) {
+        result.transportError = "Error: POST /v1/exit-survey failed (HTTP " + juce::String(http.httpStatus) + ").";
         return result;
     }
 

@@ -1,0 +1,47 @@
+# Bug: a Drum Kit pad set to play an Oscillator (under "Instruments on your canvas") was silent when the Oscillator sits
+# behind an ADSR and a VCA, as an Oscillator track builds it: the pad struck the oscillator but never opened the envelope.
+# This scenario builds that project; the sound itself is in the offline render of the saved bundle and in
+# DrumKitInstrumentPadsRender.APadOnAnOscillatorOpensTheEnvelopeThatGatesItAtTheTunedPitch.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track then a Drum Kit track, opens the Drum Kit's
+#      macro and hides the bottom panel so the pads show.
+#   2. Right-clicks pad 1 and chooses Oscillator under "Instruments on your canvas" (ten Downs, then Return).
+#   3. Pad 1 now plays the Oscillator.
+record: true
+save_project: fro1390 pad plays oscillator
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - type: {text: dru}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: "macroCard:Drum Kit 2", x: 260, y: 16}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 22, button: right}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, contains: {pickedKind: instrument, pickedName: Oscillator}, within_ms: 3000}
+  - mark: {check: 1, name: pad-plays-oscillator}

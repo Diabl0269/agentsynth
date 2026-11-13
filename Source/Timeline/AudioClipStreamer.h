@@ -66,12 +66,11 @@ namespace synth {
  * copying and zeroes its output if the window moved under it, so "silence, never garbage" holds
  * even against timing.
  *
- * -- Sample rate: the v1 honest simplification --
- * Source frames are FILE frames, and this build does **not** resample. A file whose header rate
- * differs from the engine's is played at the ENGINE's rate, i.e. transposed. Record-taps are
- * written at the session rate so they are always correct; an imported file may not be.
- * `getStreamFileSampleRate()` exposes what a stream actually opened, for a UI warning later.
- * TODO(resample): a proper SRC belongs in the prefetch thread's fill step.
+ * -- Sample rate: the ring is in PLAYBACK frames --
+ * Frame numbers on the audio thread, in the ring windows and in `wantedFrame` are engine-rate frames
+ * (`sourceFrameForClipBeat`); the prefetch thread's fill step resamples (Hermite 4-point) when the
+ * file's rate differs, and copies bit-exactly when it does not. `setEngineSampleRate()` supplies the
+ * engine rate (unset: ratio 1). Details beside `fillResampled`.
  *
  * -- Pool cap policy --
  * `kMaxStreams` clips can stream at once. Beyond that, `syncToSnapshot` keeps clips that ALREADY
@@ -106,6 +105,9 @@ public:
 
     /** Frames moved per stream per slice. Bounds one slice's work and the fill scratch. */
     static constexpr int kFillChunkFrames = 16384;
+
+    /** Widest file-to-engine rate ratio (and its reciprocal) honoured; beyond it the ratio is clamped. */
+    static constexpr int kMaxRatio = 8;
 
     /** Interleaved channels per ring frame. Fixed: "Track Audio" is a stereo node. */
     static constexpr int kNumChannels = 2;
@@ -146,13 +148,13 @@ public:
         // then renders silence exactly like an unassigned one.
         std::atomic<bool> ready{false};
 
-        // The open file's length in frames (0 when nothing is open). Published by the prefetch
-        // thread before `clipId`; read by waitUntilPrimed(), which must not wait for frames that do
-        // not exist. Nothing on the audio path reads it.
-        std::atomic<std::int64_t> fileLengthFrames{0};
+        // The open file's length in PLAYBACK frames (0 when nothing is open). Published by the
+        // prefetch thread before `clipId`; read by waitUntilPrimed(), which must not wait for frames
+        // that do not exist. Nothing on the audio path reads it.
+        std::atomic<std::int64_t> playbackLengthFrames{0};
 
-        // The opened file's header sample rate (0 until open). Diagnostics only — see the class
-        // comment's sample-rate note; nothing in the playback path reads it.
+        // The opened file's header sample rate (0 until open). Diagnostics only; nothing in the
+        // playback path reads it.
         std::atomic<double> fileSampleRate{0.0};
     };
 
@@ -186,6 +188,12 @@ public:
     void releaseAll();
 
     // ---- Prepare-path, NOT the audio thread and NOT the prefetch thread ----
+
+    /** Sets the engine's sample rate (0 = no conversion), then invalidates every stream. */
+    void setEngineSampleRate(double rate);
+
+    /** The header sample rate of `file`, or 0 when unreadable. Opens the file: message thread only. */
+    static double readFileSampleRate(const juce::File& file);
 
     /** Called from `AudioEngine::handleStreamFormatChange` (`audioDeviceAboutToStart` /
      *  `prepareForHost`) whenever the engine's sample rate or block size changes. Every ring's
@@ -249,9 +257,7 @@ public:
     /** True when `clipId` has a slot AND its reader is open. */
     bool isClipReady(std::int64_t clipId) const noexcept;
 
-    /** The header sample rate of the file `clipId` streams from, or 0. See the class comment's
-     *  sample-rate note — this is what a "this file is 44.1 kHz in a 48 kHz session" warning would
-     *  read; nothing in the playback path consults it. */
+    /** The header sample rate of the file `clipId` streams from, or 0. Diagnostics only. */
     double getStreamFileSampleRate(std::int64_t clipId) const noexcept;
 
     /** Frames of audio this service holds resident for `clipId`: `kRingFrames` once its ring has
@@ -291,6 +297,9 @@ private:
         std::int64_t assignedClipId = kNoClip;
         juce::File assignedFile;
         std::int64_t fileLengthFrames = 0;
+        // fileRate / engineRate and the length in playback frames; see applyRateMapping().
+        double ratio = 1.0;
+        std::int64_t playbackLengthFrames = 0;
         // Mirrors of the window atomics, so the fill path reasons about plain integers and the
         // atomics are written exactly once per transition.
         std::int64_t windowStart = 0;
@@ -310,7 +319,7 @@ private:
         juce::File file;
         double sourceStartSeconds = 0.0;
         // Where this clip sits on the timeline. Seeds nothing on the playback path — it is what
-        // waitUntilPrimed() turns a beat into a file frame with. Like the trim, refreshed on every
+        // waitUntilPrimed() turns a beat into a playback frame with. Like the trim, refreshed on every
         // sync and deliberately outside the "has this slot changed?" comparison.
         double startBeat = 0.0;
         double lengthBeats = 0.0;
@@ -330,6 +339,9 @@ private:
 
     void applyPendingAssignments();
     void retireStream(ClipStream& stream);
+    void applyRateMapping(ClipStream& stream);
+    int fillDirect(ClipStream& stream, float* ring, int frames);
+    int fillResampled(ClipStream& stream, float* ring, int frames);
     void openStream(ClipStream& stream, const Assignment& assignment);
     bool serviceStream(ClipStream& stream);
 
@@ -371,6 +383,9 @@ private:
     // see invalidateAllStreams()'s comment. Also gates readFrames() directly so the silence
     // guarantee holds even in the gap before the prefetch thread has run.
     std::atomic<bool> forceInvalidate_{false};
+
+    // The engine's sample rate (0 = never set); written by setEngineSampleRate().
+    std::atomic<double> engineSampleRate_{0.0};
 
     // De-interleaving scratch for the fill, sized once in the constructor. Prefetch thread only.
     juce::AudioBuffer<float> fillScratch_;

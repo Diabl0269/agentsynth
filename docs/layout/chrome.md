@@ -6,7 +6,7 @@ canonical layout method. It slices top to bottom:
 
 ```
 +---------------------------------+  <- toolbar strip  (Metrics::toolbarHeight = 44 px)
-|  [Lib] [Save][Load][Cfg][<][>][ ]   ...   [Matrix][AI]  |
+|  [Lib] [Save][Load][Cfg][<][>]      ...      [AI][Panel][ ]  |
 +----------+----------------------+
 |  Library |                      |  <- library sidebar (Metrics::librarySidebarWidth = 200 px,
 | (200 px) |    Graph canvas      |                      or 0 when hidden)
@@ -30,9 +30,11 @@ here. See [animation](animation.md#panelslide).
 
 `ToolbarComponent::layoutButtons(bounds)` runs a single `juce::FlexBox` (row, align-center):
 
-- Left group: Library, Save, Load, Settings, Feedback, Undo, Redo, AutoArrange
+- Left group: Library, New, Save, Load, Settings, Feedback, Undo, Redo
 - Flex spacer (`withFlex(1.0f)`) filling the gap
-- Right group: ToggleModMatrix, ToggleAiPanel
+- Right group: Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme
+
+Auto Arrange, Minimap and Matrix are not here: they sit on the [canvas toolbar](#canvas-toolbar).
 
 `paint()` fills the toolbar background with `theme.colors.bg0` via a
 `dynamic_cast<AppLookAndFeel*>`; a null cast (headless tests, non-themed context) falls back to the
@@ -40,10 +42,13 @@ hardcoded colour `0xff0B0D10`.
 
 **Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px): every button's
 `prefWidth` becomes 32 (icon-only). In wide mode each button has a labelled preferred width —
-Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104,
-ToggleAiPanel 92. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
-for both, so no separator is drawn between them) and is always icon-only at a fixed 40 px, since it
-never grows a text label.
+Library 96, New 88, Save 112, Load 116, Settings 96, Undo 72, Redo 72, Search 88, ToggleAiPanel 92, ToggleBottomPanel 100,
+ToggleTheme 110. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
+for both, so no separator is drawn between them; its tooltip and Cmd-hold key-cap name Cmd+Shift+F, `openFeedback`) and is 84 px wide, enough for its "Feedback" caption
+at full size. **Search** opens the [command palette](command-palette.md): a magnifier (`Icon::ToolbarSearch`, view
+group, the handle nudges out on hover) captioned "Search", a sub-group of its own at the start of the right section; its
+tooltip reads "Search everything (type + to add)" with the `openCommandPalette` key (Cmd+K), which its Cmd-hold
+key-cap shows too. Pressed while the palette is open, it closes it.
 
 **Sub-group visual grouping.** `ToolbarComponent`'s local `groupOf(slot)` helper maps each `Slot`
 to its sub-group, `layoutButtons()` inserts a 12 px spacer `FlexItem` at every sub-group boundary
@@ -52,42 +57,169 @@ each intra-section sub-group gap, using the buttons' own post-layout bounds and 
 plus `isVisible()`. The left/right section boundary is excluded — that is the existing flex spacer.
 It no-ops when the `LookAndFeel` is not the themed `AppLookAndFeel`.
 
-**Toggle pills.** `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
+**Toggle state.** `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
 `setToggleState(..., juce::dontSendNotification)` on their panel-toggle button (Library, Minimap,
-ModMatrix, AiPanel, Timeline under its `#if` guard) so the button's toggle state always matches
-panel visibility. Always `dontSendNotification`, never `setClickingTogglesState`, so a button's own
-`onClick` never double-fires.
+Matrix, AiPanel, Panel) so the button's toggle state always matches panel visibility. Always
+`dontSendNotification`, never `setClickingTogglesState`, so a button's own `onClick` never
+double-fires.
 
-The pill's hover/press/toggled-on paint states are owned entirely by
-`AppLookAndFeel::drawDrawableButton`, not delegated to `LookAndFeel_V4::drawDrawableButton`: the
-stock `LookAndFeel_V2` base does an unconditional flat `g.fillAll()` keyed only on toggle state,
-with no hover/press distinction and no rounding. Toggled-on is a 13/15/20% (rest/hover/press) accent
-wash with a 0.35-alpha 1 px stroke — an "active" tint, not a filled button — and icon and label
-colour step through a `textMuted -> textPrimary (hover/press) -> accent (on)` / `textDisabled`
-ladder. The label is drawn in `drawDrawableButton` at a fixed 11 px, bottom-docked with a 6 px pad,
-replacing the stock formula that starved it at `min(16, 25%*height)`. The icon is a tinted
-`Drawable` clone built in `MainComponent::applyToolbarIcons()`: `retintIcons()` tints the base
-`textMuted`, and the hover and on variants are `replaceColour`'d and wired through `setImages`'
-state slots (see [icons](icons.md#token-to-tint-map)). A uniform
-`DrawableButton::setEdgeIndent(8)` on all toolbar buttons keeps icon optical size (~17-19 px)
-consistent regardless of button width — height, not width, is the binding constraint in
-`getImageBounds()`.
+### Toolbar buttons
 
-**The icon re-clone is gated to narrow-mode transitions.** `applyToolbarIcons()` clones `Drawable`
-objects to set button images, which is expensive, so `MainComponent::resized()` calls it only when
-the mode actually flips:
+Every button is a `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`), a
+`juce::DrawableButton` subclass that never uses DrawableButton's image children: it carries the
+state and `AppLookAndFeel::drawToolbarButton` (`AppLookAndFeelToolbarButton.cpp`) paints it. The
+other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) keep
+`drawDrawableButton`, unchanged.
+
+- **Groups and colours.** `applyToolbarIcons()` gives each button its icon and colour group
+  (`ToolbarButton::setIcon(icon, group)`; `toolbarGroupHue()` resolves the token): **file** (New,
+  Save, Load) `hueGreen`; **edit** (Undo, Redo, Auto Arrange) `hueAmber`; **view** (Library, Search,
+  Minimap, Matrix, Panel) `accent`; **AI** `hueRose`; **housekeeping** (Settings, Light mode)
+  `hueViolet`; **Feedback** sits beside Settings but has its own group, `hueGreen`.
+- **Chip.** The icon sits on a 30 x 24 chip, radius 7, 4 px from the top of the button: the group
+  colour at 16 percent at rest and 26 percent on hover (10 and 16 percent on a light theme, any
+  theme with `isDark` false). A lit toggle fills the chip solid with the colour. In narrow mode
+  (no caption) the chip is centred vertically in the button.
+- **Glyph.** 19 px, drawn from the icon's 24-unit SVG grid in four colour roles (see
+  [icons](icons.md#multi-role-icons)). On a lit chip the roles invert (colour and paper turn
+  `iconInk`, soft turns ink at 40 percent, ink takes the colour), cross-fading with the chip.
+  Hide/Show panel has its own glyph (`Icon::TogglePanel`). Save is the exception: a floppy in its
+  own fixed colours (black body, silver shutter, white label with a tiny "Agent / Synth" in outlines
+  that only reads at large sizes), identical on every theme. Feedback is a speech bubble (paper) with
+  group-colour lines inside a group-colour ring over a soft tint of it.
+- **Caption.** Inter semi-bold 10.5 px (`AppLookAndFeel::uiSemiBoldFont`), 2 px under the chip:
+  `textMuted` at rest, `textPrimary` on hover, press and when lit, `textDisabled` when disabled.
+  Captions are never coloured.
+- **Ground.** Nothing at rest, `surfaceHi` at 60 percent on hover and 85 percent pressed (radius
+  `pillRadius`).
+- **Disabled.** No chip; the glyph at 40 percent.
+- **Motion.** Hover, press and lit each ease (see
+  [animation](animation.md#what-moves-and-how)); on hover the glyph lifts 1 px and does
+  one small per-icon motion (Undo and Redo swing their arrow about its elbow and bounce past the
+  swing before settling). Under Reduce Motion nothing moves; only the colours change.
+- **The AI button's loop.** Its glyph is a patch cable with a spark at the plug, and instead of a
+  hover motion a pulse runs along the cable and the spark blooms, 2.8 s a cycle, while the assistant
+  is working (`AIChatComponent::onWaitingChanged` drives `toggleAiPanelButton.setBusy`) and while the
+  button is hovered ([icons](icons.md#the-ai-button)). While busy the button's AX description and help
+  text read "Assistant is working"; nothing repaints when it is idle, and Reduce Motion keeps it
+  still.
+
+The art is rebuilt from the icon library's untinted originals on every `setIcon`/`refreshArt` (and
+on a look-and-feel change), so a theme switch re-colours the whole bar with no accumulated tint.
+`applyToolbarIcons()` runs once at the end of `initialiseCommon()`, after every theme switch via
+`changeListenerCallback`, and from `MainComponent::resized()` only when the narrow mode actually
+flips (which changes the captions):
 
 ```cpp
 bool prevNarrow = toolbarNarrowMode_;
 toolbar.layoutButtons(toolbarBounds);       // updates toolbar.isNarrowMode()
 toolbarNarrowMode_ = toolbar.isNarrowMode();
 if (toolbarNarrowMode_ != prevNarrow)
-    applyToolbarIcons();                    // re-clone only on mode flip
+    applyToolbarIcons();                    // rebuild only on mode flip
 ```
 
-A resize that does not cross the 480 px threshold skips the clone work entirely.
-`applyToolbarIcons()` is also called unconditionally once at the end of `initialiseCommon()` and
-after every theme switch via `changeListenerCallback`.
+Tests: `Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp` (group colours on a dark and
+the Daylight theme, lit, disabled, captions, theme switch, body/part split, the Feedback slot) and
+`ToolbarButtonMotionTests.cpp` (hover, press and Reduce Motion through real mouse events) and
+`ToolbarAiSparkTests.cpp` (the AI icon at rest, the keyframes, busy, hover and Reduce Motion).
+
+### Toolbar keyboard access
+
+The toolbar is one Tab stop (the "toolbar" focus region) with a roving ring inside it. The buttons stay
+direct children of `MainComponent`, but `ToolbarComponent::setButtons` turns off their own keyboard focus,
+so the toolbar is the only thing that holds focus and the ring is the only focus indicator.
+
+| Key | Action |
+|---|---|
+| Left / Right | Move the ring to the previous / next button. Hidden and disabled buttons are skipped (Undo and Redo while there is nothing to undo); it stops at the ends and never wraps |
+| Home / End | First / last button |
+| Space / Return | Press the ringed button (its `onClick`) |
+
+Only plain keys are handled; any modified chord bubbles up to the app shortcuts. The ring starts on the
+first button and afterwards returns to the last one used when the region regains focus. If the ringed
+button stops being navigable (Undo after its last step), the ring passes to the nearest navigable
+neighbour rather than jumping back to the start.
+
+The focused button wears `paintFocusRing` (the solid accent ring), drawn by the toolbar in the margin
+around the button, since the buttons are siblings that paint above the strip. The region outline on the
+strip stays as before.
+
+**Names.** `MainComponent::applyToolbarLabels` gives every button (the canvas toolbar's too) a screen-reader title and,
+unless the toolbar is in narrow mode or Show button labels is off, the same visible text. A toggle's title is the action a press does ("Hide
+Library" / "Show Library", likewise Minimap, Matrix, AI and Panel; "Light Mode" / "Dark Mode"), in both
+widths, because these buttons expose no checked state to a screen reader. The toolbar's accessibility value is the name of the ringed button, so Left/Right announce it.
+Tooltips name each button's shortcut where it has one.
+
+### Show button labels
+
+The Preferences switch **Show button labels** (Panels & Windows; `showToolbarLabels` in the user settings, on by
+default; `Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h`) takes the caption off every top-bar button and
+every [canvas toolbar](#canvas-toolbar) button, leaving the icon chip. It also covers the Timeline panel's Add Track
+and Snap buttons and the Mixer panel's Inserts, Sends, EQ, Reset Meters and Add Bus buttons
+([inline buttons](#inline-buttons)). `applyToolbarLabels(iconOnly)` ORs it with the
+narrow-width answer, so a narrow window is icon-only whatever the switch says, and a settings write
+(`MainComponent::changeListenerCallback`) re-applies the labels at once through `applyToolbarLabelPreference()`,
+which does work only when the value flipped. Titles and tooltips (with the key) are unchanged in both modes, so a
+screen reader and a hover still name each button. Tests: `Tests/UI/Chrome/CanvasToolbarTests.cpp`,
+`PreferencesSettingsTabToolbarLabelsTests.cpp`.
+
+### Inline buttons
+
+The Timeline and Mixer toolbars have no room for a caption under the chip, so their buttons are `ToolbarButton`s in an
+inline layout (`ToolbarButtonLayout`, `toolbarChipSpec()`): the chip, then the caption to its right, in one row, so
+no bar grows. The chip is the top bar's 30 x 24 with a 19 px glyph (`Inline`: the Timeline's 34 px bar and its Add Track
+strip) or a 24 x 20 chip with a 15 px glyph (`InlineCompact`: the Mixer's 24 px bar). The look-and-feel paints them
+with the same chip, glyph roles, hover, press and lit tweens as the top bar; a lit toggle with a caption also sits on a
+faint pill of its group colour. `ToolbarButton::setLabel(name, captionShown)` sets the screen-reader title (always the
+full name) and the caption (the name, or empty when labels are off); `getPreferredWidth()` is the width the caption
+needs, and `setContentCentred(true)` (Add Track) centres chip and caption in a wider button.
+
+| Button | Glyph (`Icon`) | Group colour | Lit |
+|---|---|---|---|
+| Timeline "Add Track" | `ToolbarAddTrack` | amber | no |
+| Timeline "Snap" | `ToolbarSnap` | amber | while snapping is on |
+| Mixer "Inserts" / "Sends" / "EQ" | `MixerInserts` / `MixerSends` / `MixerEq` | accent | while the section is shown |
+| Mixer "Reset Meters" | `MixerResetMeters` | violet | no |
+| Mixer "Add Bus" | `MixerAddBus` | amber | no |
+
+The glyphs are multi-role SVGs ([icons](icons.md#multi-role-icons)). `MainComponent::applyToolbarLabels` pushes the
+preference to `TimelinePanelComponent::setToolbarLabelsShown` and `MixerPanelComponent::setToolbarLabelsShown`; the
+mixer is one panel in the dock, the Own panel and a detached window, so all three follow. Narrow mode does not touch
+them. With labels off the tooltip still names the button ("Add Track: ...", "Snap on/off (J)"). Tests:
+`Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp`, `TimelinePanelResizeTests.cpp`,
+`MixerSectionPanelTests.cpp`.
+
+## Canvas toolbar
+
+Add, Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/Chrome/CanvasToolbar/`), a strip on
+the canvas's own top row, wherever the canvas is. **Add** is the first button (the Timeline's new-track icon, amber): it
+opens the [Add list](../timeline/add-track.md#the-add-list) with module groups first. It owns the four `ToolbarButton`s (same icons, groups, captions,
+tooltips and keys as before; `MainComponent` wires their `onClick`, titles and tooltips in `applyToolbarIcons()`),
+is a `MainComponent` child like the canvas, and is laid out by `MainComponent::layoutCanvas()`: the top
+`CanvasToolbar::kHeight` (44 px, the top bar's height, so a captioned button gets the same room as on the top bar) of the main area when the
+canvas is the main view. In a rectangle so short that 44 px would be over half of it, the strip takes half, so the canvas never vanishes.
+**When the canvas is a panel tab there is one header, not two:** the three buttons shrink to caption-less
+`ToolbarButtonLayout::InlineStrip` chips (28 px each, names and shortcuts in the tooltips and screen-reader titles) and sit at the right end of the dock's tab
+strip, in the 19 px row under the resize handle (`CanvasToolbar::setInStrip`, `stripWidth()`). The dock reserves that end
+(`BottomDockComponent::setStripAccessoryWidth`, `getStripAccessoryBounds`: the tabs share what is left) and the canvas takes the
+whole tab body. The strip is raised directly above the dock in the child order (`raiseAboveBottomDock`) so the tab strip does not paint over it, and the strip draws no ground or rule of its own there.
+Swapping the canvas into the main area gives the captions and the 44 px row back (`applyToolbarLabels`). It is
+visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. Guard:
+`MainViewSwapLayoutTest.*` (`Tests/UI/Layout/BottomDockCanvasTabTests.cpp`) walks every main view x dock tab x window size and fails on any overlap between the canvas, its buttons, the tab buttons and the main-view holder. The strip is the
+same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
+aligned, 84 px wide with captions and 32 px without.
+
+The canvas keys reveal a hidden canvas first: Cmd+L, Opt+Cmd+K and Cmd+M call `ensureCanvasShowing()` before acting
+(`MainComponentCommandTable.cpp`), and adding a module, plugin or snippet from the Library with a click or Return
+does the same (drags land on the canvas, so they already show it). The greyed-out Minimap keeps its
+"Needs a taller canvas" tooltip, now only for a canvas under 240x160
+([minimap](minimap.md#placement-sizing-and-auto-hide)).
+
+**Keyboard.** The strip is one Tab stop, the "canvasToolbar" focus region (right before Canvas, wherever the canvas is: the main
+area or the bottom panel's Canvas tab; open while the strip is visible), with the same roving ring as the top bar: Left/Right/Home/End move across the visible, enabled
+buttons (the greyed Minimap is skipped), Space/Return press the ringed one, modified chords bubble up. The buttons give
+up their own focus, the ring is drawn with `paintFocusRing`, and the strip's accessibility value is the ringed button's
+name.
 
 ## Minimum window size
 
@@ -111,9 +243,10 @@ shrinking below the point where toolbar buttons could clip to zero width.
   shown only while the whole cluster fits before the voice-count slot — the same fit-check-then-drop
   the round-trip segment uses, computed in `resized()` rather than `paint()` because the button is a
   live child component that must actually be hidden (`setVisible(false)`), not merely left undrawn.
-  The glyph is accent-coloured while playing and a neutral outline while stopped, the same
-  triangle/square shapes as `TimelineTransportBar::GlyphButton`'s PlayStop case, reproduced rather
-  than shared because `StatusBarComponent` lives in `Core` and cannot depend on `AppUI`. **The
+  The button is the shared `synth::ui::IconButton` (Bare style, Play glyph, Stop while on): accent
+  while playing, muted while stopped, the same glyphs as the timeline bar's play/stop
+  ([`theming.md`](theming.md#themed-widgets)); `IconButton` and `IconGlyphs` are compiled into `Core`
+  precisely so this bar can use them. **The
   cluster is visible regardless of the timeline panel's visibility** — play/stop/position previously
   existed only inside `TimelineTransportBar`, a child of the often-hidden timeline panel.
 - Voice count: right-aligned before the mute button slot.
@@ -154,6 +287,7 @@ guard (`statusBarTickCount_`), and repaints only itself.
 
 - `formatCpu(float fraction)` — fraction is 0..1; `0.756f` becomes `"75.6%"`
 - `formatVoices(int n)` — `0` becomes `"0 voices"`, `1` becomes `"1 voice"`, `8` becomes `"8 voices"`
+  The count (`AudioEngine::getDisplayVoiceCount`) sums Poly MIDI voices plus every module implementing `synth::VoiceCountSource` (Sampler Instrument mode, Pluck, Mallet), each reading a count its audio thread published per block. The Sampler, Pluck and Mallet publish notes held (a note fading out after its key came up is not counted); the Drum Kit counts a recorded hit until it ends.
 - `formatPatch(const juce::String& s)` — empty or whitespace-only becomes `"Untitled"`
 - `formatRoundTrip(double ms, bool available)` — `(12.34, true)` becomes `"RT 12.3 ms"`;
   `(anything, false)` becomes `"RT --"`; negative input clamps to `0.0`
@@ -184,9 +318,18 @@ The text, verified against what each value actually reads:
 - **Transport play/stop button**: "Play / Stop", set in the constructor — the same text
   `TimelineTransportBar`'s own play/stop button uses.
 
-A transient message (`showMessage()`) suppresses every tooltip on the row —
+A transient message (`showMessage()`) cross-fades over the normal text (160 ms in, 110 ms out; see
+[animation](animation.md#fading-things-in-and-out)) and suppresses every tooltip on the row —
 `getTooltipForPosition` returns `""` immediately — since it visually covers the segments it would
 otherwise explain.
+
+**Screen-reader text.** The painted segments have no components of their own, so the bar exposes one
+accessibility value, `getAccessibilityText()`: the items currently drawn, in drawn order, for example
+`Project clips, CPU 13%, RT 12.5 ms, position 001.1.000, 120 BPM, 0 voices`. It follows `paint()`'s own
+visibility rules: the round-trip and position/tempo items are left out when the bar is too narrow to draw
+them, an unavailable round trip reads "RT unavailable", and while a transient or sticky message covers the
+bar the message alone is read. The mute and play/stop buttons stay separate named children. The value is
+read when a screen reader reaches the bar; the 5 Hz updates do not announce themselves.
 
 ### The mod drop hint
 
@@ -205,6 +348,23 @@ comments) — set via `GraphEditor::setPropertiesFile()`, wired by `MainComponen
 `appProperties.getUserSettings()`. A `nullptr` (e.g. a headless test that never calls the setter)
 means the hint never fires and the flag never gets written, rather than crashing.
 
+## Inline label editors and accessibility
+
+An inline-editable label (the BPM and time-signature fields, a mixer channel name, a track name, the MIDI Remote
+control name) is a `synth::ui::NonModalLabel` (`Source/UI/Layout/NonModalLabel.h/.cpp`), never a plain `juce::Label`.
+`juce::Label::showEditor()` calls `enterModalState()`, and on macOS a modal component is reported as
+`isAccessibilityModal`: the window's accessibility tree collapses to the title bar for as long as the editor is open.
+`NonModalLabel::editorShown` schedules `exitModalState()` one message-loop turn later (the call cannot happen
+inside the hook, because `showEditor()` enters modal state right after it returns). Nothing the modal state did is lost:
+the editor is a child holding keyboard focus, and losing that focus commits (or discards, per `setEditable`) through
+`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. Escape is deferred too: JUCE 9.0.3's
+`TextEditor::handleCommandMessage` dispatches it under the listener list's lock, and the base
+`Label::textEditorEscapeKeyPressed` deletes the editor there (the unlock then writes freed memory), so
+`NonModalLabel` restores the text at once and calls `hideEditor(true)` from a `callAsync`. The card-title rename is a raw
+`juce::TextEditor` child and was never modal. `NonModalLabelTests.cpp` asserts that no component is modal and no
+sibling is `isCurrentlyBlockedByAnotherModalComponent()` (the condition JUCE's accessibility code keys on) while an
+editor is open; the native tree itself needs a window peer, which the headless suite never creates.
+
 ## Panel collapse and persistence
 
 The library sidebar and the AI panel can each be fully hidden (width 0). State persists across
@@ -216,7 +376,11 @@ launches via `ApplicationProperties`:
 | `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
 | `mixerOwnPanelHeight` | absent (`220`, also the minimum) | the Mixer's "Own panel" strip — written once per resize drag, on mouse-up (FRO231) |
 | `detachedPanelBothPlaces` | `"move"` | FRO336: "move"/"both" — Tab placement's Mixer detach button either moves the panel into its window (default) or keeps it docked and opens a second live view too, see [`docs/mixer/panel.md`](../mixer/panel.md#detach-mode-move-or-both-places) |
+| `sidePaneOpen.<tab>` / `sidePaneWidth.<tab>` | absent (`mixer` open, `timeline` closed; `200`) | a bottom-panel tab's side pane (`sidePaneOpen.mixer`, `sidePaneOpen.timeline`): open state, and its width clamped to 160-320 px; the width is written when a resize drag ends, see [side pane](side-pane.md) |
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
+| `bottomDockActiveTab` | `"timeline"` | the bottom dock's active tab (`timeline`/`mixer`/`midiRemote`/`canvas`); a saved tab that is not offered falls back to the first offered one |
+| `bottomDockTabOrder` | `"timeline,mixer,midiRemote,canvas"` | the dock's strip order, all four views; a saved three-entry order (older builds) gains `canvas` at the end, anything malformed falls back to the default, and an older build reading four entries falls back to its own default. See [the tab strip](../mixer/panel.md#the-tab-strip) |
+| `mainView` | `"canvas"` | which view sits in the main area (`canvas`/`timeline`/`mixer`/`midiRemote`, see [the main view](#the-main-view)); its tab is not offered in the strip. Written on every swap and applied at launch. A saved view whose panel is in its own window, or a Mixer outside the Tab placement, is suspended for the session (the Canvas fills the main area) and the saved value is kept |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -236,6 +400,104 @@ The bottom dock (Timeline / Mixer / Controllers tabs) is resizable from ONE top-
 `timelinePanelHeight` key once per gesture. The height is the dock's, not a tab's, so it holds when
 switching tabs. Full rules: [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height).
 
+The dock's tab strip is drag-reorderable through the shared reorder drag (the lifted tab follows the
+grab point, the others glide aside, the order is applied and persisted on release, Esc cancels):
+[`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) and
+[`docs/layout/animation.md#reorder-drag`](animation.md#reorder-drag).
+
+### The main view
+
+The rect the canvas gets in the carve above is the **main area**, and one of four views fills it (`mainView`;
+the canvas unless `BottomDockComponent::setMainView()` moved another one up). With the Timeline, the Mixer or the MIDI Remote
+panel there, the dock moves that view's whole `DetachablePanelHost` (not the bare panel, so its side pane and
+detach state travel with it) into `MainComponent`'s `MainViewHolder` (`Source/UI/Layout/MainViewHolder.h`), which
+`MainComponent::layoutMainView()` places at the main rect; the canvas goes to the dock as a tab (below). A JUCE
+child is clipped to its parent, so the dock could not show the view over the main area itself; the move is the
+Mixer's Own-panel move generalised, and the dock lays out only the hosts still parented to it. When the view
+leaves main its host returns to the dock as a tab that is not active (it fades in if it becomes the active one).
+The Library and the AI panel keep their places beside the main area.
+
+A view in the main area is on screen whether or not the panel is open: hiding the panel (Cmd+J) never hides it,
+a dock tab switch never fades it, and every "is it showing" gate counts it:
+`BottomDockComponent::isTimelineShowing()` / `isMidiRemoteShowing()` / `isMixerShowing()` (the playhead poll,
+the activity tick, the meters, and the Timeline's edit commands through `resolveEditSurface()`),
+`MainComponent::isTimelineReachable()` (snap grid, track step, timeline zoom and the locator keys) and the
+`timeline`, `timelineRouting`, `scaleAssist` and `midiRemote` focus regions. Revealing it (Cmd+1/3, a focus
+region's `open`, "Edit MIDI assignment...", adding a plugin automation lane) never opens the panel
+(`ensureDockOpenFor()`), and `setActiveTab()` ignores the main view. A project load's edit block covers the holder
+as well as the dock. `setMainView()` refuses a view that is open in its own window; while in main the host shows
+no header of its own, so it cannot be detached from there. The Mixer goes to main only in the Tab placement
+(Own panel and Window leave its host to `MixerPlacementController`, so `setMainView(Mixer)` is refused). In main the Mixer fills the area (`canGrowHost` is false,
+`growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
+region is open, and the "both places" mirror is not reachable from it (a tab's detach icon is not reachable from it;
+a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
+([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. The view in the main area has no tab, so it detaches through the **Detach Main View** command
+(`BottomDockComponent::detachMainView()`; View menu, command palette, rebindable, enabled only while a view other than the Canvas fills the main
+area). The Canvas tab's icon never detaches the canvas, and the panels carry no extra toolbar button for it. A swap
+relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
+so Tab follows the new layout. The same swap has a key per strip place, Opt+Cmd+1..3 (`swapDockTab<N>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
+readers once ("Timeline in the main area"), and a refused one is silent.
+
+**The main area is never empty.** The stored view (`getStoredMainView()`, the saved `mainView`) and the view in the
+main area now (`getMainView()`) are separate in `BottomDockTabModel`. While the stored view's panel is open in its
+own window, or the Mixer leaves the Tab placement, the model suspends it: the Canvas fills the main area for the
+session, `refreshMainViewAvailability()` returns the host to the dock, and the setting on disk is not touched. When
+the panel docks again (or the Mixer returns to the Tab placement) the stored view goes back to the main area;
+choosing any view meanwhile, the Canvas included, replaces the stored choice. A tab detached while another view is
+in main changes nothing in the main area (the Canvas tab keeps the panel usable), and a tab in its own window is not
+in the strip, so its disabled swap icon is never on screen. The "both places" mirror is a second view of the docked
+Mixer and never suspends anything. Each change fires `onMainViewChanged`. A swap with the panel open on screen is
+animated, not a jump: the two views trade places in 240 ms ([swap motion](animation.md#what-moves-and-how)).
+
+### The canvas as a tab
+
+When another view is the main view the canvas is the dock's Canvas tab (the tab button is hidden while the
+canvas is main, and the tab has no detach icon, and its swap icon puts the canvas back). `GraphEditor` stays a `MainComponent` child: the dock only
+reports the tab body (`BottomDockComponent::getCanvasBodyBounds()`, everything under the tab strip) and lets
+mouse events through it (`hitTest`); `MainComponent::layoutCanvas()` sets the editor's bounds to that rect on every
+layout pass, so it follows the panel as it slides (no cross-fade; the relayout is the work a window drag already
+does per frame). The editor is hidden, not zero-sized, while another tab shows or the panel is closed. When it
+first lands in the panel its view is fitted once, after the slide ends. The zoom and pan it had in the main area are remembered meanwhile (this session only) and put back in the
+layout pass where it returns there, before a swap takes its arriving picture, so it looks exactly as it was left; if
+no module would be visible in that view any more, it is fitted to its modules instead.
+
+`MainComponent::ensureCanvasShowing()` is the one reveal seam: a no-op while the canvas is main, else it opens
+the panel and selects the Canvas tab. It runs before a channel chip click's canvas fallback, Locate (Go to
+Output), the mixer's "Edit on canvas" (`MixerPanelComponent::onRevealCanvas`), a modulator's "show on canvas",
+every project or patch load, and an accepted AI patch. Cmd+J closing the panel around the canvas hands keyboard
+focus to the view in the main area, not the canvas ([focus regions](../control/focus-regions.md)).
+
+### Tab strip keyboard and screen-reader access
+
+The tab strip is one Tab stop of its own, the "dockTabs" focus region, registered between Canvas and the
+panel regions; it is open whenever the dock is showing with at least one docked tab. Its focus holder is
+`BottomDockComponent::getTabStripFocus()`, a transparent leaf behind the tab buttons that never takes the
+mouse; the tab buttons give up keyboard focus themselves. A panel's own region is separate, so Tab goes
+Canvas, tab strip, then the panel.
+
+| Key | Action |
+|---|---|
+| Left / Right | Select the previous / next tab in the strip's current order, which switches the panel as a click does. Tabs that are not offered (detached, or the Mixer in another placement) are skipped; it stops at the ends |
+| Home / End | First / last tab |
+| Return | Move keyboard focus into the selected tab's panel (its region root) |
+| Shift+Return | Press the selected tab's swap icon (below); consumed even while the icon is disabled |
+| Option+Return | Press the selected tab's detach icon (below); consumed on the Canvas tab, which has none |
+
+Otherwise plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
+is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
+uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+J (when it opens the pane) and
+Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+J closing the pane around the focus
+hands focus to the view in the main area ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
+`paintFocusRing` while the strip has focus (not during a reorder drag), drawn by the dock over the tab.
+Clicking a tab does not give the strip focus.
+
+**Screen reader.** JUCE has no tab role, so each tab is exposed as a radio button, its closest selectable
+and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas", with the selected state
+following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
+handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
+area" (its tooltip names Shift+Return, which works on the focused tab strip, and the key bound to the tab, Opt+Cmd+1-3 by default); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
+Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
+
 ## Welcome screen overlay
 
 `Source/UI/WelcomeScreenComponent` is a full-window overlay, not a docked panel — it covers the
@@ -252,9 +514,128 @@ correctly positioned and stacked:
   stale rect from before the last window resize can never show through the instant
   `showWelcomeScreen()` makes it visible again.
 
+**Logo.** The cat mark (`assets/brand/agentsynth-logo-256.png`, embedded through `cmake/Assets.cmake`, so
+`BinaryData::agentsynthlogo256_png`) is drawn above the title, 96 pt square as a transparent cut-out (neon outline kept,
+no tile or border) so it reads on both themes; 256 px is sharp at 2x. `getCardBounds()` and `resized()` both reserve its 96 pt plus a 12 pt
+gap. Each time the overlay is shown it fades in and rises 10 px (320 ms, `easeOutCubic`, paint-only); Reduced Motion
+lands it at once. Tests: `Tests/UI/Chrome/WelcomeScreenLogoTests.cpp`.
+
+**Usage statistics card.** While `usageStatsAsked` and `shareUsageStats` are both false, an inset panel
+(`UsageStatsPromptComponent`, accent border and fill from the theme) sits between the subtitle and the three start
+buttons: heading, a plain-words body, Share and No thanks as equal buttons, and a "What we collect" link. All
+three are Tab-reachable inside the overlay's focus container and show the shared focus ring. The card height
+(`getCardBounds()`) and `resized()` both add `promptSlotHeight()`, the panel plus its 14 px gap scaled by the
+open fraction, so after an answer the panel collapses (180 ms, `easeInCubic`, height and fade) and the card
+re-forms with it instead of jumping; Share shows a one-line thanks first, and Reduced Motion lands at once.
+Details: [usage statistics](../development/usage-statistics.md#the-welcome-screen-card).
+
 App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s
-Welcome screen subsection for the gating rationale, the persisted `"showWelcomeScreenAtLaunch"` key
-and the guard-before-hide ordering that keeps a Cancel answer from dismissing it.
+Welcome screen subsection for the gating rationale and the guard-before-hide ordering that keeps a
+Cancel answer from dismissing it. It fades out when a choice dismisses it and back in when Help > Show Welcome Screen
+reopens it (hidden only after the fade, deaf to clicks while it leaves; [animation](animation.md#fading-things-in-and-out)).
+It always shows at launch in the standalone app (never in the
+plugin) and there is no opt-out; a legacy `showWelcomeScreenAtLaunch` value in an old settings file
+is ignored. Help > Show Welcome Screen reopens it.
+
+**Reopened over a project.** Help > Show Welcome Screen while the launch screen is gone puts the overlay back in its
+*dismissible* mode (`WelcomeScreenComponent::setDismissible(true)`, set by `MainComponent::showWelcomeScreen()`): it is no
+longer opaque, so the open project shows through a dimmed scrim (black at 60%) around the card, and a close button (the
+shared `IconButton`, `Glyph::Close`, named "Close welcome screen", tooltip "Close (Esc)") sits in the card's top-right
+corner. Escape, that button (a Tab stop; Space/Return press it, accent focus ring from the look-and-feel) or a click on the
+scrim outside the card calls `onDismissRequested`, which `MainComponent` answers with `hideWelcomeScreen()`: the usual fade
+out, and the project, its dirty state and its undo history are untouched. The launch screen (nothing to return to) stays
+opaque with no close button and no Escape or click-outside action. Tests: `Tests/UI/Chrome/WelcomeScreenDismissTests.cpp`.
+
+Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle through its buttons
+(the close button when dismissible, New, Open default, Open existing, the recents, Contribute, the five social links, What's New) instead of escaping to the
+toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
+Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
+
+Between the Recent Projects list and the footer the card carries a low-key contribute line and a
+"Help build Agent Synth" button. It fires `onContributeRequested`, which `MainComponent` wires to
+`openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
+the overlay, and it shows whenever the overlay is shown.
+
+Help menu hints: on macOS each Help item with a command description (Help build Agent Synth..., Join the
+Discord..., Check for Updates...) shows it as the system menu's hover hint after about a second. JUCE's
+`PopupMenu::Item` has no tooltip and its macOS menu never sets `NSMenuItem.toolTip`, so `UI/Layout/MainMenuTooltips.h`
+(`MainMenuTooltipsMac.mm`) sets it from `collectCommandTooltips()` after `setMacMainMenu`, and again each time macOS
+opens a menu, because JUCE refills the menu then. The Windows menu is a JUCE popup and cannot carry a hint: there the
+text stays on the Welcome button and the Cmd+K row. Test: `MainComponentTest.HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint`.
+
+The footer row carries five social icon buttons between the version label and What's New (28 px, 4 px apart,
+right-aligned against What's New): Discord, YouTube, GitHub, TikTok, Instagram, in that visual and Tab order. They are
+`synth::ui::IconButton`s (Bare) drawn with the `Glyph::Social*` glyphs, the same drawings as the website, each with a
+title, tooltip, description, pointing-hand cursor and a keyboard stop. A click calls `onSocialLinkRequested(url)` with the
+`branding::k*Url` address, which `MainComponent` opens through `urlOpener_`; the overlay stays up. The footer height does
+not change, so neither does the card. The Discord address is the site redirect `agentsynth.app/discord`, not an invite.
+The same page opens from Help > Join the Discord... (`AppCommands::joinDiscord`).
+
+## Toast
+
+`ToastComponent` (`Source/UI/Chrome/Toast/`) is a small message pill with one optional action, for a change that is
+bigger than what the user clicked ("Made 4 modules poly" with **Undo**). `MainComponent` owns one, a plain child laid
+out by `resized()` (centred, 20 px above the canvas' bottom edge) and raised when shown; a second `show()` replaces the
+first: while the first is on screen the pill glides to the new width and the old icon, text, bar and action cross-fade
+into the new (140 ms `easeOutCubic`, no second slide-in; a plain 80 ms cross-fade without the width glide under Reduce
+Motion, at once under Animations Off), and an action that goes is not pressable while it fades. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
+fades (80 ms), under Animations Off or while its parent is not on screen it lands at once. It hides itself 4 s after
+the last `show()` unless the pointer is over it or its action holds the keyboard focus; Esc dismisses it. The action
+is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this change"); it dismisses the toast, then
+runs. The Poly pill's Undo only undoes while its step is still the last edit (`AppUndoManager::getEditSerial()`).
+Colours are theme tokens only.
+
+A toast has a severity (`ToastComponent::Severity`: `info` by default, `warning`, `error`). Info keeps the plain pill. A
+warning or an error paints its border and a 4 px bar down its left edge in the theme's `warning` or `error` token, so
+it reads in every theme; the text stays `textPrimary`. Every severity also leads with an icon (`paintSeverityGlyph`,
+`Layout/ActionGlyphs.h`; 14 px and an 8 px gap, so the toast is that much wider and the text starts after it): a circled
+"i" in the accent colour for info, a triangle with "!" in `warning`, a circled "x" in `error`. The screen reader hears
+"Warning: <message>" or "Error: <message>"; an info toast reads as the bare message. A cable dropped on a jack that cannot take it shows its reason
+as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status messages stay on the status bar.
+
+A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow
+playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMessage` is wired to `toast_->show(message)`
+where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
+state). The toast sits at the bottom of the canvas area above the open timeline dock, so the dock never covers it.
+
+## Shortcut hint overlay
+
+`Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay` is a second full-window overlay: a child of
+`MainComponent` that stays invisible except while Cmd is held, painting key-cap bubbles over the
+toolbar, dock tabs and transport buttons. It is created at the end of `assembleToolbar()`, tracks the
+window size through a `ComponentListener` (no line in `resized()`), raises itself to the front only
+when it appears, and takes no clicks, so its z-order never matters at rest. Rules and placement:
+[control/shortcuts.md](../control/shortcuts.md#shortcut-hints).
+
+## Shared search
+
+Every search or filter box matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
+(namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
+(`ModMatrixPicker`, which the [command palette](command-palette.md) also hosts), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
+Mixer zones channel filter, the MIDI destination picker, the card layout editor's control search and the port
+connections panel's Add destination page (`PortTargetSearchPage`: jacks, knobs and "New <module>" rows).
+
+- `searchMatches(text, query)`: the query is split on whitespace, and a run of letters typed against a run of digits
+  splits too (`"lfo6"` is `"lfo 6"`); every word must appear in the text, ignoring case, in any order (`"osc 8"`
+  finds `"Oscillator 8"`). A blank query matches everything, so a box
+  that must treat a blank query differently (the library hides no section for it) guards at its call site.
+- `searchScore(text, query)`: `-1` no match, else lower is better. Per word the best occurrence counts: `0`
+  the text starts with it, `1` it starts a word, `2` it sits inside a word; the worst word sets the score.
+  Pickers use it to pre-highlight the best row.
+- `searchHighlightSpans` + `drawSearchHighlightedText`: every hit of every word, sorted and overlap-merged,
+  drawn bold in the accent colour with nothing behind them. Static, so Reduce Motion needs nothing. A
+  box that paints its own rows (library, pickers, action picker, mixer rows) uses the painter; one that only
+  hides components (Preferences, Shortcuts) shares just the matcher.
+
+- `moduleSearchAliases(moduleName)`: the other names a module type goes by, appended to its name when a
+  module/source search matches (`env`, `envelope`, `eg`, `contour` find the ADSR, `vco` the Oscillator, `vcf`
+  the Filter, `amp` the VCA). It is keyed on the module's own name (a number suffix is ignored), so a renamed
+  card still matches. The module library, the mod dot's Add source page (`ModSourceItem::searchText`) and the
+  Mod Matrix source picker (`Item::searchText`) match on name plus aliases; the painter still highlights only
+  the visible name, so an alias-only hit shows the row without a highlight. The port panel's Add destination page
+  does the same: a grouped row paints only its port, the module's name is searched but not painted.
+
+A new search box must use these; do not call `containsIgnoreCase` on the query.
 
 ## Mod matrix panel
 
@@ -280,10 +661,71 @@ Its rows paint under these rules:
   to zebra and hover, and above the footer band.
 - **Grouped-menu labels bake in the module name.** A closed `ComboBox`'s label resolves ONLY from
   the matching leaf item's own text — JUCE never concatenates ancestor submenu titles — so a
-  multi-output or multi-target module's nested source/dest submenu leaves read `"<Module> · Out N"`
-  / `"<Module> · <target>"`, not a bare `"Out 2"`. `updateRowsFromGraph()` re-populates every row's
+  multi-output or multi-target module's nested source/dest submenu leaves read `"<Module> - <jack>"`
+  / `"<Module> - <target>"`, not a bare jack name. `updateRowsFromGraph()` re-populates every row's
   combos (`populateCombos()`) BEFORE re-applying its selection (`refresh()`), because
   `populateCombos()` clears the combo box as a side effect of rebuilding it.
+- **Sources are the jacks the card draws.** The source list offers one entry per visible output jack
+  (`synth::ui::modSourceOutputs`, `Source/UI/Graph/ModMatrixEndpoints.h/.cpp`), not one per raw output
+  channel: an LFO, whose card shows one CV jack over three raw channels (two are silent pass-throughs),
+  is one entry named just "LFO 1". A jack that fronts two poly heads (Poly MIDI's Pitch and Gate) is
+  listed once per head, named by role. A routing saved from a channel the list no longer offers keeps
+  an entry of its own (`"<Module> - Out N"`), so its box never goes blank.
+- **Searchable source and destination picker.** Clicking either combo (or Return/Space with it focused)
+  opens `synth::ui::ModMatrixPicker` (`Source/UI/Graph/ModMatrixPicker.h/.cpp`) in a `juce::CallOutBox`
+  instead of the stock menu; `PickerComboBox` overrides `showPopup()` and stays the closed display.
+  `ComboBox::showPopupIfNotActive()` raises the combo's private "menu active" flag before calling
+  `showPopup()`, and only the stock menu lowers it, so `PickerComboBox::showPopup()` lowers it itself
+  (`hidePopup()`) before opening the picker: left raised, the combo ignores every later click and the
+  panel stops refreshing. A search field at the top takes focus and filters word by word
+  (the shared `synth::ui::searchMatches`, [below](#shared-search)): every space-separated word of the query must appear in the row
+  text (module title plus output or target label, e.g. "Filter - Cutoff"), ignoring case and order, so
+  "osc 8" finds "Oscillator 8", and the matched letters are highlighted in the row text and detail line; rows sit under the same category headers the menu
+  had (Envelopes, LFOs, Oscillators, Sequencers, Filters, Effects, Other), and a header hides when none
+  of its rows match. "Flat Sources" drops the headers. The popup's height comes from the full list, so it
+  does not resize while typing. Only the rows in view, plus a few past each edge, exist as components: scrolling
+  recycles them, a filter pass reads precomputed search text and steers only that screenful (a list of thousands stays
+  instant), and an Up/Down move is announced to screen readers since most rows are not in the tree. Up/Down move the highlight, Return picks the highlighted row (the best match
+  by `searchScore`, the first among equals, until moved), Escape closes, a click picks. A source search (not the
+  destination's, and only with a canvas behind the panel) also offers **Create rows**: while the typed text names a
+  source type, a "Create new LFO" / "Create new envelope" row (`Item::createsOnMatch`, the green plus and "New" tag) per
+  matching type, under a "Create" header; an empty search shows none. The types are `newModuleSources()` (the list the
+  timeline's "Add modulator..." and the mod dot's "New" rows read), built by `createSourceItems()`
+  (`ModMatrixPickerCreate.cpp`); a test fails when the timeline offers a type the matrix does not. A pick calls
+  `ModRow::pickNewSource`: the module is added by `createSourceModule` in the middle of the canvas the panel does not cover (growing in like any new card) and the row is
+  re-pointed at it, both inside one `AppUndoManager::ScopedUndoGroup`, so Cmd+Z removes the module and restores the row. A pick selects the combo's id with a synchronous
+  notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
+  choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
+  not inherit the LookAndFeel), outlines itself with `paintFocusRegionOutline` while it holds focus, and
+  every control carries a title and tooltip: the combos, amount slider and bypass button are named with
+  their row ("Routing 2 source", "Routing 2 amount"), the delete button "Remove routing 2", plus the
+  search field, each picker row, and the Add Modulation and Flat Sources buttons.
+- **Keyboard.** The matrix is one focus region (Tab lands on it and leaves it). Inside it the arrow
+  keys walk its controls (`Source/UI/Graph/ModMatrixKeyboard.h/.cpp`, a stateless key listener on the
+  panel and its row container): Left/Right step through every control in reading order (Add
+  Modulation, Flat Sources, then each row's source, destination, amount, bypass, delete), Up/Down move
+  to the same column on the row above or below, and the amount slider keeps Up/Down to nudge the
+  amount, as a mixer fader does. A combo never re-points its routing on an arrow key (the stock combo
+  would, one undo step per press); Return opens its picker (Space stays play/stop). Every control draws the accent
+  focus ring through `AppLookAndFeel`. `AccessibilityCoverageTests` audits the open matrix and the
+  picker (`ModMatrix`, `ModMatrixPicker` at 0/0).
+  The picker is also the timeline's "Add automation..." list ([automation](../timeline/automation.md#adding-a-lane-from-the-timeline)):
+  an item's `searchText` adds words the row does not show.
+  Test seams: `ModMatrixComponent::setPickerLauncherForTest` (capture the picker instead of launching a
+  window) and `ModMatrixPicker::setSearchTextForTest`.
+  Every picker opens at the top of its list (the highlight only scrolls once the view has a height); `ModMatrixPickerFirstRowTests` builds every producer and a new producer joins that list.
+- **Labels follow the card title.** Every module in the source and destination combos is listed under
+  `synth::moduleTitle` (`Source/AudioEngine/ModuleTitle.h`): the custom title the user gave the card,
+  else the auto-numbered name ("LFO 3"). The 10 Hz tick compares a hash of every module title
+  (`moduleTitlesSignature`) as well as the node count, so a rename (which changes no node count)
+  refreshes the panel's lists; a picker that is open is never refreshed underneath the
+  user, the change lands on the first tick after it closes.
+- **One set of lists for all rows.** `ModMatrixLists` builds what the pickers list once, when something first
+  asks, and each closed combo holds only its selected row. A tick builds one cable index and refreshes each
+  row once, touching a combo only when its selection or label changed.
+- **Re-pointing a row goes through macro ports**, exactly like a dragged mod cable, as one undo step
+  (the row's "Add Modulation" and delete buttons are undo steps too). See
+  [`macros/auto-ports.md`](../macros/auto-ports.md#the-mod-matrix-re-points-like-a-drag).
 - **Bypass and delete are `DrawableButton`s** (`Icon::ModuleBypass` / `Icon::ModuleDelete`,
   `ImageFitted`), not `TextButton`s — retinted via `ModRow::applyButtonIcons()`, called from the
   constructor and from `ModRow::lookAndFeelChanged()`, mirroring
@@ -295,3 +737,14 @@ Its rows paint under these rules:
   `SliderParameterAttachment` construction, whose constructor does not itself fire `onValueChange`.
 - The empty-state message ("No modulations active...") draws inside the post-header/footer `area`
   rect, not `getLocalBounds()`, so it does not overlap the title and header bands.
+
+## Quit and Hide inside a dialog
+
+Cmd+Q and Cmd+H belong to the macOS menu. While any modal component is up, JUCE's macOS peer reports every key-down no
+component used as used, so a dialog opened through `PopupMotion::launchDialog` (Settings, Export Audio, the EQ window ...)
+kept the menu from ever seeing them: Quit did nothing. The dialog's key listener (`DialogMenuKeys.{h,cpp}`, run from
+`DialogCloseKeys`) now does the menu's job for the keys that bubble up unused: Cmd+Q is the app's own quit request
+(`systemRequestedQuit`, so unsaved changes are asked about first, on top of the dialog) and Cmd+H hides the application.
+Cmd+M is not one of them: the app binds it (Toggle Mod Matrix). Guard: `ShortcutRelayTests.cpp` (each key from every
+dialog's focused children runs its action once) and `QuitRequestTests.cpp` (the quit request with every dialog open).
+Test mode's `requestQuit` runs the same request without the key.

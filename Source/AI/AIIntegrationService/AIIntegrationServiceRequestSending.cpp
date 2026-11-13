@@ -1,6 +1,7 @@
-// Request building & sending: sendMessage/sendArrangeMessage and the content/body builders they
+// Request building & sending: sendMessage/sendProjectMessage and the content/body builders they
 // share, plus chat-history bookkeeping (trim/clear) that every send path feeds into.
 #include "AIIntegrationService.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include <algorithm>
 
 namespace synth {
@@ -39,7 +40,7 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
 
 // Every outgoing request needs the same success bookkeeping: append the assistant turn to
 // chatHistory (never for a cancelled request — see the comment inside) and capture/re-push a
-// Pro-plan conversation id. Shared by sendMessage() and sendArrangeMessage() so the two paths
+// Pro-plan conversation id. Shared by sendMessage() and sendProjectMessage() so the two paths
 // cannot drift on history or conversation-id behaviour.
 AIProvider::CompletionCallback AIIntegrationService::wrapCompletionForHistory(AIProvider::CompletionCallback callback) {
     auto weakThis = juce::WeakReference<AIIntegrationService>(this);
@@ -83,24 +84,36 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
         provider->cancel(requestId);
 }
 
-juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
-    // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph
-    // or any other caller), so stripping "state" from these nodes in place cannot mutate anything
-    // else. "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) —
-    // the model can never author it, so it is pure leakage and token waste over the wire.
-    juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
-    juce::String patchSection;
-    if (auto* obj = graphJson.getDynamicObject()) {
-        if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
-            for (auto& nodeVar : *nodeArr) {
-                if (auto* nodeObj = nodeVar.getDynamicObject())
+// graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph or
+// any other caller), so stripping "state" from these nodes in place cannot mutate anything else.
+// "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) — the model
+// can never author it, so it is pure leakage and token waste over the wire. The one exception is a sequencer's
+// pattern, which the model can read and write. Shared by the patch
+// path's "Current patch state" section and project.generate's "currentPatch".
+juce::var AIIntegrationService::buildStrippedPatchJson() const {
+    juce::var graphJson = AIStateMapper::graphToJSON(audioGraph, /*forModel=*/true);
+    if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray()) {
+        for (auto& nodeVar : *nodeArr) {
+            if (auto* nodeObj = nodeVar.getDynamicObject()) {
+                // A sequencer's pattern is pure data the model can author and edit, and its steps used to be
+                // visible as parameters, so it stays.
+                const auto type = nodeObj->getProperty("type").toString();
+                if (type != "Sequencer" && type != "Poly Sequencer")
                     nodeObj->removeProperty("state");
-            }
-            if (!nodeArr->isEmpty()) {
-                patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
+                nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
+                nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
+                nodeObj->removeProperty("controlStyle");
             }
         }
     }
+    return graphJson;
+}
+
+juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
+    const juce::var graphJson = buildStrippedPatchJson();
+    juce::String patchSection;
+    if (auto* nodeArr = graphJson.getProperty("nodes", {}).getArray(); nodeArr != nullptr && !nodeArr->isEmpty())
+        patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
 
     // The timeline sibling of the patch section above, added only when there is an arrangement to
     // report. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the
@@ -149,7 +162,13 @@ std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::en
 
         for (auto* p : node->getProcessor()->getParameters()) {
             auto* f = dynamic_cast<juce::AudioParameterFloat*>(p);
-            if (f == nullptr)
+            // A Drum Kit's per-pad parameters stay out: the model drives its group ids, which write the pads. So does a
+            // parameter a module keeps off every surface (ModuleBase::isParameterExposed).
+            const auto* module = dynamic_cast<const ModuleBase*>(node->getProcessor());
+            if (f == nullptr ||
+                (dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr &&
+                 DrumKitModule::isPadParamId(f->paramID)) ||
+                (module != nullptr && !module->isParameterExposed(f->paramID)))
                 continue;
             const auto& range = f->getNormalisableRange();
             // getDefaultValue() is normalised (AudioProcessorParameter contract) and only public
@@ -222,11 +241,17 @@ juce::String AIIntegrationService::buildAutomationTargetsSection() const {
 //    buildAutomationTargetsSection() renders as text, as structured objects {nodeUuid, nodeName,
 //    paramId, min, max, default}, capped at kMaxRemoteParamTargets.
 //  - `availableTracks`: one {name, kind, index} per live TimelineDoc track, in doc order.
+// The timeline.generate prompt this build understands. Version 2 teaches the drum-hit note fields (chance, repeat,
+// flam, nudge, condition); a request that sends no version keeps getting version 1, so a server deploy never hands an
+// older app a note field it would reject.
+static constexpr int kTimelineGeneratePromptVersion = 2;
+
 juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text) const {
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
 
     // The RAW user text (see the comment above).
     body->setProperty("userPrompt", text);
+    body->setProperty("promptVersion", kTimelineGeneratePromptVersion);
 
     // Required key, allowed empty (the schema's own words: "a caller with nothing to say should
     // say so explicitly rather than have the field quietly go missing").
@@ -270,73 +295,6 @@ juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text
     body->setProperty("availableTracks", availableTracks);
 
     return juce::var(body.get());
-}
-
-// ONE intent, two transports — the local/remote parity rule: the transport difference is absorbed
-// HERE, never surfaced as a behaviour difference. Hosted provider: the `timeline.generate`
-// capability, with the structured request body from buildArrangeRequestBody(). Local provider:
-// sendPrompt() with the SAME fields composed into the outgoing message (buildArrangeAugmentedContent,
-// mirroring the server's own section layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as
-// the response contract. Both providers answer with the identical timelineOps envelope, so the
-// downstream extract -> validate -> card flow cannot tell them apart.
-//
-// No client-side retry on a validation rejection: the server runs its own bounded repair-retry
-// inside the capability, and for the local model the envelope-only grammar plays the same role —
-// an envelope that still fails TimelineOps::validate is surfaced to the user as the card's
-// rejection message. On a hosted provider without a capability endpoint (a test double), the
-// AIProvider::sendCapabilityRequest default delivers a typed Schema error.
-AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::String& text,
-                                                               AIProvider::CompletionCallback callback) {
-    // Same history contract as sendMessage(): the stored history keeps the user's original text;
-    // the structured request fields are ephemeral, built for the wire and never retained.
-    chatHistory.push_back({"user", text});
-    trimHistory();
-
-    if (!provider) {
-        if (callback) {
-            AIProvider::AIResponse response;
-            response.success = false;
-            response.error.kind = AIProvider::AIErrorKind::Schema; // no provider configured — client precondition
-            response.error.message = "Error: No AI provider selected.";
-            callback(response);
-        }
-        return {};
-    }
-
-    if (provider->isHosted())
-        return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
-                                               wrapCompletionForHistory(std::move(callback)));
-
-    // Same splice-into-the-request-copy shape as sendMessage(): chatHistory keeps the user's raw
-    // text; the composed arrange context exists only on the wire.
-    std::vector<AIProvider::Message> request = chatHistory;
-    if (!request.empty())
-        request.back().content = buildArrangeAugmentedContent(text);
-
-    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
-                                AIStateMapper::getTimelineOpsEnvelopeSchema());
-}
-
-juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::String& text) const {
-    // Composed from the SAME fields the hosted request sends (buildArrangeRequestBody), in the
-    // SAME section order the server's buildTimelineUserMessage uses (synth-platform
-    // timeline-generate/capability.ts: arrangement context when non-empty, then tracks, then
-    // targets, then the prompt) — one source of truth for what an arrange request tells the
-    // model, however it travels. The one addition is the trailing instruction: the server swaps
-    // in a dedicated arrange system prompt, which a mid-conversation local request cannot do, so
-    // that steering rides in the message instead (the envelope-only schema enforces the shape
-    // regardless; the line is for answer quality, not for safety).
-    const juce::var body = buildArrangeRequestBody(text);
-
-    juce::String content;
-    const juce::String arrangement = body["arrangementContext"].toString();
-    if (arrangement.trim().isNotEmpty())
-        content << "Arrangement context:\n" << arrangement << "\n\n";
-    content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
-    content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
-    content << text << "\n\n";
-    content << "Respond ONLY with a JSON object containing a \"timelineOps\" array. No patch, no prose.";
-    return content;
 }
 
 // Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs, removing

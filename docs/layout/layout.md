@@ -2,7 +2,7 @@
 
 `Source/UI/Layout/LayoutUtil.h` / `.cpp` (`synth::LayoutUtil`) is the headless, JUCE-GUI-free
 geometry behind every module placement on the patch canvas: the grid a module snaps to, the search
-that keeps two cards from overlapping, the topological auto-arrange, and the ghost drawn while a
+that keeps two cards from overlapping, the row-and-column auto-arrange, and the ghost drawn while a
 drag is in flight.
 
 This folder holds the rest of the editor's presentation layer:
@@ -22,7 +22,7 @@ This folder holds the rest of the editor's presentation layer:
 
 ## The soft grid
 
-Modules are free-form — placeable anywhere on the 10000x10000 canvas — but two rules are always
+Modules are free-form — placeable anywhere on the canvas (right and down without limit; the origin is the wall) — but two rules are always
 enforced:
 
 1. **Snap on drag-release.** A module's top-left corner rounds to the nearest `kGridSize` (8 px)
@@ -43,12 +43,142 @@ equals the grid size, so an anti-overlap placement is grid-aligned by constructi
 ## Canvas coordinates
 
 All layout and collision logic runs in **canvas coordinates** — the `content` child component,
-bounded `0, 0, 10000, 10000`. The zoom/pan transform lives on `content.setTransform(...)` and is
+sized to the [canvas frame](#canvas-frame) plus slack. The zoom/pan transform lives on `content.setTransform(...)` and is
 invisible to `LayoutUtil`. Never pass screen-space coordinates into a layout function.
 
 Module positions persist on the JUCE audio-graph node's property bag as integer `"x"` and `"y"`
 keys. `GraphEditor::updateComponents()` reconciles those back to `setTopLeftPosition(x, y)` after
 every state change (preset load, undo/redo, auto-arrange).
+
+## Canvas frame
+
+The patch canvas is a visible frame (`CanvasFrame`, `Source/UI/Graph/CanvasFrame/`), not a fixed-size area. Outside it
+is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner and a 1 screen px `border` outline.
+
+- **Size.** Starts at 1800 x 1100 and is never smaller. It keeps 400 px past the outermost card (loose modules,
+  collapsed macro cards, open macro hulls, the output dock), rounded up to 400 px steps.
+- **Right and down only.** The origin (0,0) is the wall: a JUCE child at a negative position is unpainted and
+  unclickable. `findFreeSlot` clamps x,y >= 0 only.
+- **Past the left/top edge, the patch slides.** A drag that would push its cards past the origin is held there
+  (`CanvasEdgeDrag`, armed in `beginSelectionDrag`, applied by `clampDragDeltaToCanvas` in the module card, macro card
+  and hull chip drags), and it remembers how far the pointer went past. On drop, `slidePatchForEdgeDrop` moves every
+  other top-level unit right/down by that overshoot (rounded up to the grid) inside the drop's own undo record, so the
+  dragged cards end up where the pointer left them relative to everything else. The view pans by the same amount and
+  the frame's animated rect shifts with it, so nothing jumps on screen: the frame glides out to the left/top. A drag
+  that moves only part of a macro (one member out of an open hull) is not held; that hull's edge stays
+  `nudgeHullIntoCanvas`'s job. A single-card drop now records graph and macros together, since the slide moves
+  collapsed macro cards. A card that joined an open macro while it was held stays where the pointer left it (only the
+  macro's other cards slide), and a card in an open macro is floored at `MacroGroupController::memberCardFloor()` so its
+  hull never pokes past the origin. Both the landing outline and the drop place the card through
+  `GraphEditor::resolvePlacement`, which looks for room among the neighbours where they will be after the slide, so the
+  outline is exactly where the card lands (guard: `MacroGroupDrop.SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorder`).
+- **Grows live, shrinks on drop.** Every drag event (module card, macro card, hull chip) and the 30 Hz tick only grow the target (`Mode::GrowOnly`), so a card dragged out
+  and back does not pulse the frame. Every drop and every `updateComponents()` (add, delete, undo, redo, load)
+  re-fits it both ways (`Mode::Animate`).
+- **Animated.** Every size change glides (220 ms, `easeOutCubic`, retargeting from the current rect). A project
+  open snaps with no glide (`detachAllModuleComponents` arms it).
+- **Content.** The `content` component is the frame TARGET (not the animated size) plus 2000 px of slack, so a fast
+  drag never clips a card.
+
+## Edge scroll while dragging
+
+Holding a drag at the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
+`Source/UI/Graph/CanvasEdgeScroll/`). Every drag that carries something across the canvas does it:
+
+| Drag | Armed by | Re-aimed after each pan by |
+| --- | --- | --- |
+| module card body (plain, Ctrl, Cmd) | `ModuleComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| folded macro card body | `MacroCardComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| cable from a jack or an input knob's landing dot | `GraphEditor::beginConnectionDrag` (`beginCableDrag`) | `GraphEditor::dragConnection` at the pointer |
+| selection box (Shift-drag) | `GraphEditor::beginMarquee` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| expanded macro's name chip (and the hull-drag preference) | `GraphEditor::mouseDown` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| card from the module library or sound browser | `GraphEditor::itemDragEnter` (`beginLibraryDrag`) | a synthetic `itemDragMove` |
+| control outline, group handle or Add control row of the on-card layout editor | `CardLayoutOnCardEditorFollow.cpp` (`beginPointerDrag`) on the first drag event | the editor's own drag handler at the pointer |
+
+Not scrolled on purpose: the empty-canvas pan (it is the scroll), the mod-amount ring and the card knob, fader and curve
+drags (they edit a value), and the minimap drag (it moves the view itself). A new drag that moves something across the
+canvas gets a row here and a gesture in `CanvasEdgeScrollGestureTests.cpp`, which presses, drags, holds and releases
+each one through its real mouse handlers.
+
+- **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
+  grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
+  it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
+  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit,
+  Esc (a cable, a macro) or `cancelLiveDragGestures` stops the timer.
+- **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
+  that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
+  grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
+  library drag gets a synthetic `itemDragMove` at the pointer. A cable keeps the endpoint under the pointer, and the box
+  grows over what scrolls in.
+- **Cost per tick.** The full landing preview (gap hover aside, which follows every aim because the way a gap opens
+  depends on the path) costs tens of ms at a crowded aim on the Load test project, so inside a tick it runs at most once
+  per `GraphDragDropController::kScrollPreviewIntervalMs` (100 ms, every third tick). A skipped aim is flushed by a tick
+  that did not pan, by `CanvasEdgeScrollDriver::end()` (every release, drop, exit and cancel calls it first) and at the
+  top of `itemDropped`, so the drop always lands where an unthrottled drag would. A real pointer move is never
+  throttled. `CanvasEdgeScrollCost` (`CanvasEdgeScrollTests.cpp`) holds it for every drag kind the scroll drives (library drag, module card,
+  folded macro card) and has a disabled bench that prints a tick's cost on a real project
+  (`AGENTSYNTH_BENCH_PROJECT=<project.json>`).
+- **The pointer.** The last position a drag handler reported (`notePointer`, and a global listener for events on the
+  canvas itself), not the OS cursor: they are the same for a real mouse, and test mode injects its events into the
+  window's peer, which the cursor never sees. A library drag is the OS drag-and-drop's, so it reads the cursor.
+- **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
+  than the content extends; a card or macro drag grows the content ahead of itself, so it can keep going, while a cable
+  or a selection box stops at the end of the content.
+- **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
+  into view instead.
+
+### Every drag follows the view
+
+The rule: a drag (or a key hold) that can carry something past the edge of a view that scrolls must scroll that view
+along, so the thing never sticks at the edge or goes out of sight. Each surface that does it, and the helpers:
+
+- **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
+  pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
+  `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection,
+  stretch-box and selection-box drags (`AutomationLaneEditorEdgeScroll.cpp`; the selection box keeps its pressed corner
+  on its beat as the view scrolls), the Sections strip's block and make-section drags
+  (`TimelineSectionStripEdgeScroll.cpp`), the ruler's marker, loop and scrub drags (`TimelineRulerEdgeScroll.cpp`),
+  the velocity strip's pen and ramp (on the piano roll's own timer, sideways only) and the drum machine's paint
+  stroke, end edge and lane ramps (`DrumMachineEdgeScroll.cpp`; a stroke also scrolls the rows) each run that timer
+  only while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged
+  thing stays under the still pointer. The shared timer is `EdgeScrollTimer` (`Source/UI/Timeline/EdgeScrollTimer.h`:
+  `track` starts or stops it from the pointer, `scrollView` moves a `TimelineViewState` and says how far). A drag that
+  only changes one value (a velocity stick, a drum hit's loudness) never scrolls. The view stops at beat 0 and never
+  stops to the right.
+- **Timeline, keys.** `kScrollIntoViewMargin` (`Source/UI/Timeline/ScrollIntoView.h`, a tenth of the view) is how far
+  in from the edge a thing leaving by it is kept. A clip picked with the keys jumps there once (`firstBeatShowing`). A
+  lane dot carried by a held Alt+arrow never makes the view jump: once the dot's DRAWN place passes that line the view
+  scrolls by the excess every frame (`followKeyDragDot`), eased together with the dot, so the drawn dot holds the line
+  and does not lurch; at beat 0 it stays clamped. Undo and redo of a lane move bring the restored selection into view
+  the same way (`AutomationLaneEditor::followRestoredSelection`, guard `UndoKeepsSelection.*`).
+- **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above: card, macro, cable, selection box, macro name
+  chip, library drops and the on-card layout editor's control, group and Add control drags (so a card bigger than the
+  view still takes a drop anywhere on it and on its "Drop to hide" area; that scroll stops once the card's far side
+  meets the view's edge, `CanvasEdgeScrollDriver::beginPointerDrag`'s drop area).
+- **Controller surface.** The MIDI Remote surface uses the same scroller and curve
+  (`ControllerSurfaceEdgeScroll.cpp`): a selection box or a cell (or group) move held at its edge pans it, the box
+  grows over what scrolls in and the cell stays under the pointer; the pan stops at the content's origin and far end,
+  and the move is still one commit on release; Esc stops the pan for the rest of the drag.
+- **Reorders in a list.** `viewport_drag_scroll` (`Source/UI/Layout/ReorderDrag/ViewportDragScroll.h`) gives the step
+  for a pointer in a 32 px zone (never more than a third of the view) at either end of a `juce::Viewport`, up to 18 px
+  per drag event on the same curve; the drag auto-repeat (`ReorderDragSession`) keeps the events coming while the
+  pointer rests. The owner reads the pointer in desktop coordinates first, lets the view follow, then hands the
+  pointer in list coordinates to the drag, so the row stays under it. It runs only while the drag is past its threshold
+  and not cancelled, so Escape stops it. The track list (track rows, lane headers, modulator rows, all through
+  `scrollTrackRows` so the clip lanes keep step), the mixer's insert and send sections, the zones pane, the column
+  strip (sideways, a 48 px zone), the macro port dialog and the card layout editor use it. The note range picker
+  scrolls its key strip its own way (`autoScrollSpeed`) and Escape puts the range back.
+- **The view is shared.** A drag that scrolls the timeline view tells its owner (`onViewScrolledByDrag`), which repaints
+  the ruler and the section strip and turns follow-playhead off, as a sideways wheel scroll does.
+
+Checklist for a drag surface: the pointer parked in the edge zone scrolls, faster nearer the edge; the thing stays under
+the pointer; a held key keeps it in view; a drop from outside (the module library, the sound browser) scrolls too; the
+scroll stops on release, Escape, a tool change and the pointer moving back in; the undo step count is unchanged (one).
+
+The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
+every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
+a resizer, a forwarder, a drag-and-drop starter, a card with no scroll of its own, a fixed page or tab strip). The
+surfaces still missing it would be listed in `kFollowGaps`, which may only shrink; it is empty now.
 
 ## Anti-overlap search
 
@@ -64,78 +194,305 @@ When a module is placed (library drop or drag-release) the engine:
    position is returned as a fallback — always a valid on-canvas coordinate.
 
 The spiral visits positions in ring order, innermost first, so the module lands as close to the
-intended drop point as possible.
+intended drop point as possible. Within the first ring that has a clear slot, the one nearest in a straight line wins
+(ties go to the walk order: top, right, bottom, left): every slot of a square ring is as far by the ring, so taking the
+first one walked would put a module dropped over a wide open macro at a corner far to its side, not straight below.
 
 Two boxes A and B collide at gap `g` when `A.inflated(g/2).intersects(B.inflated(g/2))`, which is
 equivalent to requiring at least `g` px of clear space on all sides between the edges. The `selfId`
 parameter excludes a module's own box from the occupied set — used during a drag so a module does
 not collide with its own pre-drag position.
 
+## Making room when something grows
+
+When a macro's hull or card gets bigger, or any module card does (a loose card or a macro member),
+the things beside it move aside instead of being covered. The pure geometry is `LayoutUtil::resolveDisplacement`; the canvas
+glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupControllerDisplacement.cpp`.
+
+- **Units.** Neighbours are compared one nesting level at a time. At the top level a unit is a loose
+  module, or a whole macro as ONE rectangle (its hull when open, its card when collapsed); inside a
+  macro the units are its direct members and its child macros. A module hidden inside a collapsed
+  macro is never a unit, and macro port widgets never are either (they live inside their hull).
+  Moving a macro moves everything drawn inside it rigidly, hidden members and nested collapsed
+  cards included, so their offsets to the card never change.
+- **Direction.** Only units the grower overlaps (with the usual 12 px clearance) move. Each goes the
+  way that needs the least travel (left, right, up or down; a tie goes down, then right), rounded up
+  to the 8 px grid. The grower itself never moves. A macro that expands passes its folded card's rect
+  (`LayoutUnit::before`): a neighbour wholly on one side of that card is pushed away from that side only, so the
+  macro stacked right below a card glides down instead of up past the grown border.
+- **Cascade.** A pushed unit pushes what it now overlaps in the same direction, so a row of
+  neighbours shifts together. A unit reached twice ends up as far as the further push needs.
+  Nothing ever moves back, so the cascade always settles.
+- **Canvas edge and pinned units.** The top-left of the canvas is a wall: a move that would leave
+  it is not taken, and the unit instead goes the smaller of right or down. The same rule applies
+  to a move that would land on a pinned unit (which never moves; the output dock is not one here, see
+  [Output dock](#output-dock)). A unit that is blocked both
+  ways is left where it is.
+  The wall also applies to an open macro's hull. An input port's widget overhangs the hull's left
+  border by 5 px (`LayoutUtil::kMacroPortOverhang`), and anything left of x = 0 is neither painted
+  nor clickable. So whenever a macro grows (a new port from the card, the chip, the Mod Matrix or a
+  cable dropped on it, or a member added), and its hull's left edge minus that overhang, or its top,
+  would be past the canvas, the whole macro (and every macro enclosing it) slides right/down by
+  the shortfall, rigidly, in the same undo step and with the same make-room glide
+  (`makeRoomFor` calls `nudgeHullIntoCanvas` first). A macro whose hull already clears the wall is
+  not moved. Opening a project never moves anything: a hull saved left of the canvas stays there until
+  the next change that grows it.
+- **Inside out.** After the grower's own level is settled, its enclosing macro may have a bigger
+  hull, so that macro is treated as the grower one level up, all the way to the top level.
+- **When.** Only on discrete events, never while dragging (a drag between two cards opens its own gap, see
+  [Making room for a module dropped between others](#making-room-for-a-module-dropped-between-others)): grouping (including nesting), adding
+  modules to a macro (menu, Cmd-drag, library drop into a hull), dropping a macro into an open one, expanding a macro, adding a port
+  (which lengthens the hull), and a module card changing size in place (loose or macro member: the Macros knob count, the Scope / Response / envelope graph folds, an LFO's Draw section, a poly or Dual I/O toggle; the list is in [module-card.md](module-card.md)).
+- **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
+  neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
+  are correct immediately.
+- **Shrinking a card.** A module card keeps the same kind of record for what its own growth pushed (in
+  `MacroGroupController`, keyed by the card, never saved). Each time the card changes size in place
+  (`reflowForResizedModule`) the neighbours it pushed first get their way back by the rule below, and only then does the
+  new footprint push what it covers. A neighbour whose old spot the card's new rect still covers stays blocked and keeps
+  its record, so grow, shrink, grow settles the same way every time. The records are dropped on undo/redo, Auto Arrange,
+  any graph replacement (project load, new patch, preset). Deleting the card is no loss: it first sends the neighbours it pushed back (see [Deleting a card](#deleting-a-card)).
+- **Shrinking.** Whatever a macro's growth pushed is remembered on that macro (`Macro::displaced`: which unit, how
+  far, where it landed; never saved to a project file, and lost when an undo or redo restores a snapshot). Collapsing the
+  macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
+  (`returnDisplacedNeighbours`), repeating over the still-blocked ones until a pass returns nothing so a cascade unwinds fully: a unit returns only if the user has not moved it since (it is still exactly where the
+  push left it) and its old spot is clear, with the usual 12 px clearance, of every other unit at that level, the
+  collapsed card included. A unit that cannot return stays put. Three things move a unit without the user touching
+  it: a second grower pushing it further, another grower's record sending it back, and folding or opening it (its
+  footprint switches between card and border in place). Each moves every other push record that names the unit to
+  its new top-left (`retargetPushRecords`), so pushes from several growers unwind in any order; a push or return of
+  an open macro also moves the spot its card came from, so folding it again still undoes its open-border nudge. A
+  multi-macro fold (Fold and Pack, Cmd+G on several macros) holds every folded macro's records until the last one has
+  folded and returns them together (`returnDeferredNeighbours`): one by one, each return would still be blocked by
+  the borders not yet folded. Without these, Fold and Pack with packing off left a stack of macros pushed apart after
+  opening and folding them all, depending on the order the macros happened to fold in. Collapse clears the record; a delete on a macro that
+  stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the
+  expand's canvas nudge (`restoreCardAfterCollapse`) when the members have not moved since and the card's old spot is
+  clear, so the card sits where it was and the neighbours' old spots are clear of it again.
+- **Deleting a card.** (`MacroGroupControllerDeleteReflow.cpp`, inside the delete's undo step.) The neighbours the card
+  had pushed aside come home by the rule above, whether it was loose or a macro member. Then, only when the card was a
+  member of an OPEN macro, the hole closes: the cards of the same row that lie wholly to its right (they overlap the
+  card vertically) move left together, so the nearest lands exactly where the deleted card stood and the spacing among
+  them is kept; with nothing after it in its row, the cards of its column wholly below it (they overlap it
+  horizontally) move up the same way. A move that would hit another unit (12 px clearance) or leave the canvas is
+  shortened in 8 px steps, or dropped. The macro's border follows its members, so it shrinks with them. Cards that
+  stand beside a hole on the open canvas stay put, and a macro port or a card hidden in a collapsed macro leaves no
+  hole. One Cmd+Z puts every card back exactly.
+- **Placement blockers.** A module being dropped or dragged lands through `findFreeSlot` against the same layout
+  units, flattened over every level (`MacroGroupController::placementBlockers`): each visible module, each collapsed
+  card, each open hull. A node with no card at all (the canvas detached them for an AI edit plan) blocks through its
+  model rect, its stored `x`/`y` and estimated size (`ModelCardBounds.h`), and an open hull unions the same rects for
+  such members ([where an edit plan's additions land](../ai/timeline-ops.md#where-things-land)). The hidden members of a collapsed macro are not blockers (they still sit at their
+  pre-collapse spots under and around the card, which is why a module set just below a card used to jump away).
+  Left out are the placed module itself, every macro that contains it (its own hull and its ancestors'), the
+  collapsed macros a group drag carries, and the macro the drop is about to join, whose hull is where the module is
+  meant to land. Used by single drags and drops (`resolvePlacement`), the group drag finalize, a collapsed card's own drop (`finalizeMacroCardDrag`) and the add-track slot.
+- **Loading never pushes.** A card that is still being constructed (opening a project, undo, paste)
+  has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
+  already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so
+  anything that runs while it builds cards must not call it back.
+- **Cards glide, geometry does not.** When a make-room push, a neighbour return (collapse, port or member delete)
+  or an auto-arrange moves cards, each moved card slides from its old spot to its new one over 160 ms
+  (`easeOutCubic`). Geometry stays synchronous: component bounds, node x/y, hulls, the cables' base geometry and
+  hit-tests all hold the FINAL positions at once, so a click or drag during the slide acts on the card's final spot.
+  The slide is a canvas-level overlay (`CardGlideAnimator`, `Source/UI/Graph/CardGlideAnimator/`): the real card is
+  hidden (alpha 0; JUCE paints nothing for it but still routes the mouse to it) and a snapshot of it is drawn
+  interpolating between the two rects over the canvas. Cables touching a gliding card follow it (the endpoint is
+  offset by the card's drawn-minus-final position). Open-macro hulls and port strips land at once. Only cards visible
+  both before and after glide; a card that just appeared or is being dragged does not. A second move mid-glide
+  retargets from the drawn position. One `CardGlideAnimator::Scope` around the whole action (expand, collapse,
+  `makeRoomFor`, `returnDisplacedNeighbours`, auto-arrange) arms once. Undo and redo glide too: a move that glided
+  forward glides back (see [Undo and redo glide](animation.md#undo-and-redo-glide)). Loading a project and paste never
+  glide: they land at once.
+
+## Making room for a module dropped between others
+
+Dragging a module (from the library, or a card already on the canvas) over the space between two cards opens a gap
+there: the cards after that point slide aside, the module lands in the gap, and the cards before it stay put. The
+pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.h`); the live side is `InsertGap`
+(`Source/UI/Graph/InsertGap/`), owned by `MacroGroupController` (`insertGap()`), fed every drag tick by
+`GraphDragDropController::updateDragPreview` and reusing `buildLayoutUnits`, `moveUnitBy` and `CardGlideAnimator`.
+
+- **Which gap.** Judged on the layout units of one level (the top level, or the open macro the card is in or a library
+  module would join) as they are drawn now, from the centre of the dragged card or library ghost. Inside a card only
+  its edge bands count: within a quarter of its width of its left or right edge is a row gap, within a quarter of its
+  height of its top or bottom edge a column gap (the nearer edge wins). Deeper in is an ordinary drop onto the card,
+  which dodges as before. In empty space the ghost has to touch a card (12 px clearance); beside it is a row, above or
+  below it a column. The leading half of a card means "in front of it", the trailing half "in front of the next card
+  in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
+  The module lands level with that anchor, so an anchor the module would not overlap across the axis (row: vertically,
+  column: horizontally) where it is aimed is no gap either: just below a wide open macro, the next card in the macro's
+  "column" can sit far to one side, and the module would land there wherever it was released. An open macro is wider
+  (or taller) than any module, so "level with it" is its left (top) edge: in front of an open macro is a gap only
+  where that edge is across from the aimed module, and just above the middle of a wide macro the drop is ordinary.
+  A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card, a port widget or a sound
+  from the Sounds view never opens a gap (a sound may be meant for a card, a Sampler or a Drum Kit pad, so no card may
+  slide away from under the pointer; dropped on the canvas it lands in the nearest free slot). A card dragged from the canvas opens none while its centre is still over the place it was picked up
+  from, so nudging a card never pushes its neighbours.
+  A drag whose centre is over a macro border it is not in yet (or has just left) opens no gap either, and a library
+  drop released over an open gap joins the macro the gap was made in: the join or leave is decided on the borders as
+  they stood, under any Animations setting (Reduce Motion moves cards at once, so a gap there would shift the border
+  under the pointer).
+- **Wiring.** A module released in the gap between two connected cards is wired in series, source to module to
+  target, replacing the direct cable ([smart connections](smart-connections.md#how-a-suggestion-is-found)); the cable
+  splits in two ([motion](insert-motion.md#cables-around-an-inserted-or-deleted-module)) and the hovered module's ghost
+  slides to the slot ([motion](insert-motion.md#the-hovered-module-slides-to-the-gap)).
+- **Where it lands and what moves.** The module copies the spacing between the anchor and the card before it (at the
+  start of a row, the spacing after the anchor; a lone card 40 px), held between 12 and 80 px, and takes the anchor's
+  place: one spacing after the card before it, snapped up to the 8 px grid, level with the anchor. The anchor and every
+  unit of its row (it overlaps the anchor vertically, column: horizontally) from the anchor on move by one shared
+  amount, the module's width plus that spacing rounded up to the grid, so their own spacing is kept. A gap already wide
+  enough moves nothing.
+- **Chain.** A moved unit (or the module's slot itself, say a tall module) that now runs into another unit ahead of it
+  pushes that one along the same way, as far as the 12 px clearance needs, and so on, all the way. A unit behind the
+  pusher, or one that already overlapped it, is left alone; pinned dock cards never move. Inside an open macro the
+  border grows with its members, and a border that grew pushes the units ahead of it at its own level the same way,
+  level by level to the top.
+- **Live and exact.** The moves are real (node x/y and the cards, geometry final at once) and glide like a make-room
+  push. One gap is open at a time; moving to another gap first takes the open one back exactly and then makes the new
+  one from that home layout, and the pointer keeps the open gap while it stays over the slot and the spacing either
+  side. Moving away, the drag leaving the canvas, Esc (a library drag ends; a card drag goes on with the gap closed
+  until it is released) or a click that never moved puts every card back exactly, the output dock included, and
+  records nothing.
+- **The drop.** `InsertGap::Commit` takes the gap back before the drop's undo record and `land()` makes it again inside
+  it, for the module's real size, so the add or move, the pushes and any collapsed macro card pushed are ONE undo step
+  (graph and macros). The pushes are remembered on the landed card like its own growth's
+  ([Shrinking a card](#making-room-when-something-grows)): deleting it later brings them home (and inside a macro the
+  hole is then already filled, so nothing closes further); an undo or redo forgets them, as for every record.
+- **Keyboard.** Adding a module from the library without dragging (Return on a row, or a click) while exactly one card
+  is selected puts it right after that card (`synth::insertModuleAfterSelectedCard`), through the same commit: the
+  cards after it make room, the module joins the card's open macro, one undo step. With nothing after the card the
+  module goes one spacing to its right; with no single selection it lands in the middle of the view as before.
+
+## Output dock
+
+Master (once any mixer channel exists), the Rec Tap (if the project has one) and Audio Output form the
+**output dock**: the chain tail, always the rightmost cards on the canvas, left to right in signal order
+(`Master -> Rec Tap -> Audio Output`, [`docs/mixer/mixer.md`](../mixer/mixer.md#node-types)). The pure rule is
+`LayoutUtil::computeOutputDock`; the canvas glue is `GraphEditor::reflowOutputDock()`
+(`GraphEditorOutputDock.cpp`).
+
+- **x is derived, never user-set.** The dock's left edge is the rightmost edge of every other layout unit
+  (`MacroGroupController::buildLayoutUnits("")` minus the dock: loose modules, whole macros as their hull or
+  card), rounded up to the grid, plus `kLayerGapX`. On an empty canvas it is `kArrangeOriginX`. Dock cards follow
+  each other `kOutputDockCardGapX` (40 px) apart. Nothing stores the x: it is recomputed, so it can never drift.
+- **y is Audio Output's own stored `"y"`** (no extra persisted field), snapped. A new patch seeds it at
+  `kArrangeOriginY`; when Master first appears it joins the dock on that same y.
+- **Dragging** a dock card moves it, and the whole dock with it, vertically only: x is held while dragging and
+  is not snapped back afterwards because it was never moved. Dock cards never travel with a multi-selection
+  drag (they stay put), and never join or leave a macro.
+- **Pinned.** Dock cards are `pinned` layout units. Make-room leaves them out entirely (`makeRoomFor`): they are
+  neither pushed nor in the way, so a neighbour that has to slide right goes right even when the dock sat just past it
+  (it used to be sent down instead), and the dock is then re-derived to the right of everything.
+- **When it is re-derived**, all inside the causing undo step where there is one: every `updateComponents()` (which
+  covers project/preset load, module add/remove, undo/redo, track creation and the Master splice, and
+  auto-arrange), module and selection drag release, a collapsed-macro card drop, a library drop, and the end of
+  `makeRoomFor`. It writes node x/y and the live component bounds together, never opens an undo record of its own
+  and never marks the project dirty (dirtiness follows the undo edit serial), so opening an older project just
+  shows the dock in its derived place.
+- **Delete protection.** Audio Output can never be deleted; Master can't while any mixer channel exists
+  (`synth::outputDockDeleteRefusal`, used by canvas delete, multi-delete, the card's Delete item, which is
+  disabled with the reason in its label, and the AI patch "remove" list). Undoing the track deletion that
+  removes the last channel still removes Master, as before.
+- **Go to Output** (Cmd+Shift+M, canvas menu; command id `locateMaster`) selects Master (else Audio Output) and
+  centres the view on the whole dock.
+
 ## Auto-arrange
 
-`GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) rearranges every visible module into a
-left-to-right topological signal-flow layout in one undo step.
+`GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) lays the whole canvas out in one undo step. The rule is
+built for people who are not graph experts: things that belong together stay together, the result is predictable, and
+running it twice changes nothing. The pure layout is `computeHierarchicalArrange`
+(`Source/UI/Layout/HierarchicalArrange.{h,cpp}`: blocks, edges and track order in, positions out, no graph or
+component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into that input and writes the result back.
 
-**Collect arrangeable nodes.** Every graph node whose processor is a `ModuleBase` subclass (which
-includes Audio Input), plus the `AudioGraphIOProcessor` IO nodes — Audio Output and, in a patch
-still holding one, a raw `audioInputNode`. `AttenuverterModule` nodes are skipped entirely: they
-are implementation details of the modulation graph and never appear as visible cards.
+**Rows, top to bottom.**
 
-**Build directed edges.** Edges come from `AudioProcessorGraph::getConnections()`, skipping any
-edge touching an `AttenuverterModule` node. Modulation routings from
-`AudioEngine::getModulationRoutings()` (source to destination, collapsing attenuverter chains to
-logical endpoints) are added as `extraEdges`. Duplicate edges and self-loops are removed.
+1. **The shared-modulator row.** A modulator (a block with no signal cable at all and nothing feeding it, such as an
+   LFO or an envelope) whose consumers sit in two or more rows goes in one row on top, ordered by consumer count
+   (most first), then node id, in the column before the leftmost block it modulates (right-aligned in it, like a
+   pulled-up source below). When that block is in the first column (a macro that starts its row), every other block
+   moves one column right to make room, so the modulator is behind every macro it drives and the rows stay lined up.
+   A shared modulator fed inside its own row (a MIDI retrigger cable) keeps the column that cable gives it. A
+   modulator whose consumers are all in one row joins that row instead. A block with modulation consumers and no signal cable leaving it (an LFO
+   that only takes a MIDI retrigger cable in) counts as a modulator too, so that incoming cable never pulls it into the
+   feeding track's row.
+2. **One row per track, in track order.** Track order is the timeline's: `GraphEditor::trackSourceOrder` (set by
+   `MainComponent`) returns each track's Track In / Track Audio node uuid in timeline order, the same order the mixer
+   lists its channels in ([`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)). Without that
+   callback (plugin, tests) track source nodes are ordered by node id. A track's row holds everything its source
+   reaches through signal cables (the channel macro, instrument modules, effects, a bus it sends to) plus whatever is
+   wired into that chain. A block reachable from two tracks belongs to the earlier one; a track whose source an
+   earlier track already claimed gets no row of its own.
+3. **One row per remaining connected component**, ordered by the id of the component's leftmost source (its first
+   block with nothing feeding it). A loose module with no cables is a component of one.
 
-**Assign depth by longest path.** A Kahn-style topological traversal gives each node a depth equal
-to the length of its longest incoming path; nodes with no incoming edges get depth 0. Any cycle is
-broken by ignoring back-edges to already-visited nodes, so the traversal always terminates. The
-Audio Output IO node is forced to the maximum depth, the rightmost column.
+Cables between rows are still drawn but never influence placement, with two exceptions: a shared modulator's, which pick its column, and a modulation edge from a block that is a source of its own row (nothing feeds it there, such as an LFO cabled into one track that also modulates another). Columns are shared by every row, so that edge counts like an in-row one: the modulator ends up in a column before the block it modulates in the other row. A block in the middle of a chain that modulates another row stays as it is. A source like that whose consumers sit in two or more rows is then centred vertically on the span from its first consumer's top to its last consumer's bottom (slid back toward its row only when another block of its column occupies the centre); with one consumer row it stays level with it. A shared modulator keeps the shared row on top. `HierarchicalArrangeLfoCentre` asserts the centre rule for 2 to 4 rows. The invariant, whatever the topology (track rows with channel macros, free macros in one component, chained, nested, folded or open): **for every modulation edge, the source is in a strictly earlier column than the destination.** The `HierarchicalArrangeColumns` tests in `Tests/UI/Layout/HierarchicalArrangeTests.cpp` assert it over a list of topologies; add a new shape there as one more entry. Row gap is `kIntraLayerGapY`; a row is as tall as
+its tallest column stack.
 
-**Group into layers.** All nodes at one depth form a column. Within a column, nodes sort by role
-rank for a stable, readable ordering, then by node UID for full determinism across runs:
+**Columns.** A block's column is its longest-path depth from the row's sources, over the edges inside the row (signal
+and modulation alike). A source block (nothing feeding it inside its row) that is not the row's anchor (the track's
+start, or a component's leftmost source) is then placed as late as possible: one column before its nearest consumer in
+the row, and in the stack slot that consumer has, so a loose LFO sits right before the macro it modulates instead of
+over column 0. Such a source is right-aligned in its column (everything else is left-aligned), so a wide block in
+another row's cell of the same column never opens a gap between it and what it feeds. The pass runs per level, so it
+also applies inside open macros.
+A signal edge from a block into its own modulator (an LFO that takes MIDI from the macro it modulates) is left out of
+the column count, so the pair is not a cycle: the modulator stays one column before the block and what follows the block
+keeps its column.
+
+**Columns are aligned across rows.** Inside a row a block's column is its longest-path depth from that row's sources
+(signal cables and modulation routings both count; a cycle is broken by ignoring back-edges). Column k has ONE x for
+every row and is as wide as the widest block at depth k in any row, so matching stages (Gate, EQ, Compressor, channel
+strip) line up vertically down the tracks. Inside one column of one row blocks stack by role rank (sources, then
+filters/EQ/VCA, then effects, then modulators), then node id; the shared-modulator row stacks by its own order.
 
 | Rank | Module types |
 |------|-------------|
-| 0 | Oscillator, Sequencer, MIDI Keyboard |
-| 1 | Filter, VCA |
-| 2 | FX modules (Delay, Reverb, Distortion, ...) |
-| 3 | ADSR, LFO |
+| 0 | Oscillator, Sequencer, MIDI Keyboard and the other sources |
+| 1 | Filter, EQ, VCA, Voice Mixer |
+| 2 | FX modules (Delay, Reverb, Distortion, Gate, Compressor, ...) |
+| 3 | ADSR, LFO and the other modulators |
 
-**Assign pixel coordinates.**
+**What is a block.**
 
-```
-x = kArrangeOriginX          // 40 px left margin
-for d in 0..maxDepth:
-    layerWidth = max(sizeOf(n).x for n in layers[d])
-    y = kArrangeOriginY      // 40 px top margin per column
-    for n in layers[d]:
-        nodeX = x + (layerWidth - w) / 2   // centre narrow cards in a wide column
-        emit { n, snap({nodeX, y}) }
-        y += h + kIntraLayerGapY            // 40 px between cards
-    x += layerWidth + kLayerGapX            // 80 px between columns
-```
+- **Loose module** or **collapsed macro**: one card-sized block. Nothing inside a collapsed macro is arranged; its
+  hidden members are translated rigidly by the card's delta (`MacroGroupController::moveUnitBy`), so their offsets to
+  the card never change.
+- **Open macro**: arranged recursively with the same rule (members and child macros are blocks; port widgets are
+  excluded because they dock to the hull), then placed as ONE block whose size is its hull footprint. The hull is
+  `LayoutUtil::openMacroHull(memberUnion, portRows)`, the same function `macroHullBounds` draws: the union grown by
+  the margin, the chip row on top and `kMacroHullSideOutset` of port strip each side, so the outer hull contains the
+  inner one and a hull never starts left of the canvas (the first column starts at `kArrangeOriginX`). A macro with
+  nothing to arrange inside (only ports) stays one rigid rectangle.
+- **The output dock is not arranged.** Master, Rec Tap and Audio Output are skipped; after positions are written
+  `reflowOutputDock()` places them right of everything, on the first row's y (Audio Output's own stored y is set to it).
+- A cable endpoint that resolves to nothing (the dock, a hidden helper node) contributes no edge; a macro port node or
+  a member hidden inside a collapsed macro stands in as its macro's block.
 
-Every emitted position passes through `snap()` and is clamped to
-`[0, kCanvasMax - w] x [0, kCanvasMax - h]`.
+**Pixel coordinates.** Everything is on `kGridSize`: columns and stacks advance by grid-rounded sizes, a card is
+left-aligned in its column (a wider block elsewhere in the column never shifts it sideways), and an open macro's anchor (the origin its members' offsets are measured from) is
+chosen so every member lands on the grid while the hull, which can sit a few pixels off-grid, stays within its slot.
+The origin is `(kArrangeOriginX, kArrangeOriginY)`.
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
-| `kLayerGapX` | 80 px | Horizontal gap between adjacent layer columns |
-| `kIntraLayerGapY` | 40 px | Vertical gap between stacked modules in one layer |
-| `kArrangeOriginX` | 40 px | Left margin — where the first layer column starts |
-| `kArrangeOriginY` | 40 px | Top margin — where each column's first module starts |
+| `kLayerGapX` | 80 px | Horizontal gap between adjacent columns |
+| `kIntraLayerGapY` | 40 px | Gap between stacked blocks and between rows |
+| `kArrangeOriginX` | 40 px | Left margin where the first column starts |
+| `kArrangeOriginY` | 40 px | Top margin where the first row starts |
 
-All four are multiples of `kGridSize`, so arranged positions are always on-grid.
+**Idempotent by construction.** Positions depend only on sizes, topology and row order, never on where anything
+currently is, so a second Cmd+L moves nothing (and pushes no undo step: `recordGraphAndMacroChange` records nothing
+when nothing changed). Collapsing or expanding one macro and arranging again changes only that block's footprint.
 
-The column advance for single-width modules works out to `kSingleWidth + kLayerGapX` = 360 px; it
-is a consequence of the algorithm, not a named constant. A double-width module advances the cursor
-by `kDoubleWidth + kLayerGapX` = 640 px, because `sizeOf` reports its real 560 px width and
-`layerWidth` follows — see [module-card](module-card.md#width-buckets).
+**Undo and "home".** The whole write (node x/y, collapsed cards' persisted bounds, the dock) is one
+`recordGraphAndMacroChange` step, so one Cmd+Z restores every node and every collapsed card. Arranging also clears every
+macro's transient make-room record (`Macro::displaced`, the expand nudge): the layout is the new "home", so a later
+collapse never drags a neighbour back to a spot the layout has left.
 
-`autoArrange()` wraps every position write in one undo snapshot:
-`undoManager->captureBeforeState(graph)` before computing the layout,
-`undoManager->pushSnapshotFromCapture(graph)` after `updateComponents()`. One Cmd+Z restores every
-module to its pre-arrange position.
+**Synchronous geometry.** Node x/y, macro bounds and live component bounds are written together; then only the light
+refresh runs (`syncMacroCards`, port widgets re-docked, `reflowOutputDock`, repaint). Auto-arrange never calls
+`updateComponents()`, which is not re-entrant.
 
 ## LayoutUtil API
 
@@ -148,7 +505,6 @@ inline constexpr int kGridSize       = 8;    // snap quantum
 inline constexpr int kCollisionGap   = 12;   // minimum clear gap between bounding boxes (px)
 inline constexpr int kSpiralStep     = 8;    // spiral ring step — equals kGridSize
 inline constexpr int kSpiralMaxRings = 256;  // hard cap: 256*8 = 2048 px search radius
-inline constexpr int kCanvasMax      = 10000;
 inline constexpr int kLayerGapX      = 80;
 inline constexpr int kIntraLayerGapY = 40;
 inline constexpr int kArrangeOriginX = 40;
@@ -214,49 +570,23 @@ Finds the nearest grid-aligned top-left where a `w x h` box does not overlap any
 (excluding `selfId`). Starts at `snap(desired)`, then walks the expanding spiral. Returns
 `snap(desired)`, clamped to the canvas, when no clear slot is found inside the search radius — it
 never returns an out-of-bounds position.
+The spiral can try every spot of 256 rings, so each spot is tested only against the boxes near it: the call files
+`others` once by the cells of a grid laid over them and a spot reads only the cells it touches. The answer is the one
+testing every box would give (`LayoutUtilTest.FindFreeSlotPicksTheSameSpotAsTestingEveryBox`); testing every box
+made one library add on the Load test project spend most of its time here
+(`ScaleHang.PlacingANewCardTestsOnlyTheCardsNearItsSpot` counts it).
 
-**`resolveOverlapsAfterResize`**
-
-```cpp
-inline constexpr int kResolveMaxRounds = 4;
-
-std::vector<ArrangeResult>
-resolveOverlapsAfterResize(NodeID resizedId,
-                           const std::vector<Box>& boxes,
-                           int gap = kCollisionGap);
-```
-
-Called after a module changes footprint in place. `boxes` is every module box **including** the
-resized one, already carrying its new rect. Returns a new top-left for each *other* box that had to
-move; boxes that stayed put are not returned, so an empty result means the new footprint fitted
-as-is.
-
-The resized module is never returned and never moves. Displaced boxes are pushed straight down past
-the lowest thing they collided with, then run through `findFreeSlot`, so results are on-grid and
-gap-respecting. The sweep is deterministic (top-to-bottom, then left-to-right, then id) and the
-cascade is capped at `kResolveMaxRounds` passes.
-
-**`computeAutoArrange`**
+**`computeHierarchicalArrange`**
 
 ```cpp
-struct ArrangeResult { NodeID id; juce::Point<int> pos; };
-
-std::vector<ArrangeResult>
-computeAutoArrange(juce::AudioProcessorGraph& graph,
-                   const std::function<juce::Point<int>(NodeID)>& sizeOf,
-                   const std::vector<std::pair<NodeID, NodeID>>& extraEdges);
+ArrangeOutput computeHierarchicalArrange(const ArrangeInput& input);
 ```
 
-Computes the topological layout above and returns one `ArrangeResult` per arrangeable node
-(`AttenuverterModule` nodes excluded). The caller writes `pos.x` / `pos.y` back to
-`node->properties` and calls `updateComponents()`.
-
-`sizeOf` returns the pixel footprint `{width, height}` for a `NodeID`, typically backed by the live
-`ModuleComponent` dimensions; it falls back to `{kSingleWidth, 300}` for a node with no visible
-component. `extraEdges` carries additional directed edges (for example from
-`getModulationRoutings()`) merged into the graph edge set before depths are computed, so an
-envelope-to-VCA modulation influences column ordering even though the attenuverter nodes it passes
-through are excluded from the arrangeable set.
+The pure layout behind [Auto-arrange](#auto-arrange): `ArrangeInput` carries the blocks (module, collapsed macro, open
+macro with children), the edges (signal and modulation, between any block ids), aliases (hidden members and port nodes
+mapped to the block standing in for them) and the track starts in track order. `ArrangeOutput` carries a position per
+block at every level (an open macro's position is its anchor) and the open macros' hulls. `openMacroHull` is the one
+definition of the hull around a member union. The same header holds `arrangeRoleRank`.
 
 ## Drag affordance
 
@@ -264,8 +594,8 @@ During any module drag — moving an existing module, or dragging one in from th
 two cues are drawn over the canvas so placement is predictable.
 
 **Grid dots.** Subtle dots at 40 px spacing (5 x `kGridSize`), drawn in the `textPrimary` theme
-colour at about 8% alpha. Dots are computed only over the canvas's *visible* clip region, never all
-10000 x 10000 px, so the cost is negligible at low zoom.
+colour at about 8% alpha. Dots are computed only over the canvas's *visible* clip region, never the
+whole canvas, so the cost is negligible at low zoom.
 
 **Landing ghost.** A translucent rounded rectangle tracks the exact position the module will land —
 the result of `resolvePlacement()`, which snaps to the grid *and* runs the anti-overlap spiral in
@@ -316,6 +646,23 @@ guide per type (left / right / top / bottom / centreX / centreY) is shown.
 **Guides are visual only** — they never alter snapping. `findFreeSlot()` still governs where the
 card lands, on the soft 8 px grid. A theme switch re-resolves the guide colour automatically.
 
-A toggle lives at `Settings -> Preferences -> Show Alignment Guides`, persisted as
+A toggle lives at `Settings -> Preferences -> Graph -> Show Alignment Guides` (see [settings-preferences.md](settings-preferences.md)), persisted as
 `alignmentGuidesEnabled` in `juce::ApplicationProperties` and on by default. Off, only the module
 ghost is drawn.
+
+## Context menu placement
+
+A right-click menu opens with its top-left corner at the pointer. It moves off the pointer only
+where JUCE clamps it to keep it on screen (near the right or bottom edge). A plain
+`juce::PopupMenu::Options()` targets an *empty* rectangle at the mouse, which JUCE places on the
+nearer screen half, so on the right half of the screen the menu opened to the left of the pointer.
+
+Every pointer-driven menu therefore builds its options with `ContextMenuPlacement.h`
+(`Source/UI/Layout/`):
+
+- `contextMenuOptionsAtPointer()` / `contextMenuOptionsAtPoint(p)`: top-left at the pointer / a screen point.
+- `contextMenuOptions(keyboardAnchor)`: the anchor when the menu was opened from the keyboard
+  (Shift+F10, see the `openContextMenu` action), otherwise the pointer.
+
+Dropdown and button menus keep `withTargetComponent(&button)` so they stay anchored to their button.
+`Tests/UI/Layout/MenuPlacementTests.cpp` pins the options the helpers build.

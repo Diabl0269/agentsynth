@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "connections": [],
+  "modulations": [],
+  "macros": [],
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Audio Output",
+      "uuid": "0b9a7e10-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "params": {},
+      "position": {
+        "x": 1200,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "LFO",
+      "uuid": "2a111111-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "params": {},
+      "position": {
+        "x": 60,
+        "y": 60
+      }
+    },
+    {
+      "id": 3,
+      "type": "Hosted Plugin",
+      "uuid": "3b222222-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+      "params": {},
+      "position": {
+        "x": 460,
+        "y": 60
+      },
+      "state": {
+        "pluginFormat": "AudioUnit",
+        "pluginName": "AUDelay",
+        "pluginUid": 0
+      }
+    }
+  ]
+}

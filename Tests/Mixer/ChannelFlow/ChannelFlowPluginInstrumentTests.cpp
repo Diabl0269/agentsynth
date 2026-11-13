@@ -1,6 +1,6 @@
 // ChannelFlowPluginInstrumentTests.cpp
 //
-// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
+// "Add Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
 // instrument, plus regressions for menu snapshot resolution, format-label
 // disambiguation, self-exclusion and poly Voice Mixer wiring. Uses InstrumentPluginStubBackendCFT
 // and friends from ChannelFlowTestFixture.h.
@@ -9,6 +9,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "Branding.h"
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
@@ -25,7 +26,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -36,7 +37,7 @@
 #include <thread>
 
 // ============================================================================
-// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
+// "Add Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
 // Loading is asynchronous (StubBackend's own contract), so every test here pumps the message loop
 // after driving the SAME applyAddTrackMenuChoice/menu-id path the tests above use.
 // ============================================================================
@@ -87,10 +88,13 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
     std::vector<juce::String> expectedMembers{nodeUuid(trackIn), nodeUuid(plugin), nodeUuid(gate),
                                               nodeUuid(eq),      nodeUuid(comp),   nodeUuid(strip)};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expectedMembers.push_back(nodeUuid(outletsFedByStripCFT(graph, strip).front()));
     auto actualMembers = macro.members;
     std::sort(expectedMembers.begin(), expectedMembers.end());
     std::sort(actualMembers.begin(), actualMembers.end());
-    EXPECT_EQ(actualMembers, expectedMembers) << "exactly Track In/plugin/Gate/EQ/Compressor/Strip, nothing else";
+    EXPECT_EQ(actualMembers, expectedMembers)
+        << "exactly Track In/plugin/Gate/EQ/Compressor/Strip and the strip's output port, nothing else";
 
     bool midiWired = false;
     for (const auto& c : graph.getConnections())
@@ -114,6 +118,55 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     EXPECT_TRUE(leftWired) << "the plugin's L output must reach Gate L";
     EXPECT_TRUE(rightWired) << "the plugin's real published R output (raw ch1) must reach Gate R — "
                                "rightAudioLegChannel() read AFTER the load completed, never assumed ch1 blind";
+}
+
+// The plugin track follows the Dual I/O preference. The stub's DEFAULT is a mono output that also runs in
+// stereo, so this also covers the stereo negotiation; collapsing the jack must not drop either raw cable.
+TEST_F(ChannelFlowTest, PluginInstrumentTrackFollowsTheDualIOPreferenceAndKeepsBothRawCables) {
+    for (const bool dual : {true, false}) {
+        SCOPED_TRACE(dual ? "preference: dual" : "preference: collapsed");
+        InstrumentPluginStubBackendCFT backend;
+        backend.factories["Stub Synth"] = [] {
+            return std::make_unique<synth::test::StubPluginInstance>(
+                0, 1, "Stub Synth", 0x5754424, "VST3", std::vector<synth::test::StubParamSpec>{}, false, 0,
+                /*flexibleLayout=*/true);
+        };
+        synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        mc.getGraphEditor().setDefaultDualIOForNewModules(dual);
+        auto& graph = mc.getAudioEngine().getGraph();
+        mc.getPluginScanService().setCandidateSource([](const juce::String&) { return juce::StringArray(); });
+        seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+        mc.getTimelinePanel().buildAddTrackMenu();
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase + 0);
+        ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == 1; }));
+
+        auto* plugin = findNodeOfTypeCFT(graph, ModuleType::HostedPlugin);
+        auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
+        ASSERT_NE(plugin, nullptr);
+        ASSERT_NE(gate, nullptr);
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(plugin->getProcessor());
+        ASSERT_NE(hosted, nullptr);
+
+        EXPECT_EQ(hosted->isDualIO(), dual);
+        EXPECT_EQ(hosted->getVisibleOutputPortCount(), dual ? 2 : 1);
+
+        bool leftWired = false;
+        bool rightWired = false;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != gate->nodeID)
+                continue;
+            leftWired = leftWired || (c.source.channelIndex == 0 && c.destination.channelIndex == 0);
+            rightWired = rightWired || (c.source.channelIndex == 1 && c.destination.channelIndex == 1);
+        }
+        EXPECT_TRUE(leftWired);
+        EXPECT_TRUE(rightWired) << "collapsing the plugin's jack must leave the raw ch1 -> Gate R cable in place";
+    }
 }
 
 TEST_F(ChannelFlowTest, PluginInstrumentTrackOneUndoStepRevertsEverythingAndRedoRestores) {
@@ -394,6 +447,9 @@ TEST_F(ChannelFlowTest, PluginInstrumentLoadCompletingAfterNewPatchIsDroppedNotA
     backend.factories["Stub Synth"] = [] {
         return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
     };
+    // The completion is parked until after New Patch has run: left to the message loop it would be
+    // delivered ahead of New Patch's own queued command, i.e. before the document is replaced.
+    backend.holdCompletions = true;
     synth::HostedPluginBackend::ScopedDefault installed(&backend);
 
     MainComponent mc(std::make_unique<MockProviderCFT>());
@@ -411,19 +467,27 @@ TEST_F(ChannelFlowTest, PluginInstrumentLoadCompletingAfterNewPatchIsDroppedNotA
     // later message-loop turn) — nothing has touched the graph or doc yet, since
     // buildInstrumentTrackAndChain only ever runs once onLoadCompleted fires.
     ASSERT_TRUE(doc.getTracks().empty());
+    ASSERT_EQ(mc.getPendingInstrumentPluginLoadCountForTest(), 1);
 
     // New Patch — the REAL guarded flow (guardUnsavedChanges("New Patch", ...), same seam a menu
-    // click or Cmd+N goes through) — replaces the document WHILE that load is still pending. Let
-    // New Patch's OWN (unrelated) undo-tracked steps settle before touching the stale load at all,
-    // so the edit-serial comparison below isolates just the stale completion's effect.
+    // click or Cmd+N goes through) — replaces the document WHILE that load is still pending. The
+    // command is dispatched asynchronously, and New Patch's own graph-clear is an undo-tracked step
+    // that bumps the edit serial in one go, so wait for that serial move: a fixed pause could end
+    // before it, and the baseline below would then wrongly count New Patch's own steps against the
+    // stale load.
+    const int editSerialBeforeNewPatch = mc.getUndoManager().getEditSerial();
     mc.simulateNewPatchClick();
-    pumpUntilCFT([] { return false; }, 50);
+    ASSERT_TRUE(pumpUntilCFT([&] { return mc.getUndoManager().getEditSerial() != editSerialBeforeNewPatch; }, 4000))
+        << "New Patch never ran";
     const int editSerialAfterNewPatchSettled = mc.getUndoManager().getEditSerial();
 
-    // Now let the stale load's completion land. There is deliberately nothing to poll FOR beyond
-    // that: a correctly dropped completion has no observable side effect at all, which is exactly
-    // what this proves.
-    pumpUntilCFT([] { return false; }, 300);
+    // Now let the stale load's completion land: the pending-load count only returns to zero once
+    // the completion has been delivered and the dropped load released. A correctly dropped
+    // completion has no other observable side effect, which is exactly what this proves.
+    ASSERT_EQ(mc.getPendingInstrumentPluginLoadCountForTest(), 1) << "New Patch must not release the pending load";
+    backend.releaseHeldCompletions();
+    ASSERT_TRUE(pumpUntilCFT([&] { return mc.getPendingInstrumentPluginLoadCountForTest() == 0; }, 4000))
+        << "the stale load's completion was never delivered";
 
     EXPECT_TRUE(doc.getTracks().empty()) << "the stale load must not land a track in the fresh document";
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::HostedPlugin), 0)
@@ -485,14 +549,14 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackMonoInstanceDuplicatesOntoBothChann
 
 TEST_F(ChannelFlowTest, PluginInstrumentTrackOverMaxChannelsIsRefusedGraphAndUndoUntouched) {
     // TEST GAP (finding 5b): a plugin instance whose real channel count exceeds
-    // HostedPluginModule::kMaxPluginChannels is REFUSED inside publishInstance(), never truncated
+    // HostedPluginModule::kMaxPluginOutputChannels is REFUSED inside publishInstance(), never truncated
     // (Source/Modules/CLAUDE.md's invariant). hasInstance() reads that refusal identically to an
     // outright backend failure, so this must behave exactly like
     // PluginInstrumentTrackFailedLoadLeavesGraphAndUndoUntouched: no track, no node, no undo step.
     InstrumentPluginStubBackendCFT backend;
     backend.factories["Huge Synth"] = [] {
-        return std::make_unique<synth::test::StubPluginInstance>(0, synth::HostedPluginModule::kMaxPluginChannels + 1,
-                                                                 "Huge Synth");
+        return std::make_unique<synth::test::StubPluginInstance>(
+            0, synth::HostedPluginModule::kMaxPluginOutputChannels + 1, "Huge Synth");
     };
     synth::HostedPluginBackend::ScopedDefault installed(&backend);
 
@@ -530,7 +594,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackOverMaxChannelsIsRefusedGraphAndUnd
 // synth::addVoiceMixerForPolyInstrument / the poly branch of MainComponent::addInstrumentTrack's
 // chain-source selection, exercised directly at the ChannelFlows level: a factory-default
 // Oscillator is poly OFF (see InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1 above), so
-// the golden "+ Track -> Instrument" path never takes this branch today — this proves it wires
+// the golden "Add Track -> Instrument" path never takes this branch today — this proves it wires
 // correctly for whenever an instrument IS poly (docs/mixer/mixer.md#an-instrument-track).
 TEST_F(ChannelFlowTest, PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel) {
     AudioEngine engine;
@@ -581,7 +645,7 @@ TEST_F(ChannelFlowTest, NonPolyInstrumentGetsNoVoiceMixer) {
 }
 
 // synth::addEnvelopeAndVCAForRawInstrument, exercised directly at the ChannelFlows level for the
-// poly case (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path
+// poly case (a factory-default Oscillator is poly OFF, so the golden "Add Track -> Instrument" path
 // never exercises composition with a Voice Mixer today — see PolyInstrumentGetsVoiceMixerAheadOf-
 // StripAndFeedsTheChannel above for the same reasoning). Proves the VCA is inserted AFTER the Voice
 // Mixer's poly-voice sum, both forced non-poly, exactly as MainComponent::addInstrumentTrack does.
@@ -630,8 +694,47 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
+// The ADSR a 'Add Track' chain builds is the same card as one dragged from the library: every
+// parameter but the forced-mono `poly` is the stock default, and the new-module hook (Dual I/O default)
+// runs on it like it does on a library drop.
+TEST_F(ChannelFlowTest, TrackChainAdsrMatchesTheLibraryAdsrAndRunsTheNewModuleHook) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    auto trackInNode = graph.addNode(synth::AIStateMapper::createModule("Track In"));
+    auto oscNode = graph.addNode(synth::AIStateMapper::createModule("Oscillator"));
+    ASSERT_NE(trackInNode, nullptr);
+    ASSERT_NE(oscNode, nullptr);
+
+    juce::StringArray hooked;
+    const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
+        graph, *trackInNode, *oscNode, /*chainSourceRightChannel=*/1, {200, 0}, {300, 0},
+        [&hooked](juce::AudioProcessor&, const juce::String& type) { hooked.add(type); });
+    ASSERT_NE(envAndVca.vca, nullptr);
+    EXPECT_TRUE(hooked.contains("ADSR"));
+    EXPECT_TRUE(hooked.contains("VCA"));
+
+    auto* adsrNode = findNodeOfTypeCFT(graph, ModuleType::ADSR);
+    ASSERT_NE(adsrNode, nullptr);
+    auto libraryAdsr = synth::AIStateMapper::createModule("ADSR");
+    ASSERT_NE(libraryAdsr, nullptr);
+    for (auto* param : libraryAdsr->getParameters()) {
+        auto* ref = dynamic_cast<juce::RangedAudioParameter*>(param);
+        ASSERT_NE(ref, nullptr);
+        if (ref->paramID == "poly")
+            continue; // forced mono: Track In's raw MIDI only gates the mono branch
+        auto* built = dynamic_cast<juce::RangedAudioParameter*>([&]() -> juce::AudioProcessorParameter* {
+            for (auto* p : adsrNode->getProcessor()->getParameters())
+                if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(p); r != nullptr && r->paramID == ref->paramID)
+                    return p;
+            return nullptr;
+        }());
+        ASSERT_NE(built, nullptr) << ref->paramID;
+        EXPECT_FLOAT_EQ(built->getValue(), ref->getValue()) << ref->paramID << " differs from the library ADSR";
+    }
+}
+
 // synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
-// level (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path never
+// level (a factory-default Oscillator is poly OFF, so the golden "Add Track -> Instrument" path never
 // takes this branch today, same reasoning as the poly tests above) — proves a poly instrument gets
 // a TRUE per-voice envelope: Poly MIDI's Pitch/Gate fans feed the instrument and a poly ADSR
 // directly, no Voice Mixer, both ADSR and VCA stay poly (never forced non-poly).
@@ -669,9 +772,6 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
             if (boolParam->paramID == "poly")
                 EXPECT_TRUE(boolParam->get()) << "the ADSR must be poly — its gate now comes from Poly MIDI CV";
-        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
-            if (floatParam->paramID == "sustain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f) << "same sustain override as the non-poly path";
     }
     for (auto* param : polyEnv.vca->getProcessor()->getParameters()) {
         if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
@@ -679,7 +779,7 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
                 EXPECT_TRUE(boolParam->get()) << "the VCA must be poly";
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
             if (floatParam->paramID == "gain")
-                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f) << "same gain override as the non-poly path";
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.5f) << "same gain as the non-poly path";
     }
 
     EXPECT_TRUE(graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
@@ -704,10 +804,10 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
         << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";
 }
 
-// The "+ Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
+// The "Add Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
 // entry point for the poly-envelope auto-wire above — it must set the freshly created Oscillator's
 // "poly" parameter BEFORE MainComponent::addInstrumentTrack's own isProcessorPoly check runs, so
-// the golden "+ Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
+// the golden "Add Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
 // LegNeverCh1 above) can actually reach PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNo-
 // VoiceMixer's wiring. Drives the real menu seam (applyAddTrackMenuChoice), not
 // MainComponent::addInstrumentTrack or synth::addPolyEnvelopeAndVCAForInstrument directly.
@@ -812,4 +912,41 @@ TEST_F(ChannelFlowTest, AddInstrumentTrackMenuOscillatorNonPolyStaysNonPoly) {
         << "the non-poly menu entry must never take the poly-envelope branch";
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
         << "a freshly created Oscillator defaults to poly OFF — no Voice Mixer needed";
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentTracksAreNamedAfterThePluginAndNumberedOnlyOnClash) {
+    InstrumentPluginStubBackendCFT backend;
+    backend.factories["Stub Synth"] = [] {
+        return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
+    };
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    mc.getPluginScanService().setCandidateSource([](const juce::String&) { return juce::StringArray(); });
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+    for (int added = 1; added <= 2; ++added) {
+        mc.getTimelinePanel().buildAddTrackMenu();
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase + 0);
+        ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == added; }))
+            << "the async load/chain-build never completed";
+    }
+
+    const auto& tracks = mc.getTimelineDoc().getTracks();
+    ASSERT_EQ(tracks.size(), 2u);
+    EXPECT_EQ(tracks[0].name, "Stub Synth");
+    EXPECT_EQ(tracks[1].name, "Stub Synth 2");
+
+    std::vector<juce::String> titles;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) != nullptr)
+            titles.push_back(synth::moduleTitle(*node));
+    std::sort(titles.begin(), titles.end());
+    ASSERT_EQ(titles.size(), 2u);
+    EXPECT_EQ(titles[0], "Stub Synth");
+    EXPECT_EQ(titles[1], "Stub Synth 2");
 }

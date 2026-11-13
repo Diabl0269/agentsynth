@@ -3,8 +3,11 @@
 
 #include "MixerSends.h"
 
+#include "AudioEngine/ConnectionIndex.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/RecordTapModule.h"
@@ -41,12 +44,15 @@ std::vector<int> keyInputChannels(juce::AudioProcessorGraph& graph, NodeID modul
     return channels;
 }
 
-/** True when `conn` is an audio edge landing on a module's Key input. */
-bool landsOnKey(juce::AudioProcessorGraph& graph, const Connection& conn) {
+/** The module whose Key input `conn` lands on, looking through macro ports (a send into a keyed
+ *  module inside a macro enters through an auto-created port); an invalid id when it lands on none. */
+NodeID keyModuleOf(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables, const Connection& conn) {
     if (conn.destination.isMIDI())
-        return false;
-    auto* module = moduleAt(graph, conn.destination.nodeID);
-    return module != nullptr && module->mapInputChannel(conn.destination.channelIndex).role == PortRole::Sidechain;
+        return {};
+    const auto pin = resolveThroughPorts(graph, cables, conn.destination);
+    auto* module = moduleAt(graph, pin.nodeID);
+    const bool isKey = module != nullptr && module->mapInputChannel(pin.channelIndex).role == PortRole::Sidechain;
+    return isKey ? pin.nodeID : NodeID{};
 }
 
 bool isReachTerminal(const juce::AudioProcessor* processor) {
@@ -148,11 +154,19 @@ bool targetIsLegal(juce::AudioProcessorGraph& graph, NodeID sourceStrip, const S
 } // namespace
 
 std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
+    if (stripAt(graph, stripId) == nullptr)
+        return {};
+    return findStripsFeedingStrip(graph, ConnectionIndex(graph), stripId);
+}
+
+// Each step asks the index for the node's own incoming cables (in the full list's order), so a whole mixer snapshot
+// shares one cable scan instead of re-sorting every cable per column.
+std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                                           NodeID stripId) {
     std::vector<NodeID> sources;
     if (stripAt(graph, stripId) == nullptr)
         return sources;
 
-    const auto connections = graph.getConnections();
     std::vector<NodeID> queue{stripId};
     std::set<NodeID> visited{stripId};
 
@@ -160,8 +174,8 @@ std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, Nod
         const auto nodeId = queue.front();
         queue.erase(queue.begin());
 
-        for (const auto& conn : connections) {
-            if (conn.destination.nodeID != nodeId || !isSignalEdge(graph, connections, conn))
+        for (const auto& conn : cables.into(nodeId)) {
+            if (!isSignalEdge(graph, cables, conn))
                 continue;
             const auto sourceId = conn.source.nodeID;
             if (!visited.insert(sourceId).second)
@@ -178,13 +192,17 @@ std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, Nod
 }
 
 // The trusted "isBus" flag is what a freshly added, still-unfed bus has to go on -- it has no
-// predecessors yet. A strip among its signal predecessors is the structural fallback, so a patch
-// built before the flag existed and a hand-wired group bus both still classify.
+// predecessors yet. Strips feeding it with NO track source feeding it is the structural fallback,
+// so a patch built before the flag existed and a hand-wired group bus both still classify. A strip
+// a track plays into is that track's channel whatever else feeds it: a send from track A
+// into track B's channel must not turn B into a bus. Judged live, so no load-time migration.
 bool isBusStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
     auto* strip = stripAt(graph, stripId);
     if (strip == nullptr)
         return false;
-    return strip->isBus() || !findStripsFeedingStrip(graph, stripId).empty();
+    if (strip->isBus())
+        return true;
+    return !findStripsFeedingStrip(graph, stripId).empty() && findTrackSourcesFeedingStrip(graph, stripId).empty();
 }
 
 // The name a bus column and a bus's stem file fall back to, a bus having no feeding track to take a
@@ -210,26 +228,33 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || !strip->isSendActive(slot))
         return {};
+    return resolveSendTarget(graph, ConnectionIndex(graph), sourceStrip, slot);
+}
 
-    const auto connections = graph.getConnections();
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables, NodeID sourceStrip,
+                             int slot) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return {};
+
     std::vector<SendTarget> queue; // key == true entries are Key hits, never expanded
     std::set<NodeID> visited{sourceStrip};
     std::set<NodeID> keyHits;
     const auto follow = [&](const Connection& conn) {
-        if (landsOnKey(graph, conn)) {
-            if (keyHits.insert(conn.destination.nodeID).second)
-                queue.push_back({conn.destination.nodeID, true});
+        if (const auto keyed = keyModuleOf(graph, cables, conn); keyed != NodeID{}) {
+            if (keyHits.insert(keyed).second)
+                queue.push_back({keyed, true});
             return;
         }
-        if (!isSignalEdge(graph, connections, conn))
+        if (!isSignalEdge(graph, cables, conn))
             return;
         if (visited.insert(conn.destination.nodeID).second)
             queue.push_back({conn.destination.nodeID, false});
     };
 
     const int leg = ChannelStripModule::sendLeftChannel(slot);
-    for (const auto& conn : connections)
-        if (conn.source.nodeID == sourceStrip && conn.source.channelIndex == leg)
+    for (const auto& conn : cables.outOf(sourceStrip))
+        if (conn.source.channelIndex == leg)
             follow(conn);
 
     for (size_t head = 0; head < queue.size(); ++head) {
@@ -242,9 +267,8 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
         if (isReachTerminal(processor))
             continue; // the send left the patch without ever reaching a bus
 
-        for (const auto& conn : connections)
-            if (conn.source.nodeID == entry.node)
-                follow(conn);
+        for (const auto& conn : cables.outOf(entry.node))
+            follow(conn);
     }
     return {};
 }
@@ -266,16 +290,12 @@ NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph, NodeID module) {
     return findStripFedByTrackSource(graph, module);
 }
 
-// The module half is the card title the canvas paints (a custom "displayName" first, then the
-// processor's auto-numbered "Compressor 2" -- GraphEditor::getModuleTitle's own rule, restated
-// here because Core cannot reach a GraphEditor).
+// The module half is the card title the canvas paints (synth::moduleTitle).
 juce::String keySendTargetName(juce::AudioProcessorGraph& graph, NodeID module, const juce::String& channelName) {
     auto* node = graph.getNodeForId(module);
     if (node == nullptr)
         return "No target";
-    auto title = node->properties["displayName"].toString();
-    if (title.isEmpty() && node->getProcessor() != nullptr)
-        title = node->getProcessor()->getName();
+    const auto title = synth::moduleTitle(*node);
     return "Key: " + title + (channelName.isNotEmpty() ? " on " + channelName : juce::String());
 }
 
@@ -287,7 +307,7 @@ juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* ma
     if (node == nullptr)
         return "No target";
     if (macros != nullptr)
-        if (const auto* macro = macros->findByMember(node->properties["uuid"].toString()))
+        if (const auto* macro = nearestChannelMacro(graph, *macros, node->properties["uuid"].toString()))
             return macro->name;
     return isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
 }
@@ -378,7 +398,8 @@ bool removeSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) 
     strip->setSendActive(slot, false);
     strip->setSendPreFader(slot, false);
     strip->setSendMuted(slot, false); // A reused slot always starts unmuted
-    strip->setSendMono(slot, false);  // And stereo
+    strip->setSendBypassed(slot, false);
+    strip->setSendMono(slot, false); // And stereo
     return true;
 }
 
@@ -387,6 +408,14 @@ bool setSendMuted(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot
     if (strip == nullptr || !strip->isSendActive(slot))
         return false;
     strip->setSendMuted(slot, muted);
+    return true;
+}
+
+bool setSendBypassed(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, bool bypassed) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return false;
+    strip->setSendBypassed(slot, bypassed);
     return true;
 }
 
@@ -471,6 +500,7 @@ bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, 
     const bool activeA = strip->isSendActive(slotA), activeB = strip->isSendActive(slotB);
     const bool preA = strip->isSendPreFader(slotA), preB = strip->isSendPreFader(slotB);
     const bool muteA = strip->isSendMuted(slotA), muteB = strip->isSendMuted(slotB);
+    const bool bypassA = strip->isSendBypassed(slotA), bypassB = strip->isSendBypassed(slotB);
     const bool monoA = strip->isSendMono(slotA), monoB = strip->isSendMono(slotB);
     strip->setSendActive(slotA, activeB);
     strip->setSendActive(slotB, activeA);
@@ -478,6 +508,8 @@ bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, 
     strip->setSendPreFader(slotB, preA);
     strip->setSendMuted(slotA, muteB);
     strip->setSendMuted(slotB, muteA);
+    strip->setSendBypassed(slotA, bypassB);
+    strip->setSendBypassed(slotB, bypassA);
     strip->setSendMono(slotA, monoB);
     strip->setSendMono(slotB, monoA);
 

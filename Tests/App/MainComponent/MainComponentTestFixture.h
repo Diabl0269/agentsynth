@@ -82,7 +82,16 @@ protected:
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
-            s->removeValue("aiRequestTimeoutMs");      // default: AIChatComponent::kDefaultRequestTimeoutMs
+            // default: the Modules view at the theme width; a test that shows Sounds persists both
+            s->removeValue("librarySidebarView");
+            s->removeValue("soundBrowserWidth");
+            s->removeValue("soundBrowserAutoPlay");
+            s->removeValue("soundBrowserMatchKey");
+            s->removeValue("soundBrowserPreviewGainDb");
+            // default: dock closed. Any earlier test that opens the bottom dock persists "1", which
+            // would steal canvas height from every layout-sensitive test that follows.
+            s->setValue("bottomDockVisible", "0");
+            s->removeValue("aiRequestTimeoutMs"); // default: AIChatComponent::kDefaultRequestTimeoutMs
             // Autosave defaults ON in the app, but every test that dirties a doc and drives
             // timerCallback()/runAutosaveTickForTest() shares this SAME real settings file — leaving
             // it on would make an unrelated test start writing autosave.json into its temp bundle
@@ -112,11 +121,11 @@ protected:
 
 namespace {
 
-// Collect the 9 toolbar DrawableButtons (direct children of MainComponent). Shared between the
+// Collect the 7 top-bar DrawableButtons (direct children of MainComponent). Shared between the
 // layout tests and ToolbarButtonsHaveNonZeroBoundsAfterConstruction.
 static std::vector<juce::Button*> collectToolbarButtons(MainComponent& mc) {
-    static const char* ids[] = {"toggleLibrary", "saveButton",        "loadButton",      "settingsButton", "undoButton",
-                                "redoButton",    "autoArrangeButton", "toggleModMatrix", "toggleAiPanel"};
+    static const char* ids[] = {"toggleLibrary", "saveButton", "loadButton",   "settingsButton",
+                                "undoButton",    "redoButton", "toggleAiPanel"};
     std::vector<juce::Button*> out;
     for (auto* child : mc.getChildren())
         if (auto* btn = dynamic_cast<juce::Button*>(child))

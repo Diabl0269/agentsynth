@@ -8,3 +8,15 @@ enum class PortRole { Audio, ModCV, Pitch, Gate, Midi, Other, Sidechain };
     parameter CV (ModCV) and a detector key (Sidechain). The mixer's graph walks (bus
     classification, track/channel reach, Make Channel) share this rule. */
 inline bool isSignalPathInputRole(PortRole role) { return role != PortRole::ModCV && role != PortRole::Sidechain; }
+
+/** True when any of the `numSamples` samples is non-zero (null reads as silent): the "is this CV jack
+    patched?" probe. It scans the whole block and exits on the first live sample, so an envelope that
+    idles at 0 and fires mid-block is still seen. */
+inline bool hasAnyNonZero(const float* data, int numSamples) noexcept {
+    if (data == nullptr)
+        return false;
+    for (int s = 0; s < numSamples; ++s)
+        if (data[s] != 0.0f)
+            return true;
+    return false;
+}

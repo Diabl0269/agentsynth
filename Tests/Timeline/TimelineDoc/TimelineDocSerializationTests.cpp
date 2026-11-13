@@ -75,6 +75,95 @@ TEST_F(TimelineDocTest, RoundTripSurvivesJsonText) {
     EXPECT_EQ(dump(loaded), dump(doc));
 }
 
+// ----------------------------------------------------- clip scale fields --
+
+namespace {
+synth::MusicalScale dDorian() { return synth::makeScaleFromMask(2, 0x06AD, "Dorian"); }
+
+// A one-clip doc whose clip JSON object is handed to `edit` before the doc is loaded back.
+template <typename Edit>
+juce::var docVarWithClipEdited(TimelineDoc& source, Edit&& edit) {
+    juce::var state = source.toVar();
+    auto* clipObj = state["tracks"][0]["clips"][0].getDynamicObject();
+    edit(*clipObj);
+    return state;
+}
+} // namespace
+
+// Regression test for FRO998: piano roll scale was lost after a restart
+TEST_F(TimelineDocTest, ClipScaleSurvivesToVarFromVarAndJsonText) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "A");
+    ASSERT_TRUE(doc.setClipScale(clip, dDorian(), true));
+
+    TimelineDoc viaVar;
+    ASSERT_TRUE(viaVar.fromVar(doc.toVar()));
+    TimelineDoc viaText;
+    ASSERT_TRUE(viaText.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))));
+
+    for (const TimelineDoc* loaded : {&viaVar, &viaText}) {
+        const auto* c = loaded->getClip(clip);
+        ASSERT_NE(c, nullptr);
+        ASSERT_TRUE(c->scale.has_value());
+        EXPECT_EQ(c->scale->rootPitchClass, 2);
+        EXPECT_EQ(c->scale->mask, 0x06AD);
+        EXPECT_EQ(c->scale->name, "Dorian");
+        EXPECT_TRUE(c->scaleVisible);
+    }
+}
+
+TEST_F(TimelineDocTest, ClipWithoutAScaleWritesNoScaleKeys) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    doc.addClip(track, 0.0, 4.0, "A");
+    const auto text = juce::JSON::toString(doc.toVar());
+    EXPECT_FALSE(text.contains("scale"));
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(doc.toVar()));
+    EXPECT_FALSE(loaded.getTracks()[0].clips[0].scale.has_value());
+    EXPECT_FALSE(loaded.getTracks()[0].clips[0].scaleVisible);
+}
+
+TEST_F(TimelineDocTest, MalformedClipScaleLoadsAsNoScaleWithoutFailingTheLoad) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "A");
+    ASSERT_TRUE(doc.setClipScale(clip, dDorian(), true));
+
+    const auto expectNoScale = [&](const juce::var& state) {
+        TimelineDoc loaded;
+        ASSERT_TRUE(loaded.fromVar(state)) << "a bad scale must never refuse the project";
+        EXPECT_FALSE(loaded.getClip(clip)->scale.has_value());
+    };
+    const auto withScale = [&](const juce::var& scaleValue) {
+        return docVarWithClipEdited(doc, [&](juce::DynamicObject& c) { c.setProperty("scale", scaleValue); });
+    };
+    const auto scaleObject = [](const juce::var& root, const juce::var& mask) {
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty("root", root);
+        o->setProperty("mask", mask);
+        return juce::var(o.get());
+    };
+
+    expectNoScale(withScale("D Dorian"));                           // not an object
+    expectNoScale(withScale(scaleObject("x", 0x6AD)));              // root is not a number
+    expectNoScale(withScale(scaleObject(2, "x")));                  // mask is not a number
+    expectNoScale(withScale(scaleObject(2, 0)));                    // an empty mask contains no pitch
+    expectNoScale(withScale(scaleObject(2, 0x1000)));               // nothing left once cut to 12 bits
+    expectNoScale(withScale(juce::var(new juce::DynamicObject()))); // object with neither key
+
+    TimelineDoc wrongVisible;
+    ASSERT_TRUE(wrongVisible.fromVar(
+        docVarWithClipEdited(doc, [](juce::DynamicObject& c) { c.setProperty("scaleVisible", "yes"); })));
+    EXPECT_FALSE(wrongVisible.getClip(clip)->scaleVisible);
+
+    // Out-of-range numbers are clamped, not rejected.
+    TimelineDoc clamped;
+    ASSERT_TRUE(clamped.fromVar(withScale(scaleObject(99, 0xFFFF))));
+    ASSERT_TRUE(clamped.getClip(clip)->scale.has_value());
+    EXPECT_EQ(clamped.getClip(clip)->scale->rootPitchClass, 11);
+    EXPECT_EQ(clamped.getClip(clip)->scale->mask, 0xFFF);
+}
+
 // ------------------------------------------------------- 11. all-or-nothing --
 
 TEST_F(TimelineDocTest, FromVarLeavesTheDocUntouchedOnMalformedInput) {

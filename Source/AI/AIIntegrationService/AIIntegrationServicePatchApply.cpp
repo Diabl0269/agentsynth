@@ -3,6 +3,7 @@
 #include "AI/PatchEval.h"
 #include "AIIntegrationService.h"
 #include "AppUndoManager.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 
 namespace synth {
 
@@ -74,6 +75,11 @@ bool AIIntegrationService::hasExplicitMode(const juce::var& json) {
 }
 
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
+    if (editsRefused()) {
+        lastPatchError = "Still loading";
+        lastPatchErrorCode = PatchValidationError::None;
+        return false;
+    }
     juce::String extractedJson = extractJsonFromResponse(jsonString);
     juce::var json = juce::JSON::parse(extractedJson);
     bool clearExisting = !mergeMode;
@@ -212,6 +218,13 @@ void AIIntegrationService::applyPatchWithRetry(const juce::String& jsonString, b
         return;
     }
 
+    // A load in progress is no fault of the patch: report it as it is rather than asking the model to fix it.
+    if (editsRefused()) {
+        if (onComplete)
+            onComplete(false, lastPatchError);
+        return;
+    }
+
     // Nothing to ask for a correction — report the rejection as-is rather than pretending to retry.
     if (provider == nullptr) {
         if (onComplete)
@@ -269,6 +282,11 @@ void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeM
                 return;
             }
 
+            if (self->editsRefused()) {
+                if (onComplete)
+                    onComplete(false, self->lastPatchError);
+                return;
+            }
             self->requestPatchCorrection(failedAttempt + 1, mergeMode, originalRequest, onComplete, onRetry);
         },
         /*useStructuredOutput=*/true);
@@ -337,8 +355,16 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
     return response.trim();
 }
 
+// The model reads a Drum Kit through its group ids, so the 128 per-pad values stay out of its context.
 juce::String AIIntegrationService::getPatchContext() {
-    juce::var json = AIStateMapper::graphToJSON(audioGraph);
+    juce::var json = AIStateMapper::graphToJSON(audioGraph, /*forModel=*/true);
+    if (auto* nodes = json.getProperty("nodes", {}).getArray())
+        for (auto& node : *nodes)
+            if (node.getProperty("type", {}).toString() == "Drum Kit")
+                if (auto* params = node.getProperty("params", {}).getDynamicObject())
+                    for (int i = params->getProperties().size(); --i >= 0;)
+                        if (DrumKitModule::isPadParamId(params->getProperties().getName(i).toString()))
+                            params->removeProperty(params->getProperties().getName(i));
     return juce::JSON::toString(json);
 }
 

@@ -1,0 +1,3 @@
+cmake/patches/*.patch -text
+# Text goldens are compared as written: keep LF on every platform.
+*.golden text eol=lf

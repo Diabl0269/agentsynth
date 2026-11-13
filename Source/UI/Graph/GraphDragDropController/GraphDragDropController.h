@@ -17,27 +17,69 @@
 // declare its `dragDropController_` member, so the reverse would cycle).
 #pragma once
 
+#include "UI/Graph/DragGhostSlide/DragGhostSlide.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
+
+class InsertGap;
 
 class GraphDragDropController {
 public:
     explicit GraphDragDropController(GraphCanvasHost& host)
         : host_(host) {}
+    /** `insertGap` (outliving this) opens the gap between cards a drag hovers over; without one nothing is pushed. */
+    GraphDragDropController(GraphCanvasHost& host, InsertGap& insertGap)
+        : host_(host)
+        , insertGap_(&insertGap) {}
 
     // ---- Drag-preview (grid + landing ghost shown during a module drag) -------------------
     void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
     void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    /** Places the ghost again, at the aim of the last update, against the macros as they stand now. */
+    void replaceGhostAfterCrossing();
     void endDragPreview();
+
+    /** Held by an edge-scroll tick around its re-aim: inside it updateDragPreview refreshes the preview at most once
+     *  per kScrollPreviewIntervalMs and otherwise only moves the gap and remembers the aim. */
+    class ScrollTick {
+    public:
+        explicit ScrollTick(GraphDragDropController& c)
+            : c_(c) {
+            ++c_.scrollTickDepth_;
+        }
+        ~ScrollTick() { --c_.scrollTickDepth_; }
+        ScrollTick(const ScrollTick&) = delete;
+        ScrollTick& operator=(const ScrollTick&) = delete;
+
+    private:
+        GraphDragDropController& c_;
+    };
+    static constexpr double kScrollPreviewIntervalMs = 100.0;
+    /** Brings a preview a scroll tick skipped up to date; a no-op when none was skipped. Call it before a drop. */
+    void flushDragPreview();
+    /** How many times the preview was really recomputed (placement, gap, guides, suggestions). */
+    int fullPreviewCount() const noexcept { return fullPreviewCount_; }
+    /** Test seam: the clock the scroll throttle reads, in ms. */
+    void setClockForTest(std::function<double()> clock) { clock_ = std::move(clock); }
 
     bool isDragPreviewActive() const noexcept { return dragPreviewActive_; }
     juce::Rectangle<int> getDragPreviewGhost() const noexcept { return dragPreviewGhost_; }
+    /** The landing ghost as drawn: it slides to getDragPreviewGhost() when its aim jumps
+     * (GraphEditor::refreshSmartSuggestions). */
+    DragGhostSlide& getGhostSlide() noexcept { return ghostSlide_; }
+    /** Where the cursor pointed, before anti-overlap moved the landing rect (empty before the first move). */
+    juce::Rectangle<int> getDragPreviewAim() const noexcept { return dragPreviewAim_; }
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const noexcept { return dragPreviewSelfId_; }
+    /** A group drag's landing ghost: one rect per card it moves, where the drop would put each if released now. Set by
+     *  the group drag from the placement its drop applies; empty outside one. It replaces the single-card ghost. */
+    void setGroupGhosts(std::vector<juce::Rectangle<int>> ghosts) { groupGhosts_ = std::move(ghosts); }
+    const std::vector<juce::Rectangle<int>>& getGroupGhosts() const noexcept { return groupGhosts_; }
 
     /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
      *
@@ -82,26 +124,52 @@ public:
     bool isInterestedInFileDrag(const juce::StringArray& files);
     void filesDropped(const juce::StringArray& files, int x, int y);
 
+    /** Adds a Sampler at `canvasPos` already holding `file` (a recording; an .sfz loads as its instrument), as ONE undo
+     *  step. The one path an OS file drop, a dragged Sound and the Sounds view's Return share. */
+    void addSamplerLoadedWith(const juce::File& file, juce::Point<int> canvasPos);
+
 private:
     /** The expanded macro a plain-module library drop at `details` would join, or empty. */
     juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;
+    /** The full preview for the ghost aimed at `desiredTopLeftCanvas`: gap, placement, guides, suggestions. */
+    void recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    /** Sets dragPreviewGhost_ from the open gap, else the join snap, else the nearest free slot. */
+    void placeGhost(juce::Point<int> desiredTopLeftCanvas);
+    void settleDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    /** Opens, moves or closes the gap between cards for the ghost aimed at `aim`. */
+    void hoverInsertGap(juce::Rectangle<int> aim);
 
     GraphCanvasHost& host_;
+    InsertGap* insertGap_ = nullptr;
+    juce::String dragPreviewJoinId_; // the open macro a library drop would join (the gap opens among its cards)
+    juce::Rectangle<int> dragPreviewSelfStart_; // where a dragged canvas card was picked up
 
     // Drag-preview state (grid + landing ghost)
     bool dragPreviewActive_ = false;
     int dragPreviewW_ = 0, dragPreviewH_ = 0;
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId_{};
     juce::Rectangle<int> dragPreviewGhost_;
+    DragGhostSlide ghostSlide_;
     // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
     // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost_.
     juce::Rectangle<int> dragPreviewAim_;
+    std::vector<juce::Rectangle<int>> groupGhosts_;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet_ = false;
     // True only for a plain factory-module library payload (not a snippet or a plugin), the one kind
     // that can join a macro on drop.
     bool dragPreviewIsPlainModule_ = false;
+    bool dragPreviewIsSound_ = false;
+    bool dragPreviewJoinsMacro_ = false; // the ghost sits at the pointer: a join drop makes room instead of dodging
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe_;
 
     std::vector<AlignmentGuide> alignmentGuides_;
+
+    // Edge-scroll throttle (updateDragPreview / flushDragPreview).
+    int scrollTickDepth_ = 0;
+    std::function<double()> clock_;
+    double lastFullPreviewMs_ = 0.0;
+    bool anyFullPreview_ = false;
+    std::optional<juce::Point<int>> pendingScrollAim_;
+    int fullPreviewCount_ = 0;
 };

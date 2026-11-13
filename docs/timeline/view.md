@@ -23,7 +23,7 @@ No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes i
 - `scrollBeats(delta)`
 - `snapBeat(beat, beatsPerBar)`
 - `trackScrollY` — vertical scroll of the track rows, shared with the header column
-- `rowHeightScale` — vertical zoom, within `[0.5, 3.0]`
+- `rowHeightScale` — vertical zoom, within `[0.5, 3.0]`; zooming also resets every track's own height, so all tracks end up equal ([`tracks.md`](tracks.md#one-tracks-height))
 
 ## Snap divisions
 
@@ -106,7 +106,8 @@ The bindings follow Cubase:
 | Shift+wheel, or a trackpad's own `deltaX` | Scrolls horizontally, converted to beats at the current zoom — a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time zoomed in |
 | Cmd+wheel | Zooms horizontally around the cursor |
 | Cmd+Shift+wheel | Zooms vertically, scaling `TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, anchored so the row under the pointer stays put |
-| Trackpad pinch (`mouseMagnify()`) | Horizontal zoom; Shift+pinch is vertical. Deliberate enough a gesture to need no modifier, on the panel and inside the piano roll alike |
+| Option + vertical wheel / two-finger scroll | Vertical zoom, the same `zoomTrackRows` path and anchor as Cmd+Shift+wheel; the trackpad's one-hand vertical zoom. An Option + sideways scroll stays a horizontal scroll. The test is `synth::ui::isOptionVerticalZoom()` (`ScrollPolicy.h`), shared with the piano roll, which answers Option + vertical wheel with pitch-row height the same way |
+| Trackpad pinch (`mouseMagnify()`) | Zooms time (around the pinch x) and the track rows (around the pinch y) together by the same factor, so sizes grow and shrink as one, like the patch canvas. Option+pinch (or Shift+pinch) zooms the rows only; Cmd+pinch zooms time only. macOS reports a pinch as one scale factor with no axis, so a modifier is the only way to ask for one axis. Same mapping inside the piano roll (time and pitch rows; Shift or Option = pitch rows only, Cmd = time only) |
 
 `rowHeightScale` multiplies the themed row height in BOTH `TimelineClipLaneArea::getRowHeight()`
 and the panel's `layoutTrackHeaders()`. `trackScrollY` is shared with the header column: a
@@ -125,6 +126,16 @@ A plain-scroll branch, by contrast, reads the axis the gesture actually ARRIVED 
 (`std::abs(deltaX) > std::abs(deltaY) ? deltaX : deltaY`): a Shift+wheel the OS left on `deltaY`
 and a trackpad's own sideways `deltaX` are both still "the amount to move by", so picking the
 dominant one there would be wrong.
+
+**A mouse-wheel notch eases; a trackpad does not.** A plain-scroll event with neither `isSmooth` nor
+`isInertial` (a notched wheel: one big jump per click) is not applied at once but fed to a
+`synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`), which eases the view origin toward
+the accumulated target over ~120 ms (`easeOutCubic`, VBlank-driven). A notch that lands mid-ease adds
+to the remaining distance and continues from the current position. Zoom and trackpad/inertial events
+keep the direct path and end the ease first, and anything else that moves the view (a drag's
+edge-scroll, follow-playhead) ends it too, as does hitting a clamp. A panel that is not showing
+(headless tests) applies the amount immediately. Horizontal scroll repaints only the ruler and the
+lanes region, never the track headers.
 
 ## Natural scrolling
 
@@ -178,9 +189,24 @@ cursor position, and is routed per focused surface by `MainComponent::resolveEdi
 Graph-is-horizontal-only exception.
 
 **The grid division** is likewise reachable from the keyboard, alongside the snap combo:
-Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, `1` through `1/128`), and
+Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, `1/1` through `1/128`), and
 Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`), clamped coarsest↔finest and never wrapped
-— holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around.
+— holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around. The
+step stays inside the current kind: from a triplet it goes to the next triplet, from a dotted value to
+the next dotted one. The triplet and dotted values each have a rebindable "Set Grid to 1/8T" style
+command (`snapSetEighthTriplet`, `snapSetQuarterDotted`, ...), unbound by default so no existing
+chord changes.
+
+**The Snap box is the shared [note-length menu](../layout/note-length-menu.md#the-timeline-snap)**:
+it shows the full name ("1/8T"), and its popup has S / T / D letters over one row with `Off` and
+`Bar` in front. `TimelineViewState::Snap` is saved as a raw int, so the 16 triplet and dotted values
+were appended after `HundredTwentyEighth` (ints 10 to 25) and no older value moved; an old project
+opens with the snap it saved. A triplet or dotted step is not a power of two (1/8T is a third of a
+beat, 1/8D three sixteenths), so the grid maths treats a step as an exact fraction of a beat
+(`TimelineViewState::exactStep`): `snapBeat` rounds to the nearest multiple, `floorToGrid` and
+`ceilToGrid` land on a line a rounding error short of it, and the ruler and lanes draw each line as
+`k * step` from beat 0 (the snap grid), so thirds never drift and a dotted grid does not restart at
+each bar.
 From `Off`, both directions re-enter at the last musical division the user actually chose. Real
 Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](../control/shortcuts.md#timeline) for why that is
 deliberate.

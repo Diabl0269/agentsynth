@@ -1,0 +1,191 @@
+#pragma once
+
+#include "ToolbarAiSpark.h"
+#include "UI/Layout/UIAnimation.h"
+#include "UI/Theme/IconLibrary.h"
+#include "UI/Theme/Theme.h"
+#include <array>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+
+// ToolbarButton (docs/layout/chrome.md#toolbar): one button of the top bar. A bold, multi-colour
+// icon on a chip tinted with its group's colour, over a caption that is never coloured. The button
+// carries the state (group, icon art, the hover / press / lit tweens); AppLookAndFeel::drawToolbarButton
+// paints it. It stays a juce::DrawableButton so ToolbarComponent and the toolbar's text, title and
+// tooltip code keep treating it like one, but it never uses DrawableButton's image children.
+namespace synth::ui {
+
+// The colour groups of the top bar. Feedback keeps its place beside Settings but has its own colour.
+enum class ToolbarGroup { File, Edit, View, AI, Housekeeping, Feedback };
+
+// The group's colour in `theme`: green, amber, the accent, rose, violet, green (Feedback).
+juce::Colour toolbarGroupHue(const synth::theme::Theme& theme, ToolbarGroup group);
+
+// One moving part's hover motion, at full hover, in icon units (the 24-unit SVG grid). Rotation and
+// scale turn about `pivot`, a fraction of the part's own bounds. A non-zero `overshoot` makes the
+// part overshoot its full motion and settle back while the hover arrives (an ease-out-back curve).
+struct ToolbarPartMotion {
+    float dx = 0.0f;
+    float dy = 0.0f;
+    float degrees = 0.0f;
+    float scale = 1.0f;
+    juce::Point<float> pivot{0.5f, 0.5f};
+    float overshoot = 0.0f;
+};
+
+// The hover motion of an icon's parts "mv" and "mv2"; a part an icon lacks has no motion.
+std::array<ToolbarPartMotion, 2> toolbarIconMotion(synth::theme::Icon icon);
+
+// `motion` at hover amount `t` (0..1) for a part whose icon-space bounds are `partBounds`. `arriving`
+// is true while the hover is growing; only then does an overshooting motion bounce.
+juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce::Rectangle<float> partBounds, float t,
+                                           bool arriving = true);
+
+// A recoloured icon split into its static body and up to two moving parts, all in icon space.
+struct ToolbarIconArt {
+    std::unique_ptr<juce::Drawable> body;
+    std::array<std::unique_ptr<juce::Drawable>, 2> parts;
+    std::array<juce::Rectangle<float>, 2> partBounds;
+
+    bool isValid() const noexcept { return body != nullptr; }
+    // Draws body and parts through `iconToScreen`, each part moved by `partTransforms[i]` first.
+    void draw(juce::Graphics& g, const juce::AffineTransform& iconToScreen,
+              const std::array<juce::AffineTransform, 2>& partTransforms, float opacity) const;
+};
+
+// Splits `icon` (null allowed: an empty art) at its "mv" / "mv2" groups.
+ToolbarIconArt splitToolbarIconArt(std::unique_ptr<juce::Drawable> icon);
+
+// Where a button puts its caption: Stacked is the top bar's (caption under the chip). The Inline layouts put it to
+// the chip's right and keep the button no taller than the chip; InlineCompact has the smaller chip of the mixer bar;
+// InlineStrip is the smallest, for a row only 19 px tall (the dock tab strip under its resize handle).
+enum class ToolbarButtonLayout { Stacked, Inline, InlineCompact, InlineStrip };
+
+// The chip, its glyph and the inline caption's metrics for `layout`, in px.
+struct ToolbarChipSpec {
+    float chipWidth;
+    float chipHeight;
+    float chipRadius;
+    float glyphSize;
+    float captionSize;
+    float inlineLeftInset; // before the chip, captioned
+    float inlineGap;       // chip to caption
+    float inlineRightPad;  // after the caption
+};
+ToolbarChipSpec toolbarChipSpec(ToolbarButtonLayout layout);
+
+class ToolbarButton : public juce::DrawableButton {
+public:
+    explicit ToolbarButton(const juce::String& name);
+    ~ToolbarButton() override;
+
+    // The glyph and its group; rebuilds the art from the current look-and-feel (none headless).
+    void setIcon(synth::theme::Icon icon, ToolbarGroup group);
+    // Rebuilds the art from the current look-and-feel's theme. Message thread only.
+    void refreshArt();
+
+    // Chooses where the caption sits (Stacked by default) and repaints.
+    void setLayout(ToolbarButtonLayout layout);
+    ToolbarButtonLayout getLayout() const noexcept { return layout_; }
+    bool isInline() const noexcept { return layout_ != ToolbarButtonLayout::Stacked; }
+    // Names the button: the screen-reader title is always `name`; the caption is `name` only when `captionShown`.
+    void setLabel(const juce::String& name, bool captionShown);
+    // True: a wider-than-needed Inline button centres its chip and caption instead of keeping them at the left.
+    void setContentCentred(bool centred);
+    // How far an Inline button's chip and caption are shifted right of the left edge.
+    float getInlineContentOffset() const;
+    // The width an Inline layout needs for its current caption (just the chip when it has none).
+    int getPreferredWidth() const;
+    // The same for `caption` in place of the current one (a control whose caption changes sizes itself to its widest).
+    int getPreferredWidthFor(const juce::String& caption) const;
+
+    synth::theme::Icon getIcon() const noexcept { return icon_; }
+    ToolbarGroup getGroup() const noexcept { return group_; }
+    // The art drawn at rest (lit = false) and on a lit chip (lit = true); invalid until art exists.
+    const ToolbarIconArt& getArt(bool lit) const noexcept { return lit ? litArt_ : restArt_; }
+
+    // 0..1: how far the hover, press and lit tweens have gone.
+    float getHoverAmount() const noexcept { return hover_.value; }
+    float getPressAmount() const noexcept { return press_.value; }
+    float getLitAmount() const noexcept { return lit_.value; }
+
+    // False under Reduce Motion: then nothing moves and only colours change.
+    bool isMotionEnabled() const noexcept { return motionEnabled_; }
+    // Part `index`'s hover transform in icon units right now (identity without motion).
+    juce::AffineTransform getPartTransform(int index) const;
+    // How far the icon is lifted right now, in px (0 without motion).
+    float getIconLift() const;
+    // The chip's press squash right now as x and y scale (1 without motion).
+    juce::Point<float> getChipSquash() const;
+
+    // The AI button's looping glyph: while the assistant works (setBusy) and while hovered, a pulse
+    // runs along the cable and a spark blooms at the plug, 2.8 s a cycle. Never under Reduce Motion;
+    // nothing runs (or repaints) otherwise.
+    bool hasLoopingGlyph() const noexcept { return icon_ == synth::theme::Icon::ToggleAI; }
+    // Marks the assistant as working or idle; the screen-reader description follows.
+    void setBusy(bool busy);
+    bool isBusy() const noexcept { return busy_; }
+    // True while the loop plays (or is fading out).
+    bool isLoopActive() const noexcept { return loop_.target > 0.5f || loop_.value > 0.0f; }
+    // 0..1 through the current cycle, and the frame painted right now (the rest frame when idle).
+    float getLoopPhase() const noexcept { return loopPhase_; }
+    ToolbarAiFrame getLoopFrame() const;
+    // Test seam standing in for the VBlank frames that would advance the cycle (none reach a hidden button).
+    void setLoopPhaseForTest(float phase);
+
+    void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+
+protected:
+    void buttonStateChanged() override;
+    void lookAndFeelChanged() override;
+    void visibilityChanged() override;
+    void parentHierarchyChanged() override;
+
+private:
+    struct Fade {
+        float value = 0.0f;
+        float target = 0.0f;
+        AnimationDriver driver;
+    };
+    void retarget(Fade& fade, float target, double inMs, double outMs);
+    void updateLoop();
+    void startLoopCycle();
+
+    synth::theme::Icon icon_ = synth::theme::Icon::kCount;
+    ToolbarGroup group_ = ToolbarGroup::View;
+    ToolbarButtonLayout layout_ = ToolbarButtonLayout::Stacked;
+    bool contentCentred_ = false;
+    ToolbarIconArt restArt_;
+    ToolbarIconArt litArt_;
+    std::array<ToolbarPartMotion, 2> motion_{};
+    bool motionEnabled_ = true;
+
+    juce::VBlankAnimatorUpdater updater_{this};
+    Fade hover_;
+    Fade press_;
+    Fade lit_;
+    Fade loop_; // how much of the loop's keyframes show, against the glyph at rest
+    AnimationDriver cycle_;
+    float loopPhase_ = 0.0f;
+    bool busy_ = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ToolbarButton)
+};
+
+// The one button that switches snapping on or off, on every surface that has the switch (the timeline's transport
+// bar, the curve window, the shape editor's grid rows): the Snap icon on an Edit-group chip, named "Snap". It carries
+// only that look. Each surface sets its own layout, caption, tooltip and toggle behaviour, and keeps its own state.
+class SnapToggleButton : public ToolbarButton {
+public:
+    SnapToggleButton()
+        : ToolbarButton("Snap") {
+        setIcon(synth::theme::Icon::ToolbarSnap, ToolbarGroup::Edit);
+    }
+
+    // The start of every Snap tooltip: "Snap to grid".
+    static juce::String tooltipLead() { return "Snap to grid"; }
+
+    JUCE_DECLARE_NON_COPYABLE(SnapToggleButton)
+};
+
+} // namespace synth::ui

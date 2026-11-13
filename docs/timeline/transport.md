@@ -1,6 +1,6 @@
 # Timeline Transport Bar
 
-`Source/UI/Timeline/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop,
+`Source/UI/Timeline/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — return to start, play/stop,
 record, loop, metronome, count-in, BPM and time-signature editors, and the bar:beat readout,
 left-aligned in the transport-bar strip. The snap combo stays docked right
 ([view](view.md#snap-divisions)); the edit-tool strip sits immediately left of it
@@ -14,14 +14,15 @@ follow, in that order. `kButtonSize` (26) and `Metrics::timelineTransportBarHeig
 together so the glyphs render at their intended size instead of being clamped back down by
 `min(kButtonSize, bounds.getHeight())`.
 
-**No SVG assets.** Every button is one `GlyphButton` (a `juce::Button` subclass) drawing a plain
-`juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for record, an
-open arc with an arrowhead for loop, a filled ellipse notehead plus a `juce::Rectangle` stem for
-the metronome. This mirrors the root `CLAUDE.md` rule that themes never swap typefaces: a one-off
-shape for a single caller does not earn a new icon asset either.
+**No SVG assets.** Every button is one `GlyphButton`, a thin wrapper over the shared
+`synth::ui::IconButton` (Framed style, [`theming.md`](../layout/theming.md#themed-widgets)). The
+glyphs are plain `juce::Path` shapes in `Source/UI/Theme/IconGlyphs.cpp` — a triangle/square for
+play-stop, a circle for record, an open arc with an arrowhead for loop, a filled ellipse notehead
+plus a `juce::Rectangle` stem for the metronome. This mirrors the `Source/UI/CLAUDE.md` rule that themes
+never swap typefaces: a one-off shape for a single caller does not earn a new icon asset either.
 
 **Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
-side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
+side, inset by `kGlyphInsetRatio` (24%, in `IconGlyphs.cpp`) on each edge — never a fraction of the *width* applied to
 both axes, which flattens all four glyphs once the strip gets short. Everything scales off that square (the
 loop arc's stroke and arrowhead, the note's head and stem), so the row stays legible at any strip
 height.
@@ -37,15 +38,17 @@ themes may not override it.
 **Why.** A hardware record LED is red on every desk; drawn in a cyan or green accent, "armed" stops
 reading as armed at all. It is the one colour on this bar that is not a theme token — every other
 lit glyph (play/stop, loop, metronome) still uses `colors.accent`. Idle record is a neutral outline
-(`colors.textPrimary` at 75%), not a dim red one. `GlyphButton::glyphColour()` is the single source
-for both the paint and the `getRecordGlyphColourForTest()` seam.
+(`colors.textMuted`, the shared icon-button rest colour), not a dim red one. Record is
+`IconButton::setOnColour(kRecordRedArgb)`; `IconButton::glyphColour()` is the single source for both
+the paint and the `getRecordGlyphColourForTest()` seam.
 
 ## The transport is the truth
 
 Every button click and every editor commit reads `TransportService::getPositionSnapshot()` **at the
 moment of the action**, rather than from a value this bar remembers between polls:
 
-- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`.
+- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`
+  (`IconButton::setGlyphWhenOn`).
   The click reads `getPositionSnapshot().playing` to decide `play()` vs `stop()`, so it works
   correctly even if nothing has polled `updateFromTransport()` since the last click.
 - **Loop** — the click reads the CURRENT `loopStartPpq` / `loopEndPpq` off the snapshot and
@@ -103,6 +106,12 @@ That covers every editable label at once — these two and the track-name label.
 `TimelineTransportBarTest.InlineFieldEditorsTakeTheirColoursFromTheTheme`, which asserts the TOKENS
 in a light and a dark theme so the fix cannot regress into a second hardcoded colour.
 
+## Song key field
+
+After the tempo and time signature sits the Key field, which shows and sets the song key and opens the key picker:
+[`song-key.md`](song-key.md). It reads the key from `TransportService::getDocumentState()` on the same 10 Hz poll
+as the labels.
+
 ## Bar-beat readout
 
 `TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)` is a **static, pure** helper
@@ -133,17 +142,32 @@ through `std::function<void(bool)> onRecordToggled`; it never flips its own togg
 outcome, and it is set the same way **regardless of whether anything is armed** — the indicator
 reflects record-ON, not "a take is capturing".
 
+**Record also starts playback** (Preferences, Timeline category, key `recordStartsPlayback`, default on — the convention of
+Cubase, Logic, Pro Tools, Reaper and Ableton). Off, pressing Record from a stop only engages recording; the transport is
+left alone and the take starts when the user presses Play. A MIDI take is armed at once with punch-in 0:
+`MidiRecorder::captureBlock` is a no-op while the transport is stopped, so nothing records until Play, a relocation before
+Play cannot drop notes, and the playing -> stopped edge commits it as usual. Audio takes are deferred, because their captures would
+record the stopped input: the indicator lights, a status message says to press Play, and the 10 Hz poll re-enters
+`handleRecordToggle(true)` once the transport rolls, so the take begins up to one poll (about 100 ms) after Play. The count-in
+only applies when Record itself starts the transport. Pressing Record again cancels either kind with nothing recorded. The record
+button's tooltip follows the preference ("... implies Play" / "... the take starts when you press Play"). Already playing,
+the preference changes nothing.
+
 `MainComponent`'s implementation, installed in `initialiseCommon()`:
 
-- **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first
-  `armed && (kind == TrackKind::Midi || kind == TrackKind::Audio)` track — first-armed-wins, there
-  is deliberately no "record both at once" — but either way the transport rolls: **record implies
-  roll** (a DAW convention — the record button starts the transport if it is not already playing)
-  and `setRecordingState(true)` fire unconditionally. An armed MIDI track additionally calls
-  `midiRecorder.startRecording(track, currentPpq)`; an armed Audio track resolves a
-  `RecordTapModule` tap and take files *before* the transport moves — a request that cannot be
-  honoured (no Audio Output in the patch, or the take file cannot be created or opened) must not
-  leave the transport rolling — and then starts its capture.
+- **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first armed
+  MIDI track that records every input (`Track::recordsEveryMidiInput`) — first-armed-wins among those —
+  and adds every armed MIDI track with [an input of its own](#recording-from-one-input)
+  (`collectMidiTakeTargets`). **Every armed audio track** records too, each from
+  [its own input](#recording-audio-from-each-tracks-input). Either way the transport rolls: **record implies
+  roll** (a DAW convention — the record button starts the transport if it is not already playing) and
+  `setRecordingState(true)` fire unconditionally. MIDI targets call
+  `midiRecorder.startRecording(targets, currentPpq)`; the audio takes are resolved, and their files chosen,
+  *before* the transport moves (`resolveAudioTakes`) — a request that cannot be honoured (no Audio Output to
+  tap for Whole mix, or a take file that cannot be created or opened) must not leave the transport rolling —
+  and then start their captures (`startAudioTakes`). Record-on also tells the engine at once
+  (`AudioEngine::setRecordingEngaged`) so a track [monitoring](tracks.md#monitoring) on Auto keeps hearing
+  its input when the transport starts.
 
   **With nothing armed**, the transport still rolls and the indicator still lights, identical to
   Play plus a lit record indicator; no take of either kind starts, and
@@ -162,9 +186,98 @@ reflects record-ON, not "a take is capturing".
   turns the indicator back off.
 
 `AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring, feeding
-`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer. See
-`Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
+`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer, plus
+the per-device copy below. See `Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp` for the button-to-commit path.
+
+### Recording from one input
+
+Each MIDI track has an input ([the Input row](tracks.md#the-input-row)): a device (or all MIDI inputs)
+and a channel (or any). The default, all inputs and any channel, is exactly the old behaviour, so
+an existing project records as it always did.
+
+- **Who records.** A take has up to `MidiRecorder::kMaxTargets` (16) targets. The first-armed track
+  that records every input (when the first-armed-wins search above picked a MIDI one) is one; every
+  armed MIDI track with its own device or channel is another, in document order. So two players on
+  two controllers, each armed into their own track, record at once. An audio take can run beside
+  them, and the 10 Hz poll and a device change commit both kinds.
+- **What each target hears.** A target on all inputs reads the collector-merged buffer, filtered by
+  channel when it has one. A target on one device reads that device's notes only, filtered by channel
+  when it has one. Every target that matches gets its own copy of a note.
+- **Where the device comes from.** The merged buffer has lost which input a message came from, so
+  the engine keeps a second, per-device copy of note on/off: `MidiInputSources`
+  (`Source/AudioEngine/MidiInputSources.h`). One lock-free `AbstractFifo` lane per device identifier,
+  handed out on the message thread the first time the identifier is seen (when the input opens, or
+  at record start) and never recycled, so each lane has one producer: that device's driver thread.
+  `handleIncomingMidiMessageFromSource` pushes into it right beside the collector, after the bounce
+  and MIDI Remote early-outs, so a note is in a lane exactly when it is in the merged stream. The
+  device callback drains every lane, recording or not, into one block of callback-relative sample
+  positions, placed by the message's timestamp the way `juce::MidiMessageCollector` places it (a gap
+  longer than a block is squeezed into the block; a note older than a second is a backlog from a
+  paused device and is dropped). Every render pass of that callback hands the recorder the slice of
+  the block it renders, so a sliced callback records each note once, at its own beat;
+  `renderNextBlock` then empties the block, so a hosted or bounce render never sees it. Nothing on
+  the MIDI or audio thread locks, allocates or logs.
+- **A device that is not connected.** Its lane is reserved at record start, so it records nothing
+  until it comes back, and then records at once (same identifier). It never falls back to every
+  input. In the plugin there is no hardware, so a device target records nothing; a channel-only
+  input still works there.
+- **Commit.** `stopAndCommit` pairs notes per target and adds one "Take" clip per target that
+  captured anything, all inside one `recordTimelineChange`: one Record press is one undo step for
+  the MIDI takes (an audio take beside them is its own step, as before).
+
+Tests: `MidiRecorderInputFilterTests.cpp` (filters, the lanes, and a device-thread / audio-thread /
+message-thread run meant for `-fsanitize=thread`), `TrackMidiInputRecordTests.cpp` (end to end
+through `MainComponent` and the device callback, sliced and not), `TimelineDocTrackMidiInputTests.cpp`
+and `TimelineRoutingPaneInputTests.cpp`.
+
+### Recording audio from each track's input
+
+Each audio track has an input ([the Input row](tracks.md#audio-tracks)): No input (the default), one device input
+or a stereo pair, Whole mix, or another track. One Record press records every armed audio track at once
+(`MainComponentAudioTakes.cpp`), one `AudioTake` each in `MainComponent::audioTakes_`:
+
+- **A device input** records exactly that input, straight from the device (or the host), beside the graph: the
+  engine's `synth::InputTakeRecorder` (up to 16 slots at once) is fed the device-input snapshot every render pass,
+  anchored at the transport sample like the Rec Tap. What you hear while playing went through the graph, so an
+  input take is placed with the same round-trip latency (`getRecordingLatencySamples`: input + graph + output).
+- **Whole mix** records the master through the `RecordTapModule` spliced before Audio Output, as every audio take
+  used to. The tap is one take, so only the first armed Whole-mix track records it; a second says so.
+- **Another track** records that track's sound: its instrument and its mixer channel's inserts, fader, pan and
+  mute, as a stereo take, beside every other armed track. The source's `ChannelStripModule` is armed with a live tap
+  (`setLiveTapBuffer`) pointing at a fixed stereo buffer of a strip slot of the same `InputTakeRecorder`
+  (`startStripSlot`); `AudioEngine` pushes those buffers into their writers right after the graph renders
+  (`pushStripSlots`, same block start sample as the device slots) and clears them, so a block the strip did not run
+  records silence. The source is an internal one with no round trip through the device, so the take is placed with
+  latency 0. A source track that was removed or has no mixer channel records nothing and the status bar says so
+  ("Rec: its source track was removed", "Rec: its source track has no mixer channel"); one channel feeds at most one
+  take per press. At commit every strip is scanned and disarmed (an undo mid-take may have rebuilt the graph).
+- **Nothing to record from.** No input, or an input that is not connected (picked on another device, or turned
+  off), records nothing for that track, and the status bar says why ("Vox has no input - pick one in the side
+  pane", "Vox: its input is not connected"). The other tracks still record.
+- **Take files** never collide: `chooseTakeFiles` skips numbers already given to another take of the same press.
+  If any take cannot open its file, the whole press is refused and every file of it deleted.
+- **Commit.** `commitAudioRecording` stops every take, places each one through the rate, tempo and latency frozen
+  at record-on, and adds every clip in ONE `recordTimelineChange`: one undo step for the press's audio. The live
+  recording strip is drawn per take, from its own peaks (the tap's or its recorder slot's).
+
+Wait-for-Play, the count-in and a device change mid-take behave as for a single take. Tests:
+`InputTakeRecorderTests.cpp`, `TakeCaptureWriterTests.cpp`, `MainComponentAudioTakesTests.cpp`,
+`TimelineDocTrackAudioInputTests.cpp`.
+
+## Return to Start button
+
+The leftmost glyph button (a bar with a left-pointing triangle). A click runs the app's own
+`transportReturnToStart` command through `TimelineTransportBar::onReturnToStart` (wired in
+`MainComponent::wireTimelineRecordToggle`), so the button and the shortcut or MIDI action share one
+locate-and-track-nudge path; with no hook wired it just calls `locateBeat(0)`. Like the command it
+relocates only and never stops playback. It is a `GlyphButton` like the other four, so it is
+keyboard-focusable, draws the accent focus ring (`paintFocusRegionOutline`) and carries a title and description
+for screen readers (every glyph button has a title now) plus the tooltip "Return to Start". It is not a MIDI Learn
+target — the command has no assignment surface on the bar, and `collectPickCandidates` still lists the four
+learnable buttons. No shortcut is bound by default, so the tooltip names none.
+Tests: `TimelineTransportBarReturnToStartTests.cpp` (bar) and
+`ShortcutManagerTransportActionsTests.cpp::ReturnToStartButtonLocatesToBeatZero` (through `MainComponent`).
 
 ## Transport actions
 
@@ -187,6 +300,57 @@ position — never wrapping past the first or last). `transportToggleLoop` and `
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
 Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
 of them ship unbound by default; only `togglePlayback` keeps a default key (Space).
+
+## Gliding the cursor
+
+With the timeline focused, **holding Cmd+Left / Cmd+Right** glides the cursor (the transport position, the
+thing the cursor nudge actions move) back or forward. Two rebindable Timeline actions, `timelineGlideBack`
+and `timelineGlideForward`, resolved by `TimelinePanelComponent::keyPressed` like the panel's other keys.
+
+- **Motion.** With snap on, a hold starts at four grid steps per second, so a coarse grid (1/1) sets off
+  quickly and a fine one (1/32) gently (1/16 starts at one beat per second; snap off also
+  starts at one beat per second). It then eases in (cubic) to a cap of eight bars per second, reached two
+  seconds after the glide starts; a grid so coarse that its start speed passes the cap simply starts at the cap.
+  The grid is read when the key goes down. The position is the exact integral of that speed
+  (`synth::CursorGlide`, `Source/Transport/CursorGlide.h`, clock-free), so it does not depend on the frame
+  rate.
+- **Tap versus hold.** Nothing moves for the first 150 ms. A key released inside that window is a tap: one grid
+  step (the next grid line in the direction pressed) with snap on, one beat with snap off. A tap settles to
+  its target.
+- **Release.** Acceleration resets on key-up. With snap on the cursor settles to the nearest grid line over
+  140 ms (`easeOutCubic`); snap applies to this final landing only, never to the motion before it. With snap
+  off it stops where it is.
+- **Key repeat** from the OS is swallowed: only the first key-down starts the ramp.
+- **Key up** is seen through `keyStateChanged` and `modifierKeysChanged` on the panel, and every frame also
+  checks whether the key and its modifiers are still down, so a release that never reaches the panel (focus
+  moved mid-hold) still ends the glide. Releasing Cmd first ends it too. On macOS an arrow key's state comes
+  from the window server (`physicalArrowKeyDown`, `Source/UI/Timeline/CursorGlide/PhysicalKeyState.cpp`), not
+  `KeyPress::isKeyCurrentlyDown`: Cocoa drops the key-up of a Command chord, so JUCE fakes one straight after
+  the key-down and would end every Cmd+arrow hold as a tap. Other keys, and every key off the Mac, use JUCE's
+  state.
+- **Frames.** `TimelineCursorGlide` (`Source/UI/Timeline/CursorGlide/`) runs a `ReorderFramePump` (the shared
+  VBlank `AnimationDriver`) while a key is held, and another for the settle. No free-running timer; nothing
+  runs when idle. The settle lands at once when the panel is not on screen.
+- **Moving the position** goes through `locateTransportTracked` on the same `TransportNudgeState` the nudge
+  actions use (`MainComponent` hands the panel its own via `setTransportNudgeState`), so a nudge fired during
+  or just after a glide builds on the glide's target. While playing, the glide scrubs: each frame relocates
+  the transport, and playback continues from wherever the key is released.
+- **In view.** Every move calls the follow-playhead page flip (`pageViewToShowBeat`), regardless of the Follow
+  Playhead toggle: that toggle governs playback, and a cursor you are steering must stay visible. It is skipped
+  while the piano roll is open (the roll has its own view).
+
+There is no button, so there is no hint bubble; the actions appear in Settings > Shortcuts under Timeline.
+
+## Locate glide
+
+An explicit jump (Option+1 / Option+2 to the loop locators, Return to Start, Jump to Loop Start / End, Jump to Next / Previous
+Marker, a marker picked in the command palette) glides the *drawn* cursor from where it was to where the sound now is over
+160 ms (`easeOutCubic`, `PlayheadLocateGlide`); the audio jumps at once. The code that asks for the jump arms the glide
+(`TimelinePlayheadOverlay::armLocateGlide`) and the playhead overlay uses the arm on the next locate it sees; a locate nobody
+armed (the ruler scrub, the Cmd+Left / Right cursor glide, which locate every frame) jumps at once, and so does a jump under
+Reduce Motion or Animations Off, or with the panel off screen. While playing the glide lands on the cursor's held place (the line
+stays on a locate's target until the sound reaches it). With the transport stopped the overlay runs frames for the glide and
+then stops them. Page follow pages to the target at once; Smooth follow follows the drawn cursor, so the view glides with it.
 
 ## Right-click MIDI Learn (FRO133)
 

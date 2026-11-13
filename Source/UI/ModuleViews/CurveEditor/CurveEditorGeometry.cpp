@@ -6,7 +6,7 @@ namespace synth::ui {
 CurveEditorGeometry::CurveEditorGeometry(const CurveModel& model, juce::Rectangle<float> bounds,
                                          CurveGeometryConfig config)
     : model_(model)
-    , bounds_(bounds)
+    , bounds_(bounds.getWidth() > 2.0f * kNodeInsetPx ? bounds.reduced(kNodeInsetPx, 0.0f) : bounds)
     , config_(config) {
     buildSegmentPixelSpans();
 }

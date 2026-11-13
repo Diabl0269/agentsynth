@@ -1,0 +1,62 @@
+# Sections motion: undoing a Cmd+D copy shrinks the copy and its clip away while the block it pushed slides back, and
+# redoing a delete-with-bars shrinks the block away again, the same as the first delete.
+#
+# What a user does: adds an Oscillator track and a one-bar clip, makes Section 1 over bar 1 and Section 2 over bar 2.
+# Cmd+D on Section 1 places a copy after it and pushes Section 2 to bar 3; Cmd+Z: the copy and its clip shrink away
+# and Section 2 slides back to bar 2. Then Delete on Section 1 removes it with its bar, Cmd+Z brings it back, and
+# Cmd+Shift+Z deletes it again: the block and its clip shrink away again.
+record: true
+motion: true
+save_project: "fro1532 test"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - key: {keys: escape}
+  - wait: {}
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2;Section 2:8.000:4.000:1/1", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  # Check 1: Cmd+Z shrinks the copy and its clip away; Section 2 slides back to bar 2.
+  - glide: {name: undo-copy, do: {key: {keys: cmd+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  - mark: {check: 1, name: undo-copy}
+  # Check 2: Delete removes Section 1 and its bar, Cmd+Z brings it back, Cmd+Shift+Z deletes it again with the motion.
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: delete}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}
+  - glide: {name: redo-delete, do: {key: {keys: cmd+shift+z}}, frames: 8, crop: {x: 190, y: 700, w: 420, h: 150}}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
+  - mark: {check: 2, name: redo-delete}
+  # The project is saved with both sections, the state the checks start from.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1", within_ms: 2000}

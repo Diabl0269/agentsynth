@@ -2,6 +2,7 @@
 
 #include "../Transport/TransportService.h"
 #include "Mixer/PeakMeterLatch.h"
+#include "ModTargetList.h"
 #include "ModuleBase.h"
 #include <array>
 #include <atomic>
@@ -11,8 +12,9 @@
  * @brief "Channel Strip" — the end of one mixer channel (docs/mixer/mixer.md#node-types).
  *
  * The node the mixer enumerates: a channel's chain terminates here, and the strip's gain, pan,
- * mute and solo are what a mixer column drives. Output is always stereo (Left on ch0, Right on
- * kRightBase); the INPUT is Mono or Stereo, decided once when the strip is created.
+ * mute and solo are what a mixer column drives. The output is always stereo on the raw channels
+ * (Left on ch0, Right on kRightBase); the INPUT is Mono or Stereo, decided once when the strip is
+ * created. Dual I/O only changes how many jacks show (below), never a raw channel.
  *
  * CHANNEL SHAPE (docs/mixer/mixer.md#mono-and-stereo). JUCE settles the bus layout in the ModuleBase constructor,
  * so the node always carries kNumInputs raw input channels and kNumOutputs raw output channels,
@@ -37,7 +39,7 @@
  * maximum and varies only the VISIBLE count — Source/Modules/CLAUDE.md), each with its own L and R
  * block so the "right leg on its own block" invariant holds per send:
  *
- *   inputs   0 = In/Left, 1..3 reserved, kRightBase = Right                     -> kNumInputs  = 5
+ *   inputs   0 = In/Left, 1..3 reserved, kRightBase = Right, 5..14 knob cables  -> kNumInputs  = 15
  *   main out 0 = Left,    1..3 reserved, kRightBase = Right, 5..7 reserved
  *   send L   kSendBase + slot                                                   (8..11)
  *   send R   kSendBase + kMaxSends + slot                                       (12..15)
@@ -72,8 +74,10 @@
  * branch stays `buffer.clear()` per the root CLAUDE.md two-branch contract, a deliberate departure
  * from DAWs that keep a pre-fader cue alive under mute.
  *
- * The (5, 16) channel shape does not match hasStereoOutputPairShape, so no Dual I/O toggle is
- * inherited and none is wanted — the strip owns its own fixed jack map below.
+ * DUAL I/O (StereoAudio::Declared, ships SPLIT; docs/mixer/mixer.md#mono-and-stereo). Split, the main output
+ * shows Left and Right and a Stereo strip's input shows Left and Right. Collapsed, the main output is one "Audio" jack
+ * owning raw ch0 and kRightBase (span 2, stride kRightBase), and a Stereo strip's input is one "Audio" jack the same
+ * way; send jacks never collapse and just move up one slot. Only the visible jacks change: no raw edge moves.
  *
  * SOLO (docs/mixer/mixer.md#solo-is-a-render-time-gate). `soloed_` is NOT an AudioParameter: not host-visible, not
  * automatable, persisted only in the trusted extra state. Whether ANY strip is soloed is an
@@ -114,6 +118,14 @@
  * before arming any tap — and a block wider than that is dropped rather than overrun, since the
  * audio thread must never touch memory it wasn't handed room for.
  *
+ * LIVE TAP (docs/timeline/tracks.md#the-input-row). A second, separate tap an Audio track recording "Another track"
+ * arms to hear this strip's sound: the stereo output after the inserts' sum, fader, pan and mute, but BEFORE the solo
+ * gate, so soloing the recording track (the usual thing while recording) never silences its source. A muted strip
+ * taps silence, a bypassed one its dry pass-through. Unlike the stem tap it may be armed and disarmed WHILE the graph
+ * renders: the buffers it points at (synth::InputTakeRecorder's strip slots) are allocated once and never freed or
+ * reallocated, so a pointer the audio thread loads is always valid memory. Copies min(numSamples, capacity) frames
+ * of the main legs; no allocation, no locks.
+ *
  * INTERNAL-ONLY, the same three exclusions as Rec Tap and the macro port types: no library row, no
  * replace-menu entry, never authorable by a model (kNonAuthorableModuleTypes, docs/mixer/mixer.md#ai-authorability).
  */
@@ -123,8 +135,25 @@ public:
 
     /** Raw channel carrying the right leg, in and out. See the class comment. */
     static constexpr int kRightBase = 4;
+    /** The knobs that take a cable and have no jack, one raw input channel each from kFirstCvChannel: the fader, the
+     *  pan, then each send's level and pan. They sit above every audio input so a saved cable never moves. Append
+     *  only. The cables are read once per block, before the hygiene clears below wipe their channels (which overlap
+     *  the send output block). */
+    static constexpr std::array<synth::ModTargetSpec, 2 + 2 * 4> kModTargets{{
+        {"gain", synth::ModRead::Live},
+        {"pan", synth::ModRead::Live},
+        {"send1Level", synth::ModRead::Live},
+        {"send2Level", synth::ModRead::Live},
+        {"send3Level", synth::ModRead::Live},
+        {"send4Level", synth::ModRead::Live},
+        {"send1Pan", synth::ModRead::Live},
+        {"send2Pan", synth::ModRead::Live},
+        {"send3Pan", synth::ModRead::Live},
+        {"send4Pan", synth::ModRead::Live},
+    }};
+    static constexpr int kFirstCvChannel = kRightBase + 1;
     /** Raw input channels. Fixed for the node's lifetime. */
-    static constexpr int kNumInputs = kRightBase + 1;
+    static constexpr int kNumInputs = kFirstCvChannel + (int)kModTargets.size();
 
     /** Send slots. Fixed: the parameters and the raw channels for all of them always exist; only
      *  `activeMask_` (and therefore the visible jack count) varies. */
@@ -151,7 +180,7 @@ public:
     static constexpr double kSmoothingSeconds = 0.02;
 
     ChannelStripModule()
-        : ModuleBase("Channel Strip", kNumInputs, kNumOutputs) {
+        : ModuleBase("Channel Strip", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
                          "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
         addParameter(
@@ -171,6 +200,7 @@ public:
                              new juce::AudioParameterFloat(id, "Send " + juce::String(slot + 1) + " Pan",
                                                            juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
         }
+        mods_.bind(*this);
     }
 
     ~ChannelStripModule() override = default;
@@ -188,18 +218,19 @@ public:
         smoothedGainR_.setCurrentAndTargetValue(targetR);
         for (int slot = 0; slot < kMaxSends; ++slot) {
             smoothedSend_[slot].reset(sampleRate, kSmoothingSeconds);
-            smoothedSend_[slot].setCurrentAndTargetValue(sendTargetGain(slot));
+            // A send restored as bypassed starts silent rather than ramping down from its level.
+            smoothedSend_[slot].setCurrentAndTargetValue(isSendBypassed(slot) ? 0.0f : sendTargetGain(slot));
             // The pan VALUE is what's smoothed (not the two derived gains directly), same
             // shape as the strip's own gain/pan split -- writeSendLegs() re-derives gainL/gainR from
             // the smoothed value every sample via the shared ModuleBase::panGains law.
             smoothedSendPan_[slot].reset(sampleRate, kSmoothingSeconds);
-            smoothedSendPan_[slot].setCurrentAndTargetValue(sendPanParams_[slot]->get());
+            smoothedSendPan_[slot].setCurrentAndTargetValue(sendPanNow(slot));
         }
         meterLatches_[0].reset();
         meterLatches_[1].reset();
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
         const int numSamples = buffer.getNumSamples();
         if (buffer.getNumChannels() < kNumOutputs) {
@@ -208,6 +239,7 @@ public:
         }
 
         const bool stereo = getShape() == Shape::Stereo;
+        readCables(buffer);
 
         // Hidden-channel hygiene, unconditional — the reserved blocks, every send leg (a stale
         // block from the previous callback must never leak into a bus), and the right input when
@@ -227,6 +259,7 @@ public:
             // gate still applies, per leg.
             const juce::uint32 advanced = writeSendLegs(buffer, numSamples, SendPhase::All, audible);
             skipSendSmoothers(numSamples, advanced);
+            copyToLiveTap(buffer, numSamples);
             applyMainLegGate(buffer, numSamples, audible);
             finishBlock(buffer, numSamples);
             return;
@@ -235,6 +268,7 @@ public:
         if (isMuted()) {
             buffer.clear();
             skipSendSmoothers(numSamples, 0);
+            copyToLiveTap(buffer, numSamples);
             finishBlock(buffer, numSamples);
             return;
         }
@@ -255,6 +289,7 @@ public:
 
         advanced |= writeSendLegs(buffer, numSamples, SendPhase::Post, audible);
         skipSendSmoothers(numSamples, advanced);
+        copyToLiveTap(buffer, numSamples);
         applyMainLegGate(buffer, numSamples, audible);
         finishBlock(buffer, numSamples);
     }
@@ -264,38 +299,64 @@ public:
 
     ModuleType getModuleType() const override { return ModuleType::ChannelStrip; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
 
-    int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo ? 2 : 1; }
-    int getVisibleOutputPortCount() const override { return 2 + 2 * getActiveSendCount(); }
+    int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo && isDualIO() ? 2 : 1; }
+    int getVisibleOutputPortCount() const override { return mainOutputJackCount() + 2 * getActiveSendCount(); }
 
     juce::String getInputPortLabel(int visibleJack) const override {
+        if (mods_.ownsChannel(visibleJack))
+            return mods_.label(visibleJack);
         if (getShape() == Shape::Mono)
             return "In";
+        if (!isDualIO())
+            return "Audio";
         return visibleJack == 1 ? "Right" : "Left";
     }
     juce::String getOutputPortLabel(int visibleJack) const override {
-        if (visibleJack < 2)
-            return visibleJack == 1 ? "Right" : "Left";
+        if (visibleJack < mainOutputJackCount())
+            return stereoOutputLabel(visibleJack);
         const int slot = slotForVisibleJack(visibleJack);
         if (slot < 0)
             return ModuleBase::getOutputPortLabel(visibleJack);
         // Named by SLOT, not by visible position: removing a middle send renumbers the jacks but
         // must not renumber what a row and its sendNLevel parameter call themselves.
-        return "Send " + juce::String(slot + 1) + ((visibleJack % 2) == 0 ? " L" : " R");
+        return "Send " + juce::String(slot + 1) + ((visibleJack - mainOutputJackCount()) % 2 == 0 ? " L" : " R");
     }
 
     LogicalPort mapInputChannel(int rawChannel) const override {
-        if (rawChannel == 0)
-            return audioJack(0);
-        if (rawChannel == kRightBase && getShape() == Shape::Stereo)
-            return audioJack(1);
+        const bool stereo = getShape() == Shape::Stereo;
+        if (rawChannel == 0) {
+            auto port = audioJack(0);
+            if (stereo && !isDualIO()) {
+                port.polyVoiceSpan = 2; // the one jack owns both legs, kRightBase apart
+                port.voiceStride = kRightBase;
+            }
+            return port;
+        }
+        if (rawChannel == kRightBase && stereo) {
+            auto port = audioJack(isDualIO() ? 1 : 0);
+            port.isPolyGroupHead = isDualIO();
+            return port;
+        }
+        if (mods_.ownsChannel(rawChannel))
+            return mods_.portOf(rawChannel);
         return {}; // reserved / hidden: role Other, not a group head
     }
     LogicalPort mapOutputChannel(int rawChannel) const override {
-        if (rawChannel == 0)
-            return audioJack(0);
-        if (rawChannel == kRightBase)
-            return audioJack(1);
+        if (rawChannel == 0) {
+            auto port = audioJack(0);
+            if (!isDualIO()) {
+                port.polyVoiceSpan = 2; // the one jack owns both legs, kRightBase apart
+                port.voiceStride = kRightBase;
+            }
+            return port;
+        }
+        if (rawChannel == kRightBase) {
+            auto port = audioJack(isDualIO() ? 1 : 0);
+            port.isPolyGroupHead = isDualIO();
+            return port;
+        }
         for (int slot = 0; slot < kMaxSends; ++slot) {
             if (!isSendActive(slot))
                 continue;
@@ -340,6 +401,12 @@ public:
      *  A muted slot's send level parameter is untouched, so unmuting restores the exact same level. */
     bool isSendMuted(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends && (muteMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
+    }
+    /** Per-send bypass -- non-parameter trusted extra state, same lifecycle as isSendMuted. A bypassed
+     *  send's level ramps to silence and back (writeSendLegs), so toggling it never clicks; its level
+     *  parameter is untouched. */
+    bool isSendBypassed(int slot) const noexcept {
+        return slot >= 0 && slot < kMaxSends && (bypassMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
     }
     /** Per-send mono -- non-parameter trusted extra state, same lifecycle as isSendMuted
      *  above. When set, writeSendLegs sums the tapped L/R signal to (L+R)*0.5 on BOTH legs before
@@ -391,6 +458,7 @@ public:
             setSendActive(slot, true);
             setSendPreFader(slot, false);
             setSendMuted(slot, false);
+            setSendBypassed(slot, false);
             setSendMono(slot, false);
             return slot;
         }
@@ -420,6 +488,14 @@ public:
         const juce::uint32 bit = 1u << slot;
         auto mask = muteMask_.load(std::memory_order_relaxed);
         muteMask_.store(muted ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
+    }
+    /** Bypasses/restores send `slot` without touching its level parameter. No-op out of range. */
+    void setSendBypassed(int slot, bool bypassed) {
+        if (slot < 0 || slot >= kMaxSends)
+            return;
+        const juce::uint32 bit = 1u << slot;
+        auto mask = bypassMask_.load(std::memory_order_relaxed);
+        bypassMask_.store(bypassed ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
     }
     /** Sums/unsums send `slot`'s tapped L/R to (L+R)*0.5 before its own pan law. No-op
      *  out of range. */
@@ -480,6 +556,14 @@ public:
         stemTap_.store(buffer, std::memory_order_release);
     }
 
+    // ---- Live tap (message thread arms/disarms, audio thread writes through it every block). See the class
+    // comment. Unlike the stem tap this IS safe while the graph renders, provided `buffer` is never freed or
+    // reallocated (2 channels; a longer block fills only its capacity). nullptr disarms.
+    void setLiveTapBuffer(juce::AudioBuffer<float>* buffer) noexcept {
+        liveTap_.store(buffer, std::memory_order_release);
+    }
+    juce::AudioBuffer<float>* getLiveTapBuffer() const noexcept { return liveTap_.load(std::memory_order_acquire); }
+
     // Test seam: true while a tap is armed. Lets a test prove a session disarms every tap on the
     // way out (cancel, failure, or normal completion) without needing a dangling pointer into
     // memory the session already freed.
@@ -503,6 +587,7 @@ public:
             entry->setProperty("slot", slot);
             entry->setProperty("pre", isSendPreFader(slot));
             entry->setProperty("mute", isSendMuted(slot));
+            entry->setProperty("bypass", isSendBypassed(slot));
             entry->setProperty("mono", isSendMono(slot));
             sends.add(juce::var(entry));
         }
@@ -544,8 +629,11 @@ private:
         for (int below = 0; below < slot; ++below)
             if (isSendActive(below))
                 ++position;
-        return 2 + 2 * position;
+        return mainOutputJackCount() + 2 * position;
     }
+
+    /** Main output jacks: Left and Right when Dual I/O is on, one Audio jack owning both legs when off. */
+    int mainOutputJackCount() const noexcept { return stereoVisibleOutputCount(); }
 
     /** Inverse of visibleJackForSlot for the L jack of a pair; -1 when `visibleJack` names no
      *  active slot. */
@@ -561,6 +649,7 @@ private:
         activeMask_.store(0, std::memory_order_relaxed);
         preMask_.store(0, std::memory_order_relaxed);
         muteMask_.store(0, std::memory_order_relaxed);
+        bypassMask_.store(0, std::memory_order_relaxed);
         monoMask_.store(0, std::memory_order_relaxed);
         if (const auto* array = sends.getArray()) {
             for (const auto& entry : *array) {
@@ -575,15 +664,27 @@ private:
                 // Absent (an entry saved before mute/mono existed) means off, same
                 // "unset means off" rule "pre" already established -- an old project loads unchanged.
                 setSendMuted(slot, obj->hasProperty("mute") && static_cast<bool>(obj->getProperty("mute")));
+                setSendBypassed(slot, obj->hasProperty("bypass") && static_cast<bool>(obj->getProperty("bypass")));
                 setSendMono(slot, obj->hasProperty("mono") && static_cast<bool>(obj->getProperty("mono")));
             }
         }
     }
 
+    /** Copies this block's first-sample cable of each knob, before anything writes the buffer. */
+    void readCables(const juce::AudioBuffer<float>& buffer) noexcept {
+        for (int k = 0; k < (int)kModTargets.size(); ++k)
+            cableCv_[(size_t)k] = blockCV(buffer, kFirstCvChannel + k);
+    }
+    /** A knob moved by its cable in the knob's own normalised range; `index` is its place in kModTargets. */
+    float knobNow(const juce::AudioParameterFloat& param, int index) const noexcept {
+        return modulateNormalised(param, param.get(), cableCv_[(size_t)index]);
+    }
+    float sendPanNow(int slot) const noexcept { return knobNow(*sendPanParams_[slot], 2 + kMaxSends + slot); }
+
     void computeTargetGains(float& targetL, float& targetR) const {
-        const float gain = juce::Decibels::decibelsToGain(gainParam_->get(), kMinGainDb);
+        const float gain = juce::Decibels::decibelsToGain(knobNow(*gainParam_, 0), kMinGainDb);
         float panL = 1.0f, panR = 1.0f;
-        applyPanLaw(panParam_->get(), panL, panR);
+        applyPanLaw(knobNow(*panParam_, 1), panL, panR);
         targetL = gain * panL;
         targetR = gain * panR;
     }
@@ -606,7 +707,7 @@ private:
     }
 
     float sendTargetGain(int slot) const {
-        return juce::Decibels::decibelsToGain(sendLevelParams_[slot]->get(), kMinGainDb);
+        return juce::Decibels::decibelsToGain(knobNow(*sendLevelParams_[slot], 2 + slot), kMinGainDb);
     }
 
     /** Which legs may be written this block. ~0u whenever the mixer solo gate is open, or this
@@ -615,7 +716,7 @@ private:
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
         if (transport == nullptr || !transport->isMixerSoloActiveForBlock())
             return ~0u;
-        if (isSoloed())
+        if (isSoloed() || isAuditionAudible())
             return ~0u;
         return soloAudibleMask_.load(std::memory_order_relaxed);
     }
@@ -640,8 +741,11 @@ private:
             advanced |= bit;
             auto& smoothed = smoothedSend_[slot];
             auto& smoothedPan = smoothedSendPan_[slot];
-            smoothed.setTargetValue(sendTargetGain(slot));
-            smoothedPan.setTargetValue(sendPanParams_[slot]->get());
+            // A bypassed send's level target is silence, reached through the same smoother as any level
+            // change, so bypassing and restoring never click.
+            const bool bypassed = isSendBypassed(slot);
+            smoothed.setTargetValue(bypassed ? 0.0f : sendTargetGain(slot));
+            smoothedPan.setTargetValue(sendPanNow(slot));
             // A muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
             // pass already cleared it, so just don't write over that silence. The level parameter
             // (and this smoother) keep tracking the target, so unmuting picks up at the same level.
@@ -649,6 +753,12 @@ private:
                 smoothed.skip(numSamples);
                 smoothedPan.skip(numSamples);
                 continue; // already silent from the hygiene pass
+            }
+
+            // Fully ramped down: the legs stay at the hygiene pass's silence until it is restored.
+            if (bypassed && !smoothed.isSmoothing() && smoothed.getCurrentValue() == 0.0f) {
+                smoothedPan.skip(numSamples);
+                continue;
             }
 
             const bool mono = isSendMono(slot);
@@ -697,6 +807,17 @@ private:
         buffer.clear(kRightBase, 0, numSamples);
     }
 
+    // Copies the main legs as they stand (post fader, pan and mute, pre solo gate) into the live tap, if armed. Called
+    // at each exit path just before the solo gate; see the class comment's LIVE TAP.
+    void copyToLiveTap(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
+        auto* tap = liveTap_.load(std::memory_order_acquire);
+        if (tap == nullptr || tap->getNumChannels() < 2)
+            return;
+        const int frames = juce::jmin(numSamples, tap->getNumSamples());
+        tap->copyFrom(0, 0, buffer, 0, 0, frames);
+        tap->copyFrom(1, 0, buffer, kRightBase, 0, frames);
+    }
+
     // The one place every processBlock exit path converges: updates the meter and, if a stem tap is
     // armed, copies this block's FINAL output into it. `buffer` at this point is exactly what the
     // strip hands to Master, in every branch (dry-bypassed, muted, solo-gated silent, or normal) —
@@ -719,6 +840,8 @@ private:
     juce::AudioParameterFloat* panParam_ = nullptr;
     juce::AudioParameterFloat* sendLevelParams_[kMaxSends] = {};
     juce::AudioParameterFloat* sendPanParams_[kMaxSends] = {};
+    synth::ModTargetList mods_{kModTargets, kFirstCvChannel};
+    std::array<float, kModTargets.size()> cableCv_{}; ///< each knob's cable at this block's first sample
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainL_{1.0f};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainR_{1.0f};
@@ -738,8 +861,9 @@ private:
     // reads — one relaxed load each per block, so a strip's own slots are always self-consistent.
     std::atomic<juce::uint32> activeMask_{0};
     std::atomic<juce::uint32> preMask_{0};
-    std::atomic<juce::uint32> muteMask_{0}; // per-send mute, same lifecycle as preMask_
-    std::atomic<juce::uint32> monoMask_{0}; // per-send mono, same lifecycle as muteMask_
+    std::atomic<juce::uint32> muteMask_{0};   // per-send mute, same lifecycle as preMask_
+    std::atomic<juce::uint32> bypassMask_{0}; // per-send bypass, same lifecycle as muteMask_
+    std::atomic<juce::uint32> monoMask_{0};   // per-send mono, same lifecycle as muteMask_
     std::atomic<juce::uint32> soloAudibleMask_{0};
 
     static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }
@@ -748,6 +872,8 @@ private:
 
     // Non-owning; null outside a stem export. See setStemTapBuffer() and the class comment.
     std::atomic<juce::AudioBuffer<float>*> stemTap_{nullptr};
+    // Non-owning; null unless a track is recording this strip. See setLiveTapBuffer() and the class comment.
+    std::atomic<juce::AudioBuffer<float>*> liveTap_{nullptr};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelStripModule)
 };

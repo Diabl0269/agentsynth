@@ -8,7 +8,7 @@
 // (`using NoteHit = pianoroll::NoteHit;` etc.) so every existing `PianoRollComponent::NoteHit`-style
 // qualified reference elsewhere keeps compiling unchanged.
 
-#include "Timeline/MusicalScale.h"
+#include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -32,6 +32,16 @@ struct NoteOrigin {
     int velocity = 100;
 };
 
+// The copy ghost's short-lived settle after a drop or an Esc cancel: the dragged notes' origins plus
+// the preview offset they were released at, and the eased 0..1 progress of the 140 ms tween.
+struct GhostSettle {
+    std::vector<NoteOrigin> notes;
+    double deltaBeats = 0.0;
+    int deltaRows = 0;
+    bool dropped = true; // false = cancelled (the ghost flies back to its origin and fades)
+    float t = 0.0f;
+};
+
 /** One copied note, stored RELATIVE to the earliest note in the copied block rather than in
  *  absolute (or even clip-relative) beats. That is what lets a copy survive being pasted into a
  *  different clip at a different position — the block keeps its internal shape and only its
@@ -44,6 +54,13 @@ struct ClipboardNote {
     int velocity = 100;
     int channel = 1;
     bool muted = false;
+    // Per-hit drum settings (see MidiNote): a pasted hit keeps its chance, roll, nudge and condition.
+    int chance = 100;
+    int repeat = 1;
+    bool flam = false;
+    double nudge = 0.0;
+    int condHit = 1;
+    int condOf = 1;
 };
 
 // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by
@@ -62,16 +79,6 @@ struct LineRange {
     long long first = 0;
     long long last = -1;
     int count() const noexcept { return last < first ? 0 : (int)(last - first + 1); }
-};
-
-// Per-clip scale memory: SESSION-ONLY, deliberately never persisted (mirrors rollView_ and
-// firstVisiblePitch_, which are not persisted either) — see setScaleContext's class-comment
-// discussion of why a clip's row/colour context is view state, not document state. A clip id
-// absent from this map has never had a scale chosen for it and reads back as "No scale" /
-// pitch-visibility off, per the class's "a clip never opened starts at No scale" contract.
-struct ClipScaleMemory {
-    std::optional<synth::MusicalScale> scale;
-    bool pitchVisibilityOn = false;
 };
 
 } // namespace synth::ui::pianoroll

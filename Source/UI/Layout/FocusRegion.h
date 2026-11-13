@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,6 +18,8 @@
 // every top-level window in the process). `MainComponent` owns the one instance that exists today, as
 // a plain member (`focusRegions_`), and wires it to the getters/toggles it already has — this type
 // itself knows nothing about MainComponent.
+class ShortcutManager;
+
 namespace synth::ui {
 
 // One region MainComponent's Tab-cycle and direct-focus shortcuts can land keyboard focus in.
@@ -49,6 +50,9 @@ struct FocusRegion {
 class FocusRegionRegistry {
 public:
     void addRegion(FocusRegion region) { regions_.push_back(std::move(region)); }
+    // Test seam: told the id of every region focusRegionById moved focus to, since a headless window
+    // cannot hold keyboard focus to read back.
+    std::function<void(const juce::String&)> onRegionFocused;
     void clear() { regions_.clear(); }
     const std::vector<FocusRegion>& getRegions() const { return regions_; }
 
@@ -125,6 +129,8 @@ public:
             if (!r.isCurrentlyOpen() && r.open)
                 r.open();
             r.root->grabKeyboardFocus();
+            if (onRegionFocused)
+                onRegionFocused(r.id);
             return true;
         }
         return false;
@@ -186,15 +192,17 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
 // (Shift+Tab)/nullopt if `key` isn't bound to either action right now (a user rebind is honoured
 // automatically, same as the command table). Pure: never touches real focus, so it's exactly as
 // testable as FocusRegionRegistry's own pure helpers above (see docs/mixer/panel.md).
-inline std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key,
-                                                     const ShortcutManager& shortcutManager) {
-    for (const auto& action : shortcutManager.getActionsForKeyPress(key)) {
-        if (action == "focusNextRegion")
-            return true;
-        if (action == "focusPrevRegion")
-            return false;
-    }
-    return std::nullopt;
+std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key, const ShortcutManager& shortcutManager);
+
+/** Whether a ring waiting for a panel slide may still be placed when the slide lands. Not if the dock closed again
+ *  while it slid, nor if the keys moved on since the command ran (focus is neither where the command left it nor
+ *  inside the panel, which takes focus itself once it shows): a late ring must not steal focus from a later scene. */
+inline bool deferredRingStillWanted(bool sliding, bool dockVisible, const juce::Component* focused,
+                                    const juce::Component* focusAtPress, const juce::Component& panel) {
+    if (!sliding)
+        return true;
+    return dockVisible &&
+           (focused == focusAtPress || (focused != nullptr && (focused == &panel || panel.isParentOf(focused))));
 }
 
 } // namespace synth::ui

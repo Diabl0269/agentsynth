@@ -20,7 +20,7 @@
 #include "Modules/MacroMidiInletModule.h"
 #include "Modules/MacroMidiOutletModule.h"
 #include "Modules/MacroOutletModule.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================

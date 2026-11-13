@@ -1,10 +1,16 @@
 #pragma once
 
+#include "CardViewState.h"
+#include "ModuleChoiceState.h"
+#include "ModuleOutputStage.h"
+#include "Modules/NoteInbox.h"
+#include "Modules/ParameterText.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -21,6 +27,7 @@ struct ModulationTarget {
     juce::String name;
     int channelIndex;
     juce::String paramId;
+    bool knobOnly = false; // never drawn as a gutter jack: reached only through its knob, even while that is hidden
 };
 
 enum class ModulationCategory { Envelope, LFO, Oscillator, Sequencer, Filter, FX, Other };
@@ -31,6 +38,7 @@ struct LogicalPort {
     PortRole role = PortRole::Other;
     bool isPolyGroupHead = false; // true only for the lowest raw channel of a poly fan
     int polyVoiceSpan = 1;        // 1 = mono; N = head of an N-voice fan
+    int voiceStride = 1;          // raw-channel gap between a fan's voices; > 1 only for a collapsed split-block pair
 };
 
 enum class ModuleType {
@@ -62,11 +70,16 @@ enum class ModuleType {
     Noise,
     Math,
     Sampler,
+    DrumKit,
     Wavetable,
     MacroControl,
     SampleHold,
     EnvelopeFollower,
     Comparator,
+    // Instruments added after the first release. Types are saved by NAME (the module factory), never by
+    // number, so inserting here renumbers nothing that is persisted.
+    Pluck,
+    Mallet,
     // The device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
     // paired with the "Audio Output" node, which is still a juce::AudioGraphIOProcessor.
     AudioInput,
@@ -131,6 +144,9 @@ inline bool isMidiInstrumentType(ModuleType type) noexcept {
     case ModuleType::Oscillator:
     case ModuleType::Wavetable:
     case ModuleType::Sampler:
+    case ModuleType::DrumKit:
+    case ModuleType::Pluck:
+    case ModuleType::Mallet:
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
         return true;
@@ -184,6 +200,7 @@ public:
                               numOutputs > 0))
         , moduleName(name) {
         addParameter(bypassedParam = new juce::AudioParameterBool("bypassed", "Bypassed", false));
+        outputStage_.reserveDefault(numInputs > 0 && numOutputs > 0 ? std::min(numOutputs, 2) : 0);
 
         // Bus layout stays fixed for the module's lifetime (JUCE cannot renegotiate without dropping
         // graph connections), so Dual I/O only ever changes jack *visibility* and the logical-port
@@ -205,6 +222,23 @@ public:
         if (!mutedParam)
             addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
     }
+
+    /** The input channel a bypassed module leaves on output channel `outputChannel`, or -1 for none. Default:
+        the same index when the module's first input is audio; override when bypass routes differently. */
+    virtual int bypassDryChannel(int outputChannel) const;
+
+    /** False in a module whose bypassed output is not its input left in place (Master): its bypass stays a hard switch.
+     */
+    virtual bool bypassPassesInputThrough() const { return true; }
+
+    /** A raw output channel that carries a copy of an audio leg but is not an audio jack (VCA's legacy ch1), or
+        -1. The output stage fades it with the legs so the copy does not switch on and off by itself. */
+    virtual int duplicateOutputChannel() const { return -1; }
+
+    /** Opt-in `mix` (0..1, default 1) and `pan` (-1..1, default 0) applied after processModuleBlock; add last.
+        `cvChannel`: the raw input channel that modulates it, appended after the module's others, or -1 for none. */
+    void addMixParameter(int cvChannel = -1) { outputStage_.addMix(*this, cvChannel); }
+    void addPanParameter(int cvChannel = -1) { outputStage_.addPan(*this, cvChannel); }
 
     bool hasDualIOParameter() const { return dualIOParam != nullptr; }
     bool isDualIO() const { return dualIOParam != nullptr && dualIOParam->get(); }
@@ -251,6 +285,10 @@ public:
     /** Raw channel carrying the right audio leg, or -1 when the module has no second leg.
         Defaults to the FX layout (ch1); split-block modules override it with their kRightBase. */
     virtual int rightAudioLegChannel() const { return hasDualIOParameter() ? 1 : -1; }
+
+    /** First raw input channel of the per-voice Gate fan that restarts a poly voice's phase on a new note
+        (an Oscillator or Wavetable), or -1 when the module has none. Poly MIDI's Gate fan feeds it. */
+    virtual int polyGateInputChannel() const { return -1; }
 
     /** True when the right leg sits on its own block rather than on ch1. Callers that want to wire
         or unwire a stereo pair must go through rightAudioLegChannel() rather than assuming ch1. */
@@ -307,6 +345,39 @@ public:
         solo gate); audio-thread read once per block via applyLeftRightNormalling(). */
     void setNormalLeftToRight(bool normal) noexcept { normalLeftToRight_.store(normal, std::memory_order_relaxed); }
     bool isNormalLeftToRight() const noexcept { return normalLeftToRight_.load(std::memory_order_relaxed); }
+
+    // -------------------------------------------------------------------------
+    // Stereo down-mix into a mono input (docs/architecture/audio-engine.md#stereo-down-mix-fro326)
+    //
+    // The graph sums every edge into a raw input channel at unity, so a stereo pair (a source's
+    // Left AND Right legs) cabled into one mono jack plays L+R -- up to +6 dB. The standard
+    // down-mix (Web Audio, Ableton Utility) is the average, 0.5 * (L + R). AudioEngine::refreshNormalling
+    // marks each raw input channel whose feeds are ALL complete L/R pairs; processBlock halves
+    // those channels before the module sees them. A channel with any unpaired feed is a mix the
+    // user built by hand and stays at unity. Render-time only, never an edge (like normalling).
+    // -------------------------------------------------------------------------
+
+    /** The down-mix gain: -6 dB, i.e. the average of Left and Right. */
+    static constexpr float kStereoDownMixGain = 0.5f;
+    /** Raw input channels past this cannot be marked (the mask is one 64-bit word). */
+    static constexpr int kMaxDownMixChannels = 64;
+
+    /** MESSAGE THREAD write (AudioEngine::refreshNormalling); bit c set = raw input c is fed only
+        by complete stereo pairs. Audio-thread read once per block in processBlock. */
+    void setInputDownMixMask(std::uint64_t mask) noexcept { inputDownMixMask_.store(mask, std::memory_order_relaxed); }
+    std::uint64_t getInputDownMixMask() const noexcept { return inputDownMixMask_.load(std::memory_order_relaxed); }
+
+    /** Scales every marked raw input channel by kStereoDownMixGain, in place. A no-op (one relaxed
+        load) while nothing is marked. */
+    void applyInputDownMix(juce::AudioBuffer<float>& buffer) const noexcept {
+        const auto mask = inputDownMixMask_.load(std::memory_order_relaxed);
+        if (mask == 0)
+            return;
+        const int channels = std::min({buffer.getNumChannels(), getTotalNumInputChannels(), kMaxDownMixChannels});
+        for (int c = 0; c < channels; ++c)
+            if ((mask >> c) & 1u)
+                buffer.applyGain(c, 0, buffer.getNumSamples(), kStereoDownMixGain);
+    }
 
     /** Visible audio jacks for a split-block module: 2 when dual, 1 when collapsed. */
     int splitAudioJackCount() const { return isDualIO() ? 2 : 1; }
@@ -505,19 +576,16 @@ public:
     void setSidechainConnected(bool connected) { sidechainConnected_.store(connected, std::memory_order_relaxed); }
     bool isSidechainConnected() const { return sidechainConnected_.load(std::memory_order_relaxed); }
 
-    // Opt-in output-level stage for modules whose output is audio.
-    //
-    // Deliberately NOT added in the ModuleBase ctor: parameter position is load-bearing
-    // for a few positional getParameters()[n] call sites, and "gain" is meaningless (or
-    // actively wrong) on pitch/gate CV outputs — scaling a V/oct pitch CV detunes, and
-    // scaling a gate drops it under the > 0.5f trigger threshold. Each module opts in,
-    // and MUST call this AFTER its own addParameter() calls so the new parameter lands
-    // last and existing positional lookups keep resolving to the same parameter.
-    void addOutputLevelParameter(float defaultValue = 1.0f) {
+    // Opt-in output-level stage for modules whose output is audio. Not added in the ctor: scaling a pitch or gate CV
+    // output breaks it (detunes, drops a gate under 0.5). Call it AFTER the module's own addParameter() calls, so the
+    // new parameter lands last and positional getParameters()[n] lookups keep resolving to the same parameter.
+    void addOutputLevelParameter(float defaultValue = 1.0f, int cvChannel = -1) {
         if (outputLevelParam)
             return;
-        addParameter(outputLevelParam =
-                         new juce::AudioParameterFloat("outputLevel", "Level", 0.0f, 1.0f, defaultValue));
+        outputLevelCvChannel_ = cvChannel;
+        addParameter(outputLevelParam = new juce::AudioParameterFloat(
+                         "outputLevel", "Level", juce::NormalisableRange<float>(0.0f, 1.0f), defaultValue,
+                         synth::fractionPercentAttributes()));
         // Safe default if prepareToPlay (and therefore prepareOutputLevel) never runs:
         // snap-to-target, so applyOutputLevel takes its steady-state path at unity
         // instead of ramping up from a default-constructed 0 and silencing the module.
@@ -532,7 +600,14 @@ public:
 
     const juce::String getName() const override { return moduleName; }
 
-    bool isBypassed() const { return bypassedParam->get(); }
+    /** The title a card shows when the user set none. Defaults to getName() (the auto-numbered type
+     *  name); a module whose shown name is not its type name (a hosted plugin) overrides it.
+     *  getName() stays the type key either way. Message thread. */
+    virtual juce::String getDefaultTitle() const { return getName(); }
+
+    /** The user's choice from any thread but the render thread; during a click-free transition the render
+        thread (processModuleBlock) sees the state the module is still rendering, one transition behind. */
+    bool isBypassed() const { return outputStage_.bypassedForRender(bypassedParam->get()); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
     /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
@@ -543,12 +618,34 @@ public:
      *  unconditionally and are only safe once this returns true. */
     bool hasMuteParameter() const { return mutedParam != nullptr; }
 
-    bool isMuted() const { return mutedParam->get(); }
+    bool isMuted() const { return outputStage_.mutedForRender(mutedParam->get()); }
     void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }
+    /** Message thread: a scale audition is heard through this module even while muted; see AuditionMonitor. */
+    void setAuditionAudible(bool on) noexcept { outputStage_.setAuditionAudible(on); }
+    bool isAuditionAudible() const noexcept { return outputStage_.auditionAudible(); }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override = 0;
+    /** Final on purpose: every module's render goes through here so the stereo down-mix below
+        (applyInputDownMix) can never be forgotten by one module. Override processModuleBlock. */
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
+        if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
+            inbox->drainInto(midiMessages, buffer.getNumSamples());
+        applyInputDownMix(buffer);
+        latchOutputStageCv(buffer);
+        if (outputStage_.isIdle(bypassedParam->get(), mutedParam != nullptr && mutedParam->get()))
+            processModuleBlock(buffer, midiMessages);
+        else
+            renderThroughOutputStage(buffer, midiMessages);
+    }
+
+    /** The module's own render. Runs after applyInputDownMix(), so a stereo pair summed into one
+        input already reads as its average; the bypass/mute contract (Source/CLAUDE.md) and
+        applyLeftRightNormalling() start here, exactly as they did at the top of processBlock. */
+    virtual void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
+
+    /** Message thread. Where other modules post notes for this one (made on first use); drained before each block. */
+    synth::NoteInbox& noteInbox();
 
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; } // To be implemented later
@@ -566,11 +663,21 @@ public:
         return {};
     }
     void changeProgramName(int index, const juce::String& newName) override { juce::ignoreUnused(index, newName); }
+    /** Choice count `paramId` had when state blobs without a saved choice name were written; override when
+     *  choices were appended, so an old normalised value still decodes. Default: the current count. */
+    virtual int legacyChoiceCount(const juce::String& paramId) const {
+        for (auto* param : getParameters())
+            if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(param); c != nullptr && c->paramID == paramId)
+                return c->choices.size();
+        return 0;
+    }
     void getStateInformation(juce::MemoryBlock& destData) override {
         juce::ValueTree state("ModuleState");
         for (auto* param : getParameters()) {
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
                 state.setProperty(p->paramID, p->getValue(), nullptr);
+                if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p))
+                    synth::saveChoiceName(state, *c);
             }
         }
         copyXmlToBinary(*state.createXml(), destData);
@@ -583,6 +690,10 @@ public:
                 juce::ValueTree state = juce::ValueTree::fromXml(*xmlState);
                 for (auto* param : getParameters()) {
                     if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+                        if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p)) {
+                            synth::loadChoice(state, *c, legacyChoiceCount(p->paramID));
+                            continue;
+                        }
                         if (state.hasProperty(p->paramID)) {
                             p->setValue((float)state.getProperty(p->paramID));
                         }
@@ -632,6 +743,30 @@ public:
     /** The parameter a modulation target's knob is attached to: the one whose `paramID` equals
         `target.paramId` when that is set, else the one whose display name equals `target.name`.
         Null for a target with no knob of its own (a bare CV jack such as Oscillator's Pitch). */
+    /** The raw CV channel that modulates parameter `paramId`, or -1 when no jack drives it. One pass
+        over getModulationTargets(): a target matches when its `paramId` equals `paramId`, or when it
+        declares no `paramId` and its `name` equals that parameter's display name (the knob-binding
+        fallback). The ONE rule the canvas modulator picker and a patch's "destParam" both use. */
+    int modulationChannelForParam(const juce::String& paramId) const {
+        if (paramId.isEmpty())
+            return -1;
+        juce::String displayName;
+        for (auto* param : getParameters()) {
+            if (auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param);
+                ranged != nullptr && ranged->paramID == paramId) {
+                displayName = ranged->getName(64);
+                break;
+            }
+        }
+        for (const auto& target : getModulationTargets()) {
+            if (target.paramId == paramId)
+                return target.channelIndex;
+            if (target.paramId.isEmpty() && displayName.isNotEmpty() && target.name == displayName)
+                return target.channelIndex;
+        }
+        return -1;
+    }
+
     const juce::RangedAudioParameter* parameterForModTarget(const ModulationTarget& target) const {
         for (auto* param : getParameters()) {
             auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param);
@@ -720,6 +855,7 @@ public:
         int rawHeadChannel = 0;
         PortRole role = PortRole::Other;
         int voiceSpan = 1;
+        int rawStride = 1; // voice v of the fan sits on rawHeadChannel + v * rawStride
     };
 
     /** Inverse of mapInput/OutputChannel: every poly-group head that anchors to visibleJackIndex.
@@ -734,7 +870,7 @@ public:
         for (int raw = 0; raw < numRaw; ++raw) {
             const LogicalPort p = isInput ? mapInputChannel(raw) : mapOutputChannel(raw);
             if (p.isPolyGroupHead && p.visibleJackIndex == visibleJackIndex)
-                targets.push_back({raw, p.role, std::max(1, p.polyVoiceSpan)});
+                targets.push_back({raw, p.role, std::max(1, p.polyVoiceSpan), std::max(1, p.voiceStride)});
         }
 
         if (targets.empty())
@@ -752,6 +888,10 @@ public:
         return false;
     }
 
+    /** True for an input channel kept free for a cable a later version adds (the Drum Kit's pad slots): it is no
+        signal input and no target yet. */
+    virtual bool isReservedInputChannel(int /*rawChannel*/) const { return false; }
+
     // Non-parameter state that must survive a graph rebuild (undo/redo, preset save/load), e.g. the
     // Sampler's loaded file path. AIStateMapper::graphToJSON writes whatever this returns as the
     // node's "state" property and applyJSONToGraph feeds it back through setExtraState().
@@ -762,6 +902,32 @@ public:
     // Return a void var when there is nothing to persist, so untouched modules add no JSON noise.
     virtual juce::var getExtraState() const { return {}; }
     virtual void setExtraState(const juce::var& state) { juce::ignoreUnused(state); }
+    // The one exception, opt-in per module: a "state" from untrusted model output reaches this
+    // instead of setExtraState. Override it only when the state is pure data (no file, path or
+    // other resource name) and parsing it clamps every value, e.g. the LFO's drawn Custom curve.
+    virtual void setUntrustedExtraState(const juce::var& state) { juce::ignoreUnused(state); }
+    // Called after AIStateMapper::applyParamsToProcessor (trusted or not) with the node's whole "params", so a module
+    // that dropped parameters reads the old keys. Clamp every value; with no old keys, change nothing.
+    virtual void adoptLegacyParams(const juce::NamedValueSet& params) { juce::ignoreUnused(params); }
+    // Called on a module created from a stored node (a project, preset, snapshot or generated patch), after its
+    // params are applied; `storedParams` is empty when the node has none. A module whose default moved puts the
+    // old default back for a key a trusted node never recorded; a model-authored node (`trusted` false) keeps
+    // the current defaults. Not called for a module that already exists or for a freshly dropped one.
+    virtual void applyStoredParamDefaults(const juce::NamedValueSet&, bool trusted) { juce::ignoreUnused(trusted); }
+    // Whether `id` is a parameter this module no longer has but adoptLegacyParams still reads, so the patch
+    // validator lets it through instead of rejecting it as an unknown key.
+    virtual bool isLegacyParamId(const juce::String& id) const {
+        juce::ignoreUnused(id);
+        return false;
+    }
+    // False for a parameter it keeps (saved, loaded, played) but no surface may offer yet: card, automation, AI, diff.
+    virtual bool isParameterExposed(const juce::String&) const { return true; }
+
+    // Which optional panels this module's card has open (scope / response / spectrum). Message thread
+    // only; never read by audio. Saved as the node's "cardView" key and, like "state", restored on the
+    // trusted path only -- see CardViewState.h.
+    const synth::CardViewState& getCardViewState() const noexcept { return cardViewState_; }
+    void setCardViewState(const synth::CardViewState& state) noexcept { cardViewState_ = state; }
 
     VisualBuffer* getVisualBuffer() { return visualBuffer.get(); }
     void enableVisualBuffer(bool enable) {
@@ -772,87 +938,19 @@ public:
     }
 
 protected:
-    // Call from prepareToPlay() when the module uses addOutputLevelParameter().
-    void prepareOutputLevel(double sampleRate) {
-        smoothedOutputLevel.reset(sampleRate, 0.01); // 10 ms ramp — anti-click on knob moves
-        smoothedOutputLevel.setCurrentAndTargetValue(getOutputLevel());
-    }
+    /** Call from prepareToPlay() when the module uses addOutputLevelParameter(); also prepares the output stage. */
+    void prepareOutputLevel(double sampleRate);
 
-    // Scales the first numAudioChannels channels by the smoothed output level.
-    //
-    // Call at the END of the normal processBlock path only. Never on the bypass branch
-    // (dry pass-through must stay untouched) and never on mute (already cleared) — see
-    // docs/architecture/module-base.md#bypassmute-contract. No-op when the module did not
-    // call addOutputLevelParameter().
-    void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels) {
-        if (outputLevelParam == nullptr)
-            return;
+    /** Call from prepareToPlay() in a module without an output level so the bypass crossfade has room for
+        every block and leg; without it a block past 1024 samples hard-switches. */
+    void prepareOutputStage(double sampleRate, int samplesPerBlock = 0);
 
-        const int numSamples = buffer.getNumSamples();
-        const int numChannels = juce::jmin(numAudioChannels, buffer.getNumChannels());
-        if (numSamples == 0 || numChannels <= 0)
-            return;
+    /** Scales the first numAudioChannels channels by the smoothed output level. Call at the END of the
+        normal path only: never on the bypass branch (dry stays untouched) nor on mute. */
+    void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels);
 
-        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
-
-        if (!smoothedOutputLevel.isSmoothing()) {
-            const float gain = smoothedOutputLevel.getCurrentValue();
-            if (gain != 1.0f)
-                for (int ch = 0; ch < numChannels; ++ch)
-                    buffer.applyGain(ch, 0, numSamples, gain);
-            return;
-        }
-
-        // getArrayOfWritePointers() avoids re-resolving the pointer per sample and
-        // allocates nothing — the per-sample walk keeps the ramp exact even when it
-        // completes mid-block.
-        auto* const* channels = buffer.getArrayOfWritePointers();
-        for (int i = 0; i < numSamples; ++i) {
-            const float gain = smoothedOutputLevel.getNextValue();
-            for (int ch = 0; ch < numChannels; ++ch)
-                channels[ch][i] *= gain;
-        }
-    }
-
-    // Two-block variant for modules whose Audio R block sits ABOVE the mod-CV inputs on a
-    // dedicated `kRightBase` block (Wavetable / Oscillator / Filter layouts) rather than on a
-    // contiguous ch0/ch1 pair. Scales [0, span) and [rightBase, rightBase + span) from ONE ramp:
-    // calling applyOutputLevel() twice would advance the smoother twice and leave the right leg
-    // a block behind the left, which reads as the image drifting while Level moves.
-    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase) {
-        if (outputLevelParam == nullptr)
-            return;
-
-        const int numSamples = buffer.getNumSamples();
-        const int bufChannels = buffer.getNumChannels();
-        const int leftCount = juce::jmin(span, bufChannels);
-        if (numSamples == 0 || leftCount <= 0)
-            return;
-
-        const int rightCount = juce::jlimit(0, span, bufChannels - rightBase);
-
-        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
-
-        if (!smoothedOutputLevel.isSmoothing()) {
-            const float gain = smoothedOutputLevel.getCurrentValue();
-            if (gain != 1.0f) {
-                for (int ch = 0; ch < leftCount; ++ch)
-                    buffer.applyGain(ch, 0, numSamples, gain);
-                for (int ch = 0; ch < rightCount; ++ch)
-                    buffer.applyGain(rightBase + ch, 0, numSamples, gain);
-            }
-            return;
-        }
-
-        auto* const* channels = buffer.getArrayOfWritePointers();
-        for (int i = 0; i < numSamples; ++i) {
-            const float gain = smoothedOutputLevel.getNextValue();
-            for (int ch = 0; ch < leftCount; ++ch)
-                channels[ch][i] *= gain;
-            for (int ch = 0; ch < rightCount; ++ch)
-                channels[rightBase + ch][i] *= gain;
-        }
-    }
+    /** applyOutputLevel for the split-block layouts: [0, span) and [rightBase, rightBase + span) share one ramp. */
+    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase);
 
     juce::AudioParameterBool* bypassedParam = nullptr;
     juce::AudioParameterBool* mutedParam = nullptr;
@@ -860,6 +958,12 @@ protected:
     juce::AudioParameterFloat* outputLevelParam = nullptr;
 
 private:
+    void renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    void buildOutputLegs(synth::OutputLegs& legs, int bufferChannels) const;
+    void latchOutputStageCv(const juce::AudioBuffer<float>& buffer) noexcept;
+    float outputLevelTarget() const noexcept;
+
+    synth::ModuleOutputStage outputStage_;
     juce::String moduleName;
     // 64 bytes including the NUL — matches TimelineSnapshot::kMaxStringBytes, so the strcmp
     // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.
@@ -869,8 +973,15 @@ private:
     // Right-borrows-Left normalling. Message-thread write via setNormalLeftToRight;
     // audio-thread read once per block via applyLeftRightNormalling().
     std::atomic<bool> normalLeftToRight_{false};
+    // See setInputDownMixMask().
+    std::atomic<std::uint64_t> inputDownMixMask_{0};
     std::unique_ptr<VisualBuffer> visualBuffer;
+    synth::NoteInbox::Ptr noteInboxOwner_;
+    std::atomic<synth::NoteInbox*> noteInbox_{nullptr};
+    synth::CardViewState cardViewState_;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
+    int outputLevelCvChannel_ = -1;
+    float outputLevelCv_ = 0.0f; // this block's Level CV, render thread only
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleBase)
 };

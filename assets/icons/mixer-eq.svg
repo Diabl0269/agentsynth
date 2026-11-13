@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, view group (an EQ curve with a band handle). Colour roles are placeholders the icon library replaces: #FF00FF = group colour (stroke-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M2.5 19.5h19" stroke-width="1.6" fill="none" stroke="#FF00FF" stroke-opacity=".45" stroke-linecap="round" />
+  <path d="M2.5 17C7.5 17 8.2 6.5 12 6.5S16.5 17 21.5 17" stroke-width="2.6" fill="none" stroke="#FF00FF" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="12" cy="6.5" r="2.5" fill="#FF00FF" />
+  <circle cx="12" cy="6.5" r="1" fill="#FFFF00" />
+</svg>

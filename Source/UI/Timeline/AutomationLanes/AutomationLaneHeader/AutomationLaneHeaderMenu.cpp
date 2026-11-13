@@ -1,0 +1,287 @@
+// Concern: the automation lane header's edits -- the record-mode selector and the lane menu
+// (Create custom LFO, Add modulator..., Change parameter..., Duplicate, Move to track, Delete lane), opened from the
+// "..." button, a right-click anywhere on the header, or the keyboard. Every edit is one undo step: the lane edits go
+// through AutomationLaneActions, the modulator through the host, which owns the graph.
+#include "UI/Layout/PopupHost.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+
+#include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/CustomLfoFromRange.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
+
+namespace synth::ui {
+
+void AutomationLaneHeaderComponent::applyRecordModeChoice(int comboId) {
+    setLaneRecordModeUndoable(doc_, undo_, laneId_, comboId - 1);
+}
+
+// The move targets are captured here, as the menu is built, so a click resolves against the tracks
+// the user was shown even if one was added or removed while the menu was open.
+juce::PopupMenu AutomationLaneHeaderComponent::buildMenu() {
+    moveTargets_ = laneMoveTargets(doc_, laneId_);
+    juce::PopupMenu moveMenu;
+    for (int i = 0; i < (int)moveTargets_.size(); ++i)
+        if (const auto* track = doc_.getTrack(moveTargets_[(size_t)i]))
+            moveMenu.addItem(kMoveToTrackMenuIdBase + i, track->name);
+
+    const bool canPick = canPickParameter();
+    const juce::String noneFree = canPick ? juce::String() : juce::String(" (no free parameter)");
+    juce::PopupMenu menu;
+    addCreateCustomLfoItem(menu);
+    menu.addSeparator();
+    addModulatorItem(menu);
+    menu.addItem(kChangeParameterMenuId, "Change parameter..." + noneFree, canPick);
+    menu.addItem(kDuplicateMenuId, "Duplicate" + noneFree, canPick);
+    menu.addSeparator();
+    menu.addSubMenu("Move to track", moveMenu, !moveTargets_.empty());
+    menu.addSeparator();
+    menu.addItem(kDeleteLaneMenuId, "Delete lane");
+    return menu;
+}
+
+// A parameter with no CV jack cannot be modulated; the item stays in the menu, disabled, and says why
+// in its own text (a menu item has no tooltip, and the reason must reach a screen reader too).
+void AutomationLaneHeaderComponent::addModulatorItem(juce::PopupMenu& menu) const {
+    const auto* lane = doc_.getLane(laneId_);
+    const bool canModulate = lane != nullptr && host_ != nullptr && host_->canModulate(lane->nodeUuid, lane->paramId);
+    menu.addItem(kAddModulatorMenuId,
+                 canModulate ? juce::String("Add modulator...") : juce::String("Add modulator... (no CV input)"),
+                 canModulate);
+}
+
+// First in the lane menu, and the one item in the menu of a right-click inside the selected range on the lane's curve
+// (AutomationLaneEditor). It acts on the Range tool's selection or, failing that, on the stretch of two or more points
+// selected on this lane with the Select tool (laneRangeProvider), so it is enabled only when one of them is there, the
+// parameter has a CV jack and the stretch can become an LFO; a disabled item says why in its own text (a menu item has
+// no tooltip, and the reason must reach a screen reader too).
+void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu, bool direct) const {
+    const auto* lane = doc_.getLane(laneId_);
+    const auto range = lane != nullptr && laneRangeProvider ? laneRangeProvider() : std::nullopt;
+    auto blocker = synth::ui::CustomLfoBlocker::NoRange;
+    juce::String text = synth::ui::customLfoMenuText(blocker);
+    bool enabled = false;
+    if (range.has_value()) {
+        const bool canModulate = host_ != nullptr && host_->canModulate(lane->nodeUuid, lane->paramId) &&
+                                 host_->normaliseParameterValue(lane->nodeUuid, lane->paramId, 0.0).has_value();
+        if (!canModulate) {
+            text = "Create custom LFO (no CV input)";
+        } else {
+            const auto plan =
+                synth::ui::planCustomLfoFromRange(*lane, range->first, range->second, [this, lane](double v) {
+                    return host_->normaliseParameterValue(lane->nodeUuid, lane->paramId, v).value_or(0.0);
+                });
+            text = synth::ui::customLfoMenuText(plan.blocker);
+            enabled = plan.ok();
+        }
+    }
+    if (!direct) {
+        menu.addItem(kCreateCustomLfoMenuId, text, enabled);
+        return;
+    }
+    // The pointer is only used to run the pick, which belongs to the (non-const) component the menu was built for.
+    juce::Component::SafePointer<AutomationLaneHeaderComponent> safeThis(
+        const_cast<AutomationLaneHeaderComponent*>(this));
+    menu.addItem(text, enabled, false, [safeThis] {
+        if (auto* self = safeThis.getComponent())
+            self->applyMenuChoice(kCreateCustomLfoMenuId);
+    });
+}
+
+// The picker's pick comes back after the call-out closes. A new LFO or envelope and an existing one are each ONE undo
+// step in the host. A stale menu cannot add a modulator to a parameter with no CV jack.
+void AutomationLaneHeaderComponent::openAddModulatorPicker() {
+    const auto* lane = doc_.getLane(laneId_);
+    if (lane == nullptr || host_ == nullptr || !host_->canModulate(lane->nodeUuid, lane->paramId))
+        return;
+    const auto nodeUuid = lane->nodeUuid;
+    const auto paramId = lane->paramId;
+    auto* host = host_;
+    const auto name = parameterName_.isNotEmpty() ? parameterName_ : paramId;
+    const auto choices = collectAddModulatorChoices(host->getChangeSourceChoices(nodeUuid, paramId), name);
+    auto picker = buildAddModulatorPicker(choices, name, [host, nodeUuid, paramId](const AddModulatorPick& pick) {
+        if (pick.isNew)
+            host->addNewModulator(nodeUuid, paramId, pick.newTypeName, pick.sourceChannel);
+        else
+            host->connectModulator(pick.lfoUuid, pick.sourceChannel, nodeUuid, paramId);
+    });
+    if (auto& hook = test_hooks::addModulatorPickerHookForTest()) {
+        hook(std::move(picker));
+        return;
+    }
+    synth::ui::launchPopover(std::move(picker), getScreenBounds(), this);
+}
+
+// Both edits can remove this lane (and with it this component) from inside the call, so the doc,
+// undo manager, lane and target are copied to locals first and the edit is the last statement.
+void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
+    auto& doc = doc_;
+    auto* undo = undo_;
+    const auto lane = laneId_;
+    if (menuId == kDeleteLaneMenuId) {
+        deleteLaneUndoable(doc, undo, lane);
+        return;
+    }
+    if (menuId == kAddModulatorMenuId) {
+        openAddModulatorPicker();
+        return;
+    }
+    if (menuId == kCreateCustomLfoMenuId) {
+        const auto range = laneRangeProvider ? laneRangeProvider() : std::nullopt;
+        auto create = onCreateCustomLfo;
+        if (range.has_value() && create)
+            create(range->first, range->second);
+        return;
+    }
+    if (menuId == kChangeParameterMenuId) {
+        openChangeParameterPicker();
+        return;
+    }
+    if (menuId == kDuplicateMenuId) {
+        openDuplicatePicker();
+        return;
+    }
+    if (menuId >= kRecordModeMenuIdBase && menuId < kRecordModeMenuIdBase + 5) {
+        applyRecordModeChoice(menuId - kRecordModeMenuIdBase + 1);
+        return;
+    }
+    const int index = menuId - kMoveToTrackMenuIdBase;
+    if (index < 0 || index >= (int)moveTargets_.size())
+        return;
+    const auto dest = moveTargets_[(size_t)index];
+    moveLaneUndoable(doc, undo, lane, dest, amountLanesTravellingWith(doc, host_, lane));
+}
+
+void AutomationLaneHeaderComponent::showMenuAt(const juce::PopupMenu::Options& options) {
+    auto menu = buildMenu();
+    if (auto& hook = test_hooks::laneMenuHookForTest()) {
+        hook(menu, options);
+        return;
+    }
+    juce::Component::SafePointer<AutomationLaneHeaderComponent> safeThis(this);
+    menu.showMenuAsync(options, [safeThis](int result) {
+        if (auto* self = safeThis.getComponent(); self != nullptr && result != 0)
+            self->applyMenuChoice(result);
+    });
+}
+
+// A right-click anywhere on the header opens the lane menu at the pointer. A left click on the parameter name button
+// opens the picker that changes what the lane controls; anywhere else on the header (the marker and the value readout
+// forward their events here, see the constructor) it gives the row keyboard focus. The record-mode combo takes its own
+// clicks.
+void AutomationLaneHeaderComponent::mouseDown(const juce::MouseEvent& e) {
+    const auto local = e.getEventRelativeTo(this);
+    if (e.mods.isPopupMenu()) {
+        showMenuAt(contextMenuOptionsAtPoint(e.getScreenPosition()));
+        return;
+    }
+    if (!e.mods.isLeftButtonDown())
+        return;
+    pressed_ = true;
+    pressedOnName_ = nameArea_.contains(local.getPosition());
+    if (onDragPress)
+        onDragPress(e.getScreenPosition().y);
+}
+
+// A press on the header is either a click (on the name it opens the parameter picker, elsewhere it focuses the row,
+// both on release) or the start of a drag that reorders the lane; the pool tells them apart once the pointer has
+// travelled past the drag threshold.
+void AutomationLaneHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (pressed_ && onDragMove)
+        onDragMove(e.getScreenPosition().y);
+}
+
+void AutomationLaneHeaderComponent::mouseUp(const juce::MouseEvent& e) {
+    if (!pressed_)
+        return;
+    pressed_ = false;
+    const bool click = onDragRelease ? onDragRelease() : true;
+    const bool wasName = pressedOnName_;
+    pressedOnName_ = false;
+    if (!click)
+        return;
+    if (!wasName) {
+        ++clickFocusRequests_;
+        grabKeyboardFocus();
+    } else if (nameArea_.contains(e.getEventRelativeTo(this).getPosition()) && nameButton_.onClick)
+        nameButton_.onClick();
+}
+
+// The name button takes no mouse events, so the header tells it when the pointer is over it.
+void AutomationLaneHeaderComponent::mouseMove(const juce::MouseEvent& e) {
+    nameButton_.setHovered(nameArea_.contains(e.getEventRelativeTo(this).getPosition()));
+}
+
+void AutomationLaneHeaderComponent::mouseExit(const juce::MouseEvent&) { nameButton_.setHovered(false); }
+
+juce::String AutomationLaneHeaderComponent::getTooltip() {
+    if (nameArea_.contains(getMouseXYRelative()))
+        return nameButton_.getTooltip();
+    return juce::SettableTooltipClient::getTooltip();
+}
+
+// Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane
+// menu beside the row. Everything else bubbles on.
+bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
+    if (onLaneKey && onLaneKey(key))
+        return true;
+    if (key.isKeyCode(juce::KeyPress::escapeKey) && (strip_.isEditing() || strip_.isRowOpen())) {
+        if (strip_.isEditing())
+            strip_.exitEdit();
+        else
+            strip_.closeRow();
+        return true;
+    }
+    if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return false;
+    if (key.isKeyCode(juce::KeyPress::returnKey))
+        return showContextMenuForKeyboardFocus();
+    if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::downKey)) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(key.isKeyCode(juce::KeyPress::upKey) ? -1 : 1);
+        return true;
+    }
+    return false;
+}
+
+void AutomationLaneHeaderComponent::focusGained(juce::Component::FocusChangeType) {
+    repaint();
+    if (onKeyboardFocused)
+        onKeyboardFocused();
+}
+
+void AutomationLaneHeaderComponent::focusLost(juce::Component::FocusChangeType) { repaint(); }
+
+void AutomationLaneHeaderComponent::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
+}
+
+juce::MouseCursor AutomationLaneHeaderComponent::getMouseCursor() {
+    if (host_ != nullptr && nameArea_.contains(getMouseXYRelative()))
+        return juce::MouseCursor::PointingHandCursor;
+    return juce::Component::getMouseCursor();
+}
+
+// Shift+F10 (or the menu key) or Return on the row, or Shift+F10 on the record-mode combo: the menu opens beside the
+// focused control, the way a right-click would open it at the pointer.
+bool AutomationLaneHeaderComponent::showContextMenuForKeyboardFocus() {
+    if (doc_.getLane(laneId_) == nullptr)
+        return false;
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    const auto anchor = focused != nullptr && isParentOf(focused) ? focused->getScreenBounds() : getScreenBounds();
+    showMenuAt(contextMenuOptions(anchor));
+    return true;
+}
+
+} // namespace synth::ui
+
+namespace synth::ui::test_hooks {
+std::function<void(const juce::PopupMenu&, const juce::PopupMenu::Options&)>& laneMenuHookForTest() {
+    static std::function<void(const juce::PopupMenu&, const juce::PopupMenu::Options&)> hook;
+    return hook;
+}
+} // namespace synth::ui::test_hooks

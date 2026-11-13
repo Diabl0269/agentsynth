@@ -1,0 +1,192 @@
+# Settings > Preferences: categories and scrolling
+
+The Preferences tab (`Source/UI/Settings/PreferencesSettingsTab/`) holds editor behaviour that is not
+appearance. Its rows are grouped into **categories** picked from a drop-down under the title; only the
+selected category's rows are shown, inside a `juce::Viewport`, so every row is reachable however short
+the Settings window is.
+
+## What the user sees
+
+- A title, then one line with the category drop-down (left) and the filter field (right), both pinned
+  above the scrolled region.
+- The rows of the selected category, top to bottom, in a viewport with a vertical scrollbar. Picking
+  another category scrolls back to the top.
+- **All** (first entry in the drop-down) shows every category on one page, each under a clickable
+  header with a chevron. Click a header (or Tab to it and press Space) to fold or unfold that
+  category; the one **Collapse all** / **Expand all** button in the strip above the rows (the same
+  button, and the same place, as in Keyboard Shortcuts) does every header at once: it reads "Collapse
+  all" while any section is open and "Expand all" once every section is folded. Folds are remembered
+  across Settings windows and launches (user setting `preferencesFolded`, the folded categories by stable
+  name, as for `preferencesCategory`; none saved means everything is expanded). They are restored in the
+  constructor before the first layout, so the tab opens as it was left with nothing animating into place.
+  The Keyboard Shortcuts tab does the same under `shortcutsFolded`; both go through
+  `UI/Settings/SettingsFoldState.h`, and the window itself remembers the open tab by name
+  (`settingsTabName`). → [`shortcuts.md`](../control/shortcuts.md)
+- Section headers and column heads are in normal case ("Graph", "Files & Autosave"), never all caps.
+- The picker row is sized by its content, not fixed: the drop-down is as wide as its longest entry (measured
+  with the drop-down's own font plus the look-and-feel's text insets, `AppLookAndFeel::comboBoxWidthToFitItems`),
+  so the filter field gets the rest. The Settings window cannot be dragged narrower than
+  `SettingsWindow::kMinWidth`, where the field still shows its whole hint.
+- **Keyboard**: Tab reaches every control; Up / Down also walk them (clamped at the ends), Right / Left tick
+  or untick a focused check box, and Left / Right fold or unfold a focused section header in the All view.
+  Down onto a drop-down, then Down again changes its selection (Tab moves on). The keys are fixed, not
+  rebindable. → [`accessibility.md`](../development/accessibility.md#arrow-keys-in-lists-of-controls)
+- Typing in the filter searches **every** category (a row matches on its label, button text or tooltip)
+  and disables the drop-down until the filter is cleared. Esc clears it.
+- The tab opens on the category you last picked and remembers it across Settings windows and launches
+  (user setting `preferencesCategory`, saved as the name "All", "Graph", "Timeline", "Files", "Mixer",
+  "Panels", "MidiRemote" or "Privacy"). With nothing saved, or a value that names none of them, it opens on All.
+- **Tab keys**: Cmd+1..9 switches the Settings window's tabs, also from the filter field (Left / Right on the
+  focused tab strip step through them). → [`shortcuts.md`](../control/shortcuts.md#switching-tabs)
+
+| Category | Rows |
+| --- | --- |
+| Graph | smart connections, double-click to disconnect, show curves on cables (`showCurvesOnCables`, default off, restored at startup), alignment guides, draw cables on top of modules, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
+| Timeline | Duplicate points (where Cmd+D puts copies of selected points: right after the last point, one point-spacing after, or the next grid line; user setting `duplicatePointsPlacement`; [`automation-points.md`](../timeline/automation-points.md#duplicating)), loop-locator toggles, what dropping a Sections-strip block on other music does (pushes the music later or covers it; Shift does the other one), ask before removing an LFO's last destination, "Record also starts playback", "Follow playhead point", natural scrolling, zoom direction, piano roll key labels, play the scale when browsing keys (`playScaleWhenBrowsingKeys`, default on; [song-key](../timeline/song-key.md#hearing-a-key)) |
+| Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
+| Mixer | auto-create channel on connect, default track presets, mixer placement |
+| Panels & Windows | panel detach mode, animations (Follow system / Full / Reduced / Off; [`animation.md`](animation.md#reduced-motion)), show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)), show button labels (on by default; off leaves only the icons on the top bar, the canvas toolbar, the Timeline's Add Track and Snap buttons and the Mixer's toolbar buttons, the tooltip still names the button and its key; [`chrome.md`](chrome.md#show-button-labels)) |
+| MIDI Remote | default takeover, badges |
+| Privacy | share anonymous usage statistics (off by default), a "What we collect" link, and while opted in "Your usage statistics ID" with a Copy ID button ([`usage-statistics.md`](../development/usage-statistics.md)) |
+
+## How it is built
+
+- `PreferencesSettingsTab::Category` is the enum; `categoryCombo` lists it (combo id = enum value + 1).
+  Its `onChange` (in `PreferencesSettingsTabCategories.cpp`) is the only place the selection changes; it
+  saves the choice under `preferencesCategory`, re-lays the rows and resets the scroll position. The
+  constructor restores the saved choice (`setupCategorySelector`) before the first layout.
+- Each category has one `layout*Groups` function in the unit named for its concern
+  (`layoutGraphGroups` in `...GraphBehaviour.cpp`, `layoutTimelineGroups`, `layoutAutosaveGroup`,
+  `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup`,
+  `layoutInfoTooltipsGroup`, `layoutMidiRemoteGroup` and `layoutUsageStatsGroup`, chained from the mixer group). Each sets `layoutCategory` first.
+- `layoutContent` is only the driver, so a new row is a group block in its category's `layout*Groups` unit (which sets `layoutCategory` first), never a new block in `layoutContent`; persisted keys and getters/setters do not depend on the category.
+- `layoutContent` builds three closures (`groupMatches`, `setGroupVisible`, `beginGroup`) and calls the
+  per-category functions in order. With an empty filter `groupMatches` is true only for groups whose
+  `layoutCategory` equals `selectedCategory`; with a filter it is the text match, across all categories.
+  Hidden groups are never given bounds, so they cost no height and leave no divider behind.
+- **All view** (`PreferencesSettingsTabSections.cpp`): `Category::All` is the last enumerator but the
+  first drop-down entry, and is never a `layoutCategory`. `groupMatches` calls `categoryShown`, which is
+  true for every category that is not folded. Each `layout*Groups` unit calls `enterCategory(category, y)`
+  (instead of assigning `layoutCategory`), which records where the category's rows begin; once
+  `layoutContent` is done, `placeSectionHeaders` walks those bands in order, puts a `SectionHeader` above
+  each, drops the divider that would sit under it and shifts the band down. A filter turns the headers
+  and the fold-all button off and ignores folds, so a match can never be trapped inside one. The fold-all
+  button is `synth::ui::FoldAllButton` (`Source/UI/Layout/FoldAllButton.h`), the class the Keyboard Shortcuts
+  tab uses too; `resized()` gives it a strip between the picker row and the rows only in the All view.
+  A header is never hidden and re-shown during a fold: that would drop the keyboard focus it holds. A new category
+  also needs a `kSections` entry in that unit.
+- **Group fades** (`PreferencesSettingsTabGroupFades.cpp`, [animation](animation.md#fading-things-in-and-out)): the
+  `groupMatches` closure ends in `fadeGroup`, which keeps one `FadeVisibility` per group (keyed by its first
+  component), starts it towards "matches or not" and answers true while the group is shown *or fading out*. The
+  layout units are unchanged: a leaving group is still laid out at its full size, so every position is the final-state
+  one with the leaving group in its slot. `squashFadingGroups`, the last step of `resized()`, then squeezes each
+  fading group's slot (its rows plus the gap or divider above it) to the fade's `progress()` and moves everything
+  below up; a divider inside a slot fades with it. Each frame of a fade asks for one more layout through an
+  `AsyncUpdater`, so a fold of many groups costs one pass per frame. The first layout of a group lands at once.
+  A fold, "Collapse all", a category change and a search filter all go through `groupMatches`, so they all fade.
+  The Privacy group's id row has a fade of its own (it follows the share switch and its group). The section
+  headers fade as one (`sectionHeaderFade_`) and the fold-all strip fades with its height following the fade
+  (`foldAllFade_`) when a category change or a search shows or hides them; a header's chevron turns
+  (`ChevronTurn`, [fold chevrons](animation.md#fold-chevrons)). What is there when the tab is first laid out does not fade.
+- Persistence is untouched: each row's getter/setter/`persist*` code and settings key is exactly what it
+  was, so closing and reopening Settings (a new tab constructed from the same properties) reloads every
+  value regardless of category.
+
+## Adding a preference (a row) to a category
+
+1. **Control**: declare it in `PreferencesSettingsTab.h` next to its neighbours and construct it in the
+   category's setup path (for a plain toggle: `contentHost.addAndMakeVisible(...)`, set its state from
+   `appProperties.getUserSettings()`, set a tooltip, wire `onClick` to a `persist*` method). The
+   constructor is on the function-size ratchet, so chain new setup from a `setup*Controls()` step rather
+   than growing it.
+2. **Getter / setter / persist**: add them in the unit for that concern (the existing rows show the shape),
+   with the key constant in `PreferencesSettingsTabInternal.h`.
+3. **Layout**: add one group block to that category's `layout*Groups` function, copying an existing block:
+   `groupMatches({...})`, `setGroupVisible({...}, visible)`, `beginGroup(visible)`, set bounds and advance
+   `y`, then `pendingDivider = pendingDivider || visible`. That is the whole change; the category picker,
+   scrolling and search pick the row up from there.
+4. **Push live** (if a `GraphEditor` should hear about it) in `setGraphEditor`.
+5. **Test**: extend the matching `Tests/UI/Settings/PreferencesSettingsTab/*Tests.cpp` (round-trip) and,
+   for a new category, add a probe row to `PreferencesSettingsTabCategoryTests.cpp`.
+
+Planned row: a drag-inside-a-macro-hull preference (Graph, in `layoutGraphGroups`).
+
+Worked example: the patch save location row (`PreferencesSettingsTabPatchSaveLocation.cpp`) is a label, a combo, a
+"Choose..." button and a hint; its group is laid out from the tail of `layoutAutosaveGroup`, its controls are
+chained from `setupMidiRemoteControls()`, and the folder logic lives in `synth::PatchSaveLocation`, not in the tab.
+
+A new **category** needs a `Category` enumerator (before `All`; bump `kNumSections`), a `categoryName` case, an entry in `kCategoriesInOrder`
+(`...Categories.cpp`) and its own `layout*Groups` that sets `layoutCategory`, called from `layoutContent`.
+
+The Privacy group (`PreferencesSettingsTabUsageStats.cpp`) is chained like the MIDI Remote one: its controls are built
+from the tail of `setupPatchSaveLocationControls()` (which then builds the category picker) and its layout is called from
+the tail of `layoutMidiRemoteGroup`. The toggle is the one writer of `shareUsageStats`; it also creates or deletes the
+usage statistics id and queue file at once, so the id row is accurate even where no service is running. The id row (label
+and Copy ID) is never shown while sharing is off, whatever the filter says. "What we collect" opens the privacy page
+through the owner's URL seam (`PreferencesSettingsTab::setUrlOpener`, set by `MainComponent` through
+`SettingsWindow::setUrlOpener`), the one `MainComponent::urlOpener_` the Help menu pages use.
+
+## The Audio tab
+
+Settings > Audio is a stack of folding sections, built in `Source/UI/Settings/AudioSettingsTab/`. It reuses the
+Preferences look: the same header (`synth::ui::paintFoldSectionHeader`, shared with `PreferencesSettingsTabSections.cpp`),
+chevron turn, Fold all / Expand all strip, and fades (`FadeVisibility`) so a fold slides the sections below. The
+fold state is saved under `audioFolded` (the `settingsfold` helpers) with a "saved" marker, so a user who unfolds
+everything keeps everything unfolded. Defaults: Device, Inputs and Remembered interfaces open; Outputs, Recording
+and MIDI folded.
+
+| Section | Holds | Header summary |
+|---|---|---|
+| Device | output device with Test, input device where separate, a collapsed Advanced row (interface type, sample rate, buffer size, Control panel), Bluetooth notes | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
+| Inputs | the table below | "<device> · N jacks" |
+| Remembered interfaces | every interface the app has seen | none |
+| Outputs | output channel ticks (at least one stays on) | none |
+| Recording | "WAV 32-bit float" and "latency fixed automatically (−4.1 ms)", read-only | the same line |
+| MIDI | input ticks, MIDI output, the "Controllers: ..." caption | none |
+
+The Device section is built on `AudioDeviceManager` and `AudioDeviceSetup` directly (the stock
+`AudioDeviceSelectorComponent` cannot be split into sections). What the stock panel did that this does not: no
+Bluetooth MIDI button, no input level meter beside the input device, no "Reset device" button, and outputs are one
+tick per channel instead of a channel-pair list.
+
+**Advanced and Bluetooth.** Only the output (and the input where inputs and outputs are separate) is always visible.
+The interface type, sample rate, buffer size and Control panel sit under an **Advanced** row (`AudioAdvancedToggle`:
+chevron, Tab stop, Return/Space/click, its accessible name says collapsed or expanded). It starts collapsed; once
+opened it stays open (user setting `audioDeviceAdvancedOpen`). Opening fades the rows in while the section's height
+follows, so the sections below slide. A Bluetooth output, found by CoreAudio's transport type
+(`synth::audio::isBluetoothDevice`, macOS only), shows a one-line note under the Output row (fixed rate, added delay);
+a Bluetooth device picked as the input shows a warning in the warning colour (its microphone puts AirPods into a
+low-quality call mode).
+
+**Switching device.** An output pick opens the device with what the user last had on it (sample rate, buffer size and
+output channels, saved per device by `AudioEngine::rememberOpenDeviceSettings` whenever the user's own setup changes,
+never for a change the system made). A device never used opens with its own defaults (`0` rate and buffer, default
+channels), which is what a Bluetooth output such as AirPods needs. Remembered values that no longer open fall back to
+the defaults; if the device still will not open, the previous device is opened again and `onOpenFailed` (an alert
+unless a test sets it) names the device and JUCE's error. An input pick keeps the outputs as they are. "No device"
+is therefore never shown without a reason.
+
+**Inputs table.** Columns Jacks, Pair, Name, Kind, Level, Use; one row per mono jack or per paired stereo input, up
+to 8 jacks. The chain button spans the two rows of a pair and joins them into one stereo input (a cyan bar marks a
+paired row) or splits them again; an odd last jack is mono only. The name field shows the jack name ("In 1") as its
+placeholder, and a name is optional. Level is the live peak (15 Hz timer only while the table shows); Use turns the
+jack on or off on the device (`AudioEngine::setDeviceInputsUsed`, which asks for microphone access first). Each
+control is a Tab stop in row order (pair button, then the row's name, level and use), with the accent focus ring, a
+title ("Pair In 1 and In 2 as one stereo input", "Name for In 1", "In 1 level", "Use In 1") and a tooltip.
+
+**Remembered interfaces.** One row per entry in `AudioInputLayoutStore`: a green dot and bold name for the interface
+in use ("in use · N inputs named"), a grey dot and "not connected · names kept" (warning colour) for the others,
+each with a "Forget <name>" link except the one in use.
+
+**Where the layout lives.** `AudioInputLayoutStore` (Core, `Source/AudioEngine/`) is keyed by device type plus
+device name and holds pairs, names, the device's last rate, buffer size and output channels, and last-used time. It is pure data with no JUCE audio calls; `MainComponent`
+persists it as JSON under the user setting `audioInputLayout` and republishes the timeline when it changes. An
+entry is never pruned except by Forget. The tab reads everything through the `AudioSettingsSource` seam
+(`AudioSettingsSource.h`); `MainComponentAudioSettingsSource` answers it from the engine, and tests use a fake.
+Tracks refer to a named input by name: [the Audio tracks section](../timeline/tracks.md#audio-tracks).
+
+## The Account tab
+
+Settings > Account sits next to the AI tab when an account service is attached: plan and usage, Manage subscription
+or Upgrade to Pro, Sign out and Delete account, with the popovers they open. It is a plain stacked tab (no
+viewport); see [accounts](../ai/accounts.md#account-tab).

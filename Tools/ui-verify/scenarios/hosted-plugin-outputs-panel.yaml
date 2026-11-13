@@ -1,0 +1,48 @@
+# A multi-output plugin (Maschine 2 Audio Unit, 16 stereo output buses) gets an Outputs panel on its card: a switch per
+# output under the plugin's own bus names, and a "+ N more outputs" line that gathers the shown ones when the card is folded.
+#
+# What a user does:
+#   1. Opens a project with a Maschine 2 card and a Delay, clicks the routing button on the card's header and switches
+#      on Output #2 (channels 3-4): the card gets two more jacks under the main pair.
+#   2. Closes the panel and cables Out 3 to the Delay's input.
+#   3. Folds the card with its "more outputs" line: the cable now leaves from that line.
+#   4. Opens the panel again and switches Output #2 off: its jacks and the cable on them go.
+#   5. Presses Cmd+Z once: the output and its cable come back together.
+# Checks 1 to 5 are marked at the end of each step above.
+motion: true
+record: true
+save_project: fro1264-outputs-panel
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="Maschine 2" descriptiveName="Maschine 2" format="AudioUnit" category="Synth" manufacturer="Native Instruments" version="1" file="AudioUnit:Synths/aumu,NiM2,-NI-" uniqueId="0" isInstrument="1" numInputs="0" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/hosted-outputs-panel.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Maschine 2", showing: true, within_ms: 30000}
+  - expect: {id: hostedLoadStatus, showing: false, within_ms: 15000}
+  - wait: {}
+  - click: {id: outputsButton}
+  - wait: {}
+  - click: {id: "outputsShow:Output #2"}
+  - wait: {}
+  - mark: {check: 1, name: output-3-4-switched-on}
+  - key: {keys: escape}
+  - wait: {}
+  - drag: {from: "card:Maschine 2", fromX: 270, fromY: 138, to: "card:Delay", toX: 8, toY: 58, steps: 16}
+  - wait: {}
+  - expect: {id: "card:Delay", audioFrom: "Maschine 2"}
+  - mark: {check: 2, name: out-3-cabled}
+  - glide: {name: fold, frames: 12, do: {click: {id: outputsFoldLine}}}
+  - wait: {}
+  - mark: {check: 3, name: folded-cable-from-more-line}
+  - click: {id: outputsButton}
+  - wait: {}
+  - glide: {name: switch-off, frames: 20, do: {click: {id: "outputsShow:Output #2"}}}   # the output and its cable animating away
+  - wait: {}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: "card:Delay", audioFrom: ""}
+  - mark: {check: 4, name: switched-off-cable-gone}
+  - glide: {name: undo, frames: 20, do: {key: {keys: cmd+z}}}   # the output and its cable animating back
+  - wait: {}
+  - expect: {id: "card:Delay", audioFrom: "Maschine 2"}
+  - mark: {check: 5, name: undo-restores-both}

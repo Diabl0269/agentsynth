@@ -2,12 +2,17 @@
 
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
+#include "AI/ChatTranscript.h"
 #include "AI/ConversationHistorySource.h"
 #include "AI/LocalHistoryStore.h"
 #include "AI/PatchDiff.h"
 #include "AI/PatchFeedbackStore.h"
+#include "ChatMessageViewport.h"
+#include "SongSession.h"
 #include "UI/Assistant/AccountRow.h"
+#include "UI/Assistant/EntitlementWatcher.h"
 #include "UI/Assistant/PlanBadge.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <atomic>
@@ -37,6 +42,8 @@ class AIChatComponent
 {
 public:
     AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props);
+    /** The waiting dot's pulse half-cycle in ms: 600 at full speed, 600 / loopRate() under Reduced. */
+    static double waitingDotHalfCycleMs();
     ~AIChatComponent() override;
 
     void resized() override;
@@ -53,51 +60,53 @@ public:
     void refreshModels();
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
+    /** A project is opening: Send is disabled (and says why) and Enter does not send until it has finished loading. */
+    void setProjectLoading(bool loading);
+    bool isProjectLoading() const noexcept { return projectLoading_; }
 
-    /**
-     * @brief Syncs the Patch/Arrange mode selector's visibility to its gate: areTimelineToolsEnabled()
-     *        (unconditionally on now that the timeline is GA) AND a live timeline context.
-     *
-     * Deliberately PROVIDER-AGNOSTIC (the local/remote parity rule): arrange mode works on both
-     * transports (see AIIntegrationService::sendArrangeMessage), so the provider never gates the
-     * UI. Called from refreshModels() (a convenient known resync point) — the timeline context is
-     * installed after refreshModels() runs at startup, so MainComponent re-calls this once both are
-     * in place, the same ownership shape as the refreshModels() re-call documented in CLAUDE.md.
-     * Hiding the selector also resets it to Patch: an invisible control must not keep steering
-     * requests.
-     */
-    void refreshModeControls();
-
-    // Testing hooks for the mode selector — mirror simulateCancelClick()'s "drive the real
-    // member synchronously" convention.
-    bool isModeSelectorVisibleForTesting() const { return modeSelector.isVisible(); }
-    void setArrangeModeForTesting(bool arrange) {
-        modeSelector.setSelectedId(arrange ? kModeSelectorArrangeId : kModeSelectorPatchId, juce::dontSendNotification);
-    }
-
-    // Testing hooks: the timeline half of the most recent assistant message ("" when it carries
-    // none). Json is empty-but-preview-populated for an envelope that failed validation — the
-    // rejection is shown, with nothing appliable behind it.
-    juce::String getLastTimelineOpsJsonForTesting() const {
+    // Testing hooks: the edit-plan card of the most recent assistant message. The preview is its
+    // body text, one line per phase, or the reason a rejected plan cannot apply ("" with no plan);
+    // the JSON is the plan the card's Apply hands to AIIntegrationService::applyProjectEdit.
+    juce::String getLastPlanPreviewForTesting() const {
         for (auto it = messages.rbegin(); it != messages.rend(); ++it)
             if (it->role == "assistant")
-                return it->timelineOpsJson;
+                return it->planPreviewLines.joinIntoString("\n");
         return {};
     }
-    juce::String getLastTimelineOpsPreviewForTesting() const {
+    juce::String getLastPlanJsonForTesting() const {
         for (auto it = messages.rbegin(); it != messages.rend(); ++it)
             if (it->role == "assistant")
-                return it->timelineOpsPreview;
+                return it->planJson;
         return {};
     }
 
-    // Decides whether an outgoing message should carry the live patch JSON + structured-output
-    // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
-    // can be unit-tested directly: any message naming a real module/effect type, or using a
-    // generic edit-intent verb, is treated as patch-related. `moduleTypeNames` is normally
-    // AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a
-    // synthetic registry without touching the real module factory.
+    // Decides whether an outgoing message asks for an edit plan (structured output: the live patch,
+    // and with a timeline the arrangement, plus the schema) rather than a free-text answer. Pure and
+    // free-standing (no UI state) so it can be unit-tested directly: any message naming a real
+    // module/effect type, or using a generic edit or arrangement word, is treated as an edit request. `moduleTypeNames`
+    // is normally AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a synthetic
+    // registry without touching the real module factory.
     static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
+    // Whether a message asks for a whole new song (the hosted song plan and steps, docs/ai/song-steps.md) rather than
+    // an edit: a song word, or a genre name with no edit verb and no module type. Pure, like the check above.
+    static bool shouldPlanSong(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
+    // Testing hooks for the song cards: the session of the newest message that has one (null when none), and the
+    // message count.
+    std::shared_ptr<SongSession> getLastSongSessionForTesting() const {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+            if (it->song)
+                return it->song;
+        return nullptr;
+    }
+    size_t getMessageCountForTesting() const { return messages.size(); }
+    juce::String getMessageTextForTesting(size_t index) const {
+        return index < messages.size() ? messages[index].text : juce::String();
+    }
+    // The card of message `index`, as a component; null when that message has none showing.
+    juce::Component* getSongCardForTesting(size_t index) const;
+    bool hasEditPlanCardForTesting(size_t index) const;
 
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
@@ -140,10 +149,16 @@ public:
     void simulateEscapeKey() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
 
     // Testing hook: returns true if the cancel button is currently visible.
-    bool isCancelVisible() const { return cancelButton.isVisible(); }
+    bool isCancelVisible() const { return cancelFade_.isShown(); }
 
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
+
+    // Called on the message thread with true when a request goes out and false when it ends (a reply,
+    // a failure, a timeout or a cancel). The host shows "the assistant is working" from it.
+    std::function<void(bool)> onWaitingChanged;
+    // Called on the message thread when a message is actually sent to the assistant.
+    std::function<void()> onMessageSent;
 
     // Testing hook: returns the currently configured request timeout, in milliseconds.
     int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }
@@ -158,8 +173,8 @@ public:
     // a juce::GlyphArrangement (the same wrapping primitive drawFittedText()/drawLabel() use
     // under the hood), rounded up so a bounding box that lands exactly on a line boundary still
     // gets the extra line rather than one short. Never less than one line's height. Shared by
-    // every element in this panel whose text length varies at runtime — PatchCard's diff/status
-    // box, hostedModeNotice, downgradeStripLabel — so none of them estimate their own height from
+    // every element in this panel whose text length varies at runtime — EditPlanCard's preview
+    // text, hostedModeNotice, downgradeStripLabel — so none of them estimate their own height from
     // a fixed single-line constant or a naive line count (the bug that clipped the "Preview
     // unavailable..." status line and truncated the downgrade notice). Public + static, mirroring
     // formatResponseTime()'s testable-helper precedent above.
@@ -171,6 +186,8 @@ public:
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+
+    void openUpgradePage();
 
     // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
     // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
@@ -214,6 +231,12 @@ public:
     bool lastHistoryPopupWasCloudForTesting() const { return lastHistoryPopupWasCloud; }
     const std::vector<LocalConversationSummary>& lastHistoryListForTesting() const { return lastHistoryList; }
 
+    // Testing hooks for Export chat: the button, the document it would write, and writing it to `file` without a
+    // dialog.
+    juce::TextButton& getExportButtonForTesting() { return exportButton; }
+    juce::var buildChatExportForTesting() const { return buildChatExport(); }
+    bool writeChatExportForTesting(const juce::File& file) const { return writeChatExport(file); }
+
     // Testing hook: historyButton's tooltip, which carries the upsell strip's explanatory text
     // whenever !isProPlan(snapshot) — see updateUpsellStrip()'s doc comment. Not const: JUCE's
     // Button::getTooltip() (via SettableTooltipClient) isn't a const member function.
@@ -231,6 +254,7 @@ public:
     }
 
 private:
+    void layoutMessageList(int listWidth);
     void timerCallback() override;
     void applyFetchedModels(const juce::StringArray& models, bool success); // message thread
 
@@ -246,9 +270,8 @@ private:
     void handleUserCancel();
 
     class MessageBubble;
-    class PatchCard;
-    // Sibling of PatchCard — same card conventions, one payload type over.
-    class TimelineCard;
+    // The one card an answer that changes the project renders (AIChatComponentEditPlanCard.h).
+    class EditPlanCard;
 
     // ---- Spinner component -----------------------------------------------
     // A tiny 8×8 dot that pulses (alpha 0.3→1.0→0.3) via AnimationDriver.
@@ -270,10 +293,18 @@ private:
         // entire pulsing lifetime.  The pointer is stored so the recursive onComplete
         // callback can restart without a dangling reference to the function parameter.
         void startPulse(juce::VBlankAnimatorUpdater& updater) {
+            // Animations Off completes a driver at once, which would restart this pulse without end: hold the
+            // dot steady instead.
+            if (synth::ui::animationsOff()) {
+                updaterPtr = nullptr;
+                currentAlpha = 1.0f;
+                repaint();
+                return;
+            }
             updaterPtr = &updater;
             pulseAnim.start(
                 updater,
-                600.0,                     // 600 ms per half-cycle
+                waitingDotHalfCycleMs(),   // ms per half-cycle (600 at full speed)
                 [](float t) { return t; }, // linear — easing handled below
                 [this](float t) {
                     // Ping-pong: 0→1 on even passes, 1→0 on odd passes.
@@ -308,6 +339,7 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+    void setWaiting(bool waiting);
 
     // Wall-clock start of the in-flight wait (juce::Time::getMillisecondCounter).
     // Meaningful only while isWaitingForResponse is true.
@@ -340,28 +372,16 @@ private:
     // response handler before teardown so a completed request is never "cancelled".
     AIProvider::RequestId activeRequestId{};
 
-    juce::Viewport viewport;
+    ChatMessageViewport viewport;
     juce::Component messageList;
     juce::TextEditor inputField;
     juce::TextButton sendButton;
+    bool projectLoading_ = false;  // set while a project opens; Send stays disabled
     juce::TextButton cancelButton; // Visible ONLY while waiting
     juce::TextButton newChatButton;
     juce::TextButton historyButton; // opens the history list/restore/clear popup
+    juce::TextButton exportButton;  // saves the conversation as a JSON file (AIChatComponentExport.cpp)
     juce::ComboBox modelPicker;
-
-    // Patch/Arrange request routing — see refreshModeControls() for the visibility gates and
-    // arrangeModeActive() for how sendButtonClicked() consumes it. Item ids, not indices, so a
-    // future third mode can't silently renumber these two.
-    juce::ComboBox modeSelector;
-    static constexpr int kModeSelectorPatchId = 1;
-    static constexpr int kModeSelectorArrangeId = 2;
-
-    // True when an outgoing send should route to timeline.generate (arrange mode): the selector
-    // is VISIBLE (both gates hold) and set to Arrange. Visibility is part of the condition on
-    // purpose — a hidden selector's stale selection must never steer a request.
-    bool arrangeModeActive() const {
-        return modeSelector.isVisible() && modeSelector.getSelectedId() == kModeSelectorArrangeId;
-    }
 
     // Privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
     // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
@@ -391,6 +411,25 @@ private:
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     SpinnerDot spinnerDot;
+
+    // Keeps the plan badge and requests counter current: refreshes when the app regains focus and
+    // polls after Upgrade until the plan is Pro (see EntitlementWatcher).
+    EntitlementWatcher entitlementWatcher{
+        [this] {
+            if (accountServicePtr != nullptr)
+                accountServicePtr->refreshEntitlement();
+        },
+        [this] { return accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot()); }};
+
+    // Cancel, the spinner and the three bottom banners fade in and out (160 ms in, 110 ms out, 80 ms under
+    // Reduce Motion) instead of popping. A banner's strip height follows its fade through progress(), so
+    // the rows around it slide; headless and off-screen they land at once. Declared after the components
+    // they wrap.
+    synth::ui::FadeVisibility cancelFade_{&cancelButton};
+    synth::ui::FadeVisibility spinnerFade_{&spinnerDot};
+    synth::ui::FadeVisibility hostedNoticeFade_{&hostedModeNotice};
+    synth::ui::FadeVisibility upsellFade_{&upsellButton};
+    synth::ui::FadeVisibility downgradeFade_{&downgradeStripLabel};
 
     // Opens a Quota error's "Upgrade to Pro" button target. Real default; overridden in tests via
     // setUrlOpenerForTesting() so no test ever launches a real browser.
@@ -425,7 +464,10 @@ private:
     struct MessageData {
         juce::String role;
         juce::String text;
-        juce::String jsonPatch;
+        // The edit plan this answer carries, as JSON: a patch, a sibling "timelineOps" list, or both
+        // (AIIntegrationService::previewProjectEdit). Empty for a plain-text answer. Saved into
+        // history re-fenced as a ```json block, and recorded with a rating.
+        juce::String planJson;
         bool isExpanded = false;
         // True only for a live Quota-error response — renders an "Upgrade to Pro" button on
         // the bubble. Deliberately NOT reconstructed by the history-replay loop in the
@@ -433,61 +475,121 @@ private:
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
 
-        // The TIMELINE half of a suggestion, independent of jsonPatch — a response may carry
-        // a patch, a timelineOps envelope, or both, and each gets its own card and its own Apply.
-        // `timelineOpsJson` is the raw envelope, re-parsed on Apply; EMPTY when there is nothing
-        // appliable, including when the envelope arrived but was rejected by validation (the
-        // rejection is still shown, in timelineOpsPreview, rather than dropped). `timelineOpsPreview`
-        // is what the card displays: the validated summary, or the reason it was refused.
-        juce::String timelineOpsJson;
-        juce::String timelineOpsPreview;
-
         // Session-scoped UI rating state, same "not reconstructed on replay" precedent as
         // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
         PatchRatingUiState ratingState = PatchRatingUiState::None;
         juce::String ratingComment;
 
-        // Server-assigned id for this assistant/patch message, from AIResponse::messageId
+        // Server-assigned id for this assistant message, from AIResponse::messageId
         // (x-message-id header — Pro plan + persistence succeeded only). Only ever set for a live,
-        // same-session assistant message just returned by sendMessage() — NOT reconstructed by the
-        // history-replay loop, same "session-scoped" precedent as ratingState/showUpgradeAction
-        // above. A rating on a restored conversation therefore stays local-only; this is a
-        // deliberate scope limit (ratings on restored history are not synced), not a bug.
+        // same-session assistant message, NOT reconstructed by the history-replay loop, same
+        // "session-scoped" precedent as ratingState/showUpgradeAction above. A rating on a restored
+        // conversation therefore stays local-only; this is a deliberate scope limit, not a bug.
         juce::String serverMessageId;
 
-        // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
-        // created, not on every updateChatDisplay() re-render — see that method's doc comment.
-        // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
-        // the live graph changes while this message is still on screen.
-        //
-        // Only one of patchDiff/patchSummary is ever populated: merge-mode patches get patchDiff
-        // (synth::computeDiff() against the live graph, since a merge has stable node identity to
-        // diff against); replace-mode patches get patchSummary (synth::summarizePatch() of just
-        // the new patch's contents, since replace mode has no stable node identity to diff against
-        // — see PatchDiff.h). Both are empty when patchDiffAvailable is false.
-        bool patchIsMerge = false;
-        bool patchDiffAvailable = false;
-        std::vector<PatchChange> patchDiff;
-        PatchSummary patchSummary;
+        // The plan's preview, computed ONCE (attachPlanPreview()) when this message is created, not
+        // on every updateChatDisplay() re-render: a snapshot of what the plan would do to the
+        // project as it was then. planOk false means the engine refused it, and planPreviewLines
+        // then holds the one line saying why (the card offers no Apply). planDetails is the
+        // per-change list behind the card's details toggle (PatchDiff.h: a merge diffs, a replace
+        // summarises the new patch).
+        bool planOk = false;
+        juce::StringArray planPreviewLines;
+        juce::String planDetails;
+        // Small mistakes the engine repaired around (ProjectEditResult::notes), plain words; the card shows one
+        // line for them. planSkippedCount of them dropped something, the rest adjusted a value.
+        juce::StringArray planNotes;
+        int planSkippedCount = 0;
 
         // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
-        // (history restore, patch-retry / apply-failure messages).
+        // (history restore, apply-failure messages).
         int responseMs = -1;
+
+        // True once the card's Apply succeeded; saved with the history (kPlanAppliedMarker).
+        bool planApplied = false;
+
+        // Long message unfolded by the reader; kept across rebuilds, never saved to history.
+        bool textUnfolded = false;
+
+        // The song plan and build this message shows (AIChatComponentSong.cpp); session-scoped like the rating state,
+        // so a restored conversation shows the applied edit-plan card only.
+        std::shared_ptr<SongSession> song;
+
+        // The ChatTranscript turn this message belongs to; -1 for a message restored from history or added by the chat.
+        int turnIndex = -1;
     };
+    static inline const juce::String kPlanAppliedMarker = "\n<!-- edit-plan-applied -->";
     std::vector<MessageData> messages;
 
-    // Computes and caches data.patchIsMerge/patchDiff/patchDiffAvailable ONCE, at the point a
-    // message carrying a patch is created (every messages.push_back() site that can set
-    // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
-    // apply result, retry announcement) and would otherwise rebuild a scratch graph per
-    // patch-bearing message on every single one of those redraws. See
-    // docs/ai/patch-preview.md. Also more correct, not just faster: the diff is a snapshot of the
-    // graph at proposal time and must not silently change if the live graph is edited later
-    // (e.g. an earlier patch in the same conversation gets applied) while this message is still
-    // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
-    // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
-    // `aiService`, so it must be called after data is appended to `messages`.
-    void attachPatchPreview(MessageData& data);
+    // -- Export chat (AIChatComponentExport.cpp)
+    static constexpr size_t kNoTurn = (size_t)-1;
+    ChatTranscript transcript;    // the raw data of this conversation's live turns, in memory only
+    size_t activeTurn_ = kNoTurn; // the turn whose answer is awaited
+    std::unique_ptr<juce::FileChooser> exportChooser;
+    // Starts a transcript turn for the user message just added; becomes activeTurn_.
+    size_t beginTurn(const juce::String& text, ChatTurn::Kind kind);
+    void recordAnswer(size_t turn, const juce::String& content, const juce::var& plan, const MessageData& answer);
+    void recordFailure(size_t turn, const juce::String& message);
+    void recordApplied(const MessageData& data, const ProjectEditResult& result);
+    void recordSongPlan(const std::shared_ptr<SongSession>& session, const songsteps::PlanReply& reply);
+    void recordSongEvent(const SongSession& session, const songsteps::StreamEvent& event);
+    void recordSongOutcome(const SongSession& session, const AIIntegrationService::SongBuildOutcome& outcome);
+    std::vector<ChatTurn> collectExportTurns() const;
+    juce::var buildChatExport() const;
+    bool writeChatExport(const juce::File& file) const;
+    void exportChatClicked();
+    void setUpExportButton();
+    // Export is disabled, with a tooltip saying why, while the conversation has no message.
+    void updateExportButton();
+
+    // -- Song steps (AIChatComponentSong.cpp)
+    // -------------------------------------------------------------------------- Sends `text` as a hosted song plan;
+    // the user bubble and waiting state are already set up by the caller.
+    void startSongPlan(const juce::String& text, size_t pendingPlanIndex);
+    void handleSongPlan(const juce::String& text, size_t pendingPlanIndex,
+                        const AIIntegrationService::SongPlanOutcome& outcome);
+    void replanSong(size_t index, int lengthIndex, int detailIndex, const juce::String& changeText,
+                    const juce::String& noticeAfter);
+    void buildSongAt(size_t index);
+    void handleSongEvent(const std::shared_ptr<SongSession>& session, const songsteps::StreamEvent& event);
+    void handleSongFinished(size_t index, const std::shared_ptr<SongSession>& session,
+                            const AIIntegrationService::SongBuildOutcome& outcome);
+    void dismissSong(size_t index);
+    void cancelSongBuild();
+    // Index of the newest message whose song card is waiting to be built; -1 when none.
+    int pendingSongPlanIndex() const;
+    bool refreshSongBubble(size_t index);
+    // What the song cards ask of the chat, bound to one message's index (makeSongHooks, beside MessageBubble). Each
+    // runs on a later message-loop turn, because the redraw it causes deletes the card that called it.
+    struct SongHooks {
+        std::function<void()> onBuild, onCancelPlan, onCancelBuild;
+        std::function<void(int lengthIndex, int detailIndex)> onReplan;
+    };
+    SongHooks makeSongHooks(size_t i);
+    void refreshUsesLeft(SongSession& session) const;
+    void dispatchRequest(const juce::String& text, bool projectPlan, bool editRequest);
+    // The song build in flight (an index into messages), or -1; its card replaces the waiting label and the timeout.
+    int songBuildIndex = -1;
+
+    // The answer to a sent message, on the message thread: one bubble, plus the edit-plan card when
+    // the answer carries a plan. `wantsPlan` says the request asked for structured output, so a
+    // response that is all JSON is read as a plan rather than shown as text.
+    void handleResponse(const AIProvider::AIResponse& response, bool wantsPlan);
+
+    // Previews `plan` (the parsed planJson) through AIIntegrationService::previewProjectEdit ONCE,
+    // when a message carrying a plan is created (a live answer or a history replay), and caches the
+    // card's text in data. NOT in updateChatDisplay(), which reruns on every redraw and would build a
+    // scratch graph and doc per plan each time. No-op when data.planJson is empty.
+    void attachPlanPreview(MessageData& data, const juce::var& plan);
+
+    // The card's Apply for messages[index]; false when nothing was applied.
+    bool applyEditPlan(size_t index);
+
+    // The edit plan a response carries, or a void var. A fenced ```json block is read first; with
+    // no fence, the whole response when `wholeResponseIsJson` (a structured request). A JSON object
+    // counts as a plan only when it carries a patch key or "timelineOps"; anything else stays text.
+    // `prose` receives what the bubble should say: the response minus the plan's block.
+    static juce::var extractEditPlan(const juce::String& response, bool wholeResponseIsJson, juce::String& prose);
 
     // This session's local conversation identity — minted lazily on the first successful
     // exchange (saveCurrentConversationLocally()), not at construction, so a session that never
@@ -526,7 +628,7 @@ private:
     void replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs);
 
     // Reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
-    // consume it back (text, plus a re-fenced ```json block when jsonPatch is non-empty).
+    // consume it back (text, plus a re-fenced ```json block when planJson is non-empty).
     static juce::String reconstructMessageContent(const MessageData& data);
 
     // Builds this session's LocalConversation snapshot from `messages` and writes it via
@@ -534,7 +636,7 @@ private:
     // once per successful exchange, right after the assistant turn is appended to `messages` (see
     // sendButtonClicked()) — deliberately NOT from AIIntegrationService::sendMessage()'s own
     // callback, which can run on a provider worker thread and doesn't have `messages` (the UI's
-    // own copy, split into text/jsonPatch) to hand.
+    // own copy, split into text/planJson) to hand.
     void saveCurrentConversationLocally();
 
     // First user message's text, trimmed/truncated — the title stored alongside a locally

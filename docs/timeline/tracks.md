@@ -1,8 +1,8 @@
 # Timeline Track Headers
 
-`Source/UI/Timeline/TimelineTrackHeaderComponent.h/.cpp`
+`Source/UI/Timeline/TimelineTrackHeaderComponent/` (`TimelineTrackHeaderComponent.h`, `.cpp`, and `TimelineTrackHeaderComponentPaint.cpp` for layout and painting)
 (`synth::ui::TimelineTrackHeaderComponent`) — one row per `synth::Track`, living in the timeline
-panel's track-header column. The `"+ Track"` menu and the flows it starts are
+panel's track-header column. The `"Add Track"` menu and the flows it starts are
 [add-track](add-track.md); the clip rows the headers line up with are [clips](clips.md).
 
 The row talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by
@@ -10,8 +10,8 @@ The row talks to the app exclusively through `synth::ui::TrackHeaderHost` (imple
 
 ## The track-header column
 
-Rows are `Metrics::timelineTrackRowHeight` (56 px) tall — shared with the clip-lane area, so header
-rows and clip rows always line up. The column is a fixed `"+ Track"` strip (22 px) at the top plus
+Rows are `Metrics::timelineTrackRowHeight` (56 px) tall by default — shared with the clip-lane area, so header
+rows and clip rows always line up — and each track can be resized on its own ([below](#one-tracks-height)). The column is a fixed `"Add Track"` strip (22 px) at the top plus
 a `juce::Viewport` below it, so a project with more tracks than fit **scrolls**; rows are never
 compressed. Both live inside `getTrackHeaderBounds()`, so the panel's three regions still tile
 exactly.
@@ -30,11 +30,20 @@ And it starts at `trackHeaderBounds_.getY()`, i.e. **below the transport strip**
 strip is one continuous row of chrome across the full width — cutting it in half would imply a
 column boundary its own controls do not respect.
 
-**Toggle sizing.** The `M`/`S`/`R`/`A` toggles are `kToggleWidth` (24 px) with an explicit
+**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) runs down the
+column's right edge beside the track rows, inside the column and 1 px short of the lanes so it never overlaps the
+ruler or the lanes (the Add Track button stops 1 px short of it), added last so it wins the hit test over the header rows. Dragging it sets the
+column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[168, 420]` px; a
+double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
+user settings under `timelineTrackHeaderWidth` (written on release, restored in
+`setApplicationProperties()`). The handle is one Tab stop with the accent focus ring: Left/Right nudge the
+width by 16 px and Return resets it; its screen-reader name is "Track column width" and its tooltip says
+all three. At the narrowest width the M/S/R block and the fold arrow still fit; the name label shrinks.
+
+**Toggle sizing.** The `M`/`S`/`R` toggles are `kToggleWidth` (24 px) with an explicit
 `kToggleGap` (4 px) between adjacent buttons; laid out edge-to-edge with no gap they read as one
-fused block. `Metrics::timelineTrackHeaderWidth` is 190 px so the wider, gapped toggle group does
-not crush the name label down to single-digit pixel widths when a track's `A` button is visible
-(4 toggles showing rather than 3).
+fused block. The default `Metrics::timelineTrackHeaderWidth` is 200 px so the gapped toggle group, the
+fold arrow and the kind badge do not crush the name label.
 
 ## The document is the truth
 
@@ -48,21 +57,48 @@ rebuilds them, so a mute click does not destroy the row the user is typing a nam
 
 ## Row contents
 
-Colour swatch (click opens a full colour picker), a track-kind badge, a name label (double-click to
-edit), an `A` button (visible only when `Track::lanes` is non-empty), `M` / `S` / `R` toggles, and
-the binding chip.
+A fold arrow (visible only when `Track::lanes` is non-empty), colour swatch (click opens a full
+colour picker, built by `buildTrackColourPicker` in `TrackColourPicker.h`, which the mixer column's colour dot
+shares -- [the colour dot](../mixer/panel.md#the-colour-dot)), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
+(double-click to edit), `M` / `S` / `R` toggles, on an audio track the [Monitor](#monitoring) speaker button right of
+`R` (every row keeps its slot, so M/S/R line up down the column), the binding chip and, for a track with a poly-capable voice chain, the
+[mono / poly voice toggle](#the-monopoly-switch). The Automation track is
+drawn differently, as the "Unassigned automation" section header
+([automation](automation.md#unassigned-automation)).
 
 `R` flips `Track::armed` in the document and nothing else — **arming is not recording**. The record
 button and `MidiRecorder::startRecording` live on the transport bar
-([transport](transport.md#recording)), which looks for the first `armed` track when it starts a
-take.
+([transport](transport.md#recording)), which records every armed audio track from
+[its own input](#the-input-row) and every armed MIDI track that has an input of its own, alongside the first armed
+MIDI track that records every input.
+
+## Show a track's module
+
+**Ctrl+E** on a focused track row (`timelineShowFocusedTrackModule`, rebindable, Timeline category) or the small target button at the right
+of the row's bottom line does the same thing: `TrackHeaderHost::showTrackModule`, implemented by `MainComponent::showTrackModule`
+(`MainComponentTrackModule.cpp`). The module is the track's *instrument* when it has one, so a Serum track lands on Serum and not on
+its Track In: the first node the bound Track In's MIDI reaches (through macro ports) that is a built-in MIDI instrument or a hosted
+plugin. With none (an audio track, a Track In wired to nothing) it is the bound node itself. It is selected and centred through
+`showNodeOnCanvas`, the path a modulator's "show" uses (the canvas centres at once; there is no animated pan helper). A node
+inside a collapsed macro, such as every instrument a new instrument track makes, has no card of its own, so the outermost collapsed
+macro's card is what gets centred. Ctrl+E never opens a window. A hosted plugin's
+window has its own chord, **Ctrl+Cmd+E** on macOS / **Ctrl+Alt+E** elsewhere (`timelineToggleFocusedTrackPluginWindow`, rebindable,
+`TrackHeaderHost::toggleTrackPluginWindow` -> `MainComponent::toggleTrackPluginWindow`), which toggles it through
+`HostedPluginWindowManager::toggleEditorFor`; that reads the live window map, never a flag, because the
+window can be closed from its own title bar. A built-in instrument has no window, so the chord does nothing there. An unbound or
+orphaned track does nothing. The button (`TrackShowModuleButton`) is a Tab stop with a focus ring, named "Show <track> module", its
+tooltip names the live binding, and a click leaves focus on the row. It is not drawn on the Automation section header.
+The mixer column header reuses the button as "Edit <channel> on canvas" ([Edit on canvas](../mixer/edit-on-canvas.md)).
+Tests: `Tests/UI/Timeline/TimelineTrackShowModuleTests.cpp`, `Tests/App/MainComponent/MainComponentShowTrackModuleTests.cpp`.
 
 ## Keyboard focus and M/S/R
 
 A row is a real focus target — `setWantsKeyboardFocus(true)` in the constructor, the same pattern
 `TimelineClipLaneArea` / `PianoRollComponent` use for the surfaces they own — with a `keyPressed()`
 override that resolves bare **M**/**S**/**R** (`timelineMuteFocusedTrack` /
-`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category — see
+`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category; on an audio track bare **I**,
+`timelineMonitorFocusedTrack`, flips [Monitor](#monitoring) like its button; and Cmd+D `timelineDuplicateFocusedTrack`, which
+[duplicates the track](add-track.md#duplicate-a-track) — see
 [`shortcuts.md`](../control/shortcuts.md#timeline)) into exactly the same `toggleMuted()` / `toggleSoloed()`
 / `toggleArmed()` → `performEdit()` path the M/S/R **buttons**' own `onClick` calls, so a keystroke
 and a click can never disagree about what "toggle" means or about the undo step it produces.
@@ -70,6 +106,9 @@ and a click can never disagree about what "toggle" means or about the undo step 
 Up/Down are NOT `ShortcutManager` actions (arrow-key row navigation is not rebindable anywhere else
 in this app either); the row reports a direction via `onFocusMoveRequested` instead, since it owns
 neither the sibling list nor the shared scroll state to act on it itself.
+
+**Right** (the rebindable `timelineClipNext`, `onEnterClipsRequested`) hands focus on to the row's own
+clips — see [focus](focus.md#clip-keyboard-mode).
 
 `TimelinePanelComponent::focusedTrackIndex_` is the model — an index into the doc's track order,
 **deliberately not a field on `TimelineDoc`**: this is ephemeral UI state that must never touch
@@ -91,7 +130,14 @@ and calls `TimelinePanelComponent::ensureTrackVisible()`, which scrolls the SAME
 zoom writer in this class treats as ground truth, never `trackHeaderViewport_.getViewArea()`, which
 is only a cached snapshot of the last layout pass.
 
-`syncTrackHeaders()`'s rebuild branch preserves `focusedTrackIndex_` **by `TrackId`**, not by
+`syncTrackHeaders()` keeps the row of every track that is still there when the set of tracks changes: rows are
+matched by `TrackId`, re-read (`refreshFromDoc()`) and put in the doc's order, and only a new track's row is built and
+only a removed track's row is destroyed. Re-creating every row made a duplicate, a delete and an undo of either cost a
+new row per track (`EditRefreshWorkTests.cpp` counts the rows built: one for a duplicate, none for its undo). Inside
+an edit whose reconcile re-reads every row anyway (`TrackHeaderHost::everyHeaderRefreshFollows()`: an undo or redo
+step, a track duplicate), the sync leaves the re-read to it, so each row is read once per edit.
+
+The rebuild branch preserves `focusedTrackIndex_` **by `TrackId`**, not by
 numeric index, across a track add, remove or reorder: a track deleted ABOVE the focused one must
 not silently hand focus to whatever now sits at the old index, so the focused track's id is
 resolved back to whatever new index it occupies, or cleared to `-1` if it was the one removed. The
@@ -105,6 +151,15 @@ looser "focus is somewhere in the panel" check): it seeds `focusedTrackIndex_` a
 this tightly so it can never steal an arrow key the clip lane area or piano roll have not yet
 claimed for themselves — every other keystroke that reaches this method still does so by bubbling
 up from wherever real focus actually is.
+
+## Open the row's menu from the keyboard
+
+Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on a
+focused row shows the same menu a right-click does, at the row: `TimelineTrackHeaderComponent` implements
+`KeyboardContextMenuProvider` and calls `showContextMenu()`, the function `mouseDown()` calls for a right-click. A
+bare Return on the row does the same (rename is a double-click on the name or F2 / Option+R on the focused row, `isRenameKeyPress`; Return has no other job there), and
+the row's tooltip says "Right-click, Shift+F10 or Return for the track menu; <the duplicate key> duplicates the track". The same three routes open the menu of an
+automation lane header and a modulator row, which have no "..." button either.
 
 ## Click to select
 
@@ -121,6 +176,56 @@ focus machinery for double-click rename. The row's `focusOfChildComponentChanged
 repaints for that case (and for the binding chip), since `hasKeyboardFocus(true)` — what the focus
 outline checks — includes descendants.
 
+## Selecting several tracks
+
+The header column follows the list conventions of Finder and Logic. A plain click selects one track and resets
+the rest. **Cmd-click** (Ctrl-click on Windows and Linux) adds the track or, if it is already selected, takes
+it out. **Shift-click** selects the clicked track and every track between it and the **anchor** (the last
+plainly clicked or Cmd-clicked track), keeping what was selected before that click; shift-clicking elsewhere moves
+the far end of the range instead of stacking ranges. Every selected row is washed in the accent colour, and the
+row that has keyboard focus keeps its focus ring (the wash is not animated: it follows the selection
+immediately, as the focus ring does).
+
+From the keyboard: **Shift+Up/Down** moves focus a row and extends the selection from the anchor to it
+(going back the other way shrinks it), and **Cmd/Ctrl+Space** toggles the focused row. A plain Up/Down moves
+focus and resets the selection to that one row.
+
+The model is `TrackSelectionModel` (`Source/UI/Timeline/TrackSelectionModel.h`, pure state, owned by
+`TimelinePanelComponent`), the track-id form of `ListSelectionModel` (`Source/UI/Timeline/ListSelectionModel.h`),
+which the Sections strip uses for its blocks too. It is ephemeral view state like `focusedTrackIndex_`: it is not on `TimelineDoc`,
+is not an undo step and is not saved. `TimelinePanelComponent::selectedTracks()` returns the selected
+`TrackId`s in timeline order, and `isTrackSelected(id)` asks about one. Selection is by id, so it survives
+relayouts, rebuilds and reorders; a deleted track drops out of it. The **primary** track (`getSelectedTrackId()`,
+the row last clicked or moved to) is still what the single-track commands act on and what the
+[routing pane](#routing-from-the-side-pane) follows; after a Cmd-click that removes it, it is focused but not selected.
+Each row exposes the selected state to assistive tech (a list item that is selectable and, when chosen,
+selected), and its title stays the track name. The mixer does not mirror timeline track selection (its
+strips are selected only by "reveal"), so it is unchanged.
+
+### What acts on the selection
+
+With two or more tracks selected, these act on all of them, each as **one** undo step (a track outside the selection
+is acted on alone, as in Finder and Logic; one selected track behaves exactly as before). Each reuses the single-track
+path per track, grouped by `AppUndoManager::ScopedUndoGroup`, which folds every `record*Change` inside it into one
+transaction:
+
+| Gesture | Result |
+|---|---|
+| **Cmd+D** (or the row menu's Duplicate Track) | A copy of every selected track, in the same relative order, after the **last** selected track. The copies become the selection. One audio-graph rebuild for all of them (`GraphRebuildBatch`), not one per track. |
+| **Cmd+C**, then **Cmd+V** on a row | Cmd+C remembers the selected tracks; Cmd+V pastes a copy of each, in order, directly below the row that has focus (the primary track), through the same duplicate path, and selects the copies. A copied track deleted since is skipped. |
+| **A** on a row | The focused row's automation lanes decide for every selected track: open, so all close; closed, so all open. One layout change, so the lanes animate together. The fold arrow click still folds only its own track. |
+| **Cmd+Backspace** (or the row menu's Delete Track) | One confirmation ("Delete 3 tracks?", unless switched off in Preferences), then `deleteTrack` per track, one undo step. |
+| **M** / **S** button or key | The clicked track toggles as before and every other selected track takes the state it ended in (a linked track's channel strip included), so a mixed selection ends uniform. |
+| Colour swatch | One pick colours every selected track, live preview included. Every selected track that owns its channel macro has the macro recoloured too, inside the same undo step. |
+| Dragging a selected row | Pressing a selected row keeps the selection (a plain click without a drag collapses it on release), and the drop moves the whole selection as a block, keeping its relative order, to where the dragged row lands among the unselected tracks. The grabbed row is the one that lifts; the others glide into place on the drop. |
+
+Cmd+C and Cmd+V on a row are the rebindable `timelineCopyFocusedTracks` / `timelinePasteTracks`; the row claims
+Cmd+C only with two or more tracks selected and Cmd+V only while tracks are copied, so everywhere else they keep their
+General meaning (copy / paste modules). The track clipboard holds ids, so it survives nothing but the session.
+
+Cmd+A on a row is the rebindable `timelineSelectAllTracks` (Timeline category): the row selects every track (focus stays
+on the row that had it); Select All keeps its meaning on the clip lane (all clips), the canvas and the piano roll.
+
 ## Drag to reorder
 
 `TimelineDoc::moveTrack(id, newIndex)` moves a track within `tracks[]` — display and serialization
@@ -134,47 +239,116 @@ a no-op — no revision bump, no notification — when the id does not resolve o
 The drag surface is deliberately the WHOLE row rather than a small dedicated handle, which is too
 fiddly a target: everything except the interactive children (name label, swatch, `M`/`S`/`R`/`A`
 buttons, binding chip; each intercepts its own `mouseDown`) starts a drag.
+The name label and the colour swatch cover much of the row, so they forward their own
+`mouseDown` / `mouseDrag` / `mouseUp` to the row (the label keeps double-click-to-rename and the
+right-click menu; a swatch click still opens the colour picker, but not on the release of a drag).
+`DraggingFromTheNameLabelReordersLikeAnyOtherPartOfTheRow` sends its events to the label found by
+`getComponentAt`, the real hit-test target.
 
 `TimelineTrackHeaderComponent` stays sibling-blind about it, exactly like `onFocusMoveRequested`
-above. `mouseDrag()` only commits to a drag once the pointer has moved `kRowDragThreshold` (4 px)
-past `mouseDown` — below that it is a plain click-to-select — and from then on hands raw **screen**
-Y positions up through `onRowDragStarted` / `onRowDragged` / `onRowDragEnded`, the same "compare
-against something that is not this component" idiom
-`PanelResizeHandle::desiredHeightFor` uses for its own drag.
+above. `mouseDown()` reports the press (`onRowPressed`, raw **screen** Y); once `mouseDrag()` has
+moved `kRowDragThreshold` (4 px) past the press it feeds every pointer position up through
+`onRowDragStarted` / `onRowDragged`, and `mouseUp()` ends it with `onRowDragEnded`. Below the
+threshold it is a plain click-to-select.
 
-`TimelinePanelComponent` is the one place that can turn a Y position into "between which two
-tracks", since it owns the ordered header list (`trackHeaderList_.headers`):
-`trackDropBoundaryForScreenY()` converts via `trackHeaderList_.getLocalPoint(nullptr, ...)` — a
-null source component means "the point is already in screen coordinates" — and rounds to the
-nearest row BOUNDARY (`0..headerCount`) so the live drop indicator reads as "insert here between
-these two rows", not "replace this row". `endTrackDrag()` converts that boundary into `moveTrack`'s
-target index (`dropBoundary > fromIndex ? dropBoundary - 1 : dropBoundary` — the track's own old
-slot has already vacated the array below it, so only a boundary ABOVE the old index needs the `-1`
-correction) and drives the mutation through `trackHeaderHost_->performTrackEdit()`, falling back to
-calling `TimelineDoc::moveTrack` directly when no host is installed — the same convention
-`TimelineTrackHeaderComponent::performEdit()` follows, so a panel driven straight against a doc
-still works.
+`TimelinePanelComponent` owns the gesture (`TimelinePanelTrackDrag.cpp`) and uses the shared
+[reorder behaviour](../layout/animation.md#reorder-drag) (`ReorderDragAnimator`, `ReorderFramePump`,
+`ReorderCancelKey`) on the vertical axis, in the header list's own coordinates:
 
-The drop indicator is a 2 px accent line drawn by `TrackHeaderList::paintOverChildren()`. **Over
-children**, because the header rows are children painted AFTER this component and each fills its
-own bounds, so a line drawn in `paint()` would be painted over at every interior boundary — the
-same trap the focus outline below avoids the same way.
-`DropIndicatorPaintsOverTheRowsNotUnderThem` pins it by rendering the header column mid-drag with a
-real theme installed and asserting the accent line is actually visible.
+- At press it captures the rows' static slots (their `TimelineRowLayout` spans), the pointer and the grab
+  offset once (`trackPointerY()` converts screen Y with `trackHeaderList_.getLocalPoint(nullptr, ...)`
+  on every event, so the offset survives the rows moving and the list scrolling).
+- Past 4 px the row lifts (light wash and accent border, `TimelineTrackHeaderComponent::setLift`),
+  stays exactly under the grab point and is drawn on top; the other rows glide aside (160 ms,
+  `easeOutCubic`, retargeting from their current position) to open a dashed gap
+  (`TrackHeaderList::paint()`) where it will land.
+- Release commits ONE `TimelineDoc::moveTrack(id, insertionIndex)` through
+  `trackHeaderHost_->performTrackEdit()` (one undo step; called directly when no host is installed,
+  the same convention `TimelineTrackHeaderComponent::performEdit()` follows) and the row settles
+  (140 ms). The animator's insertion index is already the track's final index, so there is no
+  boundary conversion any more.
+- Esc sends the row back (140 ms, `easeInCubic`), the neighbours back (160 ms), and commits nothing:
+  no undo step. The release that follows is neither a click nor a move.
+- The pointer within 32 px of the list viewport's top or bottom edge autoscrolls it (up to 18 px per
+  40 ms auto-repeat step, through `scrollTrackRows()` so the clip lanes stay in step). The auto-repeat
+  is only requested for a showing panel: it is a process-wide mouse-source setting and a synthesized
+  drag never releases.
+- A slot is the track's whole span, its open automation lanes included, and the lane headers ride
+  with their track's row while it is lifted (`TimelineAutomationLanes::placeHeadersFor`).
+- The "Unassigned automation" section is no slot: it can't be dragged, and no track can be dropped
+  below it (the doc enforces the same through `moveTrack`).
+- The clip lanes to the right are not animated: they follow the new order when the drop commits
+  (`refreshFromDoc()`), and stay in the old order during the drag.
+- A header rebuild that is not the drop itself (an added track, an undo, an AI patch) discards the
+  gesture (`discardTrackDrag()`); the drop's own rebuild is let through by `committingTrackDrag_`.
 
 **Ordering hazard — read before touching this code.** A reorder changes which `TrackId` sits at
 each index, which makes `syncTrackHeaders()`'s "rebuild only when the SET of tracks changed" check
-trip (same ids, different order at each slot) and rebuild the ENTIRE header column — destroying
-every `TimelineTrackHeaderComponent`, *including the one whose `mouseUp()` is still on the call
-stack* that triggered the mutation in the first place (`mouseUp` → `onRowDragEnded` →
-`endTrackDrag` → `performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all
+trip (same ids, different order at each slot) and re-order the header column. The rows are kept by
+id, but a header must still never assume it survives the call: a track removed by its own row (the
+row menu's Delete) destroys the very `TimelineTrackHeaderComponent` whose handler is still on the call
+stack, and the drag commit runs through the same synchronous chain (`mouseUp` → `onRowDragEnded` →
+`endTrackDrag` → `commitTrackDrag` → `performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all
 synchronous). Both `TimelineTrackHeaderComponent::mouseUp()` and
-`TimelinePanelComponent::endTrackDrag()` are written so every member write happens BEFORE the call
+`TimelinePanelComponent::commitTrackDrag()` are written so every member write happens BEFORE the call
 that can trigger this, and nothing follows it — see the `ORDERING HAZARD` comment on
-`onRowDragEnded` in `TimelineTrackHeaderComponent.h` and the matching comment in `endTrackDrag()`.
-`WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture` drives a real drag through this
+`onRowDragEnded` in `TimelineTrackHeaderComponent.h` and the matching comment in `commitTrackDrag()`.
+`WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture` (and the gesture tests in
+`TimelinePanelTrackReorderTests.cpp`) drive a real drag through this
 exact path with no host — the worst case, where the mutation runs with no extra indirection —
 specifically to pin it.
+
+## One track's height
+
+Each track has its own `Track::heightScale` (default 1, clamped to `[0.5, 4]`), saved with the project
+(`heightScale` in the track's JSON, left out at the default) and applied on top of the shared vertical
+zoom (a vertical zoom itself gives every track one height, see below): `TimelineClipLaneArea::getRowLayout()` makes it that track's row-height override, so the header,
+its clips, its lanes and the scroll all follow. A fixed override (the Unassigned section row) wins.
+
+- **Drag:** an `EdgeResizeHandle` along the bottom 5 px of each header row (`UpDownResizeCursor`). The
+  drag previews through `TimelineClipLaneArea::setTrackHeightPreview()` with no doc writes, and the
+  release commits `TimelineDoc::setTrackHeightScale()` once through `TrackHeaderHost::performTrackEdit`,
+  so one drag is one undo step. A double-click resets the track to the default height. The seam between
+  two rows belongs to the row above it.
+  When the track has automation or modulator rows open, they hang between its row and the next track, so a
+  second strip (`trackHeightHandleBelowLanes`, owned by the panel, same name, tooltip, drag and double-click)
+  runs along the bottom of that lane block: the seam above the next track resizes the track it belongs to
+  with lanes open or folded.
+- **Vertical zoom:** zooming the tracks in or out (Cmd+Shift+wheel, Option + a vertical scroll, a plain or Option/Shift pinch, or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
+  for all of them. `TimelinePanelComponent::zoomTrackRows()` first clears every track's own height with
+  `TimelineDoc::resetTrackHeightScales()` through `performTrackEdit` (one undo step that brings the mixed heights
+  back; a run of zoom ticks writes it once, as the heights are then equal), then scales the shared
+  `rowHeightScale`. It does not scale a tall or short track relative to the others, and it equalises them even
+  when the zoom is already at its limit.
+- **Keys and menu:** the rebindable Increase Track Height, Decrease Track Height and Reset Track Height
+  actions (`timelineIncreaseTrackHeight` Option+=, `timelineDecreaseTrackHeight` Option+-,
+  `timelineResetTrackHeight` Option+0) act on the focused header row, a step being ×1.25; the row's
+  context menu has the same three items, each naming its shortcut.
+- **Accessibility:** the edge handle is mouse-only, so a row stays one Tab stop; its name is
+  "Resize <track>" and its tooltip names the double-click and the three shortcuts.
+
+## Row layout
+
+`synth::ui::TimelineRowLayout` (`Source/UI/Timeline/TimelineRowLayout.h`) is the one place row
+geometry comes from. Each track owns a clip row (the themed `Metrics::timelineTrackRowHeight` times
+the vertical-zoom scale and the track's own `heightScale`, unless the track overrides it: the Automation
+track's section row is a fixed 26 px) followed by an optional per-track extra area holding its open automation lanes
+([automation](automation.md#lane-rows)). The model answers `trackTop(i)`, `trackSpan(i)`, `hitAtY(y)` (track plus
+whether `y` is in its clip row), `totalHeight()` and `trackIndexNearestTop(from, dy)`; every y is a
+content coordinate, before `trackScrollY`.
+
+`TimelineClipLaneArea::getRowLayout()` builds it; the panel reads the same object through
+`rowLayout()`, so the header column, clip painting, hit testing, edit tools, range selection, the
+track reorder slots, `ensureTrackVisible()` and the scroll limit cannot disagree. Nothing computes
+`index * rowHeight` any more: ask the layout. Extra heights enter through
+`TimelineClipLaneArea::setTrackExtraHeights()` and row overrides through
+`setTrackRowHeightOverrides()`, both pushed by `TimelinePanelComponent::pushAutomationGeometry()`
+on every doc change, fold toggle and vertical zoom; a header row is only the clip-row part of its
+slot. The clip lanes paint nothing but a bg-1 backdrop in an extra area and a surface-hi band on
+the section row, and their `hitTest()` refuses both, so a click there reaches the lane editor on
+top (or nothing). A vertical zoom keeps the row under the pointer put with
+`TimelineRowLayout::mapContentY(before, after, y)`, which maps per track and per part: the lane rows
+rescale with the clip rows, the section row does not.
 
 ## Focus outline
 
@@ -226,7 +400,8 @@ active the last time `refreshFromDoc()` ran.
 
 Clicking it builds a `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h` — see
 [`layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) via
-`buildColourPicker()` and launches it
+`buildColourPicker()` -- a thin wrapper over the shared `buildTrackColourPicker` (`Source/UI/Timeline/TrackColourPicker.h`,
+which the mixer column's colour dot calls too) -- and launches it
 in a `juce::CallOutBox` anchored on the swatch.
 
 Its favourites shelf persists through `TrackHeaderHost::getAppProperties()` — a non-pure
@@ -239,6 +414,10 @@ preview/commit
 contract. `createColourPickerForTest()` exposes `buildColourPicker()`'s exact wiring without ever
 launching the `CallOutBox`.
 
+A track that owns its channel macro gets a picker that also writes the macro's colour (preview, cancel and
+the one-step commit included), and recolouring the macro writes the track back: see
+[A track and its macro share a colour](../mixer/mixer.md#a-track-and-its-macro-share-a-colour).
+
 ## Binding chips
 
 Three states, two of them amber (`theme.colors.warning`):
@@ -250,8 +429,8 @@ Three states, two of them amber (`theme.colors.warning`):
 | `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
 
 An `Automation`-kind track shows **no chip at all** (`setVisible(false)`, decided in
-`refreshFromDoc()`): that track hosts lanes, and a node binding is meaningless for it, so the
-bottom half-row is simply empty. `Midi` and `Audio` tracks are unaffected.
+`refreshFromDoc()`): that track hosts lanes, and a node binding is meaningless for it (it is drawn as
+the one-row "Unassigned automation" section). `Midi` and `Audio` tracks are unaffected.
 
 The chip always carries a tooltip explaining what it shows and, when amber, how to fix it. A bound
 name carries a `"#id"` suffix only in the re-bind menu, and only on an option whose display name
@@ -304,13 +483,23 @@ differ. The destination picker and the add-track auto-wire search both go throug
 `isMidiInstrumentType()`; `AIStateMapper` does not.
 
 **The graph is the truth.** Toggling a row calls `TrackHeaderHost::setMidiDestinationConnected(
-TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs one `recordStructuralChange`
+TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs one `recordGraphAndMacroChange`
 (add or remove the MIDI connection) then always calls `reconcileTimelineAfterGraphChange()` — and
 immediately re-pulls `getMidiDestinationOptions(TrackId)` to rebuild every row from what the graph
 now actually reports, rather than trusting the click. Both host methods are non-pure with inert
 defaults (empty list, no-op) for the same keep-every-implementer-compiling reason
 `getAppProperties()` is, and both no-op cleanly on a stale popup — the track's binding or the
 target node no longer resolves — rather than crashing.
+
+**Through macros.** A destination (or the Track In) inside a macro is reached through macro MIDI ports,
+exactly like a mixer send: the add runs through `applyProgrammaticConnectionChange`
+([auto-ports](../macros/auto-ports.md#programmatic-connections)), which mints the inlet/outlet chain (one
+per macro boundary), and one undo step restores graph and macros together. "Connected" means the Track
+In's MIDI *reaches* the node (`findMidiNodesReachedFrom`, which expands only through macro ports), not
+that a direct cable exists; macro port nodes are never listed as candidates. Unticking removes the last
+leg onto that node, so a port another destination in the same macro still uses survives, and a port left
+carrying nothing is swept (when the auto-delete preference is on). With the auto-port preference off the
+add is a plain direct cable.
 
 ## The channel chip
 
@@ -350,37 +539,295 @@ write is not a document change, nothing notifies the header afterwards — the t
 row itself, and `MainComponent::reconcileTimelineAfterGraphChange` refreshes every row after an
 undo or redo restore.
 
-## The automation button
+## The Mono/Poly switch
 
-The `A` button toggles this track's automation lane in the single, doc-wide automation strip
-([automation](automation.md)). The header only reports the click via
-`onAutomationToggleRequested` — it never tracks open/closed state itself, since it cannot see
-whether another track's lane is the one currently shown.
-`TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this track's own
-lanes closes the strip; anything else — closed, or open on a different track — opens the track's
-first lane.
+A track whose voice graph holds a poly-capable module (Oscillator, Wavetable, Noise, Filter, ADSR or VCA) shows a
+**voice toggle** (`TrackVoiceToggle`, `Source/UI/Timeline/TrackVoiceToggle.h`) in the bottom row, left of the channel
+chip: one icon button, the same square size as the show-module button beside it (`TrackShowModuleButton::kSize`). It does
+what the **Poly** pill on a card does ([the Poly toggle](../modules/modulation.md#the-poly-toggle)), for the whole track
+at once: the same plan, the same question when other tracks' modules would change, and ONE undo step.
+
+- **Where the state comes from.** The header stays graph-free: `TrackHeaderHost::getTrackPolyState(track)` answers
+  `none` (no poly-capable module, so the toggle is hidden), `mono`, `poly` or `mixed`, and `setTrackPoly(track, poly)`
+  asks for a switch. `MainComponent` resolves the track's source node and calls
+  `PolyChainController::trackPolyState` / `trackPolyClicked`, which plan the voice graph from that node (a source node
+  has no pill of its own, so nothing falls back to it).
+- **Looks.** One note head means mono (drawn in the muted text colour), a stack of three note heads means poly (drawn in
+  the accent, and the toggle reads as on). While a chain is half poly (a card's pill flipped by hand) the stack is drawn
+  as outlines and the tooltip says "Some of <track>'s modules are mono and some poly right now"; a click on it sets every
+  module to poly. The pictures come from `paintVoiceGlyph` (`Source/UI/Layout/ActionGlyphs.h`). The tooltip names what the
+  state is and what a click does.
+- **Fits any row height.** The toggle keeps its width and takes the row's height when the row is shorter than the
+  button, like the show-module and drum buttons; every child of the header stays inside it and none overlap at any row
+  height (`TimelineTrackHeaderRowFitTests.cpp` sweeps heights, widths and control sets).
+- **Keyboard and screen reader.** A Tab stop (Return or Space presses it) that leaves focus on the row when clicked, with
+  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly). With the
+  row (or the toggle) focused, **P** (`trackHeaderTogglePoly`, rebindable, Track Header category, [shortcuts](../control/shortcuts.md#timeline))
+  presses it; the tooltip ends with the key's current text. P sits in its own category so it does not collide with the
+  Timeline's bare P (loop selection); a row with no toggle lets P bubble to loop selection.
+- **Why this icon.** Ableton Live and Bitwig have no per-track poly control (voices are a device setting), so there is
+  no convention to copy; a note head against a stack of note heads reads as "one note or a chord" without a word, and
+  the old two-word Mono | Poly switch could not show "Mono" in the 168 px minimum header width.
+- **Staying current.** A pill click, the toggle and an undo all end in a header refresh
+  (`PolyChainController::onVoiceGraphChanged`, `reconcileTimelineAfterGraphChange`), so the toggle and the cards never
+  disagree. The toggle fades in and out with the chip row ([header chips fade](#header-chips-fade)).
+
+Tests: `Tests/UI/Timeline/TimelineTrackVoiceToggleTests.cpp` (the header, against a stub host),
+`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height, no part's words
+clipped at the narrowest width), `Tests/App/MainComponent/MainComponentTrackVoiceToggleTests.cpp` (P and a click end to
+end, one undo step) and
+`Tests/UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp` (the voice-graph switch from a track source).
+
+## Routing from the side pane
+
+The Timeline tab has a left [side pane](../layout/side-pane.md) that shows the **selected** track's
+routing, like an inspector. The selected track is the row last clicked ([click to
+select](#click-to-select)) or moved to with Up/Down; the pane follows it, so a click on another row
+swaps the pane at once. It is **closed** the first time (unlike the Mixer's pane) and opened by the
+button at the left of the transport strip or Cmd+Shift+B; its open state and width are remembered
+under the `timeline` tab key.
+
+`TimelineRoutingPane` (`Source/UI/Timeline/TimelineRoutingPane/`) is a view: it reads the
+`TimelineDoc` and the same `TrackHeaderHost` the header uses, owns no document state and starts no
+timer. `TimelinePanelComponent::refreshRoutingPane()` re-reads it on a selection change, on every
+document change (rename, colour, binding) and, through `reconcileTimelineAfterGraphChange`, on every
+graph change (a node rename or delete, a MIDI wire, a channel appearing). A shut pane skips the work
+and re-reads when it opens. Rows, top to bottom:
+
+- **Header line:** the track's colour swatch, its name and a small `MIDI` / `Audio` badge.
+- **Canvas node:** a combo-style button showing the bound Track In (MIDI track) or Track Audio (audio
+  track) node's name. Clicking it opens the same re-bind menu as the [binding chip](#binding-chips) —
+  kind-aware candidates not claimed by another track, plus "New Track In node" — built by
+  `buildTrackBindingMenu` / applied by `applyTrackBindingChoice` (`Source/UI/Timeline/TrackRoutingMenus.h`),
+  which the header calls too, so the two never drift. A pick is `bindTrackTo` /
+  `createAndBindTrackInNode` on the host: one undo step, never automatic. The chip's "MIDI
+  destinations..." entry is left out here because the next row is that. **Unbound** shows "Not
+  connected" in the `warning` colour. **Missing** (the node is gone) shows "Track In (missing)" or
+  "Track Audio (missing)" in `warning` — the document keeps only the gone node's uuid, so the name is
+  the node kind — with the line "Its notes are kept. Pick a new Track In to hear them again." Below a
+  live binding, a **Show on canvas** link selects the node with `selectNodeInGraph`, the
+  chip's highlight-only path (the canvas is not scrolled).
+- **Input**: what records into the track. On a MIDI track, two combo-style buttons, one under the other:
+  the device ("All MIDI inputs" by default) and the channel ("Any channel" by default). On an audio track,
+  one combo ("No input" by default) with a thin level meter under it, then the **Monitor** switch (Auto /
+  On / Off). See [the Input row](#the-input-row) and [Monitoring](#monitoring).
+- **MIDI destinations** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
+  Clicking it opens the [MIDI destination picker](#midi-destinations) in a `CallOutBox`, built by
+  `buildTrackMidiDestinationPicker` over `getMidiDestinationOptions` / `setMidiDestinationConnected`
+  exactly as the header builds it. An unbound track shows "None" and the picker asks for a binding first.
+- **Mixer channel:** read-only. "Channel · <name>" with the [channel chip](#the-channel-chip)'s
+  gated level meter (ticked by the panel's existing 15 Hz timer), or "No mixer channel" (muted). A
+  **Show in mixer** link calls `TrackChannelLinkSurface::revealChannelForTrack`, which opens the Mixer
+  tab on that column. The channel comes from the graph's cables; nothing here chooses it. The chip takes no clicks and is no keyboard stop, so the link's description names the channel ("Finds this track's channel, <name>, in the mixer") for a keyboard or screen-reader user.
+
+An automation track, or no selection, shows one muted line instead: "Nothing to route on an
+automation track." / "Select a MIDI or audio track to see its routing." Every control opts out of
+keyboard focus so a click never moves it off the panel.
+
+## The Input row
+
+Like Cubase's input routing: each MIDI track chooses what it records, so two players (or two
+controllers) can record into two tracks at once. The row is built in
+`TimelineRoutingPaneInput.cpp`.
+
+- **Device button.** Opens a menu: "All MIDI inputs", then every MIDI input connected now
+  (`TrackHeaderHost::getMidiInputDevices`, which `MainComponent` answers from
+  `AudioEngine::getAvailableMidiInputs`; empty in the plugin, where the host owns MIDI routing), the
+  current one ticked. A pick writes the device's stable identifier **and** its name
+  (`TimelineDoc::setTrackMidiInput`) through `performTrackEdit`: one undo step.
+- **Channel button.** Opens "Any channel" and "Channel 1" to "Channel 16". A pick keeps the device.
+- **A device that is not connected** (unplugged, or a project from another machine) stays the
+  track's input. The button names it, "Old Keyboard (not connected)", in the `warning` colour, and
+  its menu lists it ticked; picking it again changes nothing. A take records nothing from it until
+  it is back. It is never swapped for "All MIDI inputs" behind the user's back. The identifier is
+  matched exactly, as MIDI Remote matches its controllers. The row re-reads on
+  `AudioEngine::onMidiDevicesChanged`, so a replug clears the warning.
+- **Accessibility.** Both buttons are pane keyboard stops in visual order (Canvas node, device,
+  channel, MIDI destinations): Up/Down move between them and Return opens the menu. Each has the
+  accent focus ring, a screen-reader name that carries the value ("MIDI input, Keystation 49",
+  "Input channel, Any channel") and a tooltip that says what it records and what a click does.
+- **Motion.** The row fades in and out with the track kind (`FadeVisibility`), and the rows below
+  slide, like the MIDI destinations row.
+
+**Stored on the track.** `Track::midiInputId` (empty = all inputs), `midiInputName` and
+`midiInputChannel` (0 = any, else 1 to 16). They are saved with the project only when they differ
+from the defaults ("all inputs, any channel"), so older projects load unchanged and save
+byte-identical. A channel outside 0 to 16 in a file fails the load. A duplicated track keeps its input.
+How a take uses them: [transport](transport.md#recording-from-one-input).
+
+### Audio tracks
+
+Each audio track records from its own input, so a singer and a guitar on two inputs record into two tracks in
+one take. The section is built in `TimelineRoutingPaneAudioInput.cpp`; its words and menu are pure functions in
+`AudioInputMenu.h` (`describeAudioInput`, `buildAudioInputMenu`, `resolveAudioInputMenuChoice`), so tests read them
+without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost::getAudioInputSurface()`
+(`TrackAudioInputSurface`: the inputs on offer, their peaks, turning inputs on, Audio settings), which
+`MainComponent` answers from its `AudioEngine` (`MainComponentAudioInputSurface`); null in a host that has none.
+
+- **The combo** says "No input" (muted text), "In 2 (mono)", "In 3 + 4", "Whole mix" (the master, through the
+  Rec Tap) or the name of another track. Its menu: "No input"; a "Mono · <device>" section with In 1 to In N; a
+  "Stereo · <device>" section with In 1 + 2, In 3 + 4 and so on; an "Another track" submenu; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
+  input that is turned off is listed but disabled and says so ("In 3 (off)", "In 3 + 4 (off)": a pair is off when
+  either jack is), and "Turn on all its inputs" sits right under the "Mono" header, where the grey rows are. With
+  no other track to record, "Another track" is disabled and reads "Another track (no other tracks)". Every
+  disabled row of the menu states why in its own words (`AudioInputMenuOffRowsTests.cpp`). A pick stores
+  the input and the name of the device open now (`TimelineDoc::setTrackAudioInput`) through `performTrackEdit`:
+  one undo step. The Mono and Stereo sections both stay; a jack the user named in Settings > Audio carries the
+  name ("Vocal mic (In 1)"), on the mono entry for an unpaired jack and on the stereo entry for a paired pair.
+  Which jacks are pairs comes from the layout store, so In 3 + 4 is only offered as stereo once paired there.
+- **Another track.** The submenu lists every other track except Automation ones, in timeline order, by name
+  (`listAudioInputTrackSources`); one whose sound reaches no mixer channel is listed disabled as "<name> (no mixer
+  channel)". Picking one makes this track record that track's sound (instrument plus its channel's inserts, fader and
+  pan) as an audio take, in the same undo step as the other armed tracks
+  ([transport](transport.md#recording-audio-from-each-tracks-input)). Such a track never monitors its input,
+  whatever its Monitor mode says: the source is already heard, and the input meter stays hidden, as for Whole mix.
+  Solo follows the input: soloing such a track solos its source too (`TimelineSnapshot::buildFrom`), so the source's
+  clips keep playing and the take is never silent; the tap sits before the channel's solo gate for the same reason.
+  If the source is deleted later the project still loads, the row reads "(track removed)" in the warning colour of a
+  device that is not connected, the menu keeps it ticked, and Record skips the track with a status-bar note.
+  `TimelineDoc::setTrackAudioInput` accepts a source only when it exists, is not the target itself and is not an
+  Automation track; `synth::isTrackInputConnected` (`Source/Timeline/TrackAudioInput.h`) is the rule.
+- **Inputs off** (the device has inputs, none turned on, which is how the app starts: audio input is opt-in):
+  the jack items give way to a disabled "The inputs of <device> are turned off." and "Turn on its inputs", which
+  asks for microphone access and turns every input on (`AudioEngine::enableDeviceInputs`). That lands as a device
+  change, which refreshes the pane. No device with inputs at all: a disabled "No audio input device found".
+- **Not connected.** An input picked on another device (or a project from another machine) stays the track's
+  input, like an unplugged MIDI controller: "In 1 + 2 (MOTU M4 not connected)" in the `warning` colour, a note
+  line "This track records and plays nothing until MOTU M4 is connected." and a ticked menu entry. An input of the
+  open device that is turned off says "In 3 (turned off)" with a note to turn it on. The rule
+  (`synth::isAudioInputConnected`, `Source/Timeline/TrackAudioInput.h`) is the one the record path and monitoring
+  use, so the pane, a take and what you hear never disagree.
+- **Named inputs.** A pick of a named input also stores its name (`AudioInputChoice::inputName`), and every
+  consumer (take recording, monitoring, the pane's row and meter, `isAudioInputConnected`) resolves it through
+  `synth::resolveAudioInput`: the name finds the jacks on the open interface, so a renamed layout or a different
+  interface that has the name follows it. A name the open interface does not have reads "Vocal mic (not on this
+  interface)" in the `warning` colour and records nothing; picking any input remaps it. Hosted inputs ignore the name.
+- **In a plugin** the inputs are the host's: the device label is "Host input", there is nothing to turn on and no
+  Audio settings item; an input the host does not pass says so.
+- **The meter** shows the chosen input's level (two bars for a pair) on the mixer meters' scale and colours,
+  fed by the pane's existing 15 Hz tick through `readInputPeak`; hidden for No input, Whole mix and an input that
+  is not connected. It is decoration: no focus, no screen-reader node.
+- **Accessibility.** The combo and the Monitor switch are pane keyboard stops in visual order (Canvas node,
+  Input, Monitor, Mixer channel links): Up/Down move between stops, Return opens the menu, Left/Right change the
+  Monitor segment. The combo's screen-reader name carries the value ("Audio input, In 1 (mono)"); its tooltip says
+  where the track records from (and, in a warning, why nothing will).
+- **Motion.** The section fades in and out with the track kind, and the rows below slide, like the MIDI rows;
+  the meter fades with its input.
+
+**Stored on the track.** `Track::audioInput` (`synth::AudioInputChoice`: kind None / Device / WholeMix / Track, the first
+0-based input, 1 or 2 channels, the device name, the source `TrackId`), saved as `"audioInput": {"kind": "device",
+"channel": 3, "channels": 2, "device": "..."}` (1-based; plus `"name"` only when the input is named), `{"kind": "mix"}` or `{"kind": "track", "track": 4}`, and only when it is not None. A channel past In 8
+or a kind it does not know fails the load. A duplicated track keeps it. New tracks start on No input.
+
+## Monitoring
+
+An audio track can play its own input live, through its own Track Audio node, so what you hear goes through the
+track's mixer channel and effects. `Track::monitorMode` (`synth::MonitorMode`) picks when:
+
+- **Auto** (the default): while the track is armed and the transport is stopped (you hear yourself before you
+  press Record) or recording (you hear the take as it is made); not during plain playback, where the track's clips
+  play instead.
+- **On**: always, armed or not.
+- **Off**: never.
+
+**The input replaces the track's own clips.** While the monitor hears the input, the track's clips do not play: you
+hear the live input only, never the old take mixed under the new one (recording a second pass in a loop does not play
+the first pass). When the monitor lets go (Off, Auto during plain playback, or the feedback guard muting the input) the
+clips play again at once. Other tracks, including a track the recording track takes its sound from, keep playing.
+
+The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input, Whole mix and Another track monitor
+nothing, nor does an input that is not connected; a muted or solo-gated track hears nothing.
+
+**The header button.** A speaker right of `R` on audio tracks (`TrackMonitorButton`): unlit for Off and for Auto
+while not armed (nothing to hear), an accent outline for Auto while armed, solid accent for On. A click switches
+On and Auto (from Off it turns On); bare **I** on the focused row does the same. Like M/S/R it is not a Tab stop and
+right-click opens the row's menu. Its screen-reader title is "Monitor" with the mode as its value ("Auto, hearing
+the input"), and its tooltip names the mode. Each change is one undo step. The side pane's **Monitor** switch sets
+any of the three.
+
+**Feedback guard, per track.** If the monitored input stays at or above 0.97 for 0.25 s (a mic hearing its own
+speaker), that track stops monitoring and the status bar says "Vox input muted - sustained clipping". Arming the
+track again turns it back on. Other tracks keep monitoring. Mechanism:
+[audio engine](../architecture/audio-engine.md#input-monitoring--feedback-guard).
+
+**Stored on the track.** Saved as `"monitor": "on"` or `"off"`, only when not Auto; any other value fails the
+load. A duplicated track keeps it.
+
+## The automation fold arrow
+
+`TrackFoldArrow` (`Source/UI/Timeline/AutomationLanes/`) sits at the left of the name row of every
+track (the Unassigned section header only while it holds lanes): pointing
+right while the track's lanes are folded, down while they are open under the track
+([automation](automation.md#lane-rows)). It is a Tab stop; Return or Space toggles it, and its
+name and tooltip say what the next press does ("Show Bass automation" / "Hide Bass automation").
+The rebindable "Show/Hide Track Automation" action (`timelineToggleTrackAutomation`, Timeline
+category, default bare A) does the same from the focused header row (for every selected track when the row is one of several). A right-click on the arrow
+opens the row menu and never toggles.
+
+The header only reports a toggle via `onAutomationToggleRequested`; the panel owns the fold state
+(runtime-only, per `TrackId`, never saved) and answers with `setAutomationExpanded()`. While folded,
+a muted "N lanes" badge follows the kind badge.
 
 ## Row context menu
 
 **Right-click a header means anywhere on the row.** `TimelineTrackHeaderComponent::mouseDown()`
 only ever sees a click that lands on the row's own background, because JUCE hands a click to
 whichever component is directly under the cursor and never bubbles it to an ancestor on its own. A
-right-click on `nameLabel_` or the M/S/R/A toggles — almost every pixel of the row — would
+right-click on `nameLabel_`, the M/S/R toggles or the fold arrow — almost every pixel of the row — would
 otherwise be swallowed silently instead of reaching this menu at all, while the binding chip and
 the colour swatch would still show SOMETHING (their own menu or picker, opened for the wrong
 reason, since `juce::Button` fires `onClick` from any mouse button).
 
 Two small nested classes in `TimelineTrackHeaderComponent.h` close that: `ContextMenuForwardingLabel`
 (wraps `nameLabel_`) and `ContextMenuForwardingButton` (wraps `muteButton_` / `soloButton_` /
-`armButton_` / `automationButton_`). Each forwards a right-click straight to `showContextMenu()`
+`armButton_`); `TrackFoldArrow` does the same through its `onPopupMenuRequested`. Each forwards a right-click straight to `showContextMenu()`
 and, for the buttons, never lets the click reach `juce::TextButton`'s own `onClick`, so a
 right-click on Mute does not also toggle mute. The binding chip and colour swatch are untouched —
 they keep opening their own menu or picker.
 
 The menu's items:
 
-- **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
-  its bound `Track In` / `Track Audio` node go together, and come back together.
+- **Duplicate Track** (above the height items; not on the Automation section header) copies the track below itself, and
+  names its rebindable shortcut: [add-track](add-track.md#duplicate-a-track).
+- **Delete track** — the same compound step the add-track flows produce, in reverse: the track, its bound
+  `Track In` / `Track Audio` node, **the macro that holds it** with everything inside, its **mixer strip** (the strip,
+  its inserts, and every other channel's send into it) and **the modules only it used** go together, and Cmd+Z brings
+  them all back in place: each module at its position, the macro with its members, ports and fold, every cable with its
+  modulation amount, the strip with its gain, pan, sends, inserts, routing, colour and name, the track with its lanes
+  (`MainComponent::deleteTrack` in `MainComponentTrackDelete.cpp`, one graph + timeline + macro undo step, redo removes
+  it all again). "Only it used" is `synth::modulesOnlyUsedBy` (`TrackRemovalSet.h`): a module goes when every cable it
+  has ends in what is going, to a fixed point, so an LFO wired only to the track goes, and so does an LFO that only feeds
+  that LFO. A module with a cable to anything that stays (another track, a send bus, Master) stays and only loses its
+  cables into the removed set: an LFO that modulates two tracks keeps its link to the other one and loses the link into
+  the deleted one (the hidden Attenuverter that carried it goes). A module with no cable at all was never used by the
+  track and stays. The output dock, a node another track is bound to, and a module in a different macro are never taken.
+  When the track's macro is shared (another track is bound to a node in it, or another track feeds a strip in it) the
+  macro stays and only the track's own node and strip go. A channel other tracks feed too, a bus and any strip no
+  track owns stay: only the strip the deleted track alone feeds goes. The menu item never asks;
+  **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
+  `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
+  Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
+  Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
+  ("Ask before deleting a track or its macro") turns the question back on. Cmd+Z brings the track back either way.
+  The row (header and its lane line) shrinks away toward its centre and the rows below close the gap, while the macro
+  card and the other cards that leave shrink away on the canvas with it; Cmd+Z makes room, grows them all back and fades
+  a thin accent outline around each ([delete and undo](../layout/animation.md#delete-and-undo-animation),
+  `TimelinePanelTrackListMotion.cpp`). Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
+- **Delete the macro of a track.** Every way of deleting a macro (the macro menu's "Delete Macro & Modules", Delete or
+  Backspace with macro cards selected, folded or open, with or without other modules selected, Cut, and "Delete N
+  Selected Modules") goes through `MacroGroupController::requestDeleteMacro` / `requestDeleteSelection`, whose app hook is
+  `MainComponent::deleteMacrosOfTracks` (`MainComponentMacroDelete.cpp`). A track plays a macro when its bound node is one
+  of the macro's members or one of a nested macro's (`tracksPlayingMacros`), so a parent holding a track's macro, a user group around the channel macro,
+  several tracks under one parent, and a project reopened from a file all count. With no track playing it the macro
+  deletes its members at once, as before. Otherwise it asks "Delete the macro of Audio 1?" (several tracks are named
+  together) on the shared three-way window (`showConfirmChoice`, as the LFO question): **Remove track** (Return) runs
+  `deleteTrack` for each track and deletes whatever of the macros and the selection is left, as one undo step; **Keep track** deletes the
+  macros, their modules and the rest of the selection and leaves the track rows; **Cancel** (Escape) changes nothing. The **Remember my choice**
+  box stores the answer: the user setting `timelineAskBeforeDeletingTrack` turns off (the track row's question stops
+  too, as with its own "Don't ask again") and `timelineDeleteMacroChoice` ("keep" or "remove"; no value reads as
+  "remove", what a macro delete did before Keep track existed) is applied without asking from then on. A Cancel never
+  stores anything. Turning the Preferences switch back on forgets the answer, so the next macro delete asks again.
+  Cmd+Z restores the track, macro, modules and cables in one step either way.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own
@@ -393,6 +840,12 @@ The menu's items:
   rather than disabled, matching that menu's existing "Mute Macro" omit-when-meaningless
   precedent. See [`docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box`](../mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) for what a saved preset carries and how
   loading it is gated.
+- **"Add automation..."** (above Delete Track) opens the picker of that track's parameters, the
+  entry point for a track with no lane yet (it has no fold arrow, so no "+ Add automation..." row
+  either): [`automation.md`](automation.md#adding-a-lane-from-the-timeline). Disabled while
+  `TrackHeaderHost::getAutomatableParameters()` has nothing to offer the track. The header only
+  reports the choice through `onAddAutomationRequested`; the panel opens the picker anchored on the
+  row.
 
 ## Test seams
 
@@ -402,7 +855,22 @@ menu: `collectBindingOptions()` / `applyBindingMenuChoice(id)` and `applyContext
 `mouseDown()` builds, and `handleChipClick(showMenu=false)` exercises the selection affordance on
 its own.
 
-Tests: `Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`,
+The routing pane has the same seams: `setShowBindingMenuHookForTest()` receives the menu a real
+click on "Canvas node" builds (a test then feeds an item id to `applyBindingMenuChoice()`),
+`setOpenMidiDestinationsHookForTest()` replaces the picker's `CallOutBox`, and
+`createMidiDestinationPickerForTest()` builds the picker unlaunched. The audio Input section shares
+`setShowInputMenuHookForTest()` with the MIDI row; `applyAudioInputChoice(id)` and `applyMonitorChoice(index)` apply
+a pick.
+
+Tests: `Tests/UI/Timeline/TimelineRoutingPaneTests.cpp` (the side pane),
+`Tests/UI/Timeline/TimelineRoutingPaneAudioInputTests.cpp` (the audio Input section and Monitor switch),
+`Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`, `Tests/UI/Timeline/TimelineTrackHeaderMonitorTests.cpp`,
 `Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` (the real-child-dispatch right-click
 coverage), `Tests/UI/Timeline/TimelineTrackFocusTests.cpp`, and
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp` for the panel-side column.
+
+## Header chips fade
+
+A track header's channel chip, voice toggle and fold arrow fade in and out as the track gains or loses them, the binding chip giving
+way (or taking the room back) as the channel chip's width follows the fade. A new modulator row and its band under a
+lane fade in. See [animation](../layout/animation.md#fading-things-in-and-out).

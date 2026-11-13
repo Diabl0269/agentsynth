@@ -1,0 +1,82 @@
+# Feature: one shape picker, with a small picture of every shape, on the Filter card and the LFO card. Picking a shape
+# applies it as one undo step, so Cmd+Z puts the card back.
+#
+# What a user does: sets a Filter to Custom, presses Pick shape (the list opens, each row a thumbnail, a name and a
+# Factory badge), arrows to "notch" and presses Return (the card's curve changes), presses Cmd+Z (it changes back), then
+# does the same on the LFO card.
+record: true
+save_project: shape-picker
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - drag: {from: window, to: window, fromX: 900, fromY: 301, toX: 900, toY: 130, steps: 15}   # lift the card so its curve shows
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: filter-card-before}
+  - key: {keys: return, target: Pick shape}
+  - wait: {settleMs: 800}
+  - screenshot: {name: filter-picker-open}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - screenshot: {name: filter-picker-arrowed}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: filter-card-after-pick}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: filter-card-after-undo}
+  - click: {id: window, x: 493, y: 391}                        # the LFO Shape combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: lfo-card-custom}
+  - drag: {from: window, to: window, fromX: 450, fromY: 301, toX: 450, toY: 110, steps: 15}   # lift the LFO card
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: lfo-card-lifted}
+  - click: {id: window, x: 550, y: 735}                        # Pick shape on the LFO card
+  - wait: {settleMs: 800}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: lfo-card-after-pick}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - screenshot: {id: window, name: lfo-card-after-undo}

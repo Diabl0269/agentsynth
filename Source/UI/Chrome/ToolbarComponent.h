@@ -3,7 +3,7 @@
 #include <array>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ToolbarComponent  §2.2
+// ToolbarComponent  (docs/layout/chrome.md#toolbar)
 // FlexBox-based responsive top strip. Owns NO buttons itself — the buttons are direct
 // children of MainComponent (so existing getChildren() accessors keep working). This
 // component only paints the toolbar background and positions the buttons passed via
@@ -20,10 +20,10 @@ class ToolbarComponent : public juce::Component {
 public:
     ToolbarComponent();
 
-    // Logical slot order — matches the left group [Library..AutoArrange] + right group
-    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. NumSlots is
-    // the array size. Feedback sits immediately after Settings (same group — icon-only,
-    // visually paired with the settings gear rather than a new standalone cluster).
+    // Logical slot order — matches the left group [Library..Redo] + right group
+    // [Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. (Auto Arrange, Minimap and Matrix sit on the canvas's
+    // own toolbar, not here.) NumSlots is the array size. Feedback sits immediately after Settings (same group —
+    // icon-only, visually paired with the settings gear rather than a new standalone cluster).
     enum Slot {
         Library = 0,
         New,
@@ -33,11 +33,8 @@ public:
         Feedback,
         Undo,
         Redo,
-        AutoArrange,
-        // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> bottom panel -> theme.
-        ToggleMinimap,
-        ToggleModMatrix,
+        // Opens the command palette; the right section's first button, a group of its own.
+        Search,
         ToggleAiPanel,
         // The ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
         // the former separate ToggleTimeline/ToggleMidiRemote slots.
@@ -63,7 +60,29 @@ public:
     // for consistency with the other five focus-region roots.
     void paintOverChildren(juce::Graphics& g) override;
 
+    // Roving keyboard focus (docs/layout/chrome.md#toolbar): the toolbar is one Tab stop; while it holds
+    // focus, Left/Right/Home/End move a ring across the visible, enabled buttons (no wrap) and
+    // Space/Return press the ringed one. Plain keys only; modified chords bubble up unhandled.
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+
+    // The slot the ring sits on: the last one used, or the first button until one is. -1 when no
+    // button is both visible and enabled.
+    int getFocusedSlot() const;
+    // The spoken name of that button; empty when there is none.
+    juce::String getFocusedButtonName() const;
+
+protected:
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
 private:
+    bool isNavigable(int slot) const;
+    // The next navigable slot strictly past `from` in direction `step` (+1/-1); -1 when none.
+    int navigableSlotFrom(int from, int step) const;
+    void setFocusedSlot(int slot);
+
+    int focusedSlot_{-1};
     std::array<juce::DrawableButton*, NumSlots> buttons_{};
     int narrowThreshold_{480};
     bool narrowMode_{false};

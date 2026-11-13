@@ -1,0 +1,52 @@
+# The Drum Kit's Show all chip moved when it was pressed and the pad-count stepper touched the Level value box.
+#
+# What a user does: adds a Drum Kit, hides a few pads (clicking their Shown switch), then presses Show all. The chip
+# sits on the Pads row beside the "Pads" title and stays at the same place when lit; the Pads row keeps a gap under the
+# Level box. DrumKitPadsRowTests and CardBodyOverlap check the geometry; this checks the real window.
+motion: true
+record: true
+save_project: fro1678 drum kit hidden pads
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - drag: {from: "card:Drum Kit", fromX: 120, fromY: 14, to: window, toX: 520, toY: 100}
+  - wait: {}
+  # Setup: pick the Cowbell, Cymbal and Tom in turn and switch each off with its Shown switch.
+  - click: {id: "card:Drum Kit > drumPads", x: 225, y: 68, mods: [shift]}
+  - wait: {}
+  - click: {id: "card:Drum Kit > Shown: Cowbell"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 160, y: 68, mods: [shift]}
+  - wait: {}
+  - click: {id: "card:Drum Kit > Shown: Cymbal"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 68, mods: [shift]}
+  - wait: {}
+  - click: {id: "card:Drum Kit > Shown: Tom"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, chipVisible: true, chipLit: false, chipX: 68, levelToStepperGap: 6, within_ms: 2000}
+  - getState: {id: "card:Drum Kit > drumPads"}
+  - screenshot: {id: "card:Drum Kit", name: three-hidden}
+  # Check 1: with three pads hidden the Show all chip sits on the Pads row, next to the title; the caption says
+  # "3 hidden" under the grid, and the Pads row is clear of the Level value box.
+  - mark: {check: 1, name: show-all-by-pads-title}
+  - glide: {name: press-show-all, frames: 10, crop: {x: 380, y: 80, w: 320, h: 640}, do: {click: {id: "card:Drum Kit > Show all hidden pads"}}}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, chipVisible: true, chipLit: true, chipX: 68, levelToStepperGap: 6, within_ms: 2000}
+  - getState: {id: "card:Drum Kit > drumPads"}
+  # Check 2: the pads came back and the lit chip is at the same x as before.
+  - mark: {check: 2, name: show-all-stays-put}

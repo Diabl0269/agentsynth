@@ -1,6 +1,9 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/IconButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -42,6 +45,8 @@
 // bindings, and the owner calls it every time the popover is (re)shown — otherwise a rebind made
 // in Settings while this object is alive would freeze at whatever it said when the popup was
 // first built, staling exactly the thing the "resolved live" design promised never to stale.
+class ShortcutManager;
+
 namespace synth::ui {
 
 class ModuleLibraryHelpPopup : public juce::Component {
@@ -78,6 +83,7 @@ public:
         addAndMakeVisible(viewport_);
         viewport_.setViewedComponent(&column_, false);
         viewport_.setScrollBarsShown(true, false);
+        viewport_.setWantsKeyboardFocus(false);
 
         addSection(sectionTitle(UsingModules), usingModulesLines());
         addSection(sectionTitle(FirstPatch), firstPatchSteps());
@@ -113,6 +119,17 @@ public:
         g.fillRoundedRectangle(b, radius);
         g.setColour(border);
         g.drawRoundedRectangle(b.reduced(0.5f), radius, 1.0f);
+    }
+
+    /** Escape closes the popover the same way its close icon does. */
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key != juce::KeyPress::escapeKey)
+            return false;
+        if (onCloseRequested)
+            onCloseRequested();
+        else
+            synth::ui::closeHostingWindow(*this);
+        return true;
     }
 
     void lookAndFeelChanged() override { applyThemeColours(); }
@@ -175,14 +192,13 @@ public:
         return {"1. Drag a Poly MIDI module onto the canvas - this is your MIDI source.",
                 "2. Drag a MIDI Keyboard too (or bind a timeline track's piano roll instead), and "
                 "connect it into Poly MIDI so it has notes to play.",
-                "3. Drag an Oscillator, wire Poly MIDI's Poly Out to its Pitch input, and switch "
-                "Poly on.",
-                "4. Drag a VCA, wire the Oscillator's output into it, and switch Poly on.",
-                "5. Drag an ADSR, wire Poly MIDI's Poly Out to its Gate input and switch Poly on, "
-                "then wire the ADSR's output to the VCA's CV input - without this the VCA stays "
-                "silent.",
+                "3. Drag an Oscillator and wire Poly MIDI's Poly Out to its Pitch input.",
+                "4. Drag a VCA and wire the Oscillator's output into it.",
+                "5. Drag an ADSR, wire Poly MIDI's Poly Out to its Gate input, then wire the ADSR's "
+                "output to the VCA's CV input - without this the VCA stays silent.",
                 "6. Drag an Audio Output and wire the VCA's output to it.",
-                "7. Play the on-screen MIDI Keyboard (or notes from the piano roll) to hear it."};
+                "7. Click Poly on any one of them: the whole chain switches to 8 voices at once.",
+                "8. Play the on-screen MIDI Keyboard (or notes from the piano roll) to hear it."};
     }
 
     struct ShortcutEntry {
@@ -205,6 +221,8 @@ public:
             {"timelineJumpToLocator2", juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)},
             {"toggleBottomPanel", juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0)},
             {"toggleLibrary", juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0)},
+            {"toggleSoundBrowser",
+             juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0)},
 #if JUCE_MAC
             {"toggleAiPanel", juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)},
 #else
@@ -220,15 +238,7 @@ public:
      *  stale) and the label via ShortcutManager::getActionDescription (so the two can never drift
      *  apart from the Settings tab's own wording either). `manager` may be null — see the class
      *  comment. */
-    static juce::StringArray shortcutLines(const ShortcutManager* manager) {
-        juce::StringArray lines;
-        for (const auto& entry : curatedShortcuts()) {
-            const auto key = shortcutHintFor(manager, entry.actionId, entry.fallback);
-            const auto label = ShortcutManager::getActionDescription(entry.actionId);
-            lines.add(key.isNotEmpty() ? (label + "  -  " + key) : label);
-        }
-        return lines;
-    }
+    static juce::StringArray shortcutLines(const ShortcutManager* manager);
 
     // -------------------------------------------------------------------------
     // Test seams
@@ -236,6 +246,9 @@ public:
 
     juce::String getSectionTitleForTest(int index) const { return sections_[(size_t)index].title; }
     bool isSectionExpandedForTest(int index) const { return sections_[(size_t)index].expanded; }
+    /** The section body's current height and whether its rows are on screen (they stay until a fade-out ends). */
+    int getSectionBodyHeightForTest(int index) const { return sections_[(size_t)index].holder->getHeight(); }
+    bool isSectionBodyVisibleForTest(int index) const { return sections_[(size_t)index].holder->isVisible(); }
     juce::StringArray getSectionLinesForTest(int index) const { return sections_[(size_t)index].lines; }
 
     /** Simulates clicking the header of section `index` — the same synchronous "call the handler
@@ -261,13 +274,8 @@ public:
      *  private layout state. */
     juce::Rectangle<int> getHeaderBoundsForTest() const { return topBar_.getBounds(); }
 
-    /** Simulates hovering the pin (true) / close (false) icon and returns whatever tooltip that
-     *  hover would show — exercises the SAME mouseMove()-driven tooltip wiring a real hover uses
-     *  (see TopBar::simulateHoverForTest), not a hard-coded string. */
-    juce::String simulateHeaderHoverForTest(bool overPin) {
-        topBar_.simulateHoverForTest(overPin);
-        return topBar_.getTooltip();
-    }
+    /** The tooltip hovering the pin (true) / close (false) icon shows. */
+    juce::String simulateHeaderHoverForTest(bool overPin) { return topBar_.getIconTooltip(overPin); }
 
     /** Simulates a real drag gesture landing on the header bar (down at its centre, then a drag by
      *  `delta`) — exercises the actual juce::ComponentDragger wiring end to end. Only moves this
@@ -282,32 +290,50 @@ private:
     // out first in resized(), so it can never be clipped or scrolled away regardless of content
     // length (see ModuleLibraryComponent::defaultFloatingPosition for the OTHER half of "the header
     // must always be reachable": keeping the whole popup on screen in the first place). ----------
-    class TopBar
-        : public juce::Component
-        , public juce::SettableTooltipClient {
+    class TopBar : public juce::Component {
     public:
         TopBar(std::function<void()> onPin, std::function<void()> onClose)
-            : onPin_(std::move(onPin))
-            , onClose_(std::move(onClose)) {}
+            : pinButton_("Pin help", synth::theme::Glyph::Pin, synth::ui::IconButton::Style::Round)
+            , closeButton_("Close help", synth::theme::Glyph::Close, synth::ui::IconButton::Style::Round)
+            , onPin_(std::move(onPin))
+            , onClose_(std::move(onClose)) {
+            // The pin and close icons are real buttons, so Tab reaches them and Space/Return press them.
+            pinButton_.setGlyphWhenOn(synth::theme::Glyph::PinOn);
+            pinButton_.setTitle("Pin help");
+            pinButton_.setTooltip("Pin - keep open while you work");
+            pinButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+            closeButton_.setTitle("Close help");
+            closeButton_.setTooltip("Close (Esc)");
+            closeButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+            pinButton_.setToggleable(true);
+            pinButton_.onClick = [this] { triggerPinForTest(); };
+            closeButton_.onClick = [this] { triggerCloseForTest(); };
+            addAndMakeVisible(pinButton_);
+            addAndMakeVisible(closeButton_);
+        }
 
         void setPinned(bool pinned) {
-            if (pinned_ == pinned)
-                return;
+            pinButton_.setToggleState(pinned, juce::dontSendNotification);
+            pinButton_.setTitle(pinned ? "Unpin help" : "Pin help");
             pinned_ = pinned;
             repaint();
         }
         bool isPinned() const noexcept { return pinned_; }
         void setDraggable(bool draggable) noexcept { draggable_ = draggable; }
 
-        void applyThemeColours(juce::Colour text, juce::Colour accent) {
+        void applyThemeColours(juce::Colour text) {
             textColour_ = text;
-            accentColour_ = accent;
             repaint();
         }
 
         juce::Rectangle<int> getPinBounds() const { return {4, (getHeight() - kIconSize) / 2, kIconSize, kIconSize}; }
         juce::Rectangle<int> getCloseBounds() const {
             return {getWidth() - 4 - kIconSize, (getHeight() - kIconSize) / 2, kIconSize, kIconSize};
+        }
+
+        void resized() override {
+            pinButton_.setBounds(getPinBounds());
+            closeButton_.setBounds(getCloseBounds());
         }
 
         void paint(juce::Graphics& g) override {
@@ -321,50 +347,6 @@ private:
             // is already anchored on that button, and a floating panel reads more like a panel
             // with a short, plain title.
             g.drawText("Help", titleLeft, 0, titleWidth, getHeight(), juce::Justification::centredLeft);
-
-            // Hover highlight — same "accent fill behind the glyph" treatment
-            // ModuleLibraryComponent's own "?" button uses for its hover state, so the two read as
-            // one visual language.
-            if (hoveredPin_) {
-                g.setColour(accentColour_.withAlpha(0.18f));
-                g.fillEllipse(pinArea.toFloat());
-            }
-            if (hoveredClose_) {
-                g.setColour(accentColour_.withAlpha(0.18f));
-                g.fillEllipse(closeArea.toFloat());
-            }
-
-            drawPinGlyph(g, pinArea.toFloat(), (pinned_ || hoveredPin_) ? accentColour_ : textColour_, pinned_);
-            drawCloseGlyph(g, closeArea.toFloat(), hoveredClose_ ? accentColour_ : textColour_);
-        }
-
-        void mouseMove(const juce::MouseEvent& e) override {
-            const auto pos = e.getPosition();
-            const bool overPin = getPinBounds().contains(pos);
-            const bool overClose = getCloseBounds().contains(pos);
-            if (overPin == hoveredPin_ && overClose == hoveredClose_)
-                return;
-            hoveredPin_ = overPin;
-            hoveredClose_ = overClose;
-            if (hoveredPin_)
-                setTooltip("Pin - keep open while you work");
-            else if (hoveredClose_)
-                setTooltip("Close");
-            else
-                setTooltip({});
-            setMouseCursor(overPin || overClose ? juce::MouseCursor::PointingHandCursor
-                                                : juce::MouseCursor::NormalCursor);
-            repaint();
-        }
-
-        void mouseExit(const juce::MouseEvent&) override {
-            if (!hoveredPin_ && !hoveredClose_)
-                return;
-            hoveredPin_ = false;
-            hoveredClose_ = false;
-            setTooltip({});
-            setMouseCursor(juce::MouseCursor::NormalCursor);
-            repaint();
         }
 
         void mouseDown(const juce::MouseEvent& e) override {
@@ -377,17 +359,6 @@ private:
                 dragger_.dragComponent(getParentComponent(), e, nullptr);
         }
 
-        void mouseUp(const juce::MouseEvent& e) override {
-            const auto pos = e.getPosition();
-            if (getPinBounds().contains(pos)) {
-                if (onPin_)
-                    onPin_();
-            } else if (getCloseBounds().contains(pos)) {
-                if (onClose_)
-                    onClose_();
-            }
-        }
-
         void triggerPinForTest() {
             if (onPin_)
                 onPin_();
@@ -397,19 +368,13 @@ private:
                 onClose_();
         }
 
-        /** Simulates hovering the pin (true) or close (false) icon — real mouse events never reach
-         *  a headless test's components via the OS-level hit-testing this bypasses (same idiom as
-         *  ModuleLibraryComponentTests.cpp's simulateMouseMoveAt). Drives the SAME mouseMove() path
-         *  a real hover would, so it exercises the tooltip/hover-paint wiring for real. */
-        void simulateHoverForTest(bool overPin) {
-            const auto pos = (overPin ? getPinBounds() : getCloseBounds()).getCentre().toFloat();
-            mouseMove(makeHoverEvent(*this, pos));
-        }
+        /** The tooltip a hover over the pin (true) or close (false) icon shows. */
+        juce::String getIconTooltip(bool pin) { return pin ? pinButton_.getTooltip() : closeButton_.getTooltip(); }
 
-        /** Simulates a real drag gesture landing on this header — down at the header's centre,
-         *  then a drag to centre + delta — exercising the ACTUAL juce::ComponentDragger wiring
-         *  (mouseDown()/mouseDrag() above), not a stand-in. Only takes effect once setDraggable()
-         *  has been armed, exactly like a real gesture would gate on it. */
+        /** Simulates a real drag gesture landing on this header — down at its centre, then a drag to
+         *  centre + delta — exercising the ACTUAL juce::ComponentDragger wiring (mouseDown()/
+         *  mouseDrag() above), not a stand-in. Only takes effect once setDraggable() has been armed,
+         *  exactly like a real gesture would gate on it. */
         void simulateDragForTest(juce::Point<int> delta) {
             const auto downPos = getLocalBounds().getCentre().toFloat();
             const auto dragPos = downPos + delta.toFloat();
@@ -418,14 +383,6 @@ private:
         }
 
     private:
-        // No mouse button down — the natural state for a hover/move event. mouseMove() only reads
-        // the position, but a real hover never carries a button, so neither should this.
-        static juce::MouseEvent makeHoverEvent(TopBar& self, juce::Point<float> pos) {
-            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 1.0f,
-                                    0.0f, 0.0f, 0.0f, 0.0f, &self, &self, juce::Time::getCurrentTime(), pos,
-                                    juce::Time::getCurrentTime(), 0, false);
-        }
-
         // Left button down — required for juce::ComponentDragger, which asserts
         // e.mods.isAnyMouseButtonDown() in both startDraggingComponent() and dragComponent().
         // `wasDragged` only affects other JUCE bookkeeping (e.g. e.mouseWasDraggedSinceMouseDown()),
@@ -440,84 +397,53 @@ private:
                                     juce::Time::getCurrentTime(), 1, wasDragged);
         }
 
-        static void drawPinGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, bool pinned) {
-            const float headR = area.getWidth() * 0.22f;
-            const auto centre = area.getCentre();
-            juce::Path p;
-            p.addEllipse(centre.x - headR, area.getY() + headR * 0.4f, headR * 2.0f, headR * 2.0f);
-            p.addTriangle(centre.x - headR * 0.7f, area.getY() + headR * 1.8f, centre.x + headR * 0.7f,
-                          area.getY() + headR * 1.8f, centre.x, area.getBottom());
-            if (pinned)
-                p.applyTransform(
-                    juce::AffineTransform::rotation(juce::MathConstants<float>::pi * 0.25f, centre.x, centre.y));
-            g.setColour(colour);
-            if (pinned)
-                g.fillPath(p);
-            else
-                g.strokePath(p, juce::PathStrokeType(1.4f));
-        }
-
-        static void drawCloseGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour) {
-            auto b = area.reduced(area.getWidth() * 0.22f);
-            g.setColour(colour);
-            g.drawLine({b.getTopLeft(), b.getBottomRight()}, 1.6f);
-            g.drawLine({b.getTopRight(), b.getBottomLeft()}, 1.6f);
-        }
-
         static constexpr int kIconSize = 16;
         bool pinned_ = false;
         bool draggable_ = false;
-        bool hoveredPin_ = false;
-        bool hoveredClose_ = false;
         juce::Colour textColour_ = juce::Colours::white;
-        juce::Colour accentColour_ = juce::Colours::lightblue;
+        synth::ui::IconButton pinButton_;
+        synth::ui::IconButton closeButton_;
         std::function<void()> onPin_;
         std::function<void()> onClose_;
         juce::ComponentDragger dragger_;
     };
 
     // ---- Section header row: chevron + title; clicking anywhere on it toggles the section. -----
-    class HeaderRow : public juce::Component {
+    class HeaderRow : public juce::Button {
     public:
         HeaderRow(juce::String title, std::function<void()> onToggle)
-            : title_(std::move(title))
-            , onToggle_(std::move(onToggle)) {}
+            : juce::Button(title)
+            , title_(std::move(title)) {
+            setToggleable(true);
+            setToggleState(true, juce::dontSendNotification);
+            setTooltip("Show or hide this section");
+            onClick = std::move(onToggle);
+        }
 
         void setExpandedForPaint(bool expanded) {
             if (expanded_ == expanded)
                 return;
             expanded_ = expanded;
+            setToggleState(expanded, juce::dontSendNotification);
             repaint();
-        }
-
-        void mouseUp(const juce::MouseEvent& e) override {
-            if (onToggle_ && getLocalBounds().contains(e.getPosition()))
-                onToggle_();
         }
 
         /** Mirrors MidiDestinationPicker::Row::toggleForTest — a faithful, synchronous simulation
          *  of a real click landing anywhere on the row. */
         void toggleForTest() {
-            if (onToggle_)
-                onToggle_();
+            if (onClick)
+                onClick();
         }
 
-        void paint(juce::Graphics& g) override {
-            // Chevron drawn as a rotated triangle path — the same geometry
-            // ModuleLibraryComponent::drawChevron uses, duplicated here in miniature rather than
-            // shared: pulling that header in here would invert the ownership direction between
-            // the sidebar and its popup.
-            juce::Path p;
+        void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override {
             const juce::Rectangle<float> chevronArea(4.0f, (float)getHeight() * 0.5f - 4.0f, 8.0f, 8.0f);
-            p.addTriangle(chevronArea.getX(), chevronArea.getY(), chevronArea.getRight(), chevronArea.getY(),
-                          chevronArea.getCentreX(), chevronArea.getBottom());
-            p.applyTransform(juce::AffineTransform::rotation(expanded_ ? 0.0f : -juce::MathConstants<float>::halfPi,
-                                                             chevronArea.getCentreX(), chevronArea.getCentreY()));
-            g.setColour(textColour_);
-            g.fillPath(p);
+            synth::theme::paintDisclosureChevron(g, chevronArea, expanded_ ? 1.0f : 0.0f, synth::theme::themeOf(*this),
+                                                 highlighted);
 
+            g.setColour(textColour_);
             g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
             g.drawText(title_, 20, 0, getWidth() - 24, getHeight(), juce::Justification::centredLeft);
+            synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 4.0f);
         }
 
         void applyThemeColours(juce::Colour text) {
@@ -529,7 +455,6 @@ private:
         juce::String title_;
         bool expanded_ = true;
         juce::Colour textColour_ = juce::Colours::white;
-        std::function<void()> onToggle_;
     };
 
     // ---- Body row: one bullet/step line, word-wrapped via juce::TextLayout. --------------------
@@ -582,6 +507,10 @@ private:
         bool expanded = true; // open by default — a first-time user should not need to click first
         std::unique_ptr<HeaderRow> header;
         std::vector<std::unique_ptr<TextRow>> body;
+        /// Holds the body rows: fades with the section and is as tall as its rows times the fade's progress, so
+        /// the sections below slide (docs/layout/animation.md#fading-things-in-and-out).
+        std::unique_ptr<juce::Component> holder;
+        std::unique_ptr<synth::ui::FadeVisibility> fade;
     };
 
     void addSection(const juce::String& title, const juce::StringArray& lines) {
@@ -591,11 +520,17 @@ private:
         const int index = (int)sections_.size();
         section.header = std::make_unique<HeaderRow>(title, [this, index] { toggleSection(index); });
         column_.addAndMakeVisible(*section.header);
+        section.holder = std::make_unique<juce::Component>();
+        section.holder->setInterceptsMouseClicks(false, true);
+        column_.addAndMakeVisible(*section.holder);
         for (const auto& line : lines) {
             auto row = std::make_unique<TextRow>(line);
-            column_.addAndMakeVisible(*row);
+            section.holder->addAndMakeVisible(*row);
             section.body.push_back(std::move(row));
         }
+        section.fade =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{section.holder.get()});
+        section.fade->onFrame = [this] { refit(); };
         sections_.push_back(std::move(section));
     }
 
@@ -607,7 +542,7 @@ private:
         s.body.clear(); // each TextRow's destructor detaches it from column_ — see juce::Component
         for (const auto& line : newLines) {
             auto row = std::make_unique<TextRow>(line);
-            column_.addAndMakeVisible(*row);
+            s.holder->addAndMakeVisible(*row);
             s.body.push_back(std::move(row));
         }
         applyThemeColours(); // re-pushes colours onto the fresh rows and re-lays-out
@@ -618,25 +553,36 @@ private:
         auto& section = sections_[(size_t)index];
         section.expanded = !section.expanded;
         section.header->setExpandedForPaint(section.expanded);
+        // The body fades and its height follows the fade, frame by frame (refit); off screen it lands at once.
+        section.fade->setShown(section.expanded);
+        refit();
+    }
+
+    // Re-lays the column out and re-fits the outer popup to the now shorter/taller content — a manually-hosted
+    // juce::CallOutBox tracks its content component's size via childBoundsChanged(), so this
+    // is what makes collapsing a section actually shrink the popup rather than leaving dead
+    // space (mirrors MidiDestinationPicker::refreshRows()); harmless no-op while floating.
+    void refit() {
         layoutColumn();
-        // Re-fits the outer popup to the now shorter/taller content — a manually-hosted
-        // juce::CallOutBox tracks its content component's size via childBoundsChanged(), so this
-        // is what makes collapsing a section actually shrink the popup rather than leaving dead
-        // space (mirrors MidiDestinationPicker::refreshRows()); harmless no-op while floating.
         setSize(getWidth(), preferredHeight());
+    }
+
+    static int bodyHeight(const SectionRow& section) {
+        int natural = 0;
+        for (auto& row : section.body)
+            natural += row->getPreferredHeight();
+        return juce::roundToInt((float)natural * section.fade->progress());
     }
 
     void applyThemeColours() {
         juce::Colour text = juce::Colours::white;
         juce::Colour muted = juce::Colours::lightgrey;
-        juce::Colour accent = juce::Colours::lightblue;
         if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
             const auto& c = lf->getTheme().colors;
             text = c.textPrimary;
             muted = c.textMuted;
-            accent = c.accent;
         }
-        topBar_.applyThemeColours(text, accent);
+        topBar_.applyThemeColours(text);
         for (auto& section : sections_) {
             section.header->applyThemeColours(text);
             for (auto& row : section.body)
@@ -657,15 +603,15 @@ private:
         for (auto& section : sections_) {
             section.header->setBounds(0, y, width, kHeaderHeight);
             y += kHeaderHeight;
+            int rowY = 0;
             for (auto& row : section.body) {
                 row->layoutForWidth(width);
-                row->setVisible(section.expanded);
-                if (section.expanded) {
-                    row->setBounds(0, y, width, row->getPreferredHeight());
-                    y += row->getPreferredHeight();
-                }
+                row->setBounds(0, rowY, width, row->getPreferredHeight());
+                rowY += row->getPreferredHeight();
             }
-            y += kSectionGap;
+            const int height = bodyHeight(section);
+            section.holder->setBounds(0, y, width, height);
+            y += height + kSectionGap;
         }
         column_.setSize(width, juce::jmax(y, 1));
     }
@@ -673,11 +619,7 @@ private:
     int preferredHeight() const {
         int rowsHeight = 0;
         for (auto& section : sections_) {
-            rowsHeight += kHeaderHeight;
-            if (section.expanded)
-                for (auto& row : section.body)
-                    rowsHeight += row->getPreferredHeight();
-            rowsHeight += kSectionGap;
+            rowsHeight += kHeaderHeight + bodyHeight(section) + kSectionGap;
         }
         const int content = kOuterPadding * 2 + kTopBarHeight + 4 + rowsHeight;
         return juce::jlimit(kTopBarHeight + kHeaderHeight + kOuterPadding * 2, kMaxHeight, content);
@@ -693,6 +635,7 @@ private:
 
     TopBar topBar_;
     juce::Viewport viewport_;
+    synth::ui::ScrollIntoViewOnFocus followFocus_{viewport_};
     juce::Component column_;
     std::vector<SectionRow> sections_;
 

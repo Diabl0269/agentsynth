@@ -1,9 +1,10 @@
 // ParametricEQTestHelpers.h
-// Shared fixtures for the Parametric EQ test units: parameter lookup, band setup, sine
-// measurement and the analytic/digital response helpers.
+// Shared fixtures for the Parametric EQ test units: parameter lookup, band
+// setup, sine measurement and the analytic/digital response helpers.
 
 #pragma once
 
+#include "Modules/FX/ParametricEQ/ParametricEQFilterDesign.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include <array>
 #include <cmath>
@@ -17,7 +18,8 @@ using BandType = ParametricEQModule::BandType;
 
 constexpr double kSampleRate = 48000.0;
 constexpr int kBlockSize = 512;
-constexpr int kNumBands = ParametricEQModule::kNumBands;
+constexpr int kMaxBands = ParametricEQModule::kMaxBands;
+constexpr int kOriginalBands = ParametricEQModule::kOriginalBands;
 
 inline juce::AudioParameterFloat* floatParamById(ParametricEQModule& eq, const juce::String& id) {
     for (auto* p : eq.getParameters())
@@ -43,7 +45,20 @@ inline void setFloatParam(ParametricEQModule& eq, const juce::String& id, float 
     p->setValueNotifyingHost(p->convertTo0to1(value));
 }
 
-/** Turns a band on and parks it at the given shape, using the module's own setters. */
+/** Turns a band on and parks it at the given shape, using the module's own
+ * setters. */
+inline void enableShapedBand(ParametricEQModule& eq, int band, BandType type, float freqHz, float gainDb, float q,
+                             int slopeDbPerOct) {
+    eq.setBandType(band, type);
+    eq.setBandSlope(band, slopeDbPerOct);
+    eq.setBandFreq(band, freqHz);
+    eq.setBandGain(band, gainDb);
+    eq.setBandQ(band, q);
+    eq.setBandEnabled(band, true);
+}
+
+/** Turns a band on and parks it at the given shape, using the module's own
+ * setters. */
 inline void enableBand(ParametricEQModule& eq, int band, float freqHz, float gainDb,
                        float q = ParametricEQModule::kDefaultQ) {
     eq.setBandFreq(band, freqHz);
@@ -56,14 +71,16 @@ constexpr float kSineAmplitude = 0.5f;
 // RMS of a kSineAmplitude sine: 0.5 / sqrt(2).
 constexpr float kFlatRMS = 0.35355339f;
 
-// Warm-up blocks (filter transient + 20 ms parameter smoothing) then the measurement window.
-// 8 x 512 = 4096 samples = 85 ms at 48 kHz — enough whole cycles that even a 50 Hz tone's RMS
-// is within ~0.1 dB of the ideal, so phase shift through the filter can't skew the comparison.
+// Warm-up blocks (filter transient + 20 ms parameter smoothing) then the
+// measurement window. 8 x 512 = 4096 samples = 85 ms at 48 kHz — enough whole
+// cycles that even a 50 Hz tone's RMS is within ~0.1 dB of the ideal, so phase
+// shift through the filter can't skew the comparison.
 constexpr int kWarmupBlocks = 12;
 constexpr int kMeasureBlocks = 8;
 
-// Fills `buffer` (channels 0..min(2,numCh)-1) with a sine at `freq`, continuing the phase from
-// absolute sample index `startSample` so successive blocks form one unbroken tone.
+// Fills `buffer` (channels 0..min(2,numCh)-1) with a sine at `freq`, continuing
+// the phase from absolute sample index `startSample` so successive blocks form
+// one unbroken tone.
 inline void fillSine(juce::AudioBuffer<float>& buffer, float freq, double sampleRate, int startSample = 0,
                      float amplitude = kSineAmplitude) {
     const int numSamples = buffer.getNumSamples();
@@ -76,9 +93,10 @@ inline void fillSine(juce::AudioBuffer<float>& buffer, float freq, double sample
     }
 }
 
-/** Drives `eq` with a continuous sine at `freq` and returns the output RMS of channel 0 over the
- *  measurement window. `prepBlock`, if given, runs after the sine is written and before
- *  processBlock, so a test can stamp CV values into channels 2-5.
+/** Drives `eq` with a continuous sine at `freq` and returns the output RMS of
+ * channel 0 over the measurement window. `prepBlock`, if given, runs after the
+ * sine is written and before processBlock, so a test can stamp CV values into
+ * channels 2-5.
  */
 inline float measureRMS(ParametricEQModule& eq, float freq, int numChannels = 6,
                         const std::function<void(juce::AudioBuffer<float>&)>& prepBlock = {}) {
@@ -107,16 +125,17 @@ inline float measureRMS(ParametricEQModule& eq, float freq, int numChannels = 6,
     return static_cast<float>(std::sqrt(sumSquares / measuredSamples));
 }
 
-/** Level change in dB that `eq` applies to a `freq` tone, relative to a flat (all-off) EQ. */
+/** Level change in dB that `eq` applies to a `freq` tone, relative to a flat
+ * (all-off) EQ. */
 inline float measureGainDb(ParametricEQModule& eq, float freq, int numChannels = 6,
                            const std::function<void(juce::AudioBuffer<float>&)>& prepBlock = {}) {
     const float rms = measureRMS(eq, freq, numChannels, prepBlock);
     return 20.0f * std::log10(std::max(rms, 1.0e-9f) / kFlatRMS);
 }
 
-// Magnitude in dB of the digital biquad that writeBiquad() produces, evaluated at `freq`.
-// Uses juce::dsp::IIR::Coefficients to do the z-plane evaluation so the check is independent
-// of our own maths.
+// Magnitude in dB of the digital biquad that writeBiquad() produces, evaluated
+// at `freq`. Uses juce::dsp::IIR::Coefficients to do the z-plane evaluation so
+// the check is independent of our own maths.
 inline float digitalMagnitudeDb(BandType type, float centreHz, float gainDb, float q, float freq) {
     float raw[5] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     ParametricEQModule::writeBiquad(type, centreHz, gainDb, q, kSampleRate, raw);
@@ -125,11 +144,25 @@ inline float digitalMagnitudeDb(BandType type, float centreHz, float gainDb, flo
     return 20.0f * std::log10(static_cast<float>(std::max(mag, 1.0e-12)));
 }
 
-/** An all-off snapshot with one band enabled at the given shape — for responseDb tests. */
-inline std::array<ParametricEQModule::BandSnapshot, kNumBands> oneBandSnapshot(int band, float freqHz, float gainDb,
-                                                                               float q) {
-    std::array<ParametricEQModule::BandSnapshot, kNumBands> bands{};
-    for (int b = 0; b < kNumBands; ++b) {
+// Magnitude in dB of every digital stage one band runs (its whole cut cascade),
+// evaluated by juce.
+inline float digitalCascadeDb(BandType type, int slopeDbPerOct, float centreHz, float gainDb, float q, float freq) {
+    synth::eq::BandStages stages{};
+    const int count = synth::eq::designStages(type, slopeDbPerOct, centreHz, gainDb, q, kSampleRate, stages);
+    double total = 0.0;
+    for (int s = 0; s < count; ++s) {
+        const auto& c = stages[(size_t)s];
+        juce::dsp::IIR::Coefficients<float> coefs(c[0], c[1], c[2], 1.0f, c[3], c[4]);
+        total += 20.0 * std::log10(std::max(coefs.getMagnitudeForFrequency(freq, kSampleRate), 1.0e-12));
+    }
+    return static_cast<float>(total);
+}
+
+/** An all-off snapshot with one band enabled at the given shape — for
+ * responseDb tests. */
+inline ParametricEQModule::BandSnapshots oneBandSnapshot(int band, float freqHz, float gainDb, float q) {
+    ParametricEQModule::BandSnapshots bands{};
+    for (int b = 0; b < kMaxBands; ++b) {
         bands[(size_t)b].type = ParametricEQModule::bandTypeFor(b);
         bands[(size_t)b].enabled = false;
         bands[(size_t)b].freqHz = ParametricEQModule::defaultFreqFor(b);

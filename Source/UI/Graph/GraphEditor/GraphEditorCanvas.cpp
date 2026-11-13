@@ -7,23 +7,73 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorCableCurveChips.h"
+#include "GraphEditorCableMenu.h"
 #include "GraphEditorInternal.h"
+#include "GraphEditorPaintMemo.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "CanvasAccessibilityClip.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
+#include "Project/ViewDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/ControlStyle/ControlStyleCards.h"
+#include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace detail;
 
-void GraphEditor::detachAllModuleComponents() {
-    // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
-    // whatever mutation the caller is about to run (see the member's own doc comment).
+namespace {
+
+// A card's body is built once; when the layout it was built from has changed since (a layout edit,
+// its undo or redo, or its type's stored default), the card has to be rebuilt.
+bool cardLayoutIsStale(const ModuleComponent& comp, const juce::AudioProcessorGraph::Node& node) {
+    const auto* body = comp.getCardBody();
+    return body != nullptr && body->isStaleFor(node);
+}
+
+// Swaps `stale` for a fresh card at the same index (so canvas order is kept) and deletes it. The old
+// card lets go of the processor before the new one binds to it. Making room is the caller's: a
+// restore puts every position back from its snapshot, and the quick path makes room inside its own
+// undo step (CardLayoutQuickEdit.cpp).
+ModuleComponent* rebuildCard(juce::OwnedArray<ModuleComponent>& modules, juce::Component& content,
+                             ModuleComponent& stale, const std::function<ModuleComponent*()>& build) {
+    stale.detachFromProcessor();
+    content.removeChildComponent(&stale);
+    auto* card = build();
+    modules.set(modules.indexOf(&stale), card, /*deleteOldElement*/ true);
+    content.addAndMakeVisible(card);
+    return card;
+}
+
+} // namespace
+
+// Ends the mod dot's "pick on canvas" mode (it holds no node pointer, but it highlights cards that are going away)
+// and then runs the owner's unbind hook.
+void GraphEditor::fireBeforeDetachAllModuleComponents() {
+    modDot_->endCanvasPick();
     if (onBeforeDetachAllModuleComponents)
         onBeforeDetachAllModuleComponents();
+}
+
+void GraphEditor::detachAllModuleComponents() {
+    // An undo or redo that frees a node tears every card down here: picture them first, so the ones it removes
+    // shrink away (CardGlideAnimator::noteExitsBeforeTeardown). A no-op outside a restore.
+    cardGlide_.noteExitsBeforeTeardown();
+    getLoadReveal().finish(); // every card it scales is about to go
+    // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
+    // whatever mutation the caller is about to run (see the member's own doc comment).
+    fireBeforeDetachAllModuleComponents();
     // A teardown can't be allowed to leave the settle animator holding a SafePointer to a card
     // set that no longer applies. Harmless either way (SafePointer guards it), but keeps the
     // zoomGestureActive state machine honest.
@@ -33,6 +83,11 @@ void GraphEditor::detachAllModuleComponents() {
     // to reset it (e.g. an AI patch apply landing mid-gesture). Cancel
     // unconditionally: harmless when nothing was active, correct when something was.
     cancelLiveDragGestures();
+    // The reload's updateComponents() lands the canvas frame at its new size with no glide.
+    canvasFrame_.requestSnapOnNextUpdate();
+    // Every graph-replacing path (project load, new patch, preset, AI apply, undo fallback) comes through here: the
+    // arrangement the make-room records describe is gone.
+    macroController_.clearModuleDisplacements();
     for (auto* comp : content.getModules())
         comp->detachFromProcessor();
     content.getModules().clear(); // Remove after detach so ~ModuleComponent doesn't double-detach freed params
@@ -40,29 +95,80 @@ void GraphEditor::detachAllModuleComponents() {
     modMatrix.clearRows();
 }
 
+// detachAllModuleComponents for a restore that frees only `doomed` (an undo of a duplicate or an add, a redo of a
+// delete): the same unbinding, but only those nodes' cards are pictured, detached and dropped. Every other card stays
+// bound to a processor that survives, so updateComponents() only has new nodes left to build cards for; rebuilding
+// every card on such an undo made it grow with the project. The owner's UI is told which nodes go when it installed
+// onBeforeDetachModuleComponentsFor (the mixer then unbinds and rebuilds only the columns bound to them); otherwise it
+// unbinds wholesale through onBeforeDetachAllModuleComponents. The mod matrix rows are unbound wholesale: they are
+// rebuilt from the graph after every restore anyway.
+void GraphEditor::detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed) {
+    std::set<juce::uint32> gone;
+    for (auto id : doomed)
+        gone.insert(id.uid);
+    auto& modules = content.getModules();
+    for (auto* comp : modules) // pictured while still bound; a no-op outside a restore's glide Scope
+        if (gone.count(comp->getNodeId().uid) != 0)
+            cardGlide_.noteExit(comp, comp->getNodeId().uid);
+    if (onBeforeDetachModuleComponentsFor) {
+        modDot_->endCanvasPick();
+        onBeforeDetachModuleComponentsFor(doomed);
+    } else {
+        fireBeforeDetachAllModuleComponents();
+    }
+    for (int i = modules.size(); --i >= 0;) {
+        auto* comp = modules.getUnchecked(i);
+        const auto id = comp->getNodeId();
+        if (gone.count(id.uid) == 0)
+            continue;
+        if (dragDropController_.isDragPreviewActive() && id == dragDropController_.getDragPreviewSelfId())
+            cancelLiveDragGestures();
+        macroController_.forgetModuleDisplacements(id);
+        comp->detachFromProcessor();
+        content.removeChildComponent(comp);
+        modules.remove(i);
+    }
+    modMatrix.detachAllRows();
+    modMatrix.clearRows();
+}
+
 void GraphEditor::updateComponents() {
+    // Not re-entrant: a card constructed below is not in `modules` until this pass adds it, so a nested pass
+    // would not see it and would build a second card for the same node, and so on without end. Nothing may
+    // call back into here while cards are being built.
+    if (updatingComponents) {
+        jassertfalse;
+        return;
+    }
+    // A cable edit can change which macro ports a routing is looked through without changing the routing itself,
+    // so the next tick recounts every knob's sources (ModDotController::recountIfRoutingsChanged).
+    modDot_->forgetRoutings();
+    // Every structural edit (undo and redo included) passes here: a plugin parameter whose last cable went frees its
+    // modulation slot.
+    audioEngine.releaseUnconnectedHostedModSlots();
+    const juce::ScopedValueSetter<bool> reentrancyGuard(updatingComponents, true);
+    ++graph_editor_paint::workCounters().componentUpdates;
+
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
 
-    // Nodes appear/disappear here, so the cable memo can go stale from this call alone (a repaint
-    // is not guaranteed to follow immediately).
+    // Nodes appear/disappear here, so the cable memo and the measured macro borders can go stale from this call alone
+    // (a repaint is not guaranteed to follow immediately).
     cablesCacheValid = false;
+    canvasMemo_->layoutChanged();
 
     // Any reconcile can follow a node removal (delete, undo/redo, preset load). Drop selected ids
     // whose nodes are gone BEFORE anything reads the selection again.
     pruneSelection();
 
-    // 1. Remove components for nodes that no longer exist
+    // 1. Remove components for nodes that no longer exist. Both steps look cards and processors up in sets built
+    // once: a scan of the other list per card made every reconcile (each edit, each undo) cards x nodes.
+    std::unordered_set<const juce::AudioProcessor*> liveProcessors;
+    for (auto* node : graph.getNodes())
+        liveProcessors.insert(node->getProcessor());
     for (int i = modules.size(); --i >= 0;) {
         auto* comp = modules.getUnchecked(i);
-        bool stillExists = false;
-        for (auto* node : graph.getNodes()) {
-            if (node->getProcessor() == comp->getModule()) {
-                stillExists = true;
-                break;
-            }
-        }
-        if (!stillExists) {
+        if (liveProcessors.count(comp->getModule()) == 0) {
             // The node this component tracked just vanished (undo, a doc removal) — if it was the
             // one live-dragging (dragPreviewSelfId), no mouseUp is ever coming to reset the flags it
             // armed; cancel now, before the component itself is destroyed below. A
@@ -72,12 +178,16 @@ void GraphEditor::updateComponents() {
             if (dragDropController_.isDragPreviewActive() &&
                 comp->getNodeId() == dragDropController_.getDragPreviewSelfId())
                 cancelLiveDragGestures();
+            macroController_.forgetModuleDisplacements(comp->getNodeId());
             content.removeChildComponent(comp);
             modules.remove(i);
         }
     }
 
     // 2. Add components for new nodes
+    std::unordered_map<const juce::AudioProcessor*, ModuleComponent*> cardOf;
+    for (auto* comp : modules)
+        cardOf.emplace(comp->getModule(), comp);
     int moduleIndex = 0;
     for (auto* node : graph.getNodes()) {
         auto* processor = node->getProcessor();
@@ -87,21 +197,25 @@ void GraphEditor::updateComponents() {
         if (dynamic_cast<AttenuverterModule*>(processor) != nullptr)
             continue;
 
-        // Check if we already have a component for this module
-        ModuleComponent* existingComp = nullptr;
-        for (auto* comp : modules) {
-            if (comp->getModule() == processor) {
-                existingComp = comp;
-                break;
-            }
-        }
+        const auto known = cardOf.find(processor);
+        ModuleComponent* existingComp = known != cardOf.end() ? known->second : nullptr;
 
         if (existingComp == nullptr) {
+            ++graph_editor_paint::workCounters().cardsBuilt;
             auto* newComp = modules.add(new ModuleComponent(processor, node->nodeID, *this, undoManager));
             content.addAndMakeVisible(newComp);
             existingComp = newComp;
+        } else if (cardLayoutIsStale(*existingComp, *node)) {
+            if (dragDropController_.isDragPreviewActive() &&
+                existingComp->getNodeId() == dragDropController_.getDragPreviewSelfId())
+                cancelLiveDragGestures();
+            ++graph_editor_paint::workCounters().cardsBuilt;
+            existingComp = rebuildCard(modules, content, *existingComp, [&] {
+                return new ModuleComponent(processor, node->nodeID, *this, undoManager);
+            });
         }
 
+        synth::refreshControlStyle(*this, *existingComp);
         // Always sync position from properties OR deterministic fallback
         auto x = node->properties.getWithDefault("x", -1);
         auto y = node->properties.getWithDefault("y", -1);
@@ -135,8 +249,10 @@ void GraphEditor::updateComponents() {
         }
         macros.retainOnly(aliveUuids);
     }
+    evictOutputDockFromMacros(); // a dock card is never a macro member (a saved project may hold one)
     syncMacroCards();
     macroController_.dockMacroPortWidgets();
+    reflowOutputDock(); // load, module add/remove, undo/redo: the dock always sits right of everything
 
     // Refresh mod matrix to pick up any new/removed attenuverter routings
     // Use callAsync to avoid re-entrancy during graph modification
@@ -144,12 +260,14 @@ void GraphEditor::updateComponents() {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
         if (auto* self = safeThis.getComponent())
-            self->modMatrix.updateRowsFromGraph();
+            self->modMatrix.updateRowsIfOpen();
     });
 
     // Let owners refresh anything that depends on which modules the patch now contains. Event-driven
     // on purpose: no timer and no per-tick repaint.
-    if (onGraphStructureChanged)
+    if (structureNotify_.first > 0)
+        structureNotify_.second = true; // fired once when the outermost hold ends
+    else if (onGraphStructureChanged)
         onGraphStructureChanged();
 
     // A card created mid-gesture (e.g. paste/duplicate while zooming) must join the freeze, or it
@@ -162,12 +280,17 @@ void GraphEditor::updateComponents() {
     // see it until the next frame.
     applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
+    refreshCanvasFrame(CanvasFrame::Mode::Animate);
+    emptyCanvasHint.setShown(isCanvasEmpty(modules.size()));
     repaint();
 }
 
+// The colour outside the canvas frame; GraphContentComponent::paint draws the frame itself.
 void GraphEditor::paint(juce::Graphics& g) {
-    // GraphEditor itself can draw a background or overlay if needed
-    // But content handles it now.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
+    else
+        g.fillAll(juce::Colours::darkgrey);
 }
 
 // Draws the empty-canvas onboarding hint centred in the visible, untransformed viewport,
@@ -190,19 +313,20 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
     // Drawn here (OUTER, untransformed GraphEditor local coordinates) so it is ALWAYS
     // centred in the visible viewport regardless of pan/zoom on the inner canvas.
     // The inner GraphContentComponent runs in a transformed (pan+zoom) space over a
-    // ~10000x10000 virtual canvas — any rect drawn there would land off-screen once the
+    // virtual canvas (the canvas frame plus slack) — any rect drawn there would land off-screen once the
     // user pans or zooms. Drawing here, in getLocalBounds(), guarantees centre alignment.
     //
-    // Gate: only when canvas is empty. Show/hide is driven by the existing updateComponents()
-    // repaint path — no extra timer or per-tick repaint is added.
-    if (!GraphEditor::isCanvasEmpty(static_cast<int>(content.getModules().size())))
+    // Gate: it paints while the canvas is empty and while it fades out after the first module lands. updateComponents()
+    // starts the fade (160 ms in, 110 ms out); frames run only while it does, so nothing repaints at rest.
+    const float hintAmount = emptyCanvasHint.value();
+    if (hintAmount <= 0.0f)
         return;
 
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     // textMuted token at ~60% alpha — tasteful, non-distracting.
     const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
-    g.setColour(textMutedColour.withAlpha(0.6f));
+    g.setColour(textMutedColour.withAlpha(0.6f * hintAmount));
 
     // Use the theme h1 font (~18pt) for comfortable legibility; fall back to 16pt headless.
     juce::Font hintFont;
@@ -236,22 +360,7 @@ void GraphEditor::resized() {
                                                 : juce::Rectangle<int>(getWidth(), 0, 600, getHeight());
     }
 
-    // ---- Minimap -----------------
-    // Bottom-LEFT with a 12px margin — the mod-matrix panel occupies a 600px panel on the right.
-    // Auto-hide when the editor is too small to show it without swallowing the view, but never
-    // clobber the user's preference: `minimapVisible` still reflects what they asked for, and
-    // resized() just recomputes whether that preference currently fits.
-    {
-        constexpr int kMargin = 12;
-        // Absolute floors, not a fraction of the editor: a fraction-of-self test is always
-        // satisfied (w/4 * 2 <= w for any w), so it would never actually hide anything.
-        constexpr int kMinEditorW = 480, kMinEditorH = 360;
-        const int mmW = juce::jmin(220, getWidth() / 4);
-        const int mmH = juce::jmin(150, getHeight() / 4);
-        const bool fits = getWidth() >= kMinEditorW && getHeight() >= kMinEditorH;
-        minimap.setBounds(kMargin, getHeight() - mmH - kMargin, mmW, mmH);
-        minimap.setVisible(minimapVisible && fits);
-    }
+    layoutMinimap();
 
     updateTransform();
 }
@@ -290,13 +399,15 @@ void GraphEditor::toggleModMatrixVisibility() {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     modMatrixAnim.start(
         vblankUpdater, 220.0, synth::ui::easeOutCubic,
-        [safeThis, fromBounds, toBounds](float t) {
+        [safeThis, fromBounds](float t) {
             if (auto* self = safeThis.getComponent())
-                self->modMatrix.setBounds(synth::ui::AnimationDriver::lerpBounds(fromBounds, toBounds, t));
+                self->modMatrix.setBounds(
+                    synth::ui::AnimationDriver::lerpBounds(fromBounds, self->modMatrixTargetBounds, t));
         },
-        [safeThis, hidingAfterAnim, toBounds]() {
+        [safeThis, hidingAfterAnim]() {
             if (auto* self = safeThis.getComponent()) {
-                self->modMatrix.setBounds(toBounds);
+                // The target resized() kept current, so a canvas resize mid-slide lands where the canvas is now.
+                self->modMatrix.setBounds(self->modMatrixTargetBounds);
                 if (hidingAfterAnim)
                     self->modMatrix.setVisible(false);
             }
@@ -308,8 +419,14 @@ void GraphEditor::updateTransform() {
     t = t.scaled(zoomLevel, zoomLevel);
     t = t.translated(panOffset);
 
-    content.setBounds(0, 0, 10000, 10000);
+    const bool zoomChanged = content.getTransform().getScaleFactor() != t.getScaleFactor();
+    applyContentBounds();
     content.setTransform(t);
+    // A zoomed-out macro port's interior jack slides onto its boundary jack (getPortCenter reads the zoom), so the
+    // memoized cable endpoints go stale with the zoom itself; the strips/widgets repaint live. A pan moves no cable
+    // end: rebuilding every cable per pan frame made a pan cost in proportion to the patch.
+    if (zoomChanged && !getMacros().empty())
+        cablesCacheValid = false;
     repaint();
 
     // Keep the minimap tracking pan/zoom immediately rather than waiting up to 33ms for the next
@@ -329,9 +446,10 @@ void GraphEditor::updateTransform() {
 // [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
 // screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
 void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
+    wheelPanTween_.stop();
     float oldZoom = zoomLevel;
     zoomLevel += wheelDelta * 0.1f * zoomLevel;
-    zoomLevel = juce::jlimit(0.1f, 2.0f, zoomLevel);
+    zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, zoomLevel);
 
     if (oldZoom != zoomLevel) {
         // Transform the anchor position to get the graph point before scaling
@@ -356,12 +474,37 @@ void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor)
         beginOrRefreshZoomGesture();
 }
 
+// The canvas view a project saves. Applying one is a view change only: it is not an edit, so it records no undo
+// step and does not mark the document unsaved (the same as any pan or zoom).
+synth::ViewDoc GraphEditor::getViewDoc() const {
+    synth::ViewDoc view;
+    view.zoom = zoomLevel;
+    view.panX = panOffset.x;
+    view.panY = panOffset.y;
+    return view;
+}
+
+void GraphEditor::applyViewDoc(const synth::ViewDoc& view) {
+    wheelPanTween_.stop();
+    const float oldZoom = zoomLevel;
+    zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, view.zoom);
+    panOffset = {view.panX, view.panY};
+    updateTransform();
+    // A changed scale re-rasters every card, exactly as a wheel tick does.
+    if (oldZoom != zoomLevel)
+        beginOrRefreshZoomGesture();
+}
+
 void GraphEditor::setModuleRasterFrozen(bool frozen) {
     for (auto* comp : content.getModules())
         if (comp != nullptr)
             comp->setRasterFrozen(frozen);
 }
 
+// While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick resamples
+// the cached images instead of re-rendering every panel + slider at a new scale. The gesture ends
+// kZoomSettleMs after the last zoom event and thaws with exactly one crisp re-render. Time-bounded
+// (docs/layout/animation.md#the-time-bounded-animation-rule).
 void GraphEditor::beginOrRefreshZoomGesture() {
     if (!zoomGestureActive) {
         zoomGestureActive = true;
@@ -387,10 +530,6 @@ void GraphEditor::endZoomGesture() {
     setModuleRasterFrozen(false);
 }
 
-void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
-    applyZoomAt(wheel.deltaY, e.position);
-}
-
 // The canvas rect currently visible in the editor — the inverse of the content transform
 // applied to getLocalBounds().
 juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
@@ -402,6 +541,7 @@ juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
 
 // Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged.
 void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
+    wheelPanTween_.stop();
     panOffset = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel;
     updateTransform();
 }
@@ -410,56 +550,6 @@ void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
 // range as wheel zoom, so the point under the centre stays put.
 void GraphEditor::zoomAroundCentre(float wheelDelta) {
     applyZoomAt(wheelDelta, getLocalBounds().getCentre().toFloat());
-}
-
-void GraphEditor::setMinimapVisible(bool shouldBeVisible) {
-    minimapVisible = shouldBeVisible;
-    // resized() recomputes the effective (preference && fits) visibility.
-    resized();
-    // Seed the full model on the way in: updateTransform() only pushes the viewport, so without
-    // this the map would show an empty canvas until the next 30 Hz tick.
-    if (minimap.isVisible())
-        minimap.setModel(buildMinimapModel());
-}
-
-void GraphEditor::toggleMinimapVisibility() { setMinimapVisible(!minimapVisible); }
-
-// Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
-synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
-    synth::ui::MinimapModel model;
-
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr || comp->getModule() == nullptr)
-            continue;
-
-        // Per-category theme colour, the same source buildVisibleCables()/colourForCable() use for
-        // "By source module" cable colouring — there is no cheap per-instance colour on
-        // ModuleComponent itself, but category IS available cheaply via ModuleBase::getModuleType().
-        auto category = synth::ui::ModuleCategory::Utility;
-        if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
-            category = synth::ui::categoryFor(mb->getModuleType());
-
-        synth::ui::MinimapModel::Node node;
-        node.bounds = comp->getBounds().toFloat();
-        node.colour = synth::ui::themeColourForCategory(colors, category);
-        node.selected = isNodeSelected(comp->getNodeId());
-        model.nodes.push_back(node);
-    }
-
-    for (const auto& cable : buildVisibleCables()) {
-        synth::ui::MinimapModel::Cable mc;
-        mc.p1 = cable.p1;
-        mc.p2 = cable.p2;
-        mc.colour = colourForCable(cable);
-        model.cables.push_back(mc);
-    }
-
-    model.viewport = getVisibleCanvasRect();
-    return model;
 }
 
 // Scroll + zoom the viewport so every module component is on-screen, clamped to the
@@ -506,9 +596,7 @@ void GraphEditor::fitViewToModules() {
         return; // not laid out yet; a later paint/resize will settle the view
 
     float scale = juce::jmin(view.getWidth() / box.getWidth(), view.getHeight() / box.getHeight());
-    const float kMinZoom = 0.1f; // matches the wheel-zoom clamp in contentWheelPositionChanged
-    const float kMaxZoom = 2.0f;
-    scale = juce::jlimit(kMinZoom, kMaxZoom, scale);
+    scale = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, scale);
     zoomLevel = scale;
     // Centre the (expanded) box within the viewport. screen = content * scale + panOffset.
     float targetCenterX = view.getX() + view.getWidth() * 0.5f;
@@ -565,12 +653,7 @@ GraphEditor::LocateMasterResult GraphEditor::locateMasterOrOutput() {
     // timeline binding chip, rather than duplicating it.
     selectModule(node->nodeID, /*additive=*/false);
 
-    for (auto* comp : content.getModules()) {
-        if (comp != nullptr && comp->getNodeId() == node->nodeID) {
-            centreViewOn(comp->getBounds().toFloat().getCentre());
-            break;
-        }
-    }
+    frameOutputDock(); // "Go to Output": the whole dock, not just the one selected card
 
     // The minimap highlight is free (buildMinimapModel() derives Node::selected from the selection
     // set above) — pushed immediately rather than waiting for the next 30 Hz tick, the same as
@@ -591,7 +674,7 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     const bool overChip = !macroController_.macroChipAt(localPos.roundToInt()).isEmpty();
     if (overChip != hoveringMacroChip) {
         hoveringMacroChip = overChip;
-        setMouseCursor(overChip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor(overChip ? synth::ui::dragGrabCursor() : juce::MouseCursor(juce::MouseCursor::NormalCursor));
     }
     if (overChip)
         return;
@@ -652,16 +735,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu()) {
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).toFloat();
         if (auto cable = getCableAt(canvasPos)) {
-            const auto captured = *cable;
-            juce::Component::SafePointer<GraphEditor> safeThis(this);
-
-            juce::PopupMenu m;
-            m.addSectionHeader(juce::String(synth::ui::cableSignalLabel(captured.signal)) + " cable");
-            m.addItem("Disconnect Cable", [safeThis, captured] {
-                if (safeThis != nullptr)
-                    safeThis->disconnectCable(captured);
-            });
-            m.showMenuAsync(juce::PopupMenu::Options());
+            synth::ui::showCableMenu(*this, *cable);
             return;
         }
 
@@ -684,7 +758,8 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             const auto priorSelection = getSelectedNodes();
             if (priorSelection.empty())
                 macroController_.selectMacro(hullMacroId, false);
-            buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
+            buildMacroMenu(hullMacroId, nullptr, &priorSelection)
+                .showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
             return;
         }
 
@@ -700,6 +775,23 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         pendingEmptyCanvasClick = false;
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
+
+        // The '+' / '-' at the foot of an open macro's port strips, checked first: '+' opens the same kind/shape
+        // menu the collapsed card's '+' does (through the canvas menu hook a test installs; null shows the real
+        // async menu), '-' deletes the bottom port on that side.
+        if (auto hit = macroController_.macroHullPortButtonAt(localPos.roundToInt(),
+                                                              content.getTransform().getScaleFactor())) {
+            if (hit->isAdd) {
+                auto menu = macroController_.buildAddPortMenu(hit->macroId, hit->isInput);
+                if (showCanvasContextMenuHook_)
+                    showCanvasContextMenuHook_(menu);
+                else
+                    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+            } else {
+                macroController_.deleteBottomMacroPort(hit->macroId, hit->isInput);
+            }
+            return;
+        }
 
         // Collapse button - checked BEFORE the chip below, carving its
         // hit zone out of that row explicitly, even though the two rectangles never actually
@@ -718,21 +810,30 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // before the attenuverter/empty-canvas-click logic below so the chip wins over whatever
         // would otherwise be under it (in practice, empty canvas above the hull).
         //
-        // Shift is excluded deliberately: it is the explicit marquee modifier, and a marquee that
-        // happens to start on a chip should still be a marquee. The chip is a small target, so
-        // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
-        // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
-        if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
-            macroId.isNotEmpty() && !e.mods.isShiftDown()) {
-            macroController_.selectMacro(macroId, false);
+        // Shift is excluded deliberately: it is the marquee modifier, and the chip is a small target, so letting it
+        // swallow Shift+drag would make marquees fail unpredictably near a hull's top edge.
+        // The chip's rigid-body drag start, shared with the hull-drag preference below so both
+        // gestures run the ONE beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag path.
+        const auto beginMacroBodyDrag = [this, &localPos](const juce::String& macroId) {
+            macroController_.selectMacroForDrag(macroId); // kept when it is selected with others: they all move
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
             beginSelectionDrag();
+            macroController_.beginMacroUnitDrag(macroId); // holds the parent's border still while it drags
             macroChipDragId = macroId;
             macroChipDragStartCanvasPos = localPos.roundToInt();
             pendingEmptyCanvasClick = false;
+            edgeScroll_->beginCanvasDrag(); // a lone member never arms the move, so nothing scrolls for it
+        };
+
+        if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
+            macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+            beginMacroBodyDrag(macroId);
             return;
         }
+
+        if (synth::ui::cable_curve_chips::press(*this, content, localPos.toFloat()))
+            return; // a curve chip is its own control: never the start of a knob drag
 
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {
@@ -742,6 +843,20 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         }
 
         draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
+
+        // Preference "moveMacroOnHullDrag" (off by default): an unmodified press on the empty space
+        // inside an expanded hull moves the macro like its name chip does. Checked after the chip and
+        // attenuverter so those keep winning; Shift stays the marquee. A macro with fewer than two
+        // members cannot arm a group drag, so it keeps panning rather than doing nothing.
+        if (moveMacroOnHullDragEnabled && !e.mods.isShiftDown()) {
+            const auto hullId = macroController_.macroHullAt(localPos.roundToInt());
+            const auto* hullMacro = hullId.isNotEmpty() ? getMacros().find(hullId) : nullptr;
+            // Counted transitively: a parent with one direct member and a nested child still moves.
+            if (hullMacro != nullptr && getMacros().descendantMembers(hullId).size() > 1) {
+                beginMacroBodyDrag(hullId);
+                return;
+            }
+        }
 
         // Shift starts a marquee; anything else keeps the historical drag-to-pan behaviour.
         // Cmd/Ctrl alongside Shift makes the marquee additive.
@@ -762,12 +877,15 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (macroChipDragId.isNotEmpty()) {
-        // The delta MUST be computed in CANVAS space (via content.getLocalPoint), not in
-        // GraphEditor-local space the way the pan code below does: `content` carries the zoom
-        // transform, so a raw e.getPosition() delta would make the macro drift at any zoom other
-        // than 1.0 (a delta of N screen pixels is N/zoom canvas pixels).
+        if (!isSelectionDragActive())
+            return; // nothing moves (a lone member never arms), or Esc cancelled it: the pointer no longer pans
+        // The delta MUST be in CANVAS space (content.getLocalPoint), not GraphEditor-local like the pan below:
+        // `content` carries the zoom, so a raw e.getPosition() delta would drift at any zoom other than 1.0.
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
-        dragSelectionBy(canvasPos - macroChipDragStartCanvasPos, nullptr);
+        macroController_.updateMacroNestCandidate(macroChipDragId, canvasPos); // the open macro under the pointer
+        macroController_.updateGroupDropCandidate(canvasPos); // or a group's target; aimed before the ghost moves
+        dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
+        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the hull
         repaintCanvas();
         return;
     }
@@ -796,18 +914,27 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
 
     if (macroChipDragId.isNotEmpty()) {
         const auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
-        // isSelectionDragActive() guards a single-member macro (reachable - see
-        // MacroDelete.DeletingDownToOneMemberDoesNotDissolveButDeletingTheLastDoes): beginSelectionDrag
-        // requires >1 recorded member to arm, so a lone member never actually moves even if the
-        // mouse travelled, and finalizing would push a no-delta undo entry that visibly does nothing.
+        // isSelectionDragActive() guards a single-member macro: beginSelectionDrag needs >1 member to arm, so a lone
+        // member never moves, and finalizing would push a no-delta undo entry that visibly does nothing.
         const bool moved = isSelectionDragActive() && canvasPos != macroChipDragStartCanvasPos;
         if (moved) {
-            finalizeSelectionDrag(); // snaps + de-overlaps the group as one rigid body
+            // Graph AND macros in one step (the drop can shift a carried nested card's `bounds`, and nests the macro
+            // into an open one under the pointer); the graph "before" is the mouseDown capture.
+            const auto hullsBefore = snapshotPaintedHulls();
+            auto doFinalize = [this, id = macroChipDragId] {
+                finalizeSelectionDrag(); // snaps + de-overlaps as one rigid body
+                macroController_.moveDraggedMacroToCandidate(id);
+            };
             if (undoManager)
-                undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
+                undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doFinalize,
+                                                       undoManager->takeCapturedGraphBeforeState());
+            else
+                doFinalize();
+            glideHullsFrom(hullsBefore);
         } else {
-            cancelSelectionDrag();
+            cancelMacroCardDrag(macroChipDragId); // a click: selects just this macro
         }
+        macroController_.clearMacroNestCandidate();
         macroChipDragId.clear();
         repaintCanvas();
         return;
@@ -829,7 +956,10 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
             return; // right-click keeps the selection so the context menu can act on it
 
         const auto canvasPos = content.getLocalPoint(this, e.getPosition());
-        if (const auto hullMacroId = macroController_.macroHullAt(canvasPos); hullMacroId.isNotEmpty())
+        const auto hullMacroId = macroController_.macroHullAt(canvasPos);
+        // The hull is big and reads as empty canvas: a single click on an already-selected macro's
+        // hull clears. The second click of a double-click still selects (numClicks >= 2).
+        if (hullMacroId.isNotEmpty() && !(macroController_.isMacroSelected(hullMacroId) && e.getNumberOfClicks() < 2))
             macroController_.selectMacro(hullMacroId, false);
         else
             clearSelection();

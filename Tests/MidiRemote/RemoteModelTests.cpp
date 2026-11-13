@@ -305,9 +305,10 @@ TEST(MidiRemoteModelTest, ActionAssignmentRoundTrips) {
 }
 
 TEST(MidiRemoteModelTest, AssignmentDenormalisedSpecRoundTripsWithoutAnyProfileReference) {
-    // The whole point of §4.1's denormalised copy: nothing here ever looks up control.profileId
-    // against a live ControllerProfile, so it must round-trip identically even though no profile
-    // with this id is ever loaded in this test.
+    // The whole point of the denormalised copy
+    // (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project): nothing here ever looks up
+    // control.profileId against a live ControllerProfile, so it must round-trip identically even though no profile with
+    // this id is ever loaded in this test.
     auto assignment = makeParameterAssignment("assign-orphan");
     assignment.control.profileId = "profile-that-does-not-exist-anywhere";
     assignment.control.controlId = "control-that-does-not-exist-either";

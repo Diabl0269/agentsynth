@@ -7,36 +7,57 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/architecture/architecture.md`](architecture/architecture.md) — hub: project structure, signal flow, quality standards, and the index into the topic docs below
 - [`docs/architecture/audio-engine.md`](architecture/audio-engine.md) — AudioEngine, TransportService (bounce/export, stem export, metronome, input monitoring, mixer solo gate)
 - [`docs/architecture/timeline.md`](architecture/timeline.md) — TimelineDoc, TimelineSnapshot, AutomationKernel/Applier/Recorder, UI reflection
-- [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, recent projects, dirty state, autosave, welcome screen
+- [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, bundle-relative module file refs, recent projects, dirty state, autosave, welcome screen
 - [`docs/architecture/module-base.md`](architecture/module-base.md) — ModuleBase (logical-port API, bypass/mute contract, output level stage) + supporting components (LayoutUtil, ModuleComponent, AppUndoManager, LookAndFeel)
+- [`docs/architecture/graph-queries.md`](architecture/graph-queries.md) — per-edit passes ask the graph through lookups built once (ConnectionIndex, NodeUuidCache, MixerGraphView), and what still grows with the project
 - [`docs/architecture/graph-editor.md`](architecture/graph-editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
-- [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management
+- [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management, Collect & Archive
 - [`docs/architecture/plugin-layer.md`](architecture/plugin-layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
 ## Modules
 
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
+- [`docs/modules/sequencer-design.md`](modules/sequencer-design.md) — the sequencers' pattern as module state, playback, legacy adoption and the shared scale engine (card, pattern tools and chord picker still to come)
+- [`docs/modules/sampler-instruments.md`](modules/sampler-instruments.md) — the Sampler's Instrument mode: regions, velocity layers, round robin, release sounds, the SFZ subset, dropped-file placement, saved sources, sound packs
+- [`docs/modules/drum-kit.md`](modules/drum-kit.md) — the Drum Kit's pads: the 32-slot pad table, per-pad knobs and group links, file pads, saved state and migration, the pads area on the card
+- [`docs/modules/pluck-mallet.md`](modules/pluck-mallet.md) — the Pluck (extended Karplus-Strong string) and Mallet (modal struck bar) instruments: parameters, algorithms, formulas
 - [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)
 - [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
 - [`docs/modules/poly-channel-layout.md`](modules/poly-channel-layout.md) — the raw channel table for every poly-capable module
 - [`docs/modules/wavetable.md`](modules/wavetable.md) — the Wavetable oscillator: tables, warp, mip pyramid, interpolation, file import
+- [`docs/modules/oscillator-voice.md`](modules/oscillator-voice.md) — Oscillator Phase/Rand note restart, Blend, Width and the skewed Detune knob
 - [`docs/modules/lfo.md`](modules/lfo.md) — the LFO: built-in shapes, the user-drawn Custom waveform, tempo sync, CV inputs
+- [`docs/modules/custom-filter.md`](modules/custom-filter.md) — the Filter's Custom type: drawn shapes, morph blend, minimum-phase kernel design, partitioned convolution, saved state
 - [`docs/modules/development-guide.md`](modules/development-guide.md) — step-by-step guide to adding a module
 
 ## Layout, canvas & theming
 
-- [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides
-- [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the mod-matrix panel
+- [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides, edge scroll and the rule that every drag follows the view
+- [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the Cmd-hold shortcut hint overlay, the mod-matrix panel
 - [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, deleting a module (reconnect-the-chain heal, FRO23), custom titles, the Audio Output identity treatment, the Wavetable card
+- [`docs/layout/module-card-layout.md`](layout/module-card-layout.md) — design (not built): data-driven card layouts for built-in modules, `CardLayout` v2, per-module defaults, knob/fader/switch widgets, the Edit Layout editor, the future custom module
+- [`docs/layout/note-range-picker.md`](layout/note-range-picker.md) — the shared note range picker (four-octave strip, draggable edges and band, scale snapping, three Tab stops) used by the piano roll's Generate panel and the sequencer's Randomize popover
+- [`docs/layout/card-popovers.md`](layout/card-popovers.md) — every popover (`launchPopover`, `PopoverSlot`): open, toggle on its button, Esc, fade in and out, app shortcuts such as Cmd+Z, and the guards that keep every popover on that one path
+- [`docs/layout/lane-chips.md`](layout/lane-chips.md) — the lane chip row under a stepped editor (the sequencer step grid's lanes), how the shown lanes are saved, its keyboard and accessibility
 - [`docs/layout/module-library.md`](layout/module-library.md) — the library sidebar: rows, search, collapsible sections, scrolling, the help popover, the Shortcuts tab that mirrors it
+- [`docs/layout/sound-browser.md`](layout/sound-browser.md) — the sound index (background header-only scan of packs and your folders, name guessing, cache, search) and the Sounds view in the left sidebar, including dragging a sound onto the canvas, a Sampler or a track, and the Shapes place (saved and factory curves dragged onto shape windows and cards)
+- [`docs/modules/sound-pack-downloads.md`](modules/sound-pack-downloads.md) — optional sound pack downloads: the hosted list, the installer's steps and failure rules, Settings > Sound packs (rows, credits), the Sampler offer, the core sounds' level trims
+- [`docs/layout/settings-preferences.md`](layout/settings-preferences.md) — Settings > Preferences: the category drop-down, the scrolling viewport, search across categories, and how to add a row; Settings > Audio in folding sections (device, named and paired inputs, remembered interfaces)
 - [`docs/layout/preset-positions.md`](layout/preset-positions.md) — where factory presets place their modules
 - [`docs/layout/selection.md`](layout/selection.md) — multi-select, `SelectionModel`, group drag as one rigid body, the drag-flag reset sites
 - [`docs/layout/snippets-clipboard.md`](layout/snippets-clipboard.md) — snippets, copy/paste/duplicate, and the validate-strictly/apply-faithfully trust boundary
 - [`docs/layout/macro-cards.md`](layout/macro-cards.md) — macro containers on the canvas: collapse, the hull and its chip, the shared menu, undo and persistence
 - [`docs/layout/cables.md`](layout/cables.md) — a cable is not a graph edge: enumeration, hit-testing, hover, the menu, and colour resolution
-- [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, Ctrl to insert in series, double-click a port to disconnect
+- [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, side-by-side insert in series (Ctrl optional), double-click a port to disconnect
 - [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
+- [`docs/layout/command-palette.md`](layout/command-palette.md) — the Cmd+K search bar: what it finds, how it ranks, "+" for the Add list, on/off rows, the plugin window button, dragging and focus
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
+- [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut
+- [`docs/layout/note-length-menu.md`](layout/note-length-menu.md) — the shared note-length menu (S / T / D and chips) every rate box opens, its box, popup, keys, motion and the triplet and dotted name lists
 - [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
+- [`docs/layout/macro-fold-motion.md`](layout/macro-fold-motion.md) — a macro folding and unfolding: module flights, the border, crossing cables that slide, pushed neighbours that glide, nested macros
+- [`docs/layout/undo-glide.md`](layout/undo-glide.md) — what glides on Cmd+Z / Cmd+Shift+Z, `KeyedTween`/`RestoreWatch`, the `UndoGlideSurfaces` checklist, and the drag-surface and popup-user registries
+- [`docs/layout/insert-motion.md`](layout/insert-motion.md) — the dragged module's ghost sliding to a gap, a cable splitting around an inserted module and joining over a deleted one, and outlines that follow the card's corners
+- [`docs/layout/duplicate-motion.md`](layout/duplicate-motion.md) — a duplicated track's row, mixer strip and canvas macro coming out of the original (and back on undo): the from-source plan variant, timings, Reduce Motion
 - [`docs/layout/visualizers.md`](layout/visualizers.md) — in-card signal displays and editors (frequency response, EQ curve, scope, threshold meter, wavetable, curve editor)
 - [`docs/layout/theming.md`](layout/theming.md) — the token reference (colours, metrics, typography, treatment), the font limitation, reload, themed widgets
 - [`docs/layout/theme-authoring.md`](layout/theme-authoring.md) — the `*.gtheme.json` schema, a worked example, and what each treatment parameter does
@@ -49,11 +70,16 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/macros/ports.md`](macros/ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, how a port is drawn, cable rendering across the boundary, bypass/mute
 - [`docs/macros/auto-ports.md`](macros/auto-ports.md) — the auto-port preference, auto-creating ports when grouping, a modulation cable through an attenuverter, ungroup and direct deletion of a port, ports on a cable drag
 - [`docs/macros/configure-io.md`](macros/configure-io.md) — the Configure I/O dialog: adding/renaming/reordering/deleting a port, changing its shape, per-port colour, keyboard handling
-- [`docs/macros/menu-and-membership.md`](macros/menu-and-membership.md) — the macro menu's entry points, adding to/removing from a macro, incremental port splicing, Cmd-drag across a hull border (join, leave, transfer; the drag-without-Cmd preference), dropping a library module into a macro, the collapse button
+- [`docs/macros/menu-and-membership.md`](macros/menu-and-membership.md) — the macro menu's entry points, adding to/removing from a macro, incremental port splicing, Cmd-drag across a hull border (join, leave, transfer; the drag-without-Cmd preference), dropping a library module into a macro, dropping a macro into another, the collapse button
+- [`docs/macros/custom-module-design.md`](macros/custom-module-design.md) — design (pending picks): a folded macro with a designed face, saved to the library, buildable by the AI
 - [`docs/mixer/mixer.md`](mixer/mixer.md) — hub: what a channel is, node types, channels follow audio not tracks, solo as a render-time gate, mono/stereo, bypass/mute, inserts, building a channel, AI authorability
 - [`docs/mixer/fader.md`](mixer/fader.md) — the mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
 - [`docs/mixer/meters.md`](mixer/meters.md) — the per-reader peak latch, dB scale and taper, ballistics, colour zones, user-editable meter colours, the clip readout, the track header chip
 - [`docs/mixer/panel.md`](mixer/panel.md) — what the mixer panel shows, placement and detachable windows, unbinding before a graph change, the EQ curve thumbnail, keyboard navigation and accessibility
+- [`docs/mixer/strip-focus.md`](mixer/strip-focus.md) — a click focuses a mixer column, the outline follows the keyboard, Cmd+D duplicates the focused strip
+- [`docs/mixer/top-bar-keys.md`](mixer/top-bar-keys.md) — Cmd+Up puts a key ring on the mixer top bar (toolbar, zones filter and chips, pan law): stops, keys, screen-reader value
+- [`docs/mixer/edit-on-canvas.md`](mixer/edit-on-canvas.md) — the Edit on canvas button on every mixer column header: always shown, selects the channel and brings it into view
+- [`docs/mixer/row-motion.md`](mixer/row-motion.md) — how an added or removed insert or send row opens or closes, and what lands at once
 - [`docs/mixer/sends-and-buses.md`](mixer/sends-and-buses.md) — a bus is a Channel Strip, a send is an output leg, channel layout, parameter vs. state, pre/post and mute/bypass, the per-leg audible-solo mask, the send/bus UI, stems
 - [`docs/mixer/stem-export.md`](mixer/stem-export.md) — one render pass per strip, stem naming, buses are stems too, what sums back to the mix
 - [`docs/mixer/track-presets.md`](mixer/track-presets.md) — what a track preset is, saving and setting a default, creating a track from a preset, what a saved preset carries, loading a preset
@@ -64,41 +90,55 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/view.md`](timeline/view.md) — `TimelineViewState`: beat↔pixel mapping, snap divisions, the lanes grid, wheel/pinch/keyboard zoom and scroll
 - [`docs/timeline/ruler.md`](timeline/ruler.md) — the ruler strip: tick density, the two gesture zones, the loop brace, markers
 - [`docs/timeline/tracks.md`](timeline/tracks.md) — track header rows: binding and channel chips, M/S/R, focus, drag-to-reorder, the row context menu
-- [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"+ Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers)
+- [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"Add Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers), and Duplicate Track
 - [`docs/timeline/playhead.md`](timeline/playhead.md) — the playhead overlay, its two timers, latency compensation, follow-playhead
 - [`docs/timeline/transport.md`](timeline/transport.md) — the transport bar, the recording gate, transport actions, metronome and count-in
+- [`docs/timeline/song-key.md`](timeline/song-key.md) — the song key: the transport bar Key field, the key picker, Detect from notes, saving and undo
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
+- [`docs/timeline/render-to-audio.md`](timeline/render-to-audio.md) — render a range or clips to a new audio track: which tracks, what is heard, the files, the one undo step
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
-- [`docs/timeline/automation.md`](timeline/automation.md) — the automation strip and its curve canvas
+- [`docs/timeline/linked-clips.md`](timeline/linked-clips.md) — linked clips: Duplicate linked, Make unique, what a link shares and which edits end it
+- [`docs/timeline/sections.md`](timeline/sections.md) — sections in the timeline model: placements that hold the same music, the sync rule, time edits, file format, AI context line
+- [`docs/timeline/remove-last-modulator.md`](timeline/remove-last-modulator.md) — Remove LFO / Keep module / Remember my choice when a removal would delete the LFO, and its reset
+- [`docs/layout/mod-ring-fade.md`](layout/mod-ring-fade.md) — a knob's modulation ring fading in and out
+- [`docs/timeline/automation-points.md`](timeline/automation-points.md) — selecting, moving (mouse, key taps and holds), duplicating and stretching an automation lane's points
+- [`docs/timeline/automation.md`](timeline/automation.md) — automation lanes folded out under their tracks, the Unassigned section, the curve editor
+- [`docs/timeline/lane-motion.md`](timeline/lane-motion.md) — lane blocks and modulator rows growing in, shrinking away and gliding on undo and redo
+- [`docs/timeline/modulator-row-identity.md`](timeline/modulator-row-identity.md) — a modulator row replaced in place (Change source, Change parameter, their undo) keeps its row, slot and fold
+- [`docs/timeline/lane-controls.md`](timeline/lane-controls.md) — the control chips on a lane header and mod row: the catalogue, the shown set per lane kind, the "+" row and Edit controls
 - [`docs/timeline/piano-roll.md`](timeline/piano-roll.md) — the per-clip MIDI note editor
+- [`docs/timeline/drum-machine.md`](timeline/drum-machine.md) — the step-grid editor for a Drum Kit track's clips: cell mapping, accent, per-drum mute/solo, steps per bar, swing and humanise, the five lanes and grid marks, the Ideas panel
 - [`docs/timeline/scale-assist.md`](timeline/scale-assist.md) — the Scale Assist panel, the scale engine, pitch-row collapse, random generation
 - [`docs/timeline/focus.md`](timeline/focus.md) — which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on
 
 ## MIDI, shortcuts & remote control
 
-- [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts
+- [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) · [`docs/control/shortcuts-mac-peer-keys.md`](control/shortcuts-mac-peer-keys.md) · [`docs/control/shortcuts-eq.md`](control/shortcuts-eq.md) · [`docs/control/recolour-focused-item.md`](control/recolour-focused-item.md) — external MIDI routing, keyboard shortcuts (incl. the Cmd-hold hints)
+- [`docs/control/focus-regions.md`](control/focus-regions.md) — Tab between the app's areas: the region registry, nesting, outlines, and the keys inside each area
 - [`docs/control/midi-remote.md`](control/midi-remote.md) · [`docs/control/midi-remote-ui.md`](control/midi-remote-ui.md) — Controllers: external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel and coverage table
 - [`docs/control/midi-remote-mpe.md`](control/midi-remote-mpe.md) — Controllers v2 design (not built): MPE zone detection, member channels kept out of mappings, per-note bend/pressure/timbre into Poly MIDI
 - [`docs/control/midi-remote-mcu-hui.md`](control/midi-remote-mcu-hui.md) — Controllers v2 design (not built): Mackie Control / HUI protocol surfaces, sourced protocol tables, a source-routing sink, the motor-fader/LCD renderer
 - [`docs/control/midi-remote-osc.md`](control/midi-remote-osc.md) — Controllers v2 design (not built): OSC as a second source, with address keys, learn by address, feedback to host:port and the network trust boundary
 - [`docs/control/midi-remote-device-handshake.md`](control/midi-remote-device-handshake.md) — FRO339: a profile's optional open/close handshake bytes (e.g. the Launch Control XL 3's DAW-mode SysEx), `ControllerHandshakeCoordinator`, and its lifecycle wiring
+- [`docs/control/point-editing.md`](control/point-editing.md) — the one key and mouse map every point editor follows (curve editor, automation lanes; the morph map is the exception), Ctrl+T insert, and a checklist for a new one
 - [`docs/control/plugin-card-layout.md`](control/plugin-card-layout.md) — hosted plugin cards showing a chosen set of parameters as knobs: `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout
 
 ## AI
 
 - [`docs/ai/ai.md`](ai/ai.md) — overview: the two providers and what the assistant may author
-- [`docs/ai/usage-guide.md`](ai/usage-guide.md) — user-facing guide: prompting, timeline changes, the Patch/Arrange selector, troubleshooting
+- [`docs/ai/usage-guide.md`](ai/usage-guide.md) — user-facing guide: prompting, one message and one card for patch and timeline changes, troubleshooting
 - [`docs/ai/engine.md`](ai/engine.md) — AIIntegrationService/AIStateMapper architecture, request flow, the AI patch undo contract
 - [`docs/ai/patch-format.md`](ai/patch-format.md) — the JSON patch dialect: nodes/connections/params, `state`/`uuid`/`displayName`, reserved keys and forward compatibility
 - [`docs/ai/patch-safety.md`](ai/patch-safety.md) — `validatePatch`, the non-authorable module set, constrained decoding/retry/repair, worked examples, the harnesses
-- [`docs/ai/patch-preview.md`](ai/patch-preview.md) — the patch card's diff preview and `PatchDiff`'s snapshot-based diff
+- [`docs/ai/patch-preview.md`](ai/patch-preview.md) — the edit-plan card's patch preview and `PatchDiff`'s snapshot-based diff
 - [`docs/ai/timeline-safety.md`](ai/timeline-safety.md) — `validateTimeline`, the two-door model, the checks, and the agentic security model
 - [`docs/ai/timeline-ops.md`](ai/timeline-ops.md) — the `timelineOps` envelope, `placeMidiClip`, trust posture, the chat seam
 - [`docs/ai/arrangement-context.md`](ai/arrangement-context.md) — the read-only arrangement summary sent to the model
 - [`docs/ai/chat-component.md`](ai/chat-component.md) — AIChatComponent: bubbles, timeout, logging rules, the model-discovery and auth-token ordering contracts
 - [`docs/ai/providers.md`](ai/providers.md) — the provider registry, which provider a launch gets, hosted-mode disclosure
 - [`docs/ai/ollama-provider.md`](ai/ollama-provider.md) — OllamaProvider: fail-fast, the worker-thread contract, request cancellation
-- [`docs/ai/remote-provider.md`](ai/remote-provider.md) — RemoteProvider: wire contract, error-kind mapping, capability requests and arrange mode
+- [`docs/ai/remote-provider.md`](ai/remote-provider.md) — RemoteProvider: wire contract, error-kind mapping, capability requests and one plan over two transports
+- [`docs/ai/song-steps.md`](ai/song-steps.md) — hosted whole songs: the free plan, the streamed build, the plan and build cards, the 404 fallback
 - [`docs/ai/structured-output.md`](ai/structured-output.md) — schema generation, the vendored envelope codegen, grammar-compiler pitfalls
 - [`docs/ai/accounts.md`](ai/accounts.md) — sign-in surface, rotation-before-use, device id and trial, quota UI and PlanBadge
 - [`docs/ai/history.md`](ai/history.md) — server-side and local conversation history, retention, the history panel
@@ -106,23 +146,28 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Development: testing, CI & distribution
 
-- [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, snapshot references
+- [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, waiting for async work (`waitUntil`, the fixed-wait guard), snapshot references
 - [`docs/development/test-layers.md`](development/test-layers.md) — what each suite in the test binary covers, grouped by layer
+- [`docs/development/test-mode.md`](development/test-mode.md) — `--automation <port>`: drive a dev build by script (click, drag, keys, state, PNGs) without the real mouse, in parallel
 - [`docs/development/test-patterns.md`](development/test-patterns.md) — the conventions every test follows: the real mouse path, headless seams, settings isolation, sanitizers
+- [`docs/development/usage-statistics.md`](development/usage-statistics.md) — the opt-in anonymous daily usage summary: what it holds, where the id and queue live per OS, the send and opt-out rules, how the vendored contract is refreshed
+- [`docs/development/accessibility.md`](development/accessibility.md) — the accessibility rule for every control (keyboard path, focus ring, screen-reader name, tooltip), which focus-ring helper to use, and the coverage test's strict ratchet baseline
 - [`docs/development/gain-staging.md`](development/gain-staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
 - [`docs/development/ai-harnesses.md`](development/ai-harnesses.md) — `AIPatchHarness` and `AIEvalHarness`: measurement, not tests, and the corpus the offline replay suite is built from
 - [`docs/development/local-cloud-dev.md`](development/local-cloud-dev.md) — exercising Pro-gated flows against a locally-run backend
 - [`docs/development/local-ci.md`](development/local-ci.md) — `scripts/ci-local.sh`, the git hooks, the clang-format pin, worktree dependency reuse, running suites in parallel, dev-signing
 - [`docs/development/ci-pipeline.md`](development/ci-pipeline.md) — `ci.yml`'s triggers and jobs, the six required status checks, docs-only PR coverage, the apt-mirror failover
 - [`docs/development/ci-caching.md`](development/ci-caching.md) — the ccache and FetchContent caches, the six rules that keep them working, and the health check that gates them
+- [`docs/development/juce-patches.md`](development/juce-patches.md) — the patch applied to the FetchContent'd JUCE (VST3 parameter context menu hook), how it is applied idempotently, cached and refreshed
 - [`docs/development/ascii-literal-guard.md`](development/ascii-literal-guard.md) — no non-ASCII bytes in a `Source/` string literal, and the JUCE decoding contract behind it
 - [`docs/development/file-size-guard.md`](development/file-size-guard.md) — the 1000-line cap, its strict ratchet baseline, and how to split an over-cap file
 - [`docs/development/function-size-guard.md`](development/function-size-guard.md) — the 200-line-per-function cap, how a function's size is measured, and its ratchet baseline
 - [`docs/development/header-comment-guard.md`](development/header-comment-guard.md) — comment *placement* in headers: why it tracks excess (comments minus code) rather than a raw count, the exact threshold, and the ratchet baseline
 - [`docs/development/comment-provenance-guard.md`](development/comment-provenance-guard.md) — no ticket ids or dates in `Source/`/`Tests/` comments: the exact pattern, the rewrite rule, the `Regression test for <ID>:` exception, and the per-file ratchet baseline
-- [`docs/development/docs-guard.md`](development/docs-guard.md) — `scripts/check-docs.sh`'s seven checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions, bare basenames), the naming ratchet, and where it runs
+- [`docs/development/docs-guard.md`](development/docs-guard.md) — `scripts/check-docs.sh`'s nine checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions, bare basenames, reversed `§N of docs/...` refs, bare `§N` markers), the naming ratchet, and where it runs
 - [`docs/development/pr-title-convention.md`](development/pr-title-convention.md) — PR title format (`type(scope)!: subject`) and why it is checked on the title, not a commit message
 - [`docs/development/distribution.md`](development/distribution.md) — version identity, the build-time "What's New" data, and the signing state of a shipped build
+- [`docs/development/third-party-licences.md`](development/third-party-licences.md) — the licence text of the shipped third-party code (Signalsmith Stretch and Linear)
 - [`docs/development/auto-update.md`](development/auto-update.md) — Sparkle (macOS) and WinSparkle (Windows), EdDSA key generation, and the manual verification recipes
 - [`docs/development/releases.md`](development/releases.md) — the post-merge artifact build, appcast publishing, release asset upload reliability, and promoting a build to stable
 

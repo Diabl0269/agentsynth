@@ -2,6 +2,9 @@
 // WavetableOscillatorModule.h under the file-size cap.
 
 #include "WavetableOscillatorModule.h"
+#include "Modules/ModuleFileStateKeys.h"
+#include "Modules/ParameterText.h"
+#include "Project/DeferredAssetLoads.h"
 
 // ---- Built-in harmonic specs -------------------------------------------
 float WavetableOscillatorModule::classicShapeHarmonic(int shape, int h) {
@@ -246,11 +249,11 @@ int WavetableOscillatorModule::detectPeriod(const float* samples, int numSamples
     return (bestScore > 0.9 && bestLag >= kMinPeriod) ? bestLag : kFrameSize;
 }
 
-// kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV. More outputs than inputs are
-// declared for the same reason as OscillatorModule: JUCE's AudioProcessorGraph only makes a
-// private copy of an input buffer when inputChan < getTotalNumOutputChannels(). Declaring
-// kNumOutputs stops our post-render clear of the CV channels from corrupting a CV source that
-// also feeds another node. The channels above the audio blocks are silent pass-throughs.
+// kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV + the 8-wide Gate fan (23-30). More outputs than inputs
+// are declared for the same reason as OscillatorModule: JUCE's AudioProcessorGraph only makes a private copy of an
+// input buffer when inputChan < getTotalNumOutputChannels(). Declaring kNumOutputs stops our post-render clear of the
+// CV channels from corrupting a CV source that also feeds another node. The channels above the audio blocks are silent
+// pass-throughs.
 //
 // StereoAudio::Declared: with more than two outputs the Auto shape test cannot see the stereo
 // pair — Audio R is the kRightBase block, not ch1. Ships SPLIT.
@@ -263,29 +266,34 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
     addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0));
     addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
-    addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+    addParameter(levelParam = synth::newFractionParameter("level", "Level", 1.0f));
     addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
     addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
-    addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
+    // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
+    juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
+    detuneRange.setSkewForCentre(25.0f);
+    addParameter(detuneParam = new juce::AudioParameterFloat(
+                     "detune", "Detune", detuneRange, synth::kDefaultUnisonDetuneCents, synth::centsAttributes()));
 
     // ---- Phase 2: warp ----
     addParameter(warpParam = new juce::AudioParameterChoice("warp", "Warp",
                                                             {"Off", "Sync", "Bend +", "Bend -", "PWM", "Asym", "Flip",
                                                              "Mirror", "Quantize", "Remap", "Formant"},
                                                             0));
-    addParameter(warpAmountParam = new juce::AudioParameterFloat("warpAmount", "Warp Amt", 0.0f, 1.0f, 0.0f));
+    addParameter(warpAmountParam = synth::newFractionParameter("warpAmount", "Warp Amt", 0.0f));
 
     // ---- Phase 1: phase control ----
     addParameter(phaseParam = new juce::AudioParameterFloat("phase", "Phase", 0.0f, 360.0f, 0.0f));
-    addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand Phase", 0.0f, 1.0f, 0.0f));
-    addParameter(spreadParam = new juce::AudioParameterFloat("spread", "Spread", 0.0f, 1.0f, 0.0f));
+    addParameter(randomPhaseParam =
+                     synth::newFractionParameter("randomPhase", "Rand Phase", synth::kDefaultUnisonRand));
+    addParameter(spreadParam = synth::newFractionParameter("spread", "Spread", 0.0f));
 
     // ---- Phase 3: richer voicing ----
-    addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
-    addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 1.0f));
+    addParameter(widthParam = synth::newFractionParameter("width", "Width", synth::kDefaultUnisonWidth));
+    addParameter(blendParam = synth::newFractionParameter("blend", "Blend", synth::kDefaultUnisonBlend));
     addParameter(stackParam = new juce::AudioParameterChoice(
                      "stack", "Stack", {"Detune", "Octave", "Power Chord", "12th", "Major", "Minor"}, 0));
-    addParameter(subLevelParam = new juce::AudioParameterFloat("subLevel", "Sub", 0.0f, 1.0f, 0.0f));
+    addParameter(subLevelParam = synth::newFractionParameter("subLevel", "Sub", 0.0f));
     addParameter(subOctaveParam = new juce::AudioParameterChoice("subOctave", "Sub Oct", {"-1", "-2"}, 0));
     addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
     addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
@@ -303,6 +311,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
                      new juce::AudioParameterChoice("interpolation", "Interp", {"Linear", "Hermite"}, 0));
 
     addMuteParameter();
+    mods_.bind(*this);
     enableVisualBuffer(true);
 
     // Force the shared built-in pyramid to be built here, on the message thread, so
@@ -313,6 +322,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
 void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     juce::ignoreUnused(samplesPerBlock);
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+    syncEdgeSamples = (int)(currentSampleRate * synth::kSyncEdgeSeconds);
 
     const float initFreq = tunedFrequency(frequencyForMidiNote(voices[0].lastMidiNote));
     for (int v = 0; v < MAX_VOICES; ++v) {
@@ -331,15 +341,24 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
     smoothedPan.setCurrentAndTargetValue(panParam->get());
 
     for (int v = 0; v < MAX_VOICES; ++v) {
-        voices[v].decimator[0].reset();
-        voices[v].decimator[1].reset();
+        voices[v].stack.decimator[0].reset();
+        voices[v].stack.decimator[1].reset();
+        voices[v].ghosts.count = 0;
+        voices[v].numMidiRestarts = voices[v].nextMidiRestart = 0;
         voices[v].active = false;
+        voices[v].gateEdges.reset();
+        voices[v].sync.reset();
     }
+    unisonMix.primed = false; // the next block starts the voice gains at their targets
+    heldUnison_ = -1;
+    noteSeen_ = false;
+    heldMidiNotes_ = 0;
+    publishLiveDisplayValues(0);
     lastSyncSample = 0.0f;
     blockPeakWarpAmount = 0.0f;
 }
 
-void WavetableOscillatorModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     if (buffer.getNumChannels() == 0)
         return;
 
@@ -347,18 +366,15 @@ void WavetableOscillatorModule::processBlock(juce::AudioBuffer<float>& buffer, j
     // (same exception as OscillatorModule / PolyMidiModule — see docs/architecture/module-base.md#bypassmute-contract).
     if (isBypassed() || isMuted()) {
         buffer.clear();
+        if (auto* vb = getVisualBuffer())
+            vb->pushConstant(0.0f, buffer.getNumSamples());
+        publishLiveDisplayValues(0);
         return;
     }
 
     adoptPendingTable();
 
-    for (const auto metadata : midiMessages) {
-        const auto msg = metadata.getMessage();
-        if (msg.isNoteOn()) {
-            voices[0].lastMidiNote = (float)msg.getNoteNumber();
-            pendingRetrigger = true; // consumed once the block's unison count is known
-        }
-    }
+    scanMidi(midiMessages, buffer.getNumSamples());
 
     if (polyParam->get())
         processPolyMode(buffer);
@@ -376,8 +392,11 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
     if (!poly)
         targets.push_back({jackLabels()[kJackPitch], 0});
 
-    for (int jack = 1; jack < kNumJacks; ++jack)
+    for (int jack = 1; jack <= kNumModCV; ++jack)
         targets.push_back({jackLabels()[jack], modCVChannelFor(jack, poly), jackParamIds()[jack]});
+
+    for (auto& target : mods_.targets())
+        targets.push_back(std::move(target));
 
     return targets;
 }
@@ -388,7 +407,7 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
 const juce::String* WavetableOscillatorModule::jackParamIds() {
     static const juce::String ids[kNumJacks] = {"",           "position", "octave",      "coarse", "fine",   "level",
                                                 "warpAmount", "phase",    "randomPhase", "detune", "spread", "width",
-                                                "blend",      "subLevel", "pan",         ""};
+                                                "blend",      "subLevel", "pan",         "",       ""};
     return ids;
 }
 
@@ -403,22 +422,29 @@ LogicalPort WavetableOscillatorModule::mapInputChannel(int raw) const {
             p.polyVoiceSpan = (raw == 0) ? kNumVoices : 1;
             return p;
         }
-        if (raw >= kPolyModCVBase && raw < kNumInputs) {
+        if (raw >= kPolyModCVBase && raw < kGateBase) {
             p.visibleJackIndex = raw - kPolyModCVBase + 1; // ch8 -> jack 1 (Position), ...
             p.role = PortRole::ModCV;
             p.isPolyGroupHead = true;
             p.polyVoiceSpan = 1;
             return p;
         }
+        if (raw >= kGateBase && raw < kGateBase + kNumVoices) { // per-voice Gate fan
+            p.visibleJackIndex = kJackGate;
+            p.role = PortRole::Gate;
+            p.isPolyGroupHead = (raw == kGateBase);
+            p.polyVoiceSpan = (raw == kGateBase) ? kNumVoices : 1;
+            return p;
+        }
     } else if (raw >= 0 && raw < kNumJacks) {
         // Mono: raw channels map straight onto the visible jacks.
         p.visibleJackIndex = raw;
-        p.role = PortRole::ModCV;
+        p.role = raw == kJackGate ? PortRole::Gate : PortRole::ModCV;
         p.isPolyGroupHead = true;
         p.polyVoiceSpan = 1;
         return p;
     }
-    return ModuleBase::mapInputChannel(raw);
+    return mods_.ownsChannel(raw) ? mods_.portOf(raw) : ModuleBase::mapInputChannel(raw);
 }
 
 LogicalPort WavetableOscillatorModule::mapOutputChannel(int raw) const {
@@ -461,8 +487,8 @@ void WavetableOscillatorModule::getStateInformation(juce::MemoryBlock& destData)
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             state.setProperty(p->paramID, p->getValue(), nullptr);
 
-    state.setProperty("wavetableFile", getWavetableFile().getFullPathName(), nullptr);
-    state.setProperty("wavetableFolder", wavetableFolder.getFullPathName(), nullptr);
+    state.setProperty(synth::module_file_keys::kWavetableFile, getWavetableFile().getFullPathName(), nullptr);
+    state.setProperty(synth::module_file_keys::kWavetableFolder, wavetableFolder.getFullPathName(), nullptr);
     copyXmlToBinary(*state.createXml(), destData);
 }
 
@@ -472,22 +498,35 @@ juce::var WavetableOscillatorModule::getExtraState() const {
         return {};
     juce::DynamicObject::Ptr state = new juce::DynamicObject();
     if (file != juce::File())
-        state->setProperty("wavetableFile", file.getFullPathName());
+        state->setProperty(synth::module_file_keys::kWavetableFile, file.getFullPathName());
     if (wavetableFolder != juce::File())
-        state->setProperty("wavetableFolder", wavetableFolder.getFullPathName());
+        state->setProperty(synth::module_file_keys::kWavetableFolder, wavetableFolder.getFullPathName());
     return juce::var(state.get());
 }
 
+// The file loads BEFORE the folder is set: setWavetableFolder places the < > cursor on whichever
+// folder entry matches the loaded table, so a folder set first would leave the cursor at -1 on
+// every project open, undo and collect.
 void WavetableOscillatorModule::setExtraState(const juce::var& state) {
     if (auto* obj = state.getDynamicObject()) {
-        const juce::String folder = obj->getProperty("wavetableFolder").toString();
+        const juce::String path = obj->getProperty(synth::module_file_keys::kWavetableFile).toString();
+        if (path.isNotEmpty() && !deferWavetableLoad(juce::File(path)))
+            loadWavetableFile(juce::File(path));
+
+        const juce::String folder = obj->getProperty(synth::module_file_keys::kWavetableFolder).toString();
         if (folder.isNotEmpty())
             setWavetableFolder(juce::File(folder));
-
-        const juce::String path = obj->getProperty("wavetableFile").toString();
-        if (path.isNotEmpty())
-            loadWavetableFile(juce::File(path));
     }
+}
+
+// Applied by AIStateMapper after a node's params: a stored node (project, preset or patch) with no Detune, Blend, Width
+// or Rand keeps the legacy values instead of the new module defaults. A model-authored node was never stored, so it
+// keeps the current defaults for any of them it leaves out.
+void WavetableOscillatorModule::applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) {
+    if (!trusted)
+        return;
+    synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
+                                       *blendParam, *widthParam, *randomPhaseParam);
 }
 
 void WavetableOscillatorModule::setStateInformation(const void* data, int sizeInBytes) {
@@ -497,36 +536,86 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
 
     const juce::ValueTree state = juce::ValueTree::fromXml(*xmlState);
 
-    const juce::String folder = state.getProperty("wavetableFolder", juce::String()).toString();
-    if (folder.isNotEmpty())
-        setWavetableFolder(juce::File(folder));
-
     // Restore the file first: loadWavetableFile() never touches parameters, so the
     // "table" choice restored below stays authoritative. It reads importModeParam, which
     // the loop below has not restored yet — so re-import once the parameters are in.
-    const juce::String path = state.getProperty("wavetableFile", juce::String()).toString();
+    const juce::String path = state.getProperty(synth::module_file_keys::kWavetableFile, juce::String()).toString();
 
     for (auto* param : getParameters())
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             if (state.hasProperty(p->paramID))
                 param->setValue((float)state.getProperty(p->paramID));
 
+    // A state saved before the current unison defaults has no key for them and keeps the sound it had.
+    synth::restoreLegacyUnisonDefaults([&](const char* key) { return state.hasProperty(key); }, *detuneParam,
+                                       *blendParam, *widthParam, *randomPhaseParam);
+
     if (path.isNotEmpty()) {
         const juce::File file(path);
         if (file.existsAsFile())
             loadWavetableFile(file);
     }
+
+    // The folder goes last, for the same cursor reason as setExtraState.
+    const juce::String folder = state.getProperty(synth::module_file_keys::kWavetableFolder, juce::String()).toString();
+    if (folder.isNotEmpty())
+        setWavetableFolder(juce::File(folder));
+}
+
+juce::File WavetableOscillatorModule::getWavetableFile() const {
+    if (pendingFile != juce::File())
+        return pendingFile;
+    return messageLoadedTable != nullptr ? juce::File(messageLoadedTable->sourcePath) : juce::File();
 }
 
 bool WavetableOscillatorModule::loadWavetableFile(const juce::File& file) {
-    if (!file.existsAsFile())
+    ++fileLoadSerial; // a decode still pending for an earlier file no longer applies
+    pendingFile = juce::File();
+    auto table = decodeWavetableFile(file, currentImportMode());
+    if (table == nullptr)
         return false;
+    messageLoadedTable = table;
+    publishLoadedTable(std::move(table));
+    return true;
+}
+
+// Inside a project open on screen (DeferredAssetLoads::active()) the file is read and built on a worker and installed
+// here later, unless a newer load request came in since (the serial moved) or the module is gone. The pending file is
+// what getWavetableFile() reports meanwhile, so a save, an undo snapshot and the folder cursor all see it.
+bool WavetableOscillatorModule::deferWavetableLoad(const juce::File& file) {
+    auto* loads = synth::DeferredAssetLoads::active();
+    if (loads == nullptr)
+        return false;
+    const int serial = ++fileLoadSerial;
+    pendingFile = file;
+    const auto mode = currentImportMode();
+    juce::WeakReference<WavetableOscillatorModule> self(this);
+    loads->enqueue(synth::DeferredAssetLoads::Kind::Wavetable, this, [self, serial, file, mode] {
+        auto table = decodeWavetableFile(file, mode);
+        return synth::DeferredAssetLoads::Install([self, serial, table] {
+            auto* module = self.get();
+            if (module == nullptr || module->fileLoadSerial != serial)
+                return;
+            module->pendingFile = juce::File();
+            if (table == nullptr)
+                return;
+            module->messageLoadedTable = table;
+            module->publishLoadedTable(table);
+        });
+    });
+    return true;
+}
+
+WavetableOscillatorModule::TablePtr WavetableOscillatorModule::decodeWavetableFile(const juce::File& file,
+                                                                                   ImportMode mode) {
+    if (!file.existsAsFile())
+        return nullptr;
 
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
     if (reader == nullptr || reader->numChannels == 0 || reader->lengthInSamples <= 0)
-        return false;
+        return nullptr;
 
     // Cap the read so a pathological file cannot exhaust memory.
     const juce::int64 maxRead = (juce::int64)kMaxFrames * 8 * kFrameSize;
@@ -535,16 +624,10 @@ bool WavetableOscillatorModule::loadWavetableFile(const juce::File& file) {
     juce::AudioBuffer<float> raw(1, numSamples);
     raw.clear();
     if (!reader->read(&raw, 0, numSamples, 0, true, reader->numChannels > 1))
-        return false;
+        return nullptr;
 
-    auto table = buildTableFromSamples(raw.getReadPointer(0), numSamples, file.getFileNameWithoutExtension(),
-                                       file.getFullPathName(), currentImportMode());
-    if (table == nullptr)
-        return false;
-
-    messageLoadedTable = table;
-    publishLoadedTable(std::move(table));
-    return true;
+    return buildTableFromSamples(raw.getReadPointer(0), numSamples, file.getFileNameWithoutExtension(),
+                                 file.getFullPathName(), mode);
 }
 
 void WavetableOscillatorModule::setWavetableFolder(const juce::File& folder) {
@@ -597,22 +680,7 @@ bool WavetableOscillatorModule::stepWavetable(int delta) {
 }
 
 void WavetableOscillatorModule::getDisplayWaveformAt(std::vector<float>& out, int numPoints, float position) const {
-    out.assign((size_t)std::max(2, numPoints), 0.0f);
-    const auto* wt = selectedTableForMessageThread();
-    if (wt == nullptr || wt->numFrames <= 0)
-        return;
-
-    const float posFrames = juce::jlimit(0.0f, 1.0f, position) * (float)(wt->numFrames - 1);
-    const int n = (int)out.size();
-
-    // Draw what the oscillator actually plays, warp included — a Warp knob you cannot see
-    // move is a knob users do not trust.
-    const Warp warp = (Warp)juce::jlimit(0, (int)Warp::Count - 1, warpParam->getIndex());
-    const float amount = warpAmountParam->get();
-    const bool hermite = interpolationParam->getIndex() == 1;
-
-    for (int i = 0; i < n; ++i)
-        out[(size_t)i] = readWarped(*wt, 0, posFrames, (float)i / (float)n, warp, amount, hermite);
+    getDisplayWaveformAt(out, numPoints, position, warpAmountParam->get());
 }
 
 const std::array<float, WavetableOscillatorModule::kDecimTaps>& WavetableOscillatorModule::decimationKernel() {
@@ -691,22 +759,8 @@ float WavetableOscillatorModule::stackSemitones(Stack mode, int u, int unisonCou
     }
 }
 
-void WavetableOscillatorModule::unisonPanGains(int u, int unisonCount, float width, float& gainL, float& gainR) {
-    float pan = 0.0f;
-    if (unisonCount > 1)
-        pan = width * (2.0f * (float)u / (float)(unisonCount - 1) - 1.0f);
-    panGains(pan, gainL, gainR);
-}
-
 bool WavetableOscillatorModule::isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
-    if (ch >= buffer.getNumChannels())
-        return false;
-    const float* data = buffer.getReadPointer(ch);
-    const int checkLen = std::min(numSamples, 64);
-    float energy = 0.0f;
-    for (int i = 0; i < checkLen; ++i)
-        energy += data[i] * data[i];
-    return (energy / (float)checkLen) > 1.0e-6f;
+    return ch < buffer.getNumChannels() && hasAnyNonZero(buffer.getReadPointer(ch), numSamples);
 }
 
 void WavetableOscillatorModule::fillParameterRamps(int numSamples) {
@@ -732,45 +786,6 @@ void WavetableOscillatorModule::fillParameterRamps(int numSamples) {
     blockPeakWarpAmount = peakWarp;
 }
 
-WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockSettings() {
-    BlockSettings bs;
-    bs.unisonCount = juce::jlimit(1, MAX_UNISON, unisonParam->get());
-    bs.warp = (Warp)juce::jlimit(0, (int)Warp::Count - 1, warpParam->getIndex());
-    bs.stack = (Stack)juce::jlimit(0, (int)Stack::Count - 1, stackParam->getIndex());
-    bs.syncMode = (SyncMode)juce::jlimit(0, (int)SyncMode::Count - 1, syncModeParam->getIndex());
-    bs.interpolation = (Interpolation)juce::jlimit(0, (int)Interpolation::Count - 1, interpolationParam->getIndex());
-    bs.pitchModulated = hasCV(kJackOctave) || hasCV(kJackCoarse) || hasCV(kJackFine);
-    bs.oversample = warpNeedsOversampling(bs.warp, blockPeakWarpAmount);
-    bs.subOctaveRatio = (subOctaveParam->getIndex() == 1) ? 0.25f : 0.5f;
-    bs.subPosition = (subShapeParam->getIndex() == 1) ? 1.0f : 0.0f; // Basic Shapes: sine .. square
-
-    bs.detuneCents = juce::jlimit(0.0f, 100.0f, detuneParam->get() + cvAt(kJackDetune, 0) * 100.0f);
-    const float width = juce::jlimit(0.0f, 1.0f, widthParam->get() + cvAt(kJackWidth, 0));
-    const float blend = juce::jlimit(0.0f, 1.0f, blendParam->get() + cvAt(kJackBlend, 0));
-
-    float gainSum = 0.0f;
-    for (int u = 0; u < bs.unisonCount; ++u) {
-        const float cents =
-            (bs.unisonCount > 1) ? bs.detuneCents * (2.0f * (float)u / (float)(bs.unisonCount - 1) - 1.0f) : 0.0f;
-        const float semis = stackSemitones(bs.stack, u, bs.unisonCount);
-        bs.uniRatio[u] = std::pow(2.0f, semis / 12.0f + cents / 1200.0f);
-
-        // Blend fades the detuned/stacked voices against an always-present centre, so
-        // turning it down thins the chorus without changing the fundamental's level.
-        const float voiceGain = (u == 0) ? 1.0f : blend;
-        float gl, gr;
-        unisonPanGains(u, bs.unisonCount, width, gl, gr);
-        bs.uniGainL[u] = gl * voiceGain;
-        bs.uniGainR[u] = gr * voiceGain;
-        gainSum += voiceGain;
-    }
-
-    // At width 0 / blend 1 every unison voice contributes unity to both legs, so this
-    // reduces to the plain 1/unisonCount average — Audio L keeps its mono level.
-    bs.uniNormalise = (gainSum > 0.0f) ? (1.0f / gainSum) : 1.0f;
-    return bs;
-}
-
 void WavetableOscillatorModule::buildSyncResets(int cacheLen, SyncMode mode) {
     if (mode != SyncMode::HardSync || !hasCV(kJackSync)) {
         std::fill_n(syncResetCache.data(), cacheLen, false);
@@ -781,13 +796,6 @@ void WavetableOscillatorModule::buildSyncResets(int cacheLen, SyncMode mode) {
         syncResetCache[(size_t)s] = (lastSyncSample <= 0.0f && v > 0.0f);
         lastSyncSample = v;
     }
-}
-
-void WavetableOscillatorModule::retriggerVoice(VoiceState& voice, int unisonCount) {
-    const float startPhase = juce::jlimit(0.0f, 1.0f, phaseParam->get() / 360.0f + cvAt(kJackPhase, 0));
-    const float spread = juce::jlimit(0.0f, 1.0f, spreadParam->get() + cvAt(kJackSpread, 0));
-    const float randomAmount = juce::jlimit(0.0f, 1.0f, randomPhaseParam->get() + cvAt(kJackRand, 0));
-    voice.resetPhases(startPhase, spread, randomAmount, unisonCount, phaseRandom);
 }
 
 void WavetableOscillatorModule::fillFrequencyRamp(VoiceState& voice, float targetHz, int numSamples) {
@@ -806,6 +814,8 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
     // Mono jack 0 (Pitch) shares channel 0 with Audio L, so — exactly as in
     // OscillatorModule — pitch CV is ignored in mono mode; MIDI drives the pitch.
     cacheModCV(buffer, /*poly*/ false, cacheLen, numSamples);
+    scanGateEdges(buffer, /*poly*/ false, numSamples);
+    holdUnisonCable(buffer, /*poly*/ false, numSamples);
 
     // Clearing the CV channels here is safe because they were cached above and the module
     // declares kNumOutputs outputs, so JUCE hands us a private copy of any CV buffer that
@@ -814,17 +824,14 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
         buffer.clear(ch, 0, numSamples);
 
     const Wavetable* wt = audioTable();
-    if (wt == nullptr)
+    if (wt == nullptr) {
+        publishLiveDisplayValues(0);
         return;
+    }
 
     fillParameterRamps(cacheLen);
-    const BlockSettings bs = gatherBlockSettings();
+    const BlockSettings bs = gatherBlockSettings(numSamples);
     buildSyncResets(cacheLen, bs.syncMode);
-
-    if (pendingRetrigger) {
-        retriggerVoice(voices[0], bs.unisonCount);
-        pendingRetrigger = false;
-    }
 
     fillFrequencyRamp(voices[0], tunedFrequency(frequencyForMidiNote(voices[0].lastMidiNote)), cacheLen);
 
@@ -833,6 +840,7 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
     float* outR = (rightCh < numCh) ? buffer.getWritePointer(rightCh) : scratchRight.data();
     renderVoice(*wt, voices[0], outL, outR, numSamples, cacheLen, bs);
 
+    publishLiveDisplayValues(cacheLen);
     pushToVisualBuffer(buffer, numSamples);
 }
 
@@ -847,6 +855,8 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         pitchCV[(size_t)v] = (v < numCh) ? buffer.getReadPointer(v)[0] : 0.0f;
 
     cacheModCV(buffer, /*poly*/ true, cacheLen, numSamples);
+    scanGateEdges(buffer, /*poly*/ true, numSamples);
+    holdUnisonCable(buffer, /*poly*/ true, numSamples);
 
     // See the note in processMonoMode: safe because the CVs are cached and the module
     // declares kNumOutputs outputs.
@@ -854,11 +864,13 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         buffer.clear(ch, 0, numSamples);
 
     const Wavetable* wt = audioTable();
-    if (wt == nullptr)
+    if (wt == nullptr) {
+        publishLiveDisplayValues(0);
         return;
+    }
 
     fillParameterRamps(cacheLen);
-    const BlockSettings bs = gatherBlockSettings();
+    const BlockSettings bs = gatherBlockSettings(numSamples);
     buildSyncResets(cacheLen, bs.syncMode);
 
     for (int v = 0; v < MAX_VOICES && v < numCh; ++v) {
@@ -873,9 +885,11 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         }
 
         // A voice going from silent to sounding is a note-on: that is where the retrigger
-        // phase, the random-phase jitter and the unison spread get applied.
-        if (!voices[v].active || (v == 0 && pendingRetrigger)) {
-            retriggerVoice(voices[v], bs.unisonCount);
+        // phase, the random-phase jitter and the unison spread get applied. Nothing was sounding, so
+        // nothing fades out; a later note on the sounding voice restarts on its own sample in renderVoice.
+        if (!voices[v].active) {
+            restartVoice(voices[v], bs.unisonCount, /*fadeFromOld*/ false);
+            voices[v].numMidiRestarts = 0;
             voices[v].active = true;
         }
 
@@ -886,19 +900,19 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         float* outR = (rightCh < numCh) ? buffer.getWritePointer(rightCh) : scratchRight.data();
         renderVoice(*wt, voices[v], outL, outR, numSamples, cacheLen, bs);
     }
-    pendingRetrigger = false;
 
     // Shared CV channels must not leak downstream as audio. The Audio R block sits above
     // them, so clear only the span between the two audio blocks.
     for (int ch = MAX_VOICES; ch < kRightBase && ch < numCh; ++ch)
         buffer.clear(ch, 0, numSamples);
 
+    publishLiveDisplayValues(cacheLen);
     pushToVisualBuffer(buffer, numSamples);
 }
 
 void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffer, bool poly, int cacheLen,
                                            int numSamples) {
-    for (int jack = 1; jack < kNumJacks; ++jack) {
+    for (int jack = 1; jack <= kNumModCV; ++jack) {
         const int ch = modCVChannelFor(jack, poly);
         const size_t slot = (size_t)(jack - 1);
         cvActive[slot] = isChannelActive(buffer, ch, numSamples);
@@ -910,17 +924,14 @@ void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffe
 }
 
 void WavetableOscillatorModule::pushToVisualBuffer(const juce::AudioBuffer<float>& buffer, int numSamples) {
-    if (auto* vb = getVisualBuffer()) {
-        const float* ch0 = buffer.getReadPointer(0);
-        for (int i = 0; i < numSamples; ++i)
-            vb->pushSample(ch0[i]);
-    }
+    if (auto* vb = getVisualBuffer())
+        vb->pushBlock(buffer.getReadPointer(0), numSamples);
 }
 
 const juce::String* WavetableOscillatorModule::jackLabels() {
     static const juce::String labels[kNumJacks] = {"Pitch", "Position", "Octave", "Coarse", "Fine",   "Level",
                                                    "Warp",  "Phase",    "Rand",   "Detune", "Spread", "Width",
-                                                   "Blend", "Sub",      "Pan",    "Sync"};
+                                                   "Blend", "Sub",      "Pan",    "Sync",   "Restart"};
     return labels;
 }
 
@@ -934,7 +945,4 @@ juce::String WavetableOscillatorModule::getWavetableName() const {
     return wt != nullptr ? wt->name : juce::String();
 }
 
-int WavetableOscillatorModule::getWarpSignature() const {
-    return warpParam->getIndex() * 1024 + (int)std::round(warpAmountParam->get() * 200.0f) * 2 +
-           interpolationParam->getIndex();
-}
+int WavetableOscillatorModule::getWarpSignature() const { return getWarpSignature(warpAmountParam->get()); }

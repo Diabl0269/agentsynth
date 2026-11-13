@@ -1,0 +1,42 @@
+# Bug: Auto Arrange put an LFO that is cabled into one track's macro and modulates another's level with ONE of the
+# macros, instead of left of both and halfway between them.
+#
+# What a user does (a copy of a real two-track project: each track an open macro, one LFO feeding both):
+#   1. Opens the project and presses Auto Arrange (Cmd+L).
+#   2. The LFO sits left of both macros, its centre halfway between the first macro's top and the last one's bottom.
+# The layout rule is covered by HierarchicalArrangeLfoCentre (Tests/UI/Layout/); this checks the real canvas.
+record: true
+save_project: arrange-lfo-centred
+steps:
+  - openProject: {path: "${FIXTURES}/lfo-centred.agsproj"}
+  - wait: {}
+  - screenshot: {id: window, name: 1-before}
+  - getState: {id: "card:LFO"}
+  - key: {keys: "cmd+l"}
+  - wait: {}
+  # The LFO feeds the folded "Oscillator 1" card (top 119) and the open "Oscillator 2" macro (its lowest card, ADSR 2,
+  # ends at 1035 plus the hull): its centre, 456 + 258 / 2 = 585, is the middle of that span, not level with either.
+  - expect: {id: "card:LFO", bounds: {x: -1365, y: 456, w: 185, h: 258}}
+  - expect: {id: "card:Track In 2", bounds: {x: -1054, y: 224, w: 185, h: 67}}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  # Zoom back in around the LFO and the two macros it feeds so they fill the window.
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 205, y: 505, dy: 0.5, mods: cmd}
+  - wait: {}
+  - getState: {id: "card:LFO"}
+  - screenshot: {id: window, name: 2-after-auto-arrange}
+  - screenshot: {id: window, name: 3-final-framing}

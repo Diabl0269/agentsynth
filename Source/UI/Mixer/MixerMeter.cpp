@@ -14,7 +14,8 @@ namespace {
 
 constexpr int kBarGap = 2;
 constexpr int kBarsAreaWidth = 16; // two ~7px bars + the gap between them
-constexpr int kLabelMinWidth = 14; // roughly enough for "-60" at the meter's tiny tick font
+constexpr int kLabelMinWidth = 17; // roughly enough for "-60" at the meter's tiny tick font
+constexpr int kLabelHeight = 12;
 
 // A read-only value interface reporting the meter's louder bar as dBFS text, replacing
 // a percentage readout, since a percent of a linear 0..1 amplitude meant nothing once the
@@ -92,8 +93,10 @@ void MixerMeter::paint(juce::Graphics& g) {
         g.drawLine((float)barsArea.getX(), (float)y, (float)barsArea.getRight(), (float)y, isZeroDb ? 1.4f : 0.6f);
         if (showLabels) {
             g.setColour(colors.textMuted);
-            g.setFont(juce::Font(juce::FontOptions(7.5f)));
-            g.drawText(juce::String((int)db), labelArea.getX(), y - 5, labelArea.getWidth(), 10,
+            g.setFont(juce::Font(juce::FontOptions(9.0f)));
+            const int labelTop =
+                meterTickLabelTop(y, kLabelHeight, getLocalBounds().getY(), getLocalBounds().getBottom());
+            g.drawText(meterTickLabel(db), labelArea.getX(), labelTop, labelArea.getWidth(), kLabelHeight,
                        juce::Justification::centredRight, false);
         }
     }

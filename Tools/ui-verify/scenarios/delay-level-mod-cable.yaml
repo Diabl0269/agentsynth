@@ -1,0 +1,52 @@
+# Bug: the Level knob of the effects refused a modulation cable.
+#
+# What a user does:
+#   1. Starts a new project, adds a Delay and an LFO from the library (Cmd+F).
+#   2. Drags the LFO's output onto the Delay's Level control: the card shows the cable, the dot and the ring.
+#   3. Saves the project and opens it again: the cable is still on Level.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: delay}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - screenshot: {name: delay-and-lfo}
+  - expect: {id: "card:Delay > Level", showing: true, within_ms: 3000}
+  - getState: {id: "card:Delay > Level"}
+  # The LFO's CV jack sits at the top right of its card.
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Delay > Level"}
+  - wait: {}
+  - expect: {id: "card:Delay", contains: {cabledTargets: Level}, within_ms: 3000}
+  # The cable moves the ring, not the number: the knob stays where it was.
+  - expect: {id: "card:Delay > Level", value: 1.0}
+  - screenshot: {id: "card:Delay", name: level-cable-dot-and-ring}
+  - screenshot: {name: level-cable-canvas}
+  - saveProject: {path: "${OUT}/delay-level-cable.agsproj"}
+  - click: {id: New empty project}
+  - wait: {}
+  - openProject: {path: "${OUT}/delay-level-cable.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Delay", contains: {cabledTargets: Level}, within_ms: 3000}
+  - expect: {id: "card:Delay > Level", value: 1.0}
+  - screenshot: {name: reopened-canvas}
+  - screenshot: {id: "card:Delay", name: reopened-dot-and-ring}

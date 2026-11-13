@@ -206,9 +206,9 @@ jobs:
         # pins CACHE_WARM_EXPECTED to 'false' (report-only, see below), so the bump can't fail it;
         # ci.yml's equivalent PR jobs use scripts/ci-cache-check.sh's DEPS_KEY_CHANGED input (see
         # its own header comment) for the same reason.
-        key: ${{ runner.os }}-release-deps-ninja4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-release-deps-ninja6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja4-
+          ${{ runner.os }}-release-deps-ninja6-
 
     # ccache. This workflow had none until Aug 2026, so every release build recompiled the whole
     # tree from cold even though ci.yml had just built the identical commit. The key is scoped
@@ -277,6 +277,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DAGENTSYNTH_AUTOMATION=OFF \
           -DSYNTH_MARKETING_VERSION=${{ needs.version.outputs.version }} \
           -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
           -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}" \
@@ -344,8 +345,8 @@ jobs:
     # single most recent generation regardless — FRO341 dropped this from 2 generations to 1,
     # since 2 generations' worth of every cap in both workflows was, by construction, enough on
     # its own to exceed GitHub's 10 GB repo-wide cache limit — tolerates a missing/partial
-    # listing). release-deps-ninja4 is kept in its own key namespace, separate from ci.yml's
-    # deps4 (see this job's "release-deps-ninja4" key comment above) rather than merged, since the
+    # listing). release-deps-ninja6 is kept in its own key namespace, separate from ci.yml's
+    # deps6 (see this job's "release-deps-ninja6" key comment above) rather than merged, since the
     # two workflows populate build/_deps differently (ci.yml also fetches GoogleTest via
     # ENABLE_TESTS=ON; this workflow never does) — but it is NOT exempt from pruning: FRO341 found
     # this family had no prune call at all, so a superseded entry from every past
@@ -381,7 +382,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-release-ccache-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-release-deps-ninja4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-release-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see ci.yml's identical comment in its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
@@ -865,10 +866,10 @@ jobs:
           Expand-Archive -Path winsparkle.zip -DestinationPath winsparkle-tools
 
       # winsparkle-tool's `sign --private-key-file KEYFILE FILENAME` flags are confirmed against
-      # the real .exe's own --help (see docs/development/auto-update.md); the project's README additionally
-      # documents `-f`/`--private-key-file` as printing `sparkle:edSignature="..." length="..."` to
-      # stdout — that exact stdout SHAPE is still not independently re-verified (no real key +
-      # installer have been signed yet in any environment). The private key is written to a temp
+      # the real .exe's own --help (see docs/development/auto-update.md). Its README says `sign` prints
+      # `sparkle:edSignature="..." length="..."`, but the real tool printed only the base64 signature
+      # (v0.447.0, verified against WINSPARKLE_PUBLIC_KEY), so the step below adds the attribute names
+      # and the length itself. The private key is written to a temp
       # file only for the duration of this step and removed immediately after, never left on disk
       # or logged.
       - name: Sign Windows installer
@@ -881,10 +882,15 @@ jobs:
           Set-Content -Path $keyFile -Value $env:WINSPARKLE_PRIVATE_KEY -NoNewline
           $exePath = "appcast-work\AgentSynthSetup.exe"
           $toolExe = Get-ChildItem -Path winsparkle-tools -Recurse -Filter "winsparkle-tool.exe" | Select-Object -First 1
-          $output = & $toolExe.FullName sign -f $keyFile $exePath
+          $output = (& $toolExe.FullName sign -f $keyFile $exePath | Out-String).Trim()
           Remove-Item -Path $keyFile -Force
-          # Per the README's documented example output, $output already contains both
-          # sparkle:edSignature="..." AND length="..." as one string — no separate length needed.
+          # The tool prints only the bare base64 signature (v0.447.0's feed shipped it with no attribute
+          # name, which is invalid XML), so build both attributes here. If a later tool version prints
+          # the full `sparkle:edSignature="..." length="..."` pair, pass it through unchanged.
+          if ($output -notmatch 'sparkle:edSignature') {
+            $length = (Get-Item $exePath).Length
+            $output = "sparkle:edSignature=`"$output`" length=`"$length`""
+          }
           Write-Output "signature-attrs=$output" >> $env:GITHUB_OUTPUT
 
       # Hand-templated rather than tool-generated (see "Fetch WinSparkle tools" above). WinSparkle
@@ -900,6 +906,7 @@ jobs:
         run: |
           $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/AgentSynthSetup.exe"
           $pubDate = [DateTime]::UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss +0000")
+          $shortVersion = "${{ needs.release.outputs.tag }}".TrimStart("v") # same form as the macOS feed (0.447.0)
           $xml = @"
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
@@ -910,7 +917,7 @@ jobs:
                 <pubDate>$pubDate</pubDate>
                 <enclosure url="$downloadUrl"
                            sparkle:version="${{ github.run_number }}"
-                           sparkle:shortVersionString="${{ needs.release.outputs.tag }}"
+                           sparkle:shortVersionString="$shortVersion"
                            ${{ steps.sign.outputs.signature-attrs }}
                            type="application/octet-stream" />
               </item>

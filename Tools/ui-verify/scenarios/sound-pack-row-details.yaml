@@ -1,0 +1,29 @@
+# Settings > Sound packs: each pack row opens to who made it, its licence and every instrument (the old Credits list at
+# the bottom is gone).
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab: every pack is a closed row, as tall as before.
+#   2. Clicks the chevron at the left of a pack: the row grows and shows the credit, "Licence: ..." line, View licence,
+#      and the instruments list; the chevron turns down.
+#   3. Closes it again: the row is back to its closed height.
+#   4. Rests the pointer on a closed row's detail line: a tooltip lists the full line.
+record: true
+save_project: sound-pack-row-details
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {}
+  - getState: {id: "packDisclosure:core"}
+  - screenshot: {id: "Settings", name: pack-row-closed}
+  - click: {id: "packDisclosure:core"}
+  - wait: {settleMs: 600}
+  - getState: {id: "packDisclosure:core"}
+  - screenshot: {id: "Settings", name: pack-row-open}
+  - click: {id: "packDisclosure:core"}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "Settings", name: pack-row-closed-again}
+  - hover: {id: "packDetail:core"}
+  - wait: {settleMs: 1500}
+  - expect: {id: "dialogTooltip", showing: true, within_ms: 3000}
+  - screenshot: {id: "Settings", name: pack-detail-tooltip}

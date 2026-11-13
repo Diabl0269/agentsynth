@@ -12,10 +12,26 @@
 // children. Its one production caller is GraphEditor::changeMacroPortColour in GraphEditorMacroApi.cpp.
 
 #include "GraphEditor.h"
+#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 
+#include "GraphEditorInternal.h"
+#include "MacroOwnerIndex.h"
+#include "MacroPortRepair.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+namespace {
+// A port module that no macro lists as one of its ports. Only the dock places a port's widget (on its macro's hull
+// edge); a stray has no hull to sit on, and its saved position can be the canvas origin, so it stays hidden. The node
+// is untouched, and so is its cable until GraphEditor::reanchorCablesAroundCollapsedMacros drops the cable from view.
+bool isStrayPortIn(const synth::MacroOwnerIndex& owners, const juce::String& uuid, const juce::AudioProcessor* p) {
+    if (uuid.isEmpty() || !synth::isMacroPortModule(p))
+        return false;
+    const auto* owner = owners.ownerOf(uuid);
+    return owner == nullptr || !owner->memberIsPort(uuid);
+}
+} // namespace
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)
 // member ModuleComponents. Called at the end of updateComponents(), the same seam that
@@ -24,6 +40,14 @@
 // MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
 // MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
 void GraphEditor::syncMacroCards() {
+    // A fold the model has left behind (its macro gone, or toggled back) lands first; any other goes on, so a second
+    // Cmd+Z mid-fold leaves the first fold running (docs/layout/macro-fold-motion.md "Interruption").
+    cardGlide_.fold().landWhere([this](const MacroFoldAnimator::Plan& plan) {
+        const auto* root = macros.find(plan.rootId);
+        if (plan.rootRemoved)
+            return root != nullptr;
+        return root == nullptr || root->collapsed != plan.rootCollapsed || !macros.isVisible(plan.rootId);
+    });
     auto& cards = content.getMacroCards();
 
     // 1. Remove cards for macros that no longer exist.
@@ -36,6 +60,9 @@ void GraphEditor::syncMacroCards() {
             // destroyed below. Cancel now rather than leaving selectionDragActive stuck.
             if (card->isBodyDragActive())
                 cancelLiveDragGestures();
+            // A collapsed macro's card shrinks away (a no-op for an open one, whose card is hidden, and outside a
+            // delete or undo Scope).
+            cardGlide_.noteExit(card, CardGlideAnimator::macroKey(card->getMacroId()));
             content.removeChildComponent(card);
             cards.remove(i);
         }
@@ -51,23 +78,40 @@ void GraphEditor::syncMacroCards() {
                 break;
             }
         }
-        if (card == nullptr) {
+        const bool isNew = card == nullptr;
+        if (isNew) {
             card = cards.add(new MacroCardComponent(*this, macro.id));
             content.addAndMakeVisible(card);
         }
-        card->setBounds(macro.bounds);
-        card->setVisible(macro.collapsed);
+        card->setName("macroCard:" +
+                      macro.name); // test mode tells several cards apart (docs/development/test-mode.md#ids)
+        // The card's height is derived from its port rows (one 16px row each on the busier side; a
+        // two-jack Stereo port takes two), never persisted: macro.bounds keeps whatever height it was saved with.
+        int inputs = 0, outputs = 0;
+        for (const auto& p : macroController_.macroCardPortLayout(macro.id))
+            (p.isInput ? inputs : outputs) = juce::jmax(p.isInput ? inputs : outputs, p.row + 1);
+        card->setBounds(macro.bounds.withHeight(detail::macroCardHeightFor(juce::jmax(inputs, outputs))));
+        // A nested macro inside a collapsed ancestor shows no card: the ancestor's card stands in for
+        // it. Its own collapsed flag is kept, so it comes back as a card when the ancestor expands.
+        const bool wasShown = !isNew && card->isVisible();
+        const bool shown = macro.collapsed && macros.isVisible(macro.id);
+        card->setVisible(shown);
+        card->refreshPortRows(wasShown && shown); // a row that came or went fades; a fold or expand just takes them
     }
 
-    // 3. A member's own ModuleComponent is hidden exactly while its macro is collapsed — kept
-    //    alive (not removed), so its position keeps tracking a card drag underneath.
+    // 3. A member's own ModuleComponent is hidden exactly while any macro in its owner chain is
+    //    collapsed — kept alive (not removed), so its position keeps tracking a card drag underneath. Owners come from
+    //    one index for the pass: a search of every macro per card made each sync O(cards x macros x members).
+    const synth::MacroOwnerIndex owners(macros);
     for (auto* comp : content.getModules()) {
         if (comp == nullptr)
             continue;
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
-        const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
-        comp->setVisible(macro == nullptr || !macro->collapsed);
+        const bool hidden =
+            !uuid.isEmpty() && (owners.hiddenByCollapse(uuid) || isStrayPortIn(owners, uuid, comp->getModule()));
+        comp->setVisible(!hidden);
     }
+    cardGlide_.fold().reassertHolds(); // this pass showed every card the model shows; a running fold holds its own
 }
 
 // Theme colour for a module category, matching how the canvas colours cables/cards by
@@ -197,4 +241,56 @@ void GraphEditor::endMacroPortPreviewSession() {
     previewSessionNode_.clear();
     previewSessionCard_ = nullptr;
     previewSessionWidget_ = nullptr;
+}
+
+// What the mini map draws: the cards the canvas shows (a folded macro stands in as its own card), plus the visible
+// cables.
+synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
+    synth::ui::MinimapModel model;
+
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+
+    // The map draws what the canvas draws: a folded macro hides its members (setVisible(false) in syncMacroCards) and
+    // stands in as its own card, so a hidden member would be a card on the map under the view box with nothing
+    // behind it on the canvas.
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr || comp->getModule() == nullptr || !comp->isVisible())
+            continue;
+
+        // Per-category theme colour, the same source buildVisibleCables()/colourForCable() use for
+        // "By source module" cable colouring — there is no cheap per-instance colour on
+        // ModuleComponent itself, but category IS available cheaply via ModuleBase::getModuleType().
+        auto category = synth::ui::ModuleCategory::Utility;
+        if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
+            category = synth::ui::categoryFor(mb->getModuleType());
+
+        synth::ui::MinimapModel::Node node;
+        node.bounds = comp->getBounds().toFloat();
+        node.colour = synth::ui::themeColourForCategory(colors, category);
+        node.selected = isNodeSelected(comp->getNodeId());
+        model.nodes.push_back(node);
+    }
+
+    for (auto* card : content.getMacroCards()) {
+        if (card == nullptr || !card->isVisible())
+            continue;
+        synth::ui::MinimapModel::Node node;
+        node.bounds = card->getBounds().toFloat();
+        node.colour = colors.accent;
+        node.selected = macroController_.isMacroSelected(card->getMacroId());
+        model.nodes.push_back(node);
+    }
+
+    for (const auto& cable : buildVisibleCables()) {
+        synth::ui::MinimapModel::Cable mc;
+        mc.p1 = cable.p1;
+        mc.p2 = cable.p2;
+        mc.colour = colourForCable(cable);
+        model.cables.push_back(mc);
+    }
+
+    model.viewport = getVisibleCanvasRect();
+    return model;
 }

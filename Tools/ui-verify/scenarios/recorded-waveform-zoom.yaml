@@ -1,0 +1,31 @@
+# Bug: a recorded clip's waveform drew as stepped square blocks once zoomed in (one peak bucket repeated across many
+# pixel columns as 1-pixel lines), and never showed the real wave however far you zoomed.
+# The outline and RMS body are now smooth filled shapes, interpolated between peak buckets, and below one peak bucket
+# per pixel a committed clip draws the real samples read from its audio file.
+#
+# What a user does: opens a project with one 4 s clip of an oscillator-like tone with four changing, decaying notes
+# (it has no waveform file; opening the project backfills it), then zooms in with Cmd + the wheel anchored at the clip's
+# left edge: first out at the default zoom (outline with a darker body), then to about one peak bucket per pixel, then
+# right in on the first note, where the wave itself shows. Each zoom is a glide, so the switch between the peaks and the
+# real samples shows no jump. The probe `clipWaveform` reads `name:none|summary|columns`.
+record: true
+save_project: recorded-waveform-zoom
+steps:
+  - copyFixture: {name: waveform-sweep.agsproj}
+  - openProject: {path: "${SCRATCH}/waveform-sweep.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Sweep:columns", within_ms: 10000}
+  - mark: {check: 1, name: zoomed-out-outline-and-body}
+  - glide: {name: zoom-to-one-bucket-per-pixel, frames: 12, do: {wheel: {id: timelineClipLaneArea, x: 2, y: 28, dy: 0.64, mods: cmd}}}
+  - wait: {}
+  - mark: {check: 2, name: one-bucket-per-pixel}
+  - glide: {name: zoom-to-the-wave, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 2, y: 28, dy: 1.5, mods: cmd}}}
+  - wait: {}
+  - mark: {check: 3, name: zoomed-in-real-wave}
+  - glide: {name: zoom-back-out, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 2, y: 28, dy: -2.14, mods: cmd}}}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Sweep:columns", within_ms: 5000}

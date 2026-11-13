@@ -1,0 +1,34 @@
+# Feature: grid lines in the Filter's Edit shapes window come in tiers (bright labelled guides, faint snap lines),
+# the Guides pill hides only the labelled guides, and the line near the pointer lights up with its name.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Octaves at 1/3, then turns Guides off and on.
+record: true
+save_project: filter-shapes-grid-tiers
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Octaves}
+  - wait: {}
+  - click: {id: "1/3"}
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: guides-on}
+  - click: {id: Guides}
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: guides-off}
+  - click: {id: Guides}
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: guides-on-again}

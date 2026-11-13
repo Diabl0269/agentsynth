@@ -9,17 +9,37 @@ It is an untransformed sibling overlay on `GraphEditor`, the same pattern as the
 in **canvas coordinates** — the space module cards and cables already live in — and mapped down to
 the small map area with `computeWorldToMap()`.
 
+## Show and hide motion
+
+Toggling the map (top-bar button, Opt+Cmd+K) fades it and slides it 12 px out of, or back into, its
+bottom-left corner: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out. It uses the shared
+`PanelSlide` + `AnimationDriver` ([animation](animation.md#panelslide)), in
+`GraphEditorMinimapSlide.cpp`; `layoutMinimap()` derives bounds and alpha from the fraction, on every
+layout pass and every frame. Closing keeps the map visible, but click-through, until the fade ends,
+then hides it. A re-toggle mid-flight reverses from the current fraction. Under Reduce Motion it is a
+plain 80 ms fade with no slide. When the editor is not showing (headless tests, the persisted restore
+at startup) the toggle lands on its final state before it returns. Tests reach the animated path with
+`setMinimapAnimateOffScreenForTest(true)`, `advanceMinimapSlideForTest(t)` and
+`finishMinimapSlideForTest()`.
+
 ## Placement, sizing and auto-hide
 
-Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) x min(150, h/4)`.
+Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) x min(150, h/4)`: it shrinks with a short or
+narrow canvas (a quarter of each side), so the map stays useful exactly where the pane is too small to see the whole
+graph.
 
 **Bottom-left is deliberate**: the mod-matrix panel occupies the right-hand 600 px.
 
-Below a 480x360 editor the minimap auto-hides. `GraphEditor::resized()` recomputes
-`minimapVisible && fits` on every layout pass against **absolute floors** — a fraction-of-self test
-such as `w/4 * 2 <= w` is always true, so it would never actually hide anything. This never clobbers
-the user's preference: `minimapVisible` still records what they asked for, and the map reappears the
-moment the window grows back past the floor.
+Only below a 240x160 editor (the smallest legible map, `kMinMapWidth` x `kMinMapHeight` = 60x40, is a quarter of it)
+does the minimap auto-hide. `GraphEditor::resized()` recomputes `minimapVisible && fits` on every layout pass against
+**absolute floors** — a fraction-of-self test such as `w/4 * 2 <= w` is always true, so it would never actually hide
+anything. This never clobbers the user's preference: `minimapVisible` still records what they asked for, and the map
+reappears the moment the pane grows back past the floor. `GraphEditor::isMinimapSuppressedBySize()` reports the floor
+(`MinimapComponent::fitsEditor`): while it holds, the canvas toolbar's Minimap button is greyed out with the tooltip
+"Needs a taller canvas" (re-evaluated on every `MainComponent` layout pass), and is the normal toggle otherwise.
+A short canvas (a tall bottom panel) is well above the floor, so there the button stays on and the map shows, smaller.
+Tests: `BottomDockCanvasTabTest.TheMinimapStaysAvailableInAShortCanvasAndShrinksToFit`, `MinimapFloor.*`,
+`CanvasToolbarWindowTest.AShortCanvasKeepsTheMinimapButtonOn`.
 
 ## What it draws
 
@@ -44,9 +64,10 @@ functions with no `Component` state, unit-tested directly in
 
 ## Interaction
 
-A click or drag on the map converts the event position to a canvas point (`mapToWorld`) and fires
-`onNavigate`, which `GraphEditor` wires to `centreViewOn()` — it pans so that point is centred, and
-zoom is unchanged. The scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to
+A click or drag on the map converts the event position to a canvas point (`mapToWorld`). The press fires
+`onNavigateEased`, which `GraphEditor` wires to `flyViewTo()` (the view flies there in 200 ms `easeOutCubic`, at once under
+Reduce Motion or Animations Off); every drag move fires `onNavigate`, wired to `centreViewOn()`, so the view stays under
+the pointer. Either way it pans so that point is centred, and zoom is unchanged. A drag after the press cancels the fly. The scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to
 `zoomAroundCentre()`.
 
 Both the minimap's wheel-zoom and the canvas's own (`GraphEditor::mouseWheelMove`) share one private
@@ -54,7 +75,7 @@ helper, `applyZoomAt(wheelDelta, screenAnchor)`: the canvas anchors on the mouse
 minimap on the visible area's centre, but the zoom curve and the `[0.1, 2.0]` clamp are identical.
 
 Hovering the map shows a tooltip that leads with the show/hide shortcut, the same way the toolbar
-buttons read: `"Hide Minimap  (Cmd+K)  - click or drag to navigate, scroll to zoom"`. **The binding
+buttons read: `"Hide Minimap  (Opt+Cmd+K)  - click or drag to navigate, scroll to zoom"`. **The binding
 is rebindable, so `MinimapComponent` does not depend on `ShortcutManager`**: it exposes
 `setShortcutHint(displayString)` and `MainComponent::applyToolbarIcons()` resolves the current
 binding and pushes it down alongside the toolbar tooltips. Because tooltips embed the resolved
@@ -66,7 +87,11 @@ advertising the pre-rebind key until some unrelated toggle happens to refresh it
 
 Follows [rendering](rendering.md). `setModel()` and `setViewport()` only `repaint()` when the
 incoming data actually differs from the current model (`MinimapModel::operator==`, a field-wise
-comparison over nodes, cables and viewport).
+comparison over nodes, cables and viewport). The nodes and cables themselves are drawn into an image and reused
+(`MinimapComponent::paint`): the map sits over the canvas, so every 30 Hz canvas tick and every pan frame repaints it,
+and redrawing every card and cable each time made those frames cost in proportion to the patch. The image is redrawn
+only when the nodes or cables change, or the world-to-map mapping, the pixel scale or the accent colour does; the
+viewport wash and outline are drawn live on top.
 
 `GraphEditor::timerCallback()` — the existing 30 Hz tick that already drives the connection-flow
 animation — pushes a freshly built model via `buildMinimapModel()` **only while the minimap is
@@ -84,18 +109,19 @@ off-screen also removes it and its children from the accessibility tree, not jus
 
 | Member | Purpose |
 |---|---|
-| `setMinimapVisible(bool)` | Sets the user preference and re-runs `resized()`'s fits check; also seeds a full model immediately so the map is not blank until the next 30 Hz tick |
+| `setMinimapVisible(bool)` | Sets the user preference and eases the map in or out (see [Show and hide motion](#show-and-hide-motion)); seeds a full model so the map is not blank until the next 30 Hz tick |
 | `toggleMinimapVisibility()` | `setMinimapVisible(!minimapVisible)` |
 | `isMinimapVisible()` | The user preference, not the fits-adjusted effective visibility |
 | `getMinimap()` | Direct access to the `MinimapComponent` |
 | `getVisibleCanvasRect()` | The canvas rect currently visible — the inverse of the content transform applied to `getLocalBounds()` |
-| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred; zoom unchanged |
+| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred at once; zoom unchanged (the minimap's drag; its press uses `flyViewTo`) |
+| `flyViewTo(canvasPoint)` | The same pan as a 200 ms fly, for anything that shows something on the canvas; at once under Reduce Motion, Animations Off or off screen ([animation](animation.md#motion-rules)) |
 | `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
 | `buildMinimapModel()` | Walks every module, and reuses the `buildVisibleCables()` memo (no separate enumeration walk) for the cable list, into a `MinimapModel` snapshot |
 
 ## Toolbar, shortcut and persistence
 
-A toolbar toggle (`ToggleMinimap`, in the right-hand group before `ToggleModMatrix`) and the
-**Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
+A toggle on the [canvas toolbar](chrome.md#canvas-toolbar) (not the top bar) and the
+**Opt+Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, defaulting to `true`.

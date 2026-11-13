@@ -1,0 +1,41 @@
+# The shape window's grid and spectrum (docs/modules/custom-filter.md#shape-editor-window): the note-length grid shared with
+# the LFO card, the live spectrum analyser shared with the Filter's response view, the window's toolbar row and the
+# settings it remembers. Appended to APPUI_SOURCES (cmake/AppUISources.cmake is at the file-size cap).
+list(APPEND APPUI_SOURCES
+    Source/UI/ModuleViews/CurveEditor/CurveGridNoteLength.h
+    Source/UI/ModuleViews/CurveEditor/CurveGridNoteLength.cpp
+    Source/UI/ModuleViews/FilterSpectrumAnalyser.h
+    Source/UI/ModuleViews/FilterSpectrumAnalyser.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorToolbar.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorLibrary.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorDraw.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawPenButton.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h
+    Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.h
+    Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorDraw.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h
+    Source/UI/ModuleViews/ShapeEditor/ShapePicker.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapePicker.h
+    Source/UI/Chrome/Badge/Badge.cpp
+    Source/UI/Chrome/Badge/Badge.h
+)
+# Keyboard point editing (shared with the automation lanes) keeps its own list; included here because CMakeLists.txt
+# is at the file-size cap.
+include(cmake/PointEditingSources.cmake)
+# The song key and the command table's row files keep their own lists for the same reason.
+include(cmake/SongKeySources.cmake)
+include(cmake/ColourPickerSources.cmake)
+include(cmake/CommandRowSources.cmake)
+include(cmake/ButtonTooltipSources.cmake) # appends the shared button words and the tooltip rule helper
+# The modulation curve views keep their own list for the same reason.
+include(cmake/ModCurveUISources.cmake)
+# The Mod Matrix source picker's create rows.
+include(cmake/ModMatrixPickerCreateSources.cmake)
+include(cmake/ModMatrixRowMotionSources.cmake)
+# The Hosted Plugin card's outputs strip and Outputs panel.
+include(cmake/HostedOutputsSources.cmake)

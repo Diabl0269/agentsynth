@@ -1,0 +1,86 @@
+#pragma once
+
+// Nested value types of MainComponent, declared at namespace scope so MainComponent.h stays a
+// declaration list. MainComponent re-exports each as a member alias, so every `MainComponent::X`
+// spelling still compiles.
+
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_graphics/juce_graphics.h>
+#include <vector>
+
+namespace synth::maincomponent {
+
+/** Which surface Copy/Paste/Duplicate/Cut/Repeat act on. Enumerators are only ever appended, so no
+ *  existing value moves (same convention as AppCommands::CommandIDs). */
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane };
+
+/** The three sliding panels MainComponent docks. */
+enum class SlidingPanel { Library, AiChat, Timeline };
+
+/** What the user picked in the unsaved-changes dialog: Save runs performSaveProject; Discard
+ *  continues immediately; Cancel abandons the action that asked. */
+enum class UnsavedChangesChoice { Save, Discard, Cancel };
+
+/** Pick for a pending autosave sidecar: Restore loads autosave.json (stays dirty), Discard loads
+ *  project.json; either deletes the sidecar. */
+enum class AutosaveRecoveryChoice { Restore, Discard };
+
+/** The choice when opening a `.json` patch: replace the current one, add on top, or cancel. */
+enum class PatchLoadMode { Replace, Append, Cancel };
+
+/** One end of a lane carry: the node (by uuid) and parameter an automation lane drives. */
+struct LaneEnd {
+    juce::String nodeUuid;
+    juce::String paramId;
+    bool operator==(const LaneEnd& other) const noexcept {
+        return nodeUuid == other.nodeUuid && paramId == other.paramId;
+    }
+};
+
+/** Whether carrying a lane's attachments takes them off the old lane (a Change parameter) or leaves them and
+ *  adds copies (a Duplicate). */
+enum class CarryMode { Move, Copy };
+
+/** Step state threaded through buildInstrumentTrackAndChain's helpers (MainComponentTrackCreation.cpp). */
+struct InstrumentChainBuild {
+    synth::TrackId trackId;
+    juce::AudioProcessorGraph::Node* trackInNode = nullptr;
+    juce::String trackInUuid;
+    juce::Point<int> trackInPosition, trackInSize;
+    juce::AudioProcessorGraph::Node* instrumentNode = nullptr;
+    juce::String instrumentModuleType, instrumentUuid;
+    juce::String envelopeShapeType; // the module type whose envelope stage the track gets; empty = instrumentModuleType
+    juce::AudioProcessorGraph::Node* chainSource = nullptr;
+    int sourceRightChannel = 1;
+    juce::String chainSourceType;
+    juce::Point<int> chainSourcePosition;
+    juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
+    std::vector<juce::String> insertUuids; // effect inserts, in chain order (timelineOps only)
+};
+
+/** Message-thread state of one armed-Audio-track take, from the Record-on click to the commit. Every take in
+ *  MainComponent's list is rolling. The punch is the earliest beat the COMMITTED CLIP may start at; pre-roll
+ *  frames are recorded, then trimmed out of the clip window. The capture* fields are FROZEN at capture start
+ *  and never re-read at commit. */
+struct AudioTake {
+    enum class Source { Input, WholeMix, Track };
+    Source source = Source::WholeMix; // the track's own input (an engine input slot), the master Rec Tap, or another
+                                      // track's mixer channel (an engine strip slot)
+    int inputSlot = -1;               // Input and Track: the synth::InputTakeRecorder slot
+    int firstChannel = 0;             // Input only: 0-based device input
+    int numChannels = 2;              // channels in the WAV
+    synth::TrackId track;             // the armed Audio track the clip lands on
+    double punchInBeat = 0.0;         // earliest beat the committed clip may start at
+    juce::File wavFile;               // absolute path being written
+    juce::File peaksFile;             // its .agpk sidecar
+    juce::String assetRef;            // what the committed clip stores (see synth::Clip::assetRef)
+    juce::AudioProcessorGraph::NodeID tapNode;   // WholeMix only
+    juce::AudioProcessorGraph::NodeID stripNode; // Track only: the source track's channel strip when resolved
+
+    double captureSampleRate = 44100.0;
+    double captureBpm = 120.0;
+    int captureRecordingLatencySamples = 0;
+};
+
+} // namespace synth::maincomponent

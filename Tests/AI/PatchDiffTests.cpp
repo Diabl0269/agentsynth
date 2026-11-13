@@ -1,4 +1,4 @@
-// Unit coverage for Source/AI/PatchDiff.h: the human-readable diff the chat UI's PatchCard shows
+// Unit coverage for Source/AI/PatchDiff.h: the human-readable diff the chat UI's edit-plan card shows
 // as its default (pre-Apply) view. Two things matter structurally, both exercised below:
 //
 //  1. Node identity is the graphToJSON "uuid" field, not the integer "id" (merge-mode's scratch
@@ -244,7 +244,7 @@ TEST(PatchDiffTest, DescribeRendersHumanReadableLines) {
 }
 
 //==============================================================================
-// summarizePatch() — what replace-mode PatchCards render instead of a computeDiff() diff (see
+// summarizePatch() — what the edit-plan card shows for a replace-mode patch instead of a computeDiff() diff (see
 // PatchDiff.h's doc comment for why a replace-mode diff, while technically correct, isn't useful).
 
 TEST(PatchDiffTest, SummarizePatchListsNodeTypesInSnapshotOrderAndCountsConnections) {
@@ -298,7 +298,7 @@ TEST(PatchDiffTest, SummarizePatchOnEmptyGraphIsEmpty) {
 }
 
 //==============================================================================
-// groupChangesByKind() — used only for merge-mode PatchCard rendering; must not touch
+// groupChangesByKind() — used only for the edit-plan card's merge-mode details; must not touch
 // computeDiff()'s own output order (its tests assert on that directly).
 
 TEST(PatchDiffTest, GroupChangesByKindGroupsWithoutReordering) {
@@ -396,10 +396,10 @@ TEST_F(PatchDiffIntegrationTest, UntrustedRescaleShowsLandedValueNotRawPatchValu
         R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Filter"},{"id":3,"type":"Audio Output"}],
             "connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0},{"src":2,"srcPort":0,"dst":3,"dstPort":0}]})"));
 
-    // Filter cutoff's real range is [20, 20000] (FilterModule.h), linear (no skew). 0.5 is inside
+    // Filter cutoff's real range is [20, 20000] (FilterModule.h), logarithmic. 0.5 is inside
     // [0,1], so AIStateMapper::applyParamsToProcessor's untrusted-apply heuristic treats it as a
     // normalised value the model forgot to denormalize and rescales it to
-    // range.convertFrom0to1(0.5) == 10010.0 — not the literal 0.5 the patch states.
+    // range.convertFrom0to1(0.5) == 632.46 — not the literal 0.5 the patch states.
     const char* candidate =
         R"({"mode":"merge","nodes":[{"id":2,"type":"Filter","params":{"cutoff":0.5}}],"connections":[]})";
 
@@ -410,7 +410,7 @@ TEST_F(PatchDiffIntegrationTest, UntrustedRescaleShowsLandedValueNotRawPatchValu
     auto* c = firstOfKind(changes, Kind::ParamChanged);
     ASSERT_NE(c, nullptr);
     EXPECT_EQ(c->paramId, "cutoff");
-    EXPECT_NEAR((double)c->afterValue, 10010.0, 1.0);
+    EXPECT_NEAR((double)c->afterValue, 632.46, 1.0);
     EXPECT_GT(std::abs((double)c->afterValue - 0.5), 1.0) << "must show the RESCALED value, not the raw patch value";
 }
 

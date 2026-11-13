@@ -1,0 +1,51 @@
+# A plugin parameter has one place in the Mod Matrix's destination list, and a pick there ends like a drop on the card:
+# the knob shows, the cable lands on it with its short name, and one Cmd+Z takes it all back.
+#
+# What a user does:
+#   1. Opens a project with an LFO and a plugin (fixture hosted-plugin-mod.agsproj; Apple's AUDelay, listed through the
+#      seeded scan list because test mode does not scan) and shows the matrix.
+#   2. Adds a row, picks the LFO as source, searches "delay time" as destination: it is under Plugins. Return.
+#   3. The knob appears on the card. Opening the list again shows the same row under Plugins, now marked Modulated.
+#   4. Cmd+Z takes back the knob; Cmd+Shift+Z brings it back.
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/hosted-plugin-mod.agsproj"}
+  - wait: {}
+  - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - click: {id: addModulation}
+  - wait: {}
+  - expect: {id: modSource, showing: true, within_ms: 2000}
+  - click: {id: modSource}
+  - wait: {}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}}
+  - click: {id: modDest}
+  - wait: {}
+  - type: {text: delay time}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: free-under-plugins}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 2000}
+  - screenshot: {name: knob-and-cable-name}
+  - click: {id: modDest}
+  - wait: {}
+  - type: {text: delay time}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: modulated-under-plugins}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 2000}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 2000}

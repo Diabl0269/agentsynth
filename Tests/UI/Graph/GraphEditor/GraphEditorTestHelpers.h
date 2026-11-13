@@ -4,8 +4,6 @@
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
 #include "AudioEngine/AudioEngine.h"
-#include "Modules/FX/DelayModule.h"
-#include "Modules/FX/ReverbModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <gtest/gtest.h>
@@ -85,54 +83,6 @@ inline juce::AudioProcessorGraph::NodeID findNodeIdByName(juce::AudioProcessorGr
         if (node->getProcessor() != nullptr && node->getProcessor()->getName() == name)
             return node->nodeID;
     return {};
-}
-
-/** Sink at (760,100) fed on both legs by a collapsed Reverb at (40,100) — the factory-preset shape.
- *  Leaves room for a 280px-wide ghost at x=440 to sit just left of the sink. */
-struct WiredSinkFixture {
-    juce::AudioProcessorGraph::Node::Ptr outNode, reverbNode;
-    juce::AudioProcessorGraph::NodeID outId, reverbId;
-};
-inline WiredSinkFixture makeWiredSink(AudioEngine& engine, GraphEditor& editor) {
-    WiredSinkFixture f;
-    auto& graph = engine.getGraph();
-    f.outNode = addAudioOutputNode(graph, 760, 100);
-    f.reverbNode = graph.addNode(std::make_unique<ReverbModule>());
-    f.reverbNode->properties.set("x", 40);
-    f.reverbNode->properties.set("y", 100);
-    editor.updateComponents();
-    sizeModuleComponents(editor);
-    f.outId = f.outNode->nodeID;
-    f.reverbId = f.reverbNode->nodeID;
-    editor.connectPorts(f.reverbId, 0, f.outId, 0, false, false);
-    return f;
-}
-
-/** Reverb (upstream, 40/600) → Delay (insert target, 760/100), one collapsed cable covering both
- *  raw legs, so the target's audio input group is FULLY occupied. Leaves room for a 280px ghost at
- *  x=440 just left of the Delay. Collapsed FX on both ends keeps the group a single leg — a Filter
- *  fronts TWO audio input legs (L/R), and wiring only one leaves a mixed free/occupied group that
- *  insert deliberately refuses (see SmartConnectionCtrlDoesNotInsertIntoPartlyWiredStereoInput). */
-struct WiredChainFixture {
-    juce::AudioProcessorGraph::Node::Ptr upstreamNode, targetNode;
-    juce::AudioProcessorGraph::NodeID upstreamId, targetId;
-};
-inline WiredChainFixture makeWiredChain(AudioEngine& engine, GraphEditor& editor, bool wireIt = true) {
-    WiredChainFixture f;
-    auto& graph = engine.getGraph();
-    f.targetNode = graph.addNode(std::make_unique<DelayModule>());
-    f.targetNode->properties.set("x", 760);
-    f.targetNode->properties.set("y", 100);
-    f.upstreamNode = graph.addNode(std::make_unique<ReverbModule>());
-    f.upstreamNode->properties.set("x", 40);
-    f.upstreamNode->properties.set("y", 600);
-    editor.updateComponents();
-    sizeModuleComponents(editor);
-    f.targetId = f.targetNode->nodeID;
-    f.upstreamId = f.upstreamNode->nodeID;
-    if (wireIt)
-        editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
-    return f;
 }
 
 // Looks up a module's card by the processor it fronts (nullptr if the graph has no such card).

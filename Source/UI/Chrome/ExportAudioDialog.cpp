@@ -1,5 +1,8 @@
 #include "ExportAudioDialog.h"
 
+#include "Transport/LameLocator.h"
+#include "UI/Layout/DialogKeyboard.h"
+
 namespace synth::ui {
 
 namespace {
@@ -30,6 +33,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     optionsPage_.addAndMakeVisible(sampleRateBox_);
     optionsPage_.addAndMakeVisible(bitDepthLabel_);
     optionsPage_.addAndMakeVisible(bitDepthBox_);
+    optionsPage_.addAndMakeVisible(bitrateLabel_);
+    optionsPage_.addAndMakeVisible(bitrateBox_);
     optionsPage_.addAndMakeVisible(tailLabel_);
     optionsPage_.addAndMakeVisible(tailSlider_);
     optionsPage_.addAndMakeVisible(tailUnitBox_);
@@ -47,16 +52,26 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
 
     formatBox_.addItem("WAV", 1);
     formatBox_.addItem("AIFF", 2);
+    formatBox_.addItem("FLAC", 3);
+    formatBox_.addItem("MP3", 4);
     formatBox_.setSelectedId(1, juce::dontSendNotification);
+    for (const int kbps : kMp3BitratesKbps)
+        bitrateBox_.addItem(juce::String(kbps) + " kbps", kbps);
+    bitrateBox_.setSelectedId(192, juce::dontSendNotification);
     formatBox_.onChange = [this] {
+        // A disabled item cannot be clicked, but a programmatic selection could still land on it.
+        if (selectedFormat() == BounceFormat::Mp3 && !lameExecutable_.existsAsFile()) {
+            formatBox_.setSelectedId(1, juce::sendNotificationSync);
+            return;
+        }
         updateBitDepthChoicesForFormat();
+        updateFormatDependentRows();
         // Keep the destination's extension in step with the chosen format so the file that lands
         // on disk matches what the format picker says, without the user having to retype it. Stems
         // mode's destination is a FOLDER (each stem file gets its own extension at export time), so
         // there is no destination extension to track here.
         if (!stemsMode_) {
-            const bool isAiff = formatBox_.getSelectedId() == 2;
-            destination_ = destination_.withFileExtension(isAiff ? "aiff" : "wav");
+            destination_ = destination_.withFileExtension(fileExtensionFor(selectedFormat()));
         }
     };
 
@@ -66,6 +81,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     sampleRateBox_.setSelectedId(2, juce::dontSendNotification); // 48 kHz default
 
     updateBitDepthChoicesForFormat(); // populates bitDepthBox_ for WAV, selects 24-bit
+    setLameExecutable(findLameExecutable());
+    updateFormatDependentRows();
 
     tailSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
     tailSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
@@ -100,6 +117,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     // juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
     // below, so this field needs its own route to the exact same page-aware handler.
     fileNameEditor_.onEscapeKey = [this] { handleEscapeRequested(); };
+    fileNameEditor_.onReturnKey = [this] { handleReturnRequested(); };
+    removeHiddenTabStops(fileNameEditor_);
     destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);
     chooseDestinationButton_.onClick = [this] { chooseDestinationFolder(); };
 
@@ -117,6 +136,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
         if (onRequestClose)
             onRequestClose();
     };
+    nameControlsForAccessibility();
 
     addAndMakeVisible(progressPage_);
     progressPage_.setVisible(false);
@@ -138,11 +158,45 @@ bool ExportAudioDialog::keyPressed(const juce::KeyPress& key) {
         handleEscapeRequested();
         return true;
     }
+    if (key == juce::KeyPress::returnKey) {
+        handleReturnRequested();
+        return true;
+    }
     return false;
 }
 
+void ExportAudioDialog::handleReturnRequested() {
+    // Export is the default button of the options page; the progress page has no default.
+    if (!progressPageFade_.isShown() && exportButton_.isEnabled())
+        beginExport();
+}
+
+void ExportAudioDialog::nameControlsForAccessibility() {
+    formatBox_.setTitle("Format"); // its tooltip is set by setLameExecutable(), which knows if MP3 is usable
+    sampleRateBox_.setTitle("Sample rate");
+    sampleRateBox_.setTooltip("Sample rate of the exported file");
+    bitDepthBox_.setTitle("Bit depth");
+    bitDepthBox_.setTooltip("Bit depth of the exported file");
+    bitrateBox_.setTitle("Bitrate");
+    bitrateBox_.setTooltip("MP3 bitrate: higher sounds better and makes a bigger file");
+    tailSlider_.setTitle("Tail length");
+    tailSlider_.nameValueBox();
+    tailSlider_.setTooltip(tailLabel_.getTooltip());
+    tailUnitBox_.setTitle("Tail unit");
+    tailUnitBox_.setTooltip("Measure the tail in seconds or in bars");
+    wholeArrangementButton_.setTooltip("Bounce from the start to the end of the arrangement");
+    selectionButton_.setTooltip("Bounce only the loop range");
+    fileNameEditor_.setTitle(stemsMode_ ? "Folder name" : "File name");
+    fileNameEditor_.setTooltip(stemsMode_ ? "Name of the folder the stems are written into"
+                                          : "Name of the exported file, without its extension");
+    chooseDestinationButton_.setTooltip("Choose the folder the export is written into");
+    exportButton_.setTooltip("Start the export (Return)");
+    cancelButton_.setTooltip("Close without exporting (Esc)");
+    progressCancelButton_.setTooltip("Stop the export (Esc)");
+}
+
 void ExportAudioDialog::handleEscapeRequested() {
-    if (progressPage_.isVisible()) {
+    if (progressPageFade_.isShown()) {
         // A render is (or was) in flight — Cancel/Close on the progress page already reads the
         // right action for whichever state that button is currently in (reportComplete() retexts
         // it to "Close" and rewires onClick to onRequestClose; see its own comment), so route
@@ -158,17 +212,48 @@ void ExportAudioDialog::updateExportButtonEnablement() {
     exportButton_.setEnabled(wholeArrangementButton_.isEnabled() || selectionButton_.isEnabled());
 }
 
+BounceFormat ExportAudioDialog::selectedFormat() const {
+    switch (formatBox_.getSelectedId()) {
+    case 2:
+        return BounceFormat::Aiff;
+    case 3:
+        return BounceFormat::Flac;
+    case 4:
+        return BounceFormat::Mp3;
+    default:
+        return BounceFormat::Wav;
+    }
+}
+
+void ExportAudioDialog::setLameExecutable(const juce::File& lameExecutable) {
+    lameExecutable_ = lameExecutable;
+    const bool available = lameExecutable_.existsAsFile();
+    // Visible but disabled with the reason beside it, never a silent absence or a failure at Export.
+    formatBox_.setItemEnabled(4, available);
+    formatBox_.changeItemText(4, available ? "MP3" : "MP3 (needs lame)");
+    formatBox_.setTooltip(available ? juce::String("File format of the exported audio") : lameInstallHint());
+    if (!available && formatBox_.getSelectedId() == 4)
+        formatBox_.setSelectedId(1, juce::sendNotificationSync);
+}
+
+// MP3 has a bitrate but no bit depth; every other format is the other way round.
+void ExportAudioDialog::updateFormatDependentRows() {
+    const bool mp3 = selectedFormat() == BounceFormat::Mp3;
+    bitDepthFade_.setShown(!mp3);
+    bitrateFade_.setShown(mp3);
+}
+
 void ExportAudioDialog::updateBitDepthChoicesForFormat() {
-    const bool isAiff = formatBox_.getSelectedId() == 2;
+    const bool hasFloat = selectedFormat() == BounceFormat::Wav;
     const int previousId = bitDepthBox_.getSelectedId() == 0 ? 2 : bitDepthBox_.getSelectedId();
     bitDepthBox_.clear(juce::dontSendNotification);
     bitDepthBox_.addItem("16-bit", 1);
     bitDepthBox_.addItem("24-bit", 2);
-    // AIFF has no 32-bit float variant (see BounceOptions::format) - offering it here would only
-    // let a user pick a combination validate() rejects at Export time.
-    if (!isAiff)
+    // Only WAV has a 32-bit float variant (see BounceOptions::format) - offering it elsewhere would
+    // only let a user pick a combination validate() rejects at Export time.
+    if (hasFloat)
         bitDepthBox_.addItem("32-bit float", 3);
-    bitDepthBox_.setSelectedId(isAiff && previousId == 3 ? 2 : previousId, juce::dontSendNotification);
+    bitDepthBox_.setSelectedId(!hasFloat && previousId == 3 ? 2 : previousId, juce::dontSendNotification);
 }
 
 void ExportAudioDialog::chooseDestinationFolder() {
@@ -227,9 +312,11 @@ void ExportAudioDialog::currentRange(double& startBeat, double& endBeat) const {
 
 BounceOptions ExportAudioDialog::getOptionsForTest() const {
     BounceOptions options;
-    options.format = formatBox_.getSelectedId() == 2 ? BounceFormat::Aiff : BounceFormat::Wav;
+    options.format = selectedFormat();
     options.sampleRate = kSampleRates[juce::jlimit(1, 3, sampleRateBox_.getSelectedId()) - 1];
     options.bitDepth = kBitDepths[juce::jlimit(1, 3, bitDepthBox_.getSelectedId()) - 1];
+    options.mp3BitrateKbps = bitrateBox_.getSelectedId();
+    options.lameExecutable = lameExecutable_;
     // BounceOptions only ever speaks seconds - Bars is purely a display convenience for the slider.
     options.tailSeconds = wasBarsUnit_ ? tailSlider_.getValue() * (60.0 / bpm_) * kBeatsPerBar : tailSlider_.getValue();
     // Fixed, not a control: with AudioEngine::setAutomationSlicingEnabled() off (the shipped
@@ -245,8 +332,14 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
 }
 
 void ExportAudioDialog::setFormatForTest(BounceFormat format) {
-    formatBox_.setSelectedId(format == BounceFormat::Aiff ? 2 : 1, juce::sendNotificationSync);
+    formatBox_.setSelectedId(format == BounceFormat::Mp3    ? 4
+                             : format == BounceFormat::Flac ? 3
+                             : format == BounceFormat::Aiff ? 2
+                                                            : 1,
+                             juce::sendNotificationSync);
 }
+
+void ExportAudioDialog::setMp3BitrateForTest(int kbps) { bitrateBox_.setSelectedId(kbps, juce::dontSendNotification); }
 
 void ExportAudioDialog::setBitDepthForTest(int bitDepth) {
     const int id = bitDepth == 16 ? 1 : bitDepth == 32 ? 3 : 2;
@@ -340,8 +433,8 @@ void ExportAudioDialog::beginExport() {
 }
 
 void ExportAudioDialog::showProgressPage() {
-    optionsPage_.setVisible(false);
-    progressPage_.setVisible(true);
+    optionsPageFade_.setShown(false);
+    progressPageFade_.setShown(true);
     progressStatusLabel_.setText("Bouncing...", juce::dontSendNotification);
     progressValue_ = 0.0;
     progressCancelButton_.setButtonText("Cancel");
@@ -380,7 +473,13 @@ void ExportAudioDialog::resized() {
         };
         row(formatLabel_, formatBox_);
         row(sampleRateLabel_, sampleRateBox_);
+        // Same slot for both: only one of the two rows is visible at a time (updateFormatDependentRows).
+        const auto sharedSlot = area;
         row(bitDepthLabel_, bitDepthBox_);
+        const auto below = area;
+        area = sharedSlot;
+        row(bitrateLabel_, bitrateBox_);
+        area = below;
 
         auto tailRow = area.removeFromTop(28);
         tailLabel_.setBounds(tailRow.removeFromLeft(110));

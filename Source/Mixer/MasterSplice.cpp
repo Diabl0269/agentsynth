@@ -5,6 +5,7 @@
 #include "../Modules/ChannelStripModule.h"
 #include "../Modules/MasterModule.h"
 #include "../Modules/RecordTapModule.h"
+#include "ChannelFlows/ChannelFlows.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <vector>
 
@@ -17,7 +18,56 @@ juce::AudioProcessorGraph::Node* findMasterNode(juce::AudioProcessorGraph& graph
     return nullptr;
 }
 
-juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position) {
+bool isOutputDockProcessor(const juce::AudioProcessor* processor) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    if (dynamic_cast<const MasterModule*>(processor) != nullptr ||
+        dynamic_cast<const RecordTapModule*>(processor) != nullptr)
+        return true;
+    if (auto* io = dynamic_cast<const IOProcessor*>(processor))
+        return io->getType() == IOProcessor::audioOutputNode;
+    return false;
+}
+
+std::vector<juce::AudioProcessorGraph::Node*> outputDockNodes(juce::AudioProcessorGraph& graph) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    std::vector<juce::AudioProcessorGraph::Node*> master, tap, output;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* processor = node->getProcessor();
+        if (dynamic_cast<MasterModule*>(processor) != nullptr)
+            master.push_back(node);
+        else if (dynamic_cast<RecordTapModule*>(processor) != nullptr)
+            tap.push_back(node);
+        else if (auto* io = dynamic_cast<IOProcessor*>(processor);
+                 io != nullptr && io->getType() == IOProcessor::audioOutputNode)
+            output.push_back(node);
+    }
+    std::vector<juce::AudioProcessorGraph::Node*> chain = master;
+    chain.insert(chain.end(), tap.begin(), tap.end());
+    chain.insert(chain.end(), output.begin(), output.end());
+    return chain;
+}
+
+juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return {};
+    auto* processor = node->getProcessor();
+    if (auto* io = dynamic_cast<IOProcessor*>(processor);
+        io != nullptr && io->getType() == IOProcessor::audioOutputNode)
+        return "The output always stays in the patch";
+    if (dynamic_cast<MasterModule*>(processor) != nullptr)
+        for (auto* other : graph.getNodes())
+            if (other != nullptr && dynamic_cast<ChannelStripModule*>(other->getProcessor()) != nullptr)
+                return "Master stays while the mixer has channels";
+    return {};
+}
+
+juce::AudioProcessorGraph::Node*
+spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule) {
     if (auto* existing = findMasterNode(graph))
         return existing;
 
@@ -39,6 +89,8 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
     auto processor = AIStateMapper::createModule("Master");
     if (processor == nullptr)
         return nullptr;
+    if (onNewModule)
+        onNewModule(*processor, "Master"); // before addNode, like ChannelFlowsInternal.h's addChainNode
     auto node = graph.addNode(std::move(processor));
     if (node == nullptr)
         return nullptr;
@@ -64,8 +116,13 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
             continue;
         intoTarget.push_back(connection);
     }
+    // The connection list is snapshotted BEFORE the loop mutates the graph: Mix vs Direct looks
+    // backward through macro ports (a track's strip leaves its macro by an outlet), and that walk
+    // must see the cables as they were.
+    const auto snapshot = graph.getConnections();
     for (const auto& connection : intoTarget) {
-        auto* source = graph.getNodeForId(connection.source.nodeID);
+        const auto sourcePin = resolveSourceThroughPorts(graph, snapshot, connection.source);
+        auto* source = graph.getNodeForId(sourcePin.nodeID);
         const bool fromStrip =
             source != nullptr && dynamic_cast<ChannelStripModule*>(source->getProcessor()) != nullptr;
         const int channel = connection.destination.channelIndex;
@@ -79,13 +136,15 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
     return created;
 }
 
-juce::AudioProcessorGraph::Node* ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                                  TimelineDoc& doc, juce::Point<int> position) {
+juce::AudioProcessorGraph::Node*
+ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, TimelineDoc& doc,
+                 juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule) {
     if (auto* existing = findMasterNode(graph))
         return existing;
 
     juce::AudioProcessorGraph::Node* created = nullptr;
-    undoManager.recordCombinedChange(graph, doc, [&] { created = spliceMasterNode(graph, position); });
+    undoManager.recordCombinedChange(graph, doc, [&] { created = spliceMasterNode(graph, position, onNewModule); });
     return created;
 }
 

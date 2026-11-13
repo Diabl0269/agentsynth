@@ -7,11 +7,6 @@ namespace synth {
 
 namespace {
 constexpr const char* kFolderName = "PluginCardLayouts";
-constexpr const char* kDefaultStem = "default";
-
-// The reserved stem is compared case-insensitively: macOS and Windows volumes are, so a preset
-// named "Default" would otherwise silently overwrite default.json.
-bool isReservedStem(const juce::String& stem) { return stem.equalsIgnoreCase(kDefaultStem); }
 } // namespace
 
 juce::File PluginCardLayoutStore::resolveDefaultRootDirectory() {
@@ -21,117 +16,78 @@ juce::File PluginCardLayoutStore::resolveDefaultRootDirectory() {
 }
 
 PluginCardLayoutStore::PluginCardLayoutStore()
-    : rootDir_(resolveDefaultRootDirectory()) {}
+    : CardLayoutStore(resolveDefaultRootDirectory()) {}
 
 PluginCardLayoutStore::PluginCardLayoutStore(juce::File rootDir)
-    : rootDir_(std::move(rootDir)) {}
+    : CardLayoutStore(std::move(rootDir)) {}
 
 // The directory key is `<format>-<uid>`. A uid of 0 means "unknown" (PluginIdentity matches those
 // by name), and keying every such plugin on "-0" would make them share one layout, so they fall
 // back to `<format>-name-<legal name>` instead.
-juce::File PluginCardLayoutStore::getPluginDirectory(const PluginIdentity& identity) const {
+juce::String PluginCardLayoutStore::directoryKey(const PluginIdentity& identity) {
     const juce::String format = juce::File::createLegalFileName(identity.format);
     const juce::String key =
         identity.uid != 0 ? juce::String(identity.uid) : "name-" + juce::File::createLegalFileName(identity.name);
-    return rootDir_.getChildFile(format + "-" + key);
+    return format + "-" + key;
 }
 
-juce::File PluginCardLayoutStore::presetFile(const PluginIdentity& identity, const juce::String& name) const {
-    const juce::String stem = juce::File::createLegalFileName(name.trim());
-    if (stem.isEmpty() || isReservedStem(stem))
-        return {};
-    return getPluginDirectory(identity).getChildFile(stem + ".json");
+juce::File PluginCardLayoutStore::getPluginDirectory(const PluginIdentity& identity) const {
+    return directoryFor(directoryKey(identity));
 }
 
-// The file is the layout's own JSON plus the plugin's identity beside it. CardLayout::fromVar
-// ignores the extra properties, so the file stays readable as a bare layout, and the name inside is
-// what a picker shows for a plugin that is not currently loaded.
-bool PluginCardLayoutStore::writeLayout(const juce::File& file, const PluginIdentity& identity,
-                                        const CardLayout& layout) const {
-    if (!identity.isValid() || file == juce::File())
-        return false;
+juce::var PluginCardLayoutStore::ownerOf(const PluginIdentity& identity) { return identity.toVar(); }
 
-    juce::var json = layout.toVar();
-    auto* object = json.getDynamicObject();
-    const juce::var identityJson = identity.toVar(); // named: the object dies with the temporary
-    if (auto* identityObject = identityJson.getDynamicObject())
-        for (const auto& property : identityObject->getProperties())
-            object->setProperty(property.name, property.value);
-
-    if (!file.getParentDirectory().exists() && !file.getParentDirectory().createDirectory())
-        return false;
-    return file.replaceWithText(juce::JSON::toString(json));
-}
-
-PluginCardLayoutStore::LoadResult PluginCardLayoutStore::readLayout(const juce::File& file) {
+PluginCardLayoutStore::LoadResult PluginCardLayoutStore::toLoadResult(CardLayoutLoadResult&& base) {
     LoadResult result;
-    if (file == juce::File() || !file.existsAsFile())
-        return result;
-
-    const juce::var json = juce::JSON::parse(file);
-    auto parsed = CardLayout::fromVar(json);
-    switch (parsed.status) {
-    case CardLayout::ParseStatus::Ok:
-        result.status = LoadStatus::Ok;
-        result.layout = std::move(parsed.layout);
-        if (auto* object = json.getDynamicObject())
-            result.pluginName = object->getProperty("pluginName").toString();
-        break;
-    case CardLayout::ParseStatus::UnsupportedVersion:
-        result.status = LoadStatus::UnsupportedVersion;
-        break;
-    case CardLayout::ParseStatus::Malformed:
-        result.status = LoadStatus::Malformed;
-        break;
-    }
+    result.status = base.status;
+    result.layout = std::move(base.layout);
+    if (auto* object = base.file.getDynamicObject())
+        result.pluginName = object->getProperty("pluginName").toString();
     return result;
 }
 
 PluginCardLayoutStore::LoadResult PluginCardLayoutStore::loadDefault(const PluginIdentity& identity) const {
-    return readLayout(getPluginDirectory(identity).getChildFile(juce::String(kDefaultStem) + ".json"));
+    return toLoadResult(CardLayoutStore::loadDefault(directoryKey(identity)));
 }
 
 bool PluginCardLayoutStore::setDefault(const PluginIdentity& identity, const CardLayout& layout) {
-    const auto file = getPluginDirectory(identity).getChildFile(juce::String(kDefaultStem) + ".json");
-    if (!writeLayout(file, identity, layout))
+    if (!identity.isValid())
+        return false;
+    const juce::var owner = ownerOf(identity); // named: the object dies with the temporary
+    if (!writeDefault(directoryKey(identity), owner, layout))
         return false;
     listeners_.call([&](Listener& listener) { listener.layoutChangedForPlugin(identity); });
     return true;
 }
 
 bool PluginCardLayoutStore::clearDefault(const PluginIdentity& identity) {
-    const auto file = getPluginDirectory(identity).getChildFile(juce::String(kDefaultStem) + ".json");
-    if (!file.existsAsFile())
-        return true; // idempotent, and nothing changed so nothing to broadcast
-    if (!file.deleteFile())
+    bool removed = false;
+    if (!removeDefault(directoryKey(identity), removed))
         return false;
-    listeners_.call([&](Listener& listener) { listener.layoutChangedForPlugin(identity); });
+    if (removed) // nothing changed otherwise, so nothing to broadcast
+        listeners_.call([&](Listener& listener) { listener.layoutChangedForPlugin(identity); });
     return true;
 }
 
 juce::StringArray PluginCardLayoutStore::listPresets(const PluginIdentity& identity) const {
-    juce::StringArray names;
-    for (const auto& file :
-         getPluginDirectory(identity).findChildFiles(juce::File::findFiles, /*recursive=*/false, "*.json"))
-        if (!isReservedStem(file.getFileNameWithoutExtension()))
-            names.add(file.getFileNameWithoutExtension());
-    names.sortNatural();
-    return names;
+    return CardLayoutStore::listPresets(directoryKey(identity));
 }
 
 bool PluginCardLayoutStore::savePreset(const PluginIdentity& identity, const juce::String& name,
                                        const CardLayout& layout) {
-    return writeLayout(presetFile(identity, name), identity, layout);
+    if (!identity.isValid())
+        return false;
+    const juce::var owner = ownerOf(identity);
+    return writePreset(directoryKey(identity), owner, name, layout);
 }
 
 PluginCardLayoutStore::LoadResult PluginCardLayoutStore::loadPreset(const PluginIdentity& identity,
                                                                     const juce::String& name) const {
-    return readLayout(presetFile(identity, name));
+    return toLoadResult(CardLayoutStore::loadPreset(directoryKey(identity), name));
 }
 
 bool PluginCardLayoutStore::deletePreset(const PluginIdentity& identity, const juce::String& name) {
-    const auto file = presetFile(identity, name);
-    return file != juce::File() && file.existsAsFile() && file.deleteFile();
+    return removePreset(directoryKey(identity), name);
 }
 
 } // namespace synth

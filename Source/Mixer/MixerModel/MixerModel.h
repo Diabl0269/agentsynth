@@ -9,18 +9,58 @@
 
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
 namespace synth {
 
-/** One module in a column's insert list, in signal order. */
+/** One row of a column's insert list, in signal order (docs/mixer/mixer.md#parallel-paths). A split chain lists
+ *  each split as a Split row followed by its paths' rows, one level deeper, path by path; a path wired straight to
+ *  the merge, with no module, is one DryPath row. */
 struct MixerInsertEntry {
+    enum class Kind { Module, Split, DryPath };
+
+    /** Invalid for a Split row: it stands for the fork, not a node of its own. */
+    juce::AudioProcessorGraph::NodeID nodeId;
+    /** A Split or DryPath row carries the uuid of the node that fans out (the track source or an insert). */
+    juce::String uuid;
+    juce::String name;
+    bool bypassed = false;
+    Kind kind = Kind::Module;
+    /** 0 on the chain itself, +1 inside each split. */
+    int depth = 0;
+    /** Which path of the enclosing split this row sits on (0-based); -1 at depth 0. */
+    int path = -1;
+    /** Split rows only: how many paths the split has. */
+    int pathCount = 0;
+
+    bool operator==(const MixerInsertEntry&) const = default;
+};
+
+/** A module that hangs off a column's chain but leads nowhere: fed from the chain (an unplugged Distortion, or an
+ * effect whose output goes only to a CV jack) and never reaching the strip, so it is not in the sound. The column shows
+ * it as a dimmed "not connected" row in place, right after the chain row it hangs off
+ * (docs/mixer/mixer.md#not-connected-modules). A module with no cable at all is not listed: only what is reachable from
+ * the chain. */
+struct MixerDanglingEntry {
     juce::AudioProcessorGraph::NodeID nodeId;
     juce::String uuid;
     juce::String name;
     bool bypassed = false;
+    /** Index in `MixerColumn::inserts` of the module row it hangs off, or -1 when it hangs off the track's source. */
+    int anchorRow = -1;
+    /** 1 for a module fed straight from the chain, +1 for each dangling module between it and the chain. */
+    int depth = 1;
+
+    bool operator==(const MixerDanglingEntry&) const = default;
 };
+
+/** How many modules `inserts` lists (its Split rows are not modules). */
+inline int countInsertModules(const std::vector<MixerInsertEntry>& inserts) {
+    return (int)std::count_if(inserts.begin(), inserts.end(),
+                              [](const MixerInsertEntry& e) { return e.kind == MixerInsertEntry::Kind::Module; });
+}
 
 /** One of a source column's active send slots, in slot order (docs/mixer/sends-and-buses.md). The slot index is
  * the identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is read off the
@@ -30,6 +70,8 @@ struct MixerSendEntry {
     bool preFader = false;
     /** Silenced independent of its level (ChannelStripModule::isSendMuted). */
     bool muted = false;
+    /** Ramped to silence without touching its level (ChannelStripModule::isSendBypassed). */
+    bool bypassed = false;
     /** Summed to (L+R)*0.5 before its own pan law (ChannelStripModule::isSendMono). */
     bool mono = false;
     /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which
@@ -38,6 +80,8 @@ struct MixerSendEntry {
     /** `targetNodeId` is a module whose Key input this send feeds, not a strip. */
     bool keyTarget = false;
     juce::String targetName;
+
+    bool operator==(const MixerSendEntry&) const = default;
 };
 
 /** One column of the mixer panel: a ChannelStrip, a group/send bus (also a ChannelStrip --
@@ -77,6 +121,11 @@ struct MixerColumn {
      *  strip. */
     std::vector<MixerInsertEntry> inserts;
 
+    /** The modules hanging off `inserts` (or the source) that lead nowhere, in chain order, each after the one it is
+     * fed from. Every module reachable from the track's source appears exactly once, as an `inserts` row or here. Empty
+     *  for Direct, Master, buses and any chain `inserts` could not list row by row. */
+    std::vector<MixerDanglingEntry> dangling;
+
     /** Kind::Master only: the Rec Tap / Audio Output the chain feeds -- its terminator, never an insert. */
     juce::AudioProcessorGraph::NodeID chainEndNodeId;
 
@@ -84,6 +133,11 @@ struct MixerColumn {
      *  send/insert landing on the same strip input sits upstream); the column shows "Edit on
      *  canvas" instead of add/reorder/remove. Meaningless when `inserts` is empty. */
     bool insertChainIsLinear = false;
+
+    /** True when the chain splits into parallel paths that all meet again before the strip
+     *  (docs/mixer/mixer.md#parallel-paths): `inserts` then holds Split rows, insertChainIsLinear stays false (so a
+     *  track delete keeps the modules, as for any branch), and the list stays editable row by row. */
+    bool insertChainHasSplits = false;
 
     /** This strip's active send slots, in slot order (docs/mixer/sends-and-buses.md). Empty for Direct/Master and for
      * any strip with no sends. */
@@ -93,9 +147,15 @@ struct MixerColumn {
      *  column shows on its source line instead of feeding-track names. */
     std::vector<juce::String> busSources;
 
+    /** Kind::Strip only: strips sending into this track channel (docs/mixer/sends-and-buses.md). */
+    std::vector<juce::String> receivesFrom;
+
     /** Set only when `insertChainIsLinear` is false: the owning macro's id when the branching/
      *  shared node is boxed, else that node's own uuid. Empty otherwise. */
     juce::String editOnCanvasTargetUuid;
+
+    /** Every field equal: a column the panel already shows for an equal column is kept rather than rebuilt. */
+    bool operator==(const MixerColumn&) const = default;
 };
 
 struct MixerSnapshot {
@@ -114,8 +174,8 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
 // Plain graph splices, NO UNDO of their own -- same contract as Source/Mixer/ChannelFlows's own
 // builders (docs/architecture/module-base.md#appundomanager): the caller wraps each in one
 // AppUndoManager::recordGraphAndMacroChange. Only ever call these on a column whose own
-// insertChainIsLinear is true; behaviour on a branching chain's member is undefined (the UI never
-// offers add/reorder/remove there in the first place).
+// insertChainIsLinear or insertChainHasSplits is true; behaviour on a branching chain's member is undefined (the UI
+// never offers add/reorder/remove there in the first place).
 //
 // spliceOutInsert bridges by matching `node`'s OWN input channel index to its OWN output channel
 // index -- true for every ordinary passthrough FX module (an input jack and the output jack
@@ -126,12 +186,14 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
 // different module types (an ordinary FX module vs. e.g. ChannelStripModule's kRightBase) need not
 // agree on which channel is "right".
 
-/** Detaches `node` from its chain, bridging its single signal predecessor directly to its single
+/** Every primitive below takes `stripEnd` (the column's strip) to ignore dangling branches; invalid counts every edge.
+ *  Detaches `node` from its chain, bridging its single signal predecessor directly to its single
  *  signal successor. Does NOT remove `node` from the graph -- Remove calls
  *  `juce::AudioProcessorGraph::removeNode()` afterward; Reorder immediately re-splices `node`
  *  elsewhere with spliceInInsert. False (nothing changed) when `node` does not have exactly one
  *  signal predecessor and one signal successor. */
-bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node);
+bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                     juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 /** Splices `node` (already in the graph, not yet wired into this chain) between `predecessor` and
  *  `successor`'s existing direct signal connection(s), removing that connection and reconnecting
@@ -140,11 +202,43 @@ bool spliceOutInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph
 bool spliceInInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID predecessor,
                     juce::AudioProcessorGraph::NodeID successor, juce::AudioProcessorGraph::NodeID node);
 
+/** Splices `node` into every direct signal cable from a node in `predecessors` to a node in `successors`, channel for
+ *  channel as spliceInInsert does: each such source feeds `node` (cables into one input sum) and `node` feeds each
+ *  destination once. This is how an add lands in front of a split's paths (one predecessor, every path's first
+ *  node) or behind them (every path's last node, one successor). False (nothing changed) when no such cable exists. */
+bool spliceInInsertAcross(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::NodeID>& predecessors,
+                          const std::vector<juce::AudioProcessorGraph::NodeID>& successors,
+                          juce::AudioProcessorGraph::NodeID node);
+
+/** The distinct nodes outside `region` that a live signal cable from inside `region` reaches (a dangling branch that
+ *  never reaches `stripEnd` is not live). For a split's own nodes and its fork this is the merge it feeds. */
+std::vector<juce::AudioProcessorGraph::NodeID> liveExitsOf(juce::AudioProcessorGraph& graph,
+                                                           const std::vector<juce::AudioProcessorGraph::NodeID>& region,
+                                                           juce::AudioProcessorGraph::NodeID stripEnd = {});
+
 /** Moves an already-connected `node` to a new position between `newPredecessor` and
  *  `newSuccessor`: spliceOutInsert() then spliceInInsert() as one call, so a caller never has to
  *  get the two-step sequence right itself. False if either step fails (graph left as spliceOutInsert
  *  found it in that case -- see spliceOutInsert's own contract). */
 bool reorderInsert(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
-                   juce::AudioProcessorGraph::NodeID newPredecessor, juce::AudioProcessorGraph::NodeID newSuccessor);
+                   juce::AudioProcessorGraph::NodeID newPredecessor, juce::AudioProcessorGraph::NodeID newSuccessor,
+                   juce::AudioProcessorGraph::NodeID stripEnd = {});
+
+/** `node`'s one signal neighbour upstream (`upstream`) or downstream, counting a stereo pair as one; an invalid id
+ *  when it has none or several. */
+juce::AudioProcessorGraph::NodeID soleSignalNeighbour(juce::AudioProcessorGraph& graph,
+                                                      juce::AudioProcessorGraph::NodeID node, bool upstream,
+                                                      juce::AudioProcessorGraph::NodeID stripEnd = {});
+
+/** On a path of a split chain (docs/mixer/mixer.md#parallel-paths): moves `node` to sit just before `before`, its
+ *  neighbour on the same path, between `before` and `before`'s own single signal predecessor. False (nothing changed)
+ *  when `before` has no single predecessor. */
+bool moveInsertBefore(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                      juce::AudioProcessorGraph::NodeID before, juce::AudioProcessorGraph::NodeID stripEnd = {});
+
+/** The mirror of moveInsertBefore: moves `node` to sit just after `after`, between it and its single successor. */
+bool moveInsertAfter(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                     juce::AudioProcessorGraph::NodeID after, juce::AudioProcessorGraph::NodeID stripEnd = {});
 
 } // namespace synth

@@ -1,15 +1,51 @@
 #include "WelcomeScreenComponent.h"
 #include "Branding.h"
+#include "UI/Layout/ReducedMotion.h"
+#include <BinaryData.h>
 
 namespace synth::ui {
 
 namespace {
 constexpr int kCardWidth = 600;
 constexpr int kRecentRowHeight = 28;
+constexpr int kContributeRowHeight = 36;
+constexpr double kPromptCollapseMs = 180.0; // leaving: easeInCubic
+constexpr double kThanksHoldMs = 1100.0;    // Share's one-line thanks, faded over its last third
+constexpr double kLogoRevealMs = 320.0;     // fade + rise on show: easeOutCubic
+constexpr float kLogoRisePx = 10.0f;
+constexpr int kSocialButtonSize = 28;
+constexpr int kSocialGap = 4;
+
+// One row of the footer's social links; the order here is the visual and the Tab order.
+struct SocialLinkSpec {
+    synth::theme::Glyph glyph;
+    const char* title;
+    const char* tooltip;
+    const char* description;
+    const char* url;
+};
+
+const SocialLinkSpec kSocialLinks[] = {
+    {synth::theme::Glyph::SocialDiscord, "Agent Synth on Discord", "Join the Agent Synth Discord",
+     "Opens the Agent Synth Discord invite in your browser", synth::branding::kDiscordUrl},
+    {synth::theme::Glyph::SocialYouTube, "Agent Synth on YouTube", "Watch Agent Synth on YouTube",
+     "Opens the Agent Synth YouTube channel in your browser", synth::branding::kYouTubeUrl},
+    {synth::theme::Glyph::SocialGitHub, "Agent Synth on GitHub", "See the Agent Synth source on GitHub",
+     "Opens the Agent Synth GitHub repository in your browser", synth::branding::kGitHubUrl},
+    {synth::theme::Glyph::SocialTikTok, "Agent Synth on TikTok", "Follow Agent Synth on TikTok",
+     "Opens the Agent Synth TikTok page in your browser", synth::branding::kTikTokUrl},
+    {synth::theme::Glyph::SocialInstagram, "Agent Synth on Instagram", "Follow Agent Synth on Instagram",
+     "Opens the Agent Synth Instagram page in your browser", synth::branding::kInstagramUrl},
+};
 } // namespace
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
     setOpaque(true);
+    // The overlay covers the whole window, so Tab and Shift+Tab cycle inside it rather than
+    // escaping to the toolbar and canvas hidden underneath.
+    setFocusContainerType(FocusContainerType::keyboardFocusContainer);
+
+    logo_ = juce::ImageCache::getFromMemory(BinaryData::agentsynthlogo256_png, BinaryData::agentsynthlogo256_pngSize);
 
     titleLabel.setText(juce::String("Welcome to ") + synth::branding::kProductName, juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(24.0f, juce::Font::bold)));
@@ -21,18 +57,39 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     subtitleLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(subtitleLabel);
 
+    addChildComponent(usageStatsPrompt_);
+    usageStatsPrompt_.onChoice = [this](bool share) { handleUsageStatsChoice(share); };
+    usageStatsPrompt_.onLearnMoreRequested = [this] {
+        if (onUsageStatsLearnMoreRequested)
+            onUsageStatsLearnMoreRequested();
+    };
+
+    closeButton_.setTitle("Close welcome screen");
+    closeButton_.setDescription("Returns to the open project");
+    closeButton_.setTooltip("Close (Esc)");
+    closeButton_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    closeButton_.setWantsKeyboardFocus(true); // a Tab stop; Space and Return press it
+    closeButton_.onClick = [this] {
+        if (onDismissRequested)
+            onDismissRequested();
+    };
+    addChildComponent(closeButton_); // shown only while dismissible
+
+    newProjectButton.setTooltip("Start with an empty project");
     addAndMakeVisible(newProjectButton);
     newProjectButton.onClick = [this] {
         if (onNewProject)
             onNewProject();
     };
 
+    openDefaultButton.setTooltip("Open the factory default project");
     addAndMakeVisible(openDefaultButton);
     openDefaultButton.onClick = [this] {
         if (onOpenDefaultProject)
             onOpenDefaultProject();
     };
 
+    openExistingButton.setTooltip("Choose a project from disk");
     addAndMakeVisible(openExistingButton);
     openExistingButton.onClick = [this] {
         if (onOpenExistingProject)
@@ -47,23 +104,168 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     noRecentsLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(noRecentsLabel);
 
+    contributeLabel.setText("Agent Synth is free and open source, built by one person. If it has earned a place in "
+                            "your setup, you can help build it. No pressure, it stays free either way.",
+                            juce::dontSendNotification);
+    contributeLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contributeLabel.setJustificationType(juce::Justification::centredLeft);
+    contributeLabel.setMinimumHorizontalScale(1.0f);
+    contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
+    addAndMakeVisible(contributeLabel);
+
+    contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Help build Agent Synth")));
+    contributeButton.setTooltip("Agent Synth is free and open source, built by one person. Contributing helps me spend "
+                                "more time building it. Opens agentsynth.app/contribute in your browser.");
+    contributeButton.setTitle("Help build Agent Synth");
+    contributeButton.setDescription("Opens the Agent Synth contribute page in your browser");
+    addAndMakeVisible(contributeButton);
+    contributeButton.onClick = [this] {
+        if (onContributeRequested)
+            onContributeRequested();
+    };
+
+    whatsNewButton.setTooltip("See what changed in this version");
     addAndMakeVisible(whatsNewButton);
     whatsNewButton.onClick = [this] {
         if (onWhatsNewRequested)
             onWhatsNewRequested();
     };
 
-    addAndMakeVisible(showAtLaunchToggle);
-    showAtLaunchToggle.setToggleState(true, juce::dontSendNotification);
-    showAtLaunchToggle.onClick = [this] {
-        if (onShowAtLaunchChanged)
-            onShowAtLaunchChanged(showAtLaunchToggle.getToggleState());
-    };
+    for (const auto& link : kSocialLinks) {
+        auto button = std::make_unique<IconButton>(link.title, link.glyph, IconButton::Style::Bare);
+        button->setTitle(link.title);
+        button->setTooltip(link.tooltip);
+        button->setDescription(link.description);
+        button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        button->setWantsKeyboardFocus(true); // a Tab stop; Space and Return press it
+        button->onClick = [this, url = juce::String(link.url)] {
+            if (onSocialLinkRequested)
+                onSocialLinkRequested(url);
+        };
+        addAndMakeVisible(*button);
+        socialButtons_.push_back(std::move(button));
+    }
 
     versionLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(versionLabel);
 
     rebuildRecentProjectButtons();
+}
+
+void WelcomeScreenComponent::visibilityChanged() {
+    if (!isShowing()) {
+        logoAnim_.stop(vblank_);
+        logoReveal_ = 1.0f;
+        return;
+    }
+    if (synth::ui::prefersReducedMotion()) {
+        logoAnim_.stop(vblank_);
+        logoReveal_ = 1.0f;
+        repaint(logoBounds_.expanded(0, (int)kLogoRisePx));
+        return;
+    }
+    logoReveal_ = 0.0f;
+    logoAnim_.start(vblank_, kLogoRevealMs, synth::ui::easeOutCubic, [this](float e) {
+        logoReveal_ = e;
+        repaint(logoBounds_.expanded(0, (int)kLogoRisePx));
+    });
+}
+
+void WelcomeScreenComponent::setDismissible(bool dismissible) {
+    if (dismissible_ == dismissible)
+        return;
+    dismissible_ = dismissible;
+    // Opaque only while it hides the project; a scrim must let the project under it paint.
+    setOpaque(!dismissible);
+    closeButton_.setVisible(dismissible);
+    repaint();
+}
+
+bool WelcomeScreenComponent::keyPressed(const juce::KeyPress& key) {
+    if (dismissible_ && key == juce::KeyPress::escapeKey) {
+        if (onDismissRequested)
+            onDismissRequested();
+        return true;
+    }
+    return false;
+}
+
+void WelcomeScreenComponent::mouseDown(const juce::MouseEvent& e) {
+    // A click on the scrim, outside the card. Clicks on the card's own children never reach here.
+    if (dismissible_ && !getCardBounds().contains(e.getPosition()) && onDismissRequested)
+        onDismissRequested();
+}
+
+int WelcomeScreenComponent::promptSlotHeight() const {
+    return juce::roundToInt((float)(UsageStatsPromptComponent::kHeight + kPromptGap) * promptFraction_);
+}
+
+void WelcomeScreenComponent::setUsageStatsPromptShown(bool shown) {
+    if (shown && promptState_ == PromptState::hidden) {
+        promptState_ = PromptState::asking;
+        promptFraction_ = 1.0f;
+        usageStatsPrompt_.setAlpha(1.0f);
+        usageStatsPrompt_.setVisible(true);
+        resized();
+        repaint();
+    } else if (!shown && promptState_ == PromptState::asking) {
+        promptState_ = PromptState::answered;
+        collapseUsageStatsPrompt();
+    }
+}
+
+void WelcomeScreenComponent::handleUsageStatsChoice(bool share) {
+    if (promptState_ != PromptState::asking)
+        return;
+    promptState_ = PromptState::answered; // a second click while the thanks shows does nothing
+    if (onUsageStatsChoice)
+        onUsageStatsChoice(share);
+    // The pressed button is about to go; a keyboard user lands on the first start button instead of nowhere.
+    if (usageStatsPrompt_.hasKeyboardFocus(true))
+        newProjectButton.grabKeyboardFocus();
+
+    const bool animate = isShowing() && !synth::ui::prefersReducedMotion();
+    if (!share || !animate) {
+        collapseUsageStatsPrompt();
+        return;
+    }
+    // Share only: the buttons give way to a thanks that holds, then fades, then the card collapses.
+    usageStatsPrompt_.showConfirmation(true);
+    promptAnim_.start(
+        vblank_, kThanksHoldMs, [](float t) { return t; },
+        [this](float t) { usageStatsPrompt_.setConfirmationAlpha(t < 0.67f ? 1.0f : 1.0f - (t - 0.67f) / 0.33f); },
+        [safe = juce::Component::SafePointer<WelcomeScreenComponent>(this)] {
+            // Not collapsed from inside this animator's own completion: starting a driver stops the running one.
+            juce::MessageManager::callAsync([safe] {
+                if (safe != nullptr)
+                    safe->collapseUsageStatsPrompt();
+            });
+        });
+}
+
+void WelcomeScreenComponent::collapseUsageStatsPrompt() {
+    if (!isShowing() || synth::ui::prefersReducedMotion()) {
+        promptAnim_.stop(vblank_);
+        finishUsageStatsCollapse();
+        return;
+    }
+    promptAnim_.start(
+        vblank_, kPromptCollapseMs, synth::ui::easeInCubic,
+        [this](float e) {
+            promptFraction_ = 1.0f - e;
+            usageStatsPrompt_.setAlpha(promptFraction_);
+            resized();
+        },
+        [this] { finishUsageStatsCollapse(); });
+}
+
+void WelcomeScreenComponent::finishUsageStatsCollapse() {
+    promptFraction_ = 0.0f;
+    usageStatsPrompt_.setVisible(false);
+    usageStatsPrompt_.showConfirmation(false);
+    usageStatsPrompt_.setAlpha(1.0f);
+    resized();
+    repaint();
 }
 
 void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& recents) {
@@ -72,10 +274,6 @@ void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& re
         recentFiles_.resize((size_t)kMaxVisibleRecents);
     rebuildRecentProjectButtons();
     resized();
-}
-
-void WelcomeScreenComponent::setShowAtLaunch(bool shouldShow) {
-    showAtLaunchToggle.setToggleState(shouldShow, juce::dontSendNotification);
 }
 
 void WelcomeScreenComponent::setLatestVersionLabel(const juce::String& text) {
@@ -110,12 +308,13 @@ void WelcomeScreenComponent::rebuildRecentProjectButtons() {
 
 juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
     const int recentsHeight = recentFiles_.empty() ? kRecentRowHeight : (int)recentFiles_.size() * kRecentRowHeight;
-    // Title + subtitle + gap + three action buttons + gap + recents header + recents rows + gap +
-    // footer row, plus top/bottom padding. Fixed heights per row rather than FlexBox — this is a
-    // small, static layout with no dynamic resizing needs beyond the recents count.
-    const int cardHeight = 40 /*top pad*/ + 34 /*title*/ + 8 + 22 /*subtitle*/ + 24 + 40 /*New button*/ + 10 +
-                           40 /*Open default*/ + 10 + 40 /*Open existing*/ + 28 + 22 /*recents header*/ + 8 +
-                           recentsHeight + 24 + 32 /*footer*/ + 24 /*bottom pad*/;
+    // Mirrors resized() row for row (pad, logo, title, subtitle, the usage statistics card slot, three action buttons,
+    // recents header, recents rows, contribute row, footer, pad) so the drawn card and its children always agree. Fixed
+    // heights rather than FlexBox: a small, static layout whose only variable is the recents count.
+    const int cardHeight = 20 /*top pad*/ + kLogoSize + kLogoGap /*logo*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 +
+                           36 /*New*/ + 10 + 36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 +
+                           20 /*recents header*/ + 6 + recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ +
+                           20 /*bottom pad*/ + promptSlotHeight() /*usage statistics card + gap, 0 once answered*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -125,23 +324,46 @@ juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
 }
 
 void WelcomeScreenComponent::paint(juce::Graphics& g) {
-    g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+    if (dismissible_)
+        g.fillAll(juce::Colours::black.withAlpha(0.6f)); // the open project shows dimmed beneath the card
+    else
+        g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 
     auto card = getCardBounds();
     g.setColour(findColour(juce::ComboBox::backgroundColourId));
     g.fillRoundedRectangle(card.toFloat(), 10.0f);
     g.setColour(findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(card.toFloat(), 10.0f, 1.0f);
+
+    if (logo_.isValid() && logoReveal_ > 0.0f) {
+        // The artwork is a transparent cut-out with its neon outline, so it sits on the card with no tile or border.
+        const auto dest = logoBounds_.toFloat().translated(0.0f, (1.0f - logoReveal_) * kLogoRisePx);
+        g.saveState();
+        g.setOpacity(logoReveal_);
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        g.drawImage(logo_, dest, juce::RectanglePlacement::stretchToFit);
+        g.restoreState();
+    }
 }
 
 void WelcomeScreenComponent::resized() {
     auto card = getCardBounds();
+    closeButton_.setBounds(juce::Rectangle<int>(28, 28).withRightX(card.getRight() - 10).withY(card.getY() + 10));
     auto area = card.reduced(28, 20);
 
+    logoBounds_ = area.removeFromTop(kLogoSize).withSizeKeepingCentre(kLogoSize, kLogoSize);
+    area.removeFromTop(kLogoGap);
     titleLabel.setBounds(area.removeFromTop(34));
     area.removeFromTop(4);
     subtitleLabel.setBounds(area.removeFromTop(22));
     area.removeFromTop(20);
+
+    // The card's slot is its panel plus the gap to the buttons; both shrink together, so the buttons below
+    // rise by exactly what getCardBounds() took off the card height.
+    if (const int slot = promptSlotHeight(); slot > 0) {
+        const int gapPart = juce::roundToInt((float)kPromptGap * promptFraction_);
+        usageStatsPrompt_.setBounds(area.removeFromTop(slot).withTrimmedBottom(gapPart));
+    }
 
     newProjectButton.setBounds(area.removeFromTop(36));
     area.removeFromTop(10);
@@ -160,12 +382,24 @@ void WelcomeScreenComponent::resized() {
             button->setBounds(area.removeFromTop(kRecentRowHeight).reduced(0, 2));
     }
 
+    area.removeFromTop(16);
+    auto contributeRow = area.removeFromTop(kContributeRowHeight);
+    contributeButton.setBounds(contributeRow.removeFromRight(120).withSizeKeepingCentre(120, 28));
+    contributeRow.removeFromRight(12);
+    contributeLabel.setBounds(contributeRow);
+
     area.removeFromTop(20);
     auto footer = area.removeFromTop(28);
-    versionLabel.setBounds(footer.removeFromLeft(footer.getWidth() / 2));
-    showAtLaunchToggle.setBounds(footer.removeFromRight(220));
+    whatsNewButton.setBounds(footer.removeFromRight(110));
     footer.removeFromRight(10);
-    whatsNewButton.setBounds(footer.removeFromRight(90));
+    // The social links sit against What's New, 4 px apart, vertically centred in the footer row.
+    for (auto it = socialButtons_.rbegin(); it != socialButtons_.rend(); ++it) {
+        (*it)->setBounds(
+            footer.removeFromRight(kSocialButtonSize).withSizeKeepingCentre(kSocialButtonSize, kSocialButtonSize));
+        footer.removeFromRight(kSocialGap);
+    }
+    footer.removeFromRight(6);
+    versionLabel.setBounds(footer);
 }
 
 } // namespace synth::ui

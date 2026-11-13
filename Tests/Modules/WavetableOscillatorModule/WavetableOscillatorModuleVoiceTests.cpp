@@ -2,24 +2,25 @@
 // Per-voice retrigger phase, unison stacking/spread/blend, sub-oscillator, and sync modes.
 
 #include "WavetableOscillatorModuleTestFixture.h"
+#include <memory>
 
+// The restarted stack starts at the asked phase on the note-on sample and the old sound fades out over the next
+// 64, so the phase is read once the fade is done. Note 69 is the pitch the voice already runs at (no glide), so
+// the sine after the fade is exactly the asked phase plus 64 samples of travel.
 TEST_F(WavetableOscillatorModuleTest, RetriggerPhaseStartsTheWaveWhereAsked) {
-    setFloat(*module, "position", 0.0f); // sine: phase is directly readable from sample 0
-
-    // Phase 0 starts at the sine's zero crossing, rising.
-    setFloat(*module, "phase", 0.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_NEAR(renderAttack(*module, 60).getReadPointer(0)[0], 0.0f, 0.02f);
-
-    // A quarter turn starts at the positive peak instead.
-    setFloat(*module, "phase", 90.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_GT(renderAttack(*module, 60).getReadPointer(0)[0], 0.8f);
-
-    // Three quarters starts at the negative peak.
-    setFloat(*module, "phase", 270.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_LT(renderAttack(*module, 60).getReadPointer(0)[0], -0.8f);
+    setFloat(*module, "position", 0.0f); // sine: phase is directly readable
+    setFloat(*module, "level", 1.0f);
+    setFloat(*module, "randomPhase", 0.0f); // the start phase is compared exactly
+    const double dt = 440.0 / kSampleRate;
+    constexpr int kFade = 64;
+    for (const float degrees : {0.0f, 90.0f, 270.0f}) {
+        setFloat(*module, "phase", degrees);
+        module->prepareToPlay(kSampleRate, kBlockSize);
+        const double expected = std::sin(2.0 * juce::MathConstants<double>::pi * (degrees / 360.0 + kFade * dt));
+        const auto block = renderAttack(*module, 69);
+        const float amplitude = peakOf(block.getReadPointer(0), kFade, kBlockSize - kFade);
+        EXPECT_NEAR(block.getReadPointer(0)[kFade], (float)expected * amplitude, 2e-3f) << degrees;
+    }
 }
 
 TEST_F(WavetableOscillatorModuleTest, RandomPhaseDecorrelatesRepeatedNotes) {
@@ -80,6 +81,8 @@ TEST_F(WavetableOscillatorModuleTest, StackModesTransposeUnisonVoices) {
     setFloat(*module, "position", 0.0f);
     setInt(*module, "unison", 4);
     setFloat(*module, "detune", 0.0f);
+    setFloat(*module, "blend", 1.0f); // the stacked voices at full level, whatever the default Blend
+    setFloat(*module, "width", 0.0f); // and centred, so Audio L carries every voice
     setChoice(*module, "stack", (int)WavetableOscillatorModule::Stack::PowerChord);
     module->prepareToPlay(kSampleRate, kBlockSize);
 
@@ -108,6 +111,32 @@ TEST_F(WavetableOscillatorModuleTest, BlendFadesTheStackAgainstTheCentreVoice) {
         diff = std::max(diff, std::abs(full.getReadPointer(0)[i] - centreOnly.getReadPointer(0)[i]));
     EXPECT_GT(diff, 0.02f);
     EXPECT_GT(rms(centreOnly, 0), 0.05f) << "the centre voice must survive blend 0";
+}
+
+// Regression test for FRO848: moving Blend to the shared centre-voice helper kept the middle voices of a
+// Stack mode at full level, so Blend 0 left the stacked octaves and dropped the root.
+TEST_F(WavetableOscillatorModuleTest, BlendZeroInAStackModeLeavesOnlyTheRoot) {
+    setFloat(*module, "position", 0.0f);
+    setFloat(*module, "detune", 0.0f);
+    setFloat(*module, "width", 0.0f); // compare Audio L of a centred stack
+    setInt(*module, "unison", 1);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto single = renderNote(*module, 57, 2);
+
+    auto stacked = std::make_unique<WavetableOscillatorModule>(); // heap: the module is large for a Windows stack
+    setFloat(*stacked, "position", 0.0f);
+    setFloat(*stacked, "detune", 0.0f);
+    setFloat(*stacked, "width", 0.0f);
+    setInt(*stacked, "unison", 3);
+    setChoice(*stacked, "stack", (int)WavetableOscillatorModule::Stack::Octave);
+    setFloat(*stacked, "blend", 0.0f);
+    stacked->prepareToPlay(kSampleRate, kBlockSize);
+    const auto rootOnly = renderNote(*stacked, 57, 2);
+
+    float diff = 0.0f;
+    for (int i = 0; i < single.getNumSamples(); ++i)
+        diff = std::max(diff, std::abs(single.getReadPointer(0)[i] - rootOnly.getReadPointer(0)[i]));
+    EXPECT_LT(diff, 1.0e-4f) << "Blend 0 in a Stack mode must leave exactly the root voice";
 }
 
 TEST_F(WavetableOscillatorModuleTest, RingModMultipliesBySyncInput) {

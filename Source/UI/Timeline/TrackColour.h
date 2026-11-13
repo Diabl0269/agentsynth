@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <juce_graphics/juce_graphics.h>
 
 // Track colour resolution — the single source of truth for what colour a timeline track's
@@ -67,6 +69,36 @@ inline juce::Colour resolveTrackColour(juce::uint32 storedArgb, int trackIndex, 
     if (!muted)
         return base;
     return base.withSaturation(base.getSaturation() * kMutedTrackSaturation).withMultipliedAlpha(kMutedTrackAlpha);
+}
+
+// WCAG relative luminance (0 black .. 1 white) of an opaque colour.
+inline float colourLuminance(juce::Colour c) noexcept {
+    const auto linear = [](float v) { return v <= 0.03928f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126f * linear(c.getFloatRed()) + 0.7152f * linear(c.getFloatGreen()) + 0.0722f * linear(c.getFloatBlue());
+}
+
+// WCAG contrast ratio (1 .. 21) between two opaque colours.
+inline float colourContrast(juce::Colour a, juce::Colour b) noexcept {
+    const float la = colourLuminance(a);
+    const float lb = colourLuminance(b);
+    return (std::max(la, lb) + 0.05f) / (std::min(la, lb) + 0.05f);
+}
+
+// `colour` as it should be drawn on `background`: composited over it (a dimmed muted track comes back
+// opaque, looking the same), and pushed toward black on a light background or white on a dark one
+// until it reaches `minRatio` -- the track palette's pale amber or green would otherwise vanish on
+// the light theme. A colour that already reads is returned unchanged in hue.
+inline juce::Colour readableOn(juce::Colour colour, juce::Colour background, float minRatio = 3.0f) noexcept {
+    const juce::Colour solid = background.overlaidWith(colour);
+    if (colourContrast(solid, background) >= minRatio)
+        return solid;
+    const juce::Colour target = colourLuminance(background) > 0.5f ? juce::Colours::black : juce::Colours::white;
+    for (int step = 1; step <= 10; ++step) {
+        const juce::Colour candidate = solid.interpolatedWith(target, (float)step * 0.1f);
+        if (colourContrast(candidate, background) >= minRatio)
+            return candidate;
+    }
+    return target;
 }
 
 } // namespace synth::ui

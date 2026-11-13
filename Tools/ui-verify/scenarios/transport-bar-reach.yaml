@@ -1,0 +1,37 @@
+# Gap: the transport bar (play, record, tempo, key) had a key path only from inside the timeline, with Up from its
+# track column; from the canvas, the mixer or the piano roll a keyboard user could not get there.
+#
+# What a keyboard user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track.
+#   2. Closes the bottom panel (Cmd+J), then on the canvas presses Cmd+Shift+Up: the panel slides open and the timeline's
+#      ring lands on Play (it used to open the panel and leave no ring when the panel was closed).
+#   3. Presses Right: Record. Return presses it (here only the ring is checked, nothing records).
+#   4. Opens the Mixer tab, presses Cmd+Shift+Up there: the Timeline tab comes back with the ring on Play.
+record: true
+save_project: transport-reach
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - key: {keys: escape}
+  - key: {keys: cmd+j}                                       # close the bottom panel again
+  - wait: {}
+  - expect: {id: timelineTopBarRing, topBarRing: ""}
+  - key: {keys: cmd+shift+up}                                # from the canvas, panel closed
+  - expect: {id: timelineTopBarRing, topBarRing: "Play / Stop", within_ms: 2000}
+  - mark: {check: 1, name: transport-ring-panel-closed}
+  - screenshot: {name: transport-from-canvas}
+  - key: {keys: right}
+  - expect: {id: timelineTopBarRing, topBarRing: "Record"}
+  - key: {keys: escape}
+  - expect: {id: timelineTopBarRing, topBarRing: ""}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - key: {keys: cmd+shift+up, target: mixerPanel}
+  - wait: {}
+  - expect: {id: timelineTopBarRing, topBarRing: "Play / Stop", within_ms: 1000}
+  - screenshot: {name: transport-from-mixer}

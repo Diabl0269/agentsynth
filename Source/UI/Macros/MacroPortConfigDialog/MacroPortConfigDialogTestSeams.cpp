@@ -99,6 +99,14 @@ void MacroPortConfigDialog::commitRowVoiceCountForTest(int row) {
         rowControls_[row]->voicesEditor.onFocusLost();
 }
 
+juce::Component* MacroPortConfigDialog::getRowShapeBoxForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->shapeBox : nullptr;
+}
+
+juce::Component* MacroPortConfigDialog::getRowVoicesEditorForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->voicesEditor : nullptr;
+}
+
 void MacroPortConfigDialog::triggerCloseForTest() {
     if (closeButton_.onClick)
         closeButton_.onClick();
@@ -109,6 +117,14 @@ void MacroPortConfigDialog::triggerCloseForTest() {
 void MacroPortConfigDialog::dragRowToIndexInGroupForTest(int row, int newIndexInGroup) {
     if (row >= 0 && row < (int)rowControls_.size())
         rowControls_[row]->commitDragTo(newIndexInGroup);
+}
+
+juce::Component* MacroPortConfigDialog::getRowDragHandleForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->dragHandle : nullptr;
+}
+
+juce::Rectangle<int> MacroPortConfigDialog::getRowBoundsForTest(int row) const {
+    return (row >= 0 && row < (int)rowControls_.size()) ? rowControls_[row]->getBounds() : juce::Rectangle<int>();
 }
 
 juce::Colour MacroPortConfigDialog::getRowDisplayColourForTest(int row) const {

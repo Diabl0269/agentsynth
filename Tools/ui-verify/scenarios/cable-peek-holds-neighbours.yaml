@@ -1,0 +1,64 @@
+# Bug: a cable dragged across a card's folded "More" button unfolded that row as a peek, and the card grew in the layout
+# and pushed the card below it down (a Distortion under the ADSR moved about 9 px) while the cable was still in the
+# user's hand.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track, opens its channel on the canvas and adds a Distortion module
+#      below the ADSR card, then zooms out.
+#   2. Presses on the Parametric EQ's audio output and drags a cable towards the Distortion's audio input, across the
+#      ADSR card's folded "More" button, and keeps the button held.
+#   3. The ADSR row unfolds as a peek and the card draws over the neighbour in front of it; no other card moves, so the
+#      Distortion stays exactly where it was. Letting go ends the peek.
+record: true
+save_project: cable-peek-holds-neighbours
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {}
+  - key: {keys: cmd+f}                                       # add Distortion from the library
+  - type: {text: dist}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: "cmd+-"}                                     # zoom out so the whole chain is on screen
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 280, toX: 1300, toY: 420}   # pan down so the Distortion sits under the ADSR
+  - wait: {}
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}}
+  - mouseDown: {id: window, x: 1482, y: 113}                  # the Parametric EQ's audio output
+  - mouseMoveHeld: {id: window, x: 1442, y: 129}
+  - mouseMoveHeld: {id: window, x: 1403, y: 145}
+  - mouseMoveHeld: {id: window, x: 1363, y: 161}
+  - mouseMoveHeld: {id: window, x: 1323, y: 177}
+  - mouseMoveHeld: {id: window, x: 1284, y: 193}
+  - mouseMoveHeld: {id: window, x: 1244, y: 209}
+  - mouseMoveHeld: {id: window, x: 1204, y: 225}
+  - mouseMoveHeld: {id: window, x: 1164, y: 241}
+  - glide: {name: approach-1, frames: 4, do: {mouseMoveHeld: {id: window, x: 1125, y: 257}}}
+  - glide: {name: approach-2, frames: 4, do: {mouseMoveHeld: {id: window, x: 1085, y: 273}}}
+  - glide: {name: approach-3, frames: 4, do: {mouseMoveHeld: {id: window, x: 1045, y: 289}}}
+  - glide: {name: approach-4, frames: 4, do: {mouseMoveHeld: {id: window, x: 1006, y: 305}}}
+  - glide: {name: peek-opens, frames: 10, do: {mouseMoveHeld: {id: window, x: 966, y: 321}}}   # film the row opening under the cable
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}, within_ms: 1000}   # the ADSR row is open and the Distortion has not moved
+  - mark: {check: 1, name: cable-peek-over-neighbour}
+  - glide: {name: onward-1, frames: 4, do: {mouseMoveHeld: {id: window, x: 926, y: 337}}}
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}}
+  - glide: {name: onward-2, frames: 4, do: {mouseMoveHeld: {id: window, x: 887, y: 353}}}
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}}
+  - glide: {name: onward-3, frames: 4, do: {mouseMoveHeld: {id: window, x: 847, y: 369}}}
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}}
+  - mouseUp: {id: window, x: 847, y: 369}
+  - wait: {}
+  - expect: {id: "card:Distortion", bounds: {x: 842, y: 345, w: 116, h: 165}}
+  - screenshot: {name: cable-peek-holds-neighbours}

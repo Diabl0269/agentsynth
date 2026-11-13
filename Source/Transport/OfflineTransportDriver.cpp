@@ -31,6 +31,9 @@ OfflineTransportDriver::OfflineTransportDriver(AudioEngine& engineToUse, double 
     scratch.setSize(numChannels, blockSize);
     scratch.clear();
 
+    // Released first: the graph only prepares a node that is not already prepared, so without this a render at the
+    // format the graph already has would start from whatever state the previous pass left in its modules.
+    engine.releaseFromHost();
     engine.prepareForHost(sampleRate, blockSize, 0, numChannels);
 }
 

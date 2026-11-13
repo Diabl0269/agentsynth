@@ -1,4 +1,5 @@
 // FXModuleFlangerTests.cpp — Flanger module coverage
+#include "../../ClickBoundHelpers.h"
 #include "Modules/FX/FlangerModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -74,4 +75,32 @@ TEST_F(FlangerModuleTest, PrepareToPlayAndProcessDoNotCrash) {
 TEST_F(FlangerModuleTest, ModuleTypeAndCategoryAreCorrect) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Flanger);
     EXPECT_EQ(module->getModulationCategory(), ModulationCategory::FX);
+}
+
+// ---------------------------------------------------------------------------
+// Click bound: a jump of Centre Delay
+// ---------------------------------------------------------------------------
+
+using namespace clickbound;
+
+// Regression test for FRO1022: Centre Delay reached the delay line once per block, so a jump of the knob
+// moved the read head by a whole block's share of the glide at every block edge.
+TEST(FlangerClickBound, CentreDelayJumpGlidesInsteadOfStepping) {
+    for (const bool up : {true, false}) {
+        FlangerModule m;
+        setActual(m, "centreDelay", up ? 1.0f : 5.0f);
+        const auto steps = measureEdge(m, {}, {0, 1}, [&] { setActual(m, "centreDelay", up ? 5.0f : 1.0f); });
+        EXPECT_NO_CLICK(steps) << (up ? "minimum to maximum" : "maximum to minimum");
+    }
+}
+
+// Regression test for FRO1022: the delay line is not run while muted or bypassed, so coming back played
+// echoes of what it heard before, stepping against the live signal.
+TEST(FlangerClickBound, ComingBackFromBypassOrMuteStartsFromAnEmptyLine) {
+    for (const char* flag : {"bypassed", "muted"}) {
+        FlangerModule m;
+        setNormalised(m, flag, 1.0f);
+        const auto steps = measureEdge(m, {}, {0, 1}, [&] { setNormalised(m, flag, 0.0f); });
+        EXPECT_NO_CLICK(steps) << flag;
+    }
 }

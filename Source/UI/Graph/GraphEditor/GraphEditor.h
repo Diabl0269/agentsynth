@@ -6,34 +6,54 @@
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CableRetractAnimator/CableRetractAnimator.h"
+#include "UI/Graph/CanvasFrame/CanvasEdgeDrag.h"
+#include "UI/Graph/CanvasFrame/CanvasFrame.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 #include "UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/MacroHullGlide/MacroHullGlide.h"
 #include "UI/Graph/ModuleClipboard.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
+namespace synth::ui {
+class ModDotController;    // UI/Graph/ModDot/ModDotController.h
+class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
+class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
+class PolyChainController; // UI/Graph/PolyChain/PolyChainController.h
+class ColourPickerPopup;   // a unique_ptr return type only; 89 files include this header
+class CanvasEdgeScrollDriver; // UI/Graph/CanvasEdgeScroll/ (a friend: it pans the view)
+} // namespace synth::ui
 class AudioEngine;
+class CanvasCardKeyboard;
+class LoadRevealAnimator;
 class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
+struct ViewDoc;              // Forward declaration (Source/Project/ViewDoc.h)
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
 class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 } // namespace synth
-namespace synth::ui {
-class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
-}
+namespace graph_editor_paint {
+class CanvasMemo;
+} // namespace graph_editor_paint
 #include "UI/Graph/MinimapComponent.h"
 #include "UI/Graph/ModMatrixComponent.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 
 class GraphEditor
     : public juce::Component
@@ -41,6 +61,8 @@ class GraphEditor
     , public juce::DragAndDropTarget
     , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient
+    , public synth::ui::KeyboardContextMenuProvider
+    , public synth::ui::KeyboardColourProvider
     , private GraphCanvasHost {
 public:
     GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
@@ -50,125 +72,125 @@ public:
     ModMatrixComponent& getModMatrix() { return modMatrix; }
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
     std::function<void()> onBeforeDetachAllModuleComponents; // fires here AND from deleteSelection()
+    std::function<void(const juce::String&)> onModuleAdded;  // a user placed a module; its factory type name
+    std::function<void(const std::vector<juce::AudioProcessorGraph::NodeID>&)> onBeforeDetachModuleComponentsFor;
     void detachAllModuleComponents();
-
+    void detachModuleComponentsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed); // before they go
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void lookAndFeelChanged() override;
-
     void timerCallback() override;
     void updateComponents() override; // also GraphCanvasHost::updateComponents()
+    void holdStructureNotify(bool begin) override;
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
+    void completeModMatrixSlideForTest() { modMatrixAnim.completeForTest(); }
 
     // ---- Minimap ----
     void setMinimapVisible(bool shouldBeVisible);
     void toggleMinimapVisibility();
     bool isMinimapVisible() const noexcept { return minimapVisible; }
+    bool isMinimapSuppressedBySize() const noexcept; // under the size floor: hidden whatever the preference
+    /** Mini map slide-and-fade (GraphEditorMinimapSlide.cpp): 0 = gone, 1 = fully shown. */
+    float getMinimapSlideProgress() const noexcept { return minimapSlide_.getProgress(); }
+    bool isMinimapSlideMovingForTest() const noexcept { return minimapSlide_.isMoving(); }
+    /** Lets a toggle animate while the editor is off screen, so a test can reach the animated path. */
+    void setMinimapAnimateOffScreenForTest(bool animate) noexcept { minimapAnimateOffScreen_ = animate; }
+    /** Advances the slide to `t` (0..1) with no VBlank, as the real driver's onUpdate does. */
+    void advanceMinimapSlideForTest(float t);
+    /** Lands the slide, as the real driver's onComplete does. */
+    void finishMinimapSlideForTest();
     synth::ui::MinimapComponent& getMinimap() noexcept { return minimap; }
 
     juce::Rectangle<float> getVisibleCanvasRect() const;
-
     void centreViewOn(juce::Point<float> canvasPoint);
-
+    void flyViewTo(juce::Point<float> canvasPoint); // centreViewOn, eased; GraphEditorViewFly.cpp
+    synth::ui::ScrollTweenRunner& viewFlyForTest() noexcept { return wheelPanTween_; }
     void fitViewToModules();
-
     void zoomAroundCentre(float wheelDelta);
+    /** The canvas zoom and pan as they are now; `applyViewDoc` clamps to the wheel-zoom range. Message thread. */
+    synth::ViewDoc getViewDoc() const;
+    void applyViewDoc(const synth::ViewDoc& view);
     synth::ui::MinimapModel buildMinimapModel();
 
     // ---- Locate Master ---- See GraphEditorTypes.h for the LocateMasterResult enum.
     using LocateMasterResult = graph_editor_types::LocateMasterResult;
-
     bool hasLocatableMasterOrOutput() const;
-
     /** Selects Master, falling back to Audio Output when there is none yet, and pans into view. */
     LocateMasterResult locateMasterOrOutput();
-
-    // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
     void dragConnection(juce::Point<int> screenPos);
     void endConnectionDrag(juce::Point<int> screenPos);
-
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
-
-    // ---- Mod-amount drag gesture -------------
-    // Shared by the cable midpoint knob (GraphEditorCanvas.cpp) and a card knob's ring-annulus/Alt
-    // drag (ModuleComponent's CardKnobSlider) -- ONE path adjusts an attenuverter's "amount", so
-    // the two gestures can never diverge. See GraphEditorModAmount.cpp for the implementation and
-    // its own doc comment on why undo capture happens on begin, not on the first adjust.
+    // ---- Mod-amount drag gesture (the one path both the cable knob and a card knob's ring use) ----
     void beginModAmountGesture();
     void adjustModAmount(juce::AudioProcessorGraph::NodeID attenuverterNodeID, float delta);
     void commitModAmountGesture();
-
     // See GraphEditorTypes.h for the PolyLink struct's full field-level doc.
     using PolyLink = graph_editor_types::PolyLink;
-
     /** Which raw channels a cable dropped between two visible jacks should wire. */
     static PolyLink resolvePolyLink(const ModuleBase* source, int sourceVisibleJack, const ModuleBase* dest,
                                     int destVisibleJack);
-
     /** Re-evaluates every connection touching `module` after its poly parameter changed. */
     void rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                              const std::vector<LogicalPort>& previousOutputMap);
     void deleteModule(ModuleComponent* module);
-    void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId);
-    void replaceModule(ModuleComponent* module, const juce::String& newModuleType);
+    /** `recordUndo=false`: the caller already opened a recordGraphAndMacroChange around it. */
+    void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, bool recordUndo = true);
+    void replaceModule(ModuleComponent* module, const juce::String& newModuleType,
+                       const std::function<void(juce::AudioProcessor&)>& configure = {});
     void updateModulePosition(ModuleComponent* module);
 
     // Preset Management
     void savePreset(juce::File file);
     void loadPreset(juce::File file, bool append = false);
     bool loadFactoryPreset(int index);
-
     void newPatch();
 
-    /** The per-loaded-file stash of top-level JSON keys this build doesn't understand (see
-     *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge it —
-     *  GraphEditor owns no file dialogs, and MainComponent owns no PatchDocument. */
+    /** The stash of top-level JSON keys this build doesn't understand (see `patchDocument` below), exposed so the
+     *  app's `.agsproj` save/load path can re-merge it -- GraphEditor owns no file dialogs. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
-
     /** GraphEditor's live set of Macros for the current patch (Source/MacroSet.h). Exposed for the
      *  same reason as getPatchDocument() above. */
     synth::MacroSet& getMacros() noexcept override { return macros; }
 
-    // ---- Macros (docs/macros/macros.md) — owned by MacroGroupController ----
-    // GraphEditor forwards its own (unchanged) public macro API to macroController_; the nested
-    // types below are aliased so `GraphEditor::X` keeps compiling for every existing caller.
-    // Full contracts live on MacroGroupController.h.
+    // ---- Macros (docs/macros/macros.md) — owned by MacroGroupController; contracts live there ----
     using MacroPortOwner = MacroGroupController::MacroPortOwner;
 
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h,
                                       juce::AudioProcessorGraph::NodeID selfId) override;
-
     juce::Point<int> findLeftEdgeSlotBelowModules(int w, int h);
     void handleModuleResized(ModuleComponent* moduleComp);
-
     void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
-
     void refreshIoModulesAfterDeviceChange();
 
-    /** Output-card identity treatment (docs/layout/module-card.md): installs the callback
-     *  MainComponent uses to describe where the signal actually goes. Set once; GraphEditor/
-     *  ModuleComponent stay ignorant of Standalone-vs-Hosted framing and just render the string. */
-    void setOutputDeviceInfoProvider(std::function<juce::String()> provider) {
-        outputDeviceInfoProvider = std::move(provider);
-    }
-
+    /** Output-card identity (docs/layout/module-card.md): MainComponent's description of where the signal goes,
+     *  set once; GraphEditor/ModuleComponent just render the string. */
+    void setOutputDeviceInfoProvider(std::function<juce::String()> provider);
     void refreshOutputDeviceInfo();
-
     void completeStereoPairConnections(ModuleComponent* moduleComp);
     void finalizeModuleDrag(ModuleComponent* module);
-    void autoArrange();
+    void autoArrange(bool record = true); // record=false: inside the caller's own undo step
 
-    // ---- Multi-select ----
-    // See GraphEditorSelection.cpp for the full gesture contract (pan/marquee/click/drag/clear/
-    // delete keymap).
+    // ---- Output dock, always rightmost; x derived (GraphEditorOutputDock.cpp, layout.md#output-dock) ----
+    /** Re-derives the dock's positions (node x/y and live bounds, synchronously). No undo step, no dirtiness. */
+    void reflowOutputDock() override;
+    bool isOutputDockNode(juce::AudioProcessorGraph::NodeID nodeId) const;
+    void carryOutputDockWith(ModuleComponent* initiator); // live vertical drag: the other dock cards follow its y
+    void finalizeOutputDockDrag(ModuleComponent* module); // drag release: snaps y for the dock, re-derives x
+    /** Empty when `nodeId` may be deleted, else why not (Audio Output never; Master while channels exist). */
+    juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph::NodeID nodeId) const;
+    void removeUndeletableOutputNodes(std::vector<juce::AudioProcessorGraph::NodeID>& ids); // erases refused ids
+    /** Takes any dock card out of the macro it is a member of (a saved project can hold one), quietly: no undo step. */
+    void evictOutputDockFromMacros();
+    void frameOutputDock(); // frames the whole dock in view ("Go to Output")
+
+    // ---- Multi-select (gesture contract: GraphEditorSelection.cpp) ----
     const synth::ui::SelectionModel& getSelection() const override { return selection; }
-
     void selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive);
     void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) override;
     void clearSelection();
@@ -180,121 +202,111 @@ public:
     bool isNodeSelected(juce::AudioProcessorGraph::NodeID nodeId) const { return selection.contains(nodeId); }
     int getSelectionCount() const { return selection.size(); }
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
-
     /** Removes every selected module as ONE undoable change. */
     void deleteSelection() override;
-
+    /** deleteSelection()'s removal with no undo record, for a bigger gesture that records one (MainComponent::
+     *  deleteTrack, inside a CardGlideAnimator::Scope): cards of `ids` shrink away; `healChain` splices survivors. */
+    void removeNodesNow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, bool healChain, bool narrowDetach);
     void pruneSelection();
 
-    // ---- Marquee (rubber-band) selection ----
-    // Points are in CANVAS coordinates (post-transform), so the marquee tracks the content under
-    // the cursor while zoomed or panned.
+    // ---- Marquee (rubber-band) selection; points are in CANVAS coordinates ----
     void beginMarquee(juce::Point<int> canvasAnchor, bool additive);
     void updateMarquee(juce::Point<int> canvasCurrent);
     void endMarquee();
     bool isMarqueeActive() const { return marqueeActive; }
     juce::Rectangle<int> getMarqueeRect() const { return marqueeRect; }
 
-    // ---- Group drag ----
-    // ModuleComponent drives its own drag with a ComponentDragger; when the dragged module is part
-    // of a multi-selection it reports its delta here and every other selected module follows.
-    void beginSelectionDrag();
+    // ---- Group drag: a module in a multi-selection reports its delta here, the rest follow ----
+    /** `initiator` (the grabbed card, when known): a dock card drags alone, never as a group. */
+    void beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator = {});
     void dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator);
     void finalizeSelectionDrag();
     /** Discards the recorded drag origins without re-resolving any position. */
     void cancelSelectionDrag();
     bool isSelectionDragActive() const override { return selectionDragActive; }
+    /** A live drag delta with the dragged cards held at the canvas origin (GraphEditorCanvasFrame.cpp). */
+    juce::Point<int> clampDragDeltaToCanvas(juce::Point<int> rawDelta) { return edgeDrag_.clampDelta(rawDelta); }
 
     bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // test accessor
     void cancelLiveDragGestures();
-
     // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) ----
-    // A live drag JOINS/LEAVES/TRANSFERS between expanded macros by crossing hull borders; see
-    // ModuleComponentInteraction.cpp's mouseDrag/mouseUp for the gesture.
     /** The macro a live reparent drag would leave if released now, empty for none. */
-    juce::String getMacroDragLeaveId() const noexcept { return macroDragLeaveId_; }
+    juce::String getMacroDragLeaveId() const noexcept override { return macroDragLeaveId_; }
     /** The macro a live reparent drag (or a library drag, see setMacroDropCandidate) would join. */
-    juce::String getMacroDragJoinId() const noexcept { return macroDragJoinId_; }
-    /** Whether a live reparent drag currently has any leave or join candidate. */
-    bool hasMacroDragCandidate() const noexcept {
-        return macroDragLeaveId_.isNotEmpty() || macroDragJoinId_.isNotEmpty();
-    }
-    /** The module a reparent drag is currently moving, invalid between gestures — see
-     *  GraphEditorDragDrop.cpp. */
+    juce::String getMacroDragJoinId() const noexcept override { return macroDragJoinId_; }
+    /** A live reparent drag has a leave or join candidate, or has already moved its module across a border. */
+    bool hasMacroDragCandidate() const;
+    /** The macro a live drag has moved its module into as it crossed, empty when it is back where it started. */
+    juce::String getMacroDragLiveOwnerId() const;
+    /** The module a reparent drag is currently moving, invalid between gestures. */
     juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
     void updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId, juce::Point<int> canvasCentre);
-    void clearMacroDragCandidate();
-    /** Paint-only hull bounds; see GraphEditorDragDrop.cpp for the exclusion rule during a live
-     *  reparent drag. Hit-testing keeps using macroHullBounds. */
+    void clearMacroDragCandidate(bool keepFrozenBorders = false);
+    /** Freezes the borders of the module's macro and ancestors for a reparent drag (cleared on candidate clear). */
+    void beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId);
+    /** Paint-only hull bounds (hit-testing keeps using macroHullBounds). */
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
-    /** The single-undo-step finalize (position + leave + join). `module` must not be touched again
-     *  afterwards — see GraphEditorDragDrop.cpp. */
+    /** Single-undo-step finalize (position + leave + join). `module` must not be touched afterwards. */
     void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId, const juce::String& joinId);
+    /** Cables as drawn now / retract those no longer drawn since; `growAdded` (undo, redo) also grows the new ones. */
+    std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract() override;
+    void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before,
+                                bool growAdded = false) override;
+    void
+    morphCablesSince(const std::vector<graph_editor_types::VisibleCable>& before); // an insert's split, a delete's join
+    /** The expanded macro borders as drawn now; hand it to glideHullsFrom() after a change that may move them. */
+    MacroHullGlide::Hulls snapshotPaintedHulls() const;
+    /** Glides every border that moved since `before` (a snapshotPaintedHulls()) to its live bounds. */
+    void glideHullsFrom(const MacroHullGlide::Hulls& before);
+    /** True once the drag in progress has moved its module into or out of a macro (applied as it crossed). */
+    bool hasLiveMacroMembershipChange() const noexcept { return liveMembershipChanged_; }
 
-    /** Preference ("macroDragWithoutCmd"): reparent by drag without holding Cmd. On by default; single-module
-     *  drags only, never a Ctrl-held one. */
+    /** Preference "macroDragWithoutCmd": reparent by drag without Cmd (single-module drags only). */
     void setMacroDragWithoutCmdEnabled(bool enabled) { macroDragWithoutCmdEnabled = enabled; }
     bool getMacroDragWithoutCmdEnabled() const noexcept { return macroDragWithoutCmdEnabled; }
-    /** Test seam for the Cmd read behind a library drop's macro join; unset reads the live keyboard. */
-    void setMacroJoinCommandOverrideForTests(std::optional<bool> down) { macroJoinCommandOverride_ = down; }
-    bool isMacroJoinModifierDown() const override;
+    /** Preference "moveMacroOnHullDrag" (off by default): dragging empty space inside an expanded macro's hull moves
+     *  the macro (the name chip's drag) instead of panning. Shift still draws a marquee. */
+    void setMoveMacroOnHullDragEnabled(bool enabled) { moveMacroOnHullDragEnabled = enabled; }
+    bool getMoveMacroOnHullDragEnabled() const noexcept { return moveMacroOnHullDragEnabled; }
     juce::String macroJoinTargetAt(juce::Point<int> canvasCentre) const override;
     void setMacroDropCandidate(const juce::String& macroId) override;
 
-    // ---- Macros ----
-    // See MacroGroupController.h's "Grouping / membership / collapse" section for what a Macro is
-    // and the collapsed-macro selection/drag/delete model.
-
     // ---- Macro auto-port preference (docs/macros/auto-ports.md) ----
-    // See GraphEditorMacroPrompts.cpp's requestGroupSelectionIntoMacro() for the tri-state/
-    // persistence rationale.
-    enum class MacroAutoPortPreference { Unset, AutoCreatePorts, LeaveCablesAsIs };
-
+    using MacroAutoPortPreference = graph_editor_types::MacroAutoPortPreference;
     void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
     MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
-
     /** Cmd+G / right-click "Create Macro" entry point; may show the auto-port modal. */
     void requestGroupSelectionIntoMacro() override;
-
-    /** Test seam: replaces the real modal when set — see GraphEditorMacroPrompts.cpp. Null in
-     *  production. */
+    /** Test seam: replaces the real modal when set. Null in production. */
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
-
-    /** The controller itself, for the app to install its hooks on. */
+    // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
+    /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
+    synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
+    /** The jack panel's controller: jack clicks, the open panel, the cable highlight (UI/Graph/PortPanel). */
+    synth::ui::PortPanelController& getPortPanel() noexcept { return *portPanel_; }
+    synth::ui::PolyChainController& getPolyChain() noexcept { return *polyChain_; } // a Poly click's voice graph
     MacroGroupController& getMacroController() noexcept { return macroController_; }
-    /** Const overload — for call sites that reach the controller from a const
-     *  GraphEditor method (e.g. a read-only predicate), which the non-const overload can't serve. */
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
-    /** The controller itself, for the app to install its hooks on. */
+    /** Opacity factor (0..1) of the smart-connection preview cables; 1 once they have faded in. */
+    float getSmartPreviewReveal() const noexcept { return smartPreviewReveal_; }
     SmartConnectionEngine& getSmartConnections() noexcept { return smartConnections_; }
-    /** Const overload — see getMacroController()'s const overload above for why. */
     const SmartConnectionEngine& getSmartConnections() const noexcept { return smartConnections_; }
-    /** The controller itself, for the app to install its hooks on. */
     GraphDragDropController& getDragDropController() noexcept { return dragDropController_; }
-    /** Const overload — see getMacroController()'s const overload above for why. */
     const GraphDragDropController& getDragDropController() const noexcept { return dragDropController_; }
+    synth::ui::CanvasEdgeScrollDriver& getEdgeScroll() noexcept { return *edgeScroll_; } // drag-to-the-edge scroll
+    /** The canvas's card keys (arrows, Alt+arrows, Return); install the ShortcutManager here. */
+    CanvasCardKeyboard& getCardKeyboard() noexcept { return *cardKeyboard_; }
 
-    /** Async rename prompt for a macro with no card (e.g. the expanded hull menu). */
+    /** Async rename prompt for a macro with no card (e.g. the expanded hull menu); the hook swaps the modal. */
     void promptRenameMacro(const juce::String& macroId);
-
-    /** Test seam: replaces the real modal when set — see promptRenameMacro's definition. Null in
-     *  production. */
     std::function<void(const juce::String& macroId)> promptRenameMacroForTest;
-
     void promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea);
 
-    /** Where the recolour picker's favourites shelf persists to. Null (the default) means
-     *  in-memory-only favourites, which is what a headless test with no ApplicationProperties
-     *  gets — mirrors TimelineRulerComponent::setPropertiesFile exactly. */
+    /** Where the recolour picker's favourites persist. Null (default) keeps them in memory only. */
     void setPropertiesFile(juce::PropertiesFile* props) noexcept { propertiesFile_ = props; }
 
-    // ---- Macro bypass/mute (docs/macros/ports.md#bypass-and-mute) ----
-    //
-    // "Bypass macro" / "Mute macro" are FAN-OUT COMMANDS over a macro's members, not a
-    // macro-level reinterpretation of the contract — a macro has no processBlock and no
-    // bypass/mute state of its own. See MacroGroupController.h for the full fan-out contract.
+    // ---- Macro bypass/mute: fan-out commands over the members (docs/macros/ports.md#bypass-and-mute) ----
     using MacroToggleState = MacroGroupController::MacroToggleState;
-
     std::unique_ptr<synth::ui::ColourPickerPopup> createMacroColourPickerForTest(const juce::String& macroId);
 
     /** The shared macro actions menu for a collapsed card or an expanded hull. */
@@ -305,68 +317,51 @@ public:
     /** Live bounds + colour category for the currently-resolvable MODULE members of `macroId`
      *  (a port node is excluded). See MacroGroupController::macroMemberPreviews. */
     using MacroMemberPreview = MacroGroupController::MacroMemberPreview;
-
     juce::Colour categoryPreviewColour(synth::ui::ModuleCategory category) const;
 
-    /** Status-bar surface for a refused macro action. Owner installs; a no-op by default. Mirrors
-     *  onSaveSnippetRequested's ownership split — GraphEditor owns no status bar. */
+    /** Status-bar surface for a refused macro action; the owner installs it (GraphEditor owns no status bar). */
     std::function<void(const juce::String&)> onStatusMessage;
+    std::function<void(const juce::String&)> onDropRefused; // why a refused cable drop made no cable
 
-    // ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these) ----
-    // Carries every one of a collapsed macro's (hidden) members along by the card's own drag
-    // delta, reusing beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag exactly as a plain
-    // multi-select drag does.
+    // ---- Macro card drag (MacroCardComponent calls these; carries the hidden members along) ----
     void beginMacroCardDrag(const juce::String& macroId);
     void dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta);
     void finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft);
     void cancelMacroCardDrag(const juce::String& macroId);
+    bool cancelMacroUnitDrag(); // Esc mid-drag of a whole macro (card or chip): all goes back; false when none runs
 
-    // ---- Macro I/O: the "Configure I/O" modal + the cable-drop convenience ----
-    // docs/macros/configure-io.md, unified into ONE modal rather than piecemeal "Add Input"/
-    // "Add Output"/"Rename"/"Reorder" menu actions. Every entry point below is a single
-    // recordGraphAndMacroChange transaction, so add/remove/rename/reorder and a shape change are
-    // each exactly one undo step.
+    // ---- Macro I/O: the "Configure I/O" modal (docs/macros/configure-io.md); each edit is one undo step ----
 
-    // Exception: NOT a pure forwarder —
-    // its body does real work beyond the pass-through call (repaintMacroPortColourTargets() +
-    // clearMacroPortColourPreview() below), so it stays on GraphEditor rather than moving to
-    // MacroGroupController::changeMacroPortColour, which callers must not call directly.
+    // Not a pure forwarder (also repaints both surfaces and disarms the preview), so it stays on
+    // GraphEditor; callers must not call MacroGroupController::changeMacroPortColour directly.
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
 
-    // Per-port jack colour: neither paint surface (the collapsed card, the port's docked widget) repaints
-    // on its own, so these force BOTH. A live picker previews view-layer-only; the commit disarms it.
-    struct MacroPortRecolourTargets { // card/widget null when the macro is collapsed/absent
-        MacroCardComponent* card = nullptr;
-        ModuleComponent* widget = nullptr;
-    };
-    // Repaint BOTH surfaces; return the (possibly-null) pair for a headless reach check -- commit + repaint.
+    // Per-port jack colour: neither paint surface repaints on its own, so these force BOTH.
+    using MacroPortRecolourTargets = graph_editor_types::MacroPortRecolourTargets;
+    // Repaint BOTH surfaces; returns the (possibly-null) pair.
     MacroPortRecolourTargets repaintMacroPortColourTargets(const juce::String& macroId, const juce::String& nodeUuid);
-    // Arm the view-layer-only PREVIEW (no stored colour); idempotent -- an unchanged tick repaints nothing.
+    // Arm the view-layer-only preview (no stored colour); idempotent.
     void previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid, juce::Colour colour);
-    // Disarm the armed preview so the jack falls back to stored; a real no-op (no repaint) when unarmed.
+    // Disarm the preview so the jack falls back to the stored colour; no-op when unarmed.
     void clearMacroPortColourPreview(const juce::String& macroId, const juce::String& nodeUuid);
-    // Teardown BACKSTOP for a picker abandoned with no commit (its CallOutBox outlives the dialog).
+    // Teardown backstop for a picker abandoned with no commit.
     void cancelArmedMacroPortColourPreview();
-    // The shared lookup every path runs through, so a preview and its commit can never diverge.
+    // The shared lookup behind preview and commit.
     MacroPortRecolourTargets findMacroPortRecolourTargets(const juce::String& macroId, const juce::String& nodeUuid);
-
     void promptConfigureMacroIO(const juce::String& macroId);
 
     /** Quick "Rename Port" prompt -- the one-name alternative to Configure I/O. */
     void promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
 
     // ---- Macro card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ----
-    // See MacroGroupController::MacroCardPort for the full on-card-jack layout contract.
     using MacroCardPort = MacroGroupController::MacroCardPort;
 
     // ---- Snippets ----
     juce::var extractSelectionSnippet(const juce::String& name);
-
     bool insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) override;
 
-    // Prompts for a name and persists the snippet; invoked from the canvas context menu.
-    // GraphEditor deliberately owns no file dialogs.
+    // Prompts for a name and persists the snippet (canvas context menu); GraphEditor owns no file dialogs.
     std::function<void()> onSaveSnippetRequested;
     // Resolves a snippet name (from a library drag payload) to its JSON.
     std::function<juce::var(const juce::String&)> snippetProvider;
@@ -377,76 +372,70 @@ public:
     // GraphEditor owns no TimelineDoc, mirroring onSaveSnippetRequested above.
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
+    // The node uuids each timeline track starts from (its Track In / Track Audio), in track order. Set by
+    // MainComponent; auto-arrange gives every track its own row in this order. Unset (tests, plugin): track
+    // source nodes are ordered by node id.
+    std::function<std::vector<juce::String>()> trackSourceOrder;
+
     // ---- MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction) ----
     // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
     std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)>
         onQueryMidiMappingsForNode; // mapped paramID -> display label; absent means unmapped
+    // The paramIDs of a node that have an automation lane on the timeline (the marker beside their knob); absent means
+    // none. Set by MainComponent; polled once per card on the card's gated tick.
+    std::function<std::set<juce::String>(juce::AudioProcessorGraph::NodeID)> onQueryAutomatedParamsForNode;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
-    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)>
-        onEditMidiAssignmentRequested; // unset until the MIDI Remote panel exists
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onEditMidiAssignmentRequested;
     // Pushes/clears the armed breathing outline onto the target ModuleComponent, if on screen.
     void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     void clearMidiLearnArmed();
     // Repaints every card so its MIDI-mapped badges follow the Preferences switch (a card paints from a cached image).
     void repaintMidiLearnBadges();
 
-    // A hosted-plugin card's "Open Editor" button; resolves `nodeId` to its HostedPluginModule and
-    // hands it to HostedPluginWindowManager::openEditorFor -- same reason as the callbacks above.
+    graph_editor_types::DrumKitCardHooks
+        drumKit; // the Drum Kit card's "Drum machine" button and its hide-a-pad question
+    // Hosted-plugin card hooks ("Open Editor", the add-by-moving mode), wired to HostedPluginWindowManager.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
+    std::function<void(juce::AudioProcessorGraph::NodeID, bool)> onPluginAddingControlsChanged;
+    void endPluginAddingControls(juce::AudioProcessorGraph::NodeID nodeId);
 
-    // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, must outlive this editor.
+    // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, outlives this editor.
     void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }
     synth::PluginCardLayoutStore* getPluginCardLayoutStore() const noexcept { return pluginCardLayoutStore_; }
 
-    // ---- "Replace with..." keeps a module's MIDI Remote mappings ------------
-    // GraphEditor stays free of MidiLearnController/RemoteEngine (thin-owner rule); these three
-    // members are the hook MainComponent wires MidiLearnController through. See replaceModule()'s
-    // own doc comment (GraphEditorCommands.cpp) for how they combine into one undo step.
+    // ---- "Replace with..." keeps a module's MIDI Remote mappings (see replaceModule()'s definition) ----
 
-    /** Fires from inside replaceModule(), after the new node exists and the old node (and its
-     *  uuid) are gone, with the OLD node's uuid and the NEW node's id. May be null. */
+    /** Fires from replaceModule() once the new node exists and the old one is gone: OLD uuid, NEW id. May be null. */
     std::function<void(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId)> onModuleReplaced;
 
-    /** Fires as the postRestore of the combined undo/redo this doc participates in (see
-     *  setMidiRemoteProjectDocForUndo) -- never for the initial replace itself. May be null. */
+    /** Fires as the postRestore of the combined undo/redo (see setMidiRemoteProjectDocForUndo). */
     std::function<void()> onMidiRemoteDocRestored;
+    std::function<std::vector<synth::PluginIdentity>()> installedPluginsProvider; // "Replace with..." plugin rows
 
-    /** Non-owning; null (the default, and every headless test) means replaceModule() falls back to
-     *  its plain graph-only undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must
-     *  outlive this editor. */
+    /** Non-owning, may be null (plain graph-only undo step in replaceModule()); outlives this editor. */
     void setMidiRemoteProjectDocForUndo(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDocForUndo_ = doc; }
 
-    // ---- Copy / paste / duplicate ----
-    // All three run through the snippet pipeline (self-contained connections, modulation as
-    // intent, ids renumbered on insert) — see docs/layout/snippets-clipboard.md.
+    // ---- Copy / paste / duplicate (snippet pipeline, docs/layout/snippets-clipboard.md) ----
     bool copySelection();
 
     bool canPaste() const { return !clipboard.isEmpty(); }
     int getClipboardModuleCount() const { return clipboard.getModuleCount(); }
 
     bool pasteClipboard();
-
     bool pasteClipboardAt(juce::Point<int> canvasPos);
-
     bool duplicateSelection();
 
-    // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
-
     // Double-click a connected jack to disconnect. On by default.
     void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
     bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
-
-    // docs/macros/auto-ports.md#ports-on-a-cable-drag: auto-create a macro port when a dragged
-    // cable crosses a macro boundary. On by default; Preferences ("macroAutoCreatePortsOnDrag")
-    // can turn this off.
+    // Auto-create a macro port when a dragged cable crosses a macro boundary (docs/macros/auto-ports.md).
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
 
-    // docs/mixer/mixer.md#channels-follow-audio-not-tracks: auto-creates a mixer channel on a
-    // qualifying MIDI connect; Preferences ("mixerAutoCreateChannelOnConnect") can turn this off.
+    // Auto-create a mixer channel on a qualifying MIDI connect (docs/mixer/mixer.md).
     void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
     bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
 
@@ -455,46 +444,35 @@ public:
     // ---- "Make channel" / "Duplicate into this channel" (docs/mixer/mixer.md#make-channel-and-shared-modules) ----
     /** "Make channel" for the chain starting at `source`; boxes it into a new collapsed macro. */
     bool makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName);
-
     bool nodeNeedsChannel(juce::AudioProcessorGraph::NodeID source) const;
-
+    /** Moves a channel strip's Master-bound edges behind its track macro's output port, split into two jacks when the
+     *  "Split Left/Right jacks" preference is on. No undo of its own: call inside the caller's undo transaction,
+     *  before updateComponents(). */
+    void routeChannelOutputThroughMacroPort(const juce::String& stripUuid);
     bool isChannelMacroForTrack(const juce::String& memberUuid) const;
-
     juce::AudioProcessorGraph::NodeID channelSourceForSelection() const;
-
     void requestMakeChannel(juce::AudioProcessorGraph::NodeID source);
     std::function<void(juce::AudioProcessorGraph::NodeID)> onMakeChannelRequested;
-
     void addMakeChannelMenuItem(juce::PopupMenu& menu);
-
     std::vector<juce::String> duplicateIntoChannelTargets(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** "Duplicate into this channel": copies `nodeId` into `macroId`, re-creating its cables. */
     bool duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
-
     void requestDuplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onDuplicateIntoChannelRequested;
-
     void addDuplicateIntoChannelMenuItems(juce::PopupMenu& menu, juce::AudioProcessorGraph::NodeID nodeId);
 
-    /** Test seam, the canvas counterpart to ModuleComponent::setShowContextMenuHookForTest: a real
-     *  right-click on empty canvas builds the menu and hands it here instead of showing it. */
-    void setShowCanvasContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showCanvasContextMenuHook_ = std::move(hook);
-    }
+    /** Test seam: a right-click on empty canvas hands its menu here instead of showing it. */
+    void setShowCanvasContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook);
 
-    // docs/macros/auto-ports.md#ports-on-a-cable-drag: auto-delete a macro port once its last
-    // cable is removed. On by default; Preferences ("macroAutoDeletePortsOnLastCable") lets a
-    // user turn this off, leaving a cable-less port in place until removed by hand.
+    // Auto-delete a macro port once its last cable is removed (docs/macros/auto-ports.md).
     void setAutoDeleteMacroPortsOnLastCableEnabled(bool enabled) { autoDeleteMacroPortsOnLastCableEnabled = enabled; }
     bool getAutoDeleteMacroPortsOnLastCableEnabled() const noexcept override {
         return autoDeleteMacroPortsOnLastCableEnabled;
     }
 
-    // A MANUAL macro-port delete (Configure I/O's Delete Port, or the port's own right-click Delete
-    // Port) drops the cable by default; Preferences ("macroSpliceCableOnPortDelete") lets a user
-    // switch both to splicing it back together instead, the way ungroup always has
-    // (see docs/macros/auto-ports.md#a-port-node-is-directly-deletable).
+    // A manual macro-port delete drops the cable by default; when on, it splices it back together
+    // instead (docs/macros/auto-ports.md#a-port-node-is-directly-deletable).
     void setSpliceCableOnMacroPortDeleteEnabled(bool enabled) { spliceCableOnMacroPortDeleteEnabled = enabled; }
     bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept override {
         return spliceCableOnMacroPortDeleteEnabled;
@@ -502,36 +480,30 @@ public:
     void setReconnectChainOnDeleteEnabled(bool enabled) { reconnectChainOnDeleteEnabled = enabled; }
     bool getReconnectChainOnDeleteEnabled() const noexcept { return reconnectChainOnDeleteEnabled; }
 
-    // Default jack layout for newly created modules that expose the Dual I/O parameter.
-    // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
+    // Default jack layout for new Dual I/O modules: false = one collapsed "Audio" jack, true = split L/R.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
+    void applyDualIODefaultTo(juce::AudioProcessor& processor, const juce::String& moduleType) const {
+        applyDefaultDualIOForNewModule(processor, moduleType);
+    }
 
     /** Re-lays every stereo-capable module already on the canvas to `dual`. */
     void applyDualIOToExistingModules(bool dual);
 
     /** Unhooks a collapsed split-block module's hidden right leg, re-pointing its cables. */
     void dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId);
-
     static int rightAudioLegOf(juce::AudioProcessor* proc, bool asInput);
-
     static bool audioChannelReachableFromJack(const ModuleBase& mb, int rawChannel, bool isInput);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
-    /** Per-module-type overrides of the default above, keyed by module type name; a type with no
-     *  entry follows the global default. Applies only to NEW modules — does not retro-apply to
-     *  modules already on the canvas. */
-    void setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides) {
-        dualIOPerModuleOverrides = std::move(overrides);
-    }
+    /** Per-module-type overrides of the default above (keyed by type name); NEW modules only. */
+    void setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides);
     const std::map<juce::String, bool>& getDualIOPerModuleOverrides() const noexcept {
         return dualIOPerModuleOverrides;
     }
 
-    // ---- Custom module titles ---- A user-set card title, stored as the node property
-    // "displayName". See GraphEditorModuleTitles.cpp for why it is mirrored into neither.
+    // ---- Custom module titles (node property "displayName", see GraphEditorModuleTitles.cpp) ----
     /** The user's custom title for a node, or an empty string when it has none. */
     juce::String getModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId) const;
-
     void setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& name);
 
     juce::String getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId,
@@ -539,14 +511,9 @@ public:
 
     /** Commits and closes any open inline title editor, on any card. */
     void commitAnyOpenTitleRename();
-
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
 
-    // ---- Smart connections ----
-    // Proximity-based cable suggestions while placing a module, owned by SmartConnectionEngine
-    // (Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h) — GraphEditor just forwards.
-    // SmartConnectionMode/SmartSuggestion are aliased here so `GraphEditor::X` keeps compiling for
-    // every existing caller unchanged.
+    // ---- Smart connections (owned by SmartConnectionEngine) ----
     using SmartConnectionMode = SmartConnectionEngine::SmartConnectionMode;
     using SmartSuggestion = SmartConnectionEngine::SmartSuggestion;
 
@@ -556,24 +523,59 @@ public:
 
     void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
                       int dstJack, bool isMidi, bool recordUndo = true) override;
-
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
-    /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
-     *  happens without any mouse movement without needing a real 30 Hz timer. */
-    void pumpDragModifierTickForTests() {
-        smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
-    }
 
-    /** Test seam: exposes the private GraphCanvasHost base for a test driving a
-     *  SmartConnectionEngine of its own directly. Production code never calls this. */
-    GraphCanvasHost& getCanvasHostForTest() { return *this; }
+    // ---- Modulators added from a timeline lane (GraphEditorModulators.cpp) ----
+    /** The raw CV channel that drives `paramId` on `nodeId`'s module; -1 when it has none. */
+    int modulationChannelFor(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) const;
+    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack at `depth` as ONE undo step (none with `recordUndo`
+     *  false); invalid if it can't. `attenOut` gets the hidden attenuverter. */
+    juce::AudioProcessorGraph::NodeID addLfoModulator(juce::AudioProcessorGraph::NodeID targetId,
+                                                      const juce::String& paramId, bool recordUndo = true,
+                                                      float depth = 0.5f,
+                                                      juce::AudioProcessorGraph::NodeID* attenOut = nullptr);
+    /** Cable an existing LFO/envelope output, or a new one, into `paramId`'s CV jack as ONE undo step. */
+    bool connectExistingModulator(juce::AudioProcessorGraph::NodeID sourceId, int sourceChannel,
+                                  juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
+    juce::AudioProcessorGraph::NodeID addNewModulatorTo(const juce::String& typeName, int sourceChannel,
+                                                        juce::AudioProcessorGraph::NodeID targetId,
+                                                        const juce::String& paramId);
+    /** A new `typeName` module beside `targetId`, cabled from `sourceChannel` into raw CV channel `destChannel` at
+     * `depth` as ONE undo step (none with `recordUndo` false); returns its hidden attenuverter, invalid if it can't. */
+    juce::AudioProcessorGraph::NodeID addModulationSourceModule(const juce::String& typeName, int sourceChannel,
+                                                                juce::AudioProcessorGraph::NodeID targetId,
+                                                                int destChannel, float depth, bool recordUndo = true);
+    /** Cables any modulation source (`sourceChannel`: a ModSourceItem's raw output channel) into raw CV channel
+     *  `destChannel` of `targetId` at `depth` through the macro-port seam, as ONE undo step (none with `recordUndo`
+     *  false). Returns the routing's hidden attenuverter; invalid (nothing changed) when it can't or it is wired. */
+    juce::AudioProcessorGraph::NodeID connectModulationSource(juce::AudioProcessorGraph::NodeID sourceId,
+                                                              int sourceChannel,
+                                                              juce::AudioProcessorGraph::NodeID targetId,
+                                                              int destChannel, float depth, bool recordUndo = true);
+    /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step, or a
+     *  plain edit with `recordUndo` false. */
+    void removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo = true);
+    /** Removes the whole chain through hidden attenuverter `attenId` (ports it crossed included) as ONE undo step. */
+    void removeModulationChain(juce::AudioProcessorGraph::NodeID attenId);
+    /** The macro ports the chain through `attenId` crosses, read before a cut; empty when it crosses none. */
+    std::vector<juce::AudioProcessorGraph::NodeID> modulationChainPorts(juce::AudioProcessorGraph::NodeID attenId);
+    /** After a cable cut inside the caller's undo step: drops `touched` ports left cableless or one-sided (with the
+     *  modulation hanging off one), then sweeps `chainPorts` (read before the cut). */
+    void pruneMacroPortsAfterCut(const std::vector<juce::AudioProcessorGraph::NodeID>& touched,
+                                 std::vector<juce::AudioProcessorGraph::NodeID> chainPorts);
+    /** The resolved colour of a modulation wire from `sourceId`. */
+    juce::Colour modulationWireColour(juce::AudioProcessorGraph::NodeID sourceId) const;
+    /** Test seam: runs just the drag tick's modifier re-sample (no real 30 Hz timer needed). */
+    void pumpDragModifierTickForTests();
+
+    /** Test seam: exposes the private GraphCanvasHost base. Production code never calls this. */
+    GraphCanvasHost& getCanvasHostForTest();
 
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
 
     // ---- Onboarding helpers (headless-testable) ----
-    /** True when the canvas has no modules. nodeCount is the number of non-Attenuverter nodes
-     *  rendered as ModuleComponents. */
+    /** True when the canvas has no modules (nodeCount counts the non-Attenuverter ModuleComponents). */
     static bool isCanvasEmpty(int nodeCount) noexcept { return nodeCount <= 0; }
 
     /** The final snapped + anti-overlapped position for a newly dropped module. */
@@ -581,14 +583,10 @@ public:
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
 
-    /** Fires at the end of every updateComponents() (the module set may have changed). Owners use
-     *  it to refresh UI that depends on patch contents. */
+    /** Fires at the end of every updateComponents(); owners refresh UI that depends on patch contents. */
     std::function<void()> onGraphStructureChanged;
-
     static bool isSingletonIOModule(const juce::String& typeName);
-
     static bool graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName);
-
     static juce::Point<int> estimateModuleSize(const juce::String& typeName);
 
     // DragAndDropTarget overrides
@@ -611,39 +609,37 @@ public:
 
     /** Creates a Hosted Plugin node already pointed at `identity`. */
     void addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos) override;
-
     juce::Point<int> getViewportCentreInCanvasSpace() const;
 
     // Mouse Overrides
+    /** Wheel / two-finger swipe PANS the canvas (a mouse notch eases in); Cmd/Ctrl+wheel zooms at the cursor. */
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+    /** Trackpad pinch zooms around the pinch point. */
+    void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
-
     bool keyPressed(const juce::KeyPress& key) override;
-
+    /** One module card selected: its right-click menu at the card; else the canvas menu at the middle of the view.
+     *  False while keyboard focus is inside the Mod Matrix, which has no menu. */
+    bool showContextMenuForKeyboardFocus() override;
+    bool openColourForKeyboardFocus() override;
     juce::AudioProcessorGraph::NodeID getAttenuverterNodeAt(juce::Point<float> localPos);
 
-    // ---- Cables ---- A "cable" is one wire as the USER sees it, which is not the same thing as a
-    // graph edge — see GraphEditorTypes.h for the full rationale and the CableId/VisibleCable
-    // structs' field-level docs.
+    // ---- Cables: one wire as the USER sees it, not a graph edge (see GraphEditorTypes.h) ----
     using CableId = graph_editor_types::CableId;
     using VisibleCable = graph_editor_types::VisibleCable;
 
     /** Enumerates the memoized visible-cable list feeding both paint() and hit-testing. */
     const std::vector<VisibleCable>& buildVisibleCables();
-
     static juce::Path buildCablePath(juce::Point<float> p1, juce::Point<float> p2);
-
     static float distanceToCable(const VisibleCable& cable, juce::Point<float> canvasPos);
-
     std::optional<VisibleCable> getCableAt(juce::Point<float> canvasPos, float tolerance = kCableHitTolerance);
 
     /** Click tolerance in canvas px. Wider than the wire itself so thin cables stay grabbable. */
     static constexpr float kCableHitTolerance = 7.0f;
-
-    void disconnectCable(const VisibleCable& cable);
+    void disconnectCable(const VisibleCable& cable, const std::vector<VisibleCable>& sameConnection = {});
 
     /** Cable colouring config, owned/persisted by MainComponent / AppearanceSettingsTab. */
     void setCableColourMode(synth::ui::CableColourMode mode);
@@ -652,32 +648,20 @@ public:
     const synth::ui::CableColourOverrides& getCableColourOverrides() const noexcept { return cableColourOverrides; }
 
     juce::Colour colourForCable(const VisibleCable& cable) const;
-
     void rememberWavetableFolder(const juce::File& folder);
     juce::File getLastWavetableFolder() const noexcept { return lastWavetableFolder; }
     std::function<void(const juce::File&)> onWavetableFolderChanged;
 
-    /** A card's own content changed in a way that can move where a cable lands (e.g. a
-     *  Wavetable tab-page switch, which shows/hides knobs without moving or resizing the card
-     *  itself, so nothing else invalidates the memo for it) -- repaintCanvas() is private
-     *  (GraphCanvasHost), so this is ModuleComponent's public seam into it. */
+    /** A card's content changed in a way that can move a cable landing (e.g. a Wavetable page
+     *  switch); ModuleComponent's public seam into the private repaintCanvas(). */
     void notifyModuleContentChanged() { repaintCanvas(); }
 
-    // The modulation target (destination node + RAW channel) currently correlated with a
-    // hover, in EITHER direction -- hovering a cable that lands on a knob (mouseMove below) or
-    // hovering the knob/ring itself (ModuleComponent -> here). Cable paint treats it like
-    // hoveredCableId; ModuleComponent's ring paint reads it back to highlight the ring. One shared
-    // piece of state, since both directions mean the same thing: "this routing is what the user is
-    // looking at". docs/modules/modulation.md#modulation-rings-on-knobs.
-    struct HoveredModTarget {
-        juce::AudioProcessorGraph::NodeID nodeId;
-        int channel = 0;
-        bool operator==(const HoveredModTarget& o) const noexcept { return nodeId == o.nodeId && channel == o.channel; }
-    };
+    // The modulation target (destination node + RAW channel) correlated with a hover in either
+    // direction, cable -> knob or knob -> cable (docs/modules/modulation.md#modulation-rings-on-knobs).
+    using HoveredModTarget = graph_editor_types::HoveredModTarget;
     const std::optional<HoveredModTarget>& getHoveredModTarget() const noexcept { return hoveredModTarget_; }
-    /** Set/cleared by a card knob's mouseEnter/mouseExit (CardKnobSlider::onHoverChanged, wired in
-     *  ModuleComponent) for a knob with a live routing. Repaints only the card(s) actually
-     *  affected -- never the whole canvas -- when the target actually changes. */
+    bool isCableDragFrom(const ModuleComponent& card) const noexcept;
+    /** Set/cleared by a card knob's hover; repaints only the affected card(s), and only on change. */
     void setHoveredModTarget(std::optional<HoveredModTarget> target);
     /** True when the cable itself is under the mouse, or it lands on a knob whose ring is hovered on
      *  the card (the other direction of the cable <-> ring correlation). */
@@ -687,27 +671,39 @@ public:
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
     int getCableRebuildCountForTest() const noexcept { return cableRebuildCount; }
-
+    juce::Rectangle<int> getLastTickRepaintAreaForTest() const; // canvas coordinates
+    float getCableFlowPhaseForTest() const noexcept { return content.connectionAnimPhase; }
     // ---- Zoom gesture (raster freeze) test seams ----
     bool isZoomGestureActive() const noexcept { return zoomGestureActive; }
-    // Ends the zoom gesture now, as the settle timer would (the VBlank driver doesn't tick headless).
-    void settleZoomNowForTest() { endZoomGesture(); }
+    void settleZoomNowForTest(); // Ends the zoom gesture now, as the settle timer would.
 
     // ---- Macro-crossing animation test seams (MacroCrossingAnimator.h) -----------
-    /** True while finalizeMacroMembershipDrag's cable-slide/module-flash tween is in flight. */
+    /** True while the finalizeMacroMembershipDrag cable-slide/flash tween is in flight. */
     bool isMacroCrossingAnimLiveForTest() const noexcept { return macroCrossingAnim_.isLive(); }
-    /** Manually advances the tween to `t` (0..1) with no VBlank required — same call, including
-     *  the repaint that invalidates the cable memo, the real driver's onUpdate makes each frame. */
-    void advanceMacroCrossingAnimForTest(float t) {
-        macroCrossingAnim_.applyTweenAt(t);
-        repaintCanvas();
-    }
+    /** Advances the tween to `t` (0..1) with no VBlank, as the real driver's onUpdate does. */
+    void advanceMacroCrossingAnimForTest(float t);
     /** Lands the tween at its final state, same as the real driver's onComplete. */
-    void finishMacroCrossingAnimForTest() {
-        macroCrossingAnim_.finish();
-        repaintCanvas();
-    }
+    void finishMacroCrossingAnimForTest();
+    /** Lands every macro border glide (MacroHullGlide.h), as the real driver's onComplete does. */
+    void finishHullGlideForTest();
+    bool isHullGlideLiveForTest() const noexcept { return hullGlide_.isLive(); }
+    // ---- Cable-retract test seams (CableRetractAnimator.h) ----
+    CableRetractAnimator& getCableRetractForTest() noexcept { return cableRetract_; }
+    void advanceCableRetractForTest(float t);
+    void finishCableRetractForTest();
+    /** The visible canvas frame rect (canvas coordinates, animated) and its retarget hook (the canvas frame). */
+    juce::Rectangle<float> getCanvasFrameRect() const { return canvasFrame_.current(); }
+    void refreshCanvasFrame(CanvasFrame::Mode mode);
+    CanvasFrame& getCanvasFrameForTest() noexcept { return canvasFrame_; }
 
+    AppUndoManager* getUndoManager() const noexcept { return undoManager; } // null for a bare editor
+    CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; } // AppUndoManager opens a Scope on it per undo
+    LoadRevealAnimator& getLoadReveal(); // the project-open reveal and edit block (GraphEditorLoadReveal.cpp)
+
+    // ---- Card-glide test seams (CardGlideAnimator.h) ----
+    CardGlideAnimator& getCardGlideForTest() noexcept { return cardGlide_; }
+    void advanceCardGlideForTest(float t); // to `t` (0..1) with no VBlank
+    void finishCardGlideForTest();         // lands the glide, restoring every hidden card
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
 
@@ -718,6 +714,7 @@ private:
         void paint(juce::Graphics& g) override;
         void paintOverChildren(juce::Graphics& g) override;
         void resized() override;
+        void childBoundsChanged(juce::Component* child) override; // a card moved or resized
 
         juce::OwnedArray<ModuleComponent>& getModules() { return moduleComponents; }
         juce::OwnedArray<MacroCardComponent>& getMacroCards() { return macroCardComponents; }
@@ -725,11 +722,11 @@ private:
         float connectionAnimPhase = 0.0f;
 
     private:
+        void paintCables(juce::Graphics& g);
         GraphEditor& editor;
         juce::OwnedArray<ModuleComponent> moduleComponents;
         juce::OwnedArray<MacroCardComponent> macroCardComponents;
     };
-
     AudioEngine& audioEngine;
     // See setOutputDeviceInfoProvider/refreshOutputDeviceInfo above.
     std::function<juce::String()> outputDeviceInfoProvider;
@@ -741,6 +738,13 @@ private:
     synth::ui::MinimapComponent minimap;
     // User preference, independent of resized()'s auto-hide-when-tiny effective visibility.
     bool minimapVisible = true;
+    // Its show/hide ease (docs/layout/animation.md): the visible fraction and the one driver moving it.
+    synth::ui::PanelSlide minimapSlide_;
+    synth::ui::AnimationDriver minimapAnim_;
+    int minimapSlideDistance_ = 0; // px it travels from its corner; 0 under Reduce Motion
+    bool minimapAnimateOffScreen_ = false;
+    void layoutMinimap();
+    void finishMinimapSlide();
 
     // Navigation State
     float zoomLevel = 1.0f;
@@ -755,7 +759,10 @@ private:
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
     void maybeShowModDropHint(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi);
-
+    // A new modulator's card: estimated, created, then re-resolved at its real size (GraphEditorModulators.cpp).
+    void placeNewModulator(juce::AudioProcessorGraph::Node& node, juce::AudioProcessorGraph::NodeID targetId,
+                           const juce::String& typeName);
+    void fireBeforeDetachAllModuleComponents();
     void refreshSmartSuggestions() override;
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;
@@ -766,31 +773,29 @@ private:
     ModuleComponent* moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) override;
     juce::OwnedArray<ModuleComponent>& modules() override { return content.getModules(); }
     AppUndoManager* undo() override { return undoManager; }
-    // Most GraphCanvasHost pure virtuals are satisfied by an existing same-signature GraphEditor
-    // method declared elsewhere -- only the genuinely new ones are declared here (see
-    // GraphCanvasHost.h for the full split, incl. GraphDragDropController's dual-purpose overrides).
+    // Only the GraphCanvasHost pure virtuals no public method already satisfies are declared here.
     juce::OwnedArray<MacroCardComponent>& macroCards() override { return content.getMacroCards(); }
-    void reportStatusMessage(const juce::String& message) override {
-        if (onStatusMessage)
-            onStatusMessage(message);
-    }
+    CardGlideAnimator& cardGlide() override { return cardGlide_; }
+    void reportStatusMessage(const juce::String& message) override;
     void clearModMatrixRows() override { modMatrix.clearRows(); }
     void requestRepaint() override { repaint(); }
     juce::LookAndFeel& lookAndFeel() override { return getLookAndFeel(); }
     void seedInsertModifierSample() override;
-    juce::Point<int> canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const override {
-        return content.getLocalPoint(this, pointOnHost).roundToInt();
-    }
-    juce::Point<int> estimateModuleSizeForType(const juce::String& typeName) const override {
-        return estimateModuleSize(typeName);
-    }
-    juce::var resolveSnippetPayload(const juce::String& name) const override {
-        return snippetProvider ? snippetProvider(name) : juce::var();
-    }
-
+    /** Runs a suggestion refresh and, when it newly shows preview cables, fades them in. */
+    void refreshSmartSuggestionsWithReveal(const std::function<void()>& refresh);
+    /** The 30 Hz drag tick's re-sample of the Ctrl modifier (no mouse move needed). */
+    void refreshSmartSuggestionsForModifierChange();
+    juce::Point<int> canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const override;
+    juce::Point<int> estimateModuleSizeForType(const juce::String& typeName) const override;
+    juce::var resolveSnippetPayload(const juce::String& name) const override;
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
-    GraphDragDropController dragDropController_{*this};
+    GraphDragDropController dragDropController_{*this, macroController_.insertGap()};
+    std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
+    std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
+    std::unique_ptr<synth::ui::PolyChainController> polyChain_; // the Poly pill's whole-voice-graph switch
+    std::unique_ptr<synth::ui::CanvasEdgeScrollDriver> edgeScroll_;
+    friend class synth::ui::CanvasEdgeScrollDriver;
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;
@@ -817,8 +822,8 @@ private:
 
     /** Inserts a clipboard-dialect payload at a canvas position, carrying module state through. */
     bool insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos);
-
-    void showCanvasContextMenu(juce::Point<int> canvasPos);
+    /** `screenAnchor` places the real menu there instead of at the mouse. */
+    void showCanvasContextMenu(juce::Point<int> canvasPos, std::optional<juce::Rectangle<int>> screenAnchor = {});
     // See setShowCanvasContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showCanvasContextMenuHook_;
 
@@ -835,151 +840,147 @@ private:
     bool selectionDragActive = false;
     std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::Point<int>>> selectionDragStartPositions;
 
-    // The macros a live Cmd-drag would LEAVE and JOIN if released now, empty for none — see the
-    // public accessors/mutators above.
+    // The macros a live Cmd-drag would LEAVE and JOIN if released now, empty for none.
     juce::String macroDragLeaveId_;
     juce::String macroDragJoinId_;
-    // Which module that same drag is moving, invalid between gestures — paired lifetime with
-    // the two ids above (all set/cleared only together), so there is exactly one lifetime to
-    // reason about.
+    // Set once a drag has applied a membership change as it crossed; the macros as they were at press.
+    bool liveMembershipChanged_ = false;
+    juce::var macrosBeforeLiveDrag_;
+    juce::String liveMembershipPressOwner_; // the macro the module sat directly in at press, empty for none
+    bool liveMembershipAway_ = false;       // the module now sits somewhere other than at press
+    // The module that drag is moving; set/cleared together with the two ids above.
     juce::AudioProcessorGraph::NodeID macroDragDraggedNodeId_;
 
     // True while a click on empty canvas has not yet turned into a pan or marquee drag; a mouseUp
     // in that state is a plain click and clears the selection.
     bool pendingEmptyCanvasClick = false;
 
-    // ---- Expanded-macro chip drag ----
-    // Reuses beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag exactly like a plain
-    // multi-select body-drag; macroChipDragId is non-empty for the gesture's duration, and
-    // macroChipDragStartCanvasPos is the CANVAS-space point the chip was pressed at, so the
-    // per-frame delta fed to dragSelectionBy is correct at any zoom level.
+    // ---- Expanded-macro chip drag: macroChipDragId is non-empty for the gesture; the start point is CANVAS-space ----
     juce::String macroChipDragId;
     juce::Point<int> macroChipDragStartCanvasPos;
-    /** Tracks the DraggingHandCursor set while hovering a chip, so mouseMove/mouseExit can reset
-     *  it on the transition out rather than getting stuck. */
+    /** True while the chip's DraggingHandCursor is set, so it resets on the way out. */
     bool hoveringMacroChip = false;
-
     std::vector<synth::LayoutUtil::Box> collectModuleBoxes(bool selectedOnly, bool excludeSelected) const;
-
     juce::Point<int> estimateSnippetSize(const juce::String& payload) const override;
-
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) override;
 
-    // replaceModule()'s own named step -- picks the plain graph-only recordStructuralChange
-    // or, when MainComponent has wired a doc up, the combined recordGraphAndMidiRemoteChange, so
-    // replaceModule() itself doesn't have to inline both branches (see GraphEditorCommands.cpp).
+    // replaceModule()'s undo-recording step (graph-only, or combined with the MIDI Remote doc).
     void recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace);
-
     AppUndoManager* undoManager = nullptr;
+    std::unique_ptr<CanvasCardKeyboard> cardKeyboard_; // never null
     synth::PluginCardLayoutStore* pluginCardLayoutStore_ = nullptr;
     synth::MidiRemoteProjectDoc* midiRemoteDocForUndo_ = nullptr; // see setMidiRemoteProjectDocForUndo
 
-    // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
-    // Null (the default) keeps favourites in-memory only, which is what a headless test with no
-    // ApplicationProperties gets.
+    // See setPropertiesFile.
     juce::PropertiesFile* propertiesFile_ = nullptr;
 
-    // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
-    // stashed on load and re-merged on save so re-saving with an older build never destroys a
-    // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
-    // path (savePreset/loadPreset) touches this — undo/redo, snippets, and AI apply must not.
+    // Unknown top-level JSON keys stashed on load and re-merged on save; only savePreset/loadPreset
+    // touch it (newPatch() clears it).
     synth::PatchDocument patchDocument;
 
-    // ---- Macros ----
-    // Live macro grouping state for the current patch. Serialised by ProjectBundle exactly like
-    // patchDocument/timeline above — GraphEditor owns it, MainComponent/ProjectBundle reach it
-    // via getMacros(). newPatch() clears it, same lifecycle as patchDocument.
+    // Live macro grouping state for the patch; newPatch() clears it, same lifecycle as patchDocument.
     synth::MacroSet macros;
-
     void syncMacroCards() override;
-
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
 
     // ---- Auto-create-channel-on-connect (docs/mixer/mixer.md#channels-follow-audio-not-tracks) ----
     bool nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const;
-
     void maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::NodeID searchFrom);
-
     void showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond);
-
     MacroAutoPortPreference macroAutoPortPreference_ = MacroAutoPortPreference::Unset;
-
     std::vector<ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<ModulationRouting> cachedModRoutings;
 
     // ---- Animation members ----
-    // Drop-landing tween: animates the newly dropped module from drop point to snapped position.
-    // Both must be class members so they outlive the VBlank frame callbacks.
+    // Drop-landing tween; both must be members so they outlive the VBlank frame callbacks.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
+    CanvasFrame canvasFrame_{vblankUpdater}; // growing patch frame (CanvasFrame.h)
+    CanvasEdgeDrag edgeDrag_;                // a drag held at the canvas origin (CanvasEdgeDrag.h)
     synth::ui::AnimationDriver dropLandingAnim;
+    // Smart-connection preview cables fade in (0..1) when they first appear instead of popping.
+    float smartPreviewReveal_ = 1.0f;
+    synth::ui::AnimationDriver smartPreviewRevealAnim_;
 
-    // Mod-matrix panel ease: animates the panel bounds on show/hide. modMatrixTargetBounds tracks
-    // the target so the final position can be set on complete.
-    synth::ui::AnimationDriver modMatrixAnim;
-    juce::Rectangle<int> modMatrixTargetBounds;
+    synth::ui::AnimationDriver modMatrixAnim;   // Mod-matrix panel ease
+    juce::Rectangle<int> modMatrixTargetBounds; // its final position, set on complete
 
-    // Macro-crossing cable slide + module flash: macroCrossingAnim_ is pure tween state
-    // (MacroCrossingAnimator.h, armed by finalizeMacroMembershipDrag), driven by this ordinary
-    // AnimationDriver exactly like the two above — see that header for why the state and the
-    // driver are deliberately two separate small members rather than one.
+    // Macro-crossing cable slide + module flash: tween state (MacroCrossingAnimator.h) plus its driver.
     MacroCrossingAnimator macroCrossingAnim_;
     synth::ui::AnimationDriver macroCrossingDriverAnim_;
 
-    // ---- Alignment guides ---- During drag previews, store guide positions for visual feedback.
-    struct AlignmentGuide {
-        juce::Point<float> start; // line start point (canvas coords)
-        juce::Point<float> end;   // line end point (canvas coords)
-        int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
-    };
-    std::vector<AlignmentGuide> alignmentGuides;
+    // Paint-only slide of cards a make-room / return / auto-arrange moved (CardGlideAnimator.h).
+    CardGlideAnimator cardGlide_;
+    std::unique_ptr<LoadRevealAnimator> loadReveal_; // built on first use
 
+    // Removed cables retracting into their source jack (CableRetractAnimator.h) plus its driver.
+    CableRetractAnimator cableRetract_;
+    synth::ui::AnimationDriver cableRetractDriverAnim_;
+
+    // Expanded macro borders gliding to new bounds (MacroHullGlide.h) plus its driver.
+    MacroHullGlide hullGlide_;
+    synth::ui::AnimationDriver hullGlideDriverAnim_;
+
+    // ---- Alignment guides (drag-preview feedback) ----
+    using AlignmentGuide = graph_editor_types::AlignmentGuide;
+    std::vector<AlignmentGuide> alignmentGuides;
     bool alignmentGuidesEnabled = true;
     bool doubleClickPortDisconnectEnabled = true;
     bool autoCreateMacroPortsOnDragEnabled = true;
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
     bool spliceCableOnMacroPortDeleteEnabled = false; // off by default — a manual delete drops the cable
     bool macroDragWithoutCmdEnabled = true;
-    std::optional<bool> macroJoinCommandOverride_;
+    bool moveMacroOnHullDragEnabled = false; // off by default — hull drag pans
     bool autoCreateChannelOnConnectEnabled = true;
     bool reconnectChainOnDeleteEnabled = true; // see the getter/setter's doc comment
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
-
     void updateTransform();
-
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
-
+    // Wheel-pan tween (a mouse notch eases ~120 ms; trackpad events apply at once); axis 0 = x, 1 = y of panOffset.
+    synth::ui::ScrollTweenRunner wheelPanTween_;
+    void panByWheel(int axis, float amountPx, bool eased);
+    void configureCardGlide();
+    void noteCardExits(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    void configureCanvasFrame();
+    void applyContentBounds();
+    void beginCanvasEdgeDrag();
+    void slidePatchForEdgeDrop();
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
 
-    // Diffs `cablesBeforeSplice` against the current (post-splice) cable geometry, arms
-    // macroCrossingAnim_ if anything changed, and starts macroCrossingDriverAnim_ — see
-    // MacroCrossingAnimator.h and this method's definition (GraphEditorDragDrop.cpp) for why the
-    // snapshot itself is taken by the caller, before the mutation runs.
+    // Arms macroCrossingAnim_ from a pre-splice cable snapshot the caller takes (see its definition).
     void armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice, uint32_t crossingNodeUid,
                                    juce::Rectangle<int> flashBounds);
-
+    // Slides the port-side end of every cable a cable drop created from `dropPoint` (canvas coordinates) to its anchor.
+    void armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint);
+    void startMacroCrossingDriver();
+    juce::Rectangle<int> macroHullTargetBounds(const juce::String& macroId) const;
+    bool canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId) const;
+    void applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
+                             const juce::String& joinId);
+    void recordUnfinishedLiveMembershipChange();
+    juce::String currentOwnerOfDraggedModule() const;
+    void revertLiveMembership();
     // ---- Cable memo (perf) ----
     std::vector<VisibleCable> rebuildVisibleCables();
     std::vector<VisibleCable> cablesCache;
     bool cablesCacheValid = false;
-    int cableRebuildCount = 0; // test seam, see docs/layout/animation.md#the-paint-count-pattern
+    std::pair<int, bool> structureNotify_{0, false}; // {hold depth, notification deferred}
+    bool updatingComponents = false;                 // guards updateComponents() against re-entry
+    int cableRebuildCount = 0;                       // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
+    std::unique_ptr<graph_editor_paint::CanvasMemo> canvasMemo_; // never null
+    friend class graph_editor_paint::CanvasMemo;
+    friend class synth::ui::PortConnector;
 
-    // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ------------
-    // Post-passes at the end of rebuildVisibleCables(), in this order: the knob re-anchor runs
-    // FIRST so the collapsed-macro pass (which re-anchors again for cables crossing a collapsed
-    // macro's boundary) always wins on top of it for a cable that is both knob-bound AND crosses a
-    // collapsed macro -- see the comment at the collapsed-macro pass's call site.
+    // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
+    // Post-passes of rebuildVisibleCables(); the knob re-anchor MUST run before the collapsed-macro pass.
     void reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables);
     void reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables);
     ModuleComponent* moduleComponentForNode(juce::AudioProcessorGraph::NodeID id);
     std::optional<HoveredModTarget> hoveredModTarget_;
 
-    // ---- Zoom gesture (raster freeze) ----
-    // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick
-    // resamples the cached images instead of re-rendering every panel + slider at a new scale. The
-    // gesture ends kZoomSettleMs after the last zoom event and thaws with exactly one crisp
-    // re-render. Time-bounded (docs/layout/animation.md#the-time-bounded-animation-rule).
+    // ---- Zoom gesture (raster freeze; docs/layout/animation.md#the-time-bounded-animation-rule) ----
+    // Cards' raster scale is pinned until kZoomSettleMs after the last zoom event, then thawed once.
     bool zoomGestureActive = false;
     synth::ui::AnimationDriver zoomSettleAnim;
     static constexpr double kZoomSettleMs = 140.0;
@@ -992,8 +993,8 @@ private:
 
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
-
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
-
+    bool cablesOnTop = false, showCurvesOnCables = false; // docs/layout/cables.md#cable-layer, #right-click-menu
+    synth::ui::FadeAmount emptyCanvasHint{*this};         // the first-run hint's fade, steered by updateComponents()
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

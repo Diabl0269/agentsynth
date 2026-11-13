@@ -7,6 +7,7 @@
 #include "MacroPortWidgetTestHelpers.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <gtest/gtest.h>
@@ -508,4 +509,39 @@ TEST(MacroPortWidget, ArmedPreviewSurvivesTheSurfaceItArmedBeingDestroyed) {
     editor.previewMacroPortColour(macroId, second, juce::Colours::orange);
     EXPECT_TRUE(secondWidget->hasPortColourPreviewForTest());
     EXPECT_TRUE(editor.getMacroController().getMacroCardForTest(macroId)->hasPortColourPreviewForTest(second));
+}
+
+// A split stereo port's second jack sits on its own row; that row must carry a name too ("<name> R").
+TEST(MacroPortWidget, SplitStereoPortNamesItsSecondRowToo) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Stereo, 1, "Pad");
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+    ASSERT_EQ(comp->getHeight(), 2 * detail::kMacroPortRowHeight);
+
+    juce::Image image(juce::Image::ARGB, comp->getWidth(), comp->getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(image);
+        comp->paintEntireComponent(g, false);
+    }
+    // Text pixels in the name area of a row: anything differing from that area's own top-left pixel.
+    auto inkInRow = [&](int row) {
+        const int y0 = row * detail::kMacroPortRowHeight;
+        const int x0 = detail::kMacroPortStripInset;
+        const int x1 = comp->getWidth() - ModuleComponent::kMacroPortWidgetJackInset - 8;
+        const auto background = image.getPixelAt(x0, y0);
+        int ink = 0;
+        for (int y = y0; y < y0 + detail::kMacroPortRowHeight; ++y)
+            for (int x = x0; x < x1; ++x)
+                ink += image.getPixelAt(x, y) != background ? 1 : 0;
+        return ink;
+    };
+    EXPECT_GT(inkInRow(0), 0) << "the first row shows the name";
+    EXPECT_GT(inkInRow(1), 0) << "the second row shows the name too";
 }

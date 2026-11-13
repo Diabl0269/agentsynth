@@ -86,7 +86,7 @@ TEST_F(GateModuleTest, PortLabelsAndCounts) {
         EXPECT_EQ(module->getInputPortLabel(1 + i), cv[i]);
     EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
     EXPECT_EQ(module->getInputPortLabel(6), "Key");
-    EXPECT_EQ(module->getVisibleInputPortCount(), 7);
+    EXPECT_EQ(module->getVisibleInputPortCount(), 10);
     EXPECT_EQ(module->getVisibleOutputPortCount(), 1);
 
     setDualIO(*module, true);
@@ -98,7 +98,7 @@ TEST_F(GateModuleTest, PortLabelsAndCounts) {
     EXPECT_EQ(module->getOutputPortLabel(1), "Right");
     EXPECT_EQ(module->getInputPortLabel(7), "Key L");
     EXPECT_EQ(module->getInputPortLabel(8), "Key R");
-    EXPECT_EQ(module->getVisibleInputPortCount(), 9);
+    EXPECT_EQ(module->getVisibleInputPortCount(), 12);
     EXPECT_EQ(module->getVisibleOutputPortCount(), 2);
 }
 

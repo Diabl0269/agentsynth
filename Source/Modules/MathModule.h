@@ -22,7 +22,7 @@ public:
         juce::ignoreUnused(sampleRate, samplesPerBlock);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
 
         int numSamples = buffer.getNumSamples();
@@ -37,11 +37,15 @@ public:
         if (isBypassed()) {
             for (int ch = 1; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
@@ -80,8 +84,7 @@ public:
         // Push the Sum output into the visual buffer.
         if (auto* vb = getVisualBuffer()) {
             if (ch[0] != nullptr)
-                for (int s = 0; s < numSamples; ++s)
-                    vb->pushSample(ch[0][s]);
+                vb->pushBlock(ch[0], numSamples);
         }
     }
 

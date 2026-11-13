@@ -7,7 +7,7 @@
 
 namespace synth {
 
-/** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
+/** Which `Add Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
  *  belongs to (docs/mixer/track-presets.md). A MIDI track that alone drives an instrument counts as
  *  Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks); `Bus` has no bound
  *  timeline track -- see TrackPresetManager.cpp. */
@@ -37,7 +37,7 @@ struct TrackPresetInfo {
  * `connections`, `modulations`, optional `macros`), plus:
  *
  *   - `"schemaVersion"`: 1, same "absent means 1" rule as AIStateMapper::kSchemaVersion.
- *   - `"trackPresetKind"`: `"audio"`, `"instrument"` or `"bus"` — which `+ Track`
+ *   - `"trackPresetKind"`: `"audio"`, `"instrument"` or `"bus"` — which `Add Track`
  *     submenu/Preferences dropdown this belongs to.
  *   - `"channelMacroId"`: the snippet-local id (see "nodes") of this macro's own Channel Strip
  *     member, written defensively at extraction time so the file names which of its (usually one)

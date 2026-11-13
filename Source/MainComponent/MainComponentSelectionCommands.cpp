@@ -4,6 +4,7 @@
 // resolveEditSurface(): moving track focus itself changes what that reports, so a routed pair would
 // flip surfaces between two presses of the same pad.
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace {
@@ -25,7 +26,7 @@ bool stepTrack(MainComponent& m, int direction) {
 } // namespace
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildSelectionStepCommandRows() {
-    const auto timelineOpen = [](const MainComponent& m) { return m.isBottomDockVisible; };
+    const auto timelineOpen = [](const MainComponent& m) { return m.isTimelineReachable(); };
     return {
         {AppCommands::selectNextModule,
          "Select Next Module",

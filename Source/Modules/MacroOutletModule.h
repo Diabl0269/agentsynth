@@ -37,7 +37,7 @@ public:
         juce::ignoreUnused(sampleRate, samplesPerBlock);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
         const int numSamples = buffer.getNumSamples();
 
@@ -49,8 +49,7 @@ public:
             return;
 
         if (auto* vb = getVisualBuffer())
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(buffer.getReadPointer(0)[i]);
+            vb->pushBlock(buffer.getReadPointer(0), numSamples);
     }
 
     bool acceptsMidi() const override { return false; }

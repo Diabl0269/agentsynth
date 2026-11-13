@@ -1,11 +1,17 @@
 #pragma once
 
 #include "Timeline/PeaksFile.h"
+#include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/DrumMachine/DrumLanes.h"
+#include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/RangeSelectionModel.h"
+#include "UI/Timeline/RenderSpan.h"
+#include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
 #include <cmath>
@@ -65,6 +71,16 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // AssetManager and no bundle knowledge, exactly like onRelinkAudioRequested.
 namespace synth::ui {
 
+template <typename T>
+class KeyedTween;
+using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
+class ClipLaneEnterExit;
+class RestoreWatch;
+struct ClipLaneChange;
+struct WaveformInk;
+class WaveformSampleCache;
+enum class WaveformSource : int;
+
 //==============================================================================
 // ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
 //
@@ -95,8 +111,7 @@ enum class GridLineLevel { Subdivision = 0, Beat, Bar };
 constexpr double kMinGridLinePixels = 3.0;
 
 /** True when lines `spacingBeats` apart at `pixelsPerBeat` are still readable — the density guard
- *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never
- *  draws. */
+ *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never draws. */
 inline bool gridLevelIsReadable(double spacingBeats, double pixelsPerBeat) noexcept {
     if (!std::isfinite(spacingBeats) || !std::isfinite(pixelsPerBeat) || spacingBeats <= 0.0)
         return false;
@@ -139,16 +154,21 @@ inline juce::Colour gridLineColourFor(GridLineLevel level, juce::Colour base, ju
 class TimelineClipLaneArea
     : public juce::Component
     , public juce::FileDragAndDropTarget
+    , public SoundDropAdapter
+    , public KeyboardContextMenuProvider
+    , public juce::TooltipClient
     , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
-    ~TimelineClipLaneArea() override = default;
+    ~TimelineClipLaneArea() override;
 
     void paint(juce::Graphics& g) override;
 
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    // Pressing/releasing Alt mid-drag toggles copy <-> move.
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
     void mouseMove(const juce::MouseEvent& e) override;
     // mouseEnter re-applies the active tool's cursor; mouseExit clears the Split tool's hover
     // preview. See TimelineClipLaneMouse.cpp for why each needs its own hook.
@@ -179,6 +199,8 @@ public:
     // repaints every other viewState_ scroll/zoom writer in that class already issues — because
     // this component has no reference to the ruler and no business repainting it directly.
     std::function<void()> onViewScrolledByDrag;
+    /** Fired at the start of every mouse press on the clip lanes; may be unset. */
+    std::function<void()> onPressed;
 
     // Whether a Move/Resize(-Left/-Right) drag is currently in flight — the panel's follow-playhead
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
@@ -187,6 +209,11 @@ public:
     bool isDragInProgress() const noexcept {
         return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     }
+
+    // Esc mid-drag (move, edge resize, stretch, marquee, range, draw): abandons the gesture. The document, the
+    // preview and the undo history return to what they were before the press, and the release that follows commits
+    // nothing. False, with nothing touched, when no drag is in flight.
+    bool cancelDrag();
 
     // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
 
@@ -197,9 +224,21 @@ public:
     void setActiveTool(EditTool tool);
     EditTool getActiveTool() const noexcept { return activeTool_; }
 
+    // What a clip edge drag does to the notes (the panel's Sizing field pushes it in). Option held during an
+    // edge drag stretches that one drag instead.
+    void setClipSizingMode(synth::ClipSizingMode mode) noexcept { clipSizingMode_ = mode; }
+    synth::ClipSizingMode getClipSizingMode() const noexcept { return clipSizingMode_; }
+    // The live edge drag's outcome for `clip` (the notes the lane paints), or nullopt when no edge drag of it is
+    // in flight. The drop commits exactly this.
+    std::optional<synth::ClipEdgeResult> resizePreviewFor(const synth::Clip& clip) const;
+    // The text drawn on a clip during an edge drag ("75%" while stretching), empty when none (test hook).
+    juce::String getSizingReadoutForTest() const { return sizingReadout(); }
+
     // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into. Returns an
     // invalid ClipId when there is no doc, no such clip, or nothing after it.
     synth::ClipId findGlueTarget(synth::ClipId id) const;
+    // The key the clip uses (its own, else the transport's song key); nullopt when there is none.
+    std::optional<synth::MusicalScale> resolvedKeyFor(const synth::Clip& clip) const;
 
     // The commit half of the inline rename editor, and the headless seam for it. One
     // recordTimelineChange; TimelineDoc::setClipName REJECTS a blank name, so a cleared field
@@ -231,9 +270,13 @@ public:
     // Seconds per beat at the transport's tempo (120 bpm with no transport) — what range edits pass the doc.
     double secondsPerBeat() const;
     // The range verbs the context menu and Delete/Shift+Delete apply.
-    enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap };
+    enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap, MakeSection };
     // Applies one verb as ONE recordTimelineChange. False when there is no range or nothing changed.
     bool applyRangeChoice(RangeChoice choice);
+    // Shift+Cmd+J: the shipped binding of "timelineMakeSection" (the fallback when no manager is set).
+    static juce::KeyPress sectionKey() {
+        return juce::KeyPress('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
+    }
     // The union of the range's painted row rects, or an empty rect (test hook).
     juce::Rectangle<int> getRangeRectForTest() const { return rangeRect(); }
     bool isRangeDragActiveForTest() const noexcept { return dragMode_ == DragMode::Range; }
@@ -255,6 +298,11 @@ public:
     using AudioFileChooser = std::function<void(std::function<void(const juce::File&)> onChosen)>;
     void setAudioFileChooser(AudioFileChooser chooser) { audioFileChooser_ = std::move(chooser); }
 
+    // Fired with (floor-snapped start beat, the dropped file) when an audio file (from the OS or a dragged Sound) is
+    // dropped on the empty space under the last track: the OWNER makes a new audio track holding the clip. Unset: that
+    // space takes no drop and shows no hint.
+    std::function<void(double startBeat, juce::File)> onAudioFileDroppedBelowTracks;
+
     // ---- juce::FileDragAndDropTarget: dropping audio files from the OS ----
     // Interested when at least one dragged file has an extension a juce::AudioFormatManager can
     // read (extension only — nothing here opens a dragged file).
@@ -267,10 +315,15 @@ public:
     // The FIRST readable audio file only, reported through onAudioFileDropped. Multi-file drops
     // deliberately import one clip rather than fanning out.
     void filesDropped(const juce::StringArray& files, int x, int y) override;
+    bool takesStretchedLoops() const override { return true; }
 
     // The track row currently highlighted for a file drop, or -1. Test hook (the drop highlight is
     // otherwise only observable as pixels).
     int getFileDropRowForTest() const noexcept { return fileDropRow_; }
+    // True while the "New audio track" strip under the last track is highlighted for a drop. Test hook.
+    bool isBelowTracksHintForTest() const noexcept { return belowTracksHint_; }
+    // The strip under the last track that marks where a new audio track would be made. Test hook.
+    juce::Rectangle<int> getBelowTracksStripForTest() const { return belowTracksStrip(); }
 
     // ---- Empty-row hint ----
     // The hint line an EMPTY row of this kind paints (empty String for Automation — nothing to
@@ -281,15 +334,47 @@ public:
     // when that row has clips (or does not exist).
     juce::String getEmptyRowHintForTest(int trackIndex) const;
 
+    // A Stretch edge drop on an AUDIO clip, with its new span; the owner records it. Unset: the clip resizes instead.
+    std::function<void(synth::ClipId, double newStartBeat, double newLengthBeats)> onAudioClipStretchRequested;
+
     // Fired when the user picks "Relink audio…" from an audio clip's context menu. Non-owning; may
     // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
+    // Fired after "New variation of this part" with the placement now playing the new variation and the message to
+    // show ("Verse B: Lead has its own part now. Switch with the B chip.").
+    std::function<void(synth::PlacementId, const juce::String&)> onVariationAdded;
+
+    // ---- Render to audio track (see TimelineClipLaneRenderToAudio.cpp) ----
+    // Which of these tracks have a mixer channel to render from. Unset means the menu items are never offered.
+    std::function<std::vector<synth::TrackId>(const std::vector<synth::TrackId>&)> renderableTracks;
+    // Fired by either menu item and by the shortcut with the spans to render; the host refuses or renders them.
+    std::function<void(std::vector<RenderSpan>)> onRenderToAudioRequested;
+    // The shortcut's body: the live range, else the selected clips. False when there is neither.
+    bool renderSelectionToAudio();
 
     // Panel-scoped Delete/Escape/P. Grabs focus on mouseDown, so pressing Delete right after a
     // click lands here rather than on whichever panel had focus before. Returns false when there
     // is nothing to act on so the key falls through.
     bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(juce::Component::FocusChangeType) override;
+    void focusLost(juce::Component::FocusChangeType) override;
+
+    // ---- Keyboard clip mode (TimelineClipLaneKeyboard.cpp) ----
+    // Makes `id` the single selected clip the arrow keys step from; an unresolved id ends the mode.
+    void setKeyboardClip(synth::ClipId id);
+    // Invalid unless the selection is still exactly the keyboard clip.
+    synth::ClipId getKeyboardClip() const;
+    // Empty when there is no keyboard clip.
+    juce::String getKeyboardClipAccessibilityText() const;
+    // Both non-owning; may be unset.
+    std::function<void(synth::ClipId)> onKeyboardClipChanged;
+    std::function<void(synth::TrackId)> onReturnToTrackHeaderRequested;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    /** Opens the right-click menu of the selected clip (the first one when several are selected),
+     *  anchored at the clip. False when no selected clip has a place on screen. */
+    bool showContextMenuForKeyboardFocus() override;
 
     /** The user's binding for the one rebindable key this component owns: P, loop the selection
      *  ("timelineLoopSelection" — the SAME action id TimelinePanelComponent's own P fallback
@@ -310,6 +395,8 @@ public:
     // TimelinePanelComponent::timelineChanged() calls on every subsequent doc notification.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
+    // Fired with the start beat after "Make section" (menu or key) made one from the range: the panel opens its name.
+    std::function<void(double startBeat)> onSectionMade;
 
     // Non-owning; may be null (no undo manager -> mutations apply directly, uncommitted to any
     // undo stack — the same degrade-gracefully contract TimelineTrackHeaderComponent::performEdit
@@ -341,6 +428,11 @@ public:
     // called once by setTimelineDoc() and, thereafter, by TimelinePanelComponent::timelineChanged()
     // on every effective doc mutation.
     void refreshFromDoc();
+    /** A Drum Kit track's clips draw the kit's shown pads as their rows; set by the panel, which owns the app host. */
+    std::function<bool(synth::TrackId, KitRows&)> kitRowsProvider;
+    std::function<bool()> kitsExistProvider;
+    /** Re-reads every track's kit rows; repaints when they changed (a pad switched on or off on the card). */
+    void refreshKitRows();
 
     // ---- Waveform peaks (committed clips) ----
 
@@ -354,6 +446,12 @@ public:
     // unchanged assetRef can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
 
+    // Asset ref -> the file's header sample rate (0 = unknown); see TimelineClipLaneArea.cpp.
+    void setAssetSampleRateResolver(std::function<double(const juce::String& assetRef)> resolver);
+
+    void setAssetSamplesResolver(
+        std::function<bool(const juce::String&, std::int64_t, int, juce::AudioBuffer<float>&)> resolver);
+    WaveformSource getLastWaveformSourceForTest() const noexcept { return lastWaveformSource_; }
     // ---- Missing-asset placeholder ----
 
     // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves). Installing
@@ -363,42 +461,95 @@ public:
 
     // ---- The live-recording strip ----
 
-    // What updateLiveRecording() needs to know about an in-flight audio take. A default-
-    // constructed (or `active == false`) value means "nothing recording" — the strip (if any) is
-    // cleared. `tap` is non-owning and read for the DURATION OF THE CALL ONLY (copyLivePeaks() is
-    // called synchronously inside updateLiveRecording()); nothing here holds it across calls.
+    // One in-flight audio take. `active == false` means "nothing recording". The peaks come from `copyPeaks`
+    // when set, else from `tap`; both are used only during the update call, never held across calls.
     struct LiveRecordingInfo {
         bool active = false;
         synth::TrackId track;     // the armed track the strip paints on
         double punchBeat = 0.0;   // the strip's fixed left edge
         double currentBeat = 0.0; // the strip's growing right edge — the transport's current position
         const RecordTapModule* tap = nullptr;
+        std::function<void(std::vector<std::pair<float, float>>&, std::vector<float>&)> copyPeaks; // peaks, then rms
+        int numChannels = 2; // channels per peak bucket in the source
     };
 
-    // THE 10 Hz update for an in-flight take (see LiveRecordingInfo) — call every tick regardless
-    // of whether anything is actually recording; cheap when it isn't. See
-    // TimelineClipLanePainting.cpp for the repaint-on-data-arrival policy.
+    // THE 10 Hz update for every in-flight take, one strip each — call every tick, even with nothing
+    // recording (an empty list clears the strips).
+    void updateLiveRecordings(const std::vector<LiveRecordingInfo>& takes);
+    // A single take (or none, when `info.active` is false); same as a one-entry updateLiveRecordings().
     void updateLiveRecording(const LiveRecordingInfo& info);
 
     // Test hook: how many times updateLiveRecording() has actually issued a repaint (as opposed to
     // being called) — the same idiom TimelineTransportBar::getReadoutRepaintCountForTest() uses.
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
+    int getClipsPaintedForTest() const noexcept { return clipsPainted_; } // clips drawn since construction
+    /** Tests/test mode: "none", "summary" or "columns" - the waveform `id` is drawn with right now. */
+    juce::String getWaveformShapeForTest(synth::ClipId id);
+
+    /** Test-mode: adds the hidden `timelineClipPitches` child that reports every clip's note pitches (see the unit). */
+    void addTestModeProbe();
 
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
     // Every tool action is ALSO a menu item; see TimelineClipLaneEditTools.cpp for why Rename is
     // the one entry applyClipContextChoice treats as a no-op (its commit path is renameClip()).
-    enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete, ToggleMute, GlueWithNext, Rename };
+    enum class ClipContextChoice {
+        SplitAtPointer,
+        Duplicate,
+        Delete,
+        ToggleMute,
+        GlueWithNext,
+        Rename,
+        DuplicateLinked,
+        MakeUnique,
+        FitToKey,
+        FitSelectionToKey, // every selected clip to its own key; the clicked clip alone when it is not in a selection
+        NewVariationOfPart // the clip's track becomes its own in a new variation of the section the clip is in
+    };
+
+    // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).
+    juce::PopupMenu buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+    // The clips a clip-menu action on `clicked` covers: the whole selection when `clicked` is one of two or more
+    // selected clips, else just `clicked`.
+    std::vector<synth::ClipId> clipsForMenuAction(synth::ClipId clicked) const;
+    // The Range tool's right-click menu; empty without a range.
+    juce::PopupMenu buildRangeContextMenu();
+    std::vector<RenderSpan> renderSpansForRange() const;
+    std::vector<RenderSpan> renderSpansForClips(synth::ClipId clicked) const;
+    std::vector<synth::TrackId> renderableTracksIn(const std::vector<RenderSpan>& spans) const;
+    void addRenderToAudioItem(juce::PopupMenu& menu, const std::vector<RenderSpan>& spans);
+    bool matchesRenderToAudioKey(const juce::KeyPress& key) const;
+    // Linked copies of the selected MIDI clips, tiled after the selection as one undo step; false if none.
+    bool duplicateLinkedSelection();
+    // The section a clip belongs to when that section plays more than once (the clip then draws the link mark).
+    struct SectionFollow {
+        juce::String name;
+        int plays = 0;    // placements that share this track's music; 0: the clip follows nothing
+        bool own = false; // the track belongs to the placement's variation (`letter`), not to every placement
+        int letter = 0;
+    };
+    SectionFollow sectionFollowOf(const synth::Clip& clip) const;
+    // "Follows Verse (plays 3 times). ..." or, for an owned track, "Belongs to Verse B (plays 2 times). ...".
+    static juce::String sectionFollowTooltip(const SectionFollow& follow);
+    // Names the link mark under the pointer; empty anywhere else.
+    juce::String getTooltip() override;
+    juce::String linkTooltipAt(juce::Point<int> localPos) const;
+    // Where a linked clip painted at `clipRect` draws its link mark (empty when too narrow for one).
+    static juce::Rectangle<int> linkMarkBounds(juce::Rectangle<int> clipRect);
 
     // Applies one context-menu choice. `pointerBeat` is in absolute (doc) beats, UNSNAPPED — the
     // split case snaps it internally. One recordTimelineChange mutation, same as every other
     // doc-mutating gesture here.
     void applyClipContextChoice(synth::ClipId id, ClipContextChoice choice, double pointerBeat);
+    void addVariationOfPart(synth::ClipId id);
 
     // ---- Pure geometry (no doc, no component state) — what GeometryMapsBeatsAndRows tests ----
     // The clip rect for a known view state / track row / beat span. `rowHeight` is passed in
     // rather than read from a theme so this stays callable with no LookAndFeel installed at all.
+    // Uniform-rows convenience wrapper over the layout overload below.
     static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, int trackIndex, double startBeat,
                                                 double lengthBeats, int rowHeight);
+    static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, const TimelineRowLayout& layout,
+                                                int trackIndex, double startBeat, double lengthBeats);
 
     // ---- Waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
     // A half-open [firstBucket, firstBucket + bucketCount) range into `peaks.buckets` (bucket
@@ -411,14 +562,27 @@ public:
 
     // Which buckets of `peaks` cover this clip's visible span, given where inside the asset it
     // starts reading (`sourceStartSeconds`, seconds) and the beats<->seconds conversion (`bpm`).
-    // `sampleRate` is the ASSUMED source sample rate (see TimelineClipLaneArea.cpp). Clamped to
+    // `sampleRate` is the fallback source rate, used when `peaks.sampleRate` is 0. Clamped to
     // `[0, totalBuckets]` — a clip past the end of the peaks data (or no buckets at all) returns a
     // zero-length range rather than an out-of-bounds one.
     static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
                                           double sourceStartSeconds, double bpm, double sampleRate);
 
-    // The row height this instance currently lays out at (themed, with a headless fallback).
+    // The clip-row height this instance currently lays out at (themed, with a headless fallback).
     int getRowHeight() const;
+
+    // THE row geometry for the current doc, theme and zoom (the panel's header column reads it too).
+    TimelineRowLayout getRowLayout() const;
+
+    // Extra height under each track's clip row (by track index); empty = uniform rows.
+    void setTrackExtraHeights(std::vector<int> extraHeights);
+    // Per-track clip-row height (by track index, px); 0 or missing = getRowHeight().
+    void setTrackRowHeightOverrides(std::vector<int> rowHeights);
+    // A track's height scale shown mid-drag in place of its saved Track::heightScale.
+    void setTrackHeightPreview(synth::TrackId track, double scale);
+    void clearTrackHeightPreview();
+    // False over a track's automation lanes and over the Automation track's section row.
+    bool hitTest(int x, int y) override;
 
     // The live rect for a clip id, using its CURRENT doc geometry (never a mid-drag preview) —
     // what tests use to compute where to synthesize a mouse event. Returns an empty rect if the id
@@ -449,6 +613,12 @@ public:
     // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
     // its own move/trim drag is previewing. nullopt when the id does not resolve.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
+    // Where a clip is drawn right now (trails its place while a restore or snapped drag step glides).
+    juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
+    /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
+    double getDrawnNoteXForTest(synth::ClipId id, int index) const;
+    KeyedRectTween& getClipGlideForTest() noexcept { return *clipGlide_; }
+    ClipLaneEnterExit& getEnterExitForTest() noexcept { return *enterExit_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -486,6 +656,11 @@ public:
 private:
     enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw, Range };
 
+    synth::ClipSizingMode dragSizingMode() const noexcept;
+    juce::String sizingReadout() const;
+    std::optional<std::pair<double, double>> audioStretchDrop() const;
+    void paintSizingReadout(juce::Graphics& g, juce::Rectangle<int> clipRect) const;
+
     struct ClipHit {
         synth::ClipId id;
         juce::Rectangle<int> rect;
@@ -512,9 +687,13 @@ private:
 
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
+    void glideRestoredClips();
+    void paintClipGhosts(juce::Graphics& g, const TimelineRowLayout& layout);
+    juce::Rectangle<int> drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const;
+    // The x a note's resting `restingX` is drawn at while the clip glides from its old place (RestoreGlide.cpp).
+    double glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
-    // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag
-    // previews a cross-track drop (see TimelineClipLaneArea.cpp for the copy-drag exception).
+    // The row a clip PAINTS in right now: its own, except while a plain move drag previews a cross-track drop.
     int effectiveRowFor(synth::ClipId id, int trackIndex) const;
     double currentBeatsPerBar() const;
     double snappedBeatAt(double rawBeat) const;
@@ -530,7 +709,7 @@ private:
     // The track row `pos.y` falls on, or nullopt when there is no doc or it is below the last row.
     std::optional<int> trackIndexAt(juce::Point<int> pos) const;
     // The row's full-width rect (the same y/height computeClipRect gives that row).
-    juce::Rectangle<int> rowBounds(int trackIndex, int rowHeight) const;
+    juce::Rectangle<int> rowBounds(const TimelineRowLayout& layout, int trackIndex) const;
 
     // ---- Authoring (double-click on empty lane space) ----
     // A clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
@@ -571,7 +750,7 @@ private:
     void paintDragGhosts(juce::Graphics& g);
     // ONE dragged clip's ghost rect — the single geometry source shared with
     // getDragGhostRectsForTest().
-    juce::Rectangle<int> dragGhostRectFor(const DragOrigin& origin, int rowHeight) const;
+    juce::Rectangle<int> dragGhostRectFor(const TimelineRowLayout& layout, const DragOrigin& origin) const;
     void paintDrawGhost(juce::Graphics& g);
 
     // ---- Range tool gesture + painting ----
@@ -587,27 +766,48 @@ private:
     // ---- Tool cursors (built once per theme — never per mouse move) ----
     void rebuildToolCursors();
     void applyToolCursor();
+    /** Grab (copy while Alt-copying) cursor once a Move drag has actually moved the clips. */
+    void updateMoveCursor();
 
     // ---- Inline rename ----
     // Tears the editor down and, when `commit`, pushes its text through renameClip().
     void finishRename(bool commit);
+
+    // ---- Keyboard clip mode ----
+    bool handleKeyboardClipKey(const juce::KeyPress& key);
+    bool matchesClipAction(const juce::KeyPress& key, const juce::String& actionId,
+                           const juce::KeyPress& fallback) const;
+    synth::ClipId keyboardVerbTarget() const;
+    void moveKeyboardClipByStep(synth::ClipId id, int direction);
+    double keyboardGridStepBeats() const;
+    void publishKeyboardClip();
+    void scrollClipIntoView(const synth::Clip& clip);
+    void paintKeyboardClipRing(juce::Graphics& g);
+    void refreshKeyboardClip();
 
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
 
     void paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track, int trackIndex,
-                   int rowHeight);
+                   const TimelineRowLayout& layout);
     void paintMarquee(juce::Graphics& g);
+    void paintLinkMark(juce::Graphics& g, juce::Rectangle<int> clipRect, bool dimmed) const;
 
     // ---- Waveform + live-recording-strip painting ----
-    // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
-    // `rect`. A no-op below kMinWidthForWaveform or when nothing resolves.
-    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
-    // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
-    // Assumes the caller already set the colour.
+    // Paints a committed audio clip's waveform in `rect`, inked for the clip colour `onLane`; no-op if unresolved.
+    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect, juce::Colour onLane);
+    // Shared by paintWaveform() and the live strip: filled outline and RMS body paths (one outline without `rms`).
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                     const std::vector<std::pair<float, float>>& buckets, int numChannels,
+                                     const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,
+                                     int numChannels, int firstBucket, int bucketCount, const WaveformInk& ink);
+    bool paintWaveformFromSamples(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect,
+                                  const synth::PeaksFile::Data& data, double bpm, double transportRate,
+                                  const WaveformInk& ink);
+    // What paintWaveform draws for a clip `width` px wide (see waveformShapeFor / getWaveformShapeForTest).
+    enum class WaveformShape { None, Summary, Columns };
+    WaveformShape waveformShapeFor(const synth::Clip& clip, int width);
+    static void paintWaveformSummary(juce::Graphics& g, juce::Rectangle<int> rect, const synth::PeaksFile::Data& data,
                                      int firstBucket, int bucketCount);
     // Cache lookup/lazy-load for one assetRef. Returns nullptr for an empty ref, no resolver, an
     // unresolvable file, or a file that fails synth::PeaksFile::read(); a miss is cached too — only
@@ -619,22 +819,69 @@ private:
     // The diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not resolve, plus a
     // "missing: <name>" label when the clip is wide enough.
     void paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
-    void paintLiveRecordingStrip(juce::Graphics& g);
+    struct LiveStrip {
+        LiveRecordingInfo info;
+        std::vector<std::pair<float, float>> peaks;
+        std::vector<float> rms;
+        juce::Rectangle<int> rect;
+    };
+    void paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip);
     // The dim "how do I put something here" line for a row with no clips (see emptyRowHintFor).
     // Skipped when the row is too short or too narrow to render the line legibly.
     void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
     // The accent wash marking the audio row an OS file drop would land on.
     void paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds);
+    // The faint outline of an audio row that would take the Sound being dragged.
+    void paintSoundDropOutline(juce::Graphics& g, juce::Rectangle<int> bounds);
+    // The "New audio track" strip under the last track: faint while a Sound is dragged, full while a drop would land.
+    void paintBelowTracksStrip(juce::Graphics& g);
+    juce::Rectangle<int> belowTracksStrip() const;
+    bool isBelowTracks(juce::Point<int> pos) const;
+    void setBelowTracksHint(bool on);
+    // The backdrops of the rows that are not clip rows: a track's automation lanes, the Automation
+    // track's section row.
+    void paintAutomationRows(juce::Graphics& g, const TimelineRowLayout& layout);
     // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
     // track-vanished branch.
     void clearLiveRecording();
 
     TimelineViewState& viewState_;
+    // Where each clip rested at the last sync, so a restore can glide the clips it moved (RestoreGlide.cpp).
+    struct ClipPlace {
+        double start = 0.0;
+        double length = 0.0;
+        int row = 0;
+        bool operator==(const ClipPlace&) const = default;
+    };
+    std::map<std::int64_t, ClipPlace> clipPlaces_;
+    using NoteStartsById = std::map<std::int64_t, std::vector<synth::ClipNoteStart>>;
+    void glideChangedClips(const ClipLaneChange& change, const std::map<std::int64_t, ClipPlace>& now,
+                           const NoteStartsById& noteStartsNow);
+    // The notes' relative starts at the same sync, and how a restore's glide moves each clip's notes (ClipNoteGlide).
+    std::map<std::int64_t, std::vector<synth::ClipNoteStart>> clipNoteStarts_;
+    std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
+    std::unique_ptr<KeyedRectTween> clipGlide_;
+    std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
+    std::unique_ptr<RestoreWatch> restoreWatch_;
+    const AppUndoManager* watchedUndo_ = nullptr;
+    // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
+    std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;
+    std::unique_ptr<juce::Component> testModeProbe_; // reports the clips' pitches to test mode; no size, no input
     synth::TimelineDoc* doc_ = nullptr;
+    std::vector<int> trackExtraHeights_;       // see setTrackExtraHeights
+    std::vector<int> trackRowHeightOverrides_; // see setTrackRowHeightOverrides
+    synth::TrackId heightPreviewTrack_;
+    double heightPreviewScale_ = 1.0;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.
+    struct NoteRows {
+        std::vector<int> pitches; // empty: not a Drum Kit track
+        int rowOf(int pitch) const;
+    };
+    NoteRows noteRowsFor(const synth::Track& track, const synth::Clip& clip) const;
+    std::vector<std::pair<synth::TrackId, KitRows>> kitRows_; // the Drum Kit tracks only
     juce::ApplicationProperties* appProperties_ = nullptr;
     // Non-owning, may stay null (see setShortcutManager). const — this component only reads.
     const ShortcutManager* shortcuts_ = nullptr;
@@ -652,9 +899,10 @@ private:
     // rather than from a synthesized one.
     juce::Point<int> lastDragPointer_;
 
-    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` — the one
-    // thing an auto-scroll tick and a real pointer move share.
+    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` (what an auto-scroll tick and a
+    // pointer move share), easing the drawn clips onto each new snapped step.
     void updateDragPreviewFromLastPointer();
+    void stepDragPreview();
     // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_. Called after
     // every mouseDrag update and once from mouseUp.
     void updateAutoScrollArming();
@@ -670,7 +918,7 @@ private:
     // accepts its payload — see updateDragPreviewFromLastPointer (TimelineClipLaneMouse.cpp) for
     // why the group clamps together rather than dropping only the clips that would fit.
     int previewRowDelta_ = 0;
-    // Alt held at mouseDown — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
+    // Alt held NOW (re-read every drag event) — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
     bool copyDrag_ = false;
 
     // ---- Edit tool ----
@@ -682,6 +930,8 @@ private:
 
     // ---- Range tool (see TimelineClipLaneRange.cpp) ----
     RangeSelectionModel range_;
+    RangeSelectionModel rangeBeforeGesture_; // what a cancelled range drag puts back
+    void cancelRangeGesture();
 
     // ---- Split tool hover preview (the (clip, snapped beat) pair IS the repaint gate) ----
     synth::ClipId splitPreviewClip_;
@@ -693,6 +943,11 @@ private:
     double drawAnchorBeat_ = 0.0;
     double drawEndBeat_ = 0.0;
     bool drawDragged_ = false;
+    void cancelDrawGesture();
+
+    // ---- Keyboard clip mode ----
+    synth::ClipId keyboardClip_;
+    juce::String announcedKeyboardText_;
 
     // ---- Inline rename ----
     std::unique_ptr<juce::TextEditor> renameEditor_;
@@ -703,6 +958,8 @@ private:
     double resizeOriginalLength_ = 0.0;
     double previewStart_ = 0.0;  // left-edge trim only (end stays fixed)
     double previewLength_ = 0.0; // both edges
+    synth::ClipSizingMode clipSizingMode_ = synth::ClipSizingMode::Trim;
+    bool stretchOnce_ = false; // Option held during this edge drag
 
     // ---- Marquee ----
     juce::Point<int> marqueeAnchor_;
@@ -713,16 +970,19 @@ private:
     // ---- Waveform peaks cache ----
     std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
+    std::function<double(const juce::String& assetRef)> assetSampleRateResolver_;
 
+    std::unique_ptr<WaveformSampleCache> sampleCache_; // cleared with the peaks cache
+    WaveformSource lastWaveformSource_{};
     // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;
     std::map<juce::String, bool> assetExistsCache_;
+    std::map<std::int64_t, int> linkGroupSizes_; // rebuilt at the top of every paint()
 
     // ---- The live-recording strip ----
-    LiveRecordingInfo liveRecording_;
-    std::vector<std::pair<float, float>> livePeaks_;
-    juce::Rectangle<int> liveStripRect_;
+    std::vector<LiveStrip> liveStrips_;
     int liveStripRepaintCount_ = 0;
+    int clipsPainted_ = 0;
 
     // ---- Authoring / file drop ----
     // Registered with the basic formats once, in the constructor: it answers "can this extension be
@@ -731,6 +991,7 @@ private:
     AudioFileChooser audioFileChooser_;
     std::unique_ptr<juce::FileChooser> fileChooser_; // kept alive for the duration of launchAsync
     int fileDropRow_ = -1;                           // -1 = nothing highlighted
+    bool belowTracksHint_ = false;                   // a drop would make a new audio track
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineClipLaneArea)
 };

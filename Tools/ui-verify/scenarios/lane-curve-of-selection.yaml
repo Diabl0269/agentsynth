@@ -1,0 +1,54 @@
+# Right-clicking between two selected lane points showed Linear (ticked) and Hold above Create custom LFO, and picking
+# one changed only the segment under the pointer: here the flat one, so nothing changed on screen.
+#
+# What a user does: opens the project with a Cutoff lane (points at beats 0, 2, 4 and 8; 4 to 8 is flat; fixture
+# lane-with-lfo.agsproj), makes the lane taller, clicks the point at beat 2 and shift-clicks the one at beat 8, right-clicks the flat part
+# between them: the menu says "Curve of the selection" over Hold and Linear, then Create custom LFO. Picks Hold: every
+# segment from beat 2 to 8 becomes a step (the drop at beat 4 is now a hold then a step), melting in. Cmd+Z melts it
+# back to the ramps. Shift+F10 opens the same menu from the keyboard.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario holds a point selection the undo probe's toolbar click would move
+save_project: lane-curve-of-selection
+steps:
+  - openProject: {path: "${FIXTURES}/lane-with-lfo.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  # a taller dock and lane, so the step a Hold makes is plain to see in the clip
+  - mouseDown: {id: dockResizeHandle, y: 2}
+  - mouseMoveHeld: {id: dockResizeHandle, y: -330}
+  - mouseUp: {id: dockResizeHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - mouseDown: {id: laneHeightHandle, y: 2}
+  - mouseMoveHeld: {id: laneHeightHandle, y: 182}
+  - mouseUp: {id: laneHeightHandle, y: 2}   # the handle has moved with the pointer
+  - wait: {}
+  - expect: {id: automationLaneState, holdSegments: 0}
+  - click: {id: timelineToolSelect, instant: "the lane height handle's hover line clears as the pointer leaves it"}
+  - click: {id: automationLaneState, x: 48, y: 123}
+  - click: {id: automationLaneState, x: 192, y: 146, mods: shift}
+  - expect: {id: automationLaneState, selectedPoints: 2}
+  - click: {id: automationLaneState, x: 120, y: 146, button: right}
+  - wait: {settleMs: 500} # the menu fades in before it takes keys
+  - screenshot: {id: menu, name: menu-curve-of-selection}
+  - mark: {check: 2, name: menu-curve-of-selection}
+  - key: {keys: down}
+  - glide: {name: hold-melts-in, frames: 10, do: {key: {keys: return}}}
+  - wait: {}
+  - expect: {id: automationLaneState, holdSegments: 2, selectedPoints: 2}
+  - mark: {check: 2, name: selection-stepped}
+  - screenshot: {name: after-hold}
+  - glide: {name: undo-melts-back, frames: 10, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {id: automationLaneState, holdSegments: 0}
+  - screenshot: {name: after-undo}
+  # the keyboard path: Shift+F10 with the stretch still selected opens the same menu, and Return on Hold steps it again
+  - key: {keys: shift+f10}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: menu-from-keyboard}
+  - mark: {check: 3, name: menu-from-keyboard}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: automationLaneState, holdSegments: 2, selectedPoints: 2}

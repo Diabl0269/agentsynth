@@ -1,0 +1,47 @@
+# Check: showing a mixer insert on the canvas flies the view there while a closed macro unfolds in parallel, and
+# "Edit on canvas" on a column flies too; neither jumps.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks (Audio 1 and 2 in closed macros) and shows the Mixer tab.
+#   2. Scrolls the canvas well away from Audio 1's closed macro (setup, before the gesture).
+#   3. Double-clicks Audio 1's first insert row in the mixer: the canvas view glides to that module while the macro
+#      opens, and the module ends selected and centred.
+#   4. Scrolls the canvas away again and presses Audio 1's "Edit on canvas": the view glides to the channel's macro.
+motion: true
+pop_check: {off: "its expects read the card's position in the middle of the fly, which the check's wait for the end of the motion would pass"}
+record: true
+save_project: mixer-insert-fly
+steps:
+  - copyFixture: {name: cross-track-lanes.agsproj}
+  - openProject: {path: "${SCRATCH}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  # Setup, outside the gesture: pan the canvas away from the closed Audio 1 macro.
+  - wheel: {id: window, x: 700, y: 300, dy: -4}
+  - wait: {}
+  - wheel: {id: window, x: 700, y: 300, dx: -3}
+  - wait: {}
+  - screenshot: {name: 1-canvas-away}
+
+  - click: {id: mixerInsertList, x: 40, y: 9, clicks: 2}
+  - mark: {check: 1, name: fly-and-unfold}
+  - wait: {settleMs: 900}
+  - wait: {settleMs: 1200}
+  - screenshot: {name: 2-after-insert-fly}
+  - expect: {id: "card:Gate 1", selected: true, within_ms: 2000}
+  # Centred: the card's centre is the canvas area's centre (200..1600 x 88..486 in the 1600x900 window).
+  - expect: {id: "card:Gate 1", bounds: {x: 760, y: 127, w: 280, h: 320}}
+
+  - wheel: {id: window, x: 700, y: 300, dy: 4}
+  - wait: {}
+  - wheel: {id: window, x: 700, y: 300, dx: 3}
+  - wait: {}
+  - click: {id: mixerEditOnCanvas}
+  - mark: {check: 2, name: edit-on-canvas-fly}
+  - wait: {settleMs: 900}
+  - expect: {id: "card:Gate 1", selected: true, within_ms: 2000}
+  - screenshot: {name: 3-after-edit-on-canvas}

@@ -1,8 +1,9 @@
-// Concern: FRO25 (P9-3d) "Make channel" -- planMakeChannel/buildMakeChannel/resolveChannelSource
+// Concern: "Make channel" -- planMakeChannel/buildMakeChannel/resolveChannelSource
 // and the internal helpers that classify a chain's own region, shared merge heads and side inputs.
 #include "ChannelFlows.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "ChannelFlowsInternal.h"
 #include "MacroSet.h"
 #include "Modules/AttenuverterModule.h"
@@ -14,9 +15,9 @@
 
 namespace synth {
 
-// ---- FRO25 (P9-3d): "Make channel" --------------------------------------------------------------
+// ---- "Make channel" --------------------------------------------------------------
 
-// FRO13 (P9-7): lifted out of the anonymous namespace below (was: private to this file) so
+// Lifted out of the anonymous namespace below so
 // ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too — see
 // ChannelFlowsInternal.h's extern declarations for why this is the one definition.
 juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
@@ -46,11 +47,11 @@ bool isMacroPortNode(const juce::AudioProcessor* p) {
 // both the ModCV check below and crossingIsRight's L/R read must use the module behind it -- a
 // Cutoff CV cable into a bus through its port is still a CV cable.
 //
-// FRO11 (P9-5): promoted out of this file's anonymous namespace to synth-namespace/external
+// Promoted out of this file's anonymous namespace to synth-namespace/external
 // linkage (declared in ChannelFlows.h) so MixerModelInserts.cpp's insert-list walk can reuse the
 // exact same rule instead of re-deriving it -- the whole point being that "what counts as signal"
 // answers identically for "what would Make Channel do" and "what does the mixer column show".
-static juce::AudioProcessorGraph::NodeAndChannel
+juce::AudioProcessorGraph::NodeAndChannel
 resolveThroughPorts(juce::AudioProcessorGraph& graph,
                     const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                     juce::AudioProcessorGraph::NodeAndChannel pin) {
@@ -66,19 +67,67 @@ resolveThroughPorts(juce::AudioProcessorGraph& graph,
     return pin;
 }
 
-bool isSignalEdge(juce::AudioProcessorGraph& graph,
-                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
-                  const juce::AudioProcessorGraph::Connection& c) {
+juce::AudioProcessorGraph::NodeAndChannel
+resolveSourceThroughPorts(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                          juce::AudioProcessorGraph::NodeAndChannel pin) {
+    using Connection = juce::AudioProcessorGraph::Connection;
+    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
+        const auto prev = std::find_if(connections.begin(), connections.end(), [&](const Connection& c) {
+            return c.destination.nodeID == pin.nodeID && c.destination.channelIndex == pin.channelIndex;
+        });
+        if (prev == connections.end())
+            break;
+        pin = prev->source;
+    }
+    return pin;
+}
+
+// The same follow over a ConnectionIndex: the node's own outgoing cables, in the order the full list holds them, so the
+// first match is the full scan's first match.
+juce::AudioProcessorGraph::NodeAndChannel resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                                                              const ConnectionIndex& cables,
+                                                              juce::AudioProcessorGraph::NodeAndChannel pin) {
+    using Connection = juce::AudioProcessorGraph::Connection;
+    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
+        const auto& out = cables.outOf(pin.nodeID);
+        const auto next = std::find_if(out.begin(), out.end(),
+                                       [&](const Connection& c) { return c.source.channelIndex == pin.channelIndex; });
+        if (next == out.end())
+            break;
+        pin = next->destination;
+    }
+    return pin;
+}
+
+namespace {
+// One body for both cable sources: `Cables` is the full connection list or a ConnectionIndex, which only changes how
+// resolveThroughPorts finds a port's onward cable.
+template <typename Cables>
+bool signalEdgeOver(juce::AudioProcessorGraph& graph, const Cables& cables,
+                    const juce::AudioProcessorGraph::Connection& c) {
     auto* src = processorFor(graph, c.source.nodeID);
     auto* dst = processorFor(graph, c.destination.nodeID);
     if (src == nullptr || dst == nullptr || isAttenuverter(src) || isAttenuverter(dst))
         return false;
     if (c.source.isMIDI())
         return true;
-    const auto pin = resolveThroughPorts(graph, connections, c.destination);
+    const auto pin = resolveThroughPorts(graph, cables, c.destination);
     if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, pin.nodeID)))
         return isSignalPathInputRole(module->mapInputChannel(pin.channelIndex).role);
     return true;
+}
+} // namespace
+
+bool isSignalEdge(juce::AudioProcessorGraph& graph,
+                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                  const juce::AudioProcessorGraph::Connection& c) {
+    return signalEdgeOver(graph, connections, c);
+}
+
+bool isSignalEdge(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                  const juce::AudioProcessorGraph::Connection& c) {
+    return signalEdgeOver(graph, cables, c);
 }
 
 namespace {
@@ -227,7 +276,8 @@ bool crossingIsRight(juce::AudioProcessorGraph& graph, const std::vector<Connect
 
 // True when `channel` is on one of a poly-mode module's multi-voice jacks (span > 1, read off the
 // jack's head raw channel the same way GraphEditor::buildMacroPortCrossingPlan does). A poly VCA's
-// output is a span-1 head (it self-sums), so it never qualifies — consistent with P9-3j.
+// output is a span-1 head (it self-sums), so it never qualifies —
+// consistent with the poly-envelope auto-wire.
 bool isPolyFeed(juce::AudioProcessor* processor, int channel) {
     if (!isProcessorPoly(processor))
         return false;
@@ -530,8 +580,10 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
     for (auto& bus : plan.buses)
         absorbSideInputs(graph, connections, bus.members, reachedByTracks, plan.members);
 
-    // Flat model (synth::Macro's class comment): a node can't be in two macros, so a node that would
-    // move but is already grouped refuses the whole action rather than silently re-parenting it.
+    // A node has one direct owner (synth::Macro's class comment), so a node that would move but is
+    // already grouped refuses the whole action rather than silently re-parenting it. Nesting the channel
+    // inside that macro instead is not offered: the strip feeds Master directly, and that edge must
+    // never become a port on the outer macro.
     auto inMacro = [&](NodeID id) {
         auto* node = graph.getNodeForId(id);
         const juce::String uuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
@@ -599,7 +651,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);
-        // FRO15 (docs/mixer/sends-and-buses.md): a merge-point bus IS a bus — mark it so its mixer column
+        // docs/mixer/sends-and-buses.md: a merge-point bus IS a bus — mark it so its mixer column
         // gets the BUS badge and a feeding-strips source line instead of a track chip.
         if (built.channel.strip != nullptr)
             if (auto* busStrip = dynamic_cast<ChannelStripModule*>(built.channel.strip->getProcessor()))

@@ -37,7 +37,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
@@ -51,7 +51,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
@@ -65,7 +65,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
     int getVisibleInputPortCount() const override { return 2; }
     LogicalPort mapInputChannel(int raw) const override {
@@ -577,7 +577,7 @@ TEST_F(GraphEditorTest, DualIOSplitInputLegsCountAsTwoAndNeverHeals) {
 // VCA, all three shipping Dual I/O ON (their constructor default for a Declared stereo shape, never
 // collapsed by anything a bare preset load runs), so Filter has TWO incoming legs (Osc L->Filter L,
 // Osc R->Filter R) and TWO outgoing legs (Filter L->VCA L, Filter R->VCA R) rather than one of each.
-// mergeDualIoStereoPairLegs (GraphEditorDeleteHeal.cpp) is what turns each matching L/R pair back
+// mergeStereoPairLegs (GraphEditorDeleteHeal.cpp) is what turns each matching L/R pair back
 // into one logical leg so the 1-in/1-out rule still applies and the chain heals: Osc L->VCA L,
 // Osc R->VCA R, healed as two explicit jack pairs since resolvePolyLink has no single-jack notion
 // of "two separate jacks" the way a collapsed stereo jack's own multi-voice fan does.

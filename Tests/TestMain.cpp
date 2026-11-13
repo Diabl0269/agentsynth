@@ -1,17 +1,137 @@
+#include "AudioEngine/AudioEngine.h"
+#include "Auth/KeychainTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
+#include "SilentLookAndFeel.h"
+#include "SoundPacks/SoundPackFetch.h"
+#include "TestMode/AutomationHiding.h"
+#include "TestWait.h"
+#include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopoverPointer.h"
+#include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
+#include "WindowsCrashReport.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <juce_events/juce_events.h>
+#include <string>
+#include <vector>
 
-// Drain pending async messages after each test to prevent
-// cross-test pollution from callAsync/timer callbacks
+// Drain pending async messages after each test to prevent cross-test pollution from callAsync/timer callbacks. It
+// runs every message already queued, not a fixed slice: a test that builds hundreds of cards (CardBodyOverlap) leaves
+// more async updates than a 10 ms slice delivers, and the next test's first click then waits behind them.
 class MessageQueueDrainer : public ::testing::EmptyTestEventListener {
     void OnTestEnd(const ::testing::TestInfo&) override {
-        if (auto* mm = juce::MessageManager::getInstanceWithoutCreating())
-            mm->runDispatchLoopUntil(10);
+        if (juce::MessageManager::getInstanceWithoutCreating() != nullptr)
+            synth::test::flushMessageQueue();
+    }
+};
+
+// The motion test seams are process-wide: a test that turns one on and never back off makes every later test in the
+// same process (and so which shard it lands in) animate where it expects an instant change. After each test this names
+// a test that left one changed, puts the default back so the rest of the run is unaffected, and fails the run.
+class MotionSeamLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        const bool leaked = synth::ui::FadeVisibility::animatesOffScreenForTest() ||
+                            synth::ui::PopupMotion::animatesOffScreenForTest() ||
+                            synth::ui::animationMode() != synth::ui::AnimationMode::followSystem;
+        if (!leaked)
+            return;
+        leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+        synth::ui::PopupMotion::setAnimateOffScreenForTest(false);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    }
+};
+
+// A dialog still on the desktop when its test ends outlives the test's own objects it shows (a module, a rig): JUCE
+// deletes a closed dialog on a later message-loop turn, here in MessageQueueDrainer, and its destructor then reads
+// freed memory, crashing some later test at random. Listeners end in reverse order, so this runs before the drain. It
+// names each test once per window and fails the run; the test deletes its windows before its objects go
+// (ModalCloseKeys' DialogsDeletedFirst).
+class DialogLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        auto& desktop = juce::Desktop::getInstance();
+        bool leaked = false;
+        for (int i = 0; i < desktop.getNumComponents(); ++i) {
+            auto* dialog = dynamic_cast<juce::DialogWindow*>(desktop.getComponent(i));
+            if (dialog == nullptr || isReported(*dialog))
+                continue;
+            reported_.emplace_back(dialog);
+            leaked = true;
+        }
+        if (leaked)
+            leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+    }
+
+    bool isReported(const juce::Component& dialog) const {
+        for (const auto& seen : reported_)
+            if (seen.getComponent() == &dialog)
+                return true;
+        return false;
+    }
+
+    std::vector<juce::Component::SafePointer<juce::Component>> reported_;
+};
+
+// A call-out box still on the desktop when its test ends holds the modal state, so every later test's clicks go to it.
+// It names each test once per box and fails the run; the test closes its popovers before it returns
+// (synth::test::finishPopupTest in UI/Layout/PopupTestCleanup.h).
+class CallOutLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        auto& desktop = juce::Desktop::getInstance();
+        bool leaked = false;
+        for (int i = 0; i < desktop.getNumComponents(); ++i) {
+            auto* box = dynamic_cast<juce::CallOutBox*>(desktop.getComponent(i));
+            if (box == nullptr || isReported(*box))
+                continue;
+            reported_.emplace_back(box);
+            leaked = true;
+        }
+        if (leaked)
+            leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+    }
+
+    bool isReported(const juce::Component& box) const {
+        for (const auto& seen : reported_)
+            if (seen.getComponent() == &box)
+                return true;
+        return false;
+    }
+
+    std::vector<juce::Component::SafePointer<juce::Component>> reported_;
+};
+
+// Test-mode clicks (TestModeInput) leave the synthetic pointer where they last pressed, for the tooltip and the popover
+// click-away rules; it never carries into the next test, which would read a press at that stale point.
+class SyntheticPointerReset : public ::testing::EmptyTestEventListener {
+    void OnTestEnd(const ::testing::TestInfo&) override {
+        synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
+        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
     }
 };
 
@@ -34,27 +154,89 @@ int main(int argc, char** argv) {
         }
     }
 
+#if JUCE_WINDOWS
+    synth::tests::crashreport::install();
+#endif
     juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // The suite puts real native windows and dialogs on the desktop; they stay invisible, click-through and never take
+    // focus, so the developer keeps using the machine while it runs. AGENTSYNTH_TESTS_VISIBLE=1 shows them again.
+    const char* visible = std::getenv("AGENTSYNTH_TESTS_VISIBLE");
+    if (visible == nullptr || std::string(visible) != "1")
+        synth::testmode::hideAutomationWindows();
     ::testing::InitGoogleTest(&argc, argv);
+    synth::testmode::muteAlertSounds(); // an app look and feel in a test stays silent too
+    ::testing::UnitTest::GetInstance()->listeners().Append(new synth::tests::SilentAlertSoundsListener());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new CallOutLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new SyntheticPointerReset());
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
-    const juce::String settingsDirOverride(
+    // Without it, every run still gets a private, fresh settings folder of its own: the suite
+    // must never read or write the developer's real settings file (recent projects, the plugin
+    // scan list, preferences), and two runs in different worktrees must never share one.
+    juce::String settingsDirOverride(
         std::getenv("AGENTSYNTH_SETTINGS_DIR") != nullptr ? std::getenv("AGENTSYNTH_SETTINGS_DIR") : "");
-    if (settingsDirOverride.isNotEmpty())
-        synth::setSettingsDirOverrideForTests(settingsDirOverride);
+    juce::File ownedSettingsDir;
+    if (settingsDirOverride.isEmpty()) {
+        ownedSettingsDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                               .getChildFile("agentsynth-tests-settings-" + juce::Uuid().toDashedString());
+        ownedSettingsDir.createDirectory();
+        settingsDirOverride = ownedSettingsDir.getFullPathName();
+    }
+    synth::setSettingsDirOverrideForTests(settingsDirOverride);
+
+    // No test may read the machine's own Reduce Motion setting: CI runners and developer Macs differ, so a test that
+    // expects motion without pinning it passed locally and failed on CI. Tests that want it on say so.
+    synth::ui::setSystemReducedMotionForTest(false);
+
+    // No test may reach the real sound pack host: the default fetcher answers "offline" (tests inject their own).
+    synth::soundpacks::setHttpBlockedForTesting(true);
 
     // Every MainComponent's MidiLearnController gets a temp ControllerProfileStore instead
     // of the developer's real folder -- set once so ~50 MainComponent*Tests.cpp files don't have
-    // to know MIDI Remote exists. Nested per-shard (not one fixed name) when sharded, so
-    // concurrent shards don't race each other's deleteRecursively() -- see test-patterns.md.
-    const auto controllerProfilesRoot = settingsDirOverride.isNotEmpty()
-                                            ? juce::File(settingsDirOverride)
-                                            : juce::File::getSpecialLocation(juce::File::tempDirectory);
-    const auto controllerProfilesDir = controllerProfilesRoot.getChildFile("agentsynth-tests-controller-profiles");
+    // to know MIDI Remote exists. Nested in this run's own settings folder, so concurrent runs
+    // and shards don't race each other's deleteRecursively() -- see test-patterns.md.
+    const auto controllerProfilesDir =
+        juce::File(settingsDirOverride).getChildFile("agentsynth-tests-controller-profiles");
     controllerProfilesDir.deleteRecursively();
     MainComponent::setControllerProfileTestDirectory(controllerProfilesDir);
 
-    return RUN_ALL_TESTS();
+    // Every MainComponent builds an AccountService that reads the stored sign-in token at
+    // startup. Keep that in memory so the suite never touches the developer's real Keychain item
+    // (an unsigned or re-signed Tests binary would otherwise raise the login-keychain password
+    // prompt on every run).
+    synth::KeychainTokenStore::useInMemoryStoreForProcess(true);
+
+    // No test engine opens the machine's MIDI inputs: virtual sources are visible machine-wide, so under parallel
+    // shards a test's engine would receive another process's messages while its own graph changes.
+    AudioEngine::setOpenAllMidiInputsForTest(false);
+
+    int result = RUN_ALL_TESTS();
+    for (const auto& name : MotionSeamLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a motion test seam changed (FadeVisibility/PopupMotion off-screen animation or the "
+                     "Animations mode); restore it before the test returns"
+                  << std::endl;
+        result = 1;
+    }
+    for (const auto& name : DialogLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a dialog window open: it is deleted after the objects it shows; delete it before they go"
+                  << std::endl;
+        result = 1;
+    }
+    for (const auto& name : CallOutLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a call-out box open: it holds the modal state, so every later test's clicks go to it; "
+                     "close it before the test returns"
+                  << std::endl;
+        result = 1;
+    }
+    if (ownedSettingsDir != juce::File())
+        ownedSettingsDir.deleteRecursively();
+    return result;
 }

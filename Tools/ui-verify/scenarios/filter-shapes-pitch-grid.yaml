@@ -1,0 +1,80 @@
+# Feature: the Filter's Edit shapes window grids by pitch. Notes draws every note with each C named and the notes
+# outside the key dotted; Harmonics draws the root's multiples; the Ring helpers menu's Stack harmonics turns the
+# selected shape into peaks on those harmonics in one step (undone by one Cmd+Z).
+#
+# The Filter's Cutoff knob can also snap to notes: right-click Cutoff > Snap to notes > Notes, and its readout names the
+# note.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes and a key, then Harmonics, then Ring
+# helpers > Stack harmonics, and undoes it; closes the window, picks Snap to notes > Notes on the Cutoff knob and turns it.
+# Proof marks: 10 grid-notes (each C named, notes outside the key dimmer, pointer over the grid), 11 stack-harmonics
+# (peaks on the harmonic lines, after Stack), 12 cutoff-snap-notes (the menu open) and cutoff-note-readout.
+record: true
+save_project: filter-shapes-pitch-grid
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Notes}
+  - wait: {settleMs: 400}
+  - click: {id: "Key, following song key"}                     # a key makes the notes outside it dimmer
+  - wait: {settleMs: 400}
+  - click: {id: "C Major, C D E F G A B"}
+  - wait: {settleMs: 600}
+  - hover: {id: Shape curve, x: 300, y: 200}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: notes-grid}
+  - mark: {check: 10, name: grid-notes}
+  - click: {id: Harmonics}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: harmonics-grid}
+  - click: {id: Ring helpers}
+  - wait: {settleMs: 500} # the menu fades in before it takes keys
+  - screenshot: {id: menu, name: ring-helpers-menu}
+  # Arrow keys reach the popup (its items carry no ids): Tune selected peak, then Stack harmonics, which opens its panel.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Stack harmonics panel", name: stack-panel}
+  - click: {id: Stack}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: stacked-harmonics}
+  - mark: {check: 11, name: stack-harmonics}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: after-undo}
+  # The Custom filter card's Cutoff knob: right-click > Snap to notes > Notes, with the menu open for the mark.
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - click: {id: "card:Filter > Cutoff", button: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: right}
+  - wait: {settleMs: 500}
+  - key: {keys: down}                                           # Free, then Notes: the pick is under the highlight
+  - mark: {check: 12, name: cutoff-snap-notes}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - mouseDown: {id: "card:Filter > Cutoff"}
+  - mouseMoveHeld: {id: "card:Filter > Cutoff", x: 42, y: 20}
+  - wait: {settleMs: 400}
+  - mark: {check: 12, name: cutoff-note-readout}
+  - mouseUp: {id: "card:Filter > Cutoff", x: 42, y: 20}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "card:Filter", name: cutoff-after-turn}

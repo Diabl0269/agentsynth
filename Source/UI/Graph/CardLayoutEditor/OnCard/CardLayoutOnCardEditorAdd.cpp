@@ -1,0 +1,186 @@
+// CardLayoutOnCardEditorAdd.cpp -- "+ Add control": the Add control panel opening under the card, a click
+// on a row putting that control back in the last group at a free spot, and the fade the added control
+// arrives with. Dragging a row onto the card is CardLayoutOnCardEditorAddDrop.cpp.
+// docs/layout/module-card-layout.md#editing-a-layout.
+#include "CardLayoutOnCardEditor.h"
+#include "OnCardAddControlModel.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
+#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReducedMotion.h"
+#include <utility>
+
+namespace synth::ui {
+
+// The panel opens from the button, in a call-out like the per-control panel's. It lists what the card does
+// not show, and the button is off when that is nothing.
+void CardLayoutOnCardEditor::openAddPanel() {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (closed_ || source_ == nullptr || body == nullptr || addPanel_ != nullptr)
+        return;
+    flushNudge();
+    endDrag();
+    closePanel();
+    auto controls = addableControls(*body);
+    if (controls.empty())
+        return;
+    auto panel = std::make_unique<CardLayoutAddPanel>();
+    juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
+    panel->onPick = [self](const juce::String& paramId) {
+        if (auto* e = self.getComponent())
+            e->addControl(paramId);
+    };
+    panel->onDrag = [self](const juce::String& paramId, CardLayoutAddRow::DragPhase phase, juce::Point<int> at) {
+        if (auto* e = self.getComponent())
+            e->dragAdded(paramId, phase, at);
+    };
+    panel->onRequestClose = [self] {
+        if (auto* e = self.getComponent())
+            e->closePanel();
+    };
+    panel->setControls(std::move(controls));
+    addPanel_ = panel.get();
+    launchPanel(std::move(panel), addControl_.getScreenBounds());
+}
+
+// After a rebuild: the button is on while something is off the card, and the open panel lists what is
+// left (it closes when nothing is).
+void CardLayoutOnCardEditor::refreshAddPanel() {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    auto controls = body != nullptr ? addableControls(*body) : std::vector<AddableControl>();
+    addControl_.setEnabled(!controls.empty());
+    auto* panel = addPanel_.getComponent();
+    if (panel == nullptr)
+        return;
+    if (controls.empty())
+        return closePanel();
+    panel->setControls(std::move(controls));
+}
+
+std::vector<juce::Rectangle<int>> CardLayoutOnCardEditor::occupiedIn(int planSection) const {
+    std::vector<juce::Rectangle<int>> rects;
+    for (const auto& cell : cells_)
+        if (cell.section == planSection)
+            rects.push_back(cell.rect);
+    if (card_ != nullptr)
+        for (const auto& view : collectViews(*card_, planSection))
+            rects.push_back(view.rect);
+    return rects;
+}
+
+// The size its widget and caption take in that group, by the same rule the group's layout sizes a cell.
+juce::Point<int> CardLayoutOnCardEditor::addedCellSize(int planSection, const juce::String& paramId) const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    const int item = body != nullptr ? body->getPlan().findParam(paramId) : -1;
+    if (item < 0 || planSection < 0 || planSection >= (int)body->getPlan().sections.size())
+        return {};
+    const auto g = card_->bodyGeometry();
+    return cardBodyCellSize(body->getPlan().items[(size_t)item].kind,
+                            body->getPlan().sections[(size_t)planSection].columns, g);
+}
+
+// A place that overlaps nothing and keeps the 8 px gap, as a free position (from the group's content origin).
+juce::Point<int> CardLayoutOnCardEditor::freeSpotIn(int planSection, const juce::String& paramId) const {
+    const auto* body = card_->getCardBody();
+    const auto g = card_->bodyGeometry();
+    const auto spot = oncard::findFreeSpot(addedCellSize(planSection, paramId), occupiedIn(planSection),
+                                           limitsFor(*body, planSection, card_->bodyGeometry()));
+    return {spot.x - g.contentX, spot.y - body->getPlan().sections[(size_t)planSection].cellTop};
+}
+
+// A click: the control goes back to the group it belongs to (the one it was hidden from, else the one the
+// code default puts it in, else the last grid group). A positioned group gets it at the next free spot; a
+// flowing one just takes it in its flow.
+void CardLayoutOnCardEditor::addControl(const juce::String& paramId) {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (closed_ || source_ == nullptr || body == nullptr)
+        return;
+    flushNudge();
+    const auto layout = body->explicitLayout();
+    const auto& plan = body->getPlan();
+    const int item = plan.findParam(paramId);
+    const auto codeDefault = body->codeDefaultLayout();
+    const auto* defaults = codeDefault ? &*codeDefault : nullptr;
+    int target = homeSectionIndex(layout, defaults, paramId);
+    if (target < 0)
+        target = lastGridSectionIndex(layout);
+    std::optional<juce::Point<int>> at;
+    if (target >= 0 && item >= 0 && layout.sections[(size_t)target].id != CardSection::kFooterId) {
+        const int planSection = planSectionIndexOf(layout, target);
+        if (planSection < (int)plan.sections.size() && plan.sections[(size_t)planSection].freeform)
+            at = freeSpotIn(planSection, paramId);
+    }
+    const auto name = item >= 0 ? plan.items[(size_t)item].captionText() : paramId;
+    writeLayout(withControlAdded(layout, paramId, at, target, defaults));
+    finishAdded(paramId, name);
+}
+
+void CardLayoutOnCardEditor::finishAdded(const juce::String& paramId, const juce::String& name) {
+    fadeInControl(paramId);
+    announce(name + " added");
+}
+
+// The added control grows in at its spot: from its centre (a fader along its length) with an 8% bounce, 200 ms;
+// a plain 80 ms fade under Reduce Motion. Nothing on screen, nothing to animate.
+void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId, std::optional<juce::Point<int>> from) {
+    using namespace control_motion;
+    const int cell = indexOfCell(paramId);
+    if (cell < 0 || !canAnimate() || animationsOff())
+        return;
+    struct Part {
+        juce::Component::SafePointer<juce::Component> comp;
+        juce::Rectangle<int> bounds;
+    };
+    std::vector<Part> parts;
+    for (auto* c : {cells_[(size_t)cell].widget.getComponent(), cells_[(size_t)cell].label.getComponent()})
+        if (c != nullptr)
+            parts.push_back({c, c->getBounds()});
+    const auto axis = axisFor(cells_[(size_t)cell].rect);
+    const bool reduced = prefersReducedMotion();
+    // A control an undo brings back from the hide zone rises out of it: the grow also travels from the zone's centre.
+    const bool rises = from.has_value() && !reduced;
+    const auto origin = from.value_or(juce::Point<int>());
+    const auto apply = [parts, axis, reduced, rises, origin](float t) {
+        for (const auto& part : parts) {
+            if (part.comp == nullptr)
+                continue;
+            part.comp->setAlpha(juce::jlimit(0.0f, 1.0f, easeOutCubic(t)));
+            const auto travel =
+                rises ? (origin - part.bounds.getCentre()).toFloat() * (1.0f - easeOutCubic(t)) : juce::Point<float>();
+            part.comp->setTransform(reduced
+                                        ? juce::AffineTransform()
+                                        : scaleAbout(part.bounds, growScale(t), axis).translated(travel.x, travel.y));
+        }
+    };
+    const auto land = [parts] {
+        for (const auto& part : parts)
+            if (part.comp != nullptr) {
+                part.comp->setAlpha(1.0f);
+                part.comp->setTransform({});
+            }
+    };
+    apply(0.0f);
+    addFrame_ = apply;
+    const double ms = reduced ? kReducedMs : kGrowMs;
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    finishAddFade_ = [this, land] {
+        addFadePump_.stop();
+        addFrame_ = nullptr;
+        land();
+    };
+    addFadePump_.run(
+        ms,
+        [apply, start, ms] {
+            apply((float)juce::jlimit(0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - start) / ms));
+        },
+        [this, land] {
+            land();
+            finishAddFade_ = nullptr;
+            addFrame_ = nullptr;
+        });
+}
+
+} // namespace synth::ui

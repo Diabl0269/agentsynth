@@ -1,0 +1,55 @@
+# A Drum Kit pad's Sound row: an instrument pad (pad 1 plays the Pluck on the canvas) shows Plays pitch and Open, Open
+# selects the Pluck's card, a sound dragged from the Sounds view lands on the pad under the pointer only, and Undo takes
+# the drop back.
+#
+# What a user does:
+#   1. Opens a project whose Drum Kit pad 1 plays "Pluck 1" (fixture drum-kit-instrument-pad.agsproj).
+#   2. Looks at pad 1's Sound row: "Pluck 1, instrument", Plays pitch C3 (60), Open, Decay dimmed.
+#   3. Clicks Open: the Pluck card is selected.
+#   4. Switches the sidebar to Sounds, finds the fixture loop and drags it onto pad 2 (first row, second column).
+#   5. Presses Cmd+Z: pad 2 plays its snare again.
+# The Sound menu itself is not driven here: JUCE closes a popup menu at once while the app is not the foreground
+# process, which it never is under test mode. DrumKitPadSoundCardTests covers every menu choice.
+settings:
+  soundBrowserFolders: "${FIXTURES}/sounds"
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-instrument-pad.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, contains: {pickedKind: instrument, pickedName: Pluck 1}, within_ms: 3000}
+  - expect: {id: "card:Drum Kit > drumPadPitch", showing: true}
+  - expect: {id: "card:Drum Kit > drumPadOpenInstrument", showing: true}
+  - getState: {id: "card:Drum Kit > drumPadSound"}
+  - screenshot: {id: "card:Drum Kit", name: pad-sound-instrument}
+  # Open selects the Pluck on the canvas.
+  - click: {id: "card:Drum Kit > drumPadOpenInstrument"}
+  - wait: {}
+  - expect: {id: "card:Pluck", selected: true, within_ms: 1500}
+  - screenshot: {name: pad-sound-open-selects-pluck}
+  # A sound from the Sounds view dropped on pad 2.
+  - getState: {id: "Sidebar view"}
+  - click: {id: "Sidebar view", x: 150, y: 12}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - getState: {id: soundBrowser}
+  - screenshot: {id: soundBrowser, name: pad-sound-browser}
+  - drag: {from: soundBrowser, fromX: 80, fromY: 72, to: "card:Drum Kit > drumPads", toX: 95, toY: 22}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, contains: {pickedKind: audio file}, within_ms: 3000}
+  - expect: {id: "card:Drum Kit > drumPads", contains: {pickedName: test loop 120bpm Am}}
+  - screenshot: {id: "card:Drum Kit", name: pad-sound-dropped}
+  # Pad 1 still plays the Pluck: the drop changed only the pad under the pointer.
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 22, mods: [shift]}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, contains: {pickedKind: instrument}, within_ms: 1500}
+  # Undo the drop: pad 2 plays its snare again.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 22, mods: [shift]}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, contains: {pickedKind: built-in}, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: pad-sound-after-undo}

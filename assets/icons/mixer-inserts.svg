@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, view group (a stack of insert slots). Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <rect x="3" y="3.5" width="18" height="4.8" rx="1.8" fill="#FF00FF" />
+  <rect x="3" y="9.6" width="18" height="4.8" rx="1.8" fill="#FF00FF" />
+  <rect x="3" y="15.7" width="18" height="4.8" rx="1.8" fill="#FF00FF" fill-opacity=".45" />
+  <circle cx="6.4" cy="5.9" r="1.1" fill="#FFFF00" />
+  <circle cx="6.4" cy="12" r="1.1" fill="#FFFF00" />
+  <circle cx="6.4" cy="18.1" r="1.1" fill="#FFFF00" />
+</svg>

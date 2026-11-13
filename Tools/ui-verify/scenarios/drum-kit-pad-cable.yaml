@@ -1,0 +1,53 @@
+# A mod cable dropped on a pad knob binds to that pad.
+#
+# What a user does: adds a Drum Kit and an LFO, picks the Snare (pad 2), and drags the LFO's output onto the Snare's
+# Level knob: the knob shows the mod ring. Picking the Kick hides the ring (the cable keeps moving the Snare);
+# picking the Snare again brings it back. The sound is covered by DrumKitPadCableTests.
+record: true
+save_project: fro1555-drum-pad-cable
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - screenshot: {name: both-cards}
+  # The cards land at the bottom of the canvas: drag both up so the pad knobs are on screen.
+  - drag: {from: "card:Drum Kit", fromX: 120, fromY: 14, to: window, toX: 420, toY: 120}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 14, to: window, toX: 1000, toY: 120}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2 (Snare), quietly
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
+  # The LFO's CV jack sits at the top right of its card.
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Drum Kit > Level: Snare"}
+  - wait: {}
+  - mark: {check: 1, name: pad-cable-ring}
+  - screenshot: {id: "card:Drum Kit", name: snare-level-ring}
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 20, mods: [shift]}   # pad 1 (Kick): no ring
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: kick-no-ring}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # Snare again: ring is back
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: snare-ring-back}

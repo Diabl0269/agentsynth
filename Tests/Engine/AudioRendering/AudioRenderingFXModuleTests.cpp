@@ -1,6 +1,7 @@
 // Topic: every FX module produces output when fed an oscillator.
 
 #include "AudioRenderingTestHelpers.h"
+#include "Modules/FX/ReverbModule.h"
 
 // ===========================================================================
 // Test 7: Each FX module produces output

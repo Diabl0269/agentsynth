@@ -1,6 +1,8 @@
 // Concern: DetachedPanelWindow's content wrapper, bounds persistence, per-window
 // focus-region Tab cycling, and the plugin-mode LookAndFeel seam.
 #include "DetachedPanelWindow.h"
+#include "UI/Graph/ProjectLoad/EditBlockOverlay.h"
+#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -37,11 +39,10 @@ bool isPlausibleRestoredBounds(const juce::Rectangle<int>& rect) {
 }
 } // namespace
 
-DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableButton& headerButton,
-                                         juce::Label& headerTitle, juce::String boundsKey,
+DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, const juce::String& title, juce::String boundsKey,
                                          juce::ApplicationProperties* appProperties,
                                          synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
-    : juce::DocumentWindow(headerTitle.getText(), juce::Colours::darkgrey, juce::DocumentWindow::closeButton,
+    : juce::DocumentWindow(title, juce::Colours::darkgrey, juce::DocumentWindow::closeButton,
                            /*addToDesktop*/ false)
     , panel_(panel)
     , boundsKey_(std::move(boundsKey))
@@ -62,11 +63,9 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     setUsingNativeTitleBar(true);
     setResizable(true, false);
 
-    // Borrows panel/button/title -- see the header comment on why this is setContentNonOwned, not
-    // setContentOwned: none of the three are ours to delete. Built BEFORE setLookAndFeel() below so
-    // applyHeaderButtonIcon() (called from the lookAndFeelChanged() that setLookAndFeel() fires
-    // synchronously) already has a real content_->button to apply the icon to.
-    content_ = std::make_unique<Content>(panel, headerButton, headerTitle);
+    // Borrows the panel -- see the header comment on why this is setContentNonOwned, not setContentOwned: the
+    // panel is not ours to delete.
+    content_ = std::make_unique<Content>(panel);
     setContentNonOwned(content_.get(), /*resizeToFit*/ false);
 
     // Plugin-mode seam (docs/mixer/panel.md): our OWN scope, never Desktop::setDefaultLookAndFeel.
@@ -76,31 +75,61 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
         setLookAndFeel(lookAndFeel);
 
     // MainComponent's TooltipWindow only covers its own component tree -- a second top-level
-    // window needs its own, or the detach button's tooltip (and every control inside the hosted
-    // panel) never shows here.
-    tooltipWindow_ = std::make_unique<juce::TooltipWindow>(this);
+    // window needs its own, or no tooltip of a control inside the hosted panel (the dock-back button
+    // included) ever shows here.
+    tooltipWindow_ = std::make_unique<synth::ui::AppTooltipWindow>(this, appProperties);
 
     // Repaints our own focus-region root's accent outline on focus changes -- see
     // MainComponent::globalFocusChanged, the same idiom, scoped to this window's own registry.
     juce::Desktop::getInstance().addFocusChangeListener(this);
+
+    // The window fades in when it opens and out when it closes. It never slides: it persists its own position, and a
+    // slide would be written back to the saved bounds a frame at a time.
+    popup_motion::Style style;
+    style.inSlidePx = 0.0f;
+    style.outSlidePx = 0.0f;
+    PopupMotion::attach(*this, std::move(style));
 }
 
 DetachedPanelWindow::~DetachedPanelWindow() {
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     // Drop our reference to the borrowed content BEFORE our members (content_, and the panel/
-    // button/title it never owned) unwind below -- setContentNonOwned means ~ResizableWindow would
+    // panel it never owned) unwind below -- setContentNonOwned means ~ResizableWindow would
     // never touch it anyway, but this keeps the window in a content-less state for the rest of its
     // own teardown rather than relying on that.
     setContentNonOwned(nullptr, false);
     setLookAndFeel(nullptr);
 }
 
+void DetachedPanelWindow::setEditsBlocked(bool blocked, std::function<void()> onRefused) {
+    if (content_ == nullptr)
+        return;
+    if (editBlock_ == nullptr) {
+        if (!blocked)
+            return;
+        editBlock_ = std::make_unique<EditBlockOverlay>(panel_, std::move(onRefused));
+        content_->addChildComponent(*editBlock_);
+    } else if (blocked) {
+        editBlock_->setOnRefused(std::move(onRefused));
+    }
+    editBlock_->setBlocking(blocked);
+}
+
+bool DetachedPanelWindow::areEditsBlocked() const noexcept { return editBlock_ != nullptr && editBlock_->isVisible(); }
+
 void DetachedPanelWindow::closeButtonPressed() {
     // Never self-destroys -- DetachablePanelHost owns this window in a unique_ptr and is the only
     // thing allowed to reset (and so destroy) it, via setDetached(false). Same contract as
     // HostedPluginEditorWindow::closeButtonPressed.
-    if (onCloseRequested)
-        onCloseRequested();
+    if (!onCloseRequested)
+        return;
+    // The live window fades out first; the host redocks (and so destroys this window) one turn after. Off screen it
+    // redocks before this returns.
+    juce::Component::SafePointer<DetachedPanelWindow> safe(this);
+    PopupMotion::dismiss(*this, [safe] {
+        if (safe != nullptr && safe->onCloseRequested)
+            safe->onCloseRequested();
+    });
 }
 
 void DetachedPanelWindow::moved() {
@@ -122,33 +151,9 @@ void DetachedPanelWindow::lookAndFeelChanged() {
     // panel shows the app's themed surface behind it, not a flat stock-JUCE grey. setLookAndFeel()
     // fires this synchronously (Component::sendLookAndFeelChange()), so it applies on construction,
     // on any later setLookAndFeel() swap, and once more (harmlessly) as the destructor clears it.
-    // Laid over the opaque page colour (bg0) -- a "glass" theme's surface is translucent
-    // (docs/layout/theme-authoring.md), and a top-level window filled with it shows the OS window
-    // backing through as flat light grey. An opaque surface overlays to itself, unchanged.
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& colors = lf->getTheme().colors;
-        setBackgroundColour(colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface));
-        applyHeaderButtonIcon(*lf);
-    }
-}
-
-void DetachedPanelWindow::applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf) {
-    // The header button is BORROWED from DetachablePanelHost (this class's own header
-    // comment) -- DetachablePanelHost::applyIcon() only ever runs from ITS OWN lookAndFeelChanged(),
-    // which stops reaching this button the moment setDetached(true) reparents it in here (an
-    // icon-only ImageFitted DrawableButton with no Drawable ever assigned to it paints nothing at
-    // all, not a placeholder). Re-applying the SAME icon that method uses, from THIS window's own
-    // lookAndFeelChanged() instead, keeps the button correct regardless of whether the host's own
-    // callback ran before or after the reparent.
-    if (content_ == nullptr)
-        return;
-    auto base = lf.getIcon(synth::theme::Icon::ActionDetachWindow);
-    if (base == nullptr)
-        return;
-    const auto& colors = lf.getTheme().colors;
-    auto hoverIcon = base->createCopy();
-    hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
-    content_->button.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
+    // windowBackgroundFor() is opaque even for a "glass" theme, so no OS grey shows through.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        setBackgroundColour(synth::theme::windowBackgroundFor(lf->getTheme()));
 }
 
 bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
@@ -160,12 +165,33 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
     if (shortcutManager_ != nullptr) {
         if (const auto forward = synth::ui::resolveFocusCycleKeyPress(key, *shortcutManager_))
             return focusRegions_.cycleFocus(*forward);
+        // Same story for the open-context-menu key: MainComponent's command never sees it here.
+        if (synth::ui::isOpenContextMenuKeyPress(key, *shortcutManager_))
+            return synth::ui::openContextMenuForFocusedComponent(focusedComponentOverrideForTest_ != nullptr
+                                                                     ? focusedComponentOverrideForTest_.getComponent()
+                                                                     : juce::Component::getCurrentlyFocusedComponent());
+        if (synth::ui::isRecolourKeyPress(key, *shortcutManager_))
+            return synth::ui::openColourForFocusedComponent(focusedComponentOverrideForTest_ != nullptr
+                                                                ? focusedComponentOverrideForTest_.getComponent()
+                                                                : juce::Component::getCurrentlyFocusedComponent());
     }
-    // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+T, Cmd+1..9)
+    // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+J, Cmd+1..9)
     // before giving up; see onAppShortcut's own comment.
-    if (onAppShortcut)
-        return onAppShortcut(key);
+    if (onAppShortcut && onAppShortcut(key))
+        return true;
+    // Last: Esc or Cmd+W returns the section. Everything inside the panel, and any app shortcut, has had its turn.
+    if (key == juce::KeyPress::escapeKey || key == juce::KeyPress('w', juce::ModifierKeys::commandModifier, 0)) {
+        closeButtonPressed();
+        return true;
+    }
     return false;
+}
+
+void DetachedPanelWindow::raiseAndFocusPanel() {
+    toFront(true);
+    const auto& regions = focusRegions_.getRegions();
+    if (!regions.empty())
+        focusRegions_.focusRegionById(regions.front().id);
 }
 
 void DetachedPanelWindow::registerHostedPanelFocusRegion(const juce::String& id, juce::Component& root) {

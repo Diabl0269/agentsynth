@@ -106,7 +106,7 @@ TEST_F(RingModulatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
 
     auto targets = module->getModulationTargets();
-    ASSERT_EQ(targets.size(), 3u);
+    ASSERT_EQ(targets.size(), 5u);
     EXPECT_EQ(targets[0].name, "Mix");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Drive");
@@ -140,14 +140,14 @@ TEST_F(RingModulatorModuleTest, DualIOSplitsTheOutputPairAndNothingElse) {
     // mono inputs, not a stereo pair, so splitting the output must not relabel or remap them.
     for (bool dual : {false, true}) {
         setBool(*module, "dualIO", dual);
-        EXPECT_EQ(module->getVisibleInputPortCount(), 5) << "dual=" << dual;
+        EXPECT_EQ(module->getVisibleInputPortCount(), 7) << "dual=" << dual;
         EXPECT_EQ(module->getInputPortLabel(0), "Carrier") << "dual=" << dual;
         EXPECT_EQ(module->getInputPortLabel(1), "Modulator") << "dual=" << dual;
         EXPECT_NE(module->mapInputChannel(1).role, PortRole::Audio)
             << "the Modulator input must never look like an audio right leg, or the Dual I/O toggle "
                "would wire a neighbour's Audio R into it";
         auto targets = module->getModulationTargets();
-        ASSERT_EQ(targets.size(), 3u) << "dual=" << dual;
+        ASSERT_EQ(targets.size(), 5u) << "dual=" << dual;
         EXPECT_EQ(targets[0].channelIndex, 2) << "CV raw channels must not move, dual=" << dual;
     }
 

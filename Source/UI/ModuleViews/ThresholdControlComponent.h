@@ -16,6 +16,11 @@
  *    eye. Used by ADSR and Comparator; Compressor / Limiter can adopt the Decibels
  *    scale later without a new widget.
  *
+ *  Keyboard and screen reader: the meter itself is read-only and not a Tab stop. In slider+meter mode
+ *  the attached slider is the Tab stop (Up/Down and Left/Right adjust it, Page Up/Down and Home/End jump,
+ *  and it speaks its own value); it is named after the parameter and carries a tooltip. The meter
+ *  carries a title, description and tooltip only.
+ *
  *  Repaint discipline: this owns its own timer and repaints *itself* only when a
  *  displayed value moves past a visible amount. It is deliberately a separate
  *  component rather than something ModuleComponent::paint draws, because
@@ -24,6 +29,7 @@
  */
 class ThresholdControlComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     explicit ThresholdControlComponent(ThresholdMeterSource& sourceToWatch)
@@ -39,13 +45,29 @@ public:
             slider->setSliderStyle(juce::Slider::LinearHorizontal);
             slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 16);
             slider->setName(thresholdParam->getName(100));
+            slider->setWantsKeyboardFocus(true);
+            slider->setTitle(thresholdParam->getName(100));
+            slider->setTooltip(thresholdParam->getName(100) +
+                               ": slide to set where the trigger fires; arrow keys adjust it");
             addAndMakeVisible(*slider);
             attachment = std::make_unique<juce::SliderParameterAttachment>(*thresholdParam, *slider);
         }
+        setTitle(slider != nullptr ? slider->getName() + " meter" : juce::String("Trigger meter"));
+        setDescription("Input level against the trigger threshold");
+        setTooltip("Input level against the trigger threshold; the marker is the effective threshold");
         startTimerHz(kRefreshHz);
     }
 
     ~ThresholdControlComponent() override { stopTimer(); }
+
+    /** True while the slider is bound to the module's threshold parameter. */
+    bool isBoundToParameter() const noexcept { return attachment != nullptr; }
+
+    /** Gives up the parameter binding without detaching it. Used when the processor is already gone:
+        ~ParameterAttachment would call removeListener on a freed parameter (an access violation on
+        Windows). The attachment is leaked on purpose, as CardBody::releaseBindings does; the
+        slider it points at is deleted with this component, so it never fires again. */
+    void releaseParameterBinding() noexcept { (void)attachment.release(); }
 
     int getPreferredHeight() const noexcept { return slider != nullptr ? kSliderModeHeight : kMeterOnlyHeight; }
 
@@ -129,24 +151,14 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        juce::Colour bg = juce::Colour(0xff14171C);
-        juce::Colour gridColour = juce::Colour(0xff2A2F38);
-        juce::Colour barColour = juce::Colours::grey;
-        juce::Colour armedColour = juce::Colours::orange;
-        juce::Colour markerColour = juce::Colours::white;
-        juce::Colour mutedColour = juce::Colour(0xff5C6470);
-        juce::Colour captionColour = juce::Colours::lightgrey;
-
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            const auto& c = lf->getTheme().colors;
-            bg = c.bg1;
-            gridColour = c.border.withAlpha(0.6f);
-            barColour = c.textMuted;
-            armedColour = c.gateWire;
-            markerColour = c.accent;
-            mutedColour = c.textDisabled;
-            captionColour = c.textMuted;
-        }
+        const auto& c = synth::theme::themeOf(*this).colors;
+        const auto bg = c.bg1;
+        const auto gridColour = c.border.withAlpha(0.6f);
+        const auto barColour = c.textMuted;
+        const auto armedColour = c.gateWire;
+        const auto markerColour = c.accent;
+        const auto mutedColour = c.textDisabled;
+        const auto captionColour = c.textMuted;
 
         auto bounds = getLocalBounds().toFloat();
         if (slider != nullptr) {

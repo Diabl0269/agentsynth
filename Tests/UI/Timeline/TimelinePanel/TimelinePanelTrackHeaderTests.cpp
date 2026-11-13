@@ -1,9 +1,9 @@
 // TimelinePanelTrackHeaderTests.cpp
 //
 // The track header column at panel level (ungated): follows the TimelineDoc with no timer,
-// whole-row drag-to-reorder, drop-indicator paint order, add-button/viewport layout, and
-// scrolling when tracks overflow. The app-level timeline wiring (TimelineAppWiringTest) that
-// shares this banner in the original file lives in TimelinePanelAppWiringTests.cpp.
+// whole-row drag-to-reorder (the animated gesture is in TimelinePanelTrackReorderTests.cpp), add-button/viewport
+// layout, and scrolling when tracks overflow. The app-level timeline wiring (TimelineAppWiringTest) that shares this
+// banner in the original file lives in TimelinePanelAppWiringTests.cpp.
 
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -101,55 +101,6 @@ TEST(TimelinePanelTrackHeaderTest, WholeRowDragReordersTracksAndSurvivesTheHeade
     // The rebuilt column is a live, working view of the new order — not just left-over headers.
     EXPECT_EQ(panel.getTrackHeaderAt(0)->getTrackId(), b);
     EXPECT_EQ(panel.getTrackHeaderAt(2)->getTrackId(), a);
-}
-
-// Pixel-level regression test for the drop indicator's paint ORDER. An earlier version drew
-// it in TrackHeaderList::paint() rather than paintOverChildren() — the header rows are children,
-// painted AFTER their parent, and each does an OPAQUE fill of its own bounds
-// (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so the line was painted
-// UNDER every interior row and invisible in practice. A themed LookAndFeel is installed
-// specifically so colours.surface is a real opaque fill rather than headless test's default
-// (fully transparent, alpha 0 — which would make the original bug invisible to this same test).
-TEST(TimelinePanelTrackHeaderTest, DropIndicatorPaintsOverTheRowsNotUnderThem) {
-    synth::TimelineDoc doc;
-    synth::ui::TimelinePanelComponent panel;
-    panel.setSize(1200, 400);
-    panel.setTimelineDoc(&doc);
-
-    synth::theme::AppLookAndFeel lf;
-    const auto theme = synth::theme::makeObsidian();
-    lf.applyTheme(theme);
-    panel.setLookAndFeel(&lf);
-
-    doc.addTrack(TrackKind::Midi, "A");
-    doc.addTrack(TrackKind::Midi, "B");
-    doc.addTrack(TrackKind::Midi, "C");
-    ASSERT_EQ(panel.getTrackHeaderCount(), 3);
-
-    auto* rowA = panel.getTrackHeaderAt(0);
-    ASSERT_NE(rowA, nullptr);
-    const int rowHeight = rowA->getHeight();
-
-    rowA->mouseDown(makeClickEvent(*rowA, {40.0f, 10.0f}));
-    // Same boundary math as WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture above:
-    // dragging to local Y == 2*rowHeight resolves to dragInsertionIndex_ == 2, the boundary between
-    // row 1 (B) and row 2 (C).
-    rowA->mouseDrag(makeDragEvent(*rowA, {40.0f, (float)(rowHeight * 2)}, {40.0f, 10.0f}));
-
-    auto& list = panel.getTrackHeaderListForTest();
-    const juce::Image snapshot = list.createComponentSnapshot(list.getLocalBounds());
-    ASSERT_FALSE(snapshot.isNull());
-
-    bool foundIndicator = false;
-    const int boundaryY = rowHeight * 2;
-    for (int x = 0; x < snapshot.getWidth() && !foundIndicator; ++x)
-        for (int y = boundaryY - 1; y <= boundaryY; ++y)
-            if (juce::isPositiveAndBelow(y, snapshot.getHeight()) && snapshot.getPixelAt(x, y) == theme.colors.accent)
-                foundIndicator = true;
-    EXPECT_TRUE(foundIndicator) << "the drop-indicator line must paint OVER the rows, not under them";
-
-    rowA->mouseUp(makeDragEvent(*rowA, {40.0f, (float)(rowHeight * 2)}, {40.0f, 10.0f}));
-    panel.setLookAndFeel(nullptr);
 }
 
 TEST(TimelinePanelTrackHeaderTest, AddButtonAndHeaderListStayInsideTheHeaderColumn) {

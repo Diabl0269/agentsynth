@@ -49,6 +49,10 @@ constexpr const char* kWebsiteUrl = "https://agentsynth.app";
 // URL so the payment providers behind it can change without touching the binary.
 constexpr const char* kContributeUrl = "https://agentsynth.app/contribute";
 
+// The hosted list of downloadable sound packs (index.json); each entry carries its zip url and checksum.
+constexpr const char* kSoundPackIndexUrl =
+    "https://raw.githubusercontent.com/Diabl0269/agentsynth-sound-packs/main/index.json";
+
 // Support contact address, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kSupportEmail = "support@agentsynth.app";
 
@@ -57,6 +61,18 @@ constexpr const char* kSupportEmail = "support@agentsynth.app";
 // Deliberately static rather than a dynamically-created checkout session — see the backend repo's
 // billing doc, "what this deliberately does not do", for why the app doesn't create checkout sessions.
 constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVtpl236TvS52omgYaZM26HGe1U0rbD75";
+
+// Polar customer portal, opened by the Account tab's "Manage subscription" (change payment details,
+// see invoices, cancel).
+constexpr const char* kBillingPortalUrl = "https://polar.sh/agentsynth/portal";
+
+// The community and social links on the welcome screen. kDiscordUrl is a stable redirect on the site, deliberately
+// not a discord.gg invite: invites change and a shipped binary cannot.
+constexpr const char* kDiscordUrl = "https://agentsynth.app/discord";
+constexpr const char* kYouTubeUrl = "https://www.youtube.com/@DiabolusLark";
+constexpr const char* kGitHubUrl = "https://github.com/Diabl0269/agentsynth";
+constexpr const char* kTikTokUrl = "https://www.tiktok.com/@agentsynth";
+constexpr const char* kInstagramUrl = "https://www.instagram.com/talefronny";
 
 // Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
 // apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for

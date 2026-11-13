@@ -45,12 +45,19 @@ inline bool isPendingRequestUnconsumed(const TransportNudgeState& state, const T
            (std::uint32_t)(nowMs - state.requestedAtMs) <= kNudgeAccumulateWindowMs;
 }
 
+/** Where the cursor effectively is: the last request while the audio thread has not applied it
+ *  yet, else the snapshot's own position. Records nothing. */
+inline double effectiveCursorBeat(const TransportNudgeState& state, const TransportService::PositionSnapshot& snap,
+                                  std::uint32_t nowMs) noexcept {
+    return isPendingRequestUnconsumed(state, snap, nowMs) ? state.target : snap.ppq;
+}
+
 /** The beat a nudge of `deltaBeats` should locate to, clamped at 0. Builds on the previous
  *  request while the snapshot is still the one it was based on (the audio thread has not applied
  *  it yet), else on the snapshot's own position. Records the new request in `state`. */
 inline double computeNudgeTarget(TransportNudgeState& state, const TransportService::PositionSnapshot& snap,
                                  double deltaBeats, std::uint32_t nowMs) noexcept {
-    const double from = isPendingRequestUnconsumed(state, snap, nowMs) ? state.target : snap.ppq;
+    const double from = effectiveCursorBeat(state, snap, nowMs);
     const double target = std::max(0.0, from + deltaBeats);
     state = {true, snap.ppq, snap.samplePosition, target, nowMs};
     return target;

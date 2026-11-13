@@ -6,6 +6,7 @@
 // flags only change WHEN the click fires, never which button triggered it.
 
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -27,7 +28,8 @@ public:
         , page_(page) {
         setComponentID("pageButton" + juce::String(page));
         setTitle("Page " + juce::String(page)); // accessible name (Source/UI/CLAUDE.md's accessibility rule)
-        setClickingTogglesState(false);         // the strip drives the "on" state itself -- see setActive()
+        setTooltip("Show mapping page " + juce::String(page) + " (right-click to delete it)");
+        setClickingTogglesState(false); // the strip drives the "on" state itself -- see setActive()
     }
 
     int getPage() const noexcept { return page_; }
@@ -36,8 +38,7 @@ public:
     // hard-coded colour that would ignore a user's theme override.
     void setActive(bool active) {
         setToggleState(active, juce::dontSendNotification);
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+        const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
         setColour(juce::TextButton::buttonOnColourId, accent);
     }
 
@@ -116,7 +117,7 @@ void ControllerSurfacePageStrip::showDeletePageMenu(int page) {
     if (auto& hook = test_hooks::pageStripContextMenuHookForTest())
         hook(menu);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options());
+        menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 juce::Button* ControllerSurfacePageStrip::getPageButtonForTest(int page) const {

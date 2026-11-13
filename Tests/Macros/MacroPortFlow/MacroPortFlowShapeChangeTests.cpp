@@ -158,7 +158,7 @@ public:
     TestGenuinelyMonoModule()
         : ModuleBase("TestGenuinelyMono", 1, 1) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 } // namespace

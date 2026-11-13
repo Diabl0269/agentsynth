@@ -7,6 +7,7 @@
 // bar. Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
@@ -15,6 +16,7 @@
 #include "UI/Graph/PickTargetOverlay/GraphPickCandidates.h"
 #include "UI/Graph/PickTargetOverlay/PickTargetOverlay.h"
 #include "UI/Timeline/TimelineTransportBar.h"
+#include <algorithm>
 
 using synth::midi::PickTarget;
 using synth::ui::PickTargetOverlay;
@@ -38,7 +40,7 @@ protected:
         host_.setSize(1200, 1300);
         host_.setVisible(true);
         host_.addAndMakeVisible(*graphEditor_);
-        graphEditor_->setBounds(0, 0, 1200, 1100); // tall enough for the Filter card's default spot
+        graphEditor_->setBounds(0, 0, 1200, 1145); // tall enough for the Filter card's default spot
         graphEditor_->updateComponents();
         host_.addAndMakeVisible(bar_);
         bar_.setBounds(0, 1150, 1200, 100);
@@ -96,6 +98,17 @@ TEST_F(MidiRemotePickTargetTest, OutlinesAppearOnRegisteredControlsOnlyAcrossCan
     synth::ui::collectGraphPickCandidates(*graphEditor_, expected);
     bar_.collectPickCandidates(expected);
     ASSERT_GT(expected.size(), 4u) << "the Filter card's controls plus the four transport buttons";
+    // A control its card hides in the current mode (the Filter's Custom knobs) is registered but gets no
+    // outline: the overlay outlines only what is on screen.
+    expected.erase(std::remove_if(expected.begin(), expected.end(),
+                                  [](const synth::ui::PickCandidate& c) {
+                                      for (auto* p = c.component.getComponent(); p != nullptr;
+                                           p = p->getParentComponent())
+                                          if (!p->isVisible())
+                                              return true;
+                                      return false;
+                                  }),
+                   expected.end());
     EXPECT_EQ(overlay().getOutlineCountForTest(), static_cast<int>(expected.size()));
 
     bool sawCutoff = false;
@@ -302,7 +315,7 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
 
         // The dock's tab buttons let clicks through, and a tab switch keeps the session and re-collects.
         ASSERT_TRUE(controller.beginPickTarget("p1", "knob"));
-        EXPECT_EQ(mc.getBottomDock().getTabButtons().size(), 3u);
+        EXPECT_EQ(mc.getBottomDock().getTabButtons().size(), 4u) << "every view's tab, the hidden Canvas one included";
         ASSERT_TRUE(static_cast<bool>(mc.getBottomDock().onActiveTabChanged));
         // Calling the real tab-change hook must leave the session up (it re-collects, never ends).
         mc.getBottomDock().onActiveTabChanged();
@@ -310,4 +323,40 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
         controller.cancelPickTarget();
     }
     root.deleteRecursively();
+}
+
+TEST_F(MidiRemotePickTargetTest, TheOverlayFadesInAndOutAndAnswersNoClickWhileItLeaves) {
+    FadeAnimateGuard guard;
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+    EXPECT_TRUE(overlay().isVisible());
+    EXPECT_NEAR(overlay().getAlpha(), 0.0f, 1e-4f) << "frame 0 is already the first fade frame";
+    EXPECT_TRUE(overlay().isFadingForTest());
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(overlay().getAlpha(), 0.5f, 0.01f); // alpha is stored in 8 bits
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_NEAR(overlay().getAlpha(), 1.0f, 1e-4f);
+    const int outlines = overlay().getOutlineCountForTest();
+    ASSERT_GT(outlines, 0);
+
+    ASSERT_TRUE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(controller_->isPickingTarget());
+    EXPECT_TRUE(overlay().isVisible()) << "still on screen while it fades out";
+    EXPECT_EQ(overlay().getOutlineCountForTest(), outlines) << "the outlines stay painted until it has gone";
+    EXPECT_FALSE(overlay().hitTest(10, 10)) << "it no longer answers a click";
+    EXPECT_FALSE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    synth::ui::FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_NEAR(overlay().getAlpha(), 0.5f, 0.01f); // alpha is stored in 8 bits
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(overlay().isVisible());
+    EXPECT_EQ(overlay().getOutlineCountForTest(), 0);
+}
+
+TEST_F(MidiRemotePickTargetTest, TheOverlayAppearsAndGoesAtOnceWhenTheWindowIsNotOnScreen) {
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+    EXPECT_TRUE(overlay().isVisible());
+    EXPECT_NEAR(overlay().getAlpha(), 1.0f, 1e-4f);
+    EXPECT_FALSE(overlay().isFadingForTest());
+    ASSERT_TRUE(overlay().keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(overlay().isVisible());
+    EXPECT_EQ(overlay().getOutlineCountForTest(), 0);
 }

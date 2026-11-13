@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
@@ -54,8 +55,8 @@ void PianoRollComponent::clampToClipWindow(double& start, double& length) const 
     length = juce::jlimit(0.0, clipLength - start, length);
 }
 
-bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut,
-                                              double& lengthOut, int& pitchOut) const {
+bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, double& startOut, double& lengthOut,
+                                              int& pitchOut) const {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr)
         return false;
@@ -65,11 +66,11 @@ bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorTo
     const double grid = currentGridBeats();
     const double length = grid > 0.0 ? grid : kMinNoteLengthBeats;
     const double rawStart = xToBeat((double)pos.x) - clip->startBeat;
-    // Nearest division for the double-click (aiming at a line), the containing CELL for the Draw
-    // tool's pencil — see the declaration for why the two differ.
+    // The note starts at the left line of the grid CELL that was clicked (floor), for the
+    // double-click and the Draw pencil alike; Snap Off starts exactly where the pointer is.
     double start = rawStart;
     if (grid > 0.0)
-        start = floorToGrid ? std::floor(rawStart / grid) * grid : snappedBeatAt(rawStart);
+        start = std::floor(rawStart / grid) * grid;
     // Snapping up past the clip's end would leave no room at all — step back one division instead
     // of silently creating nothing.
     if (grid > 0.0 && start >= clip->lengthBeats)
@@ -83,6 +84,11 @@ bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorTo
     startOut = start;
     lengthOut = clampedLength;
     pitchOut = juce::jlimit(0, 127, pitchForY(pos.y));
+    // A new note lands on the clip's key (own or followed); ties go down. Only new notes: moves, pastes and the notes
+    // already written never snap. Holding Cmd places it off the key, as Cmd frees a drag from the grid.
+    if (const auto key = activeScaleForOpenClip();
+        key.has_value() && !juce::ModifierKeys::currentModifiers.isCommandDown())
+        pitchOut = juce::jlimit(0, 127, key->snapPitch(pitchOut));
     return true;
 }
 
@@ -113,7 +119,7 @@ void PianoRollComponent::commitNewNote(double startBeat, double lengthBeats, int
 void PianoRollComponent::createNoteAt(juce::Point<int> pos) {
     double start = 0.0, length = 0.0;
     int pitch = 60;
-    if (!computeNewNoteAnchor(pos, false, start, length, pitch))
+    if (!computeNewNoteAnchor(pos, start, length, pitch))
         return;
     commitNewNote(start, length, pitch);
 }
@@ -175,7 +181,7 @@ void PianoRollComponent::beginMarquee(juce::Point<int> anchor, bool additive) {
     marqueeAdditive_ = additive;
     marqueeAnchor_ = anchor;
     marqueeRect_ = juce::Rectangle<int>(anchor, anchor);
-    marqueeBaseSelection_ = additive ? selection_.getSelected() : std::vector<synth::NoteId>{};
+    marqueeBaseSelection_ = selection_.getSelected(); // what an additive marquee adds to and a cancel puts back
     if (!additive)
         selection_.clear();
     repaint();
@@ -224,6 +230,7 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    copyDrag_ = false;
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;
     previewDeltaBeats_ = 0.0;
@@ -267,7 +274,7 @@ void PianoRollComponent::handleToolMouseDown(juce::Point<int> pos) {
             return; // the pencil never redraws over a note that is already there
         double start = 0.0, length = 0.0;
         int pitch = 60;
-        if (!computeNewNoteAnchor(pos, true, start, length, pitch))
+        if (!computeNewNoteAnchor(pos, start, length, pitch))
             return;
         // Armed, not committed: the note exists only as a preview until mouseUp, so a drag can
         // still change its length and an abandoned gesture costs no undo step.
@@ -327,6 +334,12 @@ void PianoRollComponent::performSplit(synth::NoteId id, juce::Point<int> pos) {
         right.velocity = original.velocity;
         right.channel = original.channel;
         right.muted = original.muted;
+        right.chance = original.chance;
+        right.repeat = original.repeat;
+        right.flam = original.flam;
+        right.nudge = original.nudge;
+        right.condHit = original.condHit;
+        right.condOf = original.condOf;
         doc_->addNote(clipId_, right);
     };
     if (undoManager_)
@@ -504,6 +517,12 @@ juce::MouseCursor PianoRollComponent::cursorForActiveTool() {
 void PianoRollComponent::applyToolCursor() {
     showingResizeCursor_ = false;
     setMouseCursor(cursorForActiveTool());
+    // A child does not inherit the roll's cursor, and the strip acts as a pen under the Draw tool;
+    // under every other tool it keeps the plain arrow. (The constructor needs nothing: the default
+    // tool is Select, and a fresh lane already shows the arrow.)
+    if (velocityLane_ != nullptr)
+        velocityLane_->setMouseCursor(
+            activeTool_ == EditTool::Draw ? cursorForActiveTool() : juce::MouseCursor(juce::MouseCursor::NormalCursor));
 }
 
 void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {
@@ -539,6 +558,13 @@ void PianoRollComponent::setRulerBandHeight(int heightPx) {
 }
 
 int PianoRollComponent::canvasTop() const noexcept { return kToolbarHeight + rulerBandHeight_; }
+
+// canvasTop()'s twin for the other edge: every "how tall is the grid" read goes through this rather
+// than getHeight(), because the velocity strip (when shown) owns the bottom band of the component.
+// Never above canvasTop(), so a tiny component yields an empty grid rather than a negative one.
+int PianoRollComponent::canvasBottom() const noexcept {
+    return std::max(canvasTop(), getHeight() - velocityLaneHeightPx());
+}
 int PianoRollComponent::getRulerBandHeight() const noexcept { return rulerBandHeight_; }
 
 //==============================================================================

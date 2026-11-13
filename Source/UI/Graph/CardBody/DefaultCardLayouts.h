@@ -1,0 +1,54 @@
+#pragma once
+
+#include "Modules/CardLayout.h"
+#include <functional>
+#include <map>
+#include <vector>
+
+namespace synth {
+
+/**
+ * A dim rule a stored layout cannot express (a numeric test, such as Detune while Unison is 1):
+ * `paramId`'s control greys out (or, with `hides`, goes) while `dims` returns true, on any layout of the type.
+ */
+struct CardDimRule {
+    juce::String paramId;
+    juce::StringArray watched; ///< The parameter ids whose change re-evaluates `dims`.
+    std::function<bool(juce::AudioProcessor& module)> dims;
+    bool hides = false; ///< The control leaves the card (its cell stays) while `dims` returns true, instead of greying.
+    bool collapses = false; ///< With `hides`: its cell goes too, so the controls after it close up (the Macros).
+    juce::String
+        disabledHint; ///< Not empty: while `dims` returns true the control is also disabled, and this is its tooltip.
+};
+
+/**
+ * The hand-designed layout per module type, keyed by factory type name. `defaultRevision` is bumped
+ * whenever an entry changes, so a user layout's `basedOn` can tell it is stale.
+ * docs/layout/module-card-layout.md#default-layouts.
+ */
+class DefaultCardLayouts {
+public:
+    struct Entry {
+        CardLayout layout;
+        int defaultRevision = 1;
+        std::vector<CardDimRule> dimRules; ///< Applied to any layout of this type.
+        /** Built-in presets: named layouts the Edit Layout Preset menu offers before the user's own. */
+        std::vector<std::pair<juce::String, CardLayout>> presets;
+    };
+
+    /** Replaces any entry for `moduleType`. */
+    void add(const juce::String& moduleType, CardLayout layout, int defaultRevision,
+             std::vector<CardDimRule> dimRules = {});
+    /** Adds a built-in preset to `moduleType`'s entry (the entry must exist). */
+    void addPreset(const juce::String& moduleType, const juce::String& name, CardLayout layout);
+    /** Null when the type has no code default (the automatic layout applies). */
+    const Entry* find(const juce::String& moduleType) const;
+
+    /** The registry the app uses: every module family's registration function, called once. */
+    static const DefaultCardLayouts& builtIn();
+
+private:
+    std::map<juce::String, Entry> entries_;
+};
+
+} // namespace synth

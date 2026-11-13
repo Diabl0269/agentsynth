@@ -1,0 +1,31 @@
+#pragma once
+
+// Reads and checks the fields of a timelineOps `addInstrumentTrack` op other than "op" and "name"
+// (those, the duplicate-name rule and the track cap stay in TimelineOps.cpp beside the other ops).
+// Split out of TimelineOps.cpp by concern: this part needs the module factory and the patch
+// validator's per-node parameter check, which no other op does.
+
+#include "Timeline/TimelineOps.h"
+#include <juce_core/juce_core.h>
+#include <vector>
+
+namespace synth {
+
+/** The checked fields of one `addInstrumentTrack` op. */
+struct InstrumentTrackOpFields {
+    juce::String instrument; // one of TimelineOps::kAuthorableInstrumentTypes
+    bool poly = false;
+    std::vector<InstrumentTrackInsert> inserts; // at most TimelineOps::kMaxInstrumentInserts
+    juce::var envelopeParams;                   // the envelope's params object, or void for the module defaults
+    juce::var instrumentParams;                 // the instrument's own params object, or void for its defaults
+    juce::String sound;                         // a core pack sound id whose stand-in is `instrument`, or empty
+};
+
+/** Reads `op`'s instrument/poly/instrumentId/instrumentParams/inserts/envelope. Empty on success, else the failure
+ * text. */
+juce::String readInstrumentTrackOpFields(juce::DynamicObject& op, InstrumentTrackOpFields& out);
+
+/** The preview's parenthetical, e.g. "Oscillator with envelope and channel strip, inserts: Filter". */
+juce::String describeInstrumentTrack(const InstrumentTrackOpFields& fields);
+
+} // namespace synth

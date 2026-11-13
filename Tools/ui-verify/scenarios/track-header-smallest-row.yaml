@@ -1,0 +1,28 @@
+# Bug kind layout-overlap: a track header's controls ran out of its row when the row was dragged to its smallest height.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track (voice toggle, channel chip and
+#      show-on-canvas button in the bottom row).
+#   2. Drags the track's bottom strip up as far as it goes.
+#   3. At the smallest row the voice toggle, channel chip and show button stay inside the header (they shrink to
+#      the 9 px the bottom row has left) instead of running out of it.
+record: true
+save_project: track-header-smallest-row
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}}
+  - screenshot: {name: row-default}
+  - drag: {from: trackHeightHandle, fromX: 100, fromY: 2, to: trackHeightHandle, toX: 100, toY: -60}
+  - wait: {}
+  - screenshot: {name: row-smallest}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 759, w: 20, h: 9}}
+  - expect: {id: trackChannelChip, bounds: {x: 94, y: 759, w: 80, h: 9}}
+  - expect: {id: trackShowModuleButton, bounds: {x: 177, y: 759, w: 20, h: 9}}
+  - expect: {id: trackHeightHandle, bounds: {x: 0, y: 767, w: 200, h: 5}}   # the strip is a deliberate overlay on the row's last 5 px

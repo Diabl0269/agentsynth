@@ -22,9 +22,12 @@ struct EqResponseCurve {
      *  Snapshots `eq`'s band settings and output gain once, then samples responseDb() at each
      *  point -- the identical two-call sequence EQCurveComponent::recomputeMagnitudes() makes. */
     static std::vector<float> compute(const ParametricEQModule& eq) {
-        const auto bands = eq.getBandSnapshots();
-        const float outputGainDb = eq.getOutputGainDb();
+        return compute(eq.getBandSnapshots(), eq.getOutputGainDb());
+    }
 
+    /** The same samples from given band settings: the thumbnail's drawn bands while an undo or redo glides
+     *  (EqBandGlide.h). */
+    static std::vector<float> compute(const ParametricEQModule::BandSnapshots& bands, float outputGainDb) {
         std::vector<float> magnitudes(kNumPoints, 0.0f);
         for (int i = 0; i < kNumPoints; ++i) {
             const float freq = FrequencyGrid::indexToFreq(i, kNumPoints);

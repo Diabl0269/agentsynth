@@ -49,6 +49,12 @@ std::vector<PianoRollComponent::ClipboardNote> PianoRollComponent::captureSelect
         entry.velocity = note.velocity;
         entry.channel = note.channel;
         entry.muted = note.muted;
+        entry.chance = note.chance;
+        entry.repeat = note.repeat;
+        entry.flam = note.flam;
+        entry.nudge = note.nudge;
+        entry.condHit = note.condHit;
+        entry.condOf = note.condOf;
         entries.push_back(entry);
     }
 
@@ -93,6 +99,12 @@ bool PianoRollComponent::buildPastedNotes(const std::vector<ClipboardNote>& entr
         note.velocity = entry.velocity;
         note.channel = entry.channel;
         note.muted = entry.muted;
+        note.chance = entry.chance;
+        note.repeat = entry.repeat;
+        note.flam = entry.flam;
+        note.nudge = entry.nudge;
+        note.condHit = entry.condHit;
+        note.condOf = entry.condOf;
         out.push_back(note);
         placedAny = true;
     }
@@ -209,6 +221,33 @@ bool PianoRollComponent::repeatSelectedNotes(int count) {
 
 //==============================================================================
 // ---- Arrow-key editing ----
+
+// P = loop the selected notes. Hands the owner [min note start, max note end] over the selection in
+// ABSOLUTE beats (notes are clip-relative; the open clip's start rebases them). Nothing selected, or
+// no owner listening, returns false so the key falls through to the panel's whole-clip loop.
+bool PianoRollComponent::loopSelectedNotes() {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || !onLoopRangeRequested)
+        return false;
+
+    double minStart = 0.0, maxEnd = 0.0;
+    bool any = false;
+    for (auto id : selection_.getSelected()) {
+        const auto* note = doc_->getNote(id);
+        if (note == nullptr)
+            continue;
+        const double end = note->startBeat + note->lengthBeats;
+        if (!any || note->startBeat < minStart)
+            minStart = note->startBeat;
+        if (!any || end > maxEnd)
+            maxEnd = end;
+        any = true;
+    }
+    if (!any)
+        return false;
+    onLoopRangeRequested(clip->startBeat + minStart, clip->startBeat + maxEnd);
+    return true;
+}
 
 bool PianoRollComponent::nudgeSelectedNotes(int direction) {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
@@ -358,10 +397,9 @@ bool PianoRollComponent::selectAdjacentNote(bool forward) {
         if (!forward)
             break;
     }
-    if (anchor < 0)
-        return false; // nothing selected in this clip: the key falls through to the panel
-
-    const int target = anchor + (forward ? 1 : -1);
+    // Nothing selected yet: forward starts at the first note and back at the last, so a keyboard-only
+    // user can reach a note at all without the pointer.
+    const int target = anchor < 0 ? (forward ? 0 : count - 1) : anchor + (forward ? 1 : -1);
     if (target < 0 || target >= count)
         return true; // at the end of the run: selection kept, key still consumed
 

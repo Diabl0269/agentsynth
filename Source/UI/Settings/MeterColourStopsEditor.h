@@ -35,6 +35,9 @@
 //    remaining stop.
 //  - Up/Down while a handle is selected: nudge kNudgeDb (Shift = kShiftNudgeDb), same clamp rules
 //    as a drag. A no-op (but still consumed) on the floor.
+//  - Keyboard, whole editor: Tab focuses it (selecting the floor), Left/Right select the previous/
+//    next handle, Return or Space opens the colour picker for the selected handle, "+" adds a stop
+//    halfway up to the next one. The accent focus ring shows while it holds focus.
 //
 // Accessibility: a single juce::AccessibilityHandler (juce::AccessibilityRole::slider, mirroring
 // MixerMeter's own MeterValueInterface idiom) describing the CURRENTLY SELECTED handle's dB and
@@ -90,6 +93,8 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     bool keyPressed(const juce::KeyPress&) override;
+    void focusGained(FocusChangeType) override;
+    void focusLost(FocusChangeType) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     // ---- Testing hooks: the real mouse path (docs/development/test-patterns.md) ----

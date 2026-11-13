@@ -1,0 +1,35 @@
+# Copying three tracks and pasting them on a big project (20 tracks, 20 open macros, about 250 modules): the copies
+# grow in at once with no pause first, Cmd+Z shrinks them away and Cmd+Shift+Z grows them back.
+#
+# Needs a big local project at ~/Music/AgentSynth/Load test.agsproj (not in the repo; copied to the scratch folder),
+# so it is a by-hand proof, not a CI check. The counters behind it are in EditRefreshWorkTests.
+#
+# What a user does:
+#   1. Clicks the first track's name, extends the selection to the next two with Shift+Down and presses Cmd+C.
+#   2. Presses Cmd+V: three copies appear below the focused row, each coming out of its original.
+#   3. Presses Cmd+Z: they shrink away; Cmd+Shift+Z: they grow back.
+settings:
+  timelinePanelHeight: 420                                   # a taller bottom panel: more of the list shows
+motion: true
+record: true
+save_project: large-project-track-paste
+steps:
+  - copyFixture: {name: load-test.agsproj, from: "~/Music/AgentSynth/Load test.agsproj"}
+  - openProject: {path: "${SCRATCH}/load-test.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j, instant: "the bottom panel opens"}
+  - wait: {}
+  - click: {id: trackNameLabel, instant: "the first row is selected and focused"}
+  - key: {keys: shift+down, instant: "the selection wash extends one row"}
+  - key: {keys: shift+down, instant: "the selection wash extends to the third row"}
+  - key: {keys: cmd+c, instant: "nothing moves: the tracks are remembered"}
+  - wait: {}
+  - glide: {name: paste, frames: 16, do: {key: {keys: cmd+v}}}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 1, name: tracks-pasted}
+  - glide: {name: undo-paste, frames: 14, do: {key: {keys: cmd+z}}}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 2, name: tracks-back-to-before}
+  - glide: {name: redo-paste, frames: 16, do: {key: {keys: cmd+shift+z}}}
+  - wait: {timeoutMs: 5000, settleMs: 500}
+  - mark: {check: 3, name: tracks-pasted-again}

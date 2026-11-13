@@ -3,19 +3,16 @@
 # `bash scripts/check-function-sizes.sh --update` so the entry tightens; once under the cap
 # the entry must be removed (--update does that).
 # Never add a NEW function here -- extract a named step / collaborator instead.
-284 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
-409 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
-239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
-260 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
+245 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
+288 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
+231 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
+209 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
-246 Source/Modules/OscillatorModule.h::processPolyMode
-380 Source/PresetManager.cpp::PresetManager::getPresetJSON
-329 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
-217 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
+379 Source/PresetManager.cpp::PresetManager::getPresetJSON
+211 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
+216 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
-550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
-291 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
-222 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
+549 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
+243 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
 286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
-255 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
 222 Tools/AIPatchHarness/Main.cpp::main

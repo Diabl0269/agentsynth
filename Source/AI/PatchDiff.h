@@ -76,7 +76,7 @@ struct PatchChange {
  * untrusted — so computeDiff() over a replace-mode before/after pair reports the entire prior
  * graph removed and the entire new patch added, even where a node is conceptually unchanged. That
  * is technically correct (every processor really is destroyed and recreated) but not useful to a
- * user reviewing a brand-new patch, which is why the chat UI never feeds a replace-mode PatchCard
+ * user reviewing a brand-new patch, which is why the chat UI never feeds a replace-mode patch's card
  * through computeDiff() for display — see summarizePatch() below, which it uses instead to
  * describe what the new patch contains rather than what changed relative to the old graph.
  * computeDiff() itself stays mode-agnostic and correct for any snapshot pair; this is a note about
@@ -96,7 +96,7 @@ std::vector<PatchChange> computeDiff(const juce::var& before, const juce::var& a
  * snapshot node order) plus a connection count — for rendering a plain "what's in this patch"
  * description.
  *
- * This is what the chat UI's PatchCard shows for a replace-mode (clearExisting=true) patch,
+ * This is what the chat UI's edit-plan card shows for a replace-mode (clearExisting=true) patch,
  * instead of computeDiff()'s output — see computeDiff()'s doc comment above for why a replace-mode
  * diff is technically correct but not useful. summarizePatch() reads only `after`.
  *

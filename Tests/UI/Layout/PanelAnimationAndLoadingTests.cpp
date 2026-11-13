@@ -9,6 +9,7 @@
 // Does NOT register in CMakeLists.txt — add it manually when ready.
 // Mirrors the pattern in MainComponentTests.cpp and AIChatComponentTests.cpp.
 
+#include "../../TestWait.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelBoundsInMainComponent
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -246,17 +247,37 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
     mc.simulateToggleBottomPanelClick();
-    // 220 total carve minus BottomDockComponent's 22px tab strip -- see
+    // 220 total carve minus BottomDockComponent's tab strip -- see
     // timelinePanelBoundsInMainComponent's own comment.
-    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
+    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220 - synth::ui::BottomDockComponent::kTabStripHeight);
 
     mc.setPanelOpenProgressForTest(SlidingPanel::Timeline, 0.5f);
     // MainComponent-relative bounds (the panel is nested inside the dock's tab strip now).
     const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(panelBounds.getHeight(), 88); // (220 * 0.5) - 22
+    EXPECT_EQ(panelBounds.getHeight(), 110 - synth::ui::BottomDockComponent::kTabStripHeight); // (220 * 0.5) - strip
     EXPECT_EQ(panelBounds.getWidth(), 1600) << "full width at every point of the slide";
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY()) << "bottom edge pinned";
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(),
+              panelBounds.getY() - synth::ui::BottomDockComponent::kTabStripHeight);
+}
+
+// Regression test for FRO816: a Mod Matrix that had finished sliding open kept its old size when the bottom pane
+// closed under it, because the canvas still thought the slide was running.
+TEST_F(PanelSlideLayoutTest, TheModMatrixFollowsTheCanvasWhenTheBottomPaneCloses) {
+    MainComponent mc(std::make_unique<MockProviderPAL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleBottomPanelClick();
+    auto& canvas = mc.getGraphEditor();
+    canvas.toggleModMatrixVisibility();
+    canvas.completeModMatrixSlideForTest();
+    ASSERT_EQ(canvas.getModMatrix().getHeight(), canvas.getHeight());
+
+    mc.setPanelOpenProgressForTest(SlidingPanel::Timeline, 0.0f);
+
+    EXPECT_GT(canvas.getHeight(), 700) << "the canvas took the pane's room";
+    EXPECT_EQ(canvas.getModMatrix().getBounds(),
+              juce::Rectangle<int>(canvas.getWidth() - 600, 0, 600, canvas.getHeight()))
+        << "the matrix is as tall as the canvas it covers";
 }
 
 // The jump this whole design removes: the tween starts from the fraction's CURRENT value, so
@@ -270,7 +291,7 @@ TEST_F(PanelSlideLayoutTest, TogglingMidSlideReversesFromTheCurrentFraction) {
     // Stand in for the VBlank frame that would have left the slide here, had one run.
     mc.setPanelOpenProgressForTest(SlidingPanel::AiChat, 0.4f);
     mc.simulateToggleAiPanelClick(); // request CLOSE now
-    EXPECT_FLOAT_EQ(mc.getPanelSlideStartForTest(SlidingPanel::AiChat), 0.4f)
+    EXPECT_FLOAT_EQ(mc.panelSlideForTest(SlidingPanel::AiChat).getTweenStart(), 0.4f)
         << "the reversal's start point is the CURRENT width, never an extreme";
     EXPECT_FLOAT_EQ(mc.getPanelOpenProgressForTest(SlidingPanel::AiChat), 0.0f) << "still headless: lands at once";
 }
@@ -580,7 +601,7 @@ TEST_F(AICancelTest, CancelAfterResponseDoesNotCancelAnything) {
 
     // The response handler posts through the message queue, so let it run.
     rawProvider->completePending("All done.");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !chat.isWaiting(); });
 
     ASSERT_FALSE(chat.isWaiting()) << "the component never left the waiting state";
     EXPECT_TRUE(rawProvider->cancelledIds.empty()) << "a completed request was cancelled after the fact";

@@ -8,8 +8,9 @@
 //      scrub, curve-toggle hook, double-click-adds-point, the publish-discipline pin (no mutation
 //      during mouseDrag, exactly one revision bump on commit) and a paint smoke test. The
 //      component compiles and runs unconditionally, same as TimelineClipLaneArea/PianoRollComponent.
-//   2. synth::ui::TimelinePanelComponent's automation strip — opens/closes with a lane selection,
-//      shrinks the clip-lane area, and the record-mode selector's headless hook.
+//   2. synth::ui::TimelinePanelComponent's lane rows — showAutomationLane opens the track, the
+//      record-mode combo, and each track's fold arrow. The deeper lane-row coverage lives in
+//      Tests/UI/Timeline/AutomationLanes/.
 //   3. MainComponent integration — right-click-any-knob's headless hook
 //      (MainComponent::automateParameter).
 
@@ -17,10 +18,16 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AutomationLanes/AutomationLanesMenuFixture.h"
 #include "MainComponent/MainComponent.h"
+#include "Timeline/AutomationKernel.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include "UserSettings.h"
 #include <cmath>
@@ -35,6 +42,10 @@ using synth::ui::AutomationLaneEditor;
 using synth::ui::TimelineViewState;
 
 namespace {
+
+// The mouse is whole pixels, and a lane maps its range onto about half a hundred of them: a value read back after a
+// drag is within a pixel of the one aimed at.
+constexpr double kPixelValueSlack = 4.5;
 
 juce::MouseEvent makeMouseEvent(juce::Component& comp, juce::Point<float> position, juce::ModifierKeys mods,
                                 bool mouseWasDragged, juce::Point<float> mouseDownPos) {
@@ -109,7 +120,7 @@ TEST(AutomationLaneEditorTest, PointerMoveHandleOneStep) {
     ASSERT_NE(lane, nullptr);
     ASSERT_EQ(lane->points.size(), 1u);
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 3.0) << "2.0 + 1.3 beats, Beat snap -> exactly 3.0";
-    EXPECT_NEAR(lane->points[0].value, 70.0, 1e-6);
+    EXPECT_NEAR(lane->points[0].value, 70.0, kPixelValueSlack);
 
     ASSERT_TRUE(f.undo.canUndo());
     f.undo.undo();
@@ -129,7 +140,7 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     // Beat 2.0 sits mid-segment (halfway between the two points, x = 80 px), well away from both
     // handles' hit radii.
     const auto anchor = juce::Point<float>((float)f.state.beatToX(2.0), 100.0f);
-    const auto dragged = juce::Point<float>(anchor.x, anchor.y - 20.0f); // up 20 px -> +0.20 tension
+    const auto dragged = juce::Point<float>(anchor.x, anchor.y - 20.0f); // up 20 px: the curve bulges up
 
     f.editor.mouseDown(leftClick(f.editor, anchor));
     ASSERT_TRUE(f.editor.isDragActiveForTest());
@@ -141,19 +152,28 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     const auto* lane = f.doc.getLane(f.laneId);
     ASSERT_NE(lane, nullptr);
     ASSERT_EQ(lane->points.size(), 2u);
-    EXPECT_NEAR(lane->points[0].tension, 0.2f, 1e-3f);
+    EXPECT_LT(lane->points[0].tension, 0.0f) << "a rising segment that bulges up has a negative tension";
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 0.0) << "the LEFT point's beat/value must be untouched";
     EXPECT_NEAR(lane->points[0].value, 20.0, 1e-6);
 
-    // Clamp: a huge upward drag pins at +1.0, still one step.
-    const auto hugeDrag = juce::Point<float>(anchor.x, anchor.y - 500.0f);
-    f.editor.mouseDown(leftClick(f.editor, anchor));
-    f.editor.mouseDrag(leftDrag(f.editor, hugeDrag, anchor));
-    f.editor.mouseUp(leftDrag(f.editor, hugeDrag, anchor));
-    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 1.0f, 1e-6f);
+    // Clamp: a huge upward drag pins at -1.0, still one step. The segment now bows away from the first press, and a
+    // press has to be on the curve itself to scrub it (anywhere else in the span starts a box), so press on the
+    // reshaped line.
+    std::vector<synth::TimelineSnapshot::Point> shape;
+    for (const auto& bp : f.doc.getLane(f.laneId)->points)
+        shape.push_back({bp.beat, bp.value, bp.tension, bp.curve});
+    synth::AutomationCursor cursor{};
+    const double onCurve = synth::AutomationKernel::evaluate(shape.data(), (int)shape.size(), 2.0, 50.0, cursor);
+    const auto second = juce::Point<float>(anchor.x, (float)f.editor.valueToY(onCurve));
+    const auto hugeDrag = juce::Point<float>(second.x, second.y - 500.0f);
+    const float firstTension = lane->points[0].tension;
+    f.editor.mouseDown(leftClick(f.editor, second));
+    f.editor.mouseDrag(leftDrag(f.editor, hugeDrag, second));
+    f.editor.mouseUp(leftDrag(f.editor, hugeDrag, second));
+    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, -1.0f, 1e-6f);
 
     f.undo.undo();
-    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 0.2f, 1e-3f);
+    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, firstTension, 1e-3f);
     f.undo.undo();
     EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 0.0f, 1e-6f);
 }
@@ -226,7 +246,7 @@ TEST(AutomationLaneEditorTest, PencilThinsAndReplacesSpanOneStep) {
     EXPECT_TRUE(foundOne) << "out-of-span point must survive untouched";
     EXPECT_TRUE(foundEight) << "out-of-span point must survive untouched";
     EXPECT_GT(insideSpan, 0) << "the drawn curve must still be represented";
-    EXPECT_LT(insideSpan, 5) << "the dense original span must have been thinned";
+    EXPECT_LT(insideSpan, 9) << "the stroke (nine raw samples) must have been thinned";
 }
 
 TEST(AutomationLaneEditorTest, LineToolTwoEndpointsOneStep) {
@@ -251,9 +271,9 @@ TEST(AutomationLaneEditorTest, LineToolTwoEndpointsOneStep) {
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 1.0);
     EXPECT_NEAR(lane->points[0].value, 10.0, 1e-6);
     EXPECT_DOUBLE_EQ(lane->points[1].beat, 2.0);
-    EXPECT_NEAR(lane->points[1].value, 20.0, 1e-6);
+    EXPECT_NEAR(lane->points[1].value, 20.0, kPixelValueSlack);
     EXPECT_DOUBLE_EQ(lane->points[2].beat, 5.0);
-    EXPECT_NEAR(lane->points[2].value, 80.0, 1e-6);
+    EXPECT_NEAR(lane->points[2].value, 80.0, kPixelValueSlack);
     EXPECT_DOUBLE_EQ(lane->points[3].beat, 8.0);
     EXPECT_NEAR(lane->points[3].value, 90.0, 1e-6);
 
@@ -299,7 +319,7 @@ TEST(AutomationLaneEditorTest, DoubleClickAddsPointOneStep) {
     ASSERT_NE(lane, nullptr);
     ASSERT_EQ(lane->points.size(), 1u);
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 2.0) << "2.3 snapped to Beat -> 2.0";
-    EXPECT_NEAR(lane->points[0].value, 37.0, 1e-6);
+    EXPECT_NEAR(lane->points[0].value, 37.0, kPixelValueSlack);
 
     // A double-click ON an existing handle is a no-op.
     const auto handleCentre = centreOf(f.editor.getHandleRectForTest(2.0));
@@ -342,10 +362,10 @@ TEST(AutomationLaneEditorTest, SnapshotSmoke) {
 }
 
 // ============================================================================
-// 2. synth::ui::TimelinePanelComponent — automation strip
+// 2. synth::ui::TimelinePanelComponent — lanes fold out under their track
 // ============================================================================
 
-TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestores) {
+TEST(TimelinePanelAutomationLanesTest, ShowAutomationLaneOpensTheTrackAndAddsTheLaneRow) {
     // Doc BEFORE panel (members die in reverse): ~TimelinePanelComponent de-registers from the
     // doc, so the doc must still be alive then — flagged as a stack-use-after-scope by ASAN.
     TimelineDoc doc;
@@ -353,30 +373,34 @@ TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestor
     panel.setSize(1200, 400);
     panel.setTimelineDoc(&doc);
 
-    const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Bass");
     AutomationLane::RangeSnapshot range;
     range.minValue = 0.0f;
     range.maxValue = 1.0f;
     const auto laneId = doc.addLane(trackId, "node-uuid-2", "cutoff", range);
     ASSERT_TRUE(laneId.isValid());
 
-    const int heightBefore = panel.getClipLaneArea().getHeight();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
+    const int totalBefore = panel.getClipLaneArea().getRowLayout().totalHeight();
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackId)) << "a track starts folded";
+    EXPECT_EQ(panel.laneEditorForTest(laneId), nullptr);
 
     panel.showAutomationLane(laneId);
-    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackId));
     EXPECT_EQ(panel.getSelectedAutomationLane(), laneId);
-    EXPECT_FALSE(panel.getAutomationStripBounds().isEmpty());
-    EXPECT_LT(panel.getClipLaneArea().getHeight(), heightBefore) << "the clip-lane area must shrink";
-    EXPECT_EQ(panel.getAutomationLaneEditor().getActiveLane(), laneId);
+    EXPECT_FALSE(panel.laneRowBoundsForTest(laneId).isEmpty());
+    ASSERT_NE(panel.laneEditorForTest(laneId), nullptr);
+    EXPECT_EQ(panel.laneEditorForTest(laneId)->getActiveLane(), laneId);
+    EXPECT_GT(panel.getClipLaneArea().getRowLayout().totalHeight(), totalBefore) << "the lane row adds height";
+    EXPECT_EQ(panel.getClipLaneArea().getHeight(),
+              panel.getLanesBounds().getHeight() - panel.getRuler().getHeight() - panel.getSectionStrip().getHeight())
+        << "nothing is carved off the bottom of the lanes any more";
 
-    panel.closeAutomationStrip();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
-    EXPECT_TRUE(panel.getAutomationStripBounds().isEmpty());
-    EXPECT_EQ(panel.getClipLaneArea().getHeight(), heightBefore) << "closing restores full height";
+    panel.setTrackAutomationExpanded(trackId, false);
+    EXPECT_EQ(panel.getClipLaneArea().getRowLayout().totalHeight(), totalBefore) << "folding restores the rows";
+    EXPECT_EQ(panel.laneEditorForTest(laneId), nullptr);
 }
 
-TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
+TEST(TimelinePanelAutomationLanesTest, RecordModeComboWritesTheDocAsOneUndoStep) {
     // Doc/undo before the panel — same destruction-order rule as the test above.
     TimelineDoc doc;
     AppUndoManager undo;
@@ -385,34 +409,38 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
     panel.setTimelineDoc(&doc);
     panel.setUndoManager(&undo);
 
-    const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Lead");
     AutomationLane::RangeSnapshot range;
     const auto laneId = doc.addLane(trackId, "node-uuid-3", "resonance", range);
     panel.showAutomationLane(laneId);
+    auto* header = panel.laneHeaderForTest(laneId);
+    ASSERT_NE(header, nullptr);
 
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read)) << "default";
+    auto& readWrite = *header->getControlStrip().chipFor(synth::ui::LaneControl::ReadWrite);
+    EXPECT_TRUE(readWrite.getTooltip().endsWith("(Read)"));
 
-    panel.applyAutomationRecordModeChoice(4); // 1-based combo id 4 -> LaneRecordMode::Latch (3)
+    // A pick from the Read / Write chip's menu.
+    lane_menu_test::pickRecordMode(*header, "Latch");
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read));
+    EXPECT_EQ(panel.laneHeaderForTest(laneId), header) << "the header survives an edit that keeps its lane";
+    EXPECT_TRUE(readWrite.getTooltip().endsWith("(Read)")) << "the chip follows the undo";
 }
 
-TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStripForThatTrack) {
+TEST(TimelinePanelAutomationLanesTest, EachTracksFoldArrowFoldsOnlyThatTrack) {
     // Doc before the panel — same destruction-order rule as the tests above.
     TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1200, 400);
     panel.setTimelineDoc(&doc);
 
-    // Two Automation tracks, each with one lane — syncTrackHeaders() (driven by setTimelineDoc's
-    // initial refresh, then this addTrack/addLane notification) builds a header per track and wires
-    // its onAutomationToggleRequested straight into TimelinePanelComponent::toggleAutomationForTrack.
-    const auto trackA = doc.addTrack(TrackKind::Automation, "Automation A");
+    const auto trackA = doc.addTrack(TrackKind::Midi, "A");
     AutomationLane::RangeSnapshot range;
     const auto laneA = doc.addLane(trackA, "node-uuid-a", "cutoff", range);
-    const auto trackB = doc.addTrack(TrackKind::Automation, "Automation B");
+    const auto trackB = doc.addTrack(TrackKind::Midi, "B");
     const auto laneB = doc.addLane(trackB, "node-uuid-b", "resonance", range);
     ASSERT_TRUE(laneA.isValid());
     ASSERT_TRUE(laneB.isValid());
@@ -423,24 +451,19 @@ TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStri
     ASSERT_NE(headerA, nullptr);
     ASSERT_NE(headerB, nullptr);
 
-    // First click on track A's button: strip was closed -> opens on track A's (only) lane.
-    headerA->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+    headerA->getFoldArrow().onClick();
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackA));
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackB));
+    EXPECT_NE(panel.laneEditorForTest(laneA), nullptr);
+    EXPECT_EQ(panel.laneEditorForTest(laneB), nullptr);
 
-    // Second click on the SAME track's button: strip is already open on this track -> closes.
-    headerA->getAutomationButton().onClick();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
+    headerB->getFoldArrow().onClick();
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackA)) << "opening B leaves A open";
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackB));
 
-    // A different track's button while closed: opens on that track's lane.
-    headerB->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneB);
-
-    // Track A's button while the strip shows track B's lane: switches the strip, doesn't close it.
-    headerA->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+    headerA->getFoldArrow().onClick();
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackA));
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackB));
 }
 
 // ============================================================================
@@ -538,7 +561,7 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     }
 
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
-    EXPECT_TRUE(mc.getTimelinePanel().isAutomationStripVisible());
+    EXPECT_TRUE(mc.getTimelinePanel().isTrackAutomationExpandedForTest(autoTrackId));
     EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), cutoffLaneId);
 
     // A second parameter on the SAME node reuses the same Automation track (not a new one).
@@ -554,4 +577,204 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     mc.automateParameter(node->nodeID, "cutoff");
     EXPECT_EQ(doc.getTrack(autoTrackId)->lanes.size(), 2u);
     EXPECT_EQ(doc.getLaneForParam(uuid, "cutoff")->id, cutoffLaneId);
+}
+
+// Automate chosen while the Mixer tab is showing (the mixer-column menu fires this same
+// wired GraphEditor callback) must switch the dock to the Timeline tab and select the new lane.
+TEST_F(AutomationEditorMainComponentTest, AutomateFromMixerTabSwitchesDockToTimelineAndSelectsLane) {
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    auto node = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(node, nullptr);
+
+    mc.getBottomDock().setActiveTab(Tab::Mixer);
+    ASSERT_EQ(mc.getBottomDock().getActiveTab(), Tab::Mixer);
+    ASSERT_TRUE(mc.getGraphEditor().onAutomateParameterRequested);
+
+    mc.getGraphEditor().onAutomateParameterRequested(node->nodeID, "cutoff");
+
+    EXPECT_EQ(mc.getBottomDock().getActiveTab(), Tab::Timeline);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
+    const auto* lane = mc.getTimelineDoc().getLaneForParam(node->properties["uuid"].toString(), "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
+}
+
+// Show in timeline (the mod dot's source-row button) while a MIDI clip is open in the panel: the clip editor
+// covers the lanes, so it has to close for the focused lane to be on screen. With no clip open nothing changes.
+TEST_F(AutomationEditorMainComponentTest, RevealModulatorClosesAnOpenClipEditorSoTheLaneShows) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    auto node = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(node, nullptr);
+    auto& doc = mc.getTimelineDoc();
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "C1");
+    ASSERT_TRUE(clip.isValid());
+    auto& panel = mc.getTimelinePanel();
+    auto& reveal = mc.getGraphEditor().getModDot().host.revealModulator;
+    ASSERT_TRUE(reveal);
+
+    synth::ui::ModulatorInfo info;
+    mc.automateParameter(node->nodeID, "cutoff"); // gives the node its uuid and the lane
+    info.targetUuid = node->properties["uuid"].toString();
+    info.paramId = "cutoff";
+
+    // No clip open: the lanes are already showing and the reveal leaves that alone.
+    ASSERT_FALSE(panel.isPianoRollOpen());
+    reveal(info);
+    EXPECT_FALSE(panel.isPianoRollOpen());
+
+    panel.openPianoRoll(clip);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+    reveal(info);
+
+    const auto* lane = doc.getLaneForParam(info.targetUuid, "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_FALSE(panel.isPianoRollOpen());
+    EXPECT_FALSE(panel.getPianoRoll().isVisible());
+    EXPECT_EQ(panel.getSelectedAutomationLane(), lane->id);
+}
+
+// ============================================================================
+// 4. Which track a lane lands on (docs/timeline/automation.md#which-track-a-lane-lands-on).
+// ============================================================================
+
+namespace {
+
+// Track 1 (Track In -> Oscillator -> Filter) built the way the app's own gestures leave it; the filter's
+// node is returned so a test can automate it.
+struct OwnedChain {
+    juce::AudioProcessorGraph::Node::Ptr filter;
+    juce::String filterUuid;
+};
+
+OwnedChain buildTrackChain(MainComponent& mc) {
+    mc.simulateAddMidiTrackClick();
+    auto& graph = mc.getAudioEngine().getGraph();
+    OwnedChain chain;
+    const juce::String trackInUuid = mc.getTimelineDoc().getTracks().front().bindingUuid;
+    juce::AudioProcessorGraph::Node::Ptr trackIn;
+    for (auto* node : graph.getNodes())
+        if (node->properties["uuid"].toString() == trackInUuid)
+            trackIn = node;
+    auto osc = graph.addNode(synth::AIStateMapper::createModule("Oscillator"));
+    chain.filter = graph.addNode(synth::AIStateMapper::createModule("Filter"));
+    EXPECT_TRUE(trackIn != nullptr && osc != nullptr && chain.filter != nullptr);
+    EXPECT_TRUE(graph.addConnection({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+    EXPECT_TRUE(graph.addConnection({{osc->nodeID, 0}, {chain.filter->nodeID, 0}}));
+    chain.filterUuid = juce::Uuid().toDashedString();
+    chain.filter->properties.set("uuid", chain.filterUuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(chain.filter->getProcessor()))
+        module->setNodeUuid(chain.filterUuid);
+    return chain;
+}
+
+int automationTrackCountOf(const synth::TimelineDoc& doc) {
+    int n = 0;
+    for (const auto& track : doc.getTracks())
+        n += track.kind == synth::TrackKind::Automation ? 1 : 0;
+    return n;
+}
+
+} // namespace
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnAModuleInATrackChainPutsTheLaneOnThatTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    const auto chain = buildTrackChain(mc);
+    auto& doc = mc.getTimelineDoc();
+    const synth::TrackId track1 = doc.getTracks().front().id;
+
+    mc.automateParameter(chain.filter->nodeID, "cutoff");
+
+    const auto* lane = doc.getLaneForParam(chain.filterUuid, "cutoff");
+    ASSERT_NE(lane, nullptr);
+    ASSERT_NE(doc.getTrackForLane(lane->id), nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane->id)->id, track1);
+    EXPECT_EQ(automationTrackCountOf(doc), 0) << "no shared Automation track is created for an owned module";
+    EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
+}
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnAModuleNoTrackPlaysFallsBackToTheAutomationTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    buildTrackChain(mc);
+    auto loose = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(loose, nullptr);
+
+    mc.automateParameter(loose->nodeID, "cutoff");
+
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(automationTrackCountOf(doc), 1);
+    const auto* lane = doc.getLaneForParam(loose->properties["uuid"].toString(), "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane->id)->kind, synth::TrackKind::Automation);
+}
+
+// A project saved before the rule has its lanes on the Automation track: opening it moves the owned ones
+// onto their track and drops the Automation track once nothing is left on it.
+TEST_F(AutomationEditorMainComponentTest, OpeningAProjectMovesAutomationTrackLanesToTheirOwningTrack) {
+    const juce::File scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("agentsynth-fro436-" + juce::Uuid().toString());
+    ASSERT_TRUE(scratch.createDirectory());
+    const juce::File bundle = scratch.getChildFile("Project.agsproj");
+    {
+        MainComponent mc(std::make_unique<MockProviderTL>());
+        const auto chain = buildTrackChain(mc);
+        auto& doc = mc.getTimelineDoc();
+        auto loose = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+        ASSERT_NE(loose, nullptr);
+        mc.automateParameter(loose->nodeID, "cutoff"); // lands on a new Automation track (unowned)
+        const juce::String looseUuid = loose->properties["uuid"].toString();
+
+        // The legacy layout: the owned module's lane sits on the Automation track too.
+        const synth::TrackId autoTrack = [&] {
+            for (const auto& t : doc.getTracks())
+                if (t.kind == synth::TrackKind::Automation)
+                    return t.id;
+            return synth::TrackId{};
+        }();
+        ASSERT_TRUE(autoTrack.isValid());
+        const auto legacy = doc.addLane(autoTrack, chain.filterUuid, "resonance", {0.0f, 1.0f, 0.5f});
+        ASSERT_TRUE(legacy.isValid());
+        ASSERT_TRUE(doc.addBreakpoint(legacy, 1.0, 0.25));
+        ASSERT_TRUE(doc.setLaneRecordMode(legacy, static_cast<int>(synth::LaneRecordMode::Touch)));
+        ASSERT_TRUE(mc.saveProjectForTest(bundle));
+
+        ASSERT_TRUE(mc.openProjectForTest(bundle));
+
+        const synth::TrackId track1 = doc.getTracks().front().id;
+        const auto* moved = doc.getLaneForParam(chain.filterUuid, "resonance");
+        ASSERT_NE(moved, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(moved->id)->id, track1);
+        ASSERT_EQ(moved->points.size(), 1u);
+        EXPECT_EQ(moved->recordMode, static_cast<int>(synth::LaneRecordMode::Touch));
+        // The unowned module's lane stays, so the Automation track stays with it.
+        const auto* stayed = doc.getLaneForParam(looseUuid, "cutoff");
+        ASSERT_NE(stayed, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(stayed->id)->kind, synth::TrackKind::Automation);
+        EXPECT_EQ(automationTrackCountOf(doc), 1);
+    }
+    scratch.deleteRecursively();
+}
+
+TEST_F(AutomationEditorMainComponentTest, OpeningAProjectRemovesAnAutomationTrackItsMoveEmptied) {
+    const juce::File scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("agentsynth-fro436-" + juce::Uuid().toString());
+    ASSERT_TRUE(scratch.createDirectory());
+    const juce::File bundle = scratch.getChildFile("Project.agsproj");
+    {
+        MainComponent mc(std::make_unique<MockProviderTL>());
+        const auto chain = buildTrackChain(mc);
+        auto& doc = mc.getTimelineDoc();
+        const auto autoTrack = doc.addTrack(synth::TrackKind::Automation, "Automation");
+        ASSERT_TRUE(doc.addLane(autoTrack, chain.filterUuid, "cutoff", {20.0f, 20000.0f, 1000.0f}).isValid());
+        ASSERT_TRUE(mc.saveProjectForTest(bundle));
+        ASSERT_TRUE(mc.openProjectForTest(bundle));
+
+        EXPECT_EQ(automationTrackCountOf(doc), 0);
+        const auto* lane = doc.getLaneForParam(chain.filterUuid, "cutoff");
+        ASSERT_NE(lane, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(lane->id)->id, doc.getTracks().front().id);
+    }
+    scratch.deleteRecursively();
 }

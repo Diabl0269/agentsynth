@@ -24,6 +24,9 @@ struct CurveNode {
     double maxSegment = std::numeric_limits<double>::infinity();
     float minY = 0.0f;
     float maxY = 1.0f;
+
+    /** False for a fully pinned node (neither axis can move): it is never selected. */
+    bool isMovable() const noexcept { return xMovable || yMovable; }
 };
 
 /** Editing topology for a CurveModel. */
@@ -59,12 +62,12 @@ inline bool operator==(const CurvePlayhead& a, const CurvePlayhead& b) {
  *
  *  Bend shaping defaults to `synth::EnvelopeGenerator::shape` — the exact function the DSP
  *  evaluates — so a curve drawn from this model is what actually plays, never a re-derived
- *  approximation. A caller may substitute a different shape function (e.g. a future LFO-specific
- *  shape) via the constructor.
+ *  approximation. A caller may substitute a different shape function (e.g. the envelope card's, which
+ *  shapes its decay and release on their own curve) via the constructor; it is told which segment it shapes.
  */
 class CurveModel {
 public:
-    using ShapeFn = std::function<float(float progress, float bend)>;
+    using ShapeFn = std::function<float(float progress, float bend, int segment)>;
 
     explicit CurveModel(CurveMode mode = CurveMode::Fixed, ShapeFn shapeFn = defaultShape());
 
@@ -108,9 +111,12 @@ public:
     /** Free mode only: refused (returns false) outside Free mode. */
     bool canRemovePoint(int index) const;
 
+    /** The most nodes a curve holds, the same cap LfoCustomWave::sanitise applies when the points are saved. */
+    static constexpr int kMaxNodes = 64;
+
     /** Free mode only: inserts at the sorted position for `x` (new segment bend/bendable are
      *  copied from the segment being split, so both halves start identical). Returns the new
-     *  node's index. */
+     *  node's index, or -1 (nothing added) when the curve already has kMaxNodes nodes. */
     int addPoint(double x, float y);
 
     /** Free mode only: refuses a pinned node (`!xMovable`) or dropping below 2 nodes. */

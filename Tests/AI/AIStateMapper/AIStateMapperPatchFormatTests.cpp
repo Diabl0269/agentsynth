@@ -118,37 +118,61 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
         {"ADSR", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                 "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+                 "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Amp Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                    "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+                    "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Attenuverter", "amount, bypassed"},
         // Audio Input is a ModuleBase, so it has ModuleBase's bypass parameter. Audio
         // Output is still the graph's raw IO node and still has none.
         {"Audio Input", "bypassed"},
         {"Audio Output", ""},
-        {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
+        {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, pan, rate"},
         // The mixer's strip. Solo is deliberately NOT here: it is a render-time gate kept
         // in trusted extra state, never a parameter (docs/mixer/mixer.md#solo-is-a-render-time-gate).
         {"Channel Strip",
-         "bypassed, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, send4Level, "
-         "send4Pan"},
-        {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+         "bypassed, dualIO, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, "
+         "send4Level, send4Pan"},
+        {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
-        {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
-        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, time"},
-        {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
+        {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, mix, muted, pan, ratio, release, threshold"},
+        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pan, pingPong, tempoSync, time, "
+                  "timeDiv"},
+        {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, pan, type"},
+        {"Drum Kit", "bypassed, clapDecay, clapLevel, clapRecorded, clapTune, closedDecay, cowbellDecay, "
+                     "cowbellLevel, cowbellRecorded, cowbellTune, cymbalDecay, cymbalLevel, cymbalRecorded, "
+                     "cymbalTune, dualIO, hatLevel, hatRecorded, hatTune, kickDecay, kickLevel, kickRecorded, "
+                     "kickTune, level, muted, openDecay, pad10Decay, pad10Level, pad10Start, pad10Tune, pad11Decay, "
+                     "pad11Level, pad11Start, pad11Tune, pad12Decay, pad12Level, pad12Start, pad12Tune, pad13Decay, "
+                     "pad13Level, pad13Start, pad13Tune, pad14Decay, pad14Level, pad14Start, pad14Tune, pad15Decay, "
+                     "pad15Level, pad15Start, pad15Tune, pad16Decay, pad16Level, pad16Start, pad16Tune, pad17Decay, "
+                     "pad17Level, pad17Start, pad17Tune, pad18Decay, pad18Level, pad18Start, pad18Tune, pad19Decay, "
+                     "pad19Level, pad19Start, pad19Tune, pad1Decay, pad1Level, pad1Start, pad1Tune, pad20Decay, "
+                     "pad20Level, pad20Start, pad20Tune, pad21Decay, pad21Level, pad21Start, pad21Tune, pad22Decay, "
+                     "pad22Level, pad22Start, pad22Tune, pad23Decay, pad23Level, pad23Start, pad23Tune, pad24Decay, "
+                     "pad24Level, pad24Start, pad24Tune, pad25Decay, pad25Level, pad25Start, pad25Tune, pad26Decay, "
+                     "pad26Level, pad26Start, pad26Tune, pad27Decay, pad27Level, pad27Start, pad27Tune, pad28Decay, "
+                     "pad28Level, pad28Start, pad28Tune, pad29Decay, pad29Level, pad29Start, pad29Tune, pad2Decay, "
+                     "pad2Level, pad2Start, pad2Tune, pad30Decay, pad30Level, pad30Start, pad30Tune, pad31Decay, "
+                     "pad31Level, pad31Start, pad31Tune, pad32Decay, pad32Level, pad32Start, pad32Tune, pad3Decay, "
+                     "pad3Level, pad3Start, pad3Tune, pad4Decay, pad4Level, pad4Start, pad4Tune, pad5Decay, "
+                     "pad5Level, pad5Start, pad5Tune, pad6Decay, pad6Level, pad6Start, pad6Tune, pad7Decay, "
+                     "pad7Level, pad7Start, pad7Tune, pad8Decay, pad8Level, pad8Start, pad8Tune, pad9Decay, "
+                     "pad9Level, pad9Start, pad9Tune, snareDecay, snareLevel, snareRecorded, snareTune, tomDecay, "
+                     "tomLevel, tomRecorded, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
-        {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
+        {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, mix, morphX, morphY, "
+                   "muted, outputLevel, pan, poly, resonance, shift"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                       "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
-        {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
-        {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
+                       "holdDiv, legato, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
+        {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
+        {"Gate", "attack, bypassed, dualIO, hold, mix, muted, outputLevel, pan, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
-        {"Hosted Plugin", "bypassed, muted"},
-        {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
-        {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
+        {"Hosted Plugin", "bypassed, dualIO, muted"},
+        {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, morphX, morphY, muted, phase, rateHz, rateSync, "
+                "retrig, shape"},
+        {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, pan, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         // The four Macro I/O port node types: pure pass-throughs, so the inherited
         // "bypassed" is the whole parameter set — same reasoning as Rec Tap/Track In/Track Audio,
@@ -158,38 +182,65 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Macro MIDI In", "bypassed"},
         {"Macro MIDI Out", "bypassed"},
         {"Macro Out", "bypassed"},
-        {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
-                   "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
+        {"Macros", "bypassed, macro1, macro10, macro10Bipolar, macro11, macro11Bipolar, macro12, "
+                   "macro12Bipolar, macro13, macro13Bipolar, macro14, macro14Bipolar, macro15, "
+                   "macro15Bipolar, macro16, macro16Bipolar, macro1Bipolar, macro2, macro2Bipolar, "
+                   "macro3, macro3Bipolar, macro4, macro4Bipolar, macro5, macro5Bipolar, macro6, "
+                   "macro6Bipolar, macro7, macro7Bipolar, macro8, macro8Bipolar, macro9, macro9Bipolar, "
+                   "macroCount, muted"},
         // The mix bus: a fader and a mute, no pan.
-        {"Master", "bypassed, gain, muted"},
+        {"Master", "bypassed, dualIO, gain, muted, safetyLimiter"},
+        {"Mallet", "brightness, bypassed, damping, decay, dualIO, fine, hardness, level, material, muted, release, "
+                   "resonator, tremolo, tune, velBright"},
         {"Math", "bypassed, clip, muted"},
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
-        {"Oscillator", "bypassed, coarse, detune, dualIO, fine, level, muted, octave, pan, poly, unison, waveform"},
-        {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
-                          "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
-                          "outputGain"},
-        {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
-        {"Pitch Shifter",
-         "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
+        {"Oscillator",
+         "blend, bypassed, coarse, detune, dualIO, fine, fixedRate, glide, glideCurve, glideMode, legato, "
+         "level, muted, octave, pan, "
+         "phase, poly, pulseWidth, randomPhase, rateMode, unison, waveform, width"},
+        {"Parametric EQ",
+         "band10Freq, band10Gain, band10On, band10Q, band10Slope, band10Type, band11Freq, band11Gain, "
+         "band11On, band11Q, band11Slope, band11Type, band12Freq, band12Gain, band12On, band12Q, band12Slope, "
+         "band12Type, band13Freq, band13Gain, band13On, band13Q, band13Slope, band13Type, band14Freq, "
+         "band14Gain, band14On, band14Q, band14Slope, band14Type, band15Freq, band15Gain, band15On, band15Q, "
+         "band15Slope, band15Type, band16Freq, band16Gain, band16On, band16Q, band16Slope, band16Type, "
+         "band17Freq, band17Gain, band17On, band17Q, band17Slope, band17Type, band18Freq, band18Gain, "
+         "band18On, band18Q, band18Slope, band18Type, band19Freq, band19Gain, band19On, band19Q, band19Slope, "
+         "band19Type, band1Freq, band1Gain, band1On, band1Q, band1Slope, band1Type, band20Freq, band20Gain, "
+         "band20On, band20Q, band20Slope, band20Type, band21Freq, band21Gain, band21On, band21Q, band21Slope, "
+         "band21Type, band22Freq, band22Gain, band22On, band22Q, band22Slope, band22Type, band23Freq, "
+         "band23Gain, band23On, band23Q, band23Slope, band23Type, band24Freq, band24Gain, band24On, band24Q, "
+         "band24Slope, band24Type, band2Freq, band2Gain, band2On, band2Q, band2Slope, band2Type, band3Freq, "
+         "band3Gain, band3On, band3Q, band3Slope, band3Type, band4Freq, band4Gain, band4On, band4Q, "
+         "band4Slope, band4Type, band5Freq, band5Gain, band5On, band5Q, band5Slope, band5Type, band6Freq, "
+         "band6Gain, band6On, band6Q, band6Slope, band6Type, band7Freq, band7Gain, band7On, band7Q, "
+         "band7Slope, band7Type, band8Freq, band8Gain, band8On, band8Q, band8Slope, band8Type, band9Freq, "
+         "band9Gain, band9On, band9Q, band9Slope, band9Type, bypassed, dualIO, mix, muted, outputGain, pan"},
+        {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
+        {"Pitch Shifter", "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pan, pitch, shiftHz, "
+                          "shiftMode, window"},
+        {"Pluck",
+         "body, brightness, bypassed, decay, decayTrack, dualIO, fine, level, muted, pickHardness, pickPosition, "
+         "release, stiffness, tune, velBright"},
         {"Poly MIDI", "bypassed, velToGate, voiceSteal"},
         // A pass-through has nothing to tweak: the inherited bypass is the whole parameter set
         // (and there is deliberately no mute — muting a tap would silence the patch, which is
         // not what a recorder is for).
         {"Rec Tap", "bypassed"},
-        {"Poly Sequencer", "Gate 1, Gate 2, Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Step 1 Chord, Step 1 Root, "
-                           "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
-                           "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
-                           "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
-        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
-        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
+        {"Poly Sequencer",
+         "bpm, bypassed, chance, followSongKey, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+         "transpose, velocity"},
+        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, pan, preDelay, roomSize, wet, width"},
+        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling, pan"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
-         "bypassed, density, dualIO, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
-        {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
-                      "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
-                      "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
+         "attack, bypassed, density, dualIO, end, feel, fine, glide, grainSize, level, loop, mono, muted, pitch, "
+         "playMode, release, releaseSound, reverse, rootNote, spray, start, tone, voices"},
+        {"Sequencer",
+         "bpm, bypassed, chance, followSongKey, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+         "transpose, velocity"},
         // Every playback value it needs (gain, fades, trim) lives on the CLIP, not on the node,
         // so the inherited bypass is the whole parameter set — and there is deliberately no mute,
         // since a muted track is a document state the module already honours.
@@ -231,43 +282,26 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
 // any registration changes the list and MUST consciously update the golden below, either by adding
 // the new type here or by adding it to kNonAuthorableModuleTypes in AIStateMapper/AIStateMapperInternal.h.
 TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
-    const juce::StringArray golden = {"ADSR",
-                                      "Amp Env",
-                                      "Audio Input",
-                                      "Audio Output",
-                                      "Bitcrusher",
-                                      "Chorus",
-                                      "Comparator",
-                                      "Compressor",
-                                      "Delay",
-                                      "Distortion",
-                                      "Envelope Follower",
-                                      "External MIDI",
-                                      "Filter",
-                                      "Filter Env",
-                                      "Flanger",
-                                      "Gate",
-                                      "LFO",
-                                      "Limiter",
-                                      "MIDI Keyboard",
-                                      "Macros",
-                                      "Math",
-                                      "Midi Input",
-                                      "Noise",
-                                      "Oscillator",
-                                      "Parametric EQ",
-                                      "Phaser",
-                                      "Pitch Shifter",
-                                      "Poly MIDI",
-                                      "Poly Sequencer",
-                                      "Reverb",
-                                      "Ring Modulator",
-                                      "Sample & Hold",
-                                      "Sampler",
-                                      "Sequencer",
-                                      "VCA",
-                                      "Voice Mixer",
-                                      "Wavetable"};
+    const juce::StringArray golden = {"ADSR",          "Amp Env",
+                                      "Audio Input",   "Audio Output",
+                                      "Bitcrusher",    "Chorus",
+                                      "Comparator",    "Compressor",
+                                      "Delay",         "Distortion",
+                                      "Drum Kit",      "Envelope Follower",
+                                      "External MIDI", "Filter",
+                                      "Filter Env",    "Flanger",
+                                      "Gate",          "LFO",
+                                      "Limiter",       "MIDI Keyboard",
+                                      "Macros",        "Mallet",
+                                      "Math",          "Midi Input",
+                                      "Noise",         "Oscillator",
+                                      "Parametric EQ", "Phaser",
+                                      "Pitch Shifter", "Pluck",
+                                      "Poly MIDI",     "Poly Sequencer",
+                                      "Reverb",        "Ring Modulator",
+                                      "Sample & Hold", "Sampler",
+                                      "Sequencer",     "VCA",
+                                      "Voice Mixer",   "Wavetable"};
 
     const auto actual = synth::AIStateMapper::authorableModuleTypes();
     EXPECT_EQ(actual.joinIntoString(", "), golden.joinIntoString(", "))
@@ -533,22 +567,14 @@ TEST(AIStateMapperTest, MidiRemoteKeyIsRefusedUntrusted) {
     EXPECT_EQ(graph.getNumNodes(), 1);
 }
 
-// Regression pin: the AI few-shot examples teach the model to emit ADSR times in real
-// seconds (attack ~0.01, decay ~0.15-0.3 -- AIIntegrationServiceSystemPrompt.cpp), and every one
-// of those lands inside [0,1]. applyParamsToProcessor's untrusted-apply heuristic therefore
-// treats them as normalized values the model "forgot" to denormalize and rescales via
-// range.convertFrom0to1 (AIStateMapper.cpp). ADSRModule.h keeps attack/hold/decay/release on a
-// LINEAR NormalisableRange(0.0, 5.0) specifically so that rescale lands at a predictable 5x the
-// input -- a 0.3-skewed range on the parameter itself would instead distort it into something
-// wildly different (a requested 0.3 s decay would land around 0.02 s instead of ~1.5 s). The 0.3
-// skew for knob feel lives only on the UI slider (ModuleComponent.cpp), which never touches the
-// parameter's stored value, so it cannot affect this. This test pins the exact landed values so
-// a future skew added back onto the parameter's own NormalisableRange fails loudly instead of
-// silently reintroducing the misfire.
-TEST(AIStateMapperTest, UntrustedAdsrFewShotTimesRescaleAgainstLinearRange) {
+// The AI few-shot examples teach the model to emit ADSR times in real seconds (attack ~0.01, decay
+// ~0.15-0.3), and every one of those lands inside [0,1]. applyParamsToProcessor's untrusted-apply
+// heuristic only rescales a [0,1] value the range cannot hold, and 0..5 s can hold all of them, so
+// they land exactly as written.
+TEST(AIStateMapperTest, UntrustedAdsrTimesLandAsRawSeconds) {
     juce::AudioProcessorGraph graph;
     juce::var json = juce::JSON::parse(
-        R"({"nodes":[{"id":1,"type":"ADSR","params":{"attack":0.01,"decay":0.3}}],"connections":[]})");
+        R"({"nodes":[{"id":1,"type":"ADSR","params":{"attack":0.01,"decay":0.3,"release":0.15}}],"connections":[]})");
 
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
     ASSERT_EQ(graph.getNumNodes(), 1);
@@ -556,10 +582,33 @@ TEST(AIStateMapperTest, UntrustedAdsrFewShotTimesRescaleAgainstLinearRange) {
     auto* processor = graph.getNodes().getUnchecked(0)->getProcessor();
     auto* attack = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "attack"));
     auto* decay = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "decay"));
+    auto* release = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "release"));
     ASSERT_NE(attack, nullptr);
     ASSERT_NE(decay, nullptr);
+    ASSERT_NE(release, nullptr);
 
-    // Linear range(0, 5): convertFrom0to1(v) == 5 * v, exactly what a linear 0..5 range gives.
-    EXPECT_NEAR(attack->get(), 0.05f, 1.0e-4f) << "0.01 rescaled against a linear 0..5 range";
-    EXPECT_NEAR(decay->get(), 1.5f, 1.0e-4f) << "0.3 rescaled against a linear 0..5 range";
+    EXPECT_NEAR(attack->get(), 0.01f, 1.0e-4f);
+    EXPECT_NEAR(decay->get(), 0.3f, 1.0e-4f);
+    EXPECT_NEAR(release->get(), 0.15f, 1.0e-4f);
+}
+
+// Only a value the range cannot hold is read as a normalized one: Filter drive is 1..10, so 1.0 is a
+// legal drive and stays, 0.5 is not and becomes the middle of the range; a cutoff of 0.5 on
+// 20..20000 Hz is not a legal cutoff and still rescales.
+TEST(AIStateMapperTest, UntrustedRescaleOnlyFiresForValuesBelowTheRangeStart) {
+    juce::AudioProcessorGraph graph;
+    juce::var json = juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Filter","params":{"drive":1.0,"cutoff":0.5}},)"
+                                       R"({"id":2,"type":"Filter","params":{"drive":0.5}}],"connections":[]})");
+
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
+    ASSERT_EQ(graph.getNumNodes(), 2);
+
+    auto value = [&](int node, const char* id) {
+        auto* param = dynamic_cast<juce::AudioParameterFloat*>(
+            findParameterByID(graph.getNodes().getUnchecked(node)->getProcessor(), id));
+        return param != nullptr ? param->get() : -1.0f;
+    };
+    EXPECT_NEAR(value(0, "drive"), 1.0f, 1.0e-4f) << "1.0 is a legal drive";
+    EXPECT_NEAR(value(0, "cutoff"), 632.46f, 1.0f) << "0.5 Hz is not a legal cutoff";
+    EXPECT_NEAR(value(1, "drive"), 5.5f, 1.0e-3f) << "0.5 is below the 1..10 range";
 }

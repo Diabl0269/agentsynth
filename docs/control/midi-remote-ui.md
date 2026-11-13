@@ -24,7 +24,7 @@ design-only: the Inspector's **Relearn** button (rendered, disabled).
 ## Right-click MIDI Learn — coverage
 
 The requirement is *every* knob, slider and button on *any* module. The generic-card
-choke point (`slider->addMouseListener(this)` in `ModuleComponent::createControls`) covers
+choke point (the card as mouse listener on every knob, in `CardBody::createKnob`) covers
 generic float/int sliders only, so coverage is an explicit list with one acceptance line each.
 A surface is "covered" when right-clicking its control shows the MIDI item block of [The learn interaction](#the-learn-interaction) and a
 Learn from there binds the right parameter (or, for the mixer column's Solo, a [node command target](midi-remote.md#node-command-targets)).
@@ -34,7 +34,7 @@ Learn from there binds the right parameter (or, for the mixer column's Solo, a [
 | Generic module card | rotary sliders (float/int params) | the existing `mouseDown` slider-identity match in `ModuleComponentInteraction.cpp` → `showAutomateMenuForSlider` grows the MIDI items | **shipped**: right-click "Cutoff" on Filter → Learn → CC binds `(uuid, "cutoff")` |
 | Generic module card | `ToggleButton` per bool param | `registerMidiLearnable` + a `RightClickSafeButton<juce::ToggleButton>` guard so a right-click never also toggles it | **shipped**: right-click a bool toggle → Learn → note/CC toggles it |
 | Generic module card | `ComboBox` per choice param | right-click on a `ComboBox` must **not** open its popup: `ModuleComponent::mouseDown`'s registry lookup runs before the combo's own native popup handling | **shipped**: right-click a choice combo → Learn shows the MIDI block; the popup never opens |
-| Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches | **shipped**: every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
+| Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches. A knob that re-binds to another parameter (the Drum Kit's picked-pad knobs) calls `rebindMidiLearnable(component, param)` on every bind, which points its entry at the new parameter; the ADSR and Comparator Threshold slider, built with the card body's views, joins the same way. A guard test walks every knob and fader on every default card and fails on one with no entry | **shipped**: every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs, toggles and choice combos (`plugin-card-layout.md`) | `ModuleComponent::MidiLearnableRegistry::addHosted` registers each hosted control with the hosted parameter's `(uuid, paramId, indexHint)` triple; `MidiLearnController::arm`/`assignControl` resolve a non-`RangedAudioParameter` paramId through `resolveLaneParameter`'s hosted rules, capturing the same `paramIndexHint` an automation lane would | **shipped** (FRO137): right-click a plugin-card knob → "Automate..." (opens the lane picker on that hosted parameter) then MIDI Learn → CC binds `(uuid, paramId, indexHint)`; a toggle/choice control gets MIDI Learn only. Removing the knob from the card layout never forgets the mapping — see `plugin-card-layout.md`'s own note |
 | Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
@@ -43,6 +43,8 @@ Learn from there binds the right parameter (or, for the mixer column's Solo, a [
 | Direct column | none | `MixerDirectColumn` has no fader/pan/M-S of its own (just "Make channel") — nothing to register | — not applicable, not a gap |
 | Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)); `GlyphButton` is right-click-safe the same way Mute/Bypass are, and `MidiLearnController::armAction()`/`forgetAction()` write the assignment into the learned device's `ControllerProfile.actions` (global, not the project doc — [`midi-remote.md`](midi-remote.md#undo)) | **shipped**: right-click Play → Learn → pad toggles playback; badge shows on the button |
 | Macro card / macro ports | none | no parameters of their own — not learnable; a collapsed macro's member knobs are learnable once expanded | — |
+
+Every learnable control on a module card goes through ONE call, `ModuleComponent::registerMidiLearnable` (for a hosted-plugin card control, `registerHostedMidiLearnable`), never a new bespoke identity-scan loop per control kind: it is the single registry the right-click menu, the MIDI-mapped badge and the armed breathing outline all read. Every surface builds its menu block, badge dot and armed outline from the same surface-agnostic helpers in `Source/UI/MidiRemote/MidiLearnMenu.h` (`appendMidiLearnMenuItems`, `paintMidiMappedBadge`, `paintMidiLearnArmedOutline`, `RightClickSafeButton`), never a second implementation per surface. `ModuleComponent`, `MixerColumnComponent`/`MixerMasterColumn` and `TimelineTransportBar` each keep their OWN small registry (a parameter or, for the transport bar's action targets, an actionId), since what an entry keys on differs per surface; the menu and paint shapes are never re-derived.
 
 Not covered by design: the piano roll, timeline clip lanes, library, AI panel (nothing there is
 a parameter or a mapped action; actions there are reachable from the panel's action picker).
@@ -83,7 +85,7 @@ assignment's control already selected.
    15 Hz `timerCallback`, `MixerColumnComponent`/`MixerMasterColumn`'s 10 Hz `refreshMeter`, and
    `TimelineTransportBar`'s 10 Hz `updateFromTransport` (FRO256) — never a new timer or an
    AnimationDriver entry. This is explicitly not a glow: Obsidian has glow 0, and this state must
-   read the same in every theme. The status bar
+   read the same in every theme. Under Reduced the breath is slower (4 s instead of 1.2 s); under Animations Off the outline is steady at full alpha (`midiLearnArmedOutlineAlpha`). The status bar
    (the existing `StatusBarComponent`, `Source/UI/Chrome/`) shows *"MIDI Learn: move a control on
    your controller for 'Cutoff' — Esc to cancel"*. If no controller profile exists yet and no
    MIDI input is open, the status line adds *"No MIDI device is enabled — open Settings →
@@ -109,10 +111,10 @@ audio, playback and every other click keep working; it is not a modal mode.
 ## The Controllers panel
 
 A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to Timeline and
-Mixer (`Source/UI/Mixer/BottomDockComponent.h`) — it reuses the dock's slide, persistence
+Mixer (`Source/UI/Layout/BottomDockComponent/BottomDockComponent.h`) — it reuses the dock's slide, persistence
 (`"bottomDockActiveTab"`), detach-to-window (`DetachablePanelHost`) and focus-region machinery.
 Opened with `Cmd+3` / the Settings shortcut list's "Show Controllers Tab" (`ShortcutManager` action
-`toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+T open/close toggle,
+`toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+J open/close toggle (it was Cmd+T),
 so there is no per-tab toolbar button any more — see
 [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip)). Files:
 `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit per region below),
@@ -165,7 +167,7 @@ Add controller" is [Add controller](#add-controller). In the plugin build the li
 
 The profile's controls drawn on a grid (`col`, `row` from the profile; default cell 56 px,
 snapped) using the app's own widgets: a rotary for `knob`/`encoder`, a vertical slider for
-`fader`, a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
+`fader` (the small fader look: 4 px slot, 18x7 cap, [`theming.md`](../layout/theming.md#themed-widgets)), a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
 Each cell shows the control's name above and its **assignment label** below (parameter:
 *"Filter · Cutoff"*, node command (FRO253's Solo): *"Kick · Solo"*, action: *"Play"*, none: *"—"*,
 orphaned node: *"(missing module)"* in the warning colour; a [focus-bank](midi-remote.md#focus-bank)
@@ -190,6 +192,15 @@ matching the module canvas's own additive-marquee modifier); a press with no dra
 or Esc, clears it. The selection is owned by the surface itself and survives a live refresh
 rebuild (Detect, a move, an undo/redo) — any id no longer present is silently dropped, and
 switching to a different controller clears it, same as before FRO270.
+
+**Edge scroll.** A marquee or a cell (or group) move held near the surface's edge pans the surface, faster nearer the
+edge, on the canvas's own scroller and speed curve (`ControllerSurfaceEdgeScroll.cpp`; `CanvasEdgeScroller`,
+`canvasEdgePanDelta`). After each pan the drag is re-aimed at the still pointer through its own handler, so the box
+grows over what scrolls in and the cell keeps moving under the pointer; moving back inward or releasing stops it, the
+pan stops at the content's origin and far end, and the move is still one commit on release. Esc mid-drag stops the
+pan for the rest of that drag (the drag goes on and commits on release; the next Esc clears the selection as usual).
+[Every drag follows the
+view](../layout/layout.md#every-drag-follows-the-view).
 
 **Pan/zoom (FRO331).** A plain drag (no Shift) on EMPTY grid space pans the view instead of
 drawing a marquee — the Shift requirement above is what disambiguates the two gestures, mirroring
@@ -229,6 +240,17 @@ With 2+ controls selected the inspector shows *"N controls selected"* and disabl
 per-control field (name, kind, encoding, button mode, learn target, Forget) — there is no one
 control's own fields left to show.
 
+### Screen reader
+
+The Controllers list is a **list** titled "Controllers" whose value follows the selected controller
+("Launchpad, 1 of 2"; "Keystep (not on this machine), 2 of 2"), updated through the same
+only-when-the-text-changes value event the module library uses. On the surface, each cell's inert
+knob, fader or pad carries the control's name and what it drives (its description), and hovering a cell
+shows "Name: assignment" (or "not assigned"); the surface itself is titled "Controller surface". The
+inspector's name, kind and encoding fields each have a name and a tooltip. The `MidiRemote` surface of
+the accessibility coverage test ([`docs/development/accessibility.md`](../development/accessibility.md))
+holds all of this at zero gaps.
+
 ### Pages
 
 A row of page buttons ("1", "2", …, one per the selected controller's effective page count — see
@@ -241,7 +263,7 @@ is nothing to delete) for "Delete page", which removes that page's project assig
 every higher page down by one, both undoable (the project half on the project history, the profile's
 own page-count shrink on the controller edit history — the same two-histories split
 [Orphan controllers](#orphan-controllers)' Recreate already uses for its own project+profile pair).
-Both buttons carry an accessible title ("Page 2", "Add page") for a screen reader. Clicking an
+Both buttons carry an accessible title ("Page 2", "Add page") for a screen reader, and a tooltip. Clicking an
 inactive page switches `RemoteEngine`'s active page for the selected profile, which republishes the
 surface's cell labels (only the newly active page's project assignments show) and posts a status-bar
 line ("Page 2 of 3"). Implemented in `Source/UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.{h,cpp}`,
@@ -311,7 +333,9 @@ target was mapped to and whatever the control drove in the same scope, so a cont
 project and one global assignment. The overlay is
 `synth::ui::PickTargetOverlay` (`Source/UI/Graph/PickTargetOverlay/`), a transparent layer added to
 `MainComponent` — not to the canvas — because the mixer columns and the transport bar are not canvas
-children. It draws once (no timer, no animation), resolves the click itself against the candidates every
+children. It draws once (no timer) and fades in and out with `FadeVisibility` (160 ms in, 110 ms out; at once off
+screen or under Animations Off; it takes no click from the moment it ends, and its outlines stay painted until it has
+faded out), resolves the click itself against the candidates every
 surface reports through its own `collectPickCandidates()` (each surface keeps its own registry; no card
 knows the mode exists), clips each outline by its ancestors so a control under the dock's edge is neither
 drawn nor pickable, lets `BottomDockComponent::getTabButtons()` through (`setPickPassThrough`) and re-collects
@@ -449,6 +473,15 @@ test file in `Tests/CMakeLists.txt` the same way (see that file's `MidiRemote/` 
 
 ---
 
+### Motion
+
+Nothing in the panel pops. The inspector and the orphan view cross-fade; the page strip, the Detect hint, the port
+warning row, the undo cue, the inspector's control fields and the Add Controller button fade with
+`FadeVisibility`, and the two hint rows tween the toolbar's height so the surface slides. A control added to or
+removed from the shown controller grows in or shrinks away on the surface like controls on a card; a different
+controller replaces the grid at once. See
+[Fading things in and out](../layout/animation.md#fading-things-in-and-out).
+
 ## Add controller
 
 "+ Add controller" → a popover: **MIDI input device** (the `juce::MidiInput::getAvailableDevices()`
@@ -485,12 +518,11 @@ the shared settings file, documented in `Source/UserSettings.h`:
 
 The Audio tab's MIDI-input checklist keeps its meaning (which devices feed the *patch*); a
 device with a profile is opened by the remote engine regardless ([`midi-remote.md`](midi-remote.md#the-engine)).
-JUCE's stock device selector cannot decorate a single device row, so instead of a per-row
-"(Controllers)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
+The Audio tab's MIDI section (`AudioMidiSection`, see [the Audio tab](../layout/settings-preferences.md#the-audio-tab))
+has no per-row "(Controllers)" suffix; it carries a one-paragraph caption under the input ticks
 naming every profiled controller, which is what lets the two lists explain each other. No profiled
-controllers, no caption. The Audio tab's MIDI-output selector stays hidden and dead either way —
-controller feedback (FRO139) is picked per controller from the Controllers list's own right-click
-("Send feedback to ▸", above), not from that selector.
+controllers, no caption. Controller feedback (FRO139) is picked per controller from the Controllers list's own
+right-click ("Send feedback to ▸", above), not from the section's MIDI output.
 
 ---
 

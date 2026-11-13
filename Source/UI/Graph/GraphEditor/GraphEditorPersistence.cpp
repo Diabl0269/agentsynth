@@ -1,6 +1,6 @@
 // GraphEditorPersistence.cpp
 //
-// Auto-arrange, and patch save/load/new-patch. GraphEditor is declared in GraphEditor.h;
+// Patch save/load/new-patch. GraphEditor is declared in GraphEditor.h;
 // sibling GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
@@ -11,39 +11,10 @@
 #include "SnippetManager.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
-void GraphEditor::autoArrange() {
-    auto& graph = audioEngine.getGraph();
-    if (undoManager)
-        undoManager->captureBeforeState(graph);
-
-    auto sizeOf = [this](synth::LayoutUtil::NodeID id) -> juce::Point<int> {
-        for (auto* c : content.getModules()) {
-            if (c != nullptr && c->getNodeId() == id)
-                return {c->getWidth(), c->getHeight()};
-        }
-        return {synth::LayoutUtil::kSingleWidth, 300};
-    };
-
-    std::vector<std::pair<synth::LayoutUtil::NodeID, synth::LayoutUtil::NodeID>> extra;
-    for (const auto& r : audioEngine.getModulationRoutings()) {
-        if (r.hasSource && r.hasDest)
-            extra.push_back({r.sourceNodeID, r.destNodeID});
-    }
-
-    auto layout = synth::LayoutUtil::computeAutoArrange(graph, sizeOf, extra);
-    for (const auto& a : layout) {
-        if (auto* n = graph.getNodeForId(a.id)) {
-            n->properties.set("x", a.pos.x);
-            n->properties.set("y", a.pos.y);
-        }
-    }
-
-    updateComponents();
-
-    if (undoManager)
-        undoManager->pushSnapshotFromCapture(graph);
-}
-
+// patchDocument holds the top-level JSON keys this build doesn't understand (e.g. a future
+// "timeline"), stashed on load and re-merged on save so re-saving with an older build never destroys
+// a newer build's data. It is per-loaded-file (newPatch() clears it) and only the user preset
+// save/load path (savePreset/loadPreset) touches it -- undo/redo, snippets and AI apply must not.
 void GraphEditor::savePreset(juce::File file) {
     auto json = synth::AIStateMapper::graphToJSON(audioEngine.getGraph());
     // Re-merge whatever unknown top-level keys were stashed on the last load (e.g. a future
@@ -66,7 +37,8 @@ bool GraphEditor::loadFactoryPreset(int index) {
 
 // Clears the canvas to the empty state (New Patch). Detaches module components (stopping scope timers)
 // BEFORE clearing the graph — same safe ordering as loadFactoryPreset. The clear is recorded as an
-// undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
+// undoable structural change when undoManager is present; MainComponent::newPatch() then drops that
+// history, so Cmd+Z after File > New does nothing.
 void GraphEditor::newPatch() {
     auto& graph = audioEngine.getGraph();
 
@@ -128,6 +100,7 @@ void GraphEditor::loadPreset(juce::File file, bool append) {
             added = synth::SnippetManager::insertSnippet(json, graph, juce::Point<int>(),
                                                          /*includeExtraState=*/true, &addedMacros,
                                                          /*trustedPayload=*/true);
+            audioEngine.updateModuleNames(); // same as the replace path below: "Diva 2" right away
             for (auto& macro : addedMacros)
                 macros.add(macro);
             updateComponents(); // reconcile the view, prune stale macros against surviving nodes
@@ -158,6 +131,7 @@ void GraphEditor::loadPreset(juce::File file, bool append) {
         const bool ok = synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true);
         if (ok)
             patchDocument.loadFromVar(json); // preserve per-file unknown keys (a trusted load)
+        audioEngine.updateModuleNames();     // a loaded second Diva reads "Diva 2" right away, not on the next edit
         updateComponents();                  // reconcile the view to whatever state the graph is in
     };
     if (undoManager)

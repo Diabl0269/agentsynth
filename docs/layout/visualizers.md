@@ -20,9 +20,13 @@ dB step, label set, and whether the 0 dB line is emphasised.
 ## FrequencyResponseComponent
 
 `Source/UI/ModuleViews/FrequencyResponseComponent.h`. A frequency-response curve with an optional
-FFT spectrum overlay, used by `FilterModule` cards. **Hidden by default** on the card — a "Show
+FFT spectrum overlay (`FilterSpectrumAnalyser`, shared with the Custom shape window: a 4096-point FFT of the
+module's spectrum buffer, with meter-like rise and fall timed in seconds), used by `FilterModule` cards. **Hidden by default** on the card — a "Show
 Response" toggle reveals it, the same opt-in pattern as "Show Scope" — and the nested "Show
-Spectrum" control appears only while the response view is open. Its 30 Hz timer starts in
+Spectrum" control appears only while the response view is open. The open panels (scope, response, spectrum) are
+remembered on the module and saved in the project as the node's `"cardView"`
+([`project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)); a card restores them when it is built,
+through the same code a toggle's click runs (`ModuleComponentCardView.cpp`). Its 30 Hz timer starts in
 `visibilityChanged` only while visible, so a closed Filter card pays no animation cost.
 
 **The stroked path is not clamped to the bottom of the view.** Magnitudes may fall below `minDb`
@@ -60,16 +64,71 @@ On the card the curve is 150 px tall and laid out *beside* the port labels (`x` 
 down each edge, so on a six-input module this reclaims about 125 px of otherwise dead space at the
 top of the card.
 
-**Gestures.** All four bands start disabled, so the curve starts empty with a "Double-click to add
-an EQ point" hint.
+**Gestures.** Every band starts disabled, so the curve starts empty with a "Double-click to add
+an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
+parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
+theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo and a floating readout
+above it (type pill, frequency, gain, Q).
 
 | Gesture | Effect |
 |---|---|
-| Double-click empty space | Adds a point, enabling the slot that best fits that frequency (`findBandForNewPoint`) |
+| Double-click empty space | Adds a point: slots 1-4 by home frequency (`findBandForNewPoint`), then the lowest free slot as a Bell parked at the click (`findFreeBand`), up to 24 |
 | Double-click a point | Removes it (disables that band; its settings are kept) |
 | Drag a point | Sets frequency (x) and gain (y) |
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
-| Hover | Halos the handle and shows a freq / gain / Q readout bottom-right |
+| Right-click a point | Opens the type menu (`EQBandTypeMenu`, through `launchPopover`, growing from the dot): the eight types, and for a cut the nine slopes. A choice is one undo step |
+| Hover | Halos the handle and shows its floating readout |
+
+**Band strip and type pill.** `EQBandStrip` sits under the curve in the pop-out window: one chip per band that is on
+(plus the selected band while it is off, at 35%) in frequency order, labelled like "7 Bell", tinted by kind, and a
+trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
+both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
+when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
+`ArrowKeyNavigation`, Return presses. The chip order is display only: a chip is always its band index.
+A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
+(`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
+`eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).
+`EQBandTypePill` shows the selected band's type and opens the same menu.
+
+**Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
+on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags
+and key steps land at once, and Reduce Motion fades the dot instead. See [undo-glide.md](undo-glide.md#points-dots-and-clips).
+The keys themselves are left to the app: the curve ignores any press with Cmd or Ctrl held (except its own rebindable chords, Cmd+D by default) and `EQWindow` relays them.
+
+**Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Its verbs are rebindable
+actions in Settings > Shortcuts, section EQ (`eq*` ids, resolved through `ShortcutManager` like the drum grid's; the
+shipped defaults below stand when no manager is installed). They act only inside the focused curve and are tried
+before the app's own commands, so Cmd+D copies the band instead of duplicating the module. See
+[shortcuts.md](../control/shortcuts-eq.md#eq).
+
+| Key (default) | Effect |
+|---|---|
+| Left / Right | Select the previous / next band (all 24, on or off; stops at the ends). Tabbing in selects band 1 |
+| Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that) |
+| Alt+Up / Alt+Down | Gain +1 / -1 dB (Shift: 0.25 dB) |
+| Up / Down | Wider / narrower: Q down / up a quarter octave (Shift: a quarter of the step) |
+| S | Solo the selected band (toggle) |
+| T | Open the selected band's type menu beside its dot |
+| + (also Shift+=, number pad +) | Add a Bell in the widest gap |
+| Backspace | Switch the selected band off (it stays selected) |
+| Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
+| 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove; end this curve's solo |
+
+**Solo.** S, the headphones button in the pop-out footer and Option-click on a dot audition one band through
+`ParametricEQModule::setSoloBand`. The soloed dot gets a bright outer ring and the other dots dim, eased through a
+`KeyedTween` (`getSoloLook`; Reduce Motion fades it, Animations Off lands it). While the curve that started a solo
+holds it, the solo follows the selection (and ends when the selected band is off or removed). Escape ends it before the
+window closes. A solo a curve started ends when that curve is destroyed (closing the pop-out), so audio never stays
+soloed with nothing on screen. Another curve's solo on the same module is shown but never ended by this one.
+
+A band that is off is selectable (Return switches it on) but is not moved by the arrows. A press
+that cannot change anything (gain already at its limit) opens no undo step. Every key that edits is
+one `onGestureStart` / `onGestureEnd` bracket, the same undo path as a drag.
+
+**Screen reader.** The curve is named "EQ curve" and its value is the selected band, e.g. "Band 2,
+1.2 kHz, +3.0 dB, Q 0.7" ("Band 2, off" while off; "No band selected, 2 of 4 bands on" before a
+band is picked). The wording lives in `ModuleViewAccessibility.h`; the keys and the handler in
+`EQCurveKeyboard.cpp`. A value-changed event is posted only when the text changes.
 
 The mouse handlers are deliberately thin wrappers over public `addPointAt` / `removeBand` /
 `dragBandTo` / `nudgeBandQ` / `hitTestBand`, so the interaction is unit-tested without synthesising
@@ -105,13 +164,24 @@ rather than a dangling call.
   default-on spectrum still settles to **zero repaints on an idle patch**. That gate is what keeps
   this compliant with [rendering](rendering.md). Never make it unconditional.
 
+## Read-only views: names and tooltips
+
+`ScopeComponent`, `FrequencyResponseComponent`, `WavetableDisplayComponent`,
+`SampleWaveformComponent` and the meter half of `ThresholdControlComponent` only show a signal. Each
+has a `setTitle`, a one-line `setDescription` and a tooltip, and none of them is a Tab stop. The
+wavetable display ignores the mouse so a drag over it reaches the card, which means its tooltip is
+never shown on hover; the title and description still reach a screen reader.
+
 ## EQWindow
 
 `Source/UI/ModuleViews/EQWindow.h`. The pop-out editor for a Parametric EQ, opened from the card's
 "Open EQ Window" button. It is a content-only `juce::Component`, the same pattern as
 `SettingsWindow`; the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`.
-It hosts a second `EQCurveComponent` over the same module at 720x420 (resizable), plus a spectrum
-toggle and a gesture hint.
+It hosts a second `EQCurveComponent` over the same module at 820x470 (resizable), the band strip under it, and a
+toolbar of the spectrum toggle, an empty reserved slot (`kReservedToolbarSlotWidth`, for the Compare and Suggest
+buttons), the type pill, the solo (headphones) button and a gesture hint whose tooltip names the live keys. Escape ends a solo the window's curve started, else closes it. The curve in this window edits with the same keys as the
+card's curve (see the EQ curve's Keyboard table above); Tab visits the curve, the band chips, the spectrum
+toggle, the type pill and the solo button.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in
 `detachFromProcessor()`** — the window references the module, so leaving it open across a graph
@@ -164,6 +234,13 @@ image and re-run the module's text layout on every meter tick — exactly the re
 a displayed value moves past a visible amount (see `needsRepaint`), leaving the parent's cached image
 untouched.
 
+**Keyboard and screen reader.** The meter is read-only and is not a Tab stop; it has a title, a
+description and a tooltip ("Trigger meter", or "<parameter> meter" in slider mode). In slider mode
+the attached slider is the Tab stop: Up/Down (and Left/Right) adjust the threshold, Page Up/Page
+Down and Home/End jump, it shows the accent focus ring, speaks its own value through the stock
+slider handler, and is named after the parameter. The container is deliberately not a second stop
+for the same value.
+
 **Public static helpers** (headless-testable):
 
 | Helper | Signature | Notes |
@@ -173,20 +250,49 @@ untouched.
 | `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
+## Gain-reduction meter
+
+`Source/Modules/GainReductionMeterSource.h`. The data behind the `gainReduction` card view the
+Compressor and Limiter defaults place (`GainReductionMeterComponent`, registered in `CardBodyViews.cpp`:
+a caption and a bar that fills left to right over 0 to 24 dB, with the reading in decibels; read-only,
+so not a Tab stop, with a title, description and tooltip). The source is the
+dynamics counterpart of `ThresholdMeterSource`: `GainReductionMeterSource::getGainReductionDb()` is
+a lock-free atomic load (audio thread writes, any thread reads), in positive decibels, 0 meaning
+the module is not touching the signal. The module feeds it once per block through
+`synth::GainReductionMeter`, which takes a deeper reduction at once and lets a shallower one fall
+at 40 dB/s, so a view polling at its own timer rate sees transients. The view binds with
+`dynamic_cast<GainReductionMeterSource*>(module)`, and — like `ThresholdControlComponent` — owns its
+own 20 Hz timer (running only while it is on screen) and repaints only itself, and only when the
+reading changes by a tenth of a dB, so a card buffered to an image is not invalidated on every tick. See
+[`../modules/fx-modules.md#compressor-module`](../modules/fx-modules.md#compressor-module) and
+[`../modules/fx-modules.md#limiter-module`](../modules/fx-modules.md#limiter-module).
+
 ## WavetableDisplayComponent
 
 `Source/UI/ModuleViews/WavetableDisplayComponent.h`. The wavetable frame view on the `Wavetable`
-module card. It draws the frame currently under the scan position as a solid trace, with
+module card. It draws the frame the oscillator plays now as a solid trace, with
 `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack, so the scan
 direction and the table's depth read as three-dimensional. It is captioned with the table name and
 `frame/total`.
 
+**It shows the modulated position, not the knob.** The frame, the ghosts and the caption follow
+`getModulatedScanPosition()` and the trace is warped by `getModulatedWarpAmount()`: knob plus the
+Position (Warp) cable at the end of the last audio block while a note sounds, the knob alone at rest
+(no note held, nothing on the cable, bypassed). So an LFO on Position sweeps the drawn frame in time
+with the sound, and a released note or a removed cable settles it on the knob. What counts as
+"sounding" is in [wavetable](../modules/wavetable.md#the-display). Between the audio thread's values
+the drawn position glides toward the live one (a one-pole of `kGlideMs`, 60 ms, under full
+Animations; a jump under Reduce Motion or Off, `motionMs`), and the timer runs at 30 Hz only while the
+drawn or the live position moves, 15 Hz otherwise. Getter, glide and rate:
+`WavetableLiveDisplayTests.cpp`. The guard over every display that does the same is
+[`DisplaysShowModulatedValue`](#every-display-shows-the-modulated-value).
+
 **The trace is drawn warped.** `getDisplayWaveformAt()` runs the same `readWarped()` the audio path
 does. A Warp knob whose effect is invisible is a knob users do not trust.
 
-**Repaints are gated.** The 15 Hz timer compares a change signature — quantised scan position, table
-name, frame count, and `getWarpSignature()` (warp mode plus quantised amount plus interpolation
-mode) — and calls `repaint()` only when it differs. This is required by [rendering](rendering.md):
+**Repaints are gated.** The timer compares a change signature — quantised drawn position, table
+name, frame count, and `getWarpSignature(amount)` (warp mode plus the quantised live amount plus
+interpolation mode) — and calls `repaint()` only when it differs, so a held value repaints nothing. This is required by [rendering](rendering.md):
 the display is always visible inside a buffered module card, so an unconditional per-tick repaint
 would invalidate that cache 15 times a second.
 
@@ -203,6 +309,21 @@ hardcoded colours when the cast fails.
 The card chrome this display sits in — the two-column jack gutter, the tabbed control body and the
 chrome band beside the ports — is [module-card](module-card.md#wavetable-card).
 
+## Every display shows the modulated value
+
+A display shows what the sound does: a parameter's processor-side current value (knob plus
+modulation, as `FilterModule::getCurrentCutoff` and `WavetableOscillatorModule::getModulatedScanPosition`
+publish it, one relaxed atomic per value stored once per block), never the stored knob value while a
+cable or LFO moves the sound. The guard `DisplaysShowModulatedValue`
+(`Tests/UI/ModuleViews/DisplaysShowModulatedValueTests.cpp`) finds every file under
+`Source/UI/ModuleViews/` that paints or ticks and fails until it is registered with what it shows (a
+live value, a live signal, editor data, or a known base-value display); a live-value display must
+read a `getModulated...`/`getCurrent...` getter, and no display outside the known list may read a
+stored value (`->get()`, `getValue()`, `getScanPosition()`...) in `paint` or `timerCallback`. The
+known list still on the stored value (shrink-only, never added to): the Sampler waveform's start and
+loop markers, the EQ curve, the Morph map cursor (card and shape window), the knob mod ring, and the
+ADSR graph.
+
 ## CurveEditorComponent
 
 `Source/UI/ModuleViews/CurveEditor/`. A generic breakpoint curve editor: a curve drawn through
@@ -215,14 +336,64 @@ It is wired into the ADSR envelope card (`ModuleComponentEnvelopeCard.cpp` — s
 [modules.md](../modules/modules.md#adsr-envelope-module)'s ADSR "Card UI" entry for the two-way sync, undo and playhead details)
 using `CurveMode::Fixed`, the fixed origin / attack-peak / hold-end / sustain / release-end topology
 this component was built for. `CurveMode::Free` (add, remove and reorder points) is the second
-supported topology, and now has a real caller: the LFO card's Custom-waveform section
+supported topology, with two callers: the LFO card's Custom-waveform section
 (`ModuleComponentLfoCard.cpp` — see [lfo.md](../modules/lfo.md)'s "Card UI"
-entry, FRO114).
+entry) and the modulation curve box ([modulation.md](../modules/modulation.md#the-modulation-curve)).
+`setLineClickEditing(true)` is the box's opt-in: a single press on the drawn line adds a point (that press can go on
+into a drag, one gesture) and a right-click on a point removes it; the LFO and envelope cards leave it off and keep
+their double-click.
 
 **Bend is `EnvelopeGenerator::shape`.** A segment's value at `progress` is
 `start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by default;
 the model accepts an alternative shape function. This is deliberate: the curve the editor draws is
 exactly what the envelope's DSP plays, never a separately re-derived approximation.
+
+**Keyboard.** The editor is a Tab stop with the accent focus ring; the keys act only inside it and
+are not rebindable actions. They are the shared point-editor map ([`control/point-editing.md`](../control/point-editing.md)).
+
+| Key | Effect |
+|---|---|
+| Left / Right | Select the previous / next point that can move (a pinned origin is skipped; stops at the ends), collapsing any selection to it. Tabbing in selects the first |
+| Shift+Left / Shift+Right | Extend or shrink the selection toward that side, like text selection: the cursor moves one point and everything between it and the anchor is selected. A fully pinned point is never selected |
+| Alt+Left / Alt+Right | Move every selected point in time. A tap is one step; holding the key glides (below) |
+| Alt+Up / Alt+Down | Move every selected point in level |
+| Up / Down | The same level move without Alt (nothing selected: the key falls through to the app) |
+| Shift added to the Alt moves | A fifth of the step, and no snapping |
+| Ctrl+T | Free mode only: insert a point halfway (time and level) between the cursor point and the next; it becomes the selection. One undo step. A press with no room (the last point, a full curve) does nothing. The physical Control key on the Mac; Cmd+T stays the app's Add Track |
+| Delete / Backspace | Remove every selected point (Free mode only; a Fixed curve leaves the key to the app). The cursor goes to the next remaining movable point |
+| Cmd+A | Select every movable point |
+| Cmd+C | Copy the selected points (spacing from the first, level, the bend between neighbours) to one process-wide curve clipboard; with nothing selected the key falls through to the app |
+| Cmd+V | Free mode only: paste the clipboard so the group starts just after the cursor point, keeping its spacing, clamped to the curve's range and the room left (the curve holds at most `CurveModel::kMaxNodes`); the pasted points become the selection |
+| Cmd+D | Free mode only: paste a copy of the selection, leaving the clipboard alone. Where it starts is the Timeline preference Duplicate points (default: one tick, 1/960 of the x range, past the last selected point; or one point-spacing after; or whole grid cells on while snapping). One selected point is copied a fiftieth of the range on, in every choice ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
+
+**Selection.** The selection is a set of point indices (`getSelectedIndices()`) plus a cursor
+(`getSelectedIndex()`, what Left/Right continue from and what a screen reader reads) and an anchor
+(where a Shift range began). With the mouse, Shift- or Cmd-click toggles a point without moving it, a
+plain click on an unselected point collapses to it, and dragging a point of a multi-selection moves the
+whole selection (a plain click on one of them without a drag collapses to it on release). A group move
+is rigid: the delta is clamped so no point leaves the curve's range or crosses an unselected neighbour,
+and a point's pinned axis stays put while the others move; in a Fixed curve the earliest selected point
+carries the later ones along, as a single drag does. Every selected point is painted in the selected
+style. The logic is in `CurveEditorSelection.cpp` (selection, group move, remove) and
+`CurveEditorClipboard.cpp` (copy, paste, duplicate).
+
+A step is one grid cell while snap-to-grid is on (the LFO card) and otherwise a fiftieth of the
+visible time range and a fiftieth of the level range. A key move goes through the same
+rules a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` (once per moved point) /
+`onPointsChanged`, and is wrapped in exactly one `onGestureStart` / `onGestureEnd`, so the envelope
+and LFO cards record one undo step per press, whatever the number of points. A press that changes
+nothing (a pinned axis, a limit) opens no gesture. A screen reader reads the cursor point, e.g. "Point 3
+of 5, time 0.25, level 0.80", led by "3 points selected" when several are ("Curve with 5 points" before
+one is picked). The keys and handler live in `CurveEditorKeyboard.cpp`.
+
+**Holding an Alt+arrow or Up/Down** glides instead of repeating (`CurveEditorKeyGlide.cpp`, the shared `KeyGlide`
+model the lanes and the morph map use). The press is the one step above; if the key is physically down the hold then
+carries the cursor point on (the group rigidly, by the same move path as a press) at 0.15 of the axis range per second
+rising to 1.2 over two seconds, Shift (fine) a fifth of that, and with snap-to-grid on in whole grid cells, jumping from
+line to line. The gesture opens at the first real move and closes at the key-up, so the tap and the hold are one
+`onGestureStart` / `onGestureEnd` pair and one undo step; a hold against a limit opens none. A tap and a snapped step
+ease the drawn points 160 ms `easeOutCubic` (`KeyedPointTween`; the model is final at once); nothing eases under Reduce
+Motion or Animations Off ([motion rule](animation.md#motion-rules)). The line, its fill and the bend handles are drawn through the gliding nodes (`segmentTweenOffset`). `setModel(model, glideMoved)` glides the nodes of a same-shaped curve the same way when an undo or redo moved them, and morphs the whole line when the restore changed the number of points ([undo-glide.md](undo-glide.md)).
 
 Five display and interaction rules:
 
@@ -273,6 +444,14 @@ Five display and interaction rules:
 - **`setFillBaselineLevel(float)`** (default 0): `paintCurve` fills down (or up) to this level
   instead of always 0. The LFO card sets 0.5 for a bipolar wave (fill from the zero line) and 0 for
   unipolar.
+- **`setAxisGuides(std::optional<AxisGuides>)`** draws exactly the given labelled lines (`AxisGuide{position,
+  label, emphasised}`, x in model units, y as a level in 0..1) in place of the even grid, for an axis that is not
+  linear: the Filter shape editor labels 100, 1k and 10k on its log frequency axis and draws 0 dB (y = 0.8) bright.
+- **`CurveModel::kMaxNodes`** (64, the same cap `LfoCustomWave::sanitise` applies when the points are saved):
+  `CurveModel::addPoint` returns -1 and adds nothing at the cap, and `addPointAt` returns -1 without opening a
+  gesture, so a full curve neither grows past what it can save nor leaves an empty undo step.
+- **`CurveWaveConversion.h`** (`curveModelFromWave`, `waveFromCurveModel`): the Free-mode `CurveModel` <->
+  `synth::LfoCustomWave` mapping the LFO card and the Filter shape editor share (end points pinned in x, y over 0..1).
 - **`CurveModel::playheadForX(double x)`**: the first segment with `x <=` its end node's `x` and a
   non-zero duration (the same convention `CurveEditorGeometry::segmentForTime` already used for
   drawing/hit-testing — a boundary value still belongs to the segment ENDING there, not the one
@@ -299,4 +478,26 @@ rule](animation.md#the-time-bounded-animation-rule).
 records the target with no gesture opened yet, since a plain click that never becomes a drag would
 otherwise push an empty undo step; `mouseDrag` opens the gesture on its first call; `mouseUp` closes
 it. Double-click adds (Free mode, empty space), removes (Free mode, a node), or resets a bend handle
-to 0 (either mode).
+to 0 (either mode). A press on empty space (no node, no handle) is a box select, not a gesture: no undo step
+opens (`CurveEditorBoxSelect.cpp`, [`point-editing.md`](../control/point-editing.md#mouse)).
+
+## MorphMap
+
+`Source/UI/ModuleViews/MorphMap/`. The morph map of the Filter's Custom type and the LFO's Custom shape: one dot per shape (its colour from
+`morphShapeColour`: the colour the user picked for it (`Dot::colour`), else the palette colour by shape index, from theme tokens) and a dark cursor dot on a square map whose coordinates run
+0..1 (x to the right, y downwards). It edits nothing itself and reports through callbacks; `ShapeMapController`
+(`Source/UI/ModuleViews/ShapeEditor/`) turns them into shape-list edits with their undo steps, so the module card's map
+and the shape editor window's map behave identically. The behaviour is in
+[`custom-filter.md`](../modules/custom-filter.md#morph-map). Pointer: drag a dot or the cursor, click empty space to
+add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Colour... / Delete (Colour... and Alt+C open the shared colour picker beside the dot: `onPreviewDotColour` shows each tick without an undo step, `onCommitDotColour` hands the owner the original and the final pick so it records ONE step, or none when the pick ended where it began; `MorphMapKeyboard.cpp`) (the menu opens beside the dot; the shape editor window leaves Edit out, since a press already selected the dot: `setEditItemShown`), right-click a slider for its Morph knob menu (`onStripMenu`: the owner opens the usual Automate / MIDI Learn menu of that Morph X / Y parameter beside the slider, on the card and in the window alike). Keyboard: the map,
+then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` children carrying the name, tooltip and
+focus ring over the painted dots, the `PianoRollHeaderChip` idea); an arrow moves the focused dot or cursor one step (Shift for a
+bigger one) and, held, glides it on (`MorphMapGlide`, the timeline cursor glide's curve at 0.15 to 1.2 map units a
+second; two arrows are diagonal; one gesture for the whole hold; a refresh keeps the existing `Stop`s so the focused one
+survives), Return opens a dot's menu (Edit first), Delete removes it and focuses the next dot, F2 renames it, Shift+F10 opens its menu (a slider's too), Escape returns to the map.
+These keys belong to the focused control, so they are documented here and not rebindable actions
+([accessibility](../development/accessibility.md#the-rule)). Thin sliders hug the bottom edge (Morph X) and the left edge
+(Morph Y), 10 px thick with the thumb at the cursor; a press, drag or arrow key sets that one coordinate, through the
+cursor's callbacks. The right edge is left empty (the plot is symmetric left and right) for a future third axis. A cable
+dropped on a slider drives that parameter (`stripAt`, `stripAnchor`, `setDropHighlight`). Tab order: the map, each
+dot, the cursor, the X slider, the Y slider.

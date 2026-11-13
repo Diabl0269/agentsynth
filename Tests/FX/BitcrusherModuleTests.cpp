@@ -16,11 +16,11 @@ TEST(BitcrusherModuleTest, PortLabelsAreCorrect) {
     EXPECT_EQ(module.getInputPortLabel(3), "Mix");
     EXPECT_EQ(module.getInputPortLabel(4), "Dither");
     EXPECT_EQ(module.getOutputPortLabel(0), "Audio");
-    EXPECT_EQ(module.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(module.getVisibleInputPortCount(), 7);
     EXPECT_EQ(module.getVisibleOutputPortCount(), 1);
 
     auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), 4u);
+    ASSERT_EQ(targets.size(), 6u);
     EXPECT_EQ(targets[0].name, "Rate");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Depth");

@@ -1,0 +1,35 @@
+# The Filter's Edit shapes window has the app's one Snap button (the snap icon, as on the timeline and in the curve
+# window) for both the Grid row and the Level row, in place of two text "Snap" pills.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes and Level 6, then clicks the Snap
+# button of each row: each lights and dims like the timeline's Snap.
+# Proof marks: 1 shape-snap-across (the Grid row's Snap button after its click), 2 shape-snap-level (the Level row's).
+record: true
+save_project: fro1764-shape-snap
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Notes}
+  - wait: {settleMs: 400}
+  - click: {id: "6"}
+  - wait: {settleMs: 400}
+  - click: {id: "Snap across"}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: shape-snap-across}
+  - click: {id: "Snap level"}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: shape-snap-level}

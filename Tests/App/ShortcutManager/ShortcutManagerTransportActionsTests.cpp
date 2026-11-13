@@ -7,11 +7,15 @@
 // MainComponent + AudioEngine (mirroring FocusArbitrationPlaybackDeleteTests.cpp's
 // SpaceTogglesPlayback), since a bare ShortcutManager has no ApplicationCommandManager to invoke
 // through.
+#include "../../ShortcutDisplayText.h"
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
@@ -79,6 +83,10 @@ void resetMetronomeKeys() {
 TEST_F(ShortcutManagerTest, TransportActionIdsExistAndHaveNoDefaultBinding) {
     for (const auto& actionId : transportActionIds()) {
         EXPECT_TRUE(manager.getActionIds().contains(actionId)) << actionId << " is not a registered action";
+        // Record and Metronome are the exception on every platform (Ctrl+R / Ctrl+M, tested in
+        // ShortcutManagerTransportChordsTests.cpp).
+        if (actionId == "transportRecord" || actionId == "transportToggleMetronome")
+            continue;
         EXPECT_FALSE(manager.getBinding(actionId).isValid()) << actionId << " should ship unbound by default";
     }
 }
@@ -191,12 +199,12 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleLoopFlipsLoopin
     // the message loop before draining the resulting transport command, the same idiom
     // SpaceTogglesPlayback uses for togglePlayback's identical triggerClick() body.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleLoop, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_EQ(transport.getPositionSnapshot().looping, !loopingBefore);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleLoop, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_EQ(transport.getPositionSnapshot().looping, loopingBefore);
 }
@@ -208,9 +216,40 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleMetronomeFlipsM
     const bool enabledBefore = metronome.isEnabled();
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleMetronome, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return metronome.isEnabled() == !enabledBefore; });
     EXPECT_EQ(metronome.isEnabled(), !enabledBefore);
     EXPECT_EQ(mc.getTimelinePanel().getTransportBar().getMetronomeButton().getToggleState(), !enabledBefore);
+}
+
+// The buttons name their keys in their tooltips and follow a rebind.
+TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportBarTooltipsNameTheirShortcutsAndFollowARebind) {
+    MainComponent mc(std::make_unique<TransportTestProvider>());
+    auto& shortcuts = mc.getShortcutManager();
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    const auto original = shortcuts.getBinding("transportToggleMetronome");
+    const auto expected = [&](const char* base, const char* actionId) {
+        return synth::ui::formatShortcutHint(base, shortcutHintFor(&shortcuts, actionId, {}));
+    };
+    EXPECT_EQ(bar.getRecordButton().getTooltip(),
+              expected("Record (arms the first armed track; implies Play)", "transportRecord"));
+    EXPECT_EQ(bar.getPlayStopButton().getTooltip(), expected("Play / Stop", "togglePlayback"));
+    EXPECT_EQ(bar.getLoopButton().getTooltip(), expected("Loop", "timelineToggleLoop"));
+#if JUCE_MAC
+    EXPECT_TRUE(bar.getMetronomeButton().getTooltip().endsWith(
+        "(" + synth::test::keyText('m', juce::ModifierKeys::ctrlModifier) + ")"))
+        << bar.getMetronomeButton().getTooltip();
+    EXPECT_TRUE(bar.getRecordButton().getTooltip().endsWith(
+        "(" + synth::test::keyText('r', juce::ModifierKeys::ctrlModifier) + ")"))
+        << bar.getRecordButton().getTooltip();
+#endif
+
+    shortcuts.setBinding("transportToggleMetronome", juce::KeyPress('9', juce::ModifierKeys::altModifier, 0));
+    EXPECT_NE(bar.getMetronomeButton().getTooltip().indexOf("9"), -1) << bar.getMetronomeButton().getTooltip();
+    shortcuts.setBinding("transportToggleMetronome", juce::KeyPress());
+    EXPECT_EQ(bar.getMetronomeButton().getTooltip(),
+              juce::String("Metronome click (summed after the graph - never recorded or bounced)"))
+        << "an unbound action claims no key";
+    shortcuts.setBinding("transportToggleMetronome", original);
 }
 
 TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTheArmedTrackGate) {
@@ -232,7 +271,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     // Nothing armed: transportRecord still reaches handleRecordToggle's "record implies roll"
     // behaviour (proving it went through the gate, not a bare toggle), but no take starts.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_TRUE(transport.getPositionSnapshot().playing) << "record implies roll, even with nothing armed";
     EXPECT_TRUE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
@@ -240,7 +279,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
 
     // Off, then arm a MIDI track and try again -- this time the take must actually start.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     transport.stop();
     engine.processHostBlock(buffer, midi);
@@ -250,7 +289,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     doc.setTrackArmed(trackA, true);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_TRUE(transport.getPositionSnapshot().playing);
     EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording()) << "an armed MIDI track must actually start a take";
@@ -300,7 +339,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordSurvivesATimerT
     // Same reachability path as the test above: invoke the command, pump only far enough for the
     // posted click to run (the real timer is stopped, so it can't coincidentally self-heal here).
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getMidiRecorderForTest().isRecording(); });
     ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording())
         << "the click must have started the take before the race window below";
 
@@ -342,7 +381,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordEngagedMidRollS
     doc.setTrackArmed(trackA, true);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getMidiRecorderForTest().isRecording(); });
     ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording());
 
     // Stop right away, then a single tick -- no intervening tick ever observed "playing" for
@@ -376,4 +415,31 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportReturnToStartLocatesT
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportReturnToStart, false));
     engine.processHostBlock(buffer, midi);
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
+}
+
+// The transport bar's Return to Start button runs the same command, so it locates exactly as the shortcut does.
+TEST_F(ShortcutManagerTransportActionsInvokeTest, ReturnToStartButtonLocatesToBeatZero) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<TransportTestProvider>());
+    auto& transport = engine.getTransport();
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    transport.locateBeat(8.0);
+    engine.processHostBlock(buffer, midi);
+    ASSERT_GT(transport.getPositionSnapshot().ppq, 0.0);
+
+    auto& button = mc.getTimelinePanel().getTransportBar().getReturnToStartButton();
+    ASSERT_TRUE(button.isShowing() || button.isVisible());
+    button.triggerClick(); // posts the click; it lands on the next dispatch pass
+    for (int i = 0; i < 50 && transport.getPositionSnapshot().ppq != 0.0; ++i) {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        engine.processHostBlock(buffer, midi);
+    }
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
+    EXPECT_FALSE(transport.getPositionSnapshot().playing) << "returning to start relocates only; it does not stop";
 }

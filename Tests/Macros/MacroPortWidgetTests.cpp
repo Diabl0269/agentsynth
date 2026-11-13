@@ -19,8 +19,10 @@
 #include "Modules/MacroInletModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -45,8 +47,13 @@ TEST(MacroPortWidget, HullBoundsExcludesPortMembersFromTheUnion) {
     editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
                                              MacroPortShape::Mono, 1, "In A");
 
+    // The port's own node is not in the member union (no feedback loop), so the hull grows only by the
+    // sidebar strip, whose width is fixed (reserved even with no ports), so nothing moves at all.
     const auto hullAfter = editor.getMacroController().macroHullBounds(macroId);
-    EXPECT_EQ(hullAfter, hullBefore) << "a port's own node must not grow the hull it then docks against";
+    EXPECT_EQ(hullAfter.getRight(), hullBefore.getRight());
+    EXPECT_EQ(hullAfter.getY(), hullBefore.getY());
+    EXPECT_EQ(hullAfter.getHeight(), hullBefore.getHeight());
+    EXPECT_EQ(hullAfter.getX(), hullBefore.getX());
 }
 
 // ============================================================================
@@ -81,18 +88,20 @@ TEST(MacroPortWidget, InputWidgetsDockLeftOfTheHullOutputsRightInOrder) {
     ASSERT_NE(in1Comp, nullptr);
     ASSERT_NE(outComp, nullptr);
 
-    // Inputs sit entirely LEFT of the hull's own left edge; outputs entirely RIGHT of its right.
-    EXPECT_LE(in0Comp->getRight(), hull.getX());
-    EXPECT_LE(in1Comp->getRight(), hull.getX());
-    EXPECT_GE(outComp->getX(), hull.getRight());
+    // Widgets dock INSIDE the hull's sidebars: an input's left jack sits on the hull's left border (the
+    // widget overhangs it by 5px) and an output's right jack on the right border.
+    EXPECT_EQ(in0Comp->getX(), hull.getX() - 5);
+    EXPECT_EQ(in1Comp->getX(), hull.getX() - 5);
+    EXPECT_EQ(outComp->getRight(), hull.getRight() + 5);
 
-    // order 0 (In A, added first) docks above order 1 (In B) — MacroPort::order, not add order,
-    // is what a redundant add/remove/reorder must keep agreeing with.
-    EXPECT_LT(in0Comp->getY(), in1Comp->getY());
+    // order 0 (In A, added first) docks above order 1 (In B), one 16px row apart — MacroPort::order, not add
+    // order, is what a redundant add/remove/reorder must keep agreeing with.
+    EXPECT_EQ(in1Comp->getY() - in0Comp->getY(), detail::kMacroPortRowHeight);
+    EXPECT_EQ(in0Comp->getHeight(), detail::kMacroPortRowHeight);
 
-    // Both sides start near the hull's own top edge.
-    EXPECT_GE(in0Comp->getY(), hull.getY());
-    EXPECT_GE(outComp->getY(), hull.getY());
+    // Both sides start on the first row, just below the chip row (hull top + 30).
+    EXPECT_EQ(in0Comp->getY(), hull.getY() + 30);
+    EXPECT_EQ(outComp->getY(), hull.getY() + 30);
 }
 
 TEST(MacroPortWidget, DockingSurvivesAnUpdateComponentsPassUnchanged) {
@@ -201,10 +210,11 @@ TEST(MacroPortWidget, StereoPortWidgetShowsTwoDistinctJacksAndGrowsASecondRow) {
     EXPECT_EQ(jack0.x, jack1.x) << "both legs stay on the same (left/input) edge";
     EXPECT_NE(jack0.y, jack1.y) << "Stereo's two visible jacks must be distinct rows, not overlapping";
 
-    // The widget grows to fit the second row, matching layoutMacroPortWidget's own formula.
-    EXPECT_EQ(comp->getWidth(), ModuleComponent::kMacroPortWidgetWidth);
-    EXPECT_EQ(comp->getHeight(), ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetRowStep +
-                                     ModuleComponent::kMacroPortWidgetBottomPad);
+    // Two 16px rows, jack centres on each row's middle, the boundary jack 5px in from the widget's edge.
+    EXPECT_EQ(comp->getHeight(), 2 * detail::kMacroPortRowHeight);
+    EXPECT_EQ(jack0.x, ModuleComponent::kMacroPortWidgetJackInset);
+    EXPECT_EQ(jack0.y, 8);
+    EXPECT_EQ(jack1.y, 24);
 }
 
 TEST(MacroPortWidget, MidiPortWidgetShowsAMidiJackAtTheCompactHeaderPosition) {
@@ -222,13 +232,14 @@ TEST(MacroPortWidget, MidiPortWidgetShowsAMidiJackAtTheCompactHeaderPosition) {
     ASSERT_NE(comp, nullptr);
     ASSERT_TRUE(comp->getModule()->acceptsMidi());
 
-    auto port = comp->getPortForPoint({10, ModuleComponent::kMacroPortWidgetHeaderY});
+    auto port =
+        comp->getPortForPoint({ModuleComponent::kMacroPortWidgetJackInset, ModuleComponent::kMacroPortWidgetHeaderY});
     ASSERT_TRUE(port.has_value());
     EXPECT_TRUE(port->isMidi);
     EXPECT_TRUE(port->isInput);
 
     // A single-row widget: no jack-count growth for MIDI (it has no Mono/Stereo/Poly-N shape).
-    EXPECT_EQ(comp->getHeight(), ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad);
+    EXPECT_EQ(comp->getHeight(), detail::kMacroPortRowHeight);
 }
 
 TEST(MacroPortWidget, AudioJackHitTestRoundTripsForMonoAndStereo) {
@@ -351,7 +362,7 @@ TEST(MacroPortWidget, AllPortsMacroFallsBackToMacroBoundsForTheHull) {
 
     auto* portComp = findComponent(editor, nodeIdForUuid(engine, portUuid));
     ASSERT_NE(portComp, nullptr);
-    EXPECT_LE(portComp->getRight(), hull.getX()) << "the port still docks against the fallback hull";
+    EXPECT_EQ(portComp->getX(), hull.getX() - 5) << "the port still docks against the fallback hull";
 }
 
 // ============================================================================
@@ -390,7 +401,7 @@ TEST(MacroPortWidget, CollapsingSeedsCardBoundsFromNonPortMembersOnly) {
     EXPECT_GE(macro->bounds.getX(), portRightBeforeCollapse);
 }
 
-TEST(MacroPortWidget, MonoPortWidgetSizeMatchesEstimateModuleSize) {
+TEST(MacroPortWidget, MonoPortWidgetIsOneRowTallAndTakesTheDockedStripWidth) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -404,9 +415,13 @@ TEST(MacroPortWidget, MonoPortWidgetSizeMatchesEstimateModuleSize) {
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
 
+    // The estimate is the nominal first-layout size; the real width is the sidebar strip's, set by the dock.
     const auto estimate = GraphEditor::estimateModuleSize("Macro Out");
-    EXPECT_EQ(comp->getWidth(), estimate.x);
+    EXPECT_EQ(estimate.y, detail::kMacroPortRowHeight);
     EXPECT_EQ(comp->getHeight(), estimate.y);
+    const auto layout = editor.getMacroController().macroHullPortLayout(macroId);
+    ASSERT_EQ(layout.size(), 1u);
+    EXPECT_EQ(comp->getBounds(), layout[0].widgetBounds);
 }
 
 // ============================================================================
@@ -447,10 +462,7 @@ TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
         auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
         ASSERT_NE(comp, nullptr) << c.label;
 
-        const int expectedHeight = ModuleComponent::kMacroPortWidgetHeaderY +
-                                   (c.expectedRows - 1) * ModuleComponent::kMacroPortWidgetRowStep +
-                                   ModuleComponent::kMacroPortWidgetBottomPad;
-        EXPECT_EQ(comp->getWidth(), ModuleComponent::kMacroPortWidgetWidth) << c.label;
+        const int expectedHeight = c.expectedRows * ModuleComponent::kMacroPortWidgetRowStep;
         EXPECT_EQ(comp->getHeight(), expectedHeight) << c.label;
 
         const bool isMidi = c.kind == synth::MacroPortKind::Midi;
@@ -465,9 +477,8 @@ TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
 }
 
 TEST(MacroPortWidgetG4, EstimateModuleSizeMatchesTheRealWidgetForEveryPortTypeName) {
-    // The anti-drift test the kPortGutterHeaderHeight comment wishes had existed, for the other
-    // geometry pair that can drift apart: GraphEditor's own drag-ghost estimate vs the real,
-    // freshly-constructed (Mono/one-row) widget, for all four type names at once.
+    // GraphEditor's drag-ghost estimate vs the real, freshly-constructed (Mono/one-row, not yet docked)
+    // widget, for all four type names at once: both are the nominal first-layout size.
     for (const juce::String& typeName : {"Macro In", "Macro Out", "Macro MIDI In", "Macro MIDI Out"}) {
         auto processor = synth::AIStateMapper::createModule(typeName);
         ASSERT_NE(processor, nullptr) << typeName;
@@ -512,22 +523,30 @@ TEST(MacroPortWidgetG4, HitTestStaysGenerousAroundTheShrunkJackDot) {
     }
 }
 
-TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) {
-    // A shrink that quietly forces every longer name into drawFittedText's compress-or-ellipsise
-    // fallback would technically satisfy "never overflow the bounds" (drawFittedText guarantees
-    // that structurally) while still costing port-name legibility. This checks the STRONGER
-    // property: at the widget's tuned width, a realistic name like "Delay 1 Audio" measures
-    // narrower than the available text area at the widget's own (unscaled) 9.5f font, so
-    // paintMacroPortWidget draws it at full size, not shrunk.
+TEST(MacroPortWidgetG4, FixedStripWidthFitsARealisticNameAtFullUnscaledSize) {
+    // The fixed strip is wide enough that a realistic name like "Delay 1 Audio" is never squeezed into
+    // drawFittedText's compress-or-ellipsise fallback at working zoom.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+
     const juce::String realisticName = "Delay 1 Audio";
-    const juce::Font nameFont(juce::FontOptions(9.5f));
+    ASSERT_FALSE(editor.getMacroController()
+                     .addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, realisticName)
+                     .isEmpty());
+
+    const juce::Font nameFont{juce::FontOptions(detail::kMacroPortNameFontSize)};
     const float textWidth = juce::GlyphArrangement::getStringWidth(nameFont, realisticName);
 
-    // Mirrors paintMacroPortWidget's own `getLocalBounds().reduced(16, 2)` textArea inset.
-    const int availableWidth = ModuleComponent::kMacroPortWidgetWidth - 2 * 16;
-    EXPECT_LE(textWidth, (float)availableWidth)
-        << "\"" << realisticName << "\" no longer fits the docked widget at full size; widen "
-        << "kMacroPortWidgetWidth rather than let it silently shrink";
+    const auto layout = editor.getMacroController().macroHullPortLayout(macroId);
+    ASSERT_EQ(layout.size(), 1u);
+    // paintMacroPortWidget's text area: inset kMacroPortStripInset from the boundary edge, 13px clear of the
+    // interior jack on the other side.
+    const int available = layout[0].widgetBounds.getWidth() - detail::kMacroPortStripInset - 13;
+    EXPECT_LE(textWidth, (float)available) << "the fixed strip must be wide enough for a realistic name";
 }
 
 // ============================================================================

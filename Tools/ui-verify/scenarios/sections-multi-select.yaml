@@ -1,0 +1,68 @@
+# Several sections can be selected, the way tracks and clips are: Cmd-click adds a block, Shift-click selects the run
+# from the last click, and a drag, Delete or Cmd+D acts on the whole set as one undo step.
+#
+# What a user does: makes three sections (bar 1, bar 2, bars 3 to 4), Cmd-clicks Section 1 and Section 3 and drags
+# them right: both move as one group, back to back, and Section 2 closes up to bar 1. Presses Delete: both go with
+# their bars; Cmd+Z brings them back. Clicks Section 2 and Shift-clicks Section 3 (the run 2, 1, 3) and presses Cmd+D:
+# copies of all three land back to back after the last one; Option-dragging the run to the end does the same.
+record: true
+save_project: sections-multi-select
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # Three sections: bar 1 (x 0..96), bar 2 (96..192), bars 3 and 4 (192..384); each opens its name, Return keeps it.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 101, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 186, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 186, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - mouseDown: {id: timelineSectionStrip, x: 197, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 378, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 378, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1;Section 2:4.000:4.000:1/1;Section 3:8.000:8.000:1/1", within_ms: 2000}
+  - screenshot: {name: 1-three-sections}
+  # Check 1: click Section 1, Cmd-click Section 3: both are selected.
+  - glide: {name: select-first, do: {click: {id: timelineSectionStrip, x: 40, y: 12}}, frames: 4}
+  - glide: {name: cmd-click-third, do: {click: {id: timelineSectionStrip, x: 280, y: 12, mods: cmd}}, frames: 4}
+  - expect: {id: timelineSections, selectedSections: "0.000;8.000", within_ms: 2000}
+  # Drag Section 1 (grabbed 40 px in) until the group's left edge is at x 290 (beat 12): Section 2 closes up to the
+  # start and Sections 1 and 3 land there back to back, filmed step by step.
+  - drag: {from: timelineSectionStrip, to: timelineSectionStrip, fromX: 40, fromY: 12, toX: 330, toY: 12, steps: 20}
+  - mark: {check: 1, name: group-drag-moves-both}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 1:12.000:4.000:1/1;Section 3:16.000:8.000:1/1", within_ms: 2000}
+  - expect: {id: timelineSections, selectedSections: "12.000;16.000", within_ms: 2000}
+  # Check 2: Delete removes both selected blocks and their bars in one step; one Cmd+Z brings both back.
+  - glide: {name: delete-both, do: {key: {keys: backspace}}, frames: 8}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1", within_ms: 2000}
+  - glide: {name: undo-brings-both-back, do: {key: {keys: cmd+z}}, frames: 8}
+  - mark: {check: 2, name: delete-then-undo-both}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 1:12.000:4.000:1/1;Section 3:16.000:8.000:1/1", within_ms: 2000}
+  # Check 3: click Section 2, Shift-click Section 3: the run from 2 to 3 (Section 1 between them) is selected. Cmd+D
+  # places copies of all three after the last one, back to back; undo takes them away. Then an Option-drag of the
+  # run to the end places the same copies, filmed step by step.
+  - glide: {name: select-second, do: {click: {id: timelineSectionStrip, x: 40, y: 12}}, frames: 4}
+  - glide: {name: shift-click-third, do: {click: {id: timelineSectionStrip, x: 460, y: 12, mods: shift}}, frames: 4}
+  - expect: {id: timelineSections, selectedSections: "0.000;12.000;16.000", within_ms: 2000}
+  - key: {keys: cmd+d}
+  - expect: {id: timelineSections, contains: {sections: "Section 3:16.000:8.000:1/2;Section 2:24.000:4.000:2/2;Section 1:28.000:4.000:2/2;Section 3:32.000:8.000:2/2"}, within_ms: 2000}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Section 1:12.000:4.000:1/1;Section 3:16.000:8.000:1/1", within_ms: 2000}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - click: {id: timelineSectionStrip, x: 460, y: 12, mods: shift}
+  - expect: {id: timelineSections, selectedSections: "0.000;12.000;16.000", within_ms: 2000}
+  - drag: {from: timelineSectionStrip, to: timelineSectionStrip, fromX: 40, fromY: 12, toX: 616, toY: 12, steps: 18, mods: alt}
+  - mark: {check: 3, name: shift-range-then-copy}
+  - expect: {id: timelineSections, contains: {sections: "Section 3:16.000:8.000:1/2;Section 2:24.000:4.000:2/2;Section 1:28.000:4.000:2/2;Section 3:32.000:8.000:2/2"}, within_ms: 2000}

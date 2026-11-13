@@ -156,6 +156,9 @@ else
 fi
 
 AWK_SCANNER="$SCRIPT_DIR/function-size-scan.awk"
+# Per-file results are cached by content (scripts/lib/guard-cache.sh); the cap and baseline are applied fresh every run.
+# shellcheck source=scripts/lib/guard-cache.sh
+source "$SCRIPT_DIR/lib/guard-cache.sh"
 CAP="${FUNCTION_SIZE_CAP:-200}"
 BASELINE_FILE="${FUNCTION_SIZE_BASELINE:-$ROOT/scripts/function-size-baseline.txt}"
 
@@ -184,11 +187,23 @@ build_current_data() {
     # Only hand awk files that actually exist on disk: git can list a path that isn't checked out
     # (e.g. a `--no-checkout` clone, or the ROOT-resolution bug the fail-safe in run_check exists
     # to catch), and awk treats a missing input file as fatal rather than "0 functions".
-    for p in "${paths[@]}"; do
+    for p in ${paths[@]+"${paths[@]}"}; do
         [ -f "$ROOT/$p" ] && existing+=("$p")
     done
     [ "${#existing[@]}" -eq 0 ] && return 0
-    (cd "$ROOT" && awk -f "$AWK_SCANNER" -- "${existing[@]}")
+    local list
+    list="$(mktemp)"
+    printf '%s\n' ${existing[@]+"${existing[@]}"} >"$list"
+    gc_init function-sizes "" "${BASH_SOURCE[0]}" "$AWK_SCANNER"
+    gc_scan_files 'p = $2; p = substr(p, 1, index(p, "::") - 1)' "$list" scan_function_sizes
+    local rc=$?
+    rm -f "$list"
+    return "$rc"
+}
+
+# scan_function_sizes -- scans the repo-relative paths on stdin with the awk scanner.
+scan_function_sizes() {
+    (cd "$ROOT" && xargs awk -f "$AWK_SCANNER" --)
 }
 
 # count_scanned_files -- how many paths list_scanned_paths returns, for run_check's vacuous-pass

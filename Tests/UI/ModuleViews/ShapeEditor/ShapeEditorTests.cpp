@@ -1,0 +1,682 @@
+// ShapeEditorTests.cpp -- the Filter shape editor window's content: selection, the curve editor driven through real
+// mouse events, the buttons, Pick shape, the lane draw shapes, undo and Escape.
+#include "../../../TestWait.h"
+#include "../../Accessibility/TabOrderHelpers.h"
+#include "Modules/Filter/CustomFilterShapes.h"
+#include "ShapeEditorTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/AppShortcutRelay.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
+
+using namespace synth::ui;
+using namespace synth::ui::test;
+using synth::CustomFilterShapes;
+
+namespace {
+
+CurveGeometryConfig editorGeometryConfig() {
+    CurveGeometryConfig config;
+    config.explicitVisibleRange = 1.0;
+    config.zeroSegmentPx = 0.0f;
+    return config;
+}
+
+// Button::triggerClick posts its click to the message queue, so a test runs the click handler itself.
+void click(juce::Button& button) { button.onClick(); }
+
+} // namespace
+
+TEST(ShapeEditor, ShowsOneChipPerShapeAndTheSelectedShapesCurve) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 1);
+
+    EXPECT_EQ(editor.getNumShapes(), 3);
+    EXPECT_NE(editor.getChip(2), nullptr);
+    EXPECT_EQ(editor.getChip(3), nullptr);
+    EXPECT_EQ(editor.getSelected(), 1);
+    EXPECT_EQ(editor.getCurveEditor().getModel().getNumNodes(),
+              (int)CustomFilterShapes::defaultShapes().shapes[1].curve.points.size());
+    EXPECT_EQ(editor.getWindowTitle(), "Filter shapes: Filter");
+}
+
+TEST(ShapeEditor, ClickingAChipSelectsThatShapeEverywhere) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+
+    click(*static_cast<juce::Button*>(editor.getChip(2)));
+
+    EXPECT_EQ(editor.getSelected(), 2);
+    EXPECT_EQ(editor.getMap().getSelected(), 2);
+    EXPECT_EQ(editor.getCurveEditor().getModel().getNumNodes(),
+              (int)CustomFilterShapes::defaultShapes().shapes[2].curve.points.size());
+}
+
+TEST(ShapeEditor, SelectingADotOnTheMapSelectsItsChipAndCurve) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& map = editor.getMap();
+    map.setBounds(0, 0, 340, 340);
+    const auto at = map.getDotCentre(1);
+
+    map.mouseDown(curveLeftClick(map, at));
+    map.mouseUp(curveLeftClick(map, at));
+
+    EXPECT_EQ(editor.getSelected(), 1);
+}
+
+TEST(ShapeEditor, DraggingACurvePointIsHeardLiveAndIsOneUndoStep) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& curve = editor.getCurveEditor();
+    ASSERT_GT(curve.getWidth(), 0);
+    const CurveEditorGeometry geometry(curve.getModel(), curve.getLocalBounds().toFloat(), editorGeometryConfig());
+    const int node = 3;
+    const auto from = geometry.nodePosition(node);
+    const auto to = from + juce::Point<float>(0.0f, -30.0f);
+    const int generationBefore = rig.filter->getCustomShapesGeneration();
+    const int serialBefore = rig.undo.getEditSerial();
+
+    curve.mouseDown(curveLeftClick(curve, from));
+    curve.mouseDrag(curveLeftDrag(curve, to, from));
+    EXPECT_GT(rig.filter->getCustomShapesGeneration(), generationBefore) << "the module has the edit mid-drag";
+    curve.mouseUp(curveLeftDrag(curve, to, from));
+
+    const float yAfter = rig.filter->getCustomShapes().shapes[0].curve.points[(size_t)node].y;
+    EXPECT_GT(yAfter, CustomFilterShapes::defaultShapes().shapes[0].curve.points[(size_t)node].y);
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1) << "a whole drag is one undo step";
+
+    rig.undo.undo();
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+    editor.refresh();
+    EXPECT_EQ(editor.getCurveEditor().getModel().getNode(node).y,
+              CustomFilterShapes::defaultShapes().shapes[0].curve.points[(size_t)node].y)
+        << "the window follows an undo";
+}
+
+TEST(ShapeEditor, AddShapeDuplicateAndDeleteEachAreOneUndoStep) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    const int serial = rig.undo.getEditSerial();
+
+    click(editor.getAddButton());
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 4u);
+    EXPECT_EQ(editor.getSelected(), 3) << "the new shape is selected";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+
+    click(editor.getDuplicateButton());
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 5u);
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[4].curve, rig.filter->getCustomShapes().shapes[3].curve);
+    EXPECT_NE(rig.filter->getCustomShapes().shapes[4].name, rig.filter->getCustomShapes().shapes[3].name);
+
+    click(editor.getDeleteButton());
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 4u);
+
+    rig.undo.undo();
+    rig.undo.undo();
+    rig.undo.undo();
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+}
+
+TEST(ShapeEditor, DeleteLeavesAtLeastOneShapeAndDisablesItsButton) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+
+    click(editor.getDeleteButton());
+    click(editor.getDeleteButton());
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 1u);
+    EXPECT_FALSE(editor.getDeleteButton().isEnabled());
+    click(editor.getDeleteButton());
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes.size(), 1u);
+}
+
+TEST(ShapeEditor, RenameButtonEditsTheSelectedShapesNameInPlace) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 1);
+
+    click(editor.getRenameButton());
+    ASSERT_TRUE(editor.getMap().isRenaming());
+    // The inline editor commits through the map's rename path.
+    editor.getMap().onRenameDot(1, "bright");
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[1].name, "bright");
+    ASSERT_NE(editor.getChip(1), nullptr);
+    EXPECT_EQ(static_cast<juce::Button*>(editor.getChip(1))->getButtonText(), "bright");
+}
+
+TEST(ShapeEditor, PickShapeListsTheBuiltInsThenTheFactoryShapesAndStampsTheCurveOnTheSelectedShape) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 2);
+    CapturedMenu captured;
+    editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+
+    click(editor.getPickShapeButton());
+
+    // The built-ins as before; the factory shapes whose curve is already a built-in (the vowels) are not repeated.
+    const std::vector<std::string> expected{"ah, Factory",
+                                            "ee, Factory",
+                                            "oo, Factory",
+                                            "eh, Factory",
+                                            "ih, Factory",
+                                            "wolf, Factory",
+                                            "crow, Factory",
+                                            "frog, Factory",
+                                            "Factory shapes",
+                                            "telephone band, Factory",
+                                            "comb, Factory",
+                                            "tilt, Factory",
+                                            "low-pass ramp, Factory",
+                                            "band, Factory",
+                                            "notch, Factory",
+                                            "two formants, Factory",
+                                            "wide comb, Factory",
+                                            "stairs, Factory",
+                                            "double peak, Factory",
+                                            "seesaw, Factory"};
+    EXPECT_EQ(captured.items, expected);
+    const int serial = rig.undo.getEditSerial();
+    ASSERT_TRUE(captured.run("wolf, Factory"));
+    const auto& shape = rig.filter->getCustomShapes().shapes[2];
+    EXPECT_EQ(shape.curve, CustomFilterShapes::presetCurve(CustomFilterShapes::Preset::Wolf));
+    EXPECT_EQ(shape.name, "oo") << "only the curve is replaced";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+
+    rig.undo.undo();
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+}
+
+TEST(ShapeEditor, TheLaneDrawFlyoutPicksThePenAndTheKeyboardRouteShapesTheSelectedCurve) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    std::unique_ptr<DrawShapeFlyout> flyout;
+    test_hooks::drawShapeFlyoutHookForTest() = [&](std::unique_ptr<DrawShapeFlyout> f) { flyout = std::move(f); };
+
+    click(editor.getDrawButton());
+    test_hooks::drawShapeFlyoutHookForTest() = nullptr;
+    ASSERT_NE(flyout, nullptr);
+
+    flyout->pick(DrawShape::Sine);
+    EXPECT_EQ(editor.getPen(), DrawShape::Sine) << "a pick chooses the pen; the drag draws";
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+    editor.getCurveEditor().setModel(editor.getCurveEditor().getModel()); // nothing selected: the whole curve
+    ASSERT_TRUE(editor.getCurveEditor().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    const auto drawn = rig.filter->getCustomShapes().shapes[0].curve;
+    const auto range = rig.adapter->getDrawRange();
+    EXPECT_GT(drawn.points.size(), 20u) << "a sine across the audible range has many points";
+    for (const auto& p : drawn.points) {
+        EXPECT_GE(p.y, range.lo - 0.001f);
+        EXPECT_LE(p.y, range.hi + 0.001f);
+    }
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[1], CustomFilterShapes::defaultShapes().shapes[1])
+        << "other shapes are untouched";
+
+    rig.undo.undo();
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+}
+
+TEST(ShapeEditor, SquareDrawMakesVerticalStepsAndLineJoinsTheEnds) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+
+    editor.applyDrawShape(DrawShape::Square);
+    const auto square = rig.filter->getCustomShapes().shapes[0].curve;
+    int steps = 0;
+    for (size_t i = 1; i < square.points.size(); ++i)
+        steps += square.points[i].x == square.points[i - 1].x ? 1 : 0;
+    EXPECT_GE(steps, 4) << "each hold becomes a step";
+
+    editor.applyDrawShape(DrawShape::Line);
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[0].curve.points.size(), 2u);
+
+    const auto before = rig.filter->getCustomShapes().shapes[0].curve;
+    editor.applyDrawShape(DrawShape::Free);
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[0].curve, before) << "Free draws nothing";
+}
+
+TEST(ShapeEditor, CurveAxesAreLabelledInHertzAndDecibelsWithAZeroDbLine) {
+    ShapeRig rig;
+    const auto guides = rig.adapter->getAxisGuides();
+    ASSERT_TRUE(guides.has_value());
+    ASSERT_EQ(guides->x.size(), 3u);
+    EXPECT_EQ(guides->x[0].label, "100");
+    EXPECT_EQ(guides->x[1].label, "1k");
+    EXPECT_EQ(guides->x[2].label, "10k");
+    EXPECT_NEAR(guides->x[1].position, CustomFilterShapes::hzToX(1000.0f), 1e-6);
+    bool zero = false;
+    for (const auto& g : guides->y)
+        if (g.emphasised) {
+            zero = true;
+            EXPECT_NEAR(g.position, 0.8, 1e-6) << "0 dB sits at y = 0.8";
+        }
+    EXPECT_TRUE(zero);
+}
+
+TEST(ShapeEditor, EscapeAndDoneClose) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    int closed = 0;
+    editor.onDone = [&] { ++closed; };
+
+    EXPECT_TRUE(editor.keyPressed(key(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(closed, 1);
+    click(editor.getDoneButton());
+    EXPECT_EQ(closed, 2);
+    EXPECT_FALSE(editor.keyPressed(key('x')));
+}
+
+TEST(ShapeEditor, TheBottomBarHoldsThePerNoteSettingsBesideDone) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto* bar = editor.getPerNoteBar();
+    ASSERT_NE(bar, nullptr);
+    EXPECT_FALSE(bar->getBounds().isEmpty());
+    EXPECT_TRUE(editor.getLocalBounds().contains(bar->getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getDoneButton().getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getCurveEditor().getBounds()));
+    EXPECT_FALSE(bar->getBounds().intersects(editor.getMap().getBounds()));
+    EXPECT_EQ(editor.getHeight(), ShapeListEditor::kPerNoteHeight);
+}
+
+TEST(ShapeEditor, AnEditMadeElsewhereReachesTheWindowOnRefresh) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto shapes = rig.filter->getCustomShapes();
+    shapes.shapes.push_back(shapes.shapes[0]);
+    shapes.shapes.back().name = "extra";
+    rig.filter->setCustomShapes(shapes);
+
+    editor.refresh();
+
+    EXPECT_EQ(editor.getNumShapes(), 4);
+    ASSERT_NE(editor.getChip(3), nullptr);
+    EXPECT_EQ(static_cast<juce::Button*>(editor.getChip(3))->getButtonText(), "extra");
+}
+
+TEST(ShapeEditor, TheWindowHookReceivesTheEditorOnTheRequestedShape) {
+    ShapeRig rig;
+    std::unique_ptr<ShapeListEditor> received;
+    test_hooks::shapeEditorWindowHookForTest() = [&](std::unique_ptr<ShapeListEditor> e) { received = std::move(e); };
+
+    auto* window = openShapeEditorWindow(rig.adapter, 2, nullptr);
+    test_hooks::shapeEditorWindowHookForTest() = nullptr;
+
+    EXPECT_EQ(window, nullptr);
+    ASSERT_NE(received, nullptr);
+    EXPECT_EQ(received->getSelected(), 2);
+}
+
+TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVisualOrder) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    const auto walk = synth::test::walkTabOrder(editor);
+    std::vector<std::string> names;
+    for (auto* c : walk.forward)
+        names.push_back(c->getTitle().toStdString());
+    const std::vector<std::string> expected{"Morph map",
+                                            "Dot 1 of 3, shape ah, position X 20%, Y 25%",
+                                            "Dot 2 of 3, shape ee, position X 80%, Y 25%",
+                                            "Dot 3 of 3, shape oo, position X 50%, Y 80%",
+                                            "Morph cursor, X 0.50, Y 0.50",
+                                            "Morph X, 0.50",
+                                            "Morph Y, 0.50",
+                                            "ah shape",
+                                            "ee shape",
+                                            "oo shape",
+                                            "Grid",  // its Snap pill is off (disabled) while Grid is Off
+                                            "Level", // likewise for Level Off
+                                            "Guides",
+                                            "Show Spectrum",
+                                            "Shape curve",
+                                            "Add shape",
+                                            "Duplicate",
+                                            "Rename",
+                                            "Pick shape",
+                                            "Draw",
+                                            "Ring helpers",
+                                            "Save shape",
+                                            "Delete",
+                                            "Notes move the cursor",
+                                            "Smoothness",
+                                            "Done"};
+    EXPECT_EQ(names, expected);
+    EXPECT_EQ(walk.backward.size(), walk.forward.size());
+    for (auto* c : walk.forward) {
+        auto* tip = dynamic_cast<juce::TooltipClient*>(c);
+        ASSERT_NE(tip, nullptr) << c->getTitle();
+        EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
+    }
+}
+
+TEST(ShapeEditor, DeleteSitsAtTheRightEndOfTheButtonRowAndIsRed) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& del = editor.getDeleteButton();
+    for (auto* other : {&editor.getAddButton(), &editor.getDuplicateButton(), &editor.getRenameButton(),
+                        &editor.getPickShapeButton(), &editor.getDrawButton(), &editor.getSaveShapeButton()}) {
+        EXPECT_EQ(other->getY(), del.getY());
+        EXPECT_LT(other->getRight(), del.getX()) << other->getTitle();
+    }
+    const auto text = del.findColour(juce::TextButton::textColourOffId);
+    EXPECT_GT(text.getRed(), text.getGreen() * 2);
+    EXPECT_GT(text.getRed(), text.getBlue() * 2);
+    EXPECT_NE(text, editor.getAddButton().findColour(juce::TextButton::textColourOffId));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// App shortcuts while the window has the keyboard
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+/** Stands in for MainComponent: the command target above the canvas, recording the keys handed to it. */
+struct RecordingTarget
+    : juce::Component
+    , juce::ApplicationCommandTarget {
+    std::vector<juce::KeyPress> received;
+    bool keyPressed(const juce::KeyPress& k) override {
+        received.push_back(k);
+        return true;
+    }
+    ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
+    void getAllCommands(juce::Array<juce::CommandID>&) override {}
+    void getCommandInfo(juce::CommandID, juce::ApplicationCommandInfo&) override {}
+    bool perform(const InvocationInfo&) override { return false; }
+};
+
+void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
+
+} // namespace
+
+TEST(ShapeEditor, KeysTheEditorDoesNotUseAreOfferedToTheAppShortcutHookButEscapeCloses) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    std::vector<int> offered;
+    editor.onAppShortcut = [&](const juce::KeyPress& k) {
+        offered.push_back(k.getKeyCode());
+        return k.getKeyCode() == ' ';
+    };
+    int closed = 0;
+    editor.onDone = [&] { ++closed; };
+
+    EXPECT_TRUE(editor.keyPressed(key(' ')));
+    EXPECT_FALSE(editor.keyPressed(key('z', juce::ModifierKeys::commandModifier)));
+    EXPECT_TRUE(editor.keyPressed(key(juce::KeyPress::escapeKey)));
+
+    EXPECT_EQ(closed, 1);
+    ASSERT_EQ(offered.size(), 2u) << "Escape is never offered";
+    EXPECT_EQ(offered[0], ' ');
+    EXPECT_EQ(offered[1], 'z');
+}
+
+TEST(ShapeEditor, KeysTheMapAndTheCurveEditorUseNeverReachTheAppShortcutHook) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    int offered = 0;
+    editor.onAppShortcut = [&](const juce::KeyPress&) {
+        ++offered;
+        return true;
+    };
+
+    EXPECT_TRUE(editor.getMap().getDotStop(0)->keyPressed(key(juce::KeyPress::backspaceKey)));
+    EXPECT_TRUE(editor.getMap().getDotStop(0)->keyPressed(key(juce::KeyPress::rightKey)));
+    EXPECT_EQ(offered, 0) << "the stop took them, so they never bubble to the editor";
+}
+
+TEST(ShapeEditor, TheRelayHandsSpaceAndUndoToTheMainWindowLaterAndLeavesEditingKeysAlone) {
+    AudioEngine engine;
+    RecordingTarget target;
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target.addAndMakeVisible(canvas);
+    juce::Component anchor;
+    canvas.addAndMakeVisible(anchor);
+    auto relay = makeAppShortcutRelay(&anchor);
+    const auto cmd = juce::ModifierKeys::commandModifier;
+
+    EXPECT_TRUE(relay(key(' ')));
+    EXPECT_TRUE(relay(key('z', cmd)));
+    EXPECT_TRUE(relay(key('z', cmd | juce::ModifierKeys::shiftModifier)));
+    EXPECT_TRUE(target.received.empty()) << "delivered a turn later, outside the window's own key handler";
+    synth::test::waitUntil([&] { return (target.received.size()) == (3u); });
+    ASSERT_EQ(target.received.size(), 3u);
+    EXPECT_EQ(target.received[0].getKeyCode(), ' ');
+    EXPECT_EQ(target.received[1].getKeyCode(), 'z');
+
+    target.received.clear();
+    for (const auto& k :
+         {key(juce::KeyPress::backspaceKey), key(juce::KeyPress::deleteKey), key(juce::KeyPress::leftKey),
+          key(juce::KeyPress::tabKey), key('c', cmd), key('v', cmd), key('a', cmd), key('x')})
+        EXPECT_FALSE(relay(k)) << k.getTextDescription();
+    synth::test::flushMessageQueue();
+    EXPECT_TRUE(target.received.empty());
+}
+
+TEST(ShapeEditor, TheRelayDoesNothingWithoutACanvasOrAfterTheAnchorIsGone) {
+    EXPECT_FALSE(makeAppShortcutRelay(nullptr)(key(' ')));
+
+    juce::Component lonely;
+    juce::Component anchor;
+    lonely.addAndMakeVisible(anchor);
+    EXPECT_FALSE(makeAppShortcutRelay(&anchor)(key(' '))) << "no canvas above the anchor";
+
+    AudioEngine engine;
+    RecordingTarget target;
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target.addAndMakeVisible(canvas);
+    auto anchorOnCanvas = std::make_unique<juce::Component>();
+    canvas.addAndMakeVisible(*anchorOnCanvas);
+    auto relay = makeAppShortcutRelay(anchorOnCanvas.get());
+    anchorOnCanvas.reset();
+    EXPECT_FALSE(relay(key(' ')));
+}
+
+TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
+    AudioEngine engine;
+    auto target = std::make_unique<RecordingTarget>();
+    GraphEditor canvas(engine);
+    ShortcutManager shortcuts;
+    canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+    target->addAndMakeVisible(canvas);
+    juce::Component anchor;
+    canvas.addAndMakeVisible(anchor);
+    auto relay = makeAppShortcutRelay(&anchor);
+
+    EXPECT_TRUE(relay(key(' ')));
+    target->removeChildComponent(&canvas);
+    target.reset();
+    pumpMessages(); // must not touch the deleted target
+    SUCCEED();
+}
+
+// ---- the morph map's menus (dot menu placement, no Edit in the window, slider menu) ----------------------
+
+namespace {
+
+struct MenuRig : ShapeRig {
+    MorphMap map;
+    ShapeMapController controller{map, *adapter};
+    CapturedMenu menu;
+    juce::Rectangle<int> menuArea;
+    int stripMenus = 0;
+    MorphMap::Axis stripAxis = MorphMap::Axis::None;
+    juce::Rectangle<int> stripArea;
+    int cursorMoves = 0;
+
+    MenuRig() {
+        map.setSize(252, 150);
+        map.showMenu = [this](juce::PopupMenu& m, juce::Rectangle<int> area) {
+            menu.capture(m);
+            menuArea = area;
+        };
+        map.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
+            ++stripMenus;
+            stripAxis = axis;
+            stripArea = area;
+        };
+        map.onCursorMoved = [this](float, float) { ++cursorMoves; };
+        controller.refresh();
+    }
+};
+
+juce::MouseEvent rightPress(juce::Component& c, juce::Point<float> p) { return curveRightClick(c, p); }
+
+/** A shown editor whose map can take keyboard focus (skipped where the runner has none). */
+struct ShownWindow {
+    ShapeRig rig;
+    ShapeListEditor editor{rig.adapter, 0};
+    ShownWindow() {
+        editor.addToDesktop(juce::ComponentPeer::windowHasTitleBar);
+        editor.setVisible(true);
+    }
+    ~ShownWindow() { editor.removeFromDesktop(); }
+    bool canFocus() {
+        editor.getMap().getDotStop(0)->grabKeyboardFocus();
+        return editor.getMap().getDotStop(0)->hasKeyboardFocus(false);
+    }
+};
+
+/** The index of the dot nearest the map's top-right corner. */
+int topRightDot(const MorphMap& map) {
+    int best = 0;
+    for (int i = 1; i < map.getNumDots(); ++i)
+        if (map.getDots()[(size_t)i].x - map.getDots()[(size_t)i].y >
+            map.getDots()[(size_t)best].x - map.getDots()[(size_t)best].y)
+            best = i;
+    return best;
+}
+
+} // namespace
+
+TEST(MorphMapMenu, TheDotMenuIsHandedADotSizedScreenAreaAroundTheDot) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(1)));
+
+    ASSERT_FALSE(rig.menu.items.empty());
+    const auto centre = rig.map.localPointToGlobal(rig.map.getDotCentre(1)).roundToInt();
+    EXPECT_TRUE(rig.menuArea.contains(centre));
+    EXPECT_LT(rig.menuArea.getWidth(), rig.map.getWidth() / 4) << "beside the dot, not the whole map";
+}
+
+TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
+    MenuRig rig;
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Colour...", "Delete"}));
+
+    rig.map.setEditItemShown(false);
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
+
+    int edited = -1;
+    rig.controller.onEdit = [&](int i) { edited = i; };
+    EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
+    EXPECT_EQ(edited, -1) << "Return on a dot opens its menu; with Edit hidden nothing edits";
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
+}
+
+TEST(MorphMapMenu, ARightPressOnEachSliderAsksForItsMenuBesideTheLandingDot) {
+    MenuRig rig;
+    for (const auto axis : {MorphMap::Axis::X, MorphMap::Axis::Y}) {
+        rig.stripMenus = 0;
+        rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+        rig.map.mouseUp(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+
+        EXPECT_EQ(rig.stripMenus, 1);
+        EXPECT_EQ(rig.stripAxis, axis);
+        EXPECT_TRUE(rig.stripArea.contains(rig.map.localPointToGlobal(rig.map.stripAnchor(axis)).roundToInt()));
+        EXPECT_TRUE(rig.menu.items.empty()) << "no dot menu on a slider";
+    }
+    EXPECT_EQ(rig.cursorMoves, 0) << "a right-press does not drag the cursor";
+}
+
+TEST(MorphMapMenu, ARightPressOnADotStillOpensTheDotMenuAndAPlainPressOnASliderStillDrags) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(0)));
+    EXPECT_FALSE(rig.menu.items.empty());
+    EXPECT_EQ(rig.stripMenus, 0);
+
+    const auto onStrip = rig.map.getStripBounds(MorphMap::Axis::X).getCentre();
+    rig.map.mouseDown(curveLeftClick(rig.map, onStrip));
+    rig.map.mouseUp(curveLeftClick(rig.map, onStrip));
+    EXPECT_EQ(rig.stripMenus, 0);
+    EXPECT_GE(rig.cursorMoves, 1) << "a plain press on a slider moves the cursor";
+}
+
+TEST(MorphMapMenu, AMapWithoutACursorHasNoSliderMenu) {
+    MenuRig rig;
+    rig.map.setCursorVisible(false);
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(MorphMap::Axis::X).getCentre()));
+    EXPECT_EQ(rig.stripMenus, 0);
+}
+
+TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDotWithoutEdit) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    CapturedMenu captured;
+    juce::Rectangle<int> area;
+    editor.showMenuAtArea = [&](juce::PopupMenu& m, juce::Rectangle<int> a) {
+        captured.capture(m);
+        area = a;
+    };
+    auto& map = editor.getMap();
+    const int dot = topRightDot(map);
+
+    map.mouseDown(rightPress(map, map.getDotCentre(dot)));
+
+    EXPECT_EQ(captured.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+    EXPECT_LT(area.getWidth(), map.getWidth() / 4) << "the old target was the whole map, under its bottom-left";
+    EXPECT_EQ(editor.getSelected(), dot) << "the press selected the dot, so nothing is left for Edit to do";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsKeyboardMenuAndTheTestHookAlsoGetTheDotArea) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    juce::Rectangle<int> area;
+    shown.editor.showMenuAtArea = [&](juce::PopupMenu&, juce::Rectangle<int> a) { area = a; };
+    const int dot = topRightDot(map);
+    map.getDotStop(dot)->grabKeyboardFocus();
+
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+
+    CapturedMenu captured;
+    shown.editor.showMenuAtArea = nullptr;
+    shown.editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_FALSE(captured.items.empty()) << "the menu-only hook keeps working";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsSliderMenuIsHandedToTheCardsHook) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    editor.getMap().mouseDown(
+        rightPress(editor.getMap(), editor.getMap().getStripBounds(MorphMap::Axis::Y).getCentre()));
+
+    EXPECT_EQ(axis, MorphMap::Axis::Y);
+}
+
+TEST(MorphMapMenu, KeyboardFocusOnASliderStopOpensItsMenu) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    shown.editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    map.getStripStop(MorphMap::Axis::X)->grabKeyboardFocus();
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_EQ(axis, MorphMap::Axis::X);
+}

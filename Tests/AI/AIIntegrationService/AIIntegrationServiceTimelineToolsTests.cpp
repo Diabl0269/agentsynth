@@ -64,11 +64,52 @@ TEST_F(AIIntegrationServiceTest, TimelineToolsToggleGatesThePromptAndSchema) {
     const juce::String enabled = service->getHistory().front().content;
     EXPECT_TRUE(enabled.contains("TIMELINE & AUTOMATION OPERATIONS"));
     EXPECT_TRUE(enabled.contains("writeLane"));
+    // The graph-building op is taught too: what it builds, and that its track name must be new.
+    EXPECT_TRUE(enabled.contains("addInstrumentTrack"));
+    EXPECT_TRUE(enabled.contains("PLAYS the instrument immediately"));
+    EXPECT_TRUE(enabled.contains("The name must be NEW"));
+    EXPECT_FALSE(baseline.contains("addInstrumentTrack"));
     EXPECT_TRUE(enabled.startsWith(baseline)) << "the timeline section is appended, never rewrites the patch prompt";
 
     // Off again: byte-identical to the baseline.
     service->setTimelineToolsEnabled(false);
     EXPECT_EQ(service->getHistory().front().content, baseline);
+}
+
+// The envelope field and the sound-design words are taught only with the timeline tools on, and the
+// filter type the acid rule names is the Filter module's own 24 dB low-pass choice.
+TEST_F(AIIntegrationServiceTest, TimelinePromptTeachesTheEnvelopeAndTheSoundDesignWords) {
+    const juce::String baseline = service->getHistory().front().content;
+    EXPECT_FALSE(baseline.contains("SOUND-DESIGN WORDS"));
+    EXPECT_FALSE(baseline.contains("\"envelope\""));
+
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+    const juce::String enabled = service->getHistory().front().content;
+
+    EXPECT_TRUE(enabled.contains("`envelope` shapes the track's OWN ADSR"));
+    EXPECT_TRUE(enabled.contains("a Sampler has none"));
+    EXPECT_TRUE(enabled.contains("`instrumentParams` sets the instrument's own params"));
+    EXPECT_TRUE(enabled.contains("`instrumentParams` {\"waveform\": \"Saw\"}"));
+    EXPECT_TRUE(enabled.contains("SOUND-DESIGN WORDS"));
+    EXPECT_TRUE(enabled.contains("pluck, plucky, stab, staccato, percussive: sustain 0"));
+    EXPECT_TRUE(enabled.contains("pad, swell: attack at least 0.5"));
+    EXPECT_TRUE(enabled.contains("\"destParam\": \"cutoff\""));
+    EXPECT_TRUE(enabled.contains("NEVER add a new free ADSR node"));
+    EXPECT_FALSE(enabled.contains("`poly` (Oscillator/Wavetable only) and `inserts`"))
+        << "the op takes an envelope too; the old two-field sentence must be gone";
+
+    auto filter = AIStateMapper::createModule("Filter");
+    ASSERT_NE(filter, nullptr);
+    juce::String lowPass24;
+    for (auto* param : filter->getParameters())
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param);
+            choice != nullptr && choice->paramID == "filterType")
+            lowPass24 = choice->choices[0];
+    ASSERT_TRUE(lowPass24.isNotEmpty());
+    EXPECT_TRUE(enabled.contains("`filterType` \"" + lowPass24 + "\" (the 24 dB low-pass)"));
 }
 
 TEST_F(AIIntegrationServiceTest, TimelineToolsToggleSelectsTheExtendedSchema) {

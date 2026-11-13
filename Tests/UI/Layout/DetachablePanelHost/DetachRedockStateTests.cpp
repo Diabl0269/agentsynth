@@ -22,6 +22,7 @@
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 #include <optional>
 
@@ -60,7 +61,7 @@ private:
 } // namespace
 
 TEST(DetachRedockStateTests, TimelineZoomAndScrollSurviveDetachAndRedock) {
-    PersistedKeysGuard guard({"timelineWindowBounds"});
+    PersistedKeysGuard guard({"timelineWindowBounds", "bottomDockActiveTab"});
 
     MainComponent mc(std::make_unique<MockProviderDRST>());
     mc.setSize(1400, 900);
@@ -84,7 +85,7 @@ TEST(DetachRedockStateTests, TimelineZoomAndScrollSurviveDetachAndRedock) {
 }
 
 TEST(DetachRedockStateTests, MixerColumnSelectionSurvivesDetachAndRedock) {
-    PersistedKeysGuard guard({"mixerWindowBounds"});
+    PersistedKeysGuard guard({"mixerWindowBounds", "bottomDockActiveTab"});
 
     MainComponent mc(std::make_unique<MockProviderDRST>());
     mc.setSize(1400, 900);
@@ -160,14 +161,14 @@ TEST(DetachRedockStateTests, MixerAndTimelineWindowBoundsKeysAreRestoredAfterAGu
     // writes a single byte) and restores them when this test ends, however it ends -- the sentinel
     // setup two lines down is itself a real-file mutation, so it needs the SAME protection every
     // other real-settings-file test here gets, not just the inner guard under test.
-    PersistedKeysGuard outerGuard({"mixerWindowBounds", "timelineWindowBounds"});
+    PersistedKeysGuard outerGuard({"mixerWindowBounds", "timelineWindowBounds", "bottomDockActiveTab"});
 
     const juce::String sentinelMixerBounds = "10 20 700 500";
     writeRealKey("mixerWindowBounds", sentinelMixerBounds); // stands in for "the developer's own value"
     removeRealKey("timelineWindowBounds");                  // stands in for "the key never existed"
 
     {
-        PersistedKeysGuard guard({"mixerWindowBounds", "timelineWindowBounds"});
+        PersistedKeysGuard guard({"mixerWindowBounds", "timelineWindowBounds", "bottomDockActiveTab"});
 
         MainComponent mc(std::make_unique<MockProviderDRST>());
         mc.setSize(1400, 900);

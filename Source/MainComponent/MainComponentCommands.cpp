@@ -6,12 +6,18 @@
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the
 // sibling MainComponent*.cpp units next to this one.
 #include "MainComponent.h"
+#include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
 
 //==============================================================================
 void MainComponent::paint(juce::Graphics& g) {
     // (Our component is opaque, so we must completely fill the background with a
     // solid colour)
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+}
+
+void MainComponent::syncWindowBackground() {
+    if (auto* window = findParentComponentOfClass<juce::ResizableWindow>())
+        window->setBackgroundColour(lookAndFeel->getTheme().colors.bg0);
 }
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
@@ -42,6 +48,8 @@ bool MainComponent::perform(const InvocationInfo& info) {
     for (const auto& spec : commandTable()) {
         if (spec.id != info.commandID)
             continue;
+        if (projectLoad_ != nullptr && projectLoad_->refusesCommand(spec.category)) // edits wait for a slow load
+            return true;
         return spec.run(*this);
     }
     return false;

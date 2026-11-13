@@ -105,7 +105,7 @@ assert_fail() {
         echo "FAIL: $desc (expected non-zero exit, got success)"
         echo "$output"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else
@@ -332,8 +332,8 @@ write_file "Source/Some.h" <<EOF
 EOF
 f_doubled_output="$(run_check 2>&1)"
 f_doubled_status=$?
-if [ "$f_doubled_status" -ne 0 ] && echo "$f_doubled_output" | grep -qF -- "${D}${S}does-not-exist.md' does not exist" \
-    && ! echo "$f_doubled_output" | grep -qF -- "has no heading matching anchor"; then
+if [ "$f_doubled_status" -ne 0 ] && grep -qF -- "${D}${S}does-not-exist.md' does not exist" <<<"$f_doubled_output" \
+    && ! grep -qF -- "has no heading matching anchor" <<<"$f_doubled_output"; then
     echo "PASS: an anchor mention on a doc that doesn't exist is check C's failure only -- check F never double-reports it"
     pass=$((pass + 1))
 else
@@ -392,7 +392,7 @@ write_file "Source/Some.h" <<EOF
 // per ${BT}architecture${MDEXT}${BT} §1 for context (a bare backticked basename, no docs/ prefix,
 // no markdown link target -- check C/D/F all require a literal docs/ prefix and so never see this)
 EOF
-assert_pass "a bare backticked basename with a valid trailing section passes"
+assert_fail "a bare backticked basename with a trailing section marker fails check I: write the full path form" "is not attached to a docs/ path"
 
 reset_repo
 seed_clean_tree
@@ -448,7 +448,7 @@ assert_fail "an ambiguous bare backticked basename fails even with no trailing m
 reset_repo
 seed_clean_tree
 write_file "Source/Some.h" <<EOF
-// root ${BT}CLAUDE${MDEXT}${BT}, §8 of ${DOCPFX}architecture${MDEXT} for context -- reversed
+// root ${BT}CLAUDE${MDEXT}${BT}, §2 of ${DOCPFX}architecture${MDEXT} for context -- reversed
 // order: the section marker belongs to the docs/-prefixed mention that actually FOLLOWS it, not
 // to the bare CLAUDE.md name before the comma (which is not even a docs/ file)
 EOF
@@ -481,6 +481,102 @@ write_file "Source/Some.h" <<EOF
 EOF
 assert_fail "a bare backticked basename with a dead trailing anchor fails" "has no heading matching anchor '#9-nope'"
 
+# --- checks H/I and check D's multi-marker chain (FRO218) --------------------------------------
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see §2 of ${DOCPFX}architecture.md for the rationale (reversed order: marker BEFORE the path)
+EOF
+assert_pass "H: a reversed-order reference to a section that exists passes"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see §9 of ${DOCPFX}architecture.md for the rationale (reversed order: marker BEFORE the path)
+EOF
+assert_fail "H: a reversed-order reference to a section that does not exist fails" "§9 of ${D}${S}architecture.md (marker written before the path) -- no such section in ${D}${S}architecture.md"
+
+reset_repo
+seed_clean_tree
+write_file "$D$S""other.md" <<'EOF'
+# Other
+
+## 9. Nine
+
+Some text.
+EOF
+link_from_readme "other.md"
+write_file "Source/Some.h" <<EOF
+// ${DOCPFX}architecture.md, §9 of ${DOCPFX}other.md -- the marker belongs to the LATER path (FRO217 pin)
+EOF
+assert_pass "H: a marker meant for a later path is not misattributed to an earlier path on the same line"
+
+write_file "Source/Some.h" <<EOF
+// ${DOCPFX}architecture.md, §8 of ${DOCPFX}other.md -- the later path has no section 8
+EOF
+assert_fail "H: ...and when the LATER path lacks that section it is the later path that is blamed" "§8 of ${D}${S}other.md (marker written before the path) -- no such section in ${D}${S}other.md"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see ${DOCPFX}architecture.md §1, §2 for the rationale (every marker in the chain resolves)
+EOF
+assert_pass "D: several markers after one path all resolving passes"
+
+write_file "Source/Some.h" <<EOF
+// see ${DOCPFX}architecture.md §1, §2 and §9 for the rationale (the third marker is stale)
+EOF
+assert_fail "D: a stale marker later in a multi-marker line is validated too, not only the first" "architecture.md §9 -- no such section in ${D}${S}architecture.md"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see §2 for the rationale (no docs path anywhere before the marker)
+EOF
+assert_fail "I: a bare section marker with no docs path before it fails" "section marker §2 is not attached to a docs/ path"
+
+write_file "Source/Some.h" <<EOF
+// ${DOCPFX}architecture.md is the overview, and elsewhere in this long-winded comment §2 turns up
+EOF
+assert_fail "I: a marker far from any earlier docs path (too far to be attached) fails too" "section marker §2 is not attached to a docs/ path"
+
+write_file "Source/Some.h" <<EOF
+// see ${DOCPFX}architecture.md#2-details for the rationale (the anchor form -- no marker at all)
+EOF
+assert_pass "I: the full path-plus-anchor form passes"
+
+reset_repo
+seed_clean_tree
+write_file "scripts/check-docs.sh" <<EOF
+# documents the pattern: a bare §5 with no path is exempt in the checker's own files
+EOF
+assert_pass "I: the checker's own files (which document the marker pattern) are exempt"
+
+# Glued paths: a docs/ path stuck to a preceding FILENAME (a typo for ", docs/...") is ours, while
+# a sibling-repo path (preceded by '/' after a directory name, never a filename) still is not.
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see Widget.h/${DOCPFX}missing.md for the rationale (glued to the filename before it)
+EOF
+assert_fail "glued: a docs/ path glued to a preceding filename is checked as ours (C)" "${D}${S}missing.md' does not exist"
+
+write_file "Source/Some.h" <<EOF
+// see Widget.h/${DOCPFX}architecture.md §9 for the rationale
+EOF
+assert_fail "glued: ...and its section marker is validated (D)" "architecture.md §9 -- no such section in ${D}${S}architecture.md"
+
+write_file "Source/Some.h" <<EOF
+// see Widget.h/${DOCPFX}architecture.md §2 for the rationale
+EOF
+assert_pass "glued: a resolving glued path passes"
+
+write_file "Source/Some.h" <<EOF
+// see synth-platform/${DOCPFX}missing.md for the rationale (sibling repo: a directory, not a filename)
+EOF
+assert_pass "glued: a sibling-repo path is still never misread as ours"
+
 # --- --update semantics -----------------------------------------------------------------------
 
 reset_repo
@@ -490,7 +586,7 @@ write_file "$D$S""Old_Name.md" <<'EOF'
 EOF
 link_from_readme "Old_Name.md"
 update_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
-if echo "$update_output" | grep -qF -- "baseline rewritten (1 naming entries)" \
+if grep -qF -- "baseline rewritten (1 naming entries)" <<<"$update_output" \
     && grep -qxF -- "naming ${D}${S}Old_Name.md" "$BASELINE"; then
     echo "PASS: --update (first run, no prior baseline) seeds the naming entry without needing --allow-growth"
     pass=$((pass + 1))
@@ -512,7 +608,7 @@ write_file "$D$S""New_Violation.md" <<'EOF'
 EOF
 refuse_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 refuse_status=$?
-if [ "$refuse_status" -ne 0 ] && echo "$refuse_output" | grep -qF -- "${D}${S}New_Violation.md is a new naming violation" \
+if [ "$refuse_status" -ne 0 ] && grep -qF -- "${D}${S}New_Violation.md is a new naming violation" <<<"$refuse_output" \
     && ! grep -q "New_Violation" "$BASELINE"; then
     echo "PASS: --update refuses to add a new naming entry once a baseline already exists"
     pass=$((pass + 1))
@@ -525,7 +621,7 @@ fi
 
 allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
 allow_status=$?
-if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::${D}${S}New_Violation.md is a new naming violation" \
+if [ "$allow_status" -eq 0 ] && grep -qF -- "::warning::${D}${S}New_Violation.md is a new naming violation" <<<"$allow_output" \
     && grep -qxF -- "naming ${D}${S}New_Violation.md" "$BASELINE"; then
     echo "PASS: --update --allow-growth lets a new naming entry through with a warning"
     pass=$((pass + 1))
@@ -563,8 +659,8 @@ write_file "$D$S""Bad_Name.md" <<'EOF'
 EOF
 list_output="$(bash "$CHECK" --root "$REPO" --list 2>&1)"
 list_status=$?
-if [ "$list_status" -eq 0 ] && echo "$list_output" | grep -qF -- "${D}${S}Bad_Name.md" \
-    && echo "$list_output" | grep -qF -- "=== naming violations (check A) ==="; then
+if [ "$list_status" -eq 0 ] && grep -qF -- "${D}${S}Bad_Name.md" <<<"$list_output" \
+    && grep -qF -- "=== naming violations (check A) ===" <<<"$list_output"; then
     echo "PASS: --list exits 0 and summarizes current violations"
     pass=$((pass + 1))
 else
@@ -580,7 +676,7 @@ mkdir -p "$empty_dir/Source"
 printf '// nothing here\n' >"$empty_dir/Source/Placeholder.cpp"
 vacuous_output="$(bash "$CHECK" --root "$empty_dir" 2>&1)"
 vacuous_status=$?
-if [ "$vacuous_status" -ne 0 ] && echo "$vacuous_output" | grep -qF -- "0 .md files scanned"; then
+if [ "$vacuous_status" -ne 0 ] && grep -qF -- "0 .md files scanned" <<<"$vacuous_output"; then
     echo "PASS: zero .md files scanned fails loudly instead of reporting a vacuous pass"
     pass=$((pass + 1))
 else

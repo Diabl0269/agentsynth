@@ -1,5 +1,6 @@
 // Concern: ShortcutsSettingsTab's pure filter helpers, the basic ShortcutManager API surface,
 // the shortcutHintFor tooltip helper, and the ChangeBroadcaster/persistence broadcast contract.
+#include "../../ShortcutDisplayText.h"
 #include "ShortcutManagerTestFixture.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 
@@ -14,6 +15,10 @@ TEST(ShortcutsSettingsFilterTest, RowMatchesDescriptionAndBindingTextCaseInsensi
 
     // Description, either case, and as a substring.
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("undo", "Undo", "Cmd + Z"));
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("semitone transpose", "Transpose Up a Semitone", "Up"))
+        << "words in any order";
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("cmd undo", "Undo", "Cmd + Z"))
+        << "across description and binding";
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("UND", "Undo", "Cmd + Z"));
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("ose up", "Transpose Up a Semitone", "Up"));
 
@@ -58,10 +63,10 @@ TEST_F(ShortcutManagerTest, GetActionForKeyPress_Correct) {
 }
 
 TEST_F(ShortcutManagerTest, GetActionForKeyPress_UnknownReturnsEmpty) {
-    // Cmd+J has no default binding (Cmd+X became cutSelection, so it no longer works as the
-    // "unknown" sample here).
-    juce::KeyPress cmdJ('j', juce::ModifierKeys::commandModifier, 0);
-    EXPECT_TRUE(manager.getActionForKeyPress(cmdJ).isEmpty());
+    // Cmd+Y has no default binding (Cmd+X became cutSelection and Cmd+J the bottom panel, so neither works as
+    // the "unknown" sample here).
+    juce::KeyPress cmdY('y', juce::ModifierKeys::commandModifier, 0);
+    EXPECT_TRUE(manager.getActionForKeyPress(cmdY).isEmpty());
 }
 
 TEST_F(ShortcutManagerTest, SetBinding_Updates) {
@@ -147,7 +152,7 @@ TEST_F(ShortcutManagerTest, KeyPressToDisplayString_Formats) {
     juce::KeyPress cmdS('s', juce::ModifierKeys::commandModifier, 0);
     auto display = ShortcutManager::keyPressToDisplayString(cmdS);
 #if JUCE_MAC
-    EXPECT_TRUE(display.contains("Cmd"));
+    EXPECT_TRUE(synth::test::has(display, synth::test::modifierPrefix(juce::ModifierKeys::commandModifier)));
 #endif
     EXPECT_TRUE(display.contains("S"));
 }
@@ -230,4 +235,114 @@ TEST_F(ShortcutManagerTest, OnBindingsChangedSingleSlotStillFiresAlongsideTheBro
     EXPECT_EQ(listener.count, 1);
 
     manager.removeChangeListener(&listener);
+}
+
+// ---------------------------------------------------------------------------
+// keyPressToDisplayString names the keys that are not characters
+// ---------------------------------------------------------------------------
+
+namespace {
+// How the platform spells the Alt/Option modifier in front of a key: the Option symbol on macOS, "Alt + " elsewhere.
+juce::String altPrefix() {
+#if JUCE_MAC
+    return juce::String::fromUTF8("\xe2\x8c\xa5 + ");
+#else
+    return "Alt + ";
+#endif
+}
+} // namespace
+
+// Regression test for FRO1202: Return, Escape, Tab, Backspace, Delete, Home, End, Page Up/Down and F1..F12 printed a
+// control character, so a hint read 'Alt + )' and the Settings search found nothing by the key's name.
+TEST(ShortcutDisplayNamesTest, NamedKeysReadAsWordsNotControlCharacters) {
+    using juce::KeyPress;
+    const std::pair<int, const char*> named[] = {
+        {KeyPress::returnKey, "Return"},
+        {KeyPress::escapeKey, "Escape"},
+        {KeyPress::tabKey, "Tab"},
+        {KeyPress::backspaceKey, "Backspace"},
+        {KeyPress::deleteKey, "Delete"},
+        {KeyPress::homeKey, "Home"},
+        {KeyPress::endKey, "End"},
+        {KeyPress::pageUpKey, "Page Up"},
+        {KeyPress::pageDownKey, "Page Down"},
+        {KeyPress::F1Key, "F1"},
+        {KeyPress::F2Key, "F2"},
+        {KeyPress::F3Key, "F3"},
+        {KeyPress::F4Key, "F4"},
+        {KeyPress::F5Key, "F5"},
+        {KeyPress::F6Key, "F6"},
+        {KeyPress::F7Key, "F7"},
+        {KeyPress::F8Key, "F8"},
+        {KeyPress::F9Key, "F9"},
+        {KeyPress::F10Key, "F10"},
+        {KeyPress::F11Key, "F11"},
+        {KeyPress::F12Key, "F12"},
+    };
+    for (const auto& [code, name] : named) {
+        EXPECT_EQ(ShortcutManager::keyPressToDisplayString(KeyPress(code)), name);
+        EXPECT_EQ(ShortcutManager::keyPressToDisplayString(KeyPress(code, juce::ModifierKeys::altModifier, 0)),
+                  altPrefix() + name);
+    }
+    EXPECT_EQ(
+        ShortcutManager::keyPressToDisplayString(KeyPress(KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0)),
+        synth::test::keyText(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier));
+}
+
+// Every default binding is spelled with printable characters only, and a search by the key's name finds its row.
+TEST_F(ShortcutManagerTest, EveryDefaultBindingHasAPrintableDisplayName) {
+    for (const auto& id : manager.getActionIds()) {
+        const auto key = manager.getBinding(id);
+        if (!key.isValid())
+            continue;
+        const auto text = ShortcutManager::keyPressToDisplayString(key);
+        for (auto c = text.getCharPointer(); !c.isEmpty(); ++c)
+            EXPECT_GE(static_cast<int>(*c), 32) << id << ": '" << text << "'";
+        EXPECT_FALSE(text.endsWith(" + ")) << id;
+    }
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery(
+        "return", "Open", ShortcutManager::keyPressToDisplayString(juce::KeyPress(juce::KeyPress::returnKey))));
+}
+
+// Mac keyboards have no Alt key, so no binding reads "Alt" there and every modifier is its Mac symbol.
+TEST_F(ShortcutManagerTest, NoBindingIsSpelledWithAltOnAMacAndEveryModifierIsASymbol) {
+    using juce::ModifierKeys;
+    for (const auto& id : manager.getActionIds()) {
+        const auto key = manager.getBinding(id);
+        if (!key.isValid())
+            continue;
+        const auto text = ShortcutManager::keyPressToDisplayString(key);
+#if JUCE_MAC
+        EXPECT_FALSE(text.containsIgnoreCase("alt")) << id << ": '" << text << "'";
+        EXPECT_FALSE(text.contains("Cmd") || text.contains("Ctrl") || text.contains("Shift"))
+            << id << ": '" << text << "'";
+#else
+        EXPECT_FALSE(synth::test::has(text, juce::String::fromUTF8("\xe2\x8c\xa5"))) << id << ": '" << text << "'";
+#endif
+    }
+#if JUCE_MAC
+    const auto all = ModifierKeys::commandModifier | ModifierKeys::ctrlModifier | ModifierKeys::altModifier |
+                     ModifierKeys::shiftModifier;
+    EXPECT_EQ(ShortcutManager::keyPressToDisplayString(juce::KeyPress('k', all, 0)),
+              juce::String::fromUTF8("\xe2\x8c\x98 + \xe2\x8c\x83 + \xe2\x8c\xa5 + \xe2\x87\xa7 + K"));
+#endif
+}
+
+// typing a modifier's name finds a binding even though it prints as a symbol; "alt" and "option" both find
+// an Alt/Option binding on a Mac, and "cmd" still finds a Command one.
+TEST(ShortcutDisplayNamesTest, SearchFindsBindingsByTheModifiersNamesNotJustTheirSymbols) {
+    using juce::ModifierKeys;
+    const juce::KeyPress altReturn(juce::KeyPress::returnKey, ModifierKeys::altModifier, 0);
+    const juce::KeyPress cmdZ('z', ModifierKeys::commandModifier, 0);
+    const auto altText = ShortcutManager::keyPressToSearchText(altReturn);
+    const auto cmdText = ShortcutManager::keyPressToSearchText(cmdZ);
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("alt", "Detach", altText));
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("alt return", "Detach", altText));
+    EXPECT_FALSE(ShortcutsSettingsTab::rowMatchesQuery("shift", "Undo", cmdText));
+#if JUCE_MAC
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("cmd", "Undo", cmdText)); // elsewhere Command is Ctrl
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("option", "Detach", altText));
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("command", "Undo", cmdText));
+    EXPECT_FALSE(ShortcutsSettingsTab::rowMatchesQuery("option", "Undo", cmdText));
+#endif
 }

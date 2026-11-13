@@ -1,0 +1,131 @@
+#pragma once
+
+#include "Mixer/ChannelFlows/PolyVoiceGraph.h"
+#include "UI/Timeline/TrackPolyState.h"
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
+#include <optional>
+#include <vector>
+
+class GraphEditor;
+
+namespace synth::ui {
+
+/** What the user picked when a Poly click would also change modules on other tracks. */
+enum class PolyChainChoice { cancel, thisTrackOnly, includeConnectedTracks };
+
+/** The wording of that question, kept apart from the window that shows it. */
+struct PolyChainPrompt {
+    int otherModuleCount = 0;
+    juce::String trackNames; ///< "Bass and Lead".
+    juce::String message;    ///< "This also changes 2 modules on Bass and Lead."
+};
+
+/** A module a sequencer's Midi output feeds that plays one note at a time: its node and the name the hint shows. */
+struct MonoNoteDestination {
+    juce::AudioProcessorGraph::NodeID node;
+    juce::String name;
+};
+
+/**
+ * The Poly pill's behaviour (docs/modules/modulation.md#the-poly-toggle): a user click on the pill switches the whole
+ * voice graph, not one module. One controller per GraphEditor; the card routes the click here and the rest of the
+ * editor routes a new cable here. Programmatic sets (undo/redo restore, project load, the AI, MIDI Learn and
+ * automation) change the parameter and never reach this class, so they never propagate.
+ *
+ *  * polyPillClicked plans the voice graph (planPolyVoiceGraph), asks first when other tracks' modules would change,
+ *    then flips the chosen modules and inserts or removes the Poly MIDI node as ONE undo step.
+ *  * joinConnectedModules lets a module that had no cables join the poly state of the module it is first cabled to.
+ *
+ * Message thread only.
+ */
+class PolyChainController {
+public:
+    using ShowToast = std::function<void(const juce::String& message, const juce::String& actionLabel,
+                                         std::function<void()> action, const juce::String& actionTooltip)>;
+    using Confirm = std::function<void(const PolyChainPrompt&, std::function<void(PolyChainChoice)> answer)>;
+
+    explicit PolyChainController(GraphEditor& editor);
+    ~PolyChainController();
+
+    /** The timeline's tracks in order (source node uuid + name). Unset: no track owns anything. Set by MainComponent.
+     */
+    std::function<std::vector<synth::PolyTrackRef>()> trackProvider;
+    /** Shows a transient message with an action. Unset (tests, plugin): no feedback. */
+    ShowToast showToast;
+    /** Test seam: answers the other-tracks question without a window. Unset: a juce::AlertWindow. */
+    Confirm confirmForTest;
+
+    /** The pill of `clicked` was clicked: `poly` is the value it asks for. The pill itself never changes state here;
+     *  it follows the parameter, so a cancelled question leaves it as it was. */
+    void polyPillClicked(juce::AudioProcessorGraph::NodeID clicked, bool poly);
+
+    /** The track-header switch (docs/timeline/tracks.md#the-monopoly-switch): the Poly state of the voice graph that
+     *  starts at a track's source node. `none` when it holds no poly-capable module, `mixed` when only some are poly.
+     */
+    TrackPolyState trackPolyState(juce::AudioProcessorGraph::NodeID trackSource) const;
+
+    /** While alive, trackPolyState reads one cable index and one track-ownership map, built on its first call, instead
+     *  of building both per call (every header of a reconcile asks). Nothing may change the graph's nodes or cables,
+     *  or the tracks, while it is open. Scopes nest; the outermost one owns the batch. */
+    class StateBatch {
+    public:
+        explicit StateBatch(PolyChainController& controller);
+        ~StateBatch();
+        StateBatch(const StateBatch&) = delete;
+        StateBatch& operator=(const StateBatch&) = delete;
+
+    private:
+        PolyChainController& controller_;
+    };
+
+    /** The header switch was clicked: the same plan, question and ONE undo step as polyPillClicked, started from the
+     *  track's source node (which has no pill of its own, so nothing falls back to it). */
+    void trackPolyClicked(juce::AudioProcessorGraph::NodeID trackSource, bool poly);
+
+    /** The first module with a Poly switch that is off which `sequencer`'s Midi output feeds directly, or nullopt when
+     *  every note reaches something that plays them all (or nothing). The Poly Sequencer card's hint reads this. */
+    std::optional<MonoNoteDestination> monoNoteDestination(juce::AudioProcessorGraph::NodeID sequencer) const;
+
+    /** The hint's button: the same call, plan, question and ONE undo step as clicking `destination`'s own Poly pill. */
+    void turnPolyOn(juce::AudioProcessorGraph::NodeID destination) { polyPillClicked(destination, true); }
+
+    /** Called after a click changed the voice graph, so surfaces that show its state (the track headers) re-read it. */
+    std::function<void()> onVoiceGraphChanged;
+
+    /** A cable is about to join `source` and `destination`: a poly-capable module with no cable yet joins the poly
+     *  state of a poly-ON poly-capable (or Poly MIDI) module on the other end. Inside the cable's own undo step. */
+    void joinConnectedModules(juce::AudioProcessorGraph::NodeID source, juce::AudioProcessorGraph::NodeID destination);
+
+    /** Keeps joinConnectedModules quiet while alive: for cables that restore wiring rather than start new ones. */
+    class SuppressJoin {
+    public:
+        explicit SuppressJoin(PolyChainController& controller)
+            : controller_(controller) {
+            ++controller_.suppressJoin_;
+        }
+        ~SuppressJoin() { --controller_.suppressJoin_; }
+        SuppressJoin(const SuppressJoin&) = delete;
+        SuppressJoin& operator=(const SuppressJoin&) = delete;
+
+    private:
+        PolyChainController& controller_;
+    };
+
+private:
+    void switchVoiceGraph(juce::AudioProcessorGraph::NodeID start, bool poly, bool includeStart);
+    void ask(const synth::PolyVoiceGraphPlan& plan, std::function<void(PolyChainChoice)> answer);
+    void commit(const std::vector<juce::AudioProcessorGraph::NodeID>& nodes, bool poly);
+    void announce(int changed, bool poly, int editSerialAfter);
+    bool hasCables(juce::AudioProcessorGraph::NodeID node) const;
+
+    GraphEditor& editor_;
+    int suppressJoin_ = 0;
+    struct Batch; // the open StateBatch's index and ownership map (PolyChainController.cpp)
+    int batchDepth_ = 0;
+    mutable std::unique_ptr<Batch> batch_;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+};
+
+} // namespace synth::ui

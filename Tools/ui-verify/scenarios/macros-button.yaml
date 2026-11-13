@@ -1,0 +1,29 @@
+# FRO1289: a Macros knob can show as a button, Toggle or Momentary (Edit Layout, Show as Button and its Mode switch).
+# The fixture's card already has M1 as a Toggle button and M2 as a Momentary button (the other knobs stay knobs). A
+# click on M1 lights it (macro 1 goes to 1) and a second click switches it off; M2 is lit only while the mouse is held
+# down on it and is off again the moment it is released, even when released away from the button.
+#
+# What a user does: sets a macro to Toggle, clicks it on and off; sets another to Momentary, holds it and lets go.
+record: true
+save_project: fro1289 buttons macro
+steps:
+  - openProject: {path: "${FIXTURES}/macros-buttons.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {settleMs: 500}
+  - screenshot: {name: at-rest}
+  - click: {id: M1}
+  - wait: {settleMs: 400}
+  - screenshot: {name: toggle-on}
+  - mark: {check: 1, name: toggle-clicked-on-lit}
+  - click: {id: M1}
+  - wait: {settleMs: 400}
+  - screenshot: {name: toggle-off}
+  - mouseDown: {id: M2}
+  - wait: {settleMs: 400}
+  - screenshot: {name: momentary-held}
+  - mark: {check: 2, name: momentary-pressed-shows-lit}
+  - mouseUp: {id: M2}
+  - wait: {settleMs: 400}
+  - screenshot: {name: momentary-released}
+  - mark: {check: 3, name: momentary-released-off}

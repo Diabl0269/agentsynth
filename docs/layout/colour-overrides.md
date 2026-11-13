@@ -37,7 +37,9 @@ partially applied**, so one corrupted slot can never take the other eleven down 
 
 **The UI** is the Appearance tab's "Piano Roll Notes" swatch row (`AppearanceSettingsTab`, one
 12-cell row keyed C to B): left-click opens a `synth::ui::ColourPickerPopup`, right-click resets that
-pitch class's override, and "Reset all" clears every pitch class in one action.
+pitch class's override, and "Reset all" clears every pitch class in one action. The row is one Tab
+stop: Left/Right choose a swatch, Return or Space opens its picker, Delete or Backspace resets it (the
+cable-colour row works the same way).
 
 Every swatch — overridden or not — previews the colour through
 `AppearanceSettingsTab::getNoteSwatchPreviewColour()`, which calls the exact same
@@ -96,7 +98,8 @@ resolve back to the app's real `AppLookAndFeel`, and the plugin build never call
 `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`) is the one full colour
 picker in the app — a `juce::ColourSelector` plus a favourites shelf — shared by the timeline track
 header's colour swatch, the timeline ruler's marker menu, the macro Change Colour item (see
-[macro-cards](macro-cards.md#the-macro-menu)) and the Appearance tab's note-colour swatches, rather
+[macro-cards](macro-cards.md#the-macro-menu)), the morph map dot's Colour... item and the Alt+C key
+([shortcuts](../control/recolour-focused-item.md)) and the Appearance tab's note-colour swatches, rather
 than each rolling its own `juce::CallOutBox` plus `ColourSelector`.
 
 Favourites persist under the single properties key `"favouriteColoursArgb"` — comma-separated
@@ -105,6 +108,10 @@ caller-owned `juce::PropertiesFile*`. **`nullptr` is legal and means "in-memory 
 instance"**, which is what keeps the class usable from a headless test with no
 `ApplicationProperties` at all. A first run with no persisted favourites seeds the shelf from the
 existing track palette, so it is never empty on a fresh install.
+
+Keyboard: Tab visits the three channel value fields, the add-to-favourites star and each favourite
+swatch (Space or Return applies it). Escape is Cancel: the colour (and the live preview) goes back to
+what it was when the popup opened, and the callout closes.
 
 The popup exposes two callbacks: a **live-preview** one, fired on every drag or favourite click,
 writing straight into the caller's target with no undo step; and a **commit-once** one, fired when
@@ -116,11 +123,12 @@ colour first silently restores the original, outside any undo-recorded mutation,
 the real edit as the ONE undo step whose undo target is the original colour. Dragging through a
 dozen preview colours before landing on a choice therefore costs exactly one Cmd+Z, not a dozen.
 
-**A caller may fan the preview out to more than one target.** A timeline track that is LINKED to a
-mixer channel builds its picker through `TrackChannelLinkController` instead, whose preview callback
+**A caller may fan the preview out to more than one target.** A timeline track that owns its
+channel macro builds its picker through `TrackChannelLinkController` instead, whose preview callback
 writes the track colour AND the channel macro's colour on every drag frame, whose no-net-change
 close restores both, and whose commit restores both and then performs ONE compound undo step
-covering them. **The popup's own contract is unchanged** — fanning out is entirely the caller's
+covering them. The macro card's picker mirrors onto the owning track the same way
+([`docs/mixer/mixer.md`](../mixer/mixer.md#a-track-and-its-macro-share-a-colour)). **The popup's own contract is unchanged** — fanning out is entirely the caller's
 business.
 
 **Committing always reconciles with `juce::ColourSelector::getCurrentColour()`** rather than trusting

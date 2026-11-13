@@ -10,9 +10,13 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
+#include "WaveformSampleCache.h"
 #include <algorithm>
 #include <cmath>
 
@@ -43,10 +47,16 @@ constexpr float kMutedClipLabelAlpha = 0.35f;
 using namespace detail;
 
 //==============================================================================
+TimelineClipLaneArea::~TimelineClipLaneArea() = default;
+
 TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection)
     : viewState_(viewState)
-    , selection_(selection) {
+    , selection_(selection)
+    , clipGlide_(std::make_unique<KeyedRectTween>(*this))
+    , enterExit_(std::make_unique<ClipLaneEnterExit>(*this))
+    , sampleCache_(std::make_unique<WaveformSampleCache>()) {
     setComponentID("timelineClipLaneArea");
+    addTestModeProbe();
     setInterceptsMouseClicks(true, false);
     // Load-bearing, and invisible to every headless test: juce::grabKeyboardFocus() is a NO-OP on
     // a component that does not want focus, so without this the mouseDown() call below never moves
@@ -58,6 +68,8 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     // entirely, which is exactly why this hole survived until a user hit it — see
     // ClipLaneAcceptsKeyboardFocusSoSurfaceVerbsCanRoute for the guard that now pins it.
     setWantsKeyboardFocus(true);
+    setTitle("Clips");
+    setDescription("Timeline clips. Arrow keys step between clips.");
     audioFormats_.registerBasicFormats();
     // The production chooser, installed as the DEFAULT rather than called directly, so a test can
     // replace it wholesale (see setAudioFileChooser).
@@ -69,12 +81,14 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
 //==============================================================================
 void TimelineClipLaneArea::setTimelineDoc(synth::TimelineDoc* doc) {
     doc_ = doc;
+    enterExit_->clear(); // a new document: its clips are simply there
     refreshFromDoc();
 }
 
 // Re-derives the doc-backed truth via synth::ui::ClipSelectionModel::retainOnly. No timer anywhere
 // in this class drives it — every call site above is an explicit doc-mutation notification.
 void TimelineClipLaneArea::refreshFromDoc() {
+    refreshKitRows();
     std::vector<synth::ClipId> alive;
     if (doc_ != nullptr) {
         for (const auto& track : doc_->getTracks())
@@ -82,6 +96,7 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
+    refreshKeyboardClip();
     // A range whose corner track was removed has no rows left to cover — drop it rather than keep
     // a selection nothing can paint or act on.
     if (range_.isActive() && (doc_ == nullptr || !range_.coveredRows(*doc_)))
@@ -98,8 +113,11 @@ void TimelineClipLaneArea::refreshFromDoc() {
     // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
     // dirty tracking against a mutation we don't otherwise inspect) is not worth building yet.
     peaksCache_.clear();
-    // Same policy, same reasoning, for the asset-existence cache.
+    // Same policy, same reasoning, for the asset-existence cache and the raw-sample blocks (a re-recorded or
+    // replaced file must show its new wave).
     assetExistsCache_.clear();
+    sampleCache_->clear();
+    glideRestoredClips();
     repaint();
 }
 
@@ -110,8 +128,23 @@ void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce:
     invalidatePeaksCache(); // a different resolver may resolve an already-cached ref differently
 }
 
+// MainComponent wires this to the audio file's header rate. Peaks buckets count FILE samples, so the
+// rate that turns seconds into buckets is the file's, not the engine's.
+void TimelineClipLaneArea::setAssetSampleRateResolver(std::function<double(const juce::String&)> resolver) {
+    assetSampleRateResolver_ = std::move(resolver);
+    invalidatePeaksCache(); // a different resolver may answer an already-cached ref differently
+}
+
+// MainComponent wires this to the same file resolution playback uses. See paintWaveformFromSamples.
+void TimelineClipLaneArea::setAssetSamplesResolver(
+    std::function<bool(const juce::String&, std::int64_t, int, juce::AudioBuffer<float>&)> resolver) {
+    sampleCache_->setResolver(std::move(resolver));
+    invalidatePeaksCache();
+}
+
 void TimelineClipLaneArea::invalidatePeaksCache() {
     peaksCache_.clear();
+    sampleCache_->clear();
     // Cleared alongside — see setAssetExistsResolver's comment for why the two caches share
     // every clear point.
     assetExistsCache_.clear();
@@ -139,6 +172,68 @@ int TimelineClipLaneArea::getRowHeight() const {
     return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
 }
 
+// A track's own height (Track::heightScale, or the drag preview) rides on top of the shared zoom, so
+// it enters the one layout as that track's row-height override. A fixed override (the Unassigned
+// section row) wins: that row is not a clip row to resize.
+TimelineRowLayout TimelineClipLaneArea::getRowLayout() const {
+    if (doc_ == nullptr)
+        return TimelineRowLayout(0, getRowHeight(), trackExtraHeights_, trackRowHeightOverrides_);
+    const auto& tracks = doc_->getTracks();
+    const int rowHeight = getRowHeight();
+    std::vector<int> overrides(tracks.size(), 0);
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        if (i < trackRowHeightOverrides_.size() && trackRowHeightOverrides_[i] > 0) {
+            overrides[i] = trackRowHeightOverrides_[i];
+            continue;
+        }
+        const double scale = tracks[i].id == heightPreviewTrack_ ? heightPreviewScale_ : tracks[i].heightScale;
+        if (scale != 1.0)
+            overrides[i] = std::max(8, (int)std::llround((double)rowHeight * scale));
+    }
+    return TimelineRowLayout((int)tracks.size(), rowHeight, trackExtraHeights_, overrides);
+}
+
+void TimelineClipLaneArea::setTrackHeightPreview(synth::TrackId track, double scale) {
+    heightPreviewTrack_ = track;
+    heightPreviewScale_ = std::clamp(scale, synth::Track::kMinHeightScale, synth::Track::kMaxHeightScale);
+    repaint();
+}
+
+void TimelineClipLaneArea::clearTrackHeightPreview() {
+    heightPreviewTrack_ = {};
+    repaint();
+}
+
+void TimelineClipLaneArea::setTrackExtraHeights(std::vector<int> extraHeights) {
+    if (extraHeights == trackExtraHeights_)
+        return;
+    trackExtraHeights_ = std::move(extraHeights);
+    repaint();
+}
+
+void TimelineClipLaneArea::setTrackRowHeightOverrides(std::vector<int> rowHeights) {
+    if (rowHeights == trackRowHeightOverrides_)
+        return;
+    trackRowHeightOverrides_ = std::move(rowHeights);
+    repaint();
+}
+
+// The automation lane editors sit over the extra areas, and the Automation track's section row
+// holds no clips: neither is this component's to answer. Returning false lets a click there reach
+// whatever is on top (an editor) or the panel behind it, instead of starting a marquee or a draw.
+bool TimelineClipLaneArea::hitTest(int x, int y) {
+    if (!juce::Component::hitTest(x, y))
+        return false;
+    if (doc_ == nullptr)
+        return true;
+    const auto hit = getRowLayout().hitAtY(y + (int)std::llround(viewState_.trackScrollY));
+    if (hit.trackIndex < 0)
+        return true; // below the last track: empty lane space stays clickable (deselect, marquee)
+    if (!hit.inClipRow)
+        return false;
+    return doc_->getTracks()[(size_t)hit.trackIndex].kind != synth::TrackKind::Automation;
+}
+
 double TimelineClipLaneArea::currentBeatsPerBar() const {
     double beatsPerBar = 4.0;
     if (transport_ != nullptr) {
@@ -157,19 +252,13 @@ double TimelineClipLaneArea::snappedBeatAt(double rawBeat) const {
 // What a created clip starts on, so a double-click always lands inside the bar/beat cell it was
 // aimed at rather than the next one. Same grid every drag uses (TimelineViewState::divisionBeats).
 double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
-    const double division = viewState_.divisionBeats(currentBeatsPerBar());
-    if (division <= 0.0)
-        return std::max(0.0, rawBeat); // Snap::Off — no grid to floor onto
-    return std::max(0.0, std::floor(rawBeat / division) * division);
+    return std::max(0.0, viewState_.floorToGrid(rawBeat, currentBeatsPerBar())); // Snap::Off passes through
 }
 
 // What the Draw tool's drag end uses so a drag that has crossed into a cell always includes that
 // whole cell.
 double TimelineClipLaneArea::ceilSnappedBeatAt(double rawBeat) const {
-    const double division = viewState_.divisionBeats(currentBeatsPerBar());
-    if (division <= 0.0)
-        return std::max(0.0, rawBeat); // Snap::Off — no grid to reach up to
-    return std::max(0.0, std::ceil(rawBeat / division) * division);
+    return std::max(0.0, viewState_.ceilToGrid(rawBeat, currentBeatsPerBar())); // Snap::Off passes through
 }
 
 // When the grid is off there is no cell to fill, so this falls back to the same floor
@@ -182,45 +271,48 @@ double TimelineClipLaneArea::minDrawLengthBeats() const {
 std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) const {
     if (doc_ == nullptr || pos.y < 0)
         return std::nullopt;
-    const int rowHeight = getRowHeight();
-    if (rowHeight <= 0)
-        return std::nullopt;
     // Same vertical-scroll offset rowBounds() subtracts — a hit test and a painted row must never
     // disagree about which track a y lands in.
     const int contentY = pos.y + (int)std::llround(viewState_.trackScrollY);
-    if (contentY < 0)
-        return std::nullopt;
-    const int index = contentY / rowHeight;
-    if (index >= (int)doc_->getTracks().size())
+    // Only the clip row counts: a y in a track's extra (sub-lane) area belongs to no clip row.
+    const auto hit = getRowLayout().hitAtY(contentY);
+    if (hit.trackIndex < 0 || !hit.inClipRow)
         return std::nullopt; // below the last row: empty panel space, not a row
-    return index;
+    return hit.trackIndex;
 }
 
-juce::Rectangle<int> TimelineClipLaneArea::rowBounds(int trackIndex, int rowHeight) const {
-    return {0, trackIndex * rowHeight - (int)std::llround(viewState_.trackScrollY), getWidth(), rowHeight};
+juce::Rectangle<int> TimelineClipLaneArea::rowBounds(const TimelineRowLayout& layout, int trackIndex) const {
+    return {0, layout.trackTop(trackIndex) - (int)std::llround(viewState_.trackScrollY), getWidth(),
+            layout.trackRowHeight(trackIndex)};
 }
 
 //==============================================================================
-juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState, int trackIndex,
-                                                           double startBeat, double lengthBeats, int rowHeight) {
+juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState,
+                                                           const TimelineRowLayout& layout, int trackIndex,
+                                                           double startBeat, double lengthBeats) {
     const double x0 = viewState.beatToX(startBeat);
     const double x1 = viewState.beatToX(startBeat + lengthBeats);
-    const int left = (int)std::llround(x0);
-    const int right = (int)std::llround(x1);
-    return {left, trackIndex * rowHeight - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
-            rowHeight};
+    const int left = (int)TimelineViewState::pixelOf(x0);
+    const int right = (int)TimelineViewState::pixelOf(x1);
+    return {left, layout.trackTop(trackIndex) - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
+            layout.trackRowHeight(trackIndex)};
 }
 
-// `sampleRate` is the ASSUMED source sample rate — the peaks file itself does not carry one (see
-// PeaksFile.h), so this is the same "engine rate, no resampling" honesty AudioClipStreamer already
-// states for playback; a caller with a live transport passes its current sampleRate/bpm, exactly
-// like currentBeatsPerBar() does for the snap grid.
+juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState, int trackIndex,
+                                                           double startBeat, double lengthBeats, int rowHeight) {
+    return computeClipRect(viewState, TimelineRowLayout(trackIndex + 1, rowHeight), trackIndex, startBeat, lengthBeats);
+}
+
+// Buckets count FILE samples, so the rate is the audio file's own: `peaks.sampleRate` when the
+// caller filled it (findPeaksData does), else `sampleRate`, the transport rate a caller passes as the
+// fallback (exactly like currentBeatsPerBar() does for the snap grid).
 TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const synth::PeaksFile::Data& peaks,
                                                                            double lengthBeats,
                                                                            double sourceStartSeconds, double bpm,
                                                                            double sampleRate) {
     BucketRange range;
-    if (peaks.numChannels <= 0 || peaks.bucketSize <= 0 || sampleRate <= 0.0)
+    const double fileRate = peaks.sampleRate > 0.0 ? peaks.sampleRate : sampleRate;
+    if (peaks.numChannels <= 0 || peaks.bucketSize <= 0 || fileRate <= 0.0)
         return range;
 
     const int totalBuckets = (int)(peaks.buckets.size() / (std::size_t)peaks.numChannels);
@@ -231,8 +323,8 @@ TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const
     const double startSeconds = std::max(0.0, sourceStartSeconds);
     const double endSeconds = startSeconds + std::max(0.0, lengthBeats) * secondsPerBeat;
 
-    const double startSample = startSeconds * sampleRate;
-    const double endSample = endSeconds * sampleRate;
+    const double startSample = startSeconds * fileRate;
+    const double endSample = endSeconds * fileRate;
 
     int firstBucket = (int)std::floor(startSample / (double)peaks.bucketSize);
     int lastBucketExclusive = (int)std::ceil(endSample / (double)peaks.bucketSize);
@@ -248,12 +340,12 @@ TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const
 juce::Rectangle<int> TimelineClipLaneArea::getClipRect(synth::ClipId id) const {
     if (doc_ == nullptr)
         return {};
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex)
         for (const auto& clip : tracks[(size_t)trackIndex].clips)
             if (clip.id == id)
-                return computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight);
+                return computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats);
     return {};
 }
 
@@ -261,12 +353,12 @@ std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> TimelineClipLaneArea
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> rects;
     if (doc_ == nullptr)
         return rects;
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex)
         for (const auto& clip : tracks[(size_t)trackIndex].clips)
             rects.emplace_back(clip.id,
-                               computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight));
+                               computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats));
     return rects;
 }
 
@@ -274,11 +366,11 @@ std::optional<TimelineClipLaneArea::ClipHit> TimelineClipLaneArea::hitTestClip(j
     if (doc_ == nullptr)
         return std::nullopt;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         for (const auto& clip : tracks[(size_t)trackIndex].clips) {
-            const auto rect = computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight);
+            const auto rect = computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats);
             if (!rect.contains(pos))
                 continue;
 
@@ -307,6 +399,8 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
         return {resizeOriginalStart_, previewLength_};
     } else if (dragMode_ == DragMode::ResizeLeft && activeClip_ == clip.id) {
         return {previewStart_, previewLength_};
+    } else if (const auto preview = resizePreviewFor(clip)) {
+        return {preview->startBeat, preview->lengthBeats}; // a copy linked to the clip being resized
     }
     return {clip.startBeat, clip.lengthBeats};
 }
@@ -329,23 +423,45 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     if (doc_ == nullptr)
         return;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
+    paintAutomationRows(g, layout);
     const auto& tracks = doc_->getTracks();
+    // Group sizes once per paint, so a clip's link mark is a map lookup rather than a doc scan.
+    linkGroupSizes_.clear();
+    for (const auto& track : tracks)
+        for (const auto& clip : track.clips)
+            if (clip.linkGroup != 0)
+                ++linkGroupSizes_[clip.linkGroup];
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         const auto& track = tracks[(size_t)trackIndex];
-        const auto bounds = rowBounds(trackIndex, rowHeight);
+        const auto bounds = rowBounds(layout, trackIndex);
         // Both of these paint UNDER the row's clips (a drop highlight is a backdrop, and a hint
         // only ever shows on a row that has none).
         if (trackIndex == fileDropRow_)
             paintFileDropHighlight(g, bounds);
+        else if (isShowingSoundOutline() && track.kind == synth::TrackKind::Audio)
+            paintSoundDropOutline(g, bounds);
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
-        for (const auto& clip : track.clips)
-            paintClip(g, clip, track, trackIndex, rowHeight);
+        for (const auto& clip : track.clips) {
+            const float fade = clipGlide_->alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
+            if (fade < 1.0f)
+                g.beginTransparencyLayer(fade);
+            paintClip(g, clip, track, trackIndex, layout);
+            if (fade < 1.0f)
+                g.endTransparencyLayer();
+        }
     }
 
-    if (liveRecording_.active)
-        paintLiveRecordingStrip(g);
+    paintClipGhosts(g, layout);
+
+    if (belowTracksHint_ || isShowingSoundOutline())
+        paintBelowTracksStrip(g);
+
+    paintKeyboardClipRing(g);
+
+    for (const auto& strip : liveStrips_)
+        paintLiveRecordingStrip(g, strip);
 
     // Tool affordances paint LAST, over the clips they describe.
     paintDragGhosts(g);
@@ -358,12 +474,19 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 }
 
 void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track,
-                                     int trackIndex, int rowHeight) {
+                                     int trackIndex, const TimelineRowLayout& layout) {
     const auto geometry = effectiveGeometryFor(clip);
-    const auto rect =
-        computeClipRect(viewState_, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length, rowHeight);
-    if (rect.getRight() < 0 || rect.getX() > getWidth())
-        return; // cheap offscreen cull — same reasoning as the panel's own bar-line loop
+    auto rect =
+        computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
+    const auto restingRect = rect; // the notes glide relative to it (glidedNoteX)
+    rect = drawnClipRect(clip.id, rect);
+    const int rowHeight = rect.getHeight(); // the row it is drawn in (a dragged clip's target row)
+    // Cull against the area being painted, in both directions: rows scrolled above or below the panel are laid out at
+    // negative or far y, and drawing every note of every track made a scroll frame cost in proportion to the project.
+    // The margin covers the selection outline drawn on the clip's edge.
+    if (!rect.expanded(2).intersects(g.getClipBounds()))
+        return;
+    ++clipsPainted_;
 
     const bool selected = selection_.contains(clip.id);
     // A clip is dimmed when EITHER its track or the clip itself is muted — the two flags are
@@ -374,7 +497,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     const juce::Colour fill = selected ? base.brighter(0.15f) : base; // "slight fill lift" when selected
 
     const auto bodyBounds = rect.toFloat().reduced(1.0f);
-    g.setColour(fill.withAlpha(selected ? 0.85f : 0.65f));
+    const juce::Colour bodyFill = fill.withAlpha(selected ? 0.85f : 0.65f);
+    g.setColour(bodyFill);
     g.fillRoundedRectangle(bodyBounds, 3.0f);
 
     g.setColour(selected ? base.brighter(0.6f) : base.darker(0.3f));
@@ -387,7 +511,7 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     // currently resolve gets the missing-asset placeholder instead of an (impossible) waveform.
     if (!clip.assetRef.isEmpty()) {
         if (assetExists(clip.assetRef))
-            paintWaveform(g, clip, rect);
+            paintWaveform(g, clip, rect, synth::theme::themeOf(*this).colors.bg1.overlaidWith(bodyFill));
         else
             paintMissingAssetPlaceholder(g, clip, rect);
     } else if (rect.getWidth() > kMinWidthForNotePreview) {
@@ -395,29 +519,49 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         // arbitrary per-track/per-user hue, not a theme colour — the contrast they need to read
         // against is unrelated to which app theme is active, only to that one clip's colour.
         g.setColour(juce::Colours::white.withAlpha(0.55f));
-        for (const auto& note : clip.notes) {
+        // During an edge drag the notes are the ones the drop will leave (the sizing rule), never the stored ones.
+        const auto preview = resizePreviewFor(clip);
+        const auto kitRows = noteRowsFor(track, clip); // a Drum Kit track draws its shown pads, not the pitch scale
+        for (const auto& note : preview ? preview->notes : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
-            const double x0 = viewState_.beatToX(noteStartBeat);
-            const double x1 = viewState_.beatToX(noteStartBeat + note.lengthBeats);
+            const double x0 = glidedNoteX(clip.id, viewState_.beatToX(noteStartBeat), restingRect);
+            const double x1 = glidedNoteX(clip.id, viewState_.beatToX(noteStartBeat + note.lengthBeats), restingRect);
             const auto nx0 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x0);
             const auto nx1 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x1);
             if (nx1 <= nx0)
                 continue;
 
-            const float pitchFrac = 1.0f - (float)juce::jlimit(0, 127, note.pitch) / 127.0f;
+            float pitchFrac = 1.0f - (float)juce::jlimit(0, 127, note.pitch) / 127.0f;
+            if (!kitRows.pitches.empty()) {
+                const int row = kitRows.rowOf(note.pitch);
+                if (row < 0)
+                    continue; // a hidden pad's hit: no row, though it still plays
+                pitchFrac = ((float)row + 0.5f) / (float)kitRows.pitches.size();
+            }
             const float y = (float)rect.getY() + 2.0f + pitchFrac * (float)(rowHeight - 4);
             g.drawLine(nx0, y, nx1, y, 1.2f);
         }
     }
 
+    const auto group = linkGroupSizes_.find(clip.linkGroup);
+    const bool linked =
+        (clip.linkGroup != 0 && group != linkGroupSizes_.end() && group->second > 1) || sectionFollowOf(clip).plays > 1;
+    const auto markBounds = linked ? linkMarkBounds(rect) : juce::Rectangle<int>();
     if (rect.getWidth() > kMinWidthForName && clip.name.isNotEmpty()) {
         // Fixed black, not a theme token, for the same reason as the note-preview lines above: the
         // label sits on `fill` (an arbitrary per-track hue), so its contrast need is independent of
         // which app theme is active.
         g.setColour(juce::Colours::black.withAlpha(clip.muted ? kMutedClipLabelAlpha : 0.8f));
         g.setFont(juce::Font(11.0f));
-        g.drawText(clip.name, rect.reduced(4, 2), juce::Justification::topLeft, true);
+        auto nameArea = rect.reduced(4, 2);
+        if (!markBounds.isEmpty())
+            nameArea.setRight(markBounds.getX() - 2); // the name never runs under the link mark
+        g.drawText(clip.name, nameArea, juce::Justification::topLeft, true);
     }
+    if (!markBounds.isEmpty())
+        paintLinkMark(g, rect, track.muted || clip.muted);
+    if (clip.id == activeClip_)
+        paintSizingReadout(g, rect);
 }
 
 juce::String TimelineClipLaneArea::emptyRowHintFor(synth::TrackKind kind) {
@@ -452,9 +596,7 @@ void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Tra
 
     // Theme token via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with
     // Theme::Colors::textMuted's own default when headless.
-    juce::Colour colour(0xff8A93A0);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        colour = lf->getTheme().colors.textMuted;
+    const juce::Colour colour = synth::theme::themeOf(*this).colors.textMuted;
 
     g.setColour(colour.withAlpha(0.75f));
     g.setFont(font);
@@ -462,14 +604,34 @@ void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Tra
 }
 
 void TimelineClipLaneArea::paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds) {
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
     g.setColour(accent.withAlpha(0.15f));
     g.fillRect(bounds);
     g.setColour(accent.withAlpha(0.7f));
     g.drawRect(bounds, 2);
+}
+
+void TimelineClipLaneArea::paintSoundDropOutline(juce::Graphics& g, juce::Rectangle<int> bounds) {
+    g.setColour(synth::theme::themeOf(*this).colors.accent.withAlpha(0.35f));
+    g.drawRect(bounds.reduced(1), 1);
+}
+
+void TimelineClipLaneArea::paintBelowTracksStrip(juce::Graphics& g) {
+    const auto strip = belowTracksStrip();
+    if (strip.isEmpty())
+        return;
+    const auto& theme = synth::theme::themeOf(*this);
+    const float radius = theme.metrics.cornerRadiusSmall;
+    if (belowTracksHint_) {
+        g.setColour(theme.colors.accent.withAlpha(0.15f));
+        g.fillRoundedRectangle(strip.toFloat(), radius);
+    }
+    g.setColour(theme.colors.accent.withAlpha(belowTracksHint_ ? 0.7f : 0.35f));
+    g.drawRoundedRectangle(strip.toFloat().reduced(0.5f), radius, belowTracksHint_ ? 2.0f : theme.metrics.borderWidth);
+    g.setColour(belowTracksHint_ ? theme.colors.textPrimary : theme.colors.textMuted);
+    g.setFont(juce::Font{juce::FontOptions(kHintFontHeight)});
+    g.drawText("New audio track", strip, juce::Justification::centred, false);
 }
 
 void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
@@ -484,7 +646,7 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
     // light theme. Keeping all three on one recipe means a theme change (or a user accent
     // override) moves all three marquees together rather than leaving one behind.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
     const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
 
     const auto bandF = marqueeRect_.toFloat();

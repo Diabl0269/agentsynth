@@ -1,0 +1,394 @@
+// CardBodyOverlapTests.cpp
+//
+// The guard for the layout-overlap bug kind: whatever a card shows, no two of its visible parts overlap and every
+// block under the controls (any visible part that is not a control: panels, the morph card, the LFO Custom
+// toolbar and curve editor) starts at least kPanelGap below the controls above it, never touching. Every module type's
+// card is built in each chrome state its type has (panels, spectrum, morph map, the Custom filter type and LFO shape,
+// the envelope graph) and checked once its fades have settled (off screen every change lands before the call returns).
+// A card's width is fixed by its type, so there is no narrower width to try. Regression test for FRO1060: the Edit
+// shapes button touched the Morph knob labels with Show Response off. Regression test for FRO1335: the LFO Custom
+// Grid/Shapes/Tools row touched the Morph value boxes. Regression test for FRO1211: a horizontal fader at its
+// maximum drew its cap over the value text.
+
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
+#include "Modules/CardLayout.h"
+#include "Modules/DrumKit/DrumKitModule.h"
+#include "Modules/ModuleBase.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
+#include "UI/ModuleViews/ScopeComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
+#include <algorithm>
+#include <gtest/gtest.h>
+#include <set>
+#include <typeinfo>
+
+namespace {
+
+struct ChromeState {
+    bool scope = false;
+    bool response = false;
+    bool spectrum = false;
+    std::optional<bool> morphMap;
+    std::optional<bool> curveView; ///< the Filter's Custom curve view: default, hidden or shown
+    bool custom = false;
+    bool envelopeGraph = false;
+
+    juce::String describe() const {
+        return juce::String("scope=") + (scope ? "1" : "0") + " response=" + (response ? "1" : "0") +
+               " spectrum=" + (spectrum ? "1" : "0") + " morphMap=" + (morphMap ? (*morphMap ? "1" : "0") : "default") +
+               " curveView=" + (curveView ? (*curveView ? "1" : "0") : "default") + " custom=" + (custom ? "1" : "0") +
+               " envelopeGraph=" + (envelopeGraph ? "1" : "0");
+    }
+};
+
+std::vector<ChromeState> chromeStates() {
+    std::vector<ChromeState> states;
+    for (const bool custom : {false, true})
+        for (const bool response : {false, true})
+            for (const bool scope : {false, true})
+                for (const bool envelopeGraph : {false, true})
+                    for (const auto morph :
+                         {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)})
+                        for (const auto curve :
+                             {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)}) {
+                            ChromeState s;
+                            s.curveView = curve;
+                            s.custom = custom;
+                            s.response = response;
+                            s.spectrum = response;
+                            s.scope = scope;
+                            s.envelopeGraph = envelopeGraph;
+                            s.morphMap = morph;
+                            states.push_back(s);
+                        }
+    return states;
+}
+
+void setChoice(ModuleBase& module, const juce::String& paramId, const juce::String& choice) {
+    for (auto* p : module.getParameters())
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p); c != nullptr && c->paramID == paramId)
+            *c = c->choices.indexOf(choice);
+}
+
+juce::String name(const juce::Component& c) {
+    return juce::String(typeid(c).name()) + " \"" + c.getComponentID() + "\" " + c.getTitle() + " " +
+           c.getBounds().toString();
+}
+
+// The parts the card body itself owns: the widget of each parameter and its non-chrome views (the controls
+// block a panel must stay clear of), plus any knob, fader, combo box or caption the card adds around them. The
+// LFO's snap-grid box belongs to the Custom-wave toolbar under the controls, not to them.
+std::set<const juce::Component*> bodyParts(ModuleComponent& card) {
+    std::set<const juce::Component*> parts;
+    auto* body = card.getCardBody();
+    if (body == nullptr)
+        return parts;
+    if (auto* processor = card.getModule())
+        for (auto* p : processor->getParameters())
+            if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
+                if (auto* widget = body->findWidget(withId->paramID))
+                    parts.insert(widget);
+    for (const auto view : {synth::CardView::Envelope, synth::CardView::LfoShape, synth::CardView::LfoCurve,
+                            synth::CardView::Waveform, synth::CardView::Wavetable, synth::CardView::EqCurve,
+                            synth::CardView::Threshold, synth::CardView::GainReduction, synth::CardView::StepGrid})
+        if (auto* widget = body->findView(view))
+            parts.insert(widget);
+    return parts;
+}
+
+bool isBodyControl(const juce::Component& c, const std::set<const juce::Component*>& parts) {
+    if (parts.count(&c) != 0)
+        return true;
+    if (dynamic_cast<const synth::ui::NoteLengthBox*>(&c) != nullptr)
+        return false;
+    return dynamic_cast<const juce::Slider*>(&c) != nullptr || dynamic_cast<const juce::ComboBox*>(&c) != nullptr ||
+           dynamic_cast<const juce::Label*>(&c) != nullptr;
+}
+
+// The More row, the instrument chrome (Drum Kit pads, the MIDI keyboard) and the footer pills are rows of their own
+// with spacing rules of their own.
+bool hasOwnSpacing(const juce::Component& c) {
+    const juce::String type(typeid(c).name());
+    return dynamic_cast<const juce::ToggleButton*>(&c) != nullptr ||
+           dynamic_cast<const juce::MidiKeyboardComponent*>(&c) || type.contains("CardMoreButton") ||
+           type.contains("DrumKit") || c.getComponentID().startsWithIgnoreCase("drum");
+}
+
+// A block is structural: any visible part that is not part of the controls above it (panels, the morph card, the
+// LFO toolbar and curve editor, the Filter's curve view).
+bool isBlock(const juce::Component& c, const std::set<const juce::Component*>& parts) {
+    return !isBodyControl(c, parts) && !hasOwnSpacing(c);
+}
+
+// The stacked blocks of a Custom card: the button rows (Edit shapes and Pick shape; Grid, Shapes and Tools), the
+// curve editors, the morph map and the response view.
+bool isStackedBlock(const juce::Component& c, const std::set<const juce::Component*>& parts) {
+    if (dynamic_cast<const juce::TextButton*>(&c) != nullptr ||
+        dynamic_cast<const synth::ui::CurveEditorComponent*>(&c) || dynamic_cast<const synth::ui::MorphMap*>(&c) ||
+        dynamic_cast<const FrequencyResponseComponent*>(&c))
+        return true;
+    return dynamic_cast<const juce::ComboBox*>(&c) != nullptr && parts.count(&c) == 0 &&
+           dynamic_cast<const synth::ui::NoteLengthBox*>(&c) == nullptr;
+}
+
+// Rows of those blocks (parts sharing a top edge are one row): the gap between one row and the next below it that
+// overlaps it sideways is kBlockGap, touching or a different size counts as a failure.
+void checkBlockGaps(const std::vector<juce::Component*>& visible, const std::set<const juce::Component*>& parts,
+                    const juce::String& context) {
+    std::vector<juce::Component*> blocks;
+    for (auto* c : visible)
+        if (isStackedBlock(*c, parts))
+            blocks.push_back(c);
+    std::sort(blocks.begin(), blocks.end(), [](auto* a, auto* b) { return a->getY() < b->getY(); });
+    std::vector<juce::Rectangle<int>> rows;
+    int rowTop = -1;
+    for (auto* c : blocks) {
+        if (c->getY() != rowTop) {
+            rows.push_back(c->getBounds());
+            rowTop = c->getY();
+        } else {
+            rows.back() = rows.back().getUnion(c->getBounds());
+        }
+    }
+    for (size_t i = 1; i < rows.size(); ++i)
+        EXPECT_EQ(rows[i].getY() - rows[i - 1].getBottom(), synth::cardbody::kBlockGap)
+            << context << "\n  between " << rows[i - 1].toString() << " and " << rows[i].toString();
+}
+
+// The first row of the Drum Kit's pads area (its title, Show all chip and count stepper) is a row of its own, but it
+// still keeps the block gap from the controls above it: a near-touch (a gap under kBlockGap, down to zero) between
+// sibling controls fails here, not only an overlap.
+bool isPadsRow(const juce::Component& c) {
+    return c.getComponentID() == "drumPadCount" || c.getComponentID() == "drumPadsShowAll" ||
+           c.getName() == "Pads label";
+}
+
+void checkNearTouch(const std::vector<juce::Component*>& visible, const std::set<const juce::Component*>& parts,
+                    const juce::String& context) {
+    for (auto* row : visible) {
+        if (!isPadsRow(*row))
+            continue;
+        for (auto* other : visible) {
+            const bool above = other != row && !isPadsRow(*other) && isBodyControl(*other, parts) &&
+                               other->getBottom() <= row->getY() && other->getRight() > row->getX() &&
+                               other->getX() < row->getRight();
+            if (above)
+                EXPECT_GE(row->getY() - other->getBottom(), synth::cardbody::kBlockGap)
+                    << context << "\n  " << name(*row) << "\n  nearly touches " << name(*other);
+        }
+    }
+}
+
+void checkCard(ModuleComponent& card, const juce::String& context, bool custom = false) {
+    std::vector<juce::Component*> visible;
+    for (auto* child : card.getChildren())
+        if (child->isVisible() && !child->getBounds().isEmpty() &&
+            !juce::String(typeid(*child).name()).contains("PortAccessible")) // jacks sit on the card edge by design
+            visible.push_back(child);
+
+    for (size_t i = 0; i < visible.size(); ++i)
+        for (size_t j = i + 1; j < visible.size(); ++j)
+            EXPECT_FALSE(visible[i]->getBounds().intersects(visible[j]->getBounds()))
+                << context << "\n  " << name(*visible[i]) << "\n  overlaps " << name(*visible[j]);
+
+    const auto parts = bodyParts(card);
+    checkNearTouch(visible, parts, context);
+    if (custom)
+        checkBlockGaps(visible, parts, context);
+    for (auto* block : visible) {
+        if (!isBlock(*block, parts))
+            continue;
+        for (auto* other : visible) {
+            const bool above = other != block && isBodyControl(*other, parts) && other->getBottom() <= block->getY() &&
+                               other->getRight() > block->getX() && other->getX() < block->getRight();
+            if (above)
+                EXPECT_GE(block->getY(), other->getBottom() + synth::cardbody::kPanelGap)
+                    << context << "\n  " << name(*block) << "\n  is too close to " << name(*other);
+        }
+    }
+}
+
+} // namespace
+
+TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    for (const auto& type : types) {
+        for (const auto& state : chromeStates()) {
+            // The LFO's Rate row differs between Sync and Free, so its Custom state is checked in both.
+            for (const bool free : {false, true}) {
+                if (free && !(state.custom && type == "LFO"))
+                    continue;
+                auto processor = synth::AIStateMapper::createModule(type);
+                auto* module = dynamic_cast<ModuleBase*>(processor.get());
+                if (module == nullptr)
+                    continue;
+                if (state.custom) {
+                    if (type == "Filter")
+                        setChoice(*module, "filterType", "Custom");
+                    else if (type == "LFO")
+                        setChoice(*module, "shape", "Custom");
+                    else
+                        continue; // only the two Custom types have a Custom state
+                }
+                synth::CardViewState view;
+                view.showScope = state.scope;
+                view.showResponse = state.response;
+                if (state.response)
+                    view.showSpectrum = state.spectrum;
+                view.showMorphMap = state.morphMap;
+                view.showCurveView = state.curveView;
+                module->setCardViewState(view);
+                if (free)
+                    for (auto* p : module->getParameters())
+                        if (auto* b = dynamic_cast<juce::AudioParameterBool*>(p); b != nullptr && b->paramID == "mode")
+                            *b = false;
+
+                ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+                for (auto* child : card.getChildren())
+                    if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child);
+                        toggle != nullptr && toggle->getButtonText() == synth::cardbody::kShowEnvelopeText)
+                        toggle->setToggleState(state.envelopeGraph, juce::sendNotificationSync);
+                checkCard(card, type + ": " + state.describe() + (free ? " free" : ""), state.custom);
+            }
+        }
+    }
+}
+
+// The Drum Kit's pads area at the smallest and the largest pad count, with nothing hidden, some pads hidden and
+// Show all pressed (the chip showing in both of its states): no part overlaps another and the Pads row keeps the gap
+// from the Level box above it. Regression test for FRO1678: the Pads row touched the Level value box.
+TEST(CardBodyOverlap, TheDrumKitPadsAreaIsClearAtEveryPadCountAndPadState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    for (const int count : {4, 32}) {
+        for (const int state : {0, 1, 2}) { // nothing hidden, two hidden, Show all pressed
+            auto processor = synth::AIStateMapper::createModule("Drum Kit");
+            auto* kit = dynamic_cast<DrumKitModule*>(processor.get());
+            ASSERT_NE(kit, nullptr);
+            kit->setPadCount(count);
+            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+            auto* chrome = dynamic_cast<synth::ui::DrumKitChrome*>(card.getInstrumentChrome());
+            ASSERT_NE(chrome, nullptr);
+            auto& pads = chrome->getPads();
+            if (state >= 1) {
+                pads.setPadShown(1, false);
+                pads.setPadShown(2, false);
+            }
+            if (state == 2)
+                pads.toggleShowAll();
+            const juce::String context = "Drum Kit: " + juce::String(count) + " pads, state " + juce::String(state);
+            EXPECT_EQ(pads.showAllChip().isVisible(), state >= 1) << context;
+            checkCard(card, context);
+        }
+    }
+}
+
+namespace {
+
+void collectFaders(juce::Component& root, std::vector<synth::ui::CardFader*>& out) {
+    for (auto* child : root.getChildren()) {
+        if (auto* fader = dynamic_cast<synth::ui::CardFader*>(child); fader != nullptr && !fader->isVerticalFader())
+            out.push_back(fader);
+        collectFaders(*child, out);
+    }
+}
+
+juce::Label* valueBox(juce::Slider& slider) {
+    for (auto* child : slider.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+            return label;
+    return nullptr;
+}
+
+// How far the focus ring reaches past the cap (its gap and its stroke), and the clear space the ring keeps from the
+// value box beside it.
+constexpr float kFocusRingReach = 4.0f;
+constexpr float kRingToBoxGap = 2.0f;
+
+float textWidthOf(const juce::Label& label) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(label.getFont(), label.getText(), 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, true).getWidth();
+}
+
+} // namespace
+
+// The painted cap and the value text box of every horizontal card fader stay apart at the lowest, default and
+// highest value (with its focus ring), at the width the card lays it out at and at a narrower one; the text also fits
+// its box.
+TEST(CardBodyOverlap, AHorizontalFadersCapNeverTouchesItsValueText) {
+    // The app's look-and-feel is the default for every card, as in the running app (the Tests binary's own default
+    // is a plain JUCE one with a different thumb radius).
+    synth::theme::AppLookAndFeel appLookAndFeel;
+    struct DefaultLookAndFeelScope {
+        explicit DefaultLookAndFeelScope(juce::LookAndFeel& l)
+            : previous(&juce::LookAndFeel::getDefaultLookAndFeel()) {
+            juce::LookAndFeel::setDefaultLookAndFeel(&l);
+        }
+        ~DefaultLookAndFeelScope() { juce::LookAndFeel::setDefaultLookAndFeel(previous); }
+        juce::LookAndFeel* previous;
+    } defaultLookAndFeel(appLookAndFeel);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    int checked = 0;
+    for (const auto& type : types) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        std::vector<synth::ui::CardFader*> faders;
+        collectFaders(card, faders);
+        for (auto* fader : faders) {
+            auto* box = valueBox(*fader);
+            ASSERT_NE(box, nullptr) << type;
+            const int laidOutWidth = fader->getWidth();
+            const double original = fader->getValue();
+            for (const int width : {laidOutWidth, juce::jmin(laidOutWidth, 100)}) {
+                fader->setSize(width, fader->getHeight());
+                for (const double value :
+                     {fader->getMinimum(), fader->getDoubleClickReturnValue(), fader->getMaximum()}) {
+                    fader->setValue(value, juce::sendNotificationSync);
+                    const auto m = synth::theme::fader::metricsFor(false, fader->getWidth(), fader->getHeight());
+                    const auto cap = synth::theme::fader::capBounds(fader->travelBounds(),
+                                                                    fader->getPositionOfValue(value), false, m);
+                    const auto textBox = box->getBounds().toFloat();
+                    const float textWidth = textWidthOf(*box);
+                    const juce::String context = type + " " + fader->getComponentID() + " width " +
+                                                 juce::String(width) + " value " + juce::String(value) + " text \"" +
+                                                 box->getText() + "\" textWidth " + juce::String(textWidth);
+                    EXPECT_FALSE(cap.expanded(kFocusRingReach + kRingToBoxGap).intersects(textBox))
+                        << context << "\n  cap " << cap.toString() << "\n  box " << textBox.toString();
+                    EXPECT_LE(textWidth, (float)box->getWidth()) << context << " does not fit its box";
+                    ++checked;
+                }
+            }
+            fader->setValue(original, juce::sendNotificationSync);
+        }
+    }
+    EXPECT_GT(checked, 0);
+}

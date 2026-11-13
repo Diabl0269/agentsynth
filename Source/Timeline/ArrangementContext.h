@@ -25,7 +25,7 @@ namespace synth {
  *    summary. The directory component — and with it anything about the bundle's on-disk layout or
  *    a user's own take-naming scheme — is deliberately dropped, never merely stripped-then-put-back.
  *  - **Never a plugin/implementation identifier.** A bound node is named by its display name (the
- *    same string its module title bar shows, `juce::AudioProcessor::getName()`) — never a node id,
+ *    same string its module title bar shows, `synth::moduleTitle`) — never a node id,
  *    factory type key, or uuid. A binding that does not resolve against the live graph reports
  *    "MISSING" rather than leaking the raw uuid it failed to resolve.
  *

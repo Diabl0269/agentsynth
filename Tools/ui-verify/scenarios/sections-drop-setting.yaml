@@ -1,0 +1,15 @@
+# Settings > Preferences: the sections drop row reads as a plain choice, "Timeline: dropping a section on other music"
+# with "Pushes the music later" / "Covers it", and a line under it about holding Shift.
+#
+# What a user does: opens Settings (Cmd+,), its Preferences tab, and types "section" in the filter.
+record: true
+save_project: "fro1539 setting"
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Preferences"}
+  - wait: {}
+  - click: {id: Filter preferences}
+  - type: {text: section}
+  - wait: {}
+  - mark: {check: 1, name: drop-setting}

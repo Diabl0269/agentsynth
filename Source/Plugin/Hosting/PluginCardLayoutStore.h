@@ -5,6 +5,7 @@
 // MidiRemote/ControllerProfileStore.h; never touches juce::ApplicationProperties.
 
 #include "Modules/CardLayout.h"
+#include "Plugin/Hosting/CardLayoutStore.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include <juce_core/juce_core.h>
 
@@ -15,7 +16,7 @@ namespace synth {
  * `<preset>.json` files (docs/control/plugin-card-layout.md#persistence). All calls are
  * message-thread only.
  */
-class PluginCardLayoutStore {
+class PluginCardLayoutStore : private CardLayoutStore {
 public:
     /** Notified on the message thread after a plugin's default layout was set or cleared. */
     class Listener {
@@ -24,7 +25,7 @@ public:
         virtual void layoutChangedForPlugin(const PluginIdentity& identity) = 0;
     };
 
-    enum class LoadStatus { Ok, NotFound, Malformed, UnsupportedVersion };
+    using LoadStatus = CardLayoutLoadStatus;
     struct LoadResult {
         LoadStatus status = LoadStatus::NotFound;
         CardLayout layout;
@@ -39,7 +40,7 @@ public:
     /** Pure path arithmetic, no I/O. */
     static juce::File resolveDefaultRootDirectory();
 
-    const juce::File& getRootDirectory() const { return rootDir_; }
+    using CardLayoutStore::getRootDirectory;
     juce::File getPluginDirectory(const PluginIdentity& identity) const;
 
     LoadResult loadDefault(const PluginIdentity& identity) const;
@@ -59,11 +60,10 @@ public:
     void removeListener(Listener* listener) { listeners_.remove(listener); }
 
 private:
-    juce::File presetFile(const PluginIdentity& identity, const juce::String& name) const;
-    bool writeLayout(const juce::File& file, const PluginIdentity& identity, const CardLayout& layout) const;
-    static LoadResult readLayout(const juce::File& file);
+    static juce::String directoryKey(const PluginIdentity& identity);
+    static juce::var ownerOf(const PluginIdentity& identity);
+    static LoadResult toLoadResult(CardLayoutLoadResult&& base);
 
-    juce::File rootDir_;
     juce::ListenerList<Listener> listeners_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginCardLayoutStore)

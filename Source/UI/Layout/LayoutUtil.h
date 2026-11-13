@@ -11,33 +11,24 @@ inline constexpr int kGridSize = 8;         // snap quantum
 inline constexpr int kCollisionGap = 12;    // min clear gap enforced between module bounding boxes
 inline constexpr int kSpiralStep = 8;       // spiral ring step (== kGridSize so results stay on-grid)
 inline constexpr int kSpiralMaxRings = 256; // hard cap; 256*8 = 2048px search radius before giving up
-inline constexpr int kCanvasMax = 10000;
 // ---- Auto-arrange spacing ----
-inline constexpr int kLayerGapX = 80;      // horizontal gap between adjacent layer columns
-inline constexpr int kIntraLayerGapY = 40; // vertical gap between stacked modules in the same layer
-inline constexpr int kArrangeOriginX = 40; // left margin where layer 0 starts
-inline constexpr int kArrangeOriginY = 40; // top margin where each layer column starts
+inline constexpr int kLayerGapX = 80;          // horizontal gap between adjacent layer columns
+inline constexpr int kIntraLayerGapY = 40;     // vertical gap between stacked modules in the same layer
+inline constexpr int kArrangeOriginX = 40;     // left margin where layer 0 starts
+inline constexpr int kArrangeOriginY = 40;     // top margin where each layer column starts
+inline constexpr int kOutputDockCardGapX = 40; // gap between neighbouring output-dock cards (Master, Rec Tap, Output)
+// Horizontal reach of an OPEN macro's hull past its member union, on each side: the hull margin (14) plus the
+// fixed port strip (96). Anything that must sit clear of an open hull (a track head's x floor, Master right of a
+// channel's Strip) budgets this. MacroGroupControllerGeometry.cpp static_asserts it equals margin + strip width.
+inline constexpr int kMacroHullSideOutset = 110;
+// How far an input port's widget overhangs the open hull's left border, so its boundary jack sits on the border.
+// The hull's left edge must stay this far inside the canvas for the widget to be painted and clickable.
+inline constexpr int kMacroPortOverhang = 5;
 // ---- Module width buckets ----
 inline constexpr int kNarrowWidth = 40;  // Attenuverter
 inline constexpr int kSingleWidth = 280; // standard module
 inline constexpr int kDoubleWidth = 560; // Sequencer / PolySequencer / MidiKeyboard (= 2 × kSingleWidth)
 // Note: kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 (no duplicate constant needed)
-
-// ---- Macro Control bank geometry ----
-// The Macro bank is the one module whose footprint changes at runtime (its "Knobs" parameter
-// picks how many macros are exposed). Its geometry lives here, not in ModuleComponent, so the
-// three places that must agree on it — the component layout, the output-jack hit test, and the
-// drag-preview size estimate — all read the same numbers, and so the growth maths stays
-// headless-testable.
-inline constexpr int kMacroHeaderH = 94;   // title bar + the Knobs / Bipolar row
-inline constexpr int kMacroRowH = 44;      // one macro knob and its output jack
-inline constexpr int kMacroBottomPad = 12; // padding below the last row
-
-// Total component height for a bank showing `count` macros.
-inline constexpr int macroBankHeight(int count) { return kMacroHeaderH + count * kMacroRowH + kMacroBottomPad; }
-
-// Vertical centre of macro row `index` — where both the knob and its output jack sit.
-inline constexpr int macroRowCentreY(int index) { return kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2; }
 
 enum class ModuleWidthBucket { Narrow, Single, Double };
 
@@ -65,34 +56,55 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 
 // Starting at desired (top-left, snap it inside), find nearest snapped top-left whose (w x h) box does
 // not intersect any others (inflated by gap). Returns desired-snapped if already clear. Square spiral on
-// grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to [0, kCanvasMax-w] x [0, kCanvasMax-h].
+// grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to x,y >= 0 only (the canvas frame grows to fit).
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
+/** How many boxes findFreeSlot and intersectsAny have tested a spot against; message thread only (ScaleHangTests). */
+struct FreeSlotSearchCounters {
+    long long boxTests = 0;
+};
+FreeSlotSearchCounters& freeSlotSearchCountersForTest() noexcept;
 
-struct ArrangeResult {
-    NodeID id;
-    juce::Point<int> pos;
+// Like findFreeSlot, but the search only walks DOWN from `desired` (snapped, clamped to x,y >= 0) in kGridSize
+// steps, so the result keeps the desired x: the first clear row under a spot beside a card. Gives up after
+// kWalkDownMaxSteps steps and returns the last row tried.
+inline constexpr int kWalkDownMaxSteps = 2048;
+juce::Point<int> findFreeSlotBelow(juce::Point<int> desired, int w, int h, const std::vector<Box>& others,
+                                   int gap = kCollisionGap);
+
+// ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
+//
+// One sibling on the canvas (a loose module, or a whole macro as ONE rigid unit) has grown; every
+// unit it now overlaps is pushed clear, and pushed units push what they land on in the same direction.
+struct LayoutUnit {
+    juce::String key;
+    juce::Rectangle<int> rect;
+    bool pinned = false; // never moves, and pushed units are redirected around it
+    // Grower only, optional: the rect it occupied before it grew. A neighbour wholly on one side of it is pushed away
+    // from that side (one below a card that opened goes down), not the way that happens to need the least travel.
+    juce::Rectangle<int> before;
+    bool hull = false; // an open macro's hull, which spans many cards
 };
 
-// A module has just changed footprint in place (only the Macro bank does this today, when its
-// "Knobs" count changes). `boxes` is every module box INCLUDING the resized one, already carrying
-// its new rect. Returns the new top-left for each OTHER box that had to move to stay clear —
-// boxes that do not move are not returned, so an empty result means the growth fitted as-is.
-//
-// The resized module never moves: it is the one the user is interacting with, and teleporting it
-// out from under the cursor is worse than nudging its neighbours. Displaced boxes are pushed
-// straight down past whatever they collided with and then run through findFreeSlot, so the result
-// is on-grid and gap-respecting. Deterministic: boxes are processed top-to-bottom, then
-// left-to-right, then by id, and the cascade is capped at kResolveMaxRounds passes.
-inline constexpr int kResolveMaxRounds = 4;
+struct UnitMove {
+    juce::String key;
+    juce::Point<int> delta;
+};
 
-std::vector<ArrangeResult> resolveOverlapsAfterResize(NodeID resizedId, const std::vector<Box>& boxes,
-                                                      int gap = kCollisionGap);
+// Backstop on cascade rounds. Displacements
+// only ever grow, so the cascade settles well before this.
+inline constexpr int kDisplacementMaxRounds = 64;
 
-// Topological signal-flow layout. sizeOf returns (w,h) footprint for a node id. extraEdges carries
-// modulation routing edges (src->dst) so envelope->VCA etc. influence layering depth.
-std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
-                                              const std::function<juce::Point<int>(NodeID)>& sizeOf,
-                                              const std::vector<std::pair<NodeID, NodeID>>& extraEdges);
+// Pure and deterministic. The grower never moves. Returns only units whose delta is non-zero; a unit blocked on
+// every side (canvas wall, pinned neighbours) is left where it is. Deltas are multiples of kGridSize.
+std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const std::vector<LayoutUnit>& units,
+                                          int gap = kCollisionGap);
+
+// The output dock (Master, Rec Tap, Audio Output -- always the rightmost cards). Pure: `content` is every layout
+// unit that is NOT a dock card, `dockSizes` the dock cards' (w,h) in chain order, `dockTopY` the shared top y.
+// Returns one snapped top-left per dock card, in the same order: left edge = snapUp(rightmost content edge) +
+// kLayerGapX (kArrangeOriginX when there is no content), cards kOutputDockCardGapX apart, all on snap(dockTopY).
+std::vector<juce::Point<int>> computeOutputDock(const std::vector<LayoutUnit>& content,
+                                                const std::vector<juce::Point<int>>& dockSizes, int dockTopY);
 
 } // namespace synth::LayoutUtil

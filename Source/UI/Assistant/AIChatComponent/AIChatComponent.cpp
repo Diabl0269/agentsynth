@@ -1,6 +1,8 @@
 #include "AIChatComponent.h"
+#include "AI/UpgradeUrl.h"
 #include "Branding.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
 namespace synth {
@@ -8,6 +10,13 @@ namespace synth {
 // Concern: construction/destruction, the request cancel/timeout watchdog, the panel's own
 // paint()/paintOverChildren(), and the small testing-hook formatters that don't warrant their
 // own unit -- everything left over once the concerns below have their own files.
+
+// Under Off the dot is held steady and startPulse never asks, so the full speed is the answer there.
+double AIChatComponent::waitingDotHalfCycleMs() {
+    constexpr double kFullHalfCycleMs = 600.0;
+    const double rate = synth::ui::loopRate();
+    return rate > 0.0 ? kFullHalfCycleMs / rate : kFullHalfCycleMs;
+}
 
 AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props)
     : aiService(service)
@@ -28,10 +37,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     debugConsole.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
     debugConsole.setColour(juce::TextEditor::textColourId, juce::Colours::lime);
     debugConsole.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+    debugConsole.setTitle("Debug log");
     debugConsole.setVisible(false);
     addChildComponent(debugConsole);
 
     toggleDebugButton.setButtonText("Debug");
+    toggleDebugButton.setTooltip("Show or hide the debug log");
     toggleDebugButton.onClick = [this]() {
         debugConsoleVisible = !debugConsoleVisible;
         debugConsole.setVisible(debugConsoleVisible);
@@ -68,7 +79,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
             handleUserCancel();
     };
     inputField.addListener(this);
-    inputField.setTextToShowWhenEmpty("Ask AI to create or modify a patch...", juce::Colours::grey);
+    inputField.setTextToShowWhenEmpty("Ask for a sound, modules, tracks or automation...", juce::Colours::grey);
+    inputField.setTitle("Message to the AI assistant");
     inputField.setTooltip("Type a message and press Enter or Send");
 
     addAndMakeVisible(sendButton);
@@ -84,6 +96,14 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     cancelButton.setVisible(false);
     addChildComponent(cancelButton);
 
+    // Tab order: the input, Send (or Cancel, in the same slot), then the message list and the
+    // cards inside it in message order; the rest of the chrome follows by position. Explicit
+    // orders sort ahead of position, so the input row comes first although it sits at the bottom.
+    inputField.setExplicitFocusOrder(1);
+    sendButton.setExplicitFocusOrder(2);
+    cancelButton.setExplicitFocusOrder(3);
+    viewport.setExplicitFocusOrder(4);
+
     // Spinner dot — 8×8 ellipse, hidden until waiting.
     spinnerDot.setSize(8, 8);
     spinnerDot.setVisible(false);
@@ -95,6 +115,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     newChatButton.onClick = [this]() {
         aiService.clearHistory();
         messages.clear();
+        transcript.clear();
         // A fresh conversation gets a fresh local-history id — the outgoing conversation's file is
         // left alone (its own save() already captured everything up to this point).
         currentLocalConversationId.clear();
@@ -108,6 +129,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         updateChatDisplay();
     };
 
+    setUpExportButton();
+
     // Opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
     // set by updateUpsellStrip() below (it varies by plan, so setting a static default here would
     // just be overwritten), not here.
@@ -116,6 +139,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     historyButton.onClick = [this]() { historyButtonClicked(); };
 
     addAndMakeVisible(modelPicker);
+    modelPicker.setTitle("AI model");
     modelPicker.setTooltip("Select the AI model to use");
     modelPicker.onChange = [this]() {
         juce::String model = modelPicker.getText();
@@ -123,19 +147,6 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         appProperties.getUserSettings()->setValue("aiModel", model);
         appProperties.getUserSettings()->saveIfNeeded();
     };
-
-    // Patch/Arrange mode selector — an EXPLICIT routing control (never a keyword heuristic:
-    // shouldUseStructuredOutput() stays a patch-path concern), provider-agnostic per the
-    // local/remote parity rule. Starts invisible; visible only while the timeline feature is
-    // active — see refreshModeControls(), called from refreshModels() below and re-called by
-    // MainComponent when the timeline preference toggles. Selection is session-scoped,
-    // defaulting to Patch.
-    addChildComponent(modeSelector);
-    modeSelector.addItem("Patch", kModeSelectorPatchId);
-    modeSelector.addItem("Arrange", kModeSelectorArrangeId);
-    modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
-    modeSelector.setTooltip("Patch: create or modify the synth patch. "
-                            "Arrange: add tracks, notes and automation on the timeline.");
 
     // Starts invisible (same contract as accountRow/planBadge) — updateHostedModeNotice(), called
     // from refreshModels() below, sets its real visibility once a provider is known.
@@ -158,8 +169,17 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // available at this point (none, at construction).
     addChildComponent(upsellButton);
     upsellButton.setButtonText("Upgrade to Pro");
+    upsellButton.setTooltip(
+        "See the Pro plan: more hosted AI requests and cloud backup of your chat history. Hosted AI is in early "
+        "access and improves with every update.");
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
-    upsellButton.onClick = [this] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
+    upsellButton.onClick = [this] { openUpgradePage(); };
+
+    // A fade frame changes a banner's height, so the stack lays out again; the spinner keeps pulsing until
+    // its fade-out has ended.
+    for (auto* fade : {&hostedNoticeFade_, &upsellFade_, &downgradeFade_})
+        fade->onFrame = [this] { resized(); };
+    spinnerFade_.onHidden = [this] { spinnerDot.stopPulse(vblankUpdater); };
 
     // Downgrade notice — invisible until historyButtonClicked() learns a real grace-period
     // deletion date (see lastDeletionScheduledAt's doc comment); never shown speculatively.
@@ -196,6 +216,17 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     }
 
     updateChatDisplay();
+}
+
+// Opens the Pro checkout (via urlOpener) with the signed-in account's email prefilled, so the Polar
+// purchase matches the account that should become Pro. Shared by both Upgrade to Pro buttons.
+void AIChatComponent::openUpgradePage() {
+    // No AccountService (tests, or before MainComponent attaches one) or a signed-out/emailless
+    // snapshot gives an empty email, which buildUpgradeUrl() turns into the bare checkout link.
+    const juce::String email = accountServicePtr != nullptr ? accountServicePtr->getSnapshot().email : juce::String();
+    urlOpener(buildUpgradeUrl(email));
+    // The purchase happens in the browser; pick the new plan up as soon as the webhook lands.
+    entitlementWatcher.startWatchingForUpgrade();
 }
 
 AIChatComponent::~AIChatComponent() {
@@ -267,6 +298,13 @@ void AIChatComponent::timerCallback() {
     if (!isWaitingForResponse)
         return;
 
+    // A song build shows its own card and clock and runs as long as the server keeps it alive (its pings); the
+    // one-answer timeout below does not apply to it.
+    if (songBuildIndex >= 0) {
+        refreshSongBubble((size_t)songBuildIndex);
+        return;
+    }
+
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     if (elapsed < requestTimeoutMs) {
         refreshWaitingStatusLabel();
@@ -275,6 +313,7 @@ void AIChatComponent::timerCallback() {
 
     // Request has timed out.
     cancelRequest();
+    recordFailure(activeTurn_, "The request timed out.");
     messages.push_back(
         {"assistant", "Error: Request timed out after " + juce::String(requestTimeoutMs / 60000) + " minutes.", ""});
     messages.back().responseMs = elapsed;
@@ -302,8 +341,13 @@ bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void AIChatComponent::handleUserCancel() {
+    if (songBuildIndex >= 0) {
+        cancelSongBuild();
+        return;
+    }
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     cancelRequest();
+    recordFailure(activeTurn_, "Cancelled.");
     messages.push_back({"assistant", "Cancelled.", ""});
     messages.back().responseMs = elapsed;
     updateChatDisplay();
@@ -318,22 +362,32 @@ void AIChatComponent::cancelRequest() {
     // cancel the same id twice.
     const auto cancelling = activeRequestId;
     activeRequestId = {};
+    songBuildIndex = -1;
     if (cancelling.value != 0)
         aiService.cancelRequest(cancelling);
 
     // Stop the live thinking-status / timeout timer.
     stopTimer();
 
-    // Stop the pulse animation and hide the spinner.
-    spinnerDot.stopPulse(vblankUpdater);
-    spinnerDot.setVisible(false);
+    // Fade the spinner out (it pulses until it has gone) and hide the cancel button; a fade that
+    // lands at once (off screen) stops the pulse here.
+    spinnerFade_.setShown(false);
+    if (!spinnerFade_.isFading())
+        spinnerDot.stopPulse(vblankUpdater);
 
-    // Hide the cancel button, restore normal input state.
-    cancelButton.setVisible(false);
-    sendButton.setEnabled(true);
+    // Restore normal input state.
+    cancelFade_.setShown(false);
+    sendButton.setEnabled(!projectLoading_);
     inputField.setReadOnly(false);
-    isWaitingForResponse = false;
     waitingStatusLabel = nullptr;
+    setWaiting(false);
+}
+
+void AIChatComponent::setWaiting(bool waiting) {
+    const bool changed = isWaitingForResponse != waiting;
+    isWaitingForResponse = waiting;
+    if (changed && onWaitingChanged)
+        onWaitingChanged(waiting);
 }
 
 void AIChatComponent::paint(juce::Graphics& g) {

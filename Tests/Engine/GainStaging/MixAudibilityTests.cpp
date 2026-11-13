@@ -17,12 +17,15 @@
 // a tiny stereo-duplicating AudioProcessor source, same pattern as MixerSoloTests.cpp's
 // ConstantSource.
 
+#include "../../Mixer/MasterSafetyOff.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
+#include "TestPaths.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -187,6 +190,7 @@ struct MixRig {
         graph.addConnection({{master, 0}, {out, 0}});
         graph.addConnection({{master, 1}, {out, 1}});
 
+        testutil::turnOffMasterSafetyLimiter(graph); // measures the raw sum, before the safety limiter
         engine.prepareForHost(kSampleRate, kBlockSize, 2, 2);
     }
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ModuleState bypassed="0.0" dualIO="0.0" band1On="1.0" band1Freq="0.2593837380409241"
+             band1Gain="0.59375" band1Q="0.5298611521720886" band2On="1.0"
+             band2Freq="0.5039610862731934" band2Gain="0.375" band2Q="0.6638998985290527"
+             band3On="0.0" band3Freq="0.6989700198173523" band3Gain="0.5625"
+             band3Q="0.4832630455493927" band4On="1.0" band4Freq="0.884404182434082"
+             band4Gain="0.4270833432674408" band4Q="0.3955181837081909" outputGain="0.4583333432674408"
+             muted="0.0" mix="0.800000011920929" pan="0.625"/>

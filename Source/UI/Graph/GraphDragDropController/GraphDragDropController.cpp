@@ -10,21 +10,32 @@
 #include "Modules/SamplerModule.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "SnippetManager.h"
+#include "UI/Graph/InsertGap/InsertGap.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Library/SoundBrowser/ShapeDragPayload.h"
+#include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId) {
     dragPreviewActive_ = true;
+    pendingScrollAim_.reset();
+    anyFullPreview_ = false;
     dragPreviewW_ = w;
     dragPreviewH_ = h;
     dragPreviewSelfId_ = selfId;
     dragPreviewGhost_ = {};
+    groupGhosts_.clear();
     alignmentGuides_.clear();
+    if (insertGap_ != nullptr)
+        insertGap_->endSession(); // a fresh gesture: nothing of the last one stays open or cancelled
+    auto* self = selfId.uid != 0 ? host_.moduleComponentFor(selfId) : nullptr;
+    dragPreviewSelfStart_ = self != nullptr ? self->getBounds() : juce::Rectangle<int>();
     host_.clearSmartSuggestions();
     // Seed the tick's comparison from the state at press time, so a drag started WITH the modifier
     // already held is not reported as a change on its very first tick.
@@ -37,9 +48,61 @@ void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcesso
     host_.repaintCanvas();
 }
 
+// An edge-scroll tick re-aims the preview 30 times a second while the pointer sits still, and on a big patch one full
+// preview (gap hover, anti-overlap search, guides over every card, smart suggestions) can take tens of ms at a crowded
+// aim. Inside a tick everything but the gap hover therefore runs at most once per kScrollPreviewIntervalMs; a skipped
+// aim is remembered and flushDragPreview() (the scroll's end, before every drop, and a tick that did not pan) brings it
+// up to date, so what is dropped is always the preview for where the pointer really is. A real pointer move is never
+// throttled.
 void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     if (!dragPreviewActive_)
         return;
+    const double now = clock_ != nullptr ? clock_() : juce::Time::getMillisecondCounterHiRes();
+    if (scrollTickDepth_ > 0 && anyFullPreview_ && now - lastFullPreviewMs_ < kScrollPreviewIntervalMs) {
+        // The gap still follows every aim: which way it opens depends on the path the ghost took to get here, so
+        // sampling that path would change where the drop lands.
+        dragPreviewAim_ =
+            juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW_, dragPreviewH_);
+        hoverInsertGap(dragPreviewAim_);
+        pendingScrollAim_ = desiredTopLeftCanvas;
+        return;
+    }
+    pendingScrollAim_.reset();
+    anyFullPreview_ = true;
+    lastFullPreviewMs_ = now;
+    ++fullPreviewCount_;
+    recomputeDragPreview(desiredTopLeftCanvas);
+}
+
+void GraphDragDropController::flushDragPreview() {
+    if (const auto aim = std::exchange(pendingScrollAim_, std::nullopt); aim && dragPreviewActive_) {
+        lastFullPreviewMs_ = clock_ != nullptr ? clock_() : juce::Time::getMillisecondCounterHiRes();
+        ++fullPreviewCount_;
+        recomputeDragPreview(*aim);
+    }
+}
+
+void GraphDragDropController::placeGhost(juce::Point<int> desiredTopLeftCanvas) {
+    const auto* gap = insertGap_ != nullptr ? insertGap_->plan() : nullptr;
+    const auto resolved =
+        gap != nullptr ? gap->slot.getPosition()
+        : dragPreviewJoinsMacro_
+            ? synth::LayoutUtil::snap({juce::jmax(0, desiredTopLeftCanvas.x), juce::jmax(0, desiredTopLeftCanvas.y)})
+            : host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
+    dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
+}
+
+// Everything a preview tick does but the insert gap, which follows the path of the aims: sampling it a second time on
+// the crossing tick would open it among the cards of the new macro early and leave a neighbour pushed after a drag back
+// out. The ghost's slide is aimed again too, or the outline would stay drawn at the old spot until the pointer moves.
+void GraphDragDropController::replaceGhostAfterCrossing() {
+    if (!dragPreviewActive_)
+        return;
+    settleDragPreview(dragPreviewAim_.getPosition());
+    host_.repaintCanvas();
+}
+
+void GraphDragDropController::recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     // Where the user is POINTING, before anti-overlap moves the card. A ghost aimed at the gap
     // between two wired cards necessarily overlaps them — it is wider than the gap — so
     // resolvePlacement throws it clear, and judging a suggestion only by that landing spot means
@@ -48,8 +111,16 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
     dragPreviewAim_ =
         juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW_, dragPreviewH_);
 
-    auto resolved = host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
-    dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
+    // Aimed between two cards, the cards after it make room and the card lands in that gap. Otherwise a card about to
+    // join an open macro lands where it is aimed (snapped) and the macro makes room for it on the drop; every other
+    // drop dodges to the nearest free slot.
+    hoverInsertGap(dragPreviewAim_);
+    settleDragPreview(desiredTopLeftCanvas);
+}
+
+// The ghost's spot, then the alignment guides and smart suggestions that follow it.
+void GraphDragDropController::settleDragPreview(juce::Point<int> desiredTopLeftCanvas) {
+    placeGhost(desiredTopLeftCanvas);
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Scan existing modules and compute alignment guides for closest edges
@@ -195,12 +266,36 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
     host_.repaintCanvas();
 }
 
+// A canvas card is placed among the cards of the macro it is in now (a crossing made mid-drag has already moved it);
+// a library module among those of the macro it would join, or the top level. A snippet (a whole group) and a group drag
+// never open a gap, nor does a sound: the card it is carried to (a Sampler, a Drum Kit pad) may take it itself, so no
+// card may slide away from under the pointer on the way there.
+void GraphDragDropController::hoverInsertGap(juce::Rectangle<int> aim) {
+    if (insertGap_ == nullptr)
+        return;
+    if (dragPreviewIsSnippet_ || dragPreviewIsSound_ || host_.isSelectionDragActive() || aim.isEmpty()) {
+        insertGap_->endSession();
+        return;
+    }
+    const juce::String selfKey = dragPreviewSelfId_.uid != 0
+                                     ? "n:" + juce::String(static_cast<juce::int64>(dragPreviewSelfId_.uid))
+                                     : juce::String();
+    insertGap_->hover(
+        {dragPreviewJoinId_, selfKey, aim.getCentre(), {aim.getWidth(), aim.getHeight()}, dragPreviewSelfStart_});
+}
+
 void GraphDragDropController::endDragPreview() {
+    if (insertGap_ != nullptr)
+        insertGap_->endSession(); // a drop that landed in the gap has already taken it; anything else goes home
     dragPreviewActive_ = false;
+    pendingScrollAim_.reset();
+    dragPreviewJoinsMacro_ = false;
+    dragPreviewJoinId_.clear();
     dragPreviewGhost_ = {};
     alignmentGuides_.clear();
     host_.clearSmartSuggestions();
     dragPreviewIsSnippet_ = false;
+    dragPreviewIsSound_ = false;
     dragPreviewProbe_.reset();
     host_.repaintCanvas();
 }
@@ -213,6 +308,10 @@ SmartConnectionEngine::DragPreviewState GraphDragDropController::buildDragPrevie
     state.selfId = dragPreviewSelfId_;
     state.isSnippet = dragPreviewIsSnippet_;
     state.probe = dragPreviewProbe_.get();
+    if (const auto anchor = insertGap_ != nullptr ? insertGap_->aimedAnchorKey() : juce::String();
+        anchor.startsWith("n:"))
+        state.gapAnchorId = juce::AudioProcessorGraph::NodeID(
+            static_cast<juce::uint32>(anchor.fromFirstOccurrenceOf("n:", false, false).getLargeIntValue()));
     // shouldOfferSmartConnections' selection-drag guard: selection itself is not on
     // GraphCanvasHost for the selection MODEL directly, but getSelection()/isSelectionDragActive()
     // are — GraphEditor's own former precompute (selectionDragActive && selection.size() > 1)
@@ -221,9 +320,30 @@ SmartConnectionEngine::DragPreviewState GraphDragDropController::buildDragPrevie
     return state;
 }
 
-bool GraphDragDropController::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails&) { return true; }
+// A dragged Sound is taken when a Sampler can load it; a Shape only stamps onto a card, never the canvas; every other
+// payload is the canvas's own kind.
+bool GraphDragDropController::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details) {
+    if (synth::ui::isShapePayload(details.description))
+        return false;
+    if (!synth::ui::isSoundPayload(details.description))
+        return true;
+    const auto file = synth::ui::soundFileFromPayload(details.description);
+    return synth::ui::isAudioSound(file) || synth::ui::isInstrumentSound(file);
+}
 
 void GraphDragDropController::itemDragEnter(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
+    if (synth::ui::isSoundPayload(dragSourceDetails.description)) {
+        // A Sound is a Sampler about to exist: sized like one, no probe (it joins no macro and is never a module type).
+        dragPreviewIsSnippet_ = false;
+        dragPreviewIsPlainModule_ = false;
+        dragPreviewIsSound_ = true;
+        dragPreviewProbe_.reset();
+        const auto size = host_.estimateModuleSizeForType("Sampler");
+        beginDragPreview(size.x, size.y, juce::AudioProcessorGraph::NodeID{});
+        updateDragPreview(ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition)));
+        return;
+    }
+    dragPreviewIsSound_ = false;
     juce::String name = dragSourceDetails.description.toString();
 
     // A snippet covers a whole group, so size the ghost from the snippet's own bounding box
@@ -270,9 +390,13 @@ GraphDragDropController::macroJoinTargetForDrop(const juce::DragAndDropTarget::S
 
 void GraphDragDropController::itemDragMove(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
     auto canvasPos = host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition);
+    // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses. Set BEFORE the
+    // ghost is placed: resolvePlacement treats the join hull as room to land in rather than an obstacle.
+    const auto joinId = dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String();
+    host_.setMacroDropCandidate(joinId);
+    dragPreviewJoinsMacro_ = joinId.isNotEmpty();
+    dragPreviewJoinId_ = joinId;
     updateDragPreview(ghostTopLeftForCursor(canvasPos));
-    // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses.
-    host_.setMacroDropCandidate(dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String());
 }
 
 void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::SourceDetails&) {
@@ -281,7 +405,19 @@ void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::Source
 }
 
 void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
+    flushDragPreview(); // the drop lands where the preview shows; a skipped scroll-tick aim is brought up to date
     const juce::String name = dragSourceDetails.description.toString();
+    if (synth::ui::isSoundPayload(dragSourceDetails.description)) {
+        // Checked before every module kind: the payload is a path, never a module type name.
+        const auto soundPos =
+            (dragPreviewActive_ && !dragPreviewGhost_.isEmpty())
+                ? dragPreviewGhost_.getPosition()
+                : ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition));
+        host_.setMacroDropCandidate({});
+        addSamplerLoadedWith(synth::ui::soundFileFromPayload(dragSourceDetails.description), soundPos);
+        endDragPreview();
+        return;
+    }
     // The drop lands exactly where the preview showed: the ghost rect is already snapped and
     // de-overlapped, so taking its position (rather than re-deriving one from the cursor) makes it
     // impossible for the two to disagree. Falls back to the centred cursor if there is no live ghost
@@ -316,7 +452,10 @@ void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceD
     // Modules only: a snippet or plugin payload never reaches here. Cmd (or the drag-without-Cmd
     // preference) over an expanded hull makes the new module a member, in the same undo step as its
     // creation.
-    const juce::String joinMacroId = macroJoinTargetForDrop(dragSourceDetails);
+    // Released over an open gap, the macro it was made in is the one joined: the cards it pushed have moved the
+    // borders, and the join was decided on the borders as they stood when the pointer got there (InsertGap::hover).
+    const bool inGap = insertGap_ != nullptr && insertGap_->isOpen();
+    const juce::String joinMacroId = inGap ? insertGap_->container() : macroJoinTargetForDrop(dragSourceDetails);
     host_.addModuleAtCanvasPosition(name, dropPos, {}, joinMacroId);
     endDragPreview();
 }
@@ -342,19 +481,30 @@ void GraphDragDropController::filesDropped(const juce::StringArray& files, int x
         if (!SamplerModule::isSupportedAudioFile(file))
             continue;
 
-        // Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the
-        // graph afterwards, and that snapshot is what undo/redo replays — so the file path has to be
-        // in place by then or the sample is lost on the first Cmd+Z.
-        host_.addModuleAtCanvasPosition("Sampler", canvasPos,
-                                        [file](juce::AudioProcessor& processor) {
-                                            if (auto* sampler = dynamic_cast<SamplerModule*>(&processor))
-                                                sampler->loadSampleFile(file);
-                                        },
-                                        {});
+        addSamplerLoadedWith(file, canvasPos);
 
         // Cascade multiple files so they do not all land on the same spot.
         canvasPos += juce::Point<int>(32, 32);
     }
 
     endDragPreview();
+}
+
+// Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the graph afterwards, and that
+// snapshot is what undo/redo replays - so the file path has to be in place by then or the sample is lost on the first
+// Cmd+Z. A card pushed apart by the gap the drag opened takes the macro that gap is in, as a library module does.
+void GraphDragDropController::addSamplerLoadedWith(const juce::File& file, juce::Point<int> canvasPos) {
+    const bool inGap = insertGap_ != nullptr && insertGap_->isOpen();
+    host_.addModuleAtCanvasPosition(
+        "Sampler", canvasPos,
+        [file](juce::AudioProcessor& processor) {
+            auto* sampler = dynamic_cast<SamplerModule*>(&processor);
+            if (sampler == nullptr)
+                return;
+            if (synth::ui::isInstrumentSound(file))
+                sampler->loadInstrumentFromSfz(file);
+            else
+                sampler->loadSampleFile(file);
+        },
+        inGap ? insertGap_->container() : juce::String());
 }

@@ -5,7 +5,9 @@
 #include "MidiRemote/ControllerTemplates.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
+#include "UI/Layout/PopupHost.h"
 
+#include "UI/Layout/PopupMotion.h"
 #include <juce_audio_devices/juce_audio_devices.h>
 
 namespace synth::ui {
@@ -33,7 +35,11 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
         if (safePanel != nullptr)
             safePanel->createControllerFromChoice(choice);
     };
-    auto& box = juce::CallOutBox::launchAsynchronously(std::move(popover), anchor.getScreenBounds(), nullptr);
+    auto* boxPtr =
+        synth::ui::launchPopover(std::move(popover), anchor.getScreenBounds(), &anchor, {.trigger = &anchor});
+    if (boxPtr == nullptr)
+        return;
+    auto& box = *boxPtr;
     if (auto* content = dynamic_cast<AddControllerPopover*>(box.getChildComponent(0))) {
         juce::Component::SafePointer<juce::CallOutBox> safeBox(&box);
         auto confirmed = content->onConfirmed;
@@ -41,11 +47,11 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
             if (confirmed)
                 confirmed(choice);
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
         content->onCancelled = [safeBox] {
             if (safeBox != nullptr)
-                safeBox->dismiss();
+                synth::ui::PopupMotion::dismissCallOut(*safeBox);
         };
     }
 }

@@ -5,16 +5,20 @@
 //   • bypass / mute  -- the root CLAUDE.md two-branch contract: bypass is dry (no gain/pan, a mono
 //                        strip still feeds both legs), mute clears
 //   • shape          -- fixed once written or once live; a later width change is refused
-//   • ports          -- kRightBase split-block jack map, no inherited Dual I/O toggle
+//   • ports          -- kRightBase split-block jack map, Dual I/O on both sides (ships split)
 //   • Master         -- Direct summed into Mix BEFORE the fader; bypass is a unity sum that keeps
 //                        Direct; mute clears
 //
 // Solo gating (the render-time gate both modules read off the playhead) lives in
 // MixerSoloTests.cpp.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/FX/CompressorModule.h"
 #include "Modules/MasterModule.h"
+#include "Transport/TransportService.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -312,7 +316,8 @@ TEST(ChannelStripTest, ExtraStateWithNoNamePropertyLeavesTheNameUnset) {
 
 TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     ChannelStripModule stereo;
-    EXPECT_FALSE(stereo.hasDualIOParameter()) << "the (5,5) shape inherits no Dual I/O toggle";
+    EXPECT_TRUE(stereo.hasDualIOParameter()) << "declared: the toggle collapses both sides";
+    EXPECT_TRUE(stereo.isDualIO()) << "ships split, so a project saved before the toggle opens unchanged";
     EXPECT_EQ(stereo.rightAudioLegChannel(), kRight);
     EXPECT_EQ(stereo.getVisibleInputPortCount(), 2);
     EXPECT_EQ(stereo.getVisibleOutputPortCount(), 2);
@@ -325,9 +330,146 @@ TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     ChannelStripModule mono;
     ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
     EXPECT_EQ(mono.getVisibleInputPortCount(), 1);
-    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2) << "strip output is always stereo";
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2) << "the output is stereo in every shape";
     EXPECT_FALSE(mono.mapInputChannel(kRight).isPolyGroupHead) << "a mono strip has no right input jack";
     EXPECT_EQ(mono.getJackTargets(1, /*isInput=*/false).front().rawHeadChannel, kRight);
+}
+
+TEST(ChannelStripTest, CollapsedStereoStripShowsOneAudioJackOwningBothLegs) {
+    ChannelStripModule strip;
+    setParam(strip, "dualIO", 0.0f);
+    ASSERT_FALSE(strip.isDualIO());
+    EXPECT_EQ(strip.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(strip.getInputPortLabel(0), "Audio");
+
+    const auto targets = strip.getJackTargets(0, /*isInput=*/true);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight) << "the second leg sits on kRightBase, not on ch1";
+    EXPECT_EQ(strip.mapInputChannel(kRight).visibleJackIndex, 0);
+    EXPECT_FALSE(strip.mapInputChannel(kRight).isPolyGroupHead) << "kRightBase is a follower of the one jack";
+    EXPECT_FALSE(strip.mapInputChannel(1).isPolyGroupHead) << "ch1 stays reserved";
+
+    // Back to split: the original two jacks.
+    setParam(strip, "dualIO", 1.0f);
+    EXPECT_EQ(strip.getVisibleInputPortCount(), 2);
+    EXPECT_EQ(strip.getInputPortLabel(0), "Left");
+    EXPECT_EQ(strip.getInputPortLabel(1), "Right");
+}
+
+// Bug kind: jack-raw-mismatch. Collapsing the output may only change which visible jack a raw channel
+// shows on; ch0 and kRightBase stay the two legs, and each send keeps its own raw pair.
+TEST(ChannelStripTest, CollapsedMainOutputIsOneAudioJackOwningBothLegsAndSendsMoveUpOne) {
+    ChannelStripModule strip;
+    strip.setSendActive(0, true);
+    strip.setSendActive(2, true);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 6);
+    EXPECT_EQ(strip.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Right");
+    EXPECT_EQ(strip.getOutputPortLabel(2), "Send 1 L");
+
+    setParam(strip, "dualIO", 0.0f);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 5) << "one Audio jack plus two send pairs";
+    EXPECT_EQ(strip.getOutputPortLabel(0), "Audio");
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Send 1 L");
+    EXPECT_EQ(strip.getOutputPortLabel(2), "Send 1 R");
+    EXPECT_EQ(strip.getOutputPortLabel(3), "Send 3 L");
+    EXPECT_EQ(strip.getOutputPortLabel(4), "Send 3 R");
+
+    const auto targets = strip.getJackTargets(0, /*isInput=*/false);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight) << "the second leg sits on kRightBase, not on ch1";
+    EXPECT_EQ(strip.mapOutputChannel(kRight).visibleJackIndex, 0);
+    EXPECT_FALSE(strip.mapOutputChannel(kRight).isPolyGroupHead) << "kRightBase follows the one jack";
+    EXPECT_FALSE(strip.mapOutputChannel(1).isPolyGroupHead) << "ch1 stays reserved";
+
+    // Sends keep their raw channels; only the visible index moves.
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(0)).visibleJackIndex, 1);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendRightChannel(0)).visibleJackIndex, 2);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(2)).visibleJackIndex, 3);
+    EXPECT_EQ(strip.getJackTargets(3, /*isInput=*/false).front().rawHeadChannel,
+              ChannelStripModule::sendLeftChannel(2));
+
+    setParam(strip, "dualIO", 1.0f);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 6);
+    EXPECT_EQ(strip.getOutputPortLabel(1), "Right");
+    EXPECT_EQ(strip.mapOutputChannel(kRight).visibleJackIndex, 1);
+    EXPECT_TRUE(strip.mapOutputChannel(kRight).isPolyGroupHead);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(2)).visibleJackIndex, 4);
+}
+
+TEST(ChannelStripTest, AMonoShapedStripCollapsesItsStereoOutputToo) {
+    ChannelStripModule mono;
+    ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
+    setParam(mono, "dualIO", 0.0f);
+    EXPECT_EQ(mono.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(mono.getInputPortLabel(0), "In");
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(mono.getOutputPortLabel(0), "Audio");
+    const auto targets = mono.getJackTargets(0, /*isInput=*/false);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight);
+
+    setParam(mono, "dualIO", 1.0f);
+    EXPECT_EQ(mono.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(mono.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(mono.getOutputPortLabel(1), "Right");
+}
+
+TEST(ChannelStripTest, AMonoStripHasOneInputJackWhateverTheToggleSays) {
+    for (const float dual : {0.0f, 1.0f}) {
+        ChannelStripModule mono;
+        ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
+        setParam(mono, "dualIO", dual);
+        EXPECT_EQ(mono.getVisibleInputPortCount(), 1) << "dual=" << dual;
+        EXPECT_EQ(mono.getInputPortLabel(0), "In") << "dual=" << dual;
+        const auto targets = mono.getJackTargets(0, /*isInput=*/true);
+        ASSERT_EQ(targets.size(), 1u);
+        EXPECT_EQ(targets[0].voiceSpan, 1) << "dual=" << dual;
+        EXPECT_FALSE(mono.mapInputChannel(kRight).isPolyGroupHead) << "dual=" << dual;
+    }
+}
+
+TEST(ChannelStripTest, ASavedStripWithoutTheDualIOParamLoadsSplitWithItsCablesIntact) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    auto compressor = graph.addNode(synth::AIStateMapper::createModule("Compressor"));
+    auto strip = graph.addNode(synth::AIStateMapper::createModule("Channel Strip"));
+    ASSERT_TRUE(compressor != nullptr && strip != nullptr);
+    ASSERT_TRUE(graph.addConnection({{compressor->nodeID, 0}, {strip->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{compressor->nodeID, 1}, {strip->nodeID, kRight}}));
+
+    auto json = synth::AIStateMapper::graphToJSON(graph);
+    int stripped = 0;
+    if (auto* nodes = json.getProperty("nodes", {}).getArray())
+        for (auto& node : *nodes)
+            if (node.getProperty("type", {}).toString() == "Channel Strip")
+                if (auto* params = node.getProperty("params", {}).getDynamicObject()) {
+                    params->removeProperty("dualIO"); // a project saved before the toggle existed
+                    ++stripped;
+                }
+    ASSERT_EQ(stripped, 1);
+
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
+    ChannelStripModule* loaded = nullptr;
+    juce::AudioProcessorGraph::NodeID loadedId, compressorId;
+    for (auto* node : graph.getNodes()) {
+        if (auto* s = dynamic_cast<ChannelStripModule*>(node->getProcessor())) {
+            loaded = s;
+            loadedId = node->nodeID;
+        } else if (dynamic_cast<CompressorModule*>(node->getProcessor()) != nullptr) {
+            compressorId = node->nodeID;
+        }
+    }
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_TRUE(loaded->isDualIO()) << "a strip saved without the param keeps its two input jacks";
+    EXPECT_EQ(loaded->getVisibleInputPortCount(), 2);
+    EXPECT_TRUE(graph.isConnected({{compressorId, 0}, {loadedId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{compressorId, 1}, {loadedId, kRight}}));
 }
 
 // ============================================================================
@@ -372,13 +514,113 @@ TEST(MasterModuleTest, MuteClears) {
         expectChannel(buffer, ch, 0.0f, "muted");
 }
 
-TEST(MasterModuleTest, FourLabelledInputJacksAndNoDualIOToggle) {
+TEST(MasterModuleTest, FourLabelledInputJacksByDefault) {
     MasterModule master;
-    EXPECT_FALSE(master.hasDualIOParameter()) << "opted out: its inputs are two stereo blocks, not an FX pair";
+    EXPECT_TRUE(master.hasDualIOParameter()) << "declared: ships split, collapsed is covered by MasterDualIOTests";
+    EXPECT_TRUE(master.isDualIO());
     EXPECT_EQ(master.getVisibleInputPortCount(), 4);
     EXPECT_EQ(master.getVisibleOutputPortCount(), 2);
     EXPECT_EQ(master.getInputPortLabel(MasterModule::kDirectLeft), "Direct L");
     EXPECT_EQ(master.getInputPortLabel(MasterModule::kMixRight), "Mix R");
     EXPECT_EQ(master.getJackTargets(MasterModule::kDirectRight, /*isInput=*/true).front().rawHeadChannel,
               MasterModule::kDirectRight);
+}
+
+// ============================================================================
+// Live tap (what another track records from this strip)
+// ============================================================================
+
+TEST(ChannelStripLiveTapTest, CapturesTheOutputAfterFaderAndPan) {
+    ChannelStripModule strip;
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+    setParam(strip, "pan", -1.0f);
+    setParam(strip, "gain", -6.0f);
+    juce::AudioBuffer<float> tap(2, kBlockSize);
+    tap.clear();
+    strip.setLiveTapBuffer(&tap);
+    auto buffer = stripInput(0.5f, 0.5f);
+    settleAndProcess(strip, buffer);
+
+    for (int i = 0; i < kBlockSize; ++i) {
+        ASSERT_EQ(tap.getSample(0, i), buffer.getSample(0, i));
+        ASSERT_EQ(tap.getSample(1, i), buffer.getSample(kRight, i));
+    }
+    EXPECT_NEAR(tap.getSample(0, 0), 0.5f * 0.5011872f, 1.0e-4f) << "post fader";
+    EXPECT_EQ(tap.getSample(1, 0), 0.0f) << "post pan: hard left silences the right leg";
+}
+
+TEST(ChannelStripLiveTapTest, AStripSoloedOutByAnotherStillTapsItsSignal) {
+    synth::TransportService transport;
+    transport.setMixerSoloActiveForBlock(true);
+    ChannelStripModule strip; // not soloed, another strip is
+    strip.setPlayHead(&transport);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+    juce::AudioBuffer<float> tap(2, kBlockSize);
+    tap.clear();
+    strip.setLiveTapBuffer(&tap);
+    auto buffer = stripInput(0.5f, 0.25f);
+    juce::MidiBuffer midi;
+    for (int i = 0; i < 40; ++i) {
+        auto scratch = stripInput(0.5f, 0.25f);
+        strip.processBlock(scratch, midi);
+    }
+    strip.processBlock(buffer, midi);
+
+    EXPECT_EQ(buffer.getSample(0, 0), 0.0f) << "the main output is solo-gated";
+    EXPECT_NEAR(tap.getSample(0, 0), 0.5f, 1.0e-5f);
+    EXPECT_NEAR(tap.getSample(1, 0), 0.25f, 1.0e-5f);
+
+    // The same holds bypassed: dry signal into the tap, gate still applied to the output.
+    strip.setBypassed(true);
+    auto dry = stripInput(0.5f, 0.25f);
+    for (int i = 0; i < 40; ++i) { // the bypass crossfade settles
+        dry = stripInput(0.5f, 0.25f);
+        strip.processBlock(dry, midi);
+    }
+    EXPECT_EQ(dry.getSample(0, 0), 0.0f);
+    EXPECT_NEAR(tap.getSample(0, 0), 0.5f, 1.0e-6f);
+}
+
+TEST(ChannelStripLiveTapTest, AMutedStripTapsSilence) {
+    ChannelStripModule strip;
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+    juce::AudioBuffer<float> tap(2, kBlockSize);
+    tap.setSample(0, 0, 1.0f); // stale content must be overwritten
+    tap.setSample(1, 0, 1.0f);
+    strip.setLiveTapBuffer(&tap);
+    strip.setMuted(true);
+    auto buffer = stripInput(0.5f, 0.5f);
+    juce::MidiBuffer midi;
+    strip.processBlock(buffer, midi);
+    EXPECT_EQ(tap.getMagnitude(0, kBlockSize), 0.0f);
+}
+
+TEST(ChannelStripLiveTapTest, ArmingAndDisarmingBetweenBlocksIsSafeAndAShortTapIsNotOverrun) {
+    ChannelStripModule strip;
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+    juce::MidiBuffer midi;
+    auto process = [&] {
+        auto buffer = stripInput(0.5f, 0.5f);
+        strip.processBlock(buffer, midi);
+    };
+    process(); // no tap armed: nothing to write
+    EXPECT_EQ(strip.getLiveTapBuffer(), nullptr);
+
+    juce::AudioBuffer<float> small(2, 16);
+    small.clear();
+    strip.setLiveTapBuffer(&small);
+    EXPECT_EQ(strip.getLiveTapBuffer(), &small);
+    process();
+    EXPECT_NEAR(small.getSample(0, 15), 0.5f, 1.0e-2f) << "the frames that fit are written";
+
+    strip.setLiveTapBuffer(nullptr);
+    small.clear();
+    process();
+    EXPECT_EQ(small.getMagnitude(0, 16), 0.0f) << "a disarmed tap is not written";
+
+    juce::AudioBuffer<float> mono(1, kBlockSize);
+    mono.clear();
+    strip.setLiveTapBuffer(&mono);
+    process(); // a tap without two channels is ignored rather than overrun
+    EXPECT_EQ(mono.getMagnitude(0, kBlockSize), 0.0f);
 }

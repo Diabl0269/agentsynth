@@ -1,0 +1,65 @@
+# A modulator row dragged onto a lane of another track: the drop crossed two macros (the LFO's track and the other
+# one), and the cable from the far macro's port to the parameter showed as a second, read-only "Macro In" row; after a
+# save and reopen the row named a "Mod Slot" attenuverter instead of the LFO.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, each in its own channel macro (Audio 1 folded, Audio 2 nested, Audio 3
+#      open), a Compressor lane on each and an LFO on Audio 1's Ratio lane (fixture cross-track-lanes.agsproj), shows
+#      the timeline in the main area and opens every track's automation.
+#   2. Drags the LFO 2 row from Audio 1's Ratio lane onto Audio 3's Threshold lane: one LFO row lands there, with its
+#      shape, rate and sync controls and a small sign saying the LFO lives in Audio 1. No "Macro In" row.
+#   3. Cmd+Z puts it back on Ratio in one step; Cmd+Shift+Z moves it again.
+#   4. Saves, reopens the saved project: still one LFO row on Audio 3's Threshold, still named LFO 2.
+motion: true
+pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the lanes its later steps expect
+stale_pixel_check: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - click: {id: "Show Audio 2 automation (1 lane)"}
+  - click: {id: "Show Audio 3 automation (1 lane)"}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true}
+  - expect: {id: modulatorOutsideMark, showing: false}
+  - screenshot: {name: before}
+  # 2. The drag: from the row's title onto the bottom of Audio 3's Threshold lane header (header column y 450..490).
+  - drag: {from: LFO 2 mod lane on Ratio, fromX: 60, fromY: 8, to: timelineTrackHeaderViewport, toX: 100, toY: 374}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  - expect: {id: LFO 2 mod lane on Ratio, exists: false}
+  - expect: {id: Threshold (dB) LFO shape, showing: true}
+  - expect: {id: modulatorOutsideMark, showing: true}
+  - expect: {count: {prefix: "Macro In mod lane", equals: 0}}
+  - screenshot: {name: after-drop}
+  - expect: {id: modulatorOutsideMark, contains: {tooltip: "LFO 2 lives in Audio 1, outside this macro"}}
+  # 3. One undo step, and redo.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true, within_ms: 2000}
+  - expect: {id: modulatorOutsideMark, showing: false}
+  - screenshot: {name: undo}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  # 4. Save and reopen.
+  - saveProject: {path: "${SCRATCH}/moved.agsproj"}
+  - restart: {}
+  - openProject: {path: "${SCRATCH}/moved.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  # The saved project comes back with the timeline already in the main area (the choice is stored), so there is nothing to click.
+  - expect: {id: timelineTrackHeaderViewport, showing: true, within_ms: 2000}
+  - click: {id: "Show Audio 3 automation (1 lane)"}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  - expect: {count: {prefix: "Mod Slot", equals: 0}}
+  - expect: {count: {prefix: "Macro In mod lane", equals: 0}}
+  - screenshot: {name: reopened}

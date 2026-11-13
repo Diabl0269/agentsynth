@@ -1,6 +1,6 @@
 # RemoteProvider
 
-`Source/AI/RemoteProvider.{h,cpp}` talks to the hosted inference service over libcurl instead of
+`Source/AI/RemoteProvider.{h,cpp}` talks to the hosted inference service over libcurl (WinHTTP on Windows) instead of
 `juce::WebInputStream`. Registration and selection are in [providers](providers.md).
 
 It reuses [OllamaProvider](ollama-provider.md)'s worker-thread, queue and cancellation architecture
@@ -12,8 +12,9 @@ rules stated there apply here unchanged.
 ## Wire contract
 
 - `POST {host}/v1/capability/patch.generate`
-- Request: `{"productName": string, "userPrompt": string}`. `currentPatch` and `promptVersion` are
-  always omitted, never sent as `null`.
+- Request: `{"productName": string, "userPrompt": string, "promptVersion": 3}`. `currentPatch` is
+  always omitted, never sent as `null`. `promptVersion` 3 (`kPatchGeneratePromptVersion`) is the prompt
+  that writes a sequencer's pattern as the node's `state` (2) and keeps new Sequencers on Follow Song Key (3); a request without it gets prompt 1.
 - Success: HTTP 200, `{"data": <Patch JSON object>}`. `data` is re-serialized with
   `juce::JSON::toString()` and delivered as `AIResponse::content`, the same raw-JSON-text shape
   `AIIntegrationService::applyPatch()` expects from any provider.
@@ -92,35 +93,32 @@ quota, trial and capacity enforcement byte-identical across capabilities. Locked
 final JSON string on the *enqueuing* thread (`Request::capabilityBodyJson`), so no ref-counted
 `juce::var` ever crosses to the worker.
 
-### Arrange mode: one intent, two transports
+### One plan, two transports
 
-`AIChatComponent` shows a Patch/Arrange selector in the model row while its gate is satisfied:
-`areTimelineToolsEnabled()` plus a live `setTimelineContext()`. The gate is deliberately
-**provider-agnostic** — arrange mode works on both transports, so the provider never gates the UI.
-Routing is the selector's call **alone, never a keyword heuristic**; `shouldUseStructuredOutput()`
-stays a patch-path concern.
+The chat has one input and no mode selector. With a timeline wired in, every edit request goes
+through `AIIntegrationService::sendProjectMessage()`, which asks for one
+[edit plan](timeline-ops.md#one-edit-plan) (a patch plus a sibling `timelineOps` list, either side
+optional) and absorbs the transport difference so it is never a behaviour difference:
 
-The selector's gate re-syncs at
-[`refreshModels()`](chat-component.md#model-discovery-ordering-contract) and at
-`AIChatComponent::refreshModeControls()`, called by `MainComponent::initialiseCommon` once the
-timeline context is installed — the service has no listener mechanism for that, so the owner that
-installs it re-syncs the selector. Hiding the selector resets it to Patch: an invisible control must
-not keep steering requests.
-
-An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which absorbs the
-transport difference so it is never a behaviour difference:
-
-- **Hosted provider** — `sendCapabilityRequest("timeline.generate", ...)` with the structured input
-  body below.
+- **Hosted provider** — `sendCapabilityRequest("project.generate", buildProjectRequestBody(text))`:
+  the `timeline.generate` fields below plus `currentPatch`, the same stripped graph JSON the patch
+  path sends, as an object and omitted when the graph is empty, and `songKey` (e.g. `"D Dorian (D E F G A B C)"`) when the project has a song key. The hosted service has no free-text
+  chat, so on a hosted provider every message is an edit request.
 - **Local provider** — `sendPrompt()` with the SAME fields composed into the outgoing message
-  (`buildArrangeAugmentedContent()`, section for section the way the server composes them:
-  arrangement context when non-empty, then tracks, then targets, then the prompt, plus one trailing
-  steering line standing in for the dedicated arrange system prompt the server swaps in and a
-  mid-conversation local request cannot), and `AIStateMapper::getTimelineOpsEnvelopeSchema()` as the
-  response contract: an envelope-ONLY grammar sharing the ops item schema with
-  `getPatchSchemaWithTimelineOps`, so the two cannot drift, with `timelineOps` **required** — an
-  arrange answer with no ops is not an answer. The history splice matches `sendMessage()`:
-  `chatHistory` keeps the raw user text, and the composed context exists only on the wire.
+  (`buildProjectAugmentedContent()`, in `project.generate`'s own section order: the patch or
+  "Current patch is empty.", the arrangement when non-empty, the tracks, the targets, the prompt,
+  plus one trailing steering line standing in for the dedicated system prompt the server swaps in),
+  and `AIStateMapper::getPatchSchemaWithTimelineOps()` as the response contract. A local message the
+  chat classifies as conversational (`shouldUseStructuredOutput()` false) goes through
+  `sendMessage()` instead and gets text back.
+
+The history splice matches `sendMessage()`: `chatHistory` keeps the raw user text, and the composed
+context exists only on the wire. Without a timeline (tests, a host without one) the chat keeps the
+plain patch request (`sendMessage()`), and its answer is read the same way.
+
+`RemoteProvider` still accepts any capability name, `timeline.generate` included (the hosted server
+offers it), but the app no longer sends it: the arrange-only request path was removed, and
+`buildArrangeRequestBody()` is the base of the project body.
 
 The structured input body is `buildArrangeRequestBody()`, public so tests reproduce the real request:
 
@@ -142,17 +140,17 @@ The structured input body is `buildArrangeRequestBody()`, public so tests reprod
 History and conversation-id bookkeeping are shared with `sendMessage()` via
 `wrapCompletionForHistory()`, one wrapper, so the two send paths cannot drift.
 
-**The response re-enters the existing seam unchanged.** `timeline.generate` answers
-`{"data": {"timelineOps": [...]}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content`
-exactly as for a patch, and the [timeline ops](timeline-ops.md) flow —
-`extractTimelineOps()`, `TimelineOps::validate`, the `TimelineCard` preview, the user's Apply —
-consumes it with **no remote-specific branch**. Arrange mode adds a second way to *ask*, never a
-second way to *apply*; both doors' validators are untouched and
-[the two-door model](timeline-safety.md#the-two-door-model) stands.
+**The response re-enters the existing seam unchanged.** `project.generate` answers
+`{"data": {...plan...}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content` exactly as
+for a patch, and the chat reads it the way it reads a local answer: the plan goes to
+`previewProjectEdit()`, ONE card shows the preview, and the user's single Apply runs
+`applyProjectEdit()` ([chat component](chat-component.md#one-answer-one-card)), with **no
+remote-specific branch**. A new way to *ask*, never a second way to *apply*; both doors' validators
+are untouched and [the two-door model](timeline-safety.md#the-two-door-model) stands.
 
-A response that fails `TimelineOps::validate` shows the rejection in the card with no Apply button,
-and there is **no client retry loop**: the server runs its own bounded repair-retry inside the
-capability, so a rejection here is information for the user, not a trigger for another round trip.
+A plan the engine refuses shows the reason in the card with no Apply button, and there is **no
+client retry loop**: the server runs its own bounded repair-retry inside the capability, so a
+rejection here is information for the user, not a trigger for another round trip.
 
 **Why the client never calls `automation.generate`.** It is a strict subset of `timeline.generate`
 in both directions: its input schema is what the timeline-generate input schema extends (minus
@@ -166,23 +164,32 @@ worth it: `sendCapabilityRequest("automation.generate", ...)` with the same body
 
 Tests: `Tests/AI/RemoteProvider/RemoteProviderCapabilityTests.cpp` (capability URL, body, headers,
 fail-fast validation, entitlement-error pass-through, envelope re-serialization),
-`Tests/AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp` (request-body shape, the
-64-target cap, empty-timeline explicitness, the shared history and conversation-id contract, the
-local transport's composed message plus envelope-only schema plus raw-text history, typed
-no-provider and hosted-without-capability failures), and `Tests/AIChatComponentTests.cpp`
-(provider-agnostic selector gating, explicit routing on both transports, and the card flow for a
-validated and a rejected canned envelope).
+`Tests/AI/AIIntegrationService/AIIntegrationServiceProjectEditTests.cpp` (both `sendProjectMessage`
+request shapes, the structured body, the 64-target cap, empty-timeline explicitness), and
+`Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp` (the chat's routing on both
+transports and the one-card flow).
+
+## Service routes and streamed responses
+
+`sendRouteRequest` posts to a route outside `/v1/capability/` (the song plan) and answers with the response's `data`;
+`streamRouteRequest` reads the response as lines (NDJSON) on the worker thread, posts each to the message thread in order
+and finishes once. The body adds `productName` like a capability's. Failures go through the same status mapping
+(`classifyFailure`) and the typed error also carries the HTTP status and the server's `error.code`. A stream has its own
+11 minute ceiling instead of the request timeout and holds the single worker for its whole length. cancel() closes the
+connection (libcurl's progress callback, or the WinHTTP watchdog); lines still queued for the message thread are dropped.
+The transport seam is `StreamPerformer`; a provider built with only an `HttpPerformer` streams through it as one chunk.
+Details: [song steps](song-steps.md).
 
 ## Transport seam and platform support
 
 `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels `OllamaProvider::InputStreamFactory`:
-a constructor taking just a host installs the real libcurl-backed performer, and a second
+a constructor taking just a host installs the real platform performer (libcurl, or WinHTTP on Windows), and a second
 constructor injects a fake one for tests, with no real sockets — see
 `Tests/AI/RemoteProvider/RemoteProviderTestFixture.h`.
 
-**Windows is not supported.** `RemoteProvider.cpp`'s libcurl implementation is compiled only under
-`#ifndef _WIN32`; the `#else` branch is a stub returning `transportFailed=true` with a clear
-message, touching no curl API. The `windows-latest` CI job has no libcurl setup step. Root
-`CMakeLists.txt` requires `CURL` (`find_package(CURL REQUIRED)`) under `if(NOT WIN32)`, covering
-Linux and macOS — whose SDK ships a `curl.tbd` stub, so no Homebrew dependency is needed there — and
-deliberately does not require it on `WIN32`.
+**Per-platform transport.** macOS and Linux use libcurl (`RemoteProvider.cpp`, `AuthClient.cpp`;
+root `CMakeLists.txt` requires `CURL` there, and the macOS SDK's `curl.tbd` stub means no Homebrew
+dependency). Windows uses WinHTTP through `Source/AI/WinHttpTransport.cpp`, shared by both clients,
+with no third-party library: a watchdog thread closes the request handle when the cancel flag is set
+or the total timeout elapses, so a request blocked on a slow generation still aborts promptly.
+`RawHeaderParser.cpp` turns WinHTTP's raw header block into the same header map curl produces.

@@ -130,6 +130,27 @@ public:
      *  its known-plugins list, which the scanner fills. */
     virtual bool resolveIdentity(const PluginIdentity& identity, juce::PluginDescription& out) const;
 
+    /** Marks the plugin bundle `bundlePath` (named `name`) as switched off for the next project load:
+     *  createInstanceAsync(identity) then fails for any identity that resolves to it, so its module stays a placeholder
+     * that keeps its identity (nothing is dropped from the project). Only the identity entry point is affected: a load
+     * the user asks for by description (a card's own load) still goes ahead. Message thread. */
+    void skipPluginForNextLoad(const juce::String& name, const juce::String& bundlePath);
+    bool isSkippedForNextLoad(const juce::PluginDescription& description) const;
+    bool isSkippedForNextLoad(const PluginIdentity& identity) const;
+    void clearSkipFor(const PluginIdentity& identity);
+    void clearSkippedPlugins() noexcept { skippedPlugins_.clear(); }
+    bool hasSkippedPlugins() const noexcept { return !skippedPlugins_.empty(); }
+
+    /** Clears the process-wide backend's skipped plugins when it goes out of scope. A project load
+     *  creates its plugin modules synchronously inside it, so one of these around the load makes the
+     *  skip last for exactly that load. */
+    struct ScopedClearSkips {
+        ScopedClearSkips() = default;
+        ~ScopedClearSkips() { HostedPluginBackend::getDefault().clearSkippedPlugins(); }
+        ScopedClearSkips(const ScopedClearSkips&) = delete;
+        ScopedClearSkips& operator=(const ScopedClearSkips&) = delete;
+    };
+
     /** The process-wide backend. Real formats unless a ScopedDefault override is installed.
      *
      *  This is the seam HostedPluginModule::setExtraState needs: state restore happens deep inside
@@ -157,6 +178,13 @@ protected:
      *  re-entrant" promise as the success path, or a caller that sets state after the call would
      *  overwrite what the callback just wrote. */
     static void failAsync(InstanceCallback callback, const juce::String& error);
+
+private:
+    struct SkippedPlugin {
+        juce::String name;
+        juce::String bundlePath;
+    };
+    std::vector<SkippedPlugin> skippedPlugins_;
 };
 
 /**

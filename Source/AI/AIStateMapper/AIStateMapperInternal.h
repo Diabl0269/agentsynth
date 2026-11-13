@@ -5,6 +5,7 @@
 // here is an implementation detail of the split, not part of the public AIStateMapper API — never
 // included from outside this directory. The class itself is declared in AIStateMapper.h.
 
+#include "../../Modules/CardLayout.h"
 #include "AIStateMapper.h"
 
 #include "../../Modules/ADSRModule.h"
@@ -15,6 +16,7 @@
 #include "../../Modules/FX/ChorusModule.h"
 
 #include "../../Modules/ComparatorModule.h"
+#include "../../Modules/DrumKit/DrumKitModule.h"
 #include "../../Modules/EnvelopeFollowerModule.h"
 #include "../../Modules/FX/BitcrusherModule.h"
 #include "../../Modules/FX/CompressorModule.h"
@@ -35,12 +37,14 @@
 #include "../../Modules/MacroMidiInletModule.h"
 #include "../../Modules/MacroMidiOutletModule.h"
 #include "../../Modules/MacroOutletModule.h"
+#include "../../Modules/Mallet/MalletModule.h"
 #include "../../Modules/MasterModule.h"
 #include "../../Modules/MathModule.h"
 #include "../../Modules/MidiKeyboardModule.h"
 #include "../../Modules/ModuleBase.h"
 #include "../../Modules/NoiseModule.h"
 #include "../../Modules/OscillatorModule.h"
+#include "../../Modules/Pluck/PluckModule.h"
 #include "../../Modules/PolyMidiModule.h"
 #include "../../Modules/PolySequencerModule.h"
 #include "../../Modules/RecordTapModule.h"
@@ -56,6 +60,8 @@
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
+#include <map>
+#include <optional>
 #include <set>
 #include <unordered_map> // For the factory map
 
@@ -63,6 +69,12 @@ namespace synth {
 namespace detail {
 
 typedef juce::AudioProcessorGraph::AudioGraphIOProcessor AudioGraphIOProcessor;
+
+/** True for a source whose cable into a modulation jack is never wrapped in a new attenuverter on load. */
+inline bool isModulationPassThrough(juce::AudioProcessor* source) {
+    return dynamic_cast<AttenuverterModule*>(source) != nullptr || dynamic_cast<MacroInletModule*>(source) != nullptr ||
+           dynamic_cast<MacroOutletModule*>(source) != nullptr;
+}
 
 using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>;
 
@@ -109,6 +121,9 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
         {"Comparator", []() { return std::make_unique<ComparatorModule>(); }},
         {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
+        {"Drum Kit", []() { return std::make_unique<DrumKitModule>(); }},
+        {"Pluck", []() { return std::make_unique<PluckModule>(); }},
+        {"Mallet", []() { return std::make_unique<MalletModule>(); }},
         {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
         {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
         // A third-party VST3/AU plugin as a module. In the factory so our own saves reload it (the
@@ -161,7 +176,9 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
     // The timeline feed. A Track In node's only meaningful state is the identity of the timeline
     // track bound to it, which lives OUTSIDE the patch — so a model authoring one either creates a
     // node that plays nothing, or (worse) one that latches onto a track the user owns. The
-    // timeline's own add-track flow is the only thing that may create these.
+    // timeline's own add-track flow is the only thing that may create these -- reached from the
+    // menu, or from a timelineOps addInstrumentTrack op through the same build, which binds only
+    // the Track In it creates.
     "Track In",
     // The audio-take tap. It names a FILE PATH on disk — a model that could author one could aim
     // a recording anywhere the app can write, which is the same class of authority the Sampler's
@@ -203,6 +220,51 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
 };
 
 inline bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
+
+// A parameter the module keeps but offers on no surface (ModuleBase::isParameterExposed). The model never sees or
+// sets one; a node's JSON leaves it out while it is at its default, and a trusted apply resets an absent one.
+inline bool isUnexposedParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    const auto* module = dynamic_cast<const ModuleBase*>(&processor);
+    return module != nullptr && !module->isParameterExposed(paramId);
+}
+
+// One of a Parametric EQ band's six parameters (bandNOn/Freq/Gain/Q/Type/Slope) while that band is off and every one
+// of the six is at its default: nothing the band says is worth showing the model, and a patch that leaves it out
+// leaves it exactly so. The model's compact view of a node (nodeToJSON's forModel) skips these.
+inline bool isDisabledDefaultEqBandParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    if (dynamic_cast<ParametricEQModule*>(&processor) == nullptr || !paramId.startsWith("band"))
+        return false;
+    const int band = paramId.substring(4).getIntValue();
+    if (band < 1 || band > ParametricEQModule::kMaxBands)
+        return false;
+    const juce::String prefix = "band" + juce::String(band);
+    if (!paramId.startsWith(prefix) || paramId.substring(prefix.length()).containsAnyOf("0123456789"))
+        return false;
+    int found = 0;
+    for (auto* param : processor.getParameters())
+        if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(param); r != nullptr && r->paramID.startsWith(prefix)) {
+            const auto rest = r->paramID.substring(prefix.length());
+            if (rest != "On" && rest != "Freq" && rest != "Gain" && rest != "Q" && rest != "Type" && rest != "Slope")
+                continue;
+            ++found;
+            if (r->getValue() != r->getDefaultValue())
+                return false;
+        }
+    return found == 6;
+}
+
+// The parameter as the model may see it, or null for one it never sees: the Drum Kit's per-pad parameters, which
+// its group ids (kickLevel, closedDecay ...) write.
+inline juce::RangedAudioParameter* modelVisibleParam(juce::AudioProcessor& processor,
+                                                     juce::AudioProcessorParameter* param) {
+    auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+    if (ranged != nullptr && dynamic_cast<DrumKitModule*>(&processor) != nullptr &&
+        DrumKitModule::isPadParamId(ranged->paramID))
+        return nullptr;
+    if (ranged != nullptr && isUnexposedParam(processor, ranged->paramID))
+        return nullptr;
+    return ranged;
+}
 
 // Whether a merge patch's "type" designates the module that already lives under that node id.
 // Two namespaces meet here: the factory key graphToJSON writes, and the processor's display name.
@@ -266,6 +328,111 @@ inline void applyDisplayNameToNode(juce::AudioProcessorGraph::Node* node, const 
     }
     node->properties.set("displayName", name.substring(0, synth::kMaxModuleDisplayNameChars));
 }
+
+// Copies a patch node's per-instance card layout ("cardLayout", kCardLayoutNodeProperty) onto the
+// live node. TRUSTED PATH ONLY, like "uuid" and "state": a layout is display-only, but a hostile one
+// could hide every control of an authorable module, and accepting one from a provider needs a
+// validator (known paramIds, bounded sizes) that does not exist yet. Absent means "leave as is".
+// The value is stored as a deep copy so a later edit of the incoming JSON never aliases the node.
+inline void applyCardLayoutToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                  bool trusted) {
+    if (!trusted || node == nullptr || nObj == nullptr)
+        return;
+    const auto& layout = nObj->getProperty(kCardLayoutNodeProperty);
+    if (layout.isObject())
+        node->properties.set(kCardLayoutNodeProperty, layout.clone());
+}
+
+// The snapshot-restore form: the snapshot is the whole truth, so a node whose snapshot carries no
+// layout loses the one it has (undoing the first layout edit must clear it). Snapshots are the
+// app's own graphToJSON output, hence always trusted.
+inline void restoreCardLayoutOnNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node == nullptr || nObj == nullptr)
+        return;
+    const auto& layout = nObj->getProperty(kCardLayoutNodeProperty);
+    if (layout.isObject())
+        node->properties.set(kCardLayoutNodeProperty, layout.clone());
+    else
+        node->properties.remove(kCardLayoutNodeProperty);
+}
+
+// The module's own knob and fader style ("controlStyle", kControlStyleNodeProperty), copied like the card
+// layout: trusted path only, absent means "leave as is".
+inline void applyControlStyleToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                    bool trusted) {
+    if (!trusted || node == nullptr || nObj == nullptr)
+        return;
+    const auto& style = nObj->getProperty(kControlStyleNodeProperty);
+    if (style.isObject())
+        node->properties.set(kControlStyleNodeProperty, style.clone());
+}
+
+// The snapshot-restore form: a snapshot without a style clears the one the node has.
+inline void restoreControlStyleOnNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node == nullptr || nObj == nullptr)
+        return;
+    const auto& style = nObj->getProperty(kControlStyleNodeProperty);
+    if (style.isObject())
+        node->properties.set(kControlStyleNodeProperty, style.clone());
+    else
+        node->properties.remove(kControlStyleNodeProperty);
+}
+
+// Display-only node presentation from a patch node: the title on every path, the card layout and control
+// style on the trusted path only. One call so the apply sites stay short.
+inline void applyNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                  bool trusted) {
+    applyDisplayNameToNode(node, nObj);
+    applyCardLayoutToNode(node, nObj, trusted);
+    applyControlStyleToNode(node, nObj, trusted);
+}
+
+// Snapshot-restore form of the above (snapshots are always trusted; see restoreCardLayoutOnNode). A snapshot
+// without a "displayName" is the whole truth too: undoing a node's first rename must clear the title it gained.
+inline void restoreNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node != nullptr && nObj != nullptr && !nObj->hasProperty("displayName"))
+        node->properties.remove("displayName");
+    applyDisplayNameToNode(node, nObj);
+    restoreCardLayoutOnNode(node, nObj);
+    restoreControlStyleOnNode(node, nObj);
+}
+
+// -- Plan-scoped ids and modulation destinations (AIStateMapperModulations.cpp) ----------------
+
+using NodeIdMap = std::map<int, juce::AudioProcessorGraph::NodeID>;
+
+// True when `scope` keeps `nodeId` out of the patch's raw-uid namespace (hidden, or bound to a plan id).
+bool scopeHidesNode(const PatchIdScope* scope, juce::AudioProcessorGraph::NodeID nodeId);
+
+// Merge mode: every live node a patch may address by raw uid, then the scope's plan ids on top.
+void seedMergeIdMap(const juce::AudioProcessorGraph& graph, const PatchIdScope* scope, NodeIdMap& idMap);
+
+// The node a "remove" entry denotes, or nullopt for one the scope hides.
+std::optional<juce::AudioProcessorGraph::NodeID> removalTarget(const NodeIdMap& idMap, const PatchIdScope* scope,
+                                                               int patchId);
+
+// The destination channel a modulation entry names: "destParam" resolved on `destProcessor`, else
+// "destPort" (0 when absent). nullopt when "destParam" does not resolve.
+std::optional<int> modulationDestPort(const juce::DynamicObject& modulation, juce::AudioProcessor* destProcessor);
+
+// The attenuverter carrying source -> dest:destPort (a "removeModulations" entry's target), if any.
+std::optional<juce::AudioProcessorGraph::NodeID> findModulationAttenuverter(const juce::AudioProcessorGraph& graph,
+                                                                            juce::AudioProcessorGraph::NodeID source,
+                                                                            juce::AudioProcessorGraph::NodeID dest,
+                                                                            int destPort);
+
+// The "modulations" step of applyJSONToGraph: one attenuverter per entry, skipping an existing routing.
+void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
+                            NodeIdMap& idMap, bool trusted);
+
+// Writes the attenuverter's curve onto a modulation entry; only a bent curve is written, so an unbent route reads as it
+// always did.
+void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuverter);
+
+// Merge-mode auto-connect, MIDI half (AIStateMapperMidiWiring.cpp): each new MIDI-accepting node with no MIDI input
+// gets a cable from the Track In (or other MIDI source) of the track whose modules it feeds or modulates.
+void autoConnectNewNodesToMidi(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                               const std::set<juce::AudioProcessorGraph::NodeID>& newlyCreatedNodes);
 
 } // namespace detail
 } // namespace synth

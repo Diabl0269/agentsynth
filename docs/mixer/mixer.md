@@ -65,9 +65,24 @@ every audio connection that fed the output re-routed through it. The ordering be
 
 The bracketed part is empty until the user adds something to it — see [Master inserts](#master-inserts).
 
+### Safety limiter
+
+Master ends with an always-on brickwall at −1 dBFS (the `safetyLimiter` param, default ON, also for a project saved before it existed), so a hot mix or an AI-made song cannot clip the output. It is the Limiter module's Ceiling stage, runs after the gain and before the meter, and does nothing below the ceiling; bypass and mute skip it. Its toggle is on Master's card. See [`modules.md`](../modules/modules.md#master-module-mix-bus-hidden).
+
+**Placement and protection.** Master, the Rec Tap and Audio Output are the canvas's *output dock*: always the
+rightmost cards, x derived and y shared with Audio Output
+([`docs/layout/layout.md#output-dock`](../layout/layout.md#output-dock)), so Master takes Audio Output's row the
+moment it is spliced in. Audio Output can never be deleted, and Master can't while any channel exists (the card's
+Delete item is disabled, with the reason in its label; the AI patch "remove" list honours the same rule).
+
 `Master` exposes a **Direct** input block that receives whatever cables previously went straight to
 the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap, one level
 upstream of it.
+
+**Master's jacks follow Dual I/O.** With Dual I/O off Master shows one **Mix** jack and one **Direct**
+jack (each a stereo pair on the same raw channels); with it on, four: Mix L, Mix R, Direct L, Direct R.
+A Master created by a track, a preset or "Make channel" follows the **Split Left/Right jacks** preference
+like every other new module; a project saved before this opens with the shape it was saved in (split).
 
 **Layouts.** A strip carries 5 raw channels a side: Left ch0, Right `kRightBase` = 4, ch1 to ch3
 reserved, with `gain` (dB), `pan` and `muted` as parameters and its shape plus solo flag in trusted
@@ -97,7 +112,7 @@ tracks do.
 **An instrument track is a `TrackKind::Midi` track, not a new track kind.** A `TrackKind::Instrument`
 enum value would mean format, serialisation and kind-badge changes, and an instrument track is exactly
 what the "MIDI track into an existing instrument" row above already describes once the user draws the
-cable by hand: a Track In feeding exactly one instrument. "+ Track -> Instrument" just draws that
+cable by hand: a Track In feeding exactly one instrument. "Add Track -> Instrument" just draws that
 cable and builds the channel automatically instead of making the user do both steps. A future
 `TrackKind::Instrument` would have to migrate every track this flow has already created.
 
@@ -120,21 +135,18 @@ instrument. Linked means:
 
 - **Names sync both ways.** Renaming the track renames the channel (strip and macro), and the
   reverse.
-- **Colour syncs live.** The track colour, the channel's macro colour and the mixer column colour
-  always match, and they update **while the colour picker is still being dragged**, not only on
-  commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
-  [`docs/layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) separates a
-  live-preview callback — fires on every drag or favourite click, writes straight into its target
-  with **no undo step** — from a commit-once callback that fires once, on close, as the real edit. A
-  linked track and channel fan the SAME preview write out on every drag frame; a cancel restores
-  every destination to its original colour, exactly like the single-target case; a commit is **one**
-  undo step covering all of them, not several separate edits, matching the existing "one `Cmd+Z`
-  undoes a dozen preview colours" semantics. It fans out over TWO stored targets, not three: **a
-  channel's colour IS its macro's colour**, so the mixer column reads the macro rather than a third
-  copy on the strip.
+- **Colour follows the track.** See [A track and its macro share a colour](#a-track-and-its-macro-share-a-colour);
+  that rule is wider than the link and applies to every track whose instrument sits in a channel macro.
 - **The track header's M and S drive the strip.** Not note gating — the linked channel's mute and
   solo. A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one
   copy.
+
+**A channel macro can contain child macros.** Anywhere the mixer asks "which channel is this node in"
+(column and send names, a column's colour, Edit on canvas, the track-to-channel link) it resolves to
+the nearest macro in the node's owner chain that directly holds a Channel Strip
+(`synth::nearestChannelMacro`, `Source/Mixer/ChannelMacroLookup.h`), never the innermost child; a
+node in no channel macro falls back to its innermost owner, so a flat set behaves as before. Track
+presets and Make Channel treat a child macro's modules as inside the channel.
 
 A channel fed by **more than one** track (Kick, Snare and Hats into one sampler) is **not** linked: it
 keeps its own independently chosen name and colour, lists every track that feeds it, and each of
@@ -163,6 +175,53 @@ field on the strip, so an **unboxed** linked channel syncs neither name nor colo
 still drive the strip. And soloing a linked channel silences every other channel, a shared one
 included, even when that shared channel's own track is note-gate soloed: that is a DAW mixer solo,
 not a bug.
+
+### A track and its macro share a colour
+
+A track's macro is the **channel macro its instrument sits in**: the macro boxing the channel strip the track's
+audio reaches, resolved with `synth::nearestChannelMacro` (never `MacroSet::findByMember`, which stops at a nested
+child). Going through the strip rather than the track's Track In node matters for a MIDI track wired into a shared
+instrument, whose Track In can sit outside the macro. The track colour, that macro's colour and
+the mixer column colour always match, because a channel's colour IS its macro's colour:
+
+- **Both ways.** Recolouring the track recolours the macro; recolouring the macro (the macro card's colour
+  action) recolours the track that owns it.
+- **Live, one undo step.** Both pickers (`synth::ui::ColourPickerPopup`,
+  [`docs/layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) write the other side on
+  every drag frame with no undo step; a close with no net change restores both; a commit is **one** graph +
+  timeline + macro step, so one `Cmd+Z` restores both. The macro half joins `MacroGroupController`'s
+  `makeMacroColourMirror` / `recordMacroColourHook`, the same way a rename joins `recordMacroRenameHook`.
+  Every write to a macro's colour that skips `setMacroColour` (a track-picker frame, a restore, the bulk pick) ends in
+  `MacroGroupController::refreshCardColours()`, which re-syncs and repaints every card, so the canvas card wears the colour
+  on that frame and not on the next edit.
+- **A shared macro follows its owning track.** When several tracks play one macro (Kick, Snare and Hats into one
+  sampler) the owner is the **first track in timeline order**. Only the owner's picker touches the macro; the
+  other tracks keep their own colour, and the macro never follows them.
+- **A macro no track plays keeps its own colour**, and recolouring it touches no track.
+- **Opening a project adopts the track colour.** `TrackChannelLinkController::syncMacroColoursToTracks` runs
+  from `reconcileLinkedTracks` (the funnel every project open, new track and undo/redo restore reaches) and from
+  `MainComponent::reconcileTimelineBindingsOnly` (the end of every canvas structural change, so a channel built by
+  a cable drag takes the colour at once). It writes the macro directly with no undo step, so a project whose macro
+  colour disagreed does not open as changed. A track whose stored colour is unset resolves through the same
+  palette the header paints with.
+- **Unboxed instruments** have no macro, so nothing syncs and the header's own picker is used.
+
+Macro port colours (FRO32) do not follow the track.
+
+### Column badges
+
+The mixer column header shows at most two small badges to the right of the channel's name
+(`MixerColumnHeader`, FRO355):
+
+- **Link glyph** (two interlocking links, accent colour) — this channel is **linked** to a track
+  under the rule above. Tooltip: "Linked to track Bass". It replaced an earlier cryptic "+R" label.
+- **BUS** — the column is a group/send bus ([`sends-and-buses.md`](sends-and-buses.md#a-bus-is-a-channel-strip));
+  shown instead of the link glyph, since a bus has no track to link to.
+- **Receives** (an arrow plus a count) — other strips send into this track channel. Tooltip:
+  "Receives sends from: Drums, Keys". Receiving a send never unlinks a track or makes it a bus.
+
+The header's tooltip and its accessible description are the same sentence, so a screen reader hears
+"Linked to track Bass. Receives sends from: Drums" rather than a glyph.
 
 ### The channel chip
 
@@ -226,11 +285,27 @@ inferred later from what gets plugged into it. This is the same rule macro ports
 ([`docs/macros/ports.md`](../macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)),
 applied to strips.
 
-Strip output is always stereo. A mono strip feeds both output legs from a single input jack, and its
+The strip's output is stereo on its raw channels in every shape (how many jacks show follows Dual I/O, below). A mono strip feeds both output legs from a single input jack, and its
 own pan is a real pan pot (see [Pan law](#pan-law) below); a stereo strip's "pan" stays a **balance**
 control (industry convention: pan pot on mono, balance on stereo). The right leg follows the
 `kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
 the split-block voice modules.
+
+**A strip's jacks follow Dual I/O.** Split (the default, and what a project saved before the toggle loads as) a
+stereo strip shows `Left` and `Right` on its input and its main output; collapsed it shows one `Audio` jack on each
+side, and each one owns BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw channels `kRightBase` apart:
+`JackTarget::rawStride`, and `PolyLink::sourceStride`/`destStride` when a cable is made). Only the visible jacks
+change: no raw edge moves, so a saved project's cables to Master, buses and the next strip, and its sends, keep
+every channel they had. Send jacks never collapse; with the main output collapsed they sit one jack higher
+(`Audio`, `Send 1 L`, `Send 1 R`, ...) and keep their `Send N` labels. A mono-shaped strip has one `In` jack
+whichever way the toggle is set, and its output collapses to one `Audio` jack the same way, so its card shows the
+toggle too. A strip made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks**
+preference and its per-module override (`Channel Strip` in the list), like every other new module; a strip loaded
+from a project or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
+[AI authorability](#ai-authorability)) yet appears in the Preferences list, which is discovered from
+`hasDualIOParameter()`. The guard for the jack-raw-mismatch kind is `StripWiringHealMatrix` (collapsed and split
+strips on both sides) plus `ChannelStripOutputCollapseProject`, which collapses every strip of a saved multi-track
+project with a bus and a send and asserts no raw edge moved across a save and reopen.
 
 **Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
 same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a
@@ -254,6 +329,8 @@ through one of two pan laws — a per-PROJECT setting, not a per-strip one:**
 pan pot, and the project setting never touches it. Every other `ModuleBase::panGains` caller (a
 module-card's own pan knob, e.g. Oscillator/Wavetable/Filter) is likewise unaffected; this ticket
 only ever changes a MONO `ChannelStripModule`'s own pan and its sends' pan.
+
+A module card's pan is never silent at an extreme: on a Left-only patch the output stage first lends the left leg to the empty right leg in proportion to |Pan| ([`fx-modules.md`](../modules/fx-modules.md#mix-and-pan-shared-stage)), and a split-block module collapsed to one jack leaves its pan at rest.
 
 **Persistence and the engine-side switch.** The setting is a top-level `"mixerPanLaw"` string in the
 project file (`"balance"`/`"compensated"`, [`docs/architecture/project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)) —
@@ -296,9 +373,106 @@ strip — muting the macro mutes the whole channel. See
 
 A mixer column lists its channel's modules **in signal order**, read off the chain between the source
 and the strip. When that chain is a straight line, the column supports adding, reordering and removing
-modules directly in the mixer. When it branches — more than one path between source and strip, or a
-shared node feeding more than one channel — the column instead shows the module list read-only with
-an "Edit on canvas" link, rather than presenting a branching chain as if it were a reorderable list.
+modules directly in the mixer. When it splits into parallel paths that meet again before the strip, the
+column lists them as a split row (see [Parallel paths](#parallel-paths)) and stays editable. A branch that
+never reaches the strip (a module wired in with no output, a cable to nowhere) is not a path: it is ignored, so
+it neither makes the list read-only nor ends the walk, and add, move and remove leave its cable alone
+(the edit primitives take the strip as `stripEnd` and skip any signal edge that has no route to it). Any other
+branch (a merge fed from outside the chain, a shared node feeding more than one channel, paths that meet at
+different places) shows the module list read-only (no "+ Insert" row), rather than presenting a branching chain as
+if it were a reorderable list. Every column's header carries an "Edit on canvas" button
+([Edit on canvas](edit-on-canvas.md)), the way to edit such a chain.
+
+### Parallel paths
+
+A chain may fan out (an oscillator into a delay and a reverb) and meet again at one node (an insert such
+as a VCA, or the strip itself). `buildInsertsForColumn` parses that series-parallel shape
+(`SplitChainParser` in `MixerModelInserts.cpp`): each fork becomes one **Split row** followed by its paths'
+rows one level deeper, path by path, top to bottom as the paths' first cards sit on the canvas (then by node
+id), so the order stays put when a module moves within a path. A path wired straight from
+the fork to the merge is a **dry path**: one `MixerInsertEntry::Kind::DryPath` row ("Dry (no effects)",
+one level deeper, its path index), so "2 paths" always has two path rows; a split inside a path nests one level
+deeper. Key
+(sidechain) cables are not signal and change nothing. Neither is the voice wiring in front of an
+instrument: a cable into a Pitch or Gate jack (a Poly MIDI driving its oscillator and envelope) plays the
+voice rather than carrying its sound, and a MIDI-only branch that never reaches the strip (Track In into an
+ADSR that only drives a VCA's gain) is modulation, so an ordinary instrument track lists as a plain chain.
+`MixerColumn::insertChainHasSplits` marks such a
+column; `insertChainIsLinear` stays false, so deleting the track keeps the modules as for any branch.
+
+In the column a split is one row: a fold arrow, the split icon (its tooltip says "Split") and "N paths",
+then the row's bypass. It is **folded by default**; a click (or Right, or Return, with the row focused)
+opens the paths in place, each under a coloured rail, and Left folds it again (Left on a path row steps up
+to its split row). The fold animates, and the open state belongs to the split, keyed by the uuid of the
+node that fans out, so it survives the column's rebuild after any edit and the docked and detached mixers
+agree. Hovering the row shows every path's modules ("Split into 2 paths / Path 1: Delay 1 / Path 2: Reverb
+1"; a dry path reads "dry, no effects"). The split row's bypass bypasses every module under it (or turns
+them all back on when all are bypassed), as one undo step. Inside a path a module moves up or down only past
+its neighbour on the same path (`moveInsertBefore`/`moveInsertAfter`), and removing one bridges its path;
+the split row itself cannot be moved or removed. The dry row is dimmed italic text with no bypass, "Show on canvas"
+or grab handle; Return or a click on it offers the same add as the split's "Add to path N", and its screen-reader
+name is "Path N: dry, no effects".
+
+### Not-connected modules
+
+A module fed from the chain that never reaches the strip (an effect dragged off the chain with its output unplugged, or
+one whose output goes only to a CV jack) is no part of the sound, but the column still lists it so the work done on the
+canvas is not hidden. `MixerColumn::dangling` holds each one with the chain row it hangs off (`anchorRow`, -1 for the
+track's source) and its depth along a not-connected branch; every module reachable from the track's source appears
+exactly once, as an `inserts` row or here (`MixerModelNotConnectedTests`). Only modules reachable from the chain are
+listed: a module with no cable is not, and a branch fed only by note data (an instrument's Track In feeding its ADSR) is
+voice plumbing, not a loose module. The flat fallback walk, buses and Master list none.
+
+`MixerInsertList` draws each as a dimmed italic row with a dashed rail and a "not connected" caption, in place right
+under its anchor row. It has no row index: keyboard focus, Alt+Up/Down and the "+ Insert" row never land on it, the
+add gap below it still adds on the chain's own cable, and a mouse drag-reorder stays between such rows (Alt+Up/Down moves past them). A double-click
+shows its card on the canvas, like any module row; a screen reader says "<name>, not connected". Plugging it in or
+unplugging it moves it between this list and the chain rows on the next rebuild. Its motion key is `dangling:<uuid>`
+([row motion](row-motion.md)). The alternative look (a dimmed "Not connected" group under the inserts) is not built.
+
+### Reordering inserts
+
+A module row reorders three ways, all through `MixerInsertList::moveRowTo` and ONE undo step: drag it by its name
+(the grab cursor shows there), Move Up / Move Down in its right-click menu, or, with the row focused in the
+panel's row walk, **Alt+Up / Alt+Down** (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable, Mixer category;
+Down, `mixerEnterRows`, enters a column's rows; the moved modules' cards follow on the canvas, see [row motion](row-motion.md#the-canvas-follows-a-reorder)). The drag is the shared `Layout/ReorderDrag/` helper exactly as
+the send list uses it: siblings make room, Esc puts everything back, and the dropped row settles from where it was
+let go (`pendingInsertSettle_`, played on the rebuilt column; see [row motion](row-motion.md)). The commit holds
+the panel's rebuild (`rebuildHoldDepth_`) around the undo step and lets `onMutated()` do the one rebuild.
+
+A row moves only within its **run**: the whole chain, or one path of a split (never across a split row, a dry
+row, or into another path). The run is also trimmed to the places the graph accepts (`moveFeasible`), so the
+preview at the last drag event is always what the drop commits: on a straight chain every place except the front
+of a bus's own chain (no external predecessor to splice against, and `reorderInsert`'s second step has no
+rollback); on a split chain's path only beside a module with one signal neighbour on that side. A lone row on a
+path, a split row and a dry row have no grab handle. A keyboard move that cannot happen is swallowed. The focus
+follows the moved row; the "+ Insert" row is reached by Down from the last insert.
+
+### Adding an insert
+
+Every editable list ends in a **"+ Insert"** row, and hovering the line between two rows that share a cable
+(or above the first row, after the track source) shows a **"+"** there. Either one, a row's "Add after", or
+a split row's "Add to path N" opens the effect picker: the shared searchable list (`ModMatrixPicker`) with
+the library's Filters, Modulation FX, Time FX and Dynamics groups, this session's last three picks first
+under "Recent". The pick is spliced into that cable (`spliceInInsert`), joins the macro of its upstream
+neighbour (its downstream one right after the track source), and its card lands right after the upstream
+neighbour's card on the canvas, the cards after it sliding aside as for a keyboard insert
+([layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others),
+`synth::insertModuleAfterNode`). Module, cables, macro and pushes are one undo step. A neighbour hidden in a
+collapsed macro gets the new node one spacing to its right without moving anything. Next to a split the add goes across
+all its paths at once (`spliceInInsertAcross`: every cable between the fork-side nodes and the merge-side
+nodes is routed through the new module, left on ch0 and right on the module's own right leg, several cables
+into one input summing). A chain whose last top-level row is a split keeps its "+ Insert": the pick lands
+behind every path, before the strip. The line above a split row adds in front of all its paths (the module
+or track source that feeds them now feeds the new module), and the line below one, above the module they
+merge into, behind all of them; the split row's right-click menu offers "Add before all paths" and "Add after
+all paths". A module hung off the fork with no output is no path and keeps its cable. Each path still takes
+one through "Add to path". Keys: Return on the "+ Insert" row opens the picker like any other chain, and Shift+F10
+on a focused row opens that row's right-click menu beside it (`MixerInsertList::showMenuForKeyboardRow`), so a
+split row's "Add before all paths" and "Add after all paths" are reachable without the mouse; the gap lines
+themselves stay mouse entries, like the line between two modules. Tests:
+`InsertAddAffordanceMatrix` (`Tests/UI/Mixer/MixerInsertListAcrossTests.cpp`) walks every chain shape x entry
+point, and `MixerModelSpliceAcrossTests` asserts the raw edges.
 
 **A bus has no source to walk from.** A bus column carries no feeding track, so
 `buildBusInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal
@@ -308,19 +482,18 @@ same strip input channels an insert's own output would and **is excluded from th
 strip is a source, never an insert, the same rule `findStripsFeedingStrip` applies walking the
 opposite direction. So an active send never marks a bus's own chain "branching" and is never mistaken
 for one of its inserts. `MixerColumn::sourceNodeId` therefore stays invalid for a bus, which is also
-why **`MixerInsertList::moveRow` refuses to move a row to the very front of a bus's chain** — there is
+why **`MixerInsertList` offers no move to the very front of a bus's chain** (`moveFeasible`) — there is
 no external predecessor to splice against, and `reorderInsert`'s second step has no rollback of its
 own.
 
-**An empty insert list and the "Edit on canvas" link must not paint on the same row.** The link
-anchors at `jmax(1, entries_.size()) * kRowHeight` in both `paint()` and `mouseDown()`, matching
-`getPreferredHeight()`'s own maths; anchoring at `entries_.size() * kRowHeight` puts it at row 0 when
-the list is empty, which is exactly where the "(no inserts)" placeholder draws.
+**"+ Insert" never turns into "Edit on canvas".** The button lives in the column header and stays whatever the
+chain looks like, so adding a line into a parallel module cannot swap one for the other; a read-only list simply has
+no "+ Insert" row and no link row (`getPreferredHeight()` is the rows alone).
 
 ## Master inserts
 
-**Master has an insert list like a strip's, off by default.** Right-click the Master column's list to add a
-Limiter, EQ, Compressor, Gate and the rest of the mixer's add menu; move and remove work the same way,
+**Master has an insert list like a strip's, off by default.** Its "+ Insert" row adds a Limiter, EQ,
+Compressor, Gate or any other effect from the picker; move and remove work the same way,
 and each gesture is one undo step. Nothing is added unless the user asks.
 
 **Post-fader, one list.** Master's inserts sit AFTER its fader — the chain is
@@ -340,7 +513,7 @@ node — the terminator, recorded as `MixerColumn::chainEndNodeId` and never its
 in between are the inserts, in signal order; `MixerColumn::sourceNodeId` is Master's own node, so the
 same `MixerInsertList` splice code that serves a strip runs unchanged (predecessor = the last entry or
 Master, successor = the terminator). A node with more than one signal successor, or an insert with more
-than one signal predecessor, makes the list read-only with "Edit on canvas", exactly as for a strip. Other
+than one signal predecessor, makes the list read-only, exactly as for a strip (the header's "Edit on canvas" button reaches the chain). Other
 feeders on the terminator itself do NOT: a hand-wired source landing on the Rec Tap or Audio Output does
 not stop the user adding a Limiter in front of Master's own connection. A Master whose output never
 reaches a terminator has nothing to splice against, so its list is empty and read-only, and "Edit on
@@ -433,16 +606,26 @@ gate belongs upstream of tone-shaping and dynamics, so it sees the source signal
 
 `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows/ChannelFlows.h`) splices Master
 (`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and wires the
-strip into it. "+ Track -> Audio Track" builds the whole channel — Track Audio, Gate, EQ, Compressor,
+strip into it. "Add Track -> Audio Track" builds the whole channel — Track Audio, Gate, EQ, Compressor,
 Strip, Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), and
 `{Track Audio, Gate, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
 (`GraphEditor::addMacroForMembers`).
 
-**Master stays OUTSIDE the macro, and the Strip to Master cable is left a plain graph edge,
-deliberately never a macro port.** `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as
-Mix or Direct by checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
-`MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet` and
-defeat that check, which the whole-project sweep below depends on.
+**Master stays OUTSIDE the macro, and the track's sound leaves the macro through ONE output port.**
+Core cannot create macro ports (they are UI-level), so `buildDefaultAudioChannel` builds Strip to
+Master Mix as two plain graph edges. The app then moves them behind the macro: after the macro exists,
+`GraphEditor::routeChannelOutputThroughMacroPort` (`MacroGroupController::routeStripOutputThroughMacroPort`)
+splices ONE outlet between the strip and Master, in the same undo step. By default it is a single
+stereo jack (`StereoCollapsed`: strip L and R in, Mix L and R out); with the **Split Left/Right jacks**
+preference on it is two jacks (`Stereo`). Only Master-bound edges move: a send, or a strip into a bus,
+stays a plain edge. `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as Mix or Direct by
+looking BACKWARD through macro ports to the real source (`synth::resolveSourceThroughPorts`), so a strip
+behind an outlet still lands on Mix, which the whole-project sweep below depends on. The same step runs
+for instrument and plugin-instrument tracks, for "Make channel" (the track's channel and each bus), for
+track and bus presets (a preset's own captured one-sided outlet is swept first, so there is exactly one),
+and for "Add bus" in the mixer. The port's right-click menu switches it between one jack and two
+("Split into Left/Right Jacks" / "Join into One Stereo Jack"); see
+[`docs/macros/ports.md`](../macros/ports.md#switching-a-stereo-port-between-one-jack-and-two).
 
 `buildDefaultAudioChannel` takes a trailing `sourceRightChannel` parameter (default 1, Track Audio's
 contiguous pair unchanged) so a split-block source passes its own
@@ -451,7 +634,7 @@ is never ch1 (`Source/Modules/CLAUDE.md`).
 
 ### An instrument track
 
-"+ Track -> Instrument" opens a submenu of audio-producing MIDI instruments — Oscillator, Wavetable,
+"Add Track -> Instrument" opens a submenu of audio-producing MIDI instruments — Oscillator, Wavetable,
 Sampler, **deliberately not every `isMidiInstrumentType()` member**, since Poly MIDI, Sequencer and
 Poly Sequencer generate CV or MIDI rather than audio — and builds Track In, the chosen instrument, and
 the same default chain, in ONE undo step (`MainComponent::addInstrumentTrack`).
@@ -475,12 +658,20 @@ inserts an ADSR and a VCA ahead of the rest of the chain:
 **Inserted AFTER any Voice Mixer stage, never before it**, and both nodes are forced non-poly
 regardless of the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only — it
 never reads the MIDI note-on and note-off fallback that drives its non-poly branch — so a poly ADSR
-fed only Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` is explicitly set to
-0.7, independently of its own stock default, so this auto-wired chain settles at a musical level;
-VCA's `gain` is overridden to 1.0 so the envelope alone governs level. **Sampler is untouched** — it
+fed only Track In's MIDI would output a permanent zero envelope. The ADSR is otherwise exactly the card the
+module library creates (stock defaults, plus the new-module Dual I/O default); only `poly` is forced.
+VCA's `gain` is 0.5 (-6 dB of per-voice headroom, see [gain-staging](../development/gain-staging.md)). **Sampler is untouched** — it
 already has its own one-shot playback envelope.
 `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one
 collapsed macro.
+
+**Right-leg cables follow the jacks.** The chain is wired with both legs, then
+`GraphEditor::dropHiddenRightLegConnections` runs on the voice-chain modules (instrument, Voice Mixer,
+ADSR, VCA, inserts), so a module built collapsed — the default preference — carries no cable on a Right
+block that has no jack. Without it the Oscillator → VCA and VCA → Gate Right cables were invisible and
+could not be unplugged: unplugging the visible cable left the sound playing through the hidden one.
+With split jacks each leg has its own cable, and unplugging one plays only the other leg
+(`ChannelFlowVcaSignalPathTests.cpp`).
 
 ### A poly instrument gets a per-voice envelope
 
@@ -493,6 +684,7 @@ goes between Track In and the instrument instead of raw MIDI, and both ADSR and 
 ```
 Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
                     Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
+                    Poly MIDI --Gate(ch8-15)--> instrument's poly Gate in (restarts each voice's phase)
 ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
 instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
 ```
@@ -514,11 +706,18 @@ poly parameter and therefore no poly entry.
 
 ### A hosted plugin as the instrument
 
-"+ Track -> Instrument -> Plugin" lists the scanned INSTRUMENT plugins
+"Add Track -> Instrument -> Plugin" lists the scanned INSTRUMENT plugins
 (`juce::PluginDescription::isInstrument`; effects are filtered out and never offered here). Choosing
 one builds the exact same Track In, instrument, default chain, Master flow, boxed into one collapsed
 macro, as ONE undo step — except the instrument is a hosted `HostedPluginModule` rather than a factory
 module, and **the load is ASYNCHRONOUS**.
+
+The track is named after the plugin: the first Diva track is "Diva", the next "Diva 2" (the lowest free
+suffix against the timeline's current track names, `uniqueNameAmong`). The Hosted Plugin card is titled
+the same way: the plugin's name, with " 2", " 3" for later modules of the same plugin
+(`HostedPluginModule::getDefaultTitle`, numbered by `AudioEngine::updateModuleNames`). The type key
+`getName()`/"Hosted Plugin" is unchanged, and nothing extra is saved: the shown name derives from the
+persisted plugin identity, so a reloaded project shows the same names. A custom rename still wins.
 
 `MainComponent::addInstrumentPluginTrack` stages a bare Hosted Plugin module OFF the graph, starts its
 load, and **only opens the undo transaction once `HostedPluginModule::onLoadCompleted` reports
@@ -538,8 +737,10 @@ parameter, so every one of those branches falls through to the plain path automa
 **`ModuleBase::rightAudioLegChannel()` is read only AFTER the load completes**, since the module's
 real channel count is not known before then. `HostedPluginModule` overrides it from the published
 instance's real output count: ch1 once there are two or more outputs, ch0 duplicated onto both legs
-for a genuinely mono instance. The base class's `hasDualIOParameter()`-gated default would read -1
-forever, since this module never registers a Dual I/O parameter.
+for a genuinely mono instance. It reads the instance's RAW output count, not the visible jack count,
+so a stereo plugin whose Dual I/O is off (one "Audio" jack, FRO654) still reports ch1 and the strip's L and R
+cables stay wired. The new instrument follows the "Dual I/O for new modules" preference like any other module
+(`newModuleHook()` runs before the node joins the graph).
 
 **Four rules the picker itself follows.** A click resolves against a SNAPSHOT of the options list
 captured when the menu was built (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by
@@ -557,10 +758,10 @@ Cancel or a failed Save — `addInstrumentPluginTrack` captures it when the load
 ### Creating channels in an existing project
 
 **Existing projects open unchanged — no automatic migration on load.** "Create Channels" on the
-"+ Track" menu (`TimelinePanelComponent::kCreateChannelsMenuId`) wraps every channel-less track's
+"Add Track" menu (`TimelinePanelComponent::kCreateChannelsMenuId`) wraps every channel-less track's
 chain into a strip, as one undo step covering all of them at once.
 
-**Why it lives on the "+ Track" menu.** It acts on every track in the project at once, so it belongs
+**Why it lives on the "Add Track" menu.** It acts on every track in the project at once, so it belongs
 beside the project-wide channel-creating actions (Audio Track, Instrument Track) rather than off a
 single track header or a per-column control.
 
@@ -629,7 +830,7 @@ is self-correcting as long as the source JSON has an Audio Output, which every f
 On the very first channel, `MainComponent::addAudioTrack()` also relocates that Audio Output — or any
 bare one the user dropped manually before adding a track — to sit immediately right of the
 newly-spliced Master, once it knows this call is the one that splices Master (checked via
-`synth::findMasterNode` before building the chain). Master already lands right of the chain by design,
+`synth::findMasterNode` before building the chain). Master already lands right of the chain by design (a further `LayoutUtil::kMacroHullSideOutset` past the Strip, so the open channel macro's right port strip does not cover it),
 so the row reads `Track Audio -> Gate -> EQ -> Compressor -> Strip -> Master -> Audio Output` left to right;
 without the move, Audio Output stayed at the newPatch seed's canvas origin while Master jumped to the
 far side of the chain, and the output cable had to run back across the whole canvas. **Only fires the
@@ -667,7 +868,7 @@ macro".
   in, and the proxy-port and internal-only-node precedents this design follows.
 - [`docs/timeline/tracks.md`](../timeline/tracks.md) — track headers, M and S controls, the timeline
   side of the track and channel relationship.
-- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "+ Track" menu and every flow it
+- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "Add Track" menu and every flow it
   starts.
 - [`docs/architecture/audio-engine.md#audioengine`](../architecture/audio-engine.md#audioengine) —
   `ensureMasterRecordTap()`, `EpochExchange`.

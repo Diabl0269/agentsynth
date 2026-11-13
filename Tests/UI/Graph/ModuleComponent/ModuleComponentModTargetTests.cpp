@@ -73,10 +73,10 @@ TEST_F(ModuleComponentTest, DropOnAUnitLabelledKnobReportsItsCVJack) {
         EXPECT_FALSE(hit->isMidi);
     }
 
-    // Level is the shared output stage and has no CV jack, so it is not a drop target.
+    // Level is the shared output stage: a knob-only target, so a drop lands on the knob.
     auto* level = findKnob(card, "Level");
     ASSERT_NE(level, nullptr);
-    EXPECT_FALSE(card.getModTargetPortForPoint(level->getBounds().getCentre()).has_value());
+    EXPECT_TRUE(card.getModTargetPortForPoint(level->getBounds().getCentre()).has_value());
 }
 
 TEST_F(ModuleComponentTest, CompressorKnobsAreDropTargetsNow) {

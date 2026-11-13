@@ -1,0 +1,724 @@
+#include "KeyPicker.h"
+
+#include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyPicker/KeyPickerKeyboard.h"
+#include "UI/Layout/KeyPicker/KeyPickerPalette.h"
+#include "UI/Layout/KeyPicker/KeyPickerParts.h"
+#include "UI/Layout/PopupMotion.h"
+#include "UI/Layout/SearchMatch.h"
+#include <algorithm>
+
+namespace synth::ui {
+
+namespace {
+constexpr int kPad = 6;
+constexpr int kGap = 4;
+constexpr int kFollowHeight = 26;
+constexpr int kSearchHeight = 26;
+constexpr int kKeyboardHeight = 44;
+constexpr int kListHeight = 190;
+constexpr int kStatusHeight = 16;
+constexpr int kPreviewHeight = 24;
+constexpr int kPlayScaleHeight = 24;
+constexpr int kPreviewLabelWidth = 92;
+constexpr int kButtonHeight = 26;
+constexpr int kDetectWidth = 112;
+constexpr int kNoKeyWidth = 64;
+constexpr float kFontSize = 13.0f;
+constexpr float kSmallFontSize = 11.0f;
+} // namespace
+
+// The picker's test-mode state lives on this 1x1 child so KeyPicker.h need not include TestModeStateSource.h.
+class KeyPickerStateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit KeyPickerStateProbe(std::function<void(juce::DynamicObject&)> fill)
+        : fill_(std::move(fill)) {
+        setComponentID("keyPicker");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override { fill_(into); }
+
+private:
+    std::function<void(juce::DynamicObject&)> fill_;
+};
+
+int KeyPicker::preferredHeight(bool followRow, bool previewRow, bool fitRow) {
+    const int follow = followRow ? kFollowHeight + kGap : 0;
+    const int preview = previewRow ? kPreviewHeight + kGap : 0;
+    const int fit = fitRow ? kButtonHeight + kGap : 0;
+    return kPad + follow + preview + fit + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap +
+           kPlayScaleHeight + kGap + kStatusHeight + kGap + kButtonHeight + kPad;
+}
+
+KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPickCallback)
+    : onPick(std::move(onPickCallback))
+    , options_(std::move(options))
+    , search_(std::make_unique<NavigationSearchField>())
+    , keyboard_(std::make_unique<KeyPickerKeyboard>()) {
+    root_ = options_.current.has_value() ? ((options_.current->rootPitchClass % 12) + 12) % 12 : 0;
+    setComponentID("keyPickerPanel");
+    setTitle(options_.what + " picker");
+    setWantsKeyboardFocus(false);
+    setFocusContainerType(FocusContainerType::keyboardFocusContainer);
+
+    if (options_.showFollowRow) {
+        follow_ = std::make_unique<KeyPickerFollowRow>("Follow the song key again");
+        follow_->setState(options_.following, options_.followDetail);
+        follow_->setExplicitFocusOrder(1);
+        follow_->onClick = [this] {
+            auto callback = onFollow;
+            endAudition();
+            dismiss();
+            if (callback)
+                callback();
+        };
+        addAndMakeVisible(*follow_);
+    }
+
+    search_->setComponentID("keyPickerSearch");
+    search_->setTitle("Search keys");
+    search_->setTooltip("Type a root and a scale, like d dor. Up and Down move, Return picks, Escape closes.");
+    search_->setMultiLine(false);
+    search_->setReturnKeyStartsNewLine(false);
+    search_->setSelectAllWhenFocused(true);
+    search_->setJustification(juce::Justification::centredLeft);
+    search_->setBorder(juce::BorderSize<int>(0));
+    search_->setIndents(6, 0);
+    search_->setFont(juce::Font(juce::FontOptions(kFontSize)));
+    search_->setExplicitFocusOrder(2);
+    search_->onTextChange = [this] { applyFilter(); };
+    search_->onNavigationKey = [this](const juce::KeyPress& key) { return sendKey(key); };
+    addAndMakeVisible(*search_);
+
+    keyboard_->onRootClicked = [this](int pitchClass) { clickKeyboardRoot(pitchClass); };
+    addAndMakeVisible(*keyboard_);
+
+    addAndMakeVisible(viewport_);
+    viewport_.setViewedComponent(&rowColumn_, false);
+    viewport_.setScrollBarsShown(true, false);
+    viewport_.setWantsKeyboardFocus(false);
+    viewport_.addMouseListener(this, true);
+
+    status_.setComponentID("keyPickerStatus");
+    status_.setTitle("Key status");
+    status_.setFont(juce::Font(juce::FontOptions(kSmallFontSize)));
+    status_.setJustificationType(juce::Justification::centredLeft);
+    status_.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(status_);
+
+    relative_ = std::make_unique<KeyPickerButton>("Relative key", "Switch to the relative major or minor key");
+    relative_->setExplicitFocusOrder(6);
+    relative_->onClick = [this] { clickRelative(); };
+    addAndMakeVisible(*relative_);
+
+    detectButton_ = std::make_unique<KeyPickerButton>("Detect from notes",
+                                                      "Suggest the key that fits the notes in your MIDI clips");
+    detectButton_->setExplicitFocusOrder(7);
+    detectButton_->onClick = [this] { clickDetect(); };
+    addChildComponent(*detectButton_);
+
+    noKey_ = std::make_unique<KeyPickerButton>("No key", "Turn the song key off");
+    noKey_->setExplicitFocusOrder(8);
+    noKey_->onClick = [this] { clickNoKey(); };
+    addChildComponent(*noKey_);
+    noKey_->setVisible(options_.showNoKey);
+
+    if (options_.showPreviewSound)
+        buildPreviewSound();
+    if (options_.showFitProject)
+        buildFitProject();
+    buildPlayScale();
+
+    buildRows();
+    applyColours();
+    setSize(kWidth, preferredHeight(options_.showFollowRow, options_.showPreviewSound, options_.showFitProject));
+    ready_ = true;
+
+    stateProbe_ = std::make_unique<KeyPickerStateProbe>([this](juce::DynamicObject& into) { fillTestModeState(into); });
+    addChildComponent(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
+    stateProbe_->setVisible(true);
+}
+
+KeyPicker::~KeyPicker() {
+    stopTimer();
+    viewport_.removeMouseListener(this);
+    endAudition();
+    if (onClosed)
+        onClosed();
+}
+
+// The Preview sound row: Default sound first, then one entry per instrument track the owner listed. Item ids are the
+// choice plus one (a ComboBox id of 0 means nothing selected).
+void KeyPicker::buildPreviewSound() {
+    previewLabel_.setText("Preview sound", juce::dontSendNotification);
+    previewLabel_.setFont(juce::Font(juce::FontOptions(kSmallFontSize)));
+    previewLabel_.setJustificationType(juce::Justification::centredLeft);
+    previewLabel_.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(previewLabel_);
+
+    previewCombo_.setComponentID("keyPickerPreviewSound");
+    previewCombo_.setTitle("Preview sound");
+    previewCombo_.setTooltip("The sound the scale plays with while you browse keys: the built-in default sound, or an "
+                             "instrument track of this project.");
+    previewCombo_.addItem("Default sound", 1);
+    for (size_t i = 0; i < options_.previewTracks.size(); ++i)
+        previewCombo_.addItem(options_.previewTracks[i], (int)i + 2);
+    previewCombo_.setSelectedId(juce::jlimit(0, (int)options_.previewTracks.size(), options_.previewSelected) + 1,
+                                juce::dontSendNotification);
+    previewCombo_.setExplicitFocusOrder(4);
+    previewCombo_.onChange = [this] {
+        if (onPreviewSoundChanged)
+            onPreviewSoundChanged(getPreviewSoundChoice());
+    };
+    addAndMakeVisible(previewCombo_);
+}
+
+// The Fit project to key row: one button across the picker, closing it before the owner's callback runs (the fit and
+// its message are the owner's). Greyed while the owner has no key to fit to.
+void KeyPicker::buildFitProject() {
+    fitProject_ = std::make_unique<KeyPickerButton>(
+        "Fit project to key",
+        "Move the notes of every MIDI clip that follows the song key into the song key. Clips with "
+        "their own key and audio clips are left alone. One undo step.");
+    fitProject_->setComponentID("keyPickerFitProject");
+    fitProject_->setExplicitFocusOrder(5);
+    fitProject_->setEnabled(options_.fitProjectEnabled);
+    fitProject_->onClick = [this] { clickFitProject(); };
+    addAndMakeVisible(*fitProject_);
+}
+
+// The play-scale row: the same setting as Preferences > Timeline "Play the scale when browsing keys", flipped in
+// place. Greyed until the owner's auditioner gives it a setting (setPlayScale), and while the transport is playing.
+void KeyPicker::buildPlayScale() {
+    playScale_ = std::make_unique<KeyPickerToggleRow>("Play the scale when browsing keys");
+    playScale_->setComponentID("keyPickerPlayScale");
+    playScale_->setExplicitFocusOrder(3);
+    playScale_->setEnabled(false);
+    playScale_->setTooltip("Plays the scale of the key you hover while you browse. Same setting as Preferences.");
+    playScale_->onClick = [this] { playScaleToggled(); };
+    addAndMakeVisible(*playScale_);
+}
+
+void KeyPicker::setPlayScale(bool on, bool available, bool playbackRunning, std::function<void(bool)> changed) {
+    onPlayScaleChanged = std::move(changed);
+    playScale_->setToggleState(on, juce::dontSendNotification);
+    playScale_->setEnabled(available && !playbackRunning);
+    playScale_->setTooltip(playbackRunning
+                               ? "The scale is not played while the song is playing. Stop playback to hear it."
+                               : "Plays the scale of the key you hover while you browse. Same setting as Preferences.");
+}
+
+// The button flips its own state before this runs, so it only has to act on the new one.
+void KeyPicker::playScaleToggled() {
+    const bool on = playScale_->getToggleState();
+    if (!on)
+        endAudition();
+    if (onPlayScaleChanged)
+        onPlayScaleChanged(on);
+}
+
+void KeyPicker::clickPlayScale() {
+    if (playScale_ != nullptr && playScale_->isEnabled())
+        playScale_->setToggleState(!playScale_->getToggleState(), juce::sendNotificationSync);
+}
+
+bool KeyPicker::isPlayScaleOn() const { return playScale_ != nullptr && playScale_->getToggleState(); }
+bool KeyPicker::isPlayScaleEnabled() const { return playScale_ != nullptr && playScale_->isEnabled(); }
+juce::String KeyPicker::getPlayScaleTooltip() const {
+    return playScale_ != nullptr ? playScale_->getTooltip() : juce::String();
+}
+juce::String KeyPicker::getPlayScaleName() const {
+    return playScale_ != nullptr ? playScale_->getTitle() : juce::String();
+}
+
+void KeyPicker::clickFitProject() {
+    if (fitProject_ == nullptr || !fitProject_->isEnabled())
+        return;
+    auto callback = onFitProject;
+    endAudition();
+    dismiss();
+    if (callback)
+        callback();
+}
+
+bool KeyPicker::isFitProjectShown() const { return fitProject_ != nullptr; }
+bool KeyPicker::isFitProjectEnabled() const { return fitProject_ != nullptr && fitProject_->isEnabled(); }
+
+bool KeyPicker::isPreviewSoundShown() const { return previewCombo_.getParentComponent() != nullptr; }
+
+juce::StringArray KeyPicker::getPreviewSoundItems() const {
+    juce::StringArray items;
+    for (int i = 0; i < previewCombo_.getNumItems(); ++i)
+        items.add(previewCombo_.getItemText(i));
+    return items;
+}
+
+int KeyPicker::getPreviewSoundChoice() const { return juce::jmax(0, previewCombo_.getSelectedId() - 1); }
+
+void KeyPicker::choosePreviewSound(int choice) {
+    previewCombo_.setSelectedId(juce::jlimit(0, juce::jmax(0, previewCombo_.getNumItems() - 1), choice) + 1,
+                                juce::sendNotificationSync);
+}
+
+void KeyPicker::buildRows() {
+    const auto& presets = builtInScalePresets();
+    auto addHeader = [this](const juce::String& title) {
+        rows_.push_back(std::make_unique<KeyPickerRow>(title));
+        rowColumn_.addAndMakeVisible(*rows_.back());
+    };
+    auto addScale = [this](const juce::String& name, std::uint16_t mask) {
+        rows_.push_back(std::make_unique<KeyPickerRow>(name, mask, root_));
+        rows_.back()->onClick = [this](KeyPickerRow& r) { pick(r.key()); };
+        rows_.back()->onHover = [this](KeyPickerRow& r) { hoverRow(r); };
+        rowColumn_.addAndMakeVisible(*rows_.back());
+    };
+    for (const auto& group : keyScaleGroups()) {
+        addHeader(group.title);
+        for (const char* name : group.scales) {
+            const int index = scalePresetIndex(name);
+            if (index >= 0)
+                addScale(name, presets[(size_t)index].mask);
+        }
+    }
+    const bool anyUser = std::any_of(options_.userScales.begin(), options_.userScales.end(),
+                                     [](const UserScale& s) { return (s.mask & 0xFFF) != 0; });
+    if (anyUser) {
+        addHeader("Your scales");
+        for (const auto& scale : options_.userScales)
+            if ((scale.mask & 0xFFF) != 0)
+                addScale(scale.name, (std::uint16_t)(scale.mask & 0xFFF));
+    }
+
+    std::vector<juce::Component*> components;
+    for (const auto& row : rows_)
+        components.push_back(row.get());
+    fades_.reset(components);
+    fades_.onFrame = [this] {
+        layoutRowColumn();
+        if (!fades_.anyFading())
+            setHighlight(highlighted_);
+    };
+    refreshTicks();
+    applyFilter();
+}
+
+std::vector<KeyPickerRow*> KeyPicker::visibleItemRows() const {
+    std::vector<KeyPickerRow*> out;
+    for (size_t i = 0; i < rows_.size(); ++i)
+        if (!rows_[i]->isHeader() && fades_.isShown(i))
+            out.push_back(rows_[i].get());
+    return out;
+}
+
+void KeyPicker::setRoot(int root) {
+    root = ((root % 12) + 12) % 12;
+    root_ = root;
+    for (auto& row : rows_)
+        if (!row->isHeader())
+            row->setRoot(root);
+    refreshTicks();
+}
+
+void KeyPicker::refreshTicks() {
+    for (auto& row : rows_)
+        if (!row->isHeader())
+            row->setTicked(!options_.following && options_.current.has_value() &&
+                           sameKey(row->key(), *options_.current));
+}
+
+// A header shows only while a row under it matches. The highlight lands on the best match for the scale words, or
+// on the current key's scale when there are none.
+void KeyPicker::applyFilter() {
+    const auto parsed = parseKeyQuery(search_->getText());
+    if (parsed.root >= 0)
+        setRoot(parsed.root);
+    const auto& words = parsed.scaleWords;
+
+    int pendingHeader = -1;
+    bool headerHasMatch = false;
+    int bestIndex = -1;
+    int bestScore = 0;
+    int currentIndex = -1;
+    int visibleIndex = 0;
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        const auto& row = rows_[i];
+        if (row->isHeader()) {
+            if (pendingHeader >= 0)
+                fades_.steer((size_t)pendingHeader, headerHasMatch);
+            pendingHeader = (int)i;
+            headerHasMatch = false;
+            continue;
+        }
+        const bool matches = searchMatches(row->scaleName(), words);
+        fades_.steer(i, matches);
+        row->setQuery(words);
+        headerHasMatch = headerHasMatch || matches;
+        if (!matches)
+            continue;
+        const int score = searchScore(row->scaleName(), words);
+        if (bestIndex < 0 || score < bestScore) {
+            bestIndex = visibleIndex;
+            bestScore = score;
+        }
+        if (options_.current.has_value() && row->scaleName() == options_.current->name &&
+            row->mask() == (options_.current->mask & 0xFFF))
+            currentIndex = visibleIndex;
+        ++visibleIndex;
+    }
+    if (pendingHeader >= 0)
+        fades_.steer((size_t)pendingHeader, headerHasMatch);
+    fades_.markLaidOut();
+
+    layoutRowColumn();
+    if (words.isNotEmpty() && bestIndex >= 0)
+        setHighlight(bestIndex);
+    else
+        setHighlight(currentIndex >= 0 ? currentIndex : 0);
+    viewport_.setViewPosition(0, 0);
+}
+
+void KeyPicker::layoutRowColumn() {
+    const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
+    int y = 0;
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        if (!fades_.occupies(i))
+            continue;
+        const int slot = fades_.slot(i, rows_[i]->preferredHeight());
+        rows_[i]->setBounds(0, y, width, slot);
+        y += slot;
+    }
+    rowColumn_.setSize(width, juce::jmax(y, 1));
+}
+
+void KeyPicker::resized() {
+    auto bounds = getLocalBounds().reduced(kPad);
+    if (follow_ != nullptr) {
+        follow_->setBounds(bounds.removeFromTop(kFollowHeight));
+        bounds.removeFromTop(kGap);
+    }
+    search_->setBounds(bounds.removeFromTop(kSearchHeight));
+    bounds.removeFromTop(kGap);
+    keyboard_->setBounds(bounds.removeFromTop(kKeyboardHeight));
+    bounds.removeFromTop(kGap);
+
+    auto buttons = bounds.removeFromBottom(kButtonHeight);
+    bounds.removeFromBottom(kGap);
+    if (fitProject_ != nullptr) {
+        fitProject_->setBounds(bounds.removeFromBottom(kButtonHeight));
+        bounds.removeFromBottom(kGap);
+    }
+    if (options_.showPreviewSound) {
+        auto preview = bounds.removeFromBottom(kPreviewHeight);
+        bounds.removeFromBottom(kGap);
+        previewLabel_.setBounds(preview.removeFromLeft(kPreviewLabelWidth));
+        previewCombo_.setBounds(preview);
+    }
+    playScale_->setBounds(bounds.removeFromBottom(kPlayScaleHeight));
+    bounds.removeFromBottom(kGap);
+    status_.setBounds(bounds.removeFromBottom(kStatusHeight));
+    bounds.removeFromBottom(kGap);
+    viewport_.setBounds(bounds);
+
+    detectButton_->setVisible(detect != nullptr);
+    noKey_->setVisible(options_.showNoKey);
+    if (options_.showNoKey)
+        noKey_->setBounds(buttons.removeFromRight(kNoKeyWidth));
+    if (options_.showNoKey && detect != nullptr)
+        buttons.removeFromRight(kGap);
+    if (detect != nullptr)
+        detectButton_->setBounds(buttons.removeFromRight(kDetectWidth));
+    if (options_.showNoKey || detect != nullptr)
+        buttons.removeFromRight(kGap);
+    relative_->setBounds(buttons);
+    layoutRowColumn();
+}
+
+void KeyPicker::paint(juce::Graphics& g) {
+    const auto p = keypicker::paletteFor(*this);
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour(p.panel);
+    g.fillRoundedRectangle(bounds, p.radius);
+    g.setColour(p.border);
+    g.drawRoundedRectangle(bounds.reduced(0.5f), p.radius, 1.0f);
+}
+
+void KeyPicker::paintOverChildren(juce::Graphics& g) { paintFocusRegionOutline(*this, g); }
+
+void KeyPicker::applyColours() {
+    const auto p = keypicker::paletteFor(*this);
+    search_->setColour(juce::TextEditor::backgroundColourId, p.field);
+    search_->setColour(juce::TextEditor::textColourId, p.text);
+    search_->setColour(juce::TextEditor::outlineColourId, p.border);
+    search_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
+    search_->setTextToShowWhenEmpty("Search keys, e.g. d dor", p.muted);
+    status_.setColour(juce::Label::textColourId, p.muted);
+    previewLabel_.setColour(juce::Label::textColourId, p.muted);
+    previewCombo_.setColour(juce::ComboBox::backgroundColourId, p.field);
+    previewCombo_.setColour(juce::ComboBox::textColourId, p.text);
+    previewCombo_.setColour(juce::ComboBox::outlineColourId, p.border);
+    previewCombo_.setColour(juce::ComboBox::arrowColourId, p.muted);
+    keyboard_->setPalette(p);
+    relative_->setPalette(p);
+    detectButton_->setPalette(p);
+    noKey_->setPalette(p);
+    if (fitProject_ != nullptr)
+        fitProject_->setPalette(p);
+    if (follow_ != nullptr)
+        follow_->setPalette(p);
+    playScale_->setPalette(p);
+    for (const auto& row : rows_)
+        row->setPalette(p);
+    repaint();
+}
+
+void KeyPicker::lookAndFeelChanged() { applyColours(); }
+
+// A CallOutBox attaches its content after construction, so the LookAndFeel and the focus target only become real
+// once this component has a parent. Callers wire `detect` after the constructor's first layout, so lay out again
+// here or the Detect button stays hidden.
+void KeyPicker::parentHierarchyChanged() {
+    applyColours();
+    resized();
+    if (isShowing())
+        search_->grabKeyboardFocus();
+}
+
+void KeyPicker::mouseExit(const juce::MouseEvent&) {
+    if (!viewport_.isMouseOver(true))
+        endAudition();
+}
+
+void KeyPicker::dismiss() {
+    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+        PopupMotion::dismissCallOut(*box);
+}
+
+// ---- Highlight and audition ----
+
+void KeyPicker::setHighlight(int index) {
+    const auto visible = visibleItemRows();
+    if (visible.empty()) {
+        highlighted_ = 0;
+        highlightChanged();
+        return;
+    }
+    highlighted_ = juce::jlimit(0, (int)visible.size() - 1, index);
+    for (int i = 0; i < (int)visible.size(); ++i)
+        visible[(size_t)i]->setHighlighted(i == highlighted_);
+
+    const auto rowBounds = visible[(size_t)highlighted_]->getBounds();
+    const auto view = viewport_.getViewArea();
+    if (rowBounds.getY() < view.getY())
+        viewport_.setViewPosition(0, rowBounds.getY());
+    else if (rowBounds.getBottom() > view.getBottom())
+        viewport_.setViewPosition(0, rowBounds.getBottom() - view.getHeight());
+    highlightChanged();
+}
+
+void KeyPicker::moveHighlight(int delta) {
+    const int count = (int)visibleItemRows().size();
+    if (count > 0)
+        setHighlight(juce::jlimit(0, count - 1, highlighted_ + (delta < 0 ? -1 : 1)));
+}
+
+void KeyPicker::highlightKey(const MusicalScale& key) {
+    const auto visible = visibleItemRows();
+    for (int i = 0; i < (int)visible.size(); ++i)
+        if (visible[(size_t)i]->scaleName() == key.name && visible[(size_t)i]->mask() == (key.mask & 0xFFF)) {
+            setHighlight(i);
+            return;
+        }
+}
+
+std::optional<MusicalScale> KeyPicker::getHighlighted() const {
+    const auto visible = visibleItemRows();
+    if (visible.empty())
+        return std::nullopt;
+    return visible[(size_t)juce::jlimit(0, (int)visible.size() - 1, highlighted_)]->key();
+}
+
+// The highlighted key decides the keyboard strip and the Relative button, and (once the picker has settled) restarts
+// the audition wait.
+void KeyPicker::highlightChanged() {
+    const auto key = getHighlighted();
+    keyboard_->setKey(key.has_value() ? key : options_.current);
+    updateRelativeButton();
+    if (sameKey(key, lastHighlight_))
+        return;
+    lastHighlight_ = key;
+    if (!ready_)
+        return;
+    if (key.has_value())
+        startTimer(kAuditionDelayMs);
+    else
+        endAudition();
+}
+
+void KeyPicker::hoverRow(KeyPickerRow& row) {
+    const auto visible = visibleItemRows();
+    const auto it = std::find(visible.begin(), visible.end(), &row);
+    if (it == visible.end())
+        return;
+    setHighlight((int)(it - visible.begin()));
+    if (!auditioning_ && !isTimerRunning())
+        startTimer(kAuditionDelayMs);
+}
+
+void KeyPicker::timerCallback() {
+    stopTimer();
+    const auto key = getHighlighted();
+    if (!key.has_value() || !onAudition)
+        return;
+    auditioning_ = true;
+    onAudition(key);
+}
+
+void KeyPicker::endAudition() {
+    stopTimer();
+    if (!auditioning_)
+        return;
+    auditioning_ = false;
+    if (onAudition)
+        onAudition(std::nullopt);
+}
+
+// ---- Actions ----
+
+void KeyPicker::pick(std::optional<MusicalScale> key) {
+    auto callback = onPick;
+    endAudition();
+    dismiss();
+    if (callback)
+        callback(key);
+}
+
+std::optional<MusicalScale> KeyPicker::relativeTarget() const {
+    const auto key = getHighlighted();
+    const auto& basis = key.has_value() ? key : options_.current;
+    return basis.has_value() ? relativeKey(*basis) : std::nullopt;
+}
+
+void KeyPicker::updateRelativeButton() {
+    const auto target = relativeTarget();
+    relative_->setEnabled(target.has_value());
+    relative_->setButtonText(target.has_value() ? "Relative: " + keyDisplayName(*target)
+                                                : juce::String("Relative key"));
+}
+
+void KeyPicker::setStatus(const juce::String& text) { status_.setText(text, juce::dontSendNotification); }
+
+bool KeyPicker::sendKey(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::downKey) {
+        moveHighlight(1);
+        return true;
+    }
+    if (key == juce::KeyPress::upKey) {
+        moveHighlight(-1);
+        return true;
+    }
+    if (key == juce::KeyPress::returnKey) {
+        pickHighlighted();
+        return true;
+    }
+    return false;
+}
+
+// Test-mode state: whether a hovered key is being auditioned, which key, and the Preview sound the picker shows.
+void KeyPicker::fillTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("auditioning", auditioning_);
+    into.setProperty("auditionKey",
+                     auditioning_ && lastHighlight_.has_value() ? keyDisplayName(*lastHighlight_) : juce::String());
+    into.setProperty("previewSoundShown", isPreviewSoundShown());
+    into.setProperty("fitProjectShown", isFitProjectShown());
+    into.setProperty("fitProjectEnabled", isFitProjectEnabled());
+    into.setProperty("playScaleOn", isPlayScaleOn());
+    into.setProperty("playScaleEnabled", isPlayScaleEnabled());
+    into.setProperty("previewSound", isPreviewSoundShown() ? previewCombo_.getText() : juce::String());
+}
+
+// ---- Test seams ----
+
+void KeyPicker::setQuery(const juce::String& text) {
+    search_->setText(text, juce::dontSendNotification);
+    applyFilter();
+}
+
+std::vector<MusicalScale> KeyPicker::visibleKeys() const {
+    std::vector<MusicalScale> keys;
+    for (auto* row : visibleItemRows())
+        keys.push_back(row->key());
+    return keys;
+}
+
+std::vector<juce::String> KeyPicker::visibleGroupTitles() const {
+    std::vector<juce::String> titles;
+    for (size_t i = 0; i < rows_.size(); ++i)
+        if (rows_[i]->isHeader() && fades_.isShown(i))
+            titles.push_back(rows_[i]->getTitle());
+    return titles;
+}
+
+bool KeyPicker::isVisibleKeyTicked(int index) const {
+    const auto visible = visibleItemRows();
+    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isTicked();
+}
+
+juce::String KeyPicker::getStatusText() const { return status_.getText(); }
+bool KeyPicker::isRelativeEnabled() const { return relative_->isEnabled(); }
+juce::String KeyPicker::getRelativeText() const { return relative_->getButtonText(); }
+
+void KeyPicker::pickHighlighted() {
+    if (const auto key = getHighlighted())
+        pick(key);
+}
+
+void KeyPicker::clickRelative() {
+    if (const auto target = relativeTarget())
+        pick(target);
+}
+
+bool KeyPicker::isDetectShown() const { return detectButton_->isVisible(); }
+
+void KeyPicker::clickDetect() {
+    if (!detect)
+        return;
+    const auto key = detect();
+    if (!key.has_value()) {
+        setStatus("No notes to read yet");
+        return;
+    }
+    search_->setText({}, juce::dontSendNotification);
+    setRoot(key->rootPitchClass);
+    applyFilter();
+    highlightKey(*key);
+    setStatus("Detected: " + keyDisplayName(*key));
+}
+
+void KeyPicker::clickNoKey() { pick(std::nullopt); }
+
+void KeyPicker::clickFollow() {
+    if (follow_ != nullptr && follow_->onClick)
+        follow_->onClick();
+}
+
+// The root typed in the search field would win on the next keystroke, so a root chosen on the strip replaces it.
+void KeyPicker::clickKeyboardRoot(int pitchClass) {
+    const auto parsed = parseKeyQuery(search_->getText());
+    if (parsed.root >= 0)
+        search_->setText(parsed.scaleWords, juce::dontSendNotification);
+    setRoot(pitchClass);
+    highlightChanged();
+}
+
+void KeyPicker::hoverVisibleKey(int index) {
+    const auto visible = visibleItemRows();
+    if (index >= 0 && index < (int)visible.size())
+        hoverRow(*visible[(size_t)index]);
+}
+
+} // namespace synth::ui

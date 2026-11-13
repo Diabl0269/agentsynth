@@ -17,7 +17,7 @@ Agent Synth now supports external MIDI input devices, allowing you to connect ha
 
 ## External MIDI path: sample-accurate stamping
 
-`AudioEngine::handleIncomingMidiMessage` runs on the MIDI thread and forwards every `juce::MidiInput` message to two places: `AudioEngine`'s own `midiMessageCollector` (feeds the graph's audio-thread MIDI stream, drained in `audioDeviceIOCallbackWithContext`) and any `ExternalMidiModule` node whose device name matches the source, via `pushMidiMessage()`. `juce::MidiInput` messages carry a wall-clock timestamp in seconds (the `Time::getMillisecondCounterHiRes()*0.001` convention).
+`AudioEngine::handleIncomingMidiMessage` runs on the MIDI thread and forwards every `juce::MidiInput` message to two places: `AudioEngine`'s own `midiMessageCollector` (feeds the graph's audio-thread MIDI stream, drained in `audioDeviceIOCallbackWithContext`) and any `ExternalMidiModule` node whose device name matches the source, via `pushMidiMessage()`. `juce::MidiInput` messages carry a wall-clock timestamp in seconds (the `Time::getMillisecondCounterHiRes()*0.001` convention). A third, record-only copy of each note on/off goes into that device's lane in `MidiInputSources`, so a take can record one device only ([transport](../timeline/transport.md#recording-from-one-input)).
 
 `ExternalMidiModule` now owns its own `juce::MidiMessageCollector` (mirroring `AudioEngine`'s):
 - `prepareToPlay()` calls `collector.reset(sampleRate)`; the constructor also calls `reset(44100.0)` so a `processBlock()` call that lands before `prepareToPlay()` can't hit the collector's un-reset jassert.

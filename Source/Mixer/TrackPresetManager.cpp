@@ -59,7 +59,8 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     std::vector<NodeID> selection;
     NodeID stripNodeId; // this macro's own ChannelStripModule member, if any (defensive default -
                         // invalid NodeID{} when the macro somehow carries none).
-    for (const auto& uuid : macro->members) {
+    // descendantMembers, not macro->members: a child macro nested inside the channel travels with it.
+    for (const auto& uuid : macros.descendantMembers(channelMacroId)) {
         auto it = nodeForUuid.find(uuid);
         if (it == nodeForUuid.end())
             continue; // a stale member (its node is gone) — same "skip it" posture the rest of the

@@ -11,7 +11,13 @@
 #include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
-#include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/InsertGap/InsertGapKeyboard.h"
+#include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
+#include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // The dock's persisted-visible flag used to be keyed "timelinePanelVisible" (the dock only ever
@@ -58,10 +64,16 @@ void MainComponent::restorePanelPreferences() {
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
+    // The mixer's shared section heights persist app-wide next to the dock height.
+    bottomDock.getMixerPanel().setSettingsStore(appProperties.getUserSettings());
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
+    graphEditor.getSmartConnections().setSideBySideMode(SmartConnectionEngine::sideBySideModeFromString(
+        appProperties.getUserSettings()->getValue("smartConnectionSideBySide", "Always")));
+    graphEditor.cablesOnTop = appProperties.getUserSettings()->getBoolValue("cablesOnTop", false);
+    graphEditor.showCurvesOnCables = appProperties.getUserSettings()->getBoolValue("showCurvesOnCables", false);
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
     // Default ON -- see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
@@ -82,6 +94,13 @@ void MainComponent::restorePanelPreferences() {
     // Default ON (Cmd-drag reparents either way) — see PreferencesSettingsTab's toggle comment.
     graphEditor.setMacroDragWithoutCmdEnabled(
         appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true));
+    // Default OFF — see PreferencesSettingsTab's toggle comment.
+    graphEditor.setMoveMacroOnHullDragEnabled(
+        appProperties.getUserSettings()->getBoolValue("moveMacroOnHullDrag", false));
+    graphEditor.getMacroController().setPackMacrosOnCollapse(
+        appProperties.getUserSettings()->getBoolValue("packMacrosOnCollapse", true));
+    graphEditor.getMacroController().setTidyCanvasOnPack(
+        appProperties.getUserSettings()->getBoolValue("tidyCanvasOnPack", true));
     // Default ON — see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
     // rather than a tri-state preference (see docs/mixer/mixer.md#channels-follow-audio-not-tracks
     // "main workflow").
@@ -214,24 +233,26 @@ void MainComponent::wireAiChatAndAccount() {
     // The timeline is GA: the AI's timeline/automation authoring surface is on unconditionally
     // from first launch (no Preferences toggle left to react to).
     aiService.setTimelineToolsEnabled(true);
-    // The chat's Patch/Arrange selector reads this switch but gets no notification of it — the
-    // refreshModels() call above ran BEFORE the switch (and before the timeline context existed),
-    // so its gate check saw "off". Re-sync now that both are installed; same ownership shape as
-    // the refreshModels() ordering contract itself.
-    aiChatComponent.refreshModeControls();
 
     // The WRITE half. The service only ever holds the doc as const (it is a context reader),
     // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
     // objects every other timeline edit in this class goes through, which is what puts an AI-applied
     // batch on the one shared undo stack alongside the user's own edits. `this` is safe to capture:
     // aiService is a member destroyed with us, and it clears the callback with it.
+    // The host builds graph-side tracks (addInstrumentTrack) and wraps such a batch in one
+    // graph + timeline + macro undo step; it is declared before aiService, so it outlives it.
+    aiService.setTimelineOpsHost(&timelineOpsHost_);
+    // An AI edit waits for a project to finish loading, as a canvas edit does (same refusal, same status message).
+    aiService.setEditGate([this] { return graphEditor.getLoadReveal().refuseEdit(); });
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
-        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager);
+        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager, &timelineOpsHost_);
     });
 
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
     // state changes that arrive from it (sign-in surface for the AI panel).
     aiChatComponent.setAccountService(&accountService);
+    // The AI button's cable pulses while a request is out.
+    aiChatComponent.onWaitingChanged = [this](bool waiting) { toggleAiPanelButton.setBusy(waiting); };
     accountService.attemptSilentSignIn();
 
     aiService.addListener(this);
@@ -244,8 +265,43 @@ void MainComponent::wireGraphEditorCallbacks() {
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    // Auto-arrange gives each timeline track a row, in timeline order.
+    graphEditor.trackSourceOrder = [this] {
+        std::vector<juce::String> uuids;
+        for (const auto& track : timelineDoc.getTracks())
+            if (track.bindingUuid.isNotEmpty())
+                uuids.push_back(track.bindingUuid);
+        return uuids;
+    };
+    // The Poly pill switches a whole voice graph: it needs the tracks (to tell this track's modules from another's)
+    // and somewhere to say what it changed. The toast is a plain child laid out by resized(), raised when shown.
+    toast_ = std::make_unique<synth::ui::ToastComponent>();
+    addChildComponent(*toast_);
+    // A timeline hotkey that changes a setting says what it did (follow, follow mode, snap).
+    timelinePanel.onShowMessage = [this](const juce::String& message) { toast_->show(message); };
+    graphEditor.getPolyChain().trackProvider = [this] {
+        std::vector<synth::PolyTrackRef> tracks;
+        for (const auto& track : timelineDoc.getTracks())
+            if (track.bindingUuid.isNotEmpty())
+                tracks.push_back({track.bindingUuid, track.name});
+        return tracks;
+    };
+    // A Poly click moves state no doc notification reports; the track headers' Mono | Poly switch re-reads it.
+    graphEditor.getPolyChain().onVoiceGraphChanged = [this] {
+        for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+            if (auto* header = timelinePanel.getTrackHeaderAt(i))
+                header->refreshFromDoc();
+    };
+    graphEditor.getPolyChain().showToast = [this](const juce::String& message, const juce::String& actionLabel,
+                                                  std::function<void()> action, const juce::String& actionTooltip) {
+        toast_->show(message, actionLabel, std::move(action), actionTooltip);
+    };
     // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
+    // A cable that cannot land says why in a toast over the canvas, where the cursor is, not in the status bar.
+    graphEditor.onDropRefused = [this](const juce::String& reason) {
+        toast_->show(reason, {}, {}, {}, synth::ui::ToastComponent::Severity::error);
+    };
     // The canvas/module menus' "Make Channel" and "Duplicate into Channel" route here so their ONE
     // undo step also covers the timeline and runs the reconcile pass.
     graphEditor.onMakeChannelRequested = [this](juce::AudioProcessorGraph::NodeID source) {
@@ -254,6 +310,11 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onDuplicateIntoChannelRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
                                                          const juce::String& macroId) {
         duplicateIntoChannel(nodeId, macroId);
+    };
+    // Deleting a macro a track plays asks whether the track goes too (MainComponentMacroDelete.cpp).
+    graphEditor.getMacroController().onDeleteMacrosRequested = [this](const std::vector<juce::String>& macroIds,
+                                                                      bool wholeSelection) {
+        return deleteMacrosOfTracks(macroIds, wholeSelection);
     };
     // The channel macro's own right-click "Save Track as Preset.../Set as Default Track Preset" —
     // see handleMacroTrackPresetAction's own comment for why this resolves to the track-header path
@@ -269,8 +330,33 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
     };
+    // The mod dot's panel removes a source through the timeline's own Remove modulator, and shows one in the timeline.
+    graphEditor.getModDot().host.removeModulator = [this](const synth::ui::ModulatorInfo& modulator) {
+        removeModulator(modulator);
+    };
+    graphEditor.getModDot().host.appProperties = &appProperties;
+    graphEditor.getModDot().host.revealModulator = [this](const synth::ui::ModulatorInfo& modulator) {
+        revealModulatorInTimeline(modulator);
+    };
     // Hosted-plugin cards resolve their layout against this store; the member outlives graphEditor.
     graphEditor.setPluginCardLayoutStore(&pluginCardLayoutStore);
+    // Built-in cards resolve their per-type default against this store, and a default written from the
+    // layout editor re-lays out every card of that type.
+    moduleCardLayoutBinding_ = std::make_unique<synth::ModuleCardLayoutBinding>(graphEditor, moduleCardLayoutStore);
+    // A Drum Kit card's "Drum machine" button: enabled while a track plays the kit; the press shows the Timeline.
+    graphEditor.drumKit.openSoundPacks = [this] { launchSettingsWindow("Sound packs"); };
+    graphEditor.drumKit.hasTrack = [this](juce::AudioProcessorGraph::NodeID id) {
+        return trackPlayingNode(id).isValid();
+    };
+    graphEditor.drumKit.openDrumMachine = [this](juce::AudioProcessorGraph::NodeID id) { openDrumMachineForKit(id); };
+    graphEditor.drumKit.confirmHidePad = [this](juce::AudioProcessorGraph::NodeID id, int note,
+                                                const juce::String& name, std::function<void()> proceed) {
+        const int hits = synth::ui::drumHitsOnNote(timelineDoc, note, [this, id](synth::TrackId track) {
+            const auto* node = trackModuleNode(track);
+            return node != nullptr && node->nodeID == id;
+        });
+        synth::ui::askBeforeHidingDrum(*this, appProperties, name, hits, std::move(proceed));
+    };
     // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
     // shape — GraphEditor owns neither the module lookup nor the window manager.
     graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
@@ -278,10 +364,25 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
                 pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
     };
+    // "Add by moving a control in the plugin": the card turns the mode on or off and the window shows or hides its
+    // tab; Done, Esc or closing the window turn it off on the card, which then hides the tab the same way.
+    graphEditor.onPluginAddingControlsChanged = [this](juce::AudioProcessorGraph::NodeID nodeId, bool on) {
+        pluginWindowManager.setAddingControls(nodeId, on);
+    };
+    pluginWindowManager.onAddingControlsEnded = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        graphEditor.endPluginAddingControls(nodeId);
+        pluginWindowManager.setAddingControls(nodeId, false); // also when the node has no card to answer
+    };
     // Module-card right-click MIDI Learn -- all three forward to the one collaborator that owns
     // RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
     graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         return midiLearnController_.queryMappings(nodeId);
+    };
+    // The marker beside a knob whose parameter has an automation lane: the card asks once per tick.
+    graphEditor.onQueryAutomatedParamsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+        return node != nullptr ? timelineDoc.automatedParamIds(node->properties["uuid"].toString())
+                               : std::set<juce::String>();
     };
     graphEditor.onMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.arm(nodeId, paramId);
@@ -300,6 +401,8 @@ void MainComponent::wireGraphEditorCallbacks() {
                                           juce::AudioProcessorGraph::NodeID newNodeId) {
         midiLearnController_.retargetNode(oldNodeUuid, newNodeId);
     };
+    // "Replace with..." lists the scanned plugins beside the module types, the same list the library shows.
+    graphEditor.installedPluginsProvider = [this] { return getPluginScanService().getKnownPluginIdentities(); };
     graphEditor.onMidiRemoteDocRestored = [this] { midiLearnController_.publishAssignments(); };
     // "Edit MIDI assignment..." -- open the dock (ensureBottomDockOpen(), same "open before reveal"
     // shape as trackChannelLink_.setMixerRevealHook() above) before asking the panel to select the
@@ -310,7 +413,7 @@ void MainComponent::wireGraphEditorCallbacks() {
         const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
         if (nodeUuid.isEmpty())
             return;
-        ensureBottomDockOpen();
+        ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::MidiRemote);
         bottomDock.selectMidiRemoteAssignment(nodeUuid, paramId);
     };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
@@ -363,15 +466,19 @@ void MainComponent::wirePluginScanAndRecents() {
 
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
+        ensureCanvasShowing();
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
     };
     // Enter-to-insert on a keyboard-focused Module/Snippet row — the click-to-add path those two
     // row kinds otherwise lack (mouseDown starts a drag for them immediately; see
     // ModuleLibraryComponent's own comment on onModuleActivated/onSnippetActivated). Both land at
     // the viewport centre, mirroring onPluginActivated above and the "drop with no cursor position"
-    // fallback GraphEditor::itemDropped already uses.
+    // fallback GraphEditor::itemDropped already uses. With exactly one card selected, a module goes right after that
+    // card instead, the cards after it making room (synth::insertModuleAfterSelectedCard).
     moduleLibrary.onModuleActivated = [this](const juce::String& name) {
-        graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
+        ensureCanvasShowing();
+        if (!synth::insertModuleAfterSelectedCard(graphEditor, name))
+            graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
     };
     moduleLibrary.onSnippetActivated = [this](const juce::String& name) {
         if (!graphEditor.snippetProvider)
@@ -379,6 +486,7 @@ void MainComponent::wirePluginScanAndRecents() {
         auto snippet = graphEditor.snippetProvider(name);
         if (!snippet.isObject())
             return;
+        ensureCanvasShowing();
         graphEditor.insertSnippetAt(snippet, graphEditor.getViewportCentreInCanvasSpace());
     };
     refreshPluginLibrary();
@@ -487,6 +595,7 @@ void MainComponent::wireMidiRemoteEngine() {
         // every mapped parameter needs to re-announce its value to whatever is open now.
         remoteFeedbackOutputs_.closeAll();
         remoteEngine.resendFeedback();
+        timelinePanel.getRoutingPane().refresh(); // its Input row says whether the track's device is connected
     };
 
     // The mixer panel and transport bar are plain MainComponent members, already fully constructed
@@ -502,6 +611,7 @@ void MainComponent::wireMidiRemoteEngine() {
     midiLearnController_.setPickPassThrough(bottomDock.getTabButtons());
     bottomDock.onActiveTabChanged = [this] {
         midiLearnController_.refreshPickTarget();
+        fitMixerHostToSections(); // a no-op unless the tab that just became active is the Mixer
         // Rebuilds and layout the switch queued land after this call; re-measure once they have.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
             if (safe != nullptr)
@@ -599,7 +709,8 @@ void MainComponent::openMidiRemoteDevices() {
     deviceNames.reserve(profiles.size());
     for (const auto& profile : profiles)
         deviceNames.push_back(profile.input.name);
-    audioEngine.openMidiDevicesForRemote(deviceNames);
+    if (!synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray()))
+        audioEngine.openMidiDevicesForRemote(deviceNames);
 
     // Same seam wireMidiRemoteEngine() primed with Hosted's placeholder source above, and the one
     // AudioEngine::onMidiDevicesChanged (wired there too) re-runs on every later device-list
@@ -631,6 +742,11 @@ bool MainComponent::initialiseAudioEngine() {
         synth::isNoAudioDeviceLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray(),
                                      juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
 
+    // A dev/verification launch can silence the metronome click without closing the device (--mute-metronome).
+    audioEngine.getMetronome().setMuted(
+        synth::isMuteMetronomeRequested(juce::JUCEApplicationBase::getCommandLineParameterArray(),
+                                        juce::SystemStats::getEnvironmentVariable(synth::kMuteMetronomeEnvVar, {})));
+
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file
     // has no say over it.
@@ -656,7 +772,30 @@ bool MainComponent::initialiseAudioEngine() {
             }
         }
 
-        audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
+        // The input layout (pairs and names per interface) lives in its own key, apart from "audioDeviceState": that
+        // state is cleaned of inputs that are not in use, this one is never pruned.
+        auto& inputLayout = audioEngine.getInputLayoutStore();
+        inputLayout.loadJson(appProperties.getUserSettings()->getValue("audioInputLayout", juce::String()));
+        // A track's named input resolves against the open interface and its layout, so either changing moves what the
+        // track monitors and records from. Only a doc with a named input has anything to republish.
+        const auto republishNamedInputs = [this] {
+            for (const auto& track : timelineDoc.getTracks())
+                if (track.audioInput.kind == synth::AudioInputChoice::Kind::Device &&
+                    track.audioInput.inputName.isNotEmpty()) {
+                    audioEngine.publishTimeline(timelineDoc);
+                    break;
+                }
+            timelinePanel.refreshRoutingPane();
+        };
+        inputLayout.onChange = [this, republishNamedInputs] {
+            appProperties.getUserSettings()->setValue("audioInputLayout", audioEngine.getInputLayoutStore().toJson());
+            appProperties.saveIfNeeded();
+            republishNamedInputs();
+        };
+
+        audioEngine.onDeviceStateChanged = [this, republishNamedInputs](std::unique_ptr<juce::XmlElement> state) {
+            audioEngine.noteOpenInterface();
+            republishNamedInputs();
             // BEFORE the null check below: a device change that JUCE does not consider
             // an explicit setup still changes how many input channels exist, and the Audio Input
             // card's jacks (plus any cable on a jack that just vanished) have to follow it.
@@ -666,12 +805,16 @@ bool MainComponent::initialiseAudioEngine() {
             // (docs/layout/module-card.md): a device/rate/channel change is exactly what it reflects,
             // and it must not wait for a repaint that has no other reason to happen.
             graphEditor.refreshOutputDeviceInfo();
+            // An audio track's Input row names the device and says which inputs are on ("Turn on its inputs"
+            // lands here too), so the routing pane re-reads it.
+            timelinePanel.refreshRoutingPane();
 
             // Null until the user has explicitly chosen a device setup — see the declaration of
             // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
             // keeps the next launch on the inputs-off defaults.
             if (state == nullptr)
                 return;
+            audioEngine.rememberOpenDeviceSettings();
             appProperties.getUserSettings()->setValue("audioDeviceState",
                                                       state->toString(juce::XmlElement::TextFormat().singleLine()));
             appProperties.saveIfNeeded();
@@ -747,7 +890,22 @@ bool MainComponent::initialiseAudioEngine() {
     return true;
 }
 
+namespace {
+// The name a screen reader speaks when Tab lands on a focus region. Only fills a root that has no
+// title of its own, so a panel that names itself (the toolbar, the mixer) keeps its name.
+void nameFocusRegionRoot(juce::Component& root, const juce::String& title) {
+    if (root.getTitle().isEmpty())
+        root.setTitle(title);
+}
+} // namespace
+
 void MainComponent::registerFocusRegions() {
+    nameFocusRegionRoot(moduleLibrary, "Module library");
+    nameFocusRegionRoot(graphEditor, "Patch canvas");
+    nameFocusRegionRoot(timelinePanel, "Timeline");
+    nameFocusRegionRoot(aiChatComponent, "AI assistant");
+    nameFocusRegionRoot(graphEditor.getModMatrix(), "Mod matrix");
+    nameFocusRegionRoot(bottomDock.getMidiRemotePanel(), "Controllers");
     rebuildFocusRegions();
 
     // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
@@ -755,98 +913,4 @@ void MainComponent::registerFocusRegions() {
     // ONE-TIME registration: rebuildFocusRegions() re-runs on every detach/redock, but this
     // listener must not — see that method's own call site (bottomDock.onPanelDetachStateChanged).
     juce::Desktop::getInstance().addFocusChangeListener(this);
-}
-
-void MainComponent::rebuildFocusRegions() {
-    // ---- Focus-region registry ---------------------------------------------------------
-    // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
-    // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
-    // Order matches the Tab-cycle order docs/control/shortcuts.md documents: Toolbar, Library, Canvas,
-    // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
-    // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
-    // comment.
-    //
-    // Cleared and rebuilt on every call so re-running it after a detach/redock never duplicates
-    // entries -- see the class-level call site in wireTimelinePanel()
-    // (bottomDock.onPanelDetachStateChanged). Each hosted panel's ONE detached-window focus region
-    // is registered once on its host, not here -- see
-    // DetachablePanelHost::setHostedPanelFocusRegion.
-    focusRegions_.clear();
-
-    // The toolbar is chrome, always visible in both the app and plugin editor -- no closed state,
-    // same as the canvas below, and no direct-focus shortcut targets it (Tab-cycling only).
-    focusRegions_.addRegion({"toolbar", &toolbar, nullptr, nullptr});
-    focusRegions_.addRegion(
-        {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
-    // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
-    focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
-    // "timeline" and "mixer" share the SAME dock, one tab visible at a time -- isBottomDockVisible
-    // alone (the dock's own open/closed state) is no longer enough to say the Timeline region is
-    // open, since the dock can be open on the MIXER tab instead. Both regions' `open` re-select
-    // their own tab first (mirroring modMatrix's "no open state of its own to open" precedent for
-    // the case that's already showing) before falling through to the shared "open the dock if it's
-    // closed" step every panel toggle already does.
-    //
-    // Guarded -- a Timeline detached to its own window has nothing docked here to cycle to; Tab
-    // inside that window cycles its OWN one-region registry instead (see
-    // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
-    // The dock has a third tab (MidiRemote) -- excluding only Mixer here is not enough to say
-    // Timeline is the one actually showing, or this region reports open while the MidiRemote tab is
-    // the one on screen.
-    if (!bottomDock.getTimelineHost().isDetached())
-        focusRegions_.addRegion({"timeline", &timelinePanel,
-                                 [this] {
-                                     return isBottomDockVisible && !bottomDock.isMixerTabActive() &&
-                                            !bottomDock.isMidiRemoteTabActive();
-                                 },
-                                 [this] {
-                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
-                                     ensureBottomDockOpen();
-                                 }});
-    // The actual registration (open predicate + no `open` callback -- see MixerFocusRegion.h's own
-    // comment) lives in the free `registerMixerFocusRegion` helper so a future detached mixer
-    // window can register the same region against its own FocusRegionRegistry with a different
-    // `dockOpen` predicate instead of re-deriving this logic.
-    //
-    // Three placements, three shapes -- never reorder/rename "mixer" once registered:
-    //  - Tab: same guard shape as "timeline" above; registerMixerFocusRegion's own dockOpen AND
-    //    dock.isMixerTabActive() gate is exactly right here (the host is still docked, one tab
-    //    visible at a time).
-    //  - Window: the detached window's OWN one-region registry covers it instead (see
-    //    DetachablePanelHost::setHostedPanelFocusRegion) -- no MainComponent-level region while
-    //    detached, same as "timeline" while the Timeline is detached.
-    //  - Own panel: still the SAME top-level window (not a DetachedPanelWindow), so it needs its
-    //    OWN MainComponent-level region here too, or Tab-cycling in the main window can never
-    //    reach it -- registerMixerFocusRegion's helper hardcodes dock.isMixerTabActive(), which is
-    //    always false once the dock's Mixer tab is disabled for this placement (see
-    //    MixerPlacementController::applyPlacement), so this is a direct addRegion against
-    //    mixerPlacement_'s own visibility instead of that helper.
-    if (!bottomDock.getMixerHost().isDetached()) {
-        if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::Tab)
-            synth::ui::registerMixerFocusRegion(focusRegions_, bottomDock, [this] { return isBottomDockVisible; });
-        else if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
-            focusRegions_.addRegion({"mixer", &bottomDock.getMixerPanel(),
-                                     [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
-    }
-    // Same guard shape as "timeline" above -- MidiRemote has no placement variant (no
-    // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
-    // unless detached to its own window, in which case that window's own one-region registry covers
-    // it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
-    // wireTimelinePanelServicesAndShortcuts() below).
-    if (!bottomDock.getMidiRemoteHost().isDetached())
-        focusRegions_.addRegion({"midiRemote", &bottomDock.getMidiRemotePanel(),
-                                 [this] { return isBottomDockVisible && bottomDock.isMidiRemoteTabActive(); },
-                                 [this] {
-                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
-                                     ensureBottomDockOpen();
-                                 }});
-    focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
-                             [this] {
-                                 if (!isAiPanelVisible && toggleAiPanelButton.onClick)
-                                     toggleAiPanelButton.onClick();
-                             }});
-    // No `open` callback: no direct-focus shortcut is wired to the Mod Matrix, and Tab-cycling
-    // never opens a closed region — see FocusRegionRegistry::cycleFocus.
-    focusRegions_.addRegion(
-        {"modMatrix", &graphEditor.getModMatrix(), [this] { return graphEditor.isModMatrixVisible(); }, nullptr});
 }

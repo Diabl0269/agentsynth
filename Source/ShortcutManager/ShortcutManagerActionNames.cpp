@@ -3,10 +3,11 @@
 // (scripts/file-size-baseline.txt) as new actions are added -- see the header's own doc comment
 // on the declaration.
 #include "ShortcutManager.h"
+#include "ShortcutManager/SnapNoteValueActions.h"
 
 namespace {
 
-// The transport family and the selection-stepping actions, split out of getActionDescription to keep
+// The transport family, and the selection-stepping actions, split out of getActionDescription to keep
 // that function under the function-size cap. Empty when `actionId` is not one of them.
 juce::String transportAndSelectionActionName(const juce::String& actionId) {
     // The transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
@@ -27,6 +28,8 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Toggle Metronome";
     if (actionId == "transportReturnToStart")
         return "Return to Start";
+    if (actionId == "setSongKey")
+        return "Set Song Key";
     // Cursor moves and loop-locator jumps.
     if (actionId == "transportNudgeBackBeat")
         return "Move Cursor Back (Beat)";
@@ -45,6 +48,11 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Jump to Next Marker";
     if (actionId == "transportJumpToPreviousMarker")
         return "Jump to Previous Marker";
+    // Hold-to-glide cursor moves (Timeline category).
+    if (actionId == "timelineGlideBack")
+        return "Glide Cursor Back (Hold)";
+    if (actionId == "timelineGlideForward")
+        return "Glide Cursor Forward (Hold)";
     // Selection stepping.
     if (actionId == "selectNextModule")
         return "Select Next Module";
@@ -57,9 +65,313 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
     return {};
 }
 
+// The Drum Machine category, split out of getActionDescription to keep that function under the function-size
+// cap. Empty when `actionId` is not a Drum Machine action.
+juce::String drumMachineActionName(const juce::String& actionId) {
+    if (actionId == "drumMachineToggleHit")
+        return "Toggle Hit at Focused Step";
+    if (actionId == "drumMachineToggleAccent")
+        return "Toggle Accent at Focused Step";
+    if (actionId == "drumMachineLouder")
+        return "Make Focused Hit Louder";
+    if (actionId == "drumMachineSofter")
+        return "Make Focused Hit Softer";
+    if (actionId == "drumMachineCarryRight")
+        return "Carry the Focused Cell's Hit Right";
+    if (actionId == "drumMachineCarryLeft")
+        return "Carry the Focused Cell's Hit Left";
+    if (actionId == "drumMachinePlayClip")
+        return "Play or Stop the Clip";
+    if (actionId == "drumMachineRowShorter")
+        return "Shorten Focused Drum by a Step";
+    if (actionId == "drumMachineRowLonger")
+        return "Lengthen Focused Drum by a Step";
+    if (actionId == "drumMachineRowShorterBar")
+        return "Shorten Focused Drum by a Bar";
+    if (actionId == "drumMachineRowLongerBar")
+        return "Lengthen Focused Drum by a Bar";
+    return {};
+}
+
+// The EQ category: the Parametric EQ curve's keys. Empty when `actionId` is not an EQ action.
+juce::String eqActionName(const juce::String& actionId) {
+    if (actionId == "eqSelectPrev")
+        return "Select Previous EQ Band";
+    if (actionId == "eqSelectNext")
+        return "Select Next EQ Band";
+    if (actionId == "eqMoveLeft")
+        return "Move EQ Band Down in Frequency";
+    if (actionId == "eqMoveRight")
+        return "Move EQ Band Up in Frequency";
+    if (actionId == "eqMoveUp")
+        return "Raise EQ Band Gain";
+    if (actionId == "eqMoveDown")
+        return "Lower EQ Band Gain";
+    if (actionId == "eqWidthUp")
+        return "Widen EQ Band";
+    if (actionId == "eqWidthDown")
+        return "Narrow EQ Band";
+    if (actionId == "eqSolo")
+        return "Solo EQ Band";
+    if (actionId == "eqTypeMenu")
+        return "Open EQ Band Type Menu";
+    if (actionId == "eqAddBand")
+        return "Add EQ Band";
+    if (actionId == "eqRemoveBand")
+        return "Remove EQ Band";
+    if (actionId == "eqDuplicateBand")
+        return "Duplicate EQ Band";
+    return {};
+}
+
+juce::String mixerActionName(const juce::String& actionId) {
+    if (actionId == "mixerToggleInserts")
+        return "Show or Hide Mixer Inserts";
+    if (actionId == "mixerToggleSends")
+        return "Show or Hide Mixer Sends";
+    if (actionId == "mixerToggleEq")
+        return "Show or Hide Mixer EQ";
+    if (actionId == "mixerEnterRows")
+        return "Enter Mixer Insert, Send and EQ Rows";
+    if (actionId == "mixerOpenEq")
+        return "Open Mixer EQ";
+    if (actionId == "mixerOpenColour")
+        return "Change Mixer Channel Colour";
+    if (actionId == "mixerPanLeft")
+        return "Pan Mixer Channel Left";
+    if (actionId == "mixerPanRight")
+        return "Pan Mixer Channel Right";
+    if (actionId == "mixerToggleChannelHidden")
+        return "Hide or Show Mixer Channel";
+    if (actionId == "mixerToggleRowBypass")
+        return "Bypass Mixer Send or Insert";
+    if (actionId == "mixerMoveRowUp")
+        return "Move Mixer Send or Insert Up";
+    if (actionId == "mixerMoveRowDown")
+        return "Move Mixer Send or Insert Down";
+    if (actionId == "mixerFocusTopBar")
+        return "Focus the Mixer Top Bar";
+    if (actionId == "mixerNudgeFaderUp")
+        return "Raise Mixer Fader";
+    if (actionId == "mixerNudgeFaderDown")
+        return "Lower Mixer Fader";
+    return {};
+}
+
+// The card layout editor's list keys and the on-card editor's nudge keys. Empty when `actionId` is not one of them.
+juce::String layoutEditorActionName(const juce::String& actionId) {
+    if (actionId == "layoutEditorToggleShown")
+        return "Show or Hide the Control on the Card";
+    if (actionId == "layoutEditorMoveUp")
+        return "Move the Control Up";
+    if (actionId == "layoutEditorMoveDown")
+        return "Move the Control Down";
+    if (actionId == "layoutEditorRename")
+        return "Rename the Control";
+    if (actionId == "layoutEditorNudgeLeft")
+        return "Nudge the Control Left";
+    if (actionId == "layoutEditorNudgeRight")
+        return "Nudge the Control Right";
+    if (actionId == "layoutEditorNudgeUp")
+        return "Nudge the Control Up";
+    if (actionId == "layoutEditorNudgeDown")
+        return "Nudge the Control Down";
+    if (actionId == "layoutEditorNudgeLeftBig")
+        return "Nudge the Control Left by 8 Pixels";
+    if (actionId == "layoutEditorNudgeRightBig")
+        return "Nudge the Control Right by 8 Pixels";
+    if (actionId == "layoutEditorNudgeUpBig")
+        return "Nudge the Control Up by 8 Pixels";
+    if (actionId == "layoutEditorNudgeDownBig")
+        return "Nudge the Control Down by 8 Pixels";
+    if (actionId == "layoutEditorRemoveControl")
+        return "Remove the Control from the Card";
+    return {};
+}
+
+// The canvas's card keys (CanvasCardKeyboard). Empty when `actionId` is not one of them.
+juce::String canvasCardActionName(const juce::String& actionId) {
+    if (actionId == "canvasSelectCardLeft")
+        return "Select Card to the Left";
+    if (actionId == "canvasSelectCardRight")
+        return "Select Card to the Right";
+    if (actionId == "canvasSelectCardUp")
+        return "Select Card Above";
+    if (actionId == "canvasSelectCardDown")
+        return "Select Card Below";
+    if (actionId == "canvasMoveCardLeft")
+        return "Move Selected Cards Left";
+    if (actionId == "canvasMoveCardRight")
+        return "Move Selected Cards Right";
+    if (actionId == "canvasMoveCardUp")
+        return "Move Selected Cards Up";
+    if (actionId == "canvasMoveCardDown")
+        return "Move Selected Cards Down";
+    if (actionId == "canvasEnterCard")
+        return "Enter Selected Card";
+    return {};
+}
+
+// The actions on the focused track header row, split out of getActionDescription to keep that
+// function under the function-size cap.
+juce::String focusedTrackActionName(const juce::String& actionId) {
+    if (actionId == "samplerMapPlaySelected")
+        return "Play the selected recording";
+    if (actionId == "trackHeaderTogglePoly")
+        return "Poly On or Off for Focused Track";
+    // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
+    // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
+    // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
+    if (actionId == "timelineMuteFocusedTrack")
+        return "Mute Focused Track";
+    if (actionId == "timelineSoloFocusedTrack")
+        return "Solo Focused Track";
+    if (actionId == "timelineArmFocusedTrack")
+        return "Arm Focused Track";
+    if (actionId == "timelineMonitorFocusedTrack")
+        return "Monitor Focused Track";
+    if (actionId == "timelineDeleteFocusedTrack")
+        return "Delete Focused Track";
+    if (actionId == "timelineToggleTrackAutomation")
+        return "Show/Hide Track Automation";
+    if (actionId == "timelineDuplicateFocusedTrack")
+        return "Duplicate Focused Track";
+    if (actionId == "timelineCopyFocusedTracks")
+        return "Copy Selected Tracks";
+    if (actionId == "timelineSelectAllTracks")
+        return "Select All Tracks";
+    if (actionId == "timelinePasteTracks")
+        return "Paste Tracks";
+    if (actionId == "timelineShowFocusedTrackModule")
+        return "Show Focused Track Module";
+    if (actionId == "timelineToggleFocusedTrackPluginWindow")
+        return "Toggle Focused Track Plugin Window";
+    if (actionId == "timelineIncreaseTrackHeight")
+        return "Increase Track Height";
+    if (actionId == "timelineDecreaseTrackHeight")
+        return "Decrease Track Height";
+    if (actionId == "timelineResetTrackHeight")
+        return "Reset Track Height";
+    return {};
+}
+
+// The timeline's Draw shapes (Shift+1..6), split out of getActionDescription for the function-size cap.
+// Free is "Free Draw Shape" so it does not read as a free-standing verb in a filtered list.
+juce::String drawShapeActionName(const juce::String& actionId) {
+    if (actionId == "timelineShapeFree")
+        return "Free Draw Shape";
+    if (actionId == "timelineShapeLine")
+        return "Line Shape";
+    if (actionId == "timelineShapeSine")
+        return "Sine Shape";
+    if (actionId == "timelineShapeTriangle")
+        return "Triangle Shape";
+    if (actionId == "timelineShapeSaw")
+        return "Saw Shape";
+    if (actionId == "timelineShapeSquare")
+        return "Square Shape";
+    if (actionId == "timelineShapeMenu")
+        return "Open shape menu";
+    return {};
+}
+
+// The four views' own "show" actions (the three bottom-panel tabs and the canvas) and their "show in the main area"
+// twins.
+juce::String dockViewActionName(const juce::String& actionId) {
+    if (actionId == "showDockTab1")
+        return "Show Tab 1";
+    if (actionId == "showDockTab2")
+        return "Show Tab 2";
+    if (actionId == "showDockTab3")
+        return "Show Tab 3";
+    if (actionId == "focusMainView")
+        return "Focus Main View";
+    if (actionId == "swapDockTab1ToMain")
+        return "Show Tab 1 in the Main Area";
+    if (actionId == "swapDockTab2ToMain")
+        return "Show Tab 2 in the Main Area";
+    if (actionId == "swapDockTab3ToMain")
+        return "Show Tab 3 in the Main Area";
+    if (actionId == "toggleTimelinePanel")
+        return "Show Timeline Tab";
+    if (actionId == "toggleMixerPanel")
+        return "Show Mixer Tab";
+    if (actionId == "toggleMidiRemotePanel")
+        return "Show Controllers Tab";
+    if (actionId == "showCanvas")
+        return "Show Canvas";
+    if (actionId == "swapTimelineToMain")
+        return "Show Timeline in the Main Area";
+    if (actionId == "swapMixerToMain")
+        return "Show Mixer in the Main Area";
+    if (actionId == "swapMidiRemoteToMain")
+        return "Show Controllers in the Main Area";
+    if (actionId == "swapCanvasToMain")
+        return "Show Canvas in the Main Area";
+    if (actionId == "detachMainView")
+        return "Detach Main View";
+    return {};
+}
+
+// Add Track and the selected-module Rename / Replace actions.
+juce::String addRenameReplaceActionName(const juce::String& actionId) {
+    if (actionId == "foldAndPackMacros")
+        return "Fold and Pack Macros";
+    if (actionId == "openAddTrackMenu")
+        return "Add...";
+    if (actionId == "openFeedback")
+        return "Send Feedback";
+    if (actionId == "openCommandPalette")
+        return "Search Everything";
+    if (actionId == "renameSelectedModule")
+        return "Rename";
+    if (actionId == "renameSelectedModuleAlt")
+        return "Rename (second key)";
+    if (actionId == "replaceSelectedModule")
+        return "Replace Module With...";
+    return {};
+}
+
+// Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
+juce::String clipKeyboardActionName(const juce::String& actionId) {
+    if (actionId == "timelineClipPrevious")
+        return "Previous Clip";
+    if (actionId == "timelineClipNext")
+        return "Next Clip";
+    if (actionId == "timelineClipAbove")
+        return "Clip on Track Above";
+    if (actionId == "timelineClipBelow")
+        return "Clip on Track Below";
+    if (actionId == "timelineClipOpen")
+        return "Open Clip in Editor";
+    if (actionId == "timelineClipMoveEarlier")
+        return "Move Clip Earlier by One Grid Step";
+    if (actionId == "timelineClipMoveLater")
+        return "Move Clip Later by One Grid Step";
+    if (actionId == "timelineClipDuplicateLinked")
+        return "Duplicate Selected Clips as Linked Copies";
+    if (actionId == "timelineMakeSection")
+        return "Make Section from Range";
+    if (actionId == "timelineRenderToAudioTrack")
+        return "Render Range or Selected Clips to Audio Track";
+    return {};
+}
+
+// The Drum Machine, Mixer, Layout Editor and EQ categories, tried in turn.
+juce::String nonTimelineActionName(const juce::String& actionId) {
+    for (const auto& name : {drumMachineActionName(actionId), mixerActionName(actionId),
+                             layoutEditorActionName(actionId), eqActionName(actionId)})
+        if (name.isNotEmpty())
+            return name;
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
+    for (const auto& action : snapNoteValueActions())
+        if (actionId == action.actionId)
+            return juce::String("Set Grid to ") + action.label;
     if (actionId == "openSettings")
         return "Open Settings";
     if (actionId == "savePreset")
@@ -93,9 +405,13 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "collapseMacro")
         return "Collapse / Expand Macro";
     if (actionId == "locateMaster")
-        return "Locate Master";
+        return "Go to Output";
+    if (const auto name = addRenameReplaceActionName(actionId); name.isNotEmpty())
+        return name;
     if (actionId == "toggleLibrary")
         return "Toggle Module Library";
+    if (actionId == "toggleSoundBrowser")
+        return "Toggle Sound Browser";
     // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
     // binding a user already persisted under that key keeps working — the label is what
     // widened when the command grew per-surface routing, not the identity.
@@ -117,12 +433,10 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Play / Stop";
     if (actionId == "toggleBottomPanel")
         return "Toggle Bottom Panel";
-    if (actionId == "toggleTimelinePanel")
-        return "Show Timeline Tab";
-    if (actionId == "toggleMixerPanel")
-        return "Show Mixer Tab";
-    if (actionId == "toggleMidiRemotePanel")
-        return "Show Controllers Tab";
+    if (const auto name = dockViewActionName(actionId); name.isNotEmpty())
+        return name;
+    if (actionId == "toggleSidePane")
+        return "Show/Hide Side Pane";
     if (actionId == "zoomInHorizontal")
         return "Zoom In";
     if (actionId == "zoomOutHorizontal")
@@ -137,10 +451,20 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Previous Region";
     if (actionId == "focusTimeline")
         return "Focus Timeline";
+    if (actionId == "focusTransportBar")
+        return "Focus Transport Bar";
     if (actionId == "focusLibrary")
         return "Focus Library";
     if (actionId == "focusLibrarySearch")
         return "Focus Library Search";
+    if (actionId == "openContextMenu")
+        return "Open Context Menu";
+    if (actionId == "recolourFocusedItem")
+        return "Recolour Focused Item";
+    if (actionId == "soundPreviewToggle")
+        return "Play or Stop the Sound Preview";
+    if (const auto name = canvasCardActionName(actionId); name.isNotEmpty())
+        return name;
     if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())
         return name;
     if (actionId == "timelineSnapToggle")
@@ -151,6 +475,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Loop the Selection";
     if (actionId == "timelineFollowPlayheadToggle")
         return "Toggle Follow Playhead";
+    if (actionId == "timelineFollowModeCycle")
+        return "Cycle Follow Playhead Mode (Page / Smooth)";
     if (actionId == "timelineToolSelect")
         return "Select Tool";
     if (actionId == "timelineToolRange")
@@ -165,25 +491,26 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Mute Tool";
     if (actionId == "timelineToolDraw")
         return "Draw Tool";
+    if (const auto name = drawShapeActionName(actionId); name.isNotEmpty())
+        return name;
     // "Locator 1"/"Locator 2" rather than "loop start"/"loop end": the two are the same pair of
     // numbers, and every DAW that has this key calls them locators.
     if (actionId == "timelineJumpToLocator1")
         return "Jump to Locator 1";
     if (actionId == "timelineJumpToLocator2")
         return "Jump to Locator 2";
-    // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
-    // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
-    // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
-    if (actionId == "timelineMuteFocusedTrack")
-        return "Mute Focused Track";
-    if (actionId == "timelineSoloFocusedTrack")
-        return "Solo Focused Track";
-    if (actionId == "timelineArmFocusedTrack")
-        return "Arm Focused Track";
+    if (const auto name = focusedTrackActionName(actionId); name.isNotEmpty())
+        return name;
+    if (const auto clip = clipKeyboardActionName(actionId); clip.isNotEmpty())
+        return clip;
+    if (actionId == "timelineMoveLaneUp")
+        return "Move Automation Lane Up";
+    if (actionId == "timelineMoveLaneDown")
+        return "Move Automation Lane Down";
     // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
     // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
     if (actionId == "snapSetWhole")
-        return "Set Grid to 1";
+        return "Set Grid to 1/1";
     if (actionId == "snapSetHalf")
         return "Set Grid to 1/2";
     if (actionId == "snapSetQuarter")
@@ -223,10 +550,14 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "pianoRollQuantiseLength")
         return "Quantise Selected Note Lengths";
     if (actionId == "pianoRollQuantisePitches")
-        return "Quantise Note Pitches to Scale";
+        return "Fit Notes to Key";
     if (actionId == "pianoRollToggleScaleFilter")
         return "Show Only Scale Notes";
     if (actionId == "pianoRollToggleScalePanel")
         return "Toggle Scale Panel";
+    if (actionId == "pianoRollToggleVelocityLane")
+        return "Show or Hide Velocity Strip";
+    if (const auto other = nonTimelineActionName(actionId); other.isNotEmpty())
+        return other;
     return actionId;
 }

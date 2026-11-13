@@ -1,7 +1,11 @@
 // Concern: keyPressMatches' shifted-symbol normalization (the macOS peer bug it rescues from),
 // its use in getActionForKeyPress/getActionsForKeyPress, and the zoom/surface-default/display tests
 // that ride alongside it.
+#include "../../ShortcutDisplayText.h"
+#include "MacPeerKeyModel.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
+#include <iterator>
 
 TEST_F(ShortcutManagerTest, KeyPressMatchesRescuesShiftChordedSymbolsFromTheMacPeer) {
     const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
@@ -176,23 +180,87 @@ TEST_F(ShortcutManagerTest, ArrowKeysGetReadableDisplayStrings) {
     EXPECT_TRUE(
         ShortcutManager::keyPressToDisplayString(manager.getBinding("pianoRollTransposeOctaveDown")).contains("Down"));
     EXPECT_TRUE(
-        ShortcutManager::keyPressToDisplayString(manager.getBinding("pianoRollTransposeOctaveDown")).contains("Shift"));
+        synth::test::has(ShortcutManager::keyPressToDisplayString(manager.getBinding("pianoRollTransposeOctaveDown")),
+                         synth::test::modifierPrefix(juce::ModifierKeys::shiftModifier)));
 }
 
 // One keypress can now name more than one action (different categories). Command dispatch depends on
 // getActionsForKeyPress returning ALL of them so MainComponent can pick the one with a command.
 TEST_F(ShortcutManagerTest, GetActionsForKeyPressReportsEveryMatch) {
-    // Bare Left: the piano roll's nudge and nothing else, and NOT a command.
+    // Bare Left: the piano roll's nudge, the timeline's Previous Clip, the canvas's card step, the
+    // on-card layout editor's nudge and the EQ curve's band step, and NONE is a command.
     const juce::KeyPress bareLeft(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0);
     const auto matches = manager.getActionsForKeyPress(bareLeft);
-    EXPECT_EQ(matches.size(), 1);
+    EXPECT_EQ(matches.size(), 5);
+    EXPECT_TRUE(matches.contains("layoutEditorNudgeLeft"));
     EXPECT_TRUE(matches.contains("pianoRollNudgeLeft"));
-    EXPECT_EQ(AppCommands::getCommandForAction(matches[0]), AppCommands::kNoCommand);
+    EXPECT_TRUE(matches.contains("timelineClipPrevious"));
+    EXPECT_TRUE(matches.contains("canvasSelectCardLeft"));
+    EXPECT_TRUE(matches.contains("eqSelectPrev"));
+    for (const auto& id : matches)
+        EXPECT_EQ(AppCommands::getCommandForAction(id), AppCommands::kNoCommand);
 
     // Deliberately put a command action on the same key in another category and check both surface.
     manager.setBinding("autoArrange", bareLeft);
     const auto both = manager.getActionsForKeyPress(bareLeft);
-    EXPECT_EQ(both.size(), 2);
+    EXPECT_EQ(both.size(), 6);
     EXPECT_TRUE(both.contains("pianoRollNudgeLeft"));
+    EXPECT_TRUE(both.contains("timelineClipPrevious"));
     EXPECT_TRUE(both.contains("autoArrange"));
+}
+
+// Regression test for FRO1088: on Windows F2 is 0x10071, and folding its case through a 16-bit towlower made it 'q'
+// (0x71), so the Rename key fired on Q. The codes are spelled out so the check runs on every platform.
+TEST_F(ShortcutManagerTest, AnExtendedKeyNeverMatchesTheLetterInItsLowBits) {
+    const juce::KeyPress windowsF2(0x10071, juce::ModifierKeys::noModifiers, 0);
+    const juce::KeyPress letterQ('q', juce::ModifierKeys::noModifiers, 0);
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(windowsF2, letterQ));
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(letterQ, windowsF2));
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(windowsF2, windowsF2));
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(juce::KeyPress('Q', juce::ModifierKeys::noModifiers, 0), letterQ))
+        << "letters still match whatever their case";
+
+    manager.setBinding("renameSelectedModule", windowsF2);
+    EXPECT_NE(manager.getActionForKeyPress(letterQ), "renameSelectedModule");
+}
+
+// Regression test for FRO1414: Ctrl+Shift+2 reached no binding because the macOS peer dropped it.
+using synth::test::kCtrlShiftDigits;
+
+namespace {
+const char* const kSnapActions[] = {
+    "snapSetWhole",     "snapSetHalf",         "snapSetQuarter",     "snapSetEighth",
+    "snapSetSixteenth", "snapSetThirtySecond", "snapSetSixtyFourth", "snapSetHundredTwentyEighth"};
+}
+
+TEST_F(ShortcutManagerTest, OnlyCtrlShift2IsDroppedByTheMacPeer) {
+    for (size_t i = 0; i < std::size(kCtrlShiftDigits); ++i) {
+        const auto& event = kCtrlShiftDigits[i];
+        const bool dropped = !synth::test::keyPressAsThePeerBuildsIt(event, synth::test::ctrlShift()).has_value();
+        EXPECT_EQ(dropped, i == 1) << event.name;
+    }
+}
+
+TEST_F(ShortcutManagerTest, EveryGridChordArrivesAsThePlatformDeliversItAndMatchesItsAction) {
+    for (size_t i = 0; i < std::size(kCtrlShiftDigits); ++i) {
+        const auto& event = kCtrlShiftDigits[i];
+        const auto key = synth::test::keyPressTheAppReceives(event, synth::test::ctrlShift());
+        ASSERT_TRUE(key.has_value()) << event.name << " never reaches the app";
+        EXPECT_EQ(manager.getActionForKeyPress(*key), kSnapActions[i]) << event.name;
+    }
+}
+
+TEST_F(ShortcutManagerTest, RecoveryOnlyRebuildsWhatThePeerDrops) {
+    const auto ctrlShift = synth::test::ctrlShift();
+    // The peer builds a key for any non-NUL text: nothing to recover, so it is never delivered twice.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer('!', '!', ctrlShift).has_value());
+    // No Control: an empty text is not a Control chord's NUL.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer(0, '@', juce::ModifierKeys(juce::ModifierKeys::shiftModifier))
+                     .has_value());
+    // Nothing to rebuild a key from.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer(0, 0, ctrlShift).has_value());
+    const auto key = synth::recoverKeyPressDroppedByMacPeer(0, '@', ctrlShift);
+    ASSERT_TRUE(key.has_value());
+    EXPECT_EQ(key->getKeyCode(), static_cast<int>('@'));
+    EXPECT_EQ(key->getModifiers().getRawFlags(), ctrlShift.getRawFlags());
 }

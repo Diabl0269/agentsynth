@@ -1,0 +1,363 @@
+// Concern: TimelineRoutingPane's state -- deriving what to show from the document and the host, the children's
+// content and visibility, and the section layout. Painting is TimelineRoutingPanePaint.cpp; the clicks are
+// TimelineRoutingPaneActions.cpp.
+#include "TimelineRoutingPane.h"
+
+#include "UI/Timeline/TrackColour.h"
+
+namespace synth::ui {
+
+namespace {
+constexpr int kPad = 8;
+constexpr int kHeaderHeight = 34;
+constexpr int kHeadingHeight = 16;
+constexpr int kButtonHeight = 24;
+constexpr int kLinkHeight = 18;
+constexpr int kChipHeight = 22;
+constexpr int kNoteHeight = 42;
+constexpr int kRowGap = 4;
+constexpr int kEmptyLineHeight = 48;
+constexpr int kMeterHeight = 8;
+
+juce::String chevron() { return juce::String::fromUTF8("\xE2\x80\xBA"); }
+} // namespace
+
+TimelineRoutingPane::TimelineRoutingPane()
+    : showOnCanvas_("Show on canvas " + chevron())
+    , showInMixer_("Show in mixer " + chevron()) {
+    setComponentID("timelineRoutingPane");
+    // A control fading in or out resizes its row from the fade's progress, so the rows below slide.
+    for (auto* fade : {&canvasNodeFade_, &midiInputFade_, &audioInputFade_, &inputMeterFade_, &midiDestinationsFade_,
+                       &showOnCanvasFade_, &channelFade_})
+        fade->onFrame = [this] {
+            layoutSections();
+            repaint();
+        };
+    // The pane is its own focus region (Tab goes timeline -> routing pane -> scale pane): the root takes focus and
+    // Up/Down step through the controls below. A click never moves keyboard focus into it.
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(false);
+    setTitle("Track routing"); // until a track is shown and the title names it
+
+    canvasNode_.setTitle("Canvas node");
+    canvasNode_.setDescription("The node that plays this track. Opens a menu to choose a different one.");
+    canvasNode_.onClick = [this] { openBindingMenu(); };
+    midiInputDevice_.setDescription(
+        "The keyboard or controller this track records from. Opens a menu to choose one, or all of them.");
+    midiInputDevice_.onClick = [this] { openMidiInputDeviceMenu(); };
+    midiInputChannel_.setDescription("The MIDI channel this track records. Opens a menu to choose one, or any.");
+    midiInputChannel_.onClick = [this] { openMidiInputChannelMenu(); };
+    audioInput_.setDescription(
+        "The input this track records from. Opens a menu to choose one, the whole mix, or none.");
+    audioInput_.onClick = [this] { openAudioInputMenu(); };
+    monitorSwitch_.setTooltip("Hear this track's input live. Auto: while the track is armed and stopped or recording.");
+    monitorSwitch_.setDescription(
+        "Whether this track plays its input live: Auto, On or Off. Left and Right change it.");
+    monitorSwitch_.onChange = [this](int index) { applyMonitorChoice(index); };
+    midiDestinations_.setTitle("MIDI destinations");
+    midiDestinations_.setDescription("The instruments this track's notes are sent to. Opens a picker to change them.");
+    midiDestinations_.onClick = [this] { openMidiDestinationsPicker(); };
+    showOnCanvas_.setDescription("Selects the node that plays this track in the graph");
+    showOnCanvas_.onClick = [this] { showOnCanvas(); };
+    showInMixer_.setDescription("Finds this track's channel in the mixer");
+    showInMixer_.onClick = [this] { showInMixer(); };
+    // The channel row is read-only: the chip is only a name and a meter here, the link beside it does the finding.
+    channelChip_.setInterceptsMouseClicks(false, false);
+
+    // Every control is a keyboard stop, but a click on one never moves keyboard focus off the panel's focus root.
+    for (auto* link : {&showOnCanvas_, &showInMixer_}) {
+        link->setWantsKeyboardFocus(true);
+        link->setMouseClickGrabsKeyboardFocus(false);
+    }
+
+    // Children in visual (and so keyboard) order.
+    const std::initializer_list<juce::Component*> controls{&canvasNode_,       &showOnCanvas_, &midiInputDevice_,
+                                                           &midiInputChannel_, &audioInput_,   &monitorSwitch_,
+                                                           &midiDestinations_, &showInMixer_};
+    for (auto* child : controls)
+        addChildComponent(*child);
+    addChildComponent(inputMeter_);
+    addChildComponent(channelChip_);
+    for (auto* control : controls)
+        paneKeys_.attach(*control);
+    refresh();
+}
+
+TimelineRoutingPane::~TimelineRoutingPane() = default;
+
+bool TimelineRoutingPane::keyPressed(const juce::KeyPress& key) {
+    const bool plain = !key.getModifiers().isAnyModifierKeyDown();
+    if (plain && key.isKeyCode(juce::KeyPress::downKey))
+        return stepFocusWithin(*this, +1, nullptr);
+    return plain && key.isKeyCode(juce::KeyPress::upKey); // Up on the root has nowhere to go; the key stays here
+}
+
+void TimelineRoutingPane::setDoc(synth::TimelineDoc* doc) { doc_ = doc; }
+
+void TimelineRoutingPane::setHost(TrackHeaderHost* host) { host_ = host; }
+
+void TimelineRoutingPane::setTrack(synth::TrackId track) {
+    track_ = track;
+    refresh();
+}
+
+void TimelineRoutingPane::refresh() {
+    computeView();
+    applyViewToChildren();
+    layoutSections();
+    repaint();
+}
+
+// Two independent meters on the one tick: neither one's absence may stop the other.
+bool TimelineRoutingPane::tickMeter() {
+    if (host_ == nullptr)
+        return false;
+    bool repainted = false;
+    if (channelChip_.isVisible())
+        if (auto* link = host_->getChannelLinkSurface())
+            repainted = channelChip_.setMeterLevel(link->getChannelMeterPeak(track_));
+    if (inputMeter_.isVisible() && view_.meterCount > 0)
+        if (auto* inputs = host_->getAudioInputSurface()) {
+            const float left = inputs->readInputPeak(view_.meterFirst);
+            const float right = view_.meterCount > 1 ? inputs->readInputPeak(view_.meterFirst + 1) : 0.0f;
+            repainted = inputMeter_.setLevels(left, right) || repainted;
+        }
+    return repainted;
+}
+
+// ---- What to show -----------------------------------------------------------------------------
+
+void TimelineRoutingPane::computeView() {
+    view_ = {};
+    const auto* track = doc_ != nullptr ? doc_->getTrack(track_) : nullptr;
+    if (track == nullptr) {
+        view_.emptyLine = "Select a MIDI or audio track to see its routing.";
+        return;
+    }
+    if (track->kind == synth::TrackKind::Automation) {
+        view_.emptyLine = "Nothing to route on an automation track.";
+        return;
+    }
+
+    view_.hasTrack = true;
+    view_.name = track->name;
+    view_.isMidi = track->kind == synth::TrackKind::Midi;
+    view_.isAudio = track->kind == synth::TrackKind::Audio;
+    view_.kindBadge = view_.isMidi ? "MIDI" : "Audio";
+    int index = 0;
+    for (const auto& other : doc_->getTracks()) {
+        if (other.id == track->id)
+            break;
+        ++index;
+    }
+    view_.colour = resolveTrackColour(track->colourArgb, index, false);
+    computeCanvasNode(*track);
+    computeMidiInput(*track);
+    computeAudioInput(*track);
+    computeNotesAndChannel();
+}
+
+// Three states, like the header's binding chip: bound to a live node, never bound, or orphaned. The gone node's own
+// name is not knowable (the document keeps only its uuid), so the orphaned case names the kind of node instead.
+void TimelineRoutingPane::computeCanvasNode(const synth::Track& track) {
+    const juce::String kindNode = view_.isMidi ? "Track In" : "Track Audio";
+    if (track.bindingUuid.isEmpty()) {
+        view_.canvasNodeText = "Not connected";
+        view_.canvasNodeWarning = true;
+    } else if (track.orphaned) {
+        view_.canvasNodeText = kindNode + " (missing)";
+        view_.canvasNodeWarning = true;
+        view_.missingNote = juce::String(view_.isMidi ? "Its notes" : "Its clips") + " are kept. Pick a new " +
+                            kindNode + " to hear them again.";
+    } else {
+        const auto name = host_ != nullptr ? host_->getNodeDisplayName(track.bindingUuid) : juce::String();
+        view_.canvasNodeText = name.isNotEmpty() ? name : kindNode;
+        view_.bound = true;
+    }
+}
+
+void TimelineRoutingPane::computeNotesAndChannel() {
+    if (view_.isMidi) {
+        juce::StringArray connected;
+        if (host_ != nullptr)
+            for (const auto& option : host_->getMidiDestinationOptions(track_))
+                if (option.connected)
+                    connected.add(option.displayName);
+        view_.midiDestinationsText = connected.isEmpty() ? juce::String("None") : connected.joinIntoString(", ");
+    }
+
+    auto* link = host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
+    const auto info = link != nullptr ? link->getChannelInfo(track_) : TrackChannelLinkSurface::ChannelInfo{};
+    view_.hasChannel = info.hasChannel;
+    view_.channelText =
+        info.hasChannel ? juce::String::fromUTF8("Channel \xC2\xB7 ") + info.channelName : "No mixer channel";
+}
+
+void TimelineRoutingPane::applyViewToChildren() {
+    const bool routable = view_.hasTrack;
+    // Each control fades in or out as the selected track changes what is routable (animation.md); a fade-out keeps it
+    // on screen until it has ended.
+    canvasNodeFade_.setShown(routable);
+    midiInputFade_.setShown(routable && view_.isMidi);
+    audioInputFade_.setShown(routable && view_.isAudio);
+    inputMeterFade_.setShown(routable && view_.isAudio && view_.meterCount > 0);
+    midiDestinationsFade_.setShown(routable && view_.isMidi);
+    showOnCanvasFade_.setShown(routable && view_.bound);
+    channelFade_.setShown(routable && view_.hasChannel);
+    if (!routable)
+        return;
+
+    canvasNode_.setButtonText(view_.canvasNodeText);
+    canvasNode_.setWarning(view_.canvasNodeWarning);
+    canvasNode_.setTooltip(view_.canvasNodeWarning ? "This track plays nowhere yet. Click to choose a node."
+                                                   : "This track plays through '" + view_.canvasNodeText +
+                                                         "'. Click to choose a different node.");
+    applyMidiInputToChildren();
+    applyAudioInputToChildren();
+    midiDestinations_.setButtonText(view_.midiDestinationsText);
+    midiDestinations_.setTooltip("MIDI destinations: " + view_.midiDestinationsText + ". Click to change.");
+    if (view_.hasChannel) { // a chip fading out keeps the name it showed
+        channelChip_.setChannelName(view_.channelText);
+        // The chip takes no clicks and is no stop, so the link beside it tells a keyboard or screen-reader user which
+        // channel it finds.
+        showInMixer_.setDescription("Finds this track's channel, " + view_.channelText + ", in the mixer");
+    }
+    setTitle("Routing for " + view_.name);
+}
+
+// ---- Layout -----------------------------------------------------------------------------------
+
+// Sections stack top to bottom, each set off from the next by a 1 px border. The rectangles paint() needs are kept in
+// layout_; the children are placed directly.
+void TimelineRoutingPane::layoutSections() {
+    layout_ = {};
+    const int contentWidth = juce::jmax(0, getWidth() - 2 * kPad);
+    if (!view_.hasTrack) {
+        layout_.emptyLine = {kPad, kPad, contentWidth, kEmptyLineHeight};
+        setContentHeight(2 * kPad + kEmptyLineHeight);
+        return;
+    }
+
+    layout_.header = {0, 0, getWidth(), kHeaderHeight};
+    int y = kHeaderHeight + kPad;
+    // A row whose control is fading takes `p` of its height, so what is below slides instead of jumping.
+    const auto scaled = [](int n, float p) { return juce::roundToInt(static_cast<float>(n) * p); };
+    auto row = [&](int height) {
+        const juce::Rectangle<int> bounds(kPad, y, contentWidth, height);
+        y += height;
+        return bounds;
+    };
+    auto endSection = [&](float p = 1.0f) {
+        y += scaled(kPad, p);
+        layout_.dividers.push_back(y);
+        y += scaled(1 + kPad, p);
+    };
+
+    layout_.canvasNodeHeading = row(kHeadingHeight);
+    canvasNode_.setBounds(row(kButtonHeight));
+    y += kRowGap;
+    if (view_.missingNote.isNotEmpty()) {
+        layout_.missingNote = row(kNoteHeight);
+        y += kRowGap;
+    }
+    if (const float p = showOnCanvasFade_.progress(); p > 0.0f)
+        showOnCanvas_.setBounds(row(scaled(kLinkHeight, p)));
+    endSection();
+
+    if (const float p = midiInputFade_.progress(); p > 0.0f) {
+        layout_.inputAlpha = p;
+        layout_.midiInputHeading = row(scaled(kHeadingHeight, p));
+        midiInputDevice_.setBounds(row(scaled(kButtonHeight, p)));
+        y += scaled(kRowGap, p);
+        midiInputChannel_.setBounds(row(scaled(kButtonHeight, p)));
+        endSection(p);
+    }
+
+    y = layoutAudioInput(y, contentWidth);
+
+    if (const float p = midiDestinationsFade_.progress(); p > 0.0f) {
+        layout_.midiAlpha = p;
+        layout_.midiDestinationsHeading = row(scaled(kHeadingHeight, p));
+        midiDestinations_.setBounds(row(scaled(kButtonHeight, p)));
+        endSection(p);
+    }
+
+    layout_.mixerChannelHeading = row(kHeadingHeight);
+    if (const float p = channelFade_.progress(); p > 0.0f) {
+        channelChip_.setBounds(row(scaled(kChipHeight, p)));
+        y += scaled(kRowGap, p);
+        showInMixer_.setBounds(row(scaled(kLinkHeight, p)));
+    }
+    if (const float p = channelFade_.progress(); p < 1.0f) {
+        layout_.noChannelAlpha = 1.0f - p;
+        layout_.noChannel = row(scaled(kLinkHeight, 1.0f - p));
+    }
+    setContentHeight(y + kPad);
+}
+
+// The audio track's Input section: heading, combo, the not-connected note, the level meter, then the Monitor heading
+// and switch. Each part takes its fade's share of its height so what is below slides; returns the next free y.
+int TimelineRoutingPane::layoutAudioInput(int y, int contentWidth) {
+    const float p = audioInputFade_.progress();
+    if (p <= 0.0f)
+        return y;
+    const auto scaled = [](int n, float share) { return juce::roundToInt(static_cast<float>(n) * share); };
+    auto row = [&](int height) {
+        const juce::Rectangle<int> bounds(kPad, y, contentWidth, height);
+        y += height;
+        return bounds;
+    };
+    layout_.audioAlpha = p;
+    layout_.audioInputHeading = row(scaled(kHeadingHeight, p));
+    audioInput_.setBounds(row(scaled(kButtonHeight, p)));
+    if (view_.audioInput.note.isNotEmpty()) {
+        y += scaled(kRowGap, p);
+        layout_.audioInputNote = row(scaled(kNoteHeight, p));
+    }
+    if (const float m = inputMeterFade_.progress() * p; m > 0.0f) {
+        y += scaled(kRowGap, m);
+        inputMeter_.setBounds(row(scaled(kMeterHeight, m)));
+    }
+    y += scaled(kRowGap, p);
+    layout_.monitorHeading = row(scaled(kHeadingHeight, p));
+    monitorSwitch_.setBounds(row(scaled(kButtonHeight, p)));
+    y += scaled(kPad, p);
+    layout_.dividers.push_back(y);
+    return y + scaled(1 + kPad, p);
+}
+
+// A section appearing or going (a missing-node note, an audio track's missing Notes row) changes the height the
+// scroller has to offer; its fit() lays out again at the same width, so this settles in one pass.
+void TimelineRoutingPane::setContentHeight(int height) {
+    const bool changed = height != contentHeight_;
+    contentHeight_ = height;
+    if (changed && !fitting_)
+        scroller_.fit();
+}
+
+void TimelineRoutingPane::resized() { layoutSections(); }
+
+TimelineRoutingPane::Scroller::Scroller(TimelineRoutingPane& pane)
+    : pane_(pane) {
+    viewport_.setViewedComponent(&pane_, false);
+    viewport_.setScrollBarsShown(true, false);
+    viewport_.setScrollBarThickness(6);
+    addAndMakeVisible(viewport_);
+}
+
+// Width first (the layout, and so the content height, depends on it), then the height: at least the visible
+// height so the pane's background fills it, more when the sections need it and the scrollbar takes its strip.
+void TimelineRoutingPane::Scroller::fit() {
+    if (pane_.fitting_)
+        return;
+    pane_.fitting_ = true;
+    viewport_.setBounds(getLocalBounds());
+    const int visibleHeight = viewport_.getHeight();
+    pane_.setSize(viewport_.getWidth(), juce::jmax(visibleHeight, pane_.getHeight()));
+    if (pane_.getContentHeight() > visibleHeight)
+        pane_.setSize(viewport_.getWidth() - viewport_.getScrollBarThickness(), pane_.getHeight());
+    pane_.setSize(pane_.getWidth(), juce::jmax(visibleHeight, pane_.getContentHeight()));
+    pane_.fitting_ = false;
+}
+
+} // namespace synth::ui

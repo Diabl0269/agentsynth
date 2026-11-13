@@ -1,18 +1,92 @@
 # Chat Component
 
 `AIChatComponent` (`Source/UI/Assistant/AIChatComponent/`) is the chat UI for AI-assisted patching.
-It wires user prompts to `AIIntegrationService` and displays the conversation history with optional
-JSON patch previews.
+It wires user prompts to `AIIntegrationService` and displays the conversation, where an answer that
+changes the project carries one edit-plan card.
 
 The class is split by concern across that directory:
 
 | Unit | Concern |
 |------|---------|
 | `AIChatComponent.cpp` | Construction and destruction, the cancel/timeout watchdog, painting |
-| `AIChatComponentMessageList.cpp` | Message bubbles, patch and timeline cards, the `resized()` layout loop |
-| `AIChatComponentSending.cpp` | Sending and streaming a request, attaching its patch-diff preview |
+| `AIChatComponentMessageList.cpp` | Message bubbles, the `resized()` layout loop |
+| `AIChatComponentEditPlanCard.h/.cpp` | The edit-plan card and what its Apply does |
+| `AIChatComponentSending.cpp` | Routing a request, reading its answer, previewing the plan once |
 | `AIChatComponentProvider.cpp` | Model and provider selection |
 | `AIChatComponentHistory.cpp` | Local and cloud conversation history, the upsell and downgrade strips |
+| `AIChatComponentExport.cpp` | Export chat: the per-turn record and the JSON file it writes |
+
+## One answer, one card
+
+There is one input and no mode selector. `sendButtonClicked()` routes by what the message asks for:
+
+- With a timeline wired in (`AIIntegrationService::hasTimelineContext()`), an edit request goes
+  through `sendProjectMessage()`: hosted `project.generate`, or the local model with the combined
+  schema (`getPatchSchemaWithTimelineOps()`). An edit request is what `shouldUseStructuredOutput()`
+  classifies as one (a module name, or an edit or arrangement word such as add, track, automate,
+  modulate, notes) and, on a hosted provider, every message, since the hosted service has no
+  free-text chat.
+- A local conversational question goes through `sendMessage(text, cb, false)` and gets text back.
+- With no timeline (tests, a host without one) the request is the patch request it always was:
+  `sendMessage(text, cb, useStructuredOutput)`.
+
+While a project is opening (`ProjectLoadPipeline::onBusyChanged`, wired in `MainComponent` to
+`AIChatComponent::setProjectLoading`) Send is disabled with the tooltip "Available once the project has finished
+loading", and Enter in the input does not send either (the typed text stays). It comes back, with its normal tooltip,
+once the project has fully loaded; a finished load never re-enables Send behind a request still in flight.
+
+Every route shares the waiting state: the spinner, Cancel, the "AI is thinking..." line and the
+timeout watchdog start before the request goes out. A hosted plan takes 20 to 30 seconds (27 s
+measured on gpt-oss-20b), well inside the 4-minute default.
+
+The answer is read once (`handleResponse()` -> `extractEditPlan()`): a fenced ```json block, or the
+whole response when the request was structured. A JSON object is a plan only when it carries a patch
+key (`nodes`, `connections`, `remove`, `modulations`, `removeModulations`) or `timelineOps`; anything
+else, including JSON that is not a plan, is shown as text. A plan is kept as `MessageData::planJson`
+and previewed ONCE by `attachPlanPreview()` through `previewProjectEdit()`, which caches the card's
+lines (`ProjectEditResult::previewLines`: the patch phase, then the timeline ops) and the per-change
+details. History restore reads saved turns the same way, so an old patch-only answer comes back as
+the same card (the engine treats it as a plan with no ops).
+
+`EditPlanCard` (`AIChatComponentEditPlanCard.h/.cpp`), from the top:
+
+- the title **Edit plan** (`accent2`; `warning` when refused);
+- the preview, one line per phase, measured with `computeWrappedTextHeight()` so it never clips;
+- a row with **Show details** on the left and **Apply** on the right. Apply calls
+  `applyEditPlan()` -> `applyProjectEdit()` once: the whole plan as one undo step. A failure is
+  reported as an assistant bubble, never swallowed, Apply stays enabled, and there is no retry loop
+  (the plan was checked against the live project when it arrived). A refused plan's card reads "This plan was rejected and
+  was not applied: <reason>" and has no Apply;
+- **After Apply**: on success the button turns into a disabled **Applied** (tooltip "This plan was
+  applied; undo with Cmd+Z", accessible name "Edit plan applied", `textMuted` (the secondary text token) text on a
+  `surfaceHi` fill, no accent), and a second click does nothing. The state is
+  `MessageData::planApplied`, next to `planJson`, so `updateChatDisplay()` rebuilding the bubbles
+  keeps it. It is saved in the history: `reconstructMessageContent()` writes
+  `kPlanAppliedMarker` (an HTML comment line) after the plan's fenced block and
+  `replayMessagesFrom()` strips it, so a restored chat does not offer Apply again for a plan that
+  was applied. (The service's in-memory history that seeds a new chat at construction has no marker,
+  as it never leaves the session);
+- the thumbs rating, with the comment row once a rating is picked (recorded with the plan's JSON in
+  `PatchFeedbackStore`, as the patch card's was);
+- the details panel when open: the per-change list (`computeDiff` grouped for a merge,
+  `summarizePatch` for a replace), filled when it first opens and capped at 20,000 characters. The
+  plan's JSON is not shown (a full song's is megabytes and froze the UI thread when laid out); it is
+  only kept in `MessageData::planJson` for Apply and the feedback record.
+
+The card has no entrance animation, like the patch and timeline cards it replaces:
+`updateChatDisplay()` rebuilds every bubble on each redraw, so a tween would replay on every
+rating or apply.
+
+Tests: `Tests/UI/Assistant/AIChatComponent/AIChatComponentEditPlanTests.cpp`.
+
+## Song cards
+
+A whole-song request on a hosted provider shows a plan card and then a live build card instead of one edit-plan card;
+the flow, the routing rule (`shouldPlanSong`) and the 404 fallback are in [song steps](song-steps.md). The state of both
+cards is `MessageData::song` (a `SongSession`), because the bubbles are rebuilt on every redraw. While a build runs the
+chat is waiting (Cancel, Escape, read-only input) but shows the build card instead of the thinking line and the one-answer
+timeout does not apply; `songBuildIndex` names the message. Both cards are laid out by `SongCardBase::layoutFor`, the one
+geometry the bubble measures and places from.
 
 ## Response timing marker
 
@@ -56,11 +130,27 @@ via `dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())`, never raw `juce::Colours
 `AIChatComponent::computeWrappedTextHeight(font, text, width)` is the **required pattern** for any
 chat-panel element whose text length varies at runtime. It measures the actual wrapped height via
 `juce::GlyphArrangement` rather than estimating from a fixed line count or a fixed single-line
-height, which is what lets a long wrapped line — a "Preview unavailable" status, a long
+height, which is what lets a long wrapped line — a refused plan's reason, a long
 `hostedModeNotice` or `downgradeStripLabel` — get clipped.
-`PatchCard::getRequiredHeight(width)` and `TimelineCard::getRequiredHeight(width)` take the render
-width as a parameter for the same reason: the height calculation and the actual render width must
-always agree.
+`EditPlanCard::getRequiredHeight(width)` takes the render width as a parameter for the same reason:
+the height calculation and the actual render width must always agree.
+
+## Long messages fold
+
+Nothing in the chat is cut off with an ellipsis. A bubble shows at most six lines of text; a longer
+message (an assistant answer, or an error such as an unreachable provider) shows its first six lines
+and a "Show more" link (`TextLinkButton`), which unfolds the whole text and then reads "Show less". The
+text label inside the bubble always holds the whole message at its full measured height (no border, so
+the wrap matches the measurement) and a clipping parent shows only the first six lines while folded,
+so the label itself never truncates. A message of six lines or fewer has no link and no extra space.
+
+The fold state is `MessageData::textUnfolded`, so `updateChatDisplay()` rebuilds keep it; it is not
+saved with the history, so a restored chat starts folded. The link is a Tab stop with the accent focus
+ring, titled and tipped "Show the whole message" / "Show less of this message"; the bubble's screen-reader
+title is the whole text whether folded or not. The height change animates over 160 ms ease-out: the
+bubble holds a `fold fraction` driven by an `AnimationDriver`, and each frame re-runs the list layout,
+which asks the bubble for its interpolated height (the same list relayout the card's Show details uses,
+now animated). A bubble that is not on screen snaps.
 
 ## Debug logger registration
 
@@ -95,6 +185,53 @@ Appends to the debug console are coalesced and the console is length-bounded. Ho
 > per-connection. They run on the UI thread. A per-parameter log on preset load causes a
 > multi-second UI freeze; this is guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`. Keep
 > logging to errors and rare events only.
+
+## Screen reader
+
+The message list is a `ChatMessageViewport` (a `juce::Viewport`): a Tab stop with the accent focus
+ring that scrolls with the arrow, Page and Home/End keys, exposed as a **list** titled "Chat messages".
+Each `MessageBubble` is a **list item** whose title is the whole message, "You: ..." or "Assistant: ..."
+with a note when it carries an edit plan that can be applied (`ChatMessageAccessibilityText.h`);
+the label inside it is hidden from the screen reader so the text is not read twice, while a bubble's
+card and buttons stay separate controls. The edit-plan card is a **group** titled "Edit plan"; its
+preview label carries the text as its description. Its Apply button is a Tab stop with the accent
+focus ring, named "Apply edit plan" with the tooltip "Apply this answer to the project (one undo
+step)"; Show details, the thumbs and the comment field are named and tipped too.
+
+Tab order is the input, Send (or Cancel, in the same slot), the message list, then the cards inside
+it in message order (`setExplicitFocusOrder` 1 to 4 on the input row and the list; the rest of the
+chrome follows by position). The input box, Send, Cancel, New Chat, History, Export chat and the model picker all
+carry a screen-reader name and a tooltip, checked by the `AIChat` surface of the accessibility
+coverage test ([`docs/development/accessibility.md`](../development/accessibility.md)).
+
+## Exporting a chat
+
+**Export chat** sits in the top row beside New Chat and History. It opens a save dialog (default name
+`agent-synth-chat-<yyyy-mm-dd-hhmm>.json`) and writes the open conversation as a JSON file you can inspect or attach to
+a bug report. It is a Tab stop with the accent focus ring, named "Export chat", and disabled, with a tooltip saying to send
+a message first, while the conversation has no message.
+
+The chat keeps, per live turn, the raw data it already receives, in memory only (`ChatTranscript`, `Source/AI/ChatTranscript.h`):
+the song plan reply, every build stream event, the final envelope or the model's text, the apply result and its notes, and
+the project summary sent with an edit or patch request. A conversation restored from history has no such record, so its turns
+export with the request and the response (or the stored edit plan) only, and no `plan`, `steps` or `events`. New Chat and a
+restore start a fresh record.
+
+```json
+{ "format": "agentsynth-chat", "version": 1, "exportedAt": "<ISO 8601>", "app": { "version": "..." },
+  "provider": { "kind": "remote" | "ollama", "model": "..." },
+  "turns": [ { "at": "<ISO 8601>", "request": "...", "kind": "song" | "edit" | "patch" | "chat",
+               "plan": {}, "steps": [ { "id": "", "kind": "", "label": "" } ], "events": [ {} ],
+               "envelope": {}, "response": "...", "context": {},
+               "applied": { "ok": true, "error": "...", "notes": [ "..." ] } } ] }
+```
+
+`plan`, `steps` and `events` are only on song turns (`events` is every build stream event, in order); `envelope` is the final
+edit plan or patch as received, and `response` the raw answer text when there is no envelope; `context` is the project summary
+the request carried (edit and patch turns); `at` is left out for a restored turn. `applied.ok` is false for a plan that was
+not applied (with `error` saying why, "Not applied yet." until the card's Apply succeeds), a failed, cancelled or timed-out
+request, and a build that could not finish; a text answer counts as ok. The serializer is the pure
+`ChatTranscript::toJson`, unit-tested in `Tests/AI/ChatTranscriptTests.cpp`.
 
 ## Panel visibility persistence
 
@@ -140,8 +277,7 @@ and the picker is left showing stale and fresh entries together for the duration
 Locked by `AIChatComponentTest.RefreshModelsClearsStaleItemsBeforeSecondFetchResolves`.
 
 `refreshModels()` is also the resync point for
-[the hosted-mode privacy notice](providers.md#hosted-mode-disclosure) and for the Patch/Arrange
-selector's gate.
+[the hosted-mode privacy notice](providers.md#hosted-mode-disclosure).
 
 ## Auth token re-push contract
 

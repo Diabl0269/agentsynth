@@ -4,6 +4,8 @@
 
 #include "MacroCrossingAnimator.h"
 
+#include <algorithm>
+
 namespace {
 
 using graph_editor_types::CableId;
@@ -26,10 +28,6 @@ struct EndpointKey {
 
 EndpointKey srcKey(const CableId& id) noexcept { return {id.srcUid, id.srcPort, true}; }
 EndpointKey dstKey(const CableId& id) noexcept { return {id.dstUid, id.dstPort, false}; }
-
-juce::Point<float> lerpPoint(juce::Point<float> from, juce::Point<float> to, float t) noexcept {
-    return from + (to - from) * t;
-}
 
 } // namespace
 
@@ -107,6 +105,35 @@ bool MacroCrossingAnimator::arm(const std::vector<VisibleCable>& before, const s
     return live_;
 }
 
+// A cable with no earlier self has no "before" to match, so the slide's start is the drop point itself:
+// the port end emerges from where the cable was released (docs/layout/animation.md "Motion rules").
+bool MacroCrossingAnimator::armSlideFrom(const std::vector<VisibleCable>& before,
+                                         const std::vector<VisibleCable>& after, juce::Point<float> dropPoint,
+                                         const std::function<bool(uint32_t)>& isPortUid) {
+    tweens_.clear();
+    flashBounds_ = {};
+    progress_ = 0.0f;
+    live_ = false;
+
+    for (const auto& a : after) {
+        const bool existedBefore =
+            std::any_of(before.begin(), before.end(), [&a](const auto& b) { return b.id == a.id; });
+        const bool srcOnPort = isPortUid(a.id.srcUid);
+        const bool dstOnPort = isPortUid(a.id.dstUid);
+        if (existedBefore || (!srcOnPort && !dstOnPort))
+            continue;
+        CableTween tween;
+        tween.afterId = a.id;
+        tween.toP1 = a.p1;
+        tween.toP2 = a.p2;
+        tween.fromP1 = srcOnPort ? dropPoint : a.p1;
+        tween.fromP2 = dstOnPort ? dropPoint : a.p2;
+        tweens_.push_back(tween);
+    }
+    live_ = !tweens_.empty();
+    return live_;
+}
+
 void MacroCrossingAnimator::applyTweenAt(float t) noexcept { progress_ = juce::jlimit(0.0f, 1.0f, t); }
 
 void MacroCrossingAnimator::finish() noexcept {
@@ -123,8 +150,10 @@ void MacroCrossingAnimator::applyTo(std::vector<VisibleCable>& cables) const {
         for (const auto& tween : tweens_) {
             if (!(cable.id == tween.afterId))
                 continue;
-            cable.p1 = lerpPoint(tween.fromP1, tween.toP1, progress_);
-            cable.p2 = lerpPoint(tween.fromP2, tween.toP2, progress_);
+            // Offset from the live anchors rather than lerped between fixed ones: a crossing applied mid-drag
+            // keeps moving its module, and the cable end on that card must stay on it.
+            cable.p1 += (tween.fromP1 - tween.toP1) * (1.0f - progress_);
+            cable.p2 += (tween.fromP2 - tween.toP2) * (1.0f - progress_);
             break;
         }
     }

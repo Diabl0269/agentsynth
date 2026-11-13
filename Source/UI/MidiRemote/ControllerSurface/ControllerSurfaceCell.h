@@ -18,7 +18,9 @@
 // LinearHorizontal juce::Slider is the honest fallback for ControlKind::wheel.
 namespace synth::ui {
 
-class ControllerSurfaceCell : public juce::Component {
+class ControllerSurfaceCell
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     ControllerSurfaceCell();
     ~ControllerSurfaceCell() override;
@@ -68,6 +70,9 @@ public:
      *  delta and clamp once, rather than accumulating per-pixel drift. */
     std::function<void(int dCols, int dRows)> onDraggedByCells;
     std::function<void()> onDragEnded; // owner commits the move (updateProfile()) here, not per-step
+    /** Every drag event and the release, before anything moves: the owner keeps its edge scroll aimed at the pointer
+     *  (ControllerSurfaceEdgeScroll.cpp). `released` is true for the mouseUp. */
+    std::function<void(const juce::MouseEvent& event, bool released)> onPointer;
 
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;

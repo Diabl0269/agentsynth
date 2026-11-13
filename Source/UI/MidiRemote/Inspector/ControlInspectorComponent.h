@@ -1,6 +1,8 @@
 #pragma once
 
 #include "MidiRemote/RemoteModel.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/NonModalLabel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -67,6 +69,9 @@ public:
     /** "Forget" on the row for `assignmentId`. */
     std::function<void(const juce::String& assignmentId)> onForgetRequested;
 
+    /** Test seam: whether the control's fields are shown (or fading in) rather than gone (or fading out). */
+    bool areFieldsShownForTest() const { return fieldsFade_.isShown(); }
+
     /** Test seam: the model setControl() last built, for asserting selectedCount/hasControl
      *  without a real screenshot. */
     const ControlModel& getModelForTest() const noexcept { return model_; }
@@ -82,7 +87,7 @@ private:
 
     ControlModel model_;
     synth::Takeover defaultTakeover_ = synth::Takeover::scale;
-    juce::Label nameLabel_;
+    synth::ui::NonModalLabel nameLabel_;
     juce::ComboBox kindCombo_;
     juce::Label messageSpecLabel_;
     juce::TextButton relearnButton_{"Relearn"}; // disabled -- needs the panel-side learn primitive
@@ -95,6 +100,11 @@ private:
     juce::ToggleButton focusBankToggle_{"Follow selection (focus bank)"};
 
     juce::OwnedArray<AssignmentRow> assignmentRows_;
+
+    // The control's own fields fade in and out as one group when a control is selected or the selection
+    // empties (docs/layout/animation.md#fading-things-in-and-out); the name line stays.
+    FadeVisibility fieldsFade_{&kindCombo_,        &messageSpecLabel_, &relearnButton_,   &encodingCombo_,
+                               &autoDetectButton_, &buttonModeLabel_,  &focusBankToggle_, &learnTargetButton_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControlInspectorComponent)
 };

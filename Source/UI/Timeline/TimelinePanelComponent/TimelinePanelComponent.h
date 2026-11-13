@@ -2,21 +2,44 @@
 
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Transport/TransportNudge.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
+#include "UI/Layout/EdgeResizeHandle.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeOutPicture.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
+#include "UI/Layout/ScrollTween.h"
+#include "UI/Layout/SidePane/SidePane.h"
+#include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
-#include "UI/Timeline/AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawPenButton.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
+#include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
+#include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/FollowPlayheadButton.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
+#include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
+#include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
-#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
@@ -25,13 +48,24 @@ class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutMa
 namespace synth {
 class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
+namespace ui {
+class ClipSizingButton; // Forward declaration (Source/UI/Timeline/ClipSizingButton.h)
+class PopoverSlot;      // Forward declaration (Source/UI/Layout/PopupHost.h)
+class DrumMachineComponent;
+class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
+struct DrumMachineHost;
+class ModMatrixPicker;      // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+class TimelineSectionStrip; // Forward declaration (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h)
+template <typename Id>
+class ListSelectionModel; // Forward declaration (Source/UI/Timeline/ListSelectionModel.h): keeps its reach low
+} // namespace ui
 } // namespace synth
 
 // Bottom-docked timeline panel: ruler, grid, zoom/scroll, snap selector, click-to-seek/
 // drag-to-loop.
 //
 // MainComponent docks this full-width, above the status bar, toggled via the toolbar button /
-// Cmd+T shortcut and slid in/out through the same coordinated AnimationDriver that already
+// Cmd+J shortcut and slid in/out through the same coordinated AnimationDriver that already
 // animates the library/AI panels (see MainComponent::beginPanelSlide()). This class owns
 // none of that: it is layout + paint, with no timer and no animation of its own — updateFromTransport()
 // is driven by MainComponent's EXISTING 10 Hz timer, and the only timer anywhere under this panel
@@ -43,26 +77,21 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //     selector and synth::ui::TimelineTransportBar (play/stop/record/loop + BPM/time-sig editors
 //     + the bar:beat readout), left-aligned in the rest.
 //   - track-header column   (left,   Metrics::timelineTrackHeaderWidth)
-//   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
-//     docked at its top, a bar/beat grid painted directly by this component below it.
+//   - lanes/ruler area      (remainder) — TimelineSectionStrip (Metrics::timelineSectionStripHeight) and
+//     TimelineRulerComponent (Metrics::timelineRulerHeight) docked at its top, a bar/beat grid painted directly below.
 //
-// The panel has no resize affordance of its own: the bottom dock's one top-edge handle
-// (BottomDockComponent, FRO231) resizes the whole dock from every tab. The panel never sets its
-// own bounds.
-//
-// The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned
-// here and shared by reference with the ruler; getViewState() exposes it so every consumer maps
-// beats to pixels identically.
-//
-// Headless-safe: paint()/resized() dynamic_cast<AppLookAndFeel*> and fall back to literal
-// values/colours when the themed LnF is absent (test runner has no themed LnF installed).
+// The panel has no resize affordance of its own: the bottom dock's top-edge handle resizes the whole dock.
+// The single TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned here and shared by reference
+// with the ruler; getViewState() exposes it so every consumer maps beats to pixels identically.
+// Headless-safe: paint()/resized() fall back to literal colours when the themed LnF is absent.
 namespace synth::ui {
 
 class TimelinePanelComponent
     : public juce::Component
+    , public DockBackSlot
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
-    // FRO14: ONE shared timer for the header column's channel-chip meters -- see timerCallback()
+    // ONE shared timer for the header column's channel-chip meters -- see timerCallback()
     // below.
     , private juce::Timer {
 public:
@@ -70,10 +99,15 @@ public:
     ~TimelinePanelComponent() override;
 
     void paint(juce::Graphics& g) override;
-    // T159: focus-region outline, drawn OVER children -- see paintOverChildren()'s definition in
-    // TimelinePanelLayout.cpp for why.
+    // Focus-region outline, drawn OVER children (see its definition in TimelinePanelLayout.cpp).
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void focusLost(FocusChangeType) override;
+    KeyRing& getTopBarKeysForTest() noexcept { return *topBarKeys_; }
+    /** Focuses this panel and puts the top bar ring on the transport's Play button. False when no top bar stop shows.
+     */
+    bool focusTransportBar();
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key) = zoom around the
     // cursor. See mouseWheelMove()'s definition in TimelinePanelLayout.cpp for the full modifier
@@ -83,8 +117,7 @@ public:
     // Non-owning; may be null (tests, or before MainComponent finishes wiring).
     void setTransport(synth::TransportService* transport);
 
-    // Non-owning; may be null.
-    void setMetronome(synth::Metronome* metronome);
+    void setMetronome(synth::Metronome* metronome); // Non-owning; may be null.
 
     // Called from MainComponent's existing 10 Hz timer (only while this panel is visible); adds no
     // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the
@@ -131,6 +164,21 @@ public:
     EditTool getActiveTool() const noexcept { return activeTool_; }
     /** The strip button for a tool. Never null once the panel is constructed. */
     juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
+    /** Every button this panel owns that has a keyboard shortcut, with its action id: the hint overlay's targets. */
+    std::vector<std::pair<juce::Component*, juce::String>> getShortcutHintTargets();
+
+    // ---- Draw shapes and the lane range (TimelinePanelShapes.cpp) ----
+    void setDrawShape(DrawShape shape);
+    DrawShape getDrawShape() const noexcept { return drawShape_; }
+    /** Picks Draw and `shape`, and stamps it over the lane range when there is one: a shape button or key. */
+    void pickDrawShape(DrawShape shape);
+    /** The Draw tool button: shows the current shape and opens the flyout (corner click, hold or the shape-menu key).
+     */
+    DrawPenButton& getDrawPenButton() noexcept { return *penButton_; }
+    /** Opens the pen's shape flyout (a toggle: a second call closes it). */
+    void openShapeFlyout();
+    TimelineAutomationLanes& getAutomationLanes() noexcept { return automationLanes_; }
+    const TimelineAutomationLanes& getAutomationLanes() const noexcept { return automationLanes_; }
 
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // See TimelinePanelClipClipboard.cpp for why this panel owns the clipboard.
@@ -149,9 +197,9 @@ public:
     // the whole paste; the pasted clips end up selected. Returns false (no-op) when the clipboard is
     // empty, there's no doc, or every clip was skipped.
     bool pasteClipsAtPlayhead();
-    // doc_->duplicateClip() per selected clip, batched into one recordTimelineChange however many
-    // clips are selected; the new clips end up selected. Returns false when nothing is selected or
-    // there's no doc.
+    // repeatSelectedClips(1): one copy of the whole selection, starting where the selection ends, in
+    // one recordTimelineChange; the new clips end up selected. Returns false when nothing is
+    // selected or there's no doc.
     bool duplicateSelectedClips();
 
     // copySelectedClips() followed by deleting the selection, as ONE recordTimelineChange — so
@@ -178,49 +226,67 @@ public:
     // copyRange() then deletes the range as ONE recordTimelineChange. False when the copy fails.
     bool cutRange();
 
-    // ---- Piano roll ----
-    // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
-    // synth::ui::PianoRollComponent, editing `id`. A no-op if `id` does not resolve to a live
-    // clip (PianoRollComponent::openClip's own contract). Double-clicking a clip in the lane area
-    // calls this via the onClipDoubleClicked hook wired in the constructor.
+    // ---- Clip editors (piano roll, drum machine) ----
+    // Each swaps the lanes for an editor on clip `id` (a no-op if not a live clip); openClipEditor picks the drum
+    // machine on a Drum Kit track, else the roll. openDrumMachineOnTrack opens the clip under the playhead or adds a
+    // one-bar one.
+    void openClipEditor(synth::ClipId id);
     void openPianoRoll(synth::ClipId id);
-    // Swaps back to the clip lanes. Wired to PianoRollComponent::onCloseRequested (back button,
-    // Escape with nothing selected, or the edited clip disappearing from the doc) — also callable
-    // directly.
     void closePianoRoll();
+    void closeClipEditor(); // whichever editor is open
+    void openDrumMachine(synth::ClipId id);
+    bool openDrumMachineOnTrack(synth::TrackId trackId);
+    void closeDrumMachine();
+    bool clipEditorOpen() const noexcept; // THE test for "an editor covers the clip lanes"; never ask one editor alone
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
+    synth::ui::DrumMachineComponent& getDrumMachine() const noexcept;
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
-    // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
-    // resolveEditSurface()).
+    synth::ui::FadeOutPicture& getRollLeavingForTest() noexcept { return rollLeaving_; }
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
 
-    // ---- Automation strip ----
-    // Docked at the BOTTOM of the lanes region (gridLanesBounds_), toggled by lane selection: the
-    // clip-lane area (and the piano roll, sharing the same rect) shrink by exactly
-    // Metrics::timelineAutomationStripHeight while the strip is open. Right-click-any-knob
-    // (ModuleComponent -> GraphEditor::onAutomateParameterRequested -> MainComponent) is the other
-    // entry point into this — see MainComponent::automateParameter().
+    // ---- Automation lanes (folded out under their tracks -- TimelinePanelAutomation.cpp) ----
+    // Right-click-any-knob (ModuleComponent -> GraphEditor::onAutomateParameterRequested ->
+    // MainComponent::automateParameter) lands in showAutomationLane().
 
-    /** Opens the strip editing `id`. A no-op if `id` doesn't resolve to a live lane. */
+    /** Expands the lane's track, scrolls its row into view and focuses its editor. No-op for a lane
+     *  that doesn't resolve. */
     void showAutomationLane(synth::LaneId id);
-    /** Closes the strip (clip-lane area/piano roll return to full height). The strip's own close
-     *  button and this panel's Escape-when-idle (keyPressed below) both route here. */
-    void closeAutomationStrip();
-    bool isAutomationStripVisible() const noexcept { return automationStripVisible_; }
+    /** The lane last shown or focused; invalid when none. */
     synth::LaneId getSelectedAutomationLane() const noexcept { return selectedAutomationLane_; }
-    synth::ui::AutomationLaneEditor& getAutomationLaneEditor() noexcept { return automationEditor_; }
-    juce::ComboBox& getAutomationLaneCombo() noexcept { return laneCombo_; }
-    juce::ComboBox& getAutomationRecordModeCombo() noexcept { return recordModeCombo_; }
-    juce::Button& getAutomationCloseButton() noexcept { return automationCloseButton_; }
-    juce::Rectangle<int> getAutomationStripBounds() const noexcept { return automationStripBounds_; }
+    /** Folds a track's lanes open or closed (runtime-only, never saved). */
+    void setTrackAutomationExpanded(synth::TrackId track, bool expanded);
+    bool isTrackAutomationExpandedForTest(synth::TrackId track) const;
+    /** The lane's row over the lanes region, in this panel's coordinates; empty when not shown. */
+    juce::Rectangle<int> laneRowBoundsForTest(synth::LaneId lane) const;
+    /** The lane's editor / header while its row is shown, else nullptr. */
+    AutomationLaneEditor* laneEditorForTest(synth::LaneId lane) const;
+    AutomationLaneHeaderComponent* laneHeaderForTest(synth::LaneId lane) const;
+    /** Re-derives the modulator rows under every open lane from the graph. Call after any graph change. */
+    void refreshModulators();
+    /** The lane's `index`th modulator row / band while shown, else nullptr. */
+    ModulatorRow* modulatorRowForTest(synth::LaneId lane, int index) const;
+    ModulatorBand* modulatorBandForTest(synth::LaneId lane, int index) const;
+    /** That row over the lanes region, in this panel's coordinates; empty when not shown. */
+    juce::Rectangle<int> modulatorRowBoundsForTest(synth::LaneId lane, int index) const;
 
-    /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 param name"
-     *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
-     *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted plugin
-     *  instance parameter that has none yet -- `isAddEntry` distinguishes the two, `id` is only
-     *  meaningful when it's false. In track order then lane order, existing lanes first, then
-     *  add-lane entries -- index i is menu id i + 1; see collectAutomationLaneOptions()'s
-     *  definition in TimelinePanelStrips.cpp for why. */
+    // ---- Adding a lane from the timeline (TimelinePanelAddAutomation.cpp) ----
+    /** Opens the picker of `track`'s automatable parameters (the "+ Add automation..." row's and the header
+     *  menu's action), anchored on `anchor`; picking one creates the lane on that track and shows it. A
+     *  no-op without a host or a doc. */
+    void openAddAutomationPicker(synth::TrackId track, juce::Component& anchor);
+    /** Receives the picker instead of it being launched in a CallOutBox, which a headless test cannot
+     *  show. The hook owns the picker and may pick from it. Null = launch for real. */
+    void setAddAutomationPickerHookForTest(std::function<void(std::unique_ptr<ModMatrixPicker>)> hook) {
+        addAutomationPickerHook_ = std::move(hook);
+    }
+    /** The track's "+ Add automation..." row while its lanes are open, else nullptr. */
+    AddAutomationRow* addAutomationRowForTest(synth::TrackId track) const;
+    /** That row over the panel, in this panel's coordinates; empty when the track has none. */
+    juce::Rectangle<int> addAutomationRowBoundsForTest(synth::TrackId track) const;
+
+    /** One lane choice: an EXISTING doc lane labelled "NodeName \xC2\xB7 param name", or an
+     *  "Add lane..." entry for a parameter that has none yet (`isAddEntry`; `id` is meaningful only
+     *  when false). Existing lanes first in track order, then add entries; index i is choice i + 1. */
     struct AutomationLaneOption {
         synth::LaneId id;
         juce::String label;
@@ -229,16 +295,27 @@ public:
     };
     std::vector<AutomationLaneOption> collectAutomationLaneOptions() const;
 
-    // ---- Headless hooks (juce::PopupMenu::showMenuAsync's "doesn't run headlessly" idiom applies
-    // here too — tests drive the choice directly rather than through a live juce::ComboBox) ----
+    /** Applies choice `selectedId` (index + 1) of collectAutomationLaneOptions(): shows an existing
+     *  lane, or adds the offered lane first. The headless backing of an "Add lane" choice. */
     void applyAutomationLaneMenuChoice(int selectedId);
-    void applyAutomationRecordModeChoice(int selectedId);
 
-    // Escape closes the strip when it's open and idle -- see its definition in
-    // TimelinePanelShortcuts.cpp for how it interacts with AutomationLaneEditor's own Escape.
+    // The panel's own keys (tools, snap, loop, follow) -- see TimelinePanelShortcuts.cpp.
     bool keyPressed(const juce::KeyPress& key) override;
 
-    // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
+    // The cursor-glide keys are held, so their release has to be seen -- see TimelinePanelCursorGlide.cpp.
+    // Both return false: they only observe, so the event keeps bubbling.
+    bool keyStateChanged(bool isKeyDown) override;
+    void modifierKeysChanged(const juce::ModifierKeys& modifiers) override;
+
+    /** The cursor glide moves the transport through this state, so it accumulates with the cursor
+     *  nudge actions instead of fighting them. Non-owning; null reverts to the panel's own. */
+    void setTransportNudgeState(synth::TransportNudgeState* state) noexcept {
+        nudge_ = state != nullptr ? state : &ownNudge_;
+    }
+    synth::ui::TimelineCursorGlide& getCursorGlide() noexcept { return cursorGlide_; }
+    void setGlideClockForTest(std::function<double()> nowMs) { glideClockForTest_ = std::move(nowMs); }
+
+    // Trackpad pinch: plain = time and row height together, Option/Shift = rows only, Cmd = time only.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
 
     // Pure geometry getters — later tasks and tests build on the same rects rather than
@@ -247,6 +324,19 @@ public:
     // The WHOLE left column, including the "+ MIDI Track" strip at its top — the three regions
     // still tile the panel exactly (see TimelinePanelComponentTest.PanelRegionsTile).
     juce::Rectangle<int> getTrackHeaderBounds() const noexcept { return trackHeaderBounds_; }
+
+    // ---- Track-header column width (drag the seam; remembered in the user settings) ----
+    static constexpr int kMinTrackHeaderWidth = 168; // room for M/S/R, the Monitor slot and the fold arrow
+    static constexpr int kMaxTrackHeaderWidth = 420;
+    static constexpr int kTrackHeaderWidthKeyStep = 16;
+    /** Clamps, re-lays out; `persist` writes the user setting. */
+    void setTrackHeaderWidth(int width, bool persist);
+    int getTrackHeaderWidth() const;
+    /** +1 taller, -1 shorter, 0 default: one undo step through the host. */
+    void stepTrackHeight(synth::TrackId track, int direction);
+    static constexpr double kTrackHeightStepFactor = 1.25;
+    int defaultTrackHeaderWidth() const;
+    EdgeResizeHandle& getTrackHeaderWidthHandle() noexcept { return trackHeaderWidthHandle_; }
     juce::Rectangle<int> getLanesBounds() const noexcept { return lanesBounds_; }
 
     // ---- Snap / zoom / scroll: the view-state verbs the shortcut layer drives ----
@@ -297,51 +387,86 @@ public:
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
+    TimelineSectionStrip& getSectionStrip() noexcept; // defined in the .cpp: the strip header stays out of here
+    // Re-reads the "show the Sections strip" setting and re-lays out when the strip's height must change.
+    void refreshSectionsStripSetting();
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
-    juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
-    juce::TextButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
+    NoteLengthBox& getSnapCombo() noexcept { return snapCombo_; }
+    SnapToggleButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
     // ---- Follow playhead ----
-    // "Keep the playhead on screen while it plays", persisted under "timelineFollowPlayhead",
-    // default OFF -- see its definition in TimelinePanelLayout.cpp.
+    // "Keep the playhead on screen while it plays" (default OFF, TimelinePanelFollowMode.cpp); the mode and pin point
+    // are separate.
     void setFollowPlayheadEnabled(bool enabled);
-    bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
-    /** Test seam: no OS mouse source exists headlessly, so a test drives the click via
-     *  `getFollowPlayheadButtonForTest().onClick()` rather than synthesising a real click. */
-    juce::DrawableButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
+    bool isFollowPlayheadEnabled() const noexcept { return follow_.enabled; }
+    FollowMode getFollowMode() const noexcept { return follow_.mode; }
+    void setFollowMode(FollowMode mode);     // Page or Smooth; persisted, forwarded to the roll, tooltip refreshed
+    void setFollowPointPercent(int percent); // where Smooth pins the cursor (10-90), applied live
+    int getFollowPointPercent() const noexcept { return follow_.pointPercent; }
+    void refreshTransportTooltips() { refreshShortcutTooltips(); } // after a preference the tooltips quote changes
+    /** A short message when a KEY changes a timeline setting (follow, follow mode, snap); a click says nothing. */
+    std::function<void(const juce::String&)> onShowMessage;
+    /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
+    FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
+    ClipSizingButton& getClipSizingButton() noexcept {
+        return *clipSizingButton_;
+    } // the edit-tool strip's Sizing field
 
-    /** How many times updateFromTransport() has been called. Test hook: it is what proves the
-     *  10 Hz poll never reaches a hidden panel. */
+    /** How many times updateFromTransport() has run; proves the 10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
+    // ---- Side pane: the selected track's routing (docs/timeline/tracks.md#routing-from-the-side-pane) ----
+    // A child of this panel, so it travels with the panel into a detached window; closed until the user opens
+    // it, then remembered per tab ("timeline") -- see TimelinePanelSidePane.cpp.
+    SidePane& getSidePane() noexcept { return sidePane_; }
+    SidePaneToggleButton& getSidePaneButton() noexcept { return sidePaneButton_; }
+    TimelineRoutingPane& getRoutingPane() noexcept { return routingPane_; }
+    /** Shows or hides the side pane; `forceOpen` only ever opens it. */
+    bool toggleSidePane(bool forceOpen = false);
+    /** Points the routing pane at the selected track (the focused header row) and re-reads it -- called on a
+     *  selection, document or graph change. */
+    void refreshRoutingPane();
+    /** The selected track: the header row that was last clicked or moved to with the arrow keys; invalid when none. */
+    synth::TrackId getSelectedTrackId() const;
+    /** Every selected track, in timeline order. A view-state selection (never on TimelineDoc, never undoable); the
+     *  primary track (getSelectedTrackId()) may be absent after a Cmd/Ctrl-click took it out. */
+    std::vector<synth::TrackId> selectedTracks() const;
+    bool isTrackSelected(synth::TrackId id) const;
+    /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
+    void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
+    void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
+
     // ---- Track headers ----
-    // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
-    // for "dismissed".
+    // Menu ids for the Add menu; from 1 because juce::PopupMenu reserves 0 for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
     // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
-    // It shares this menu because "+ Track" is where a user reaches for "add something to the
+    // It shares this menu because "Add Track" is where a user reaches for "add something to the
     // arrangement", and a second button for one item would not earn its pixels.
     static constexpr int kAddMarkerMenuId = 3;
-    // T183 (P9-3b): the Instrument submenu's three audio-producing MIDI instrument choices — see
-    // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these three (not
+    // The Instrument submenu's audio-producing MIDI instrument choices — see
+    // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these (not
     // every isMidiInstrumentType() member: Poly MIDI/Sequencer/Poly Sequencer don't produce audio).
     static constexpr int kAddInstrumentOscillatorMenuId = 4;
     static constexpr int kAddInstrumentWavetableMenuId = 5;
     static constexpr int kAddInstrumentSamplerMenuId = 6;
-    // FRO48 (P9-3k): poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
-    // parameter, so it has no poly entry.
+    static constexpr int kAddInstrumentDrumKitMenuId = 12; // no poly entry either: a kit has no poly parameter
+    static constexpr int kAddInstrumentPluckMenuId = 13;   // Pluck and Mallet run eight voices of their own,
+    static constexpr int kAddInstrumentMalletMenuId = 14;  // so neither has a poly entry
+    static constexpr int kAddInstrumentNoiseMenuId = 15;   // Noise is always built mono: no poly entry
+    // Poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
+    // parameter, so it has no poly entry (nor does the Drum Kit).
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing
+    // docs/mixer/mixer.md#creating-channels-in-an-existing-project: "Create channels" for existing
     // projects. Lives on this same menu rather than a per-track context menu or a mixer panel — there is no mixer panel
-    // yet (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives (Audio Track,
+    // yet, and "Add Track" is already where every other channel-creating action in this doc lives (Audio Track,
     // Instrument Track); a project-wide sweep belongs beside them, not off a single track header, since it acts on
     // every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
-    // FRO42 (P9-3h): the Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
+    // The Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
     // in place of an empty/scanning submenu (never actually selectable — JUCE never delivers a
     // disabled item's id — but named for clarity and so applyAddTrackMenuChoice has an explicit
     // no-op to ignore rather than falling through by luck). Every real plugin entry's id is
@@ -355,12 +480,12 @@ public:
     // opening and the click landing can silently change what index N means, resolving the click
     // against a plugin the menu never actually showed at that row. Resolving against a snapshot
     // taken when the menu was built (what the user is actually looking at) closes that: see
-    // applyAddTrackMenuChoice. Deliberately 10, not 9 — FRO26's kCreateChannelsMenuId already
-    // claims 9 on this same flat "+ Track" menu, and every flat id here must stay <
+    // applyAddTrackMenuChoice. Deliberately 10, not 9 — kCreateChannelsMenuId already
+    // claims 9 on this same flat "Add Track" menu, and every flat id here must stay <
     // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
     static constexpr int kAddInstrumentPluginNoneMenuId = 10;
     static constexpr int kAddInstrumentPluginMenuIdBase = 100;
-    // FRO13 (P9-7, docs/mixer/track-presets.md): "Insert Track Preset from File..." (next free fixed id
+    // docs/mixer/track-presets.md: "Insert Track Preset from File..." (next free fixed id
     // after 10), and the two grouped preset submenus (Audio/Instrument), each `base + index` into
     // its own snapshot vector below — same click-time-collector hazard as the plugin list
     // (a preset can be saved/deleted between menu-open and click), same snapshot-resolution fix.
@@ -369,26 +494,36 @@ public:
     static constexpr int kInsertTrackPresetFromFileMenuId = 11;
     static constexpr int kAddTrackPresetAudioMenuIdBase = 5000;
     static constexpr int kAddTrackPresetInstrumentMenuIdBase = 6000;
-    static constexpr int kAddTrackPresetBusMenuIdBase = 7000; // FRO297, same contract as the two above
+    static constexpr int kAddTrackPresetBusMenuIdBase = 7000; // same contract as the two above
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
      *  installed. Returns the new id, or an invalid one when there is no doc or the doc refused
-     *  (kMaxMarkers). Public because it IS the "+ Track" menu's Add Marker action and the seam a
+     *  (kMaxMarkers). Public because it IS the "Add Track" menu's Add Marker action and the seam a
      *  test drives instead of the async menu. */
     synth::MarkerId addMarkerAtPlayhead();
 
-    juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
+    ToolbarButton& getAddTrackButton() noexcept { return addTrackButton_; }
+    /** The "Show button labels" preference for Add Track and Snap: names beside the icons, or icons only. */
+    void setToolbarLabelsShown(bool shown);
 
-    /** Applies an "+ Track" menu choice. Exposed as the headless test seam for a menu that never
+    /** Applies an "Add Track" menu choice. Exposed as the headless test seam for a menu that never
      *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
-    // T166: the Viewport's content component — a pixel-level test seam for the track-reorder drop
-    // indicator (TrackHeaderList::paintOverChildren), which a synthesized-event drag can otherwise
-    // only assert through side effects (the eventual doc mutation), never through what actually
-    // got painted. See createComponentSnapshot() at the call site.
+    // The Viewport's content component: a pixel-level test seam for what a track-reorder drag paints.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
+    /** Lets the undo/redo row glide run on an off-screen panel (no peer, so isShowing() is false). */
+    void forceTrackGlideForTest(bool on) noexcept { trackGlideForcedForTest_ = on; }
+    /** One frame of the row glide, as the VBlank pump would run it; the setter below swaps its clock (empty: real). */
+    void advanceTrackGlideForTest() { onTrackReorderFrame(); }
+    void setTrackGlideClockForTest(std::function<double()> nowMs) { trackReorder_.setClock(std::move(nowMs)); }
+    /** True from the first drag step of a track reorder until its drop has finished settling. */
+    bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
+    /** The Esc key press a real track drag would receive from the window. */
+    bool sendEscapeToTrackDragForTest() {
+        return trackCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
+    }
     int getTrackHeaderCount() const noexcept { return trackHeaderList_.headers.size(); }
     /** Header for the track at `index` in the doc's track order, or nullptr when out of range. */
     TimelineTrackHeaderComponent* getTrackHeaderAt(int index) const noexcept {
@@ -397,17 +532,54 @@ public:
                    : nullptr;
     }
 
-    // ---- T161: focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
+    // ---- focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+    /** Track header rows constructed since this panel was made (a row kept across a sync is not counted). */
+    int getTrackHeadersBuiltForTest() const noexcept { return trackHeadersBuilt_; }
+    /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "Add Track".
+     */
+    juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
+    /** Delete and undo motion (TimelinePanelTrackListMotion.cpp). Call noteTracksLeaving() before a change that may
+     *  remove tracks (a delete, or an undo/redo that drops one) and finishTrackListChange() once the change and every
+     *  re-sync it caused have landed: a removed row shrinks away and the rows below close the gap; a row an undo
+     *  brings back is made room for, grows back and gets a fading outline. Both are no-ops off screen.
+     *  armTrackInsertMotion() before an add or a duplicate makes the new row grow in the same way (the rows below make
+     *  room first); the arm lasts until the next finishTrackListChange(). */
+    void noteTracksLeaving();
+    void armTrackInsertMotion() noexcept { trackInsertArmed_ = true; }
+    void finishTrackListChange();
+    /** `copy` is a duplicate of `source`: its row comes out of the source row (and, on undo, goes back into it) in one
+     *  movement with the rows below, instead of growing out of nothing. Call before finishTrackListChange(). */
+    void noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source);
+    synth::ui::ExitEnterListMotion& getTrackListMotionForTest() noexcept { return trackListMotion_; }
+    void focusTrackRow(synth::TrackId id);
+    bool handleRootFocusKey(const juce::KeyPress& key);
 
-    /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
+    // ---- "Add Track" keyboard stop (TimelinePanelTrackHeaders.cpp) ----
+    // The last stop of the track-header column; rationale beside the definitions.
+    /** Message thread only. Moves keyboard focus to "Add Track". */
+    void focusAddTrackButton();
+    /** True while "Add Track" holds keyboard focus (or, in test mode, was last focused through this panel). */
+    bool isAddTrackButtonFocused() const;
+    /** Keys for "Add Track" while it holds focus; false for any other focus owner or an unclaimed key. */
+    bool handleAddTrackButtonKey(const juce::KeyPress& key);
+    /** The "Add Track" picker's close callback (rationale beside the definition). */
+    void finishAddTrackMenu(int result, bool openedFromKeyboard);
+    /** Focuses "Add Track" and opens its searchable picker, as the Add Track shortcut does. Message thread only. */
+    void openAddTrackMenuFromShortcut();
+    /** Headless stand-in for real focus (no native window): focus moves are recorded, not grabbed. */
+    void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
+
+    /** Builds the "Add Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
      *  submenus). Triggers ensureInstrumentPluginsScanned() on the host first (openAddTrackMenu()'s
      *  own contract), so the Plugin submenu this builds reflects a scan that has at least started. */
     juce::PopupMenu buildAddTrackMenu();
+    /** buildAddTrackMenu() plus the "Create Channels" row: every track row the Add list offers. */
+    juce::PopupMenu buildAddMenuWithChannels();
 
     /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call --
      *  see kAddInstrumentPluginNoneMenuId's comment for why applyAddTrackMenuChoice resolves a
@@ -416,13 +588,13 @@ public:
     std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
-    /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
-     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`. Protected virtual so a
-     *  headless test can override it rather than crash on the display-less menu window -- see its
-     *  definition in TimelinePanelTrackHeaders.cpp. */
+    /** Opens the Add button's list: the host's (tracks, modules, presets) when it offers one, else the track-only
+     *  picker. Protected virtual so a headless test can override it rather than crash on the display-less window. */
     virtual void openAddTrackMenu();
 
 private:
+    void showAddTrackPickerFor(bool fromKeyboard);
+
     // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND the
     // clip-lane area's refresh (prunes the clip selection of anything the mutation removed).
     void timelineChanged(const synth::TimelineDoc& doc) override;
@@ -431,16 +603,49 @@ private:
     // Rebuilds the header components when the set of track ids changed, and otherwise just
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
-    // FRO14: ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
+    void wireTrackHeader(TimelineTrackHeaderComponent& header);
+    int trackHeadersBuilt_ = 0; // getTrackHeadersBuiltForTest()
+    // Ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
     // before the app wires one up) and defined in TimelinePanelTrackHeaders.cpp.
     void timerCallback() override;
     void layoutTrackHeaders();
 
-    // ---- T161: focused track index -------------------------------------------
+    // ---- Draw shapes (TimelinePanelShapes.cpp) ----
+    void initDrawShapes();
+    void refreshShapeTooltips();
+    bool handleDrawShapeKey(const juce::KeyPress& key);
+    // Lays out the transport row (snap, follow, tool strip, transport bar).
+    void layoutTransportRow();
+
+    // ---- Side pane (TimelinePanelSidePane.cpp) ----
+    void initSidePane();
+    // Carves the pane's current width off the left of `body` (the area under the transport strip).
+    void layoutSidePane(juce::Rectangle<int>& body);
+    // The routing pane's meter, on this panel's existing 15 Hz tick.
+    void tickRoutingPane();
+    // Fills the snap selector (part of the constructor, split out to keep it under its size ratchet).
+    void initSnapCombo();
+
+    // ---- focused track index -------------------------------------------
     // The index a track header row's onSelectRequested (click) reports lands here directly —
     // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
     // if track order/set changed between the header being built and the click landing.
     void setFocusedTrack(synth::TrackId id);
+    // Same focus move without resetting the selection (a modifier click or key edits it itself).
+    void focusTrackKeepingSelection(synth::TrackId id);
+    // onSelectRequested: plain click resets, Cmd/Ctrl toggles, Shift extends from the anchor.
+    void selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods);
+    // Shift+Up/Down: moves focus a row and extends the selection to it. Cmd/Ctrl+Space: toggles the focused row.
+    void extendTrackSelection(int direction);
+    void toggleFocusedTrackSelection();
+    // Every header's selected look follows trackSelection_ (after a change, and after the rows are rebuilt).
+    void applyTrackSelectionToHeaders();
+    std::vector<synth::TrackId> trackOrder() const;
+    // The shared tail of a keyboard move to row `index`: focus, scroll into view, routing pane.
+    void focusTrackRowAt(int index);
+    std::unique_ptr<ListSelectionModel<synth::TrackId>> trackSelection_; // built in the constructor
+    // A plain press on one of several selected tracks: they collapse to it on release, so the press can drag them all.
+    synth::TrackId pendingClickCollapse_;
     // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down) -- see its definition
     // in TimelinePanelTrackHeaders.cpp for the clamping rule.
     void moveFocusedTrack(int direction);
@@ -449,8 +654,29 @@ private:
     // cached visible area.
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
+    void stepTrackFocusFromHeader(int direction);
 
-    // ---- FRO42 (P9-3h): Instrument -> Plugin submenu click-resolution snapshot ----
+    // ---- Lanes in the arrow order (TimelinePanelLaneKeyboard.cpp) ----
+    // Under a track whose lanes are open, Up/Down visit each lane header and its modulator rows before the next track;
+    // folded lanes are skipped. `keyboardStop_` is the lane header or modulator row last moved to (null while a track
+    // row or "Add Track" is the stop), kept like focusedTrackIndex_ so the model is readable without a native window.
+    std::vector<juce::Component*> keyboardStops() const;
+    void stepFocusFromLaneStop(juce::Component& from, int direction);
+    void focusKeyboardStop(juce::Component& stop);
+    void ensureStopVisible(const juce::Component& stop);
+    void wireLaneKeyboard();
+    juce::Component::SafePointer<juce::Component> keyboardStop_;
+    bool recordFocusForTest_ = false;
+    bool addTrackFocusRecorded_ = false;
+    bool addTrackFromTop_ = false; // "Add Track" entered from above (root Down, Up off row 0), not from the last row
+
+    // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
+    bool enterTrackClips(synth::TrackId trackId);
+    void followKeyboardClip(synth::ClipId id);
+    void returnToTrackHeader(synth::TrackId trackId);
+    void wireClipLaneCallbacks();
+
+    // ---- Instrument -> Plugin submenu click-resolution snapshot ----
     // The exact option list `buildAddTrackMenu()` used to populate the "Plugin" sub-submenu, so
     // `applyAddTrackMenuChoice` resolves `kAddInstrumentPluginMenuIdBase + index` against what the
     // user actually saw rather than re-running collectInstrumentPluginMenuOptions() (which can have
@@ -458,63 +684,90 @@ private:
     // (never cleared on dismiss/apply): a stale snapshot from a menu that was shown but never acted
     // on is harmless, since nothing indexes it until another click arrives.
     std::vector<synth::PluginIdentity> instrumentPluginMenuSnapshot_;
-    // FRO13 (P9-7): same snapshot-not-re-collect contract, for the two grouped preset submenus.
+    // Same snapshot-not-re-collect contract, for the two grouped preset submenus.
     std::vector<synth::TrackPresetInfo> audioTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
-    std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // FRO297, same contract
+    std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // same contract
 
-    // ---- T166: track-reorder drag (whole-row drag) ----
-    // See syncTrackHeaders()'s definition in TimelinePanelTrackHeaders.cpp for the division of
-    // labour between the row and this panel.
-    synth::TrackId draggingTrackId_; // invalid (default) when no drag is in progress
-    int dragInsertionIndex_ = -1;    // boundary (0..headerCount) the drag would drop at; -1 = none
+    // ---- track-reorder drag (whole-row drag) ----
+    // The row detects the gesture and hands up raw screen Y; this panel feeds it to the shared
+    // ReorderDragAnimator (vertical axis, list coordinates). See TimelinePanelTrackDrag.cpp.
     void beginTrackDrag(synth::TrackId trackId, int screenY);
     void updateTrackDrag(int screenY);
-    void endTrackDrag(int screenY);
-    // Screen Y -> a BOUNDARY index in [0, headerCount] ("insert before row N"), rounded to the
-    // nearest row edge. Shared by updateTrackDrag (live drop-indicator position) and endTrackDrag
-    // (the actual drop target), which is why this returns a boundary rather than a resting index —
-    // endTrackDrag is the one place that converts a boundary into TimelineDoc::moveTrack's target.
-    int trackDropBoundaryForScreenY(int screenY) const;
+    void endTrackDrag();
+    void commitTrackDrag();
+    void cancelTrackDrag();  // Esc
+    void discardTrackDrag(); // a header rebuild is about to destroy the rows a held drag belongs to
+    void startTrackFramesIfNeeded();
+    void onTrackReorderFrame();
+    void autoscrollForTrackPointer(int screenY);
+    // Undo/redo of a track reorder: the old rows' places, then the glide of the rebuilt rows from them.
+    struct GlideRow {
+        synth::TrackId id;
+        float y = 0.0f;
+        float height = 0.0f;
+    };
+    std::vector<GlideRow> rowsToGlideAfterUndo() const;
+    bool canAnimateTrackGlide() const { return isShowing() || trackGlideForcedForTest_; }
+    bool trackGlideForcedForTest_ = false;
+    void glideTrackRowsFrom(const std::vector<GlideRow>& old);
+    float trackPointerY(int screenY) const;
+    // Places every row: static slots, or the animator's positions while a reorder is in flight.
+    void placeTrackHeaders();
+    // The resize strip along the bottom of a track's open lane block (see TimelinePanelTrackHeight.cpp).
+    void placeLaneSeamHandles(const TimelineRowLayout& layout);
 
-    // ---- Automation strip ----
-    // A header's "A" button click lands here. The header itself never knows open/closed state, so
-    // this is the one place that decides: if the strip is already open on THIS track's lane, close
-    // it; otherwise open it on the track's first lane. A track with no lanes is a no-op (the button
-    // is hidden in that case anyway — see TimelineTrackHeaderComponent::refreshFromDoc()).
+    // Delete and undo motion: the picture of the rows taken before a removal, which tracks the last rebuild added and
+    // removed, and the overlay that plays them.
+    struct TrackListPicture {
+        juce::Image image;
+        float scale = 1.0f;
+        std::vector<synth::ui::ExitEnterListRow> rows;
+    };
+    std::vector<synth::ui::ExitEnterListRow> trackListRows() const;
+    juce::Rectangle<int> trackListMotionArea() const;
+    void noteTrackSetChange(const std::vector<synth::Track>& tracks);
+    std::optional<TrackListPicture> pendingTrackPicture_;
+    std::vector<juce::String> trackRowsAdded_, trackRowsRemoved_;
+    bool trackInsertArmed_ = false;        // an add or duplicate is under way: the rebuild's new rows grow in
+    bool trackSetRestored_ = false;        // the last track-set change was an undo or redo
+    std::int64_t originsReplaceSeen_ = -1; // the doc's replace count when duplicateOrigins_ was last valid
+    synth::ui::ExitEnterListPlan::SourceOf duplicateOrigins_; // track key -> the track it was copied from
+    synth::ui::ExitEnterListMotion trackListMotion_{*this};
+
+    ReorderDragAnimator trackReorder_;
+    ReorderFramePump trackFrames_{*this};
+    ReorderCancelKey trackCancelKey_;
+    std::vector<synth::TrackId> reorderTrackIds_; // animator keys -> track ids, at press time
+    synth::TrackId liftedTrackId_;                // the row drawn lifted (dragged, then settling)
+    unsigned trackGenerationSeen_ = 0;
+    float lastDraggedTrackStart_ = 0.0f;
+    bool trackDragCancelled_ = false; // Esc pressed in this gesture
+    bool committingTrackDrag_ = false;
+
+    // ---- Automation lanes (TimelinePanelAutomation.cpp) ----
+    // A header's fold arrow (or its key) lands here.
     void toggleAutomationForTrack(synth::TrackId trackId);
-    // Repopulates the lane picker from the doc, preserving the current selection when it still
-    // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
-    void syncAutomationLaneCombo();
-    // Re-reads the active lane's recordMode into the combo (no notification — this is a REFLECTION
-    // of doc state, not an edit).
-    void syncAutomationRecordModeCombo();
+    void toggleAutomationForSelection(synth::TrackId trackId); // bare A: the selection follows the focused row
+    // Wires automationLanes_ into the panel (part of the constructor, kept out of its size ratchet).
+    void initAutomationLanes();
+    void initSongKeyField(); // the transport bar Key field's hooks, part of the constructor
+    void fitProjectToSongKey(const MusicalScale& key);
+    // Re-syncs the lane pools, pushes their row geometry into the clip lanes and relayouts.
+    void syncAutomationLanes();
+    // Pushes the lanes' extra heights and the section-row override into the clip lanes' layout.
+    void pushAutomationGeometry();
+    // Pushes fold state into the track headers, relayouts the rows and re-clamps the scroll.
+    void layoutAutomationRows();
+    // Repositions the lane editors after a scroll, resize or relayout.
+    void placeLaneBodies();
+    // The picker for `track`, wired to create and show the chosen lane; null without a host or doc.
+    std::unique_ptr<ModMatrixPicker> buildAddAutomationPickerFor(synth::TrackId track);
+    void addAutomationLaneFromPicker(synth::TrackId track, const TrackHeaderHost::AutomatableParameter& parameter);
+    std::function<void(std::unique_ptr<ModMatrixPicker>)> addAutomationPickerHook_;
 
     // ---- Clip clipboard ----
-    // One captured clip, relative to the earliest selected clip's start at copy time (see
-    // copySelectedClips()). Notes are already clip-relative in the doc, so they need no rebasing;
-    // addNote() reassigns their ids on paste regardless of what's stored here.
-    struct ClipboardClip {
-        synth::TrackId originalTrack;
-        // The track kind this clip needs on paste, derived at COPY time from the payload
-        // (non-empty assetRef -> Audio, else Midi) rather than from the track it sat on: the
-        // payload is what decides where it can be played, and it is also what
-        // TimelineDoc::moveClipToTrack checks.
-        synth::TrackKind requiredKind = synth::TrackKind::Midi;
-        double relativeStartBeat = 0.0;
-        double lengthBeats = 4.0;
-        juce::String name;
-        std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
-        bool muted = false;
-        // Audio fields — captured and restored so copy/paste of an audio clip yields the same
-        // clip, not a silent husk pointing at nothing (they were dropped before, which is exactly
-        // what "the clipboard drops audio clips" looked like from the outside).
-        juce::String assetRef;
-        double gainDb = 0.0;
-        double fadeInBeats = 0.0;
-        double fadeOutBeats = 0.0;
-        double sourceStartSeconds = 0.0;
-    };
+    using ClipboardClip = synth::ui::TimelineClipboardClip;
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
     // case — same formula (and same "4.0 with no transport" fallback) as every other timeline
@@ -538,12 +791,12 @@ private:
     void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height). Also
-    // draws the T166 track-reorder drop indicator -- see its paintOverChildren() definition in
-    // TimelinePanelTrackHeaders.cpp for why.
+    // draws the track-reorder gap marker -- see its paint() definition in
+    // TimelinePanelTrackDrag.cpp.
     struct TrackHeaderList : juce::Component {
         explicit TrackHeaderList(TimelinePanelComponent& owner)
             : owner_(owner) {}
-        void paintOverChildren(juce::Graphics& g) override;
+        void paint(juce::Graphics& g) override;
         juce::OwnedArray<TimelineTrackHeaderComponent> headers;
 
     private:
@@ -555,40 +808,45 @@ private:
     // relationship it has with viewState_ below).
     synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
-    // Positioned over gridLanesBounds_ in resized() — the SAME rect the grid below it is painted
-    // into by this component's own paint(). Added as a child AFTER the grid is painted (parent
-    // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
-    // grid -> clips -> playhead with no second place ever painting the grid.
+    // Above the ruler, same x origin; 0 px while the piano roll or drum editor is open or the setting is off.
+    std::unique_ptr<TimelineSectionStrip>
+        sectionStrip_; // built in the constructor; forward-declared to keep header reach low
+    int sectionStripHeight() const;
+    // Over gridLanesBounds_, the rect this panel's paint() fills with the grid; a child added before playhead_, so
+    // z-order reads grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
-    // Occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
-    // it (addChildComponent — not addAndMakeVisible, so it starts invisible) so z-order still
-    // reads grid -> clips/piano-roll -> playhead. Only one of clipLaneArea_/pianoRoll_ is visible
-    // at a time; openPianoRoll()/closePianoRoll() toggle it. The roll owns its OWN beat<->x
-    // mapping (keys column as a real gutter, its own zoom/scroll), which is why it is registered as
-    // playhead_'s LocalPlayheadClient: while it is open the overlay skips its rows and hands it the
-    // drawn beat instead. See PianoRollComponent's class comment.
+    // Occupies the same rect as clipLaneArea_, added right after it and invisible until opened, so z-order reads grid
+    // -> clips/editor -> playhead. It owns its own beat<->x mapping, so it is a LocalPlayheadClient of playhead_.
     synth::ui::PianoRollComponent pianoRoll_{viewState_};
+    // The clip lanes and the roll cross-fade as one replaces the other (animation.md, "Fading things in and out").
+    synth::ui::FadeVisibility clipLaneFade_{&clipLaneArea_};
+    synth::ui::FadeVisibility rollFade_{&pianoRoll_};
+    synth::ui::FadeOutPicture rollLeaving_;            // the roll or drum machine as it was, fading away over the lanes
+    std::unique_ptr<synth::ui::DrumMachineHost> drum_; // same rect and cross-fade as the roll
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
-    juce::ComboBox snapCombo_;
-    // Toggles TimelineViewState::snapEnabled from the panel chrome, so the switch is discoverable
-    // without opening a clip. Toggle STATE mirrors the shared flag via setSnapEnabled() — the
-    // button never owns it. Labelled "Snap" rather than with its key: the key moved from Q to J
-    // (Cubase's snap key — Q is Cubase's *quantise*, which is what the roll uses it for), and a
-    // button that spells its own letter goes stale the moment the binding is rebound. The live key
-    // is in the tooltip, through synth::shortcutHintFor.
-    juce::TextButton snapToggleButton_{"Snap"};
-    // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
-    // the button's lit state, and repaints every grid painter.
+    NoteLengthBox snapCombo_;
+    // Toggles TimelineViewState::snapEnabled; its state mirrors the shared flag via setSnapEnabled(), never owns it.
+    // Named "Snap", not by its key (stale on a rebind): the live key is in the tooltip (synth::shortcutHintFor).
+    SnapToggleButton snapToggleButton_;
+    std::unique_ptr<ClipSizingButton> clipSizingButton_;
+    // The one writer for the snap switch: flips the flag, persists, lights the button, repaints every grid painter.
     void setSnapEnabled(bool enabled);
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;
 
     // ---- Follow playhead (see the public accessors above) ----
-    bool followPlayhead_ = false;
-    juce::DrawableButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
+    FollowPlayheadState follow_;
+    void followViewToBeat(double beat);
+    void wireFollowPlayheadModes();
+    FollowPlayheadButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
     void persistFollowPlayheadChoice();
+    void wirePianoRollLoopRequest();
+    void wireDrumMachine();
+    void wireClipPreview();
+    bool isDrumKitClip(synth::ClipId id) const;
+    void auditionClipNote(synth::ClipId clip, int pitch, float velocity01, bool on);
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is
@@ -612,32 +870,57 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
     TrackHeaderHost* trackHeaderHost_ = nullptr;
-    // Non-owning, set by setTransport() alongside the sub-component forwards it already
-    // does. Every other consumer of the transport reads it from its OWN copy (ruler_/playhead_/
-    // transportBar_/clipLaneArea_/pianoRoll_/automationEditor_); this is the one operation the
-    // panel itself performs directly against it — reading the CURRENT position/time-signature at
-    // paste time (see pasteClipsAtPlayhead()).
+    // Non-owning, set by setTransport(). Every other consumer reads its OWN copy; the panel itself only reads the
+    // CURRENT position/time-signature from it at paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
-    // NOTE AUDITION — the track the currently-sounding preview note was sent TO. Invalid means
-    // nothing is sounding. See the onAuditionNote wiring in the constructor (TimelinePanelComponent.cpp)
-    // for the latch rationale.
+    // ---- Cursor glide (TimelinePanelCursorGlide.cpp) ----
+    bool handleCursorGlideKey(const juce::KeyPress& key);
+    /** Pages the view to show `beat` when it is off screen: the follow-playhead behaviour. */
+    void pageViewToShowBeat(double beat);
+    synth::ui::TimelineCursorGlide::Host makeCursorGlideHost();
+    synth::TransportNudgeState ownNudge_;
+    synth::TransportNudgeState* nudge_ = &ownNudge_;
+    double lastOutputLatencySeconds_ = 0.0;     // as last handed to updateFromTransport
+    std::function<double()> glideClockForTest_; // declared before cursorGlide_, whose host reads it
+    synth::ui::TimelineCursorGlide cursorGlide_{*this, makeCursorGlideHost()};
+
+    // NOTE AUDITION: the track the sounding preview note was sent TO (invalid = silent); see the onAuditionNote wiring.
     synth::TrackId auditionTrackLatch_;
 
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
-    juce::TextButton addTrackButton_{"+ Track"};
+    ToolbarButton addTrackButton_{"Add"};
+    EdgeResizeHandle trackHeaderWidthHandle_{EdgeResizeHandle::Axis::Horizontal};
+    int trackHeaderWidth_ = 0; // 0 = the themed default
+    int trackHeaderWidthAtPress_ = 0;
+    void initTrackHeaderWidthHandle();
 
     // The theme's colour for a NEW marker (see addMarkerAtPlayhead). Falls back to the model's own
     // default with no themed LookAndFeel installed, like every other paint-time resolve here.
     juce::uint32 defaultMarkerColourArgb() const;
 
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
-    // The themed row height with the shared vertical-zoom factor applied -- see its definition in
-    // TimelinePanelLayout.cpp for why it duplicates TimelineClipLaneArea::getRowHeight.
-    int currentRowHeight() const;
+    // The clip lane's layout: the one row-geometry model both surfaces share.
+    TimelineRowLayout rowLayout() const { return clipLaneArea_.getRowLayout(); }
+    int liftedTrackRowHeight() const;
+    // One track's row height (TimelinePanelTrackHeight.cpp).
+    void beginTrackHeightDrag(synth::TrackId track);
+    void dragTrackHeight(synth::TrackId track, int deltaPx);
+    void endTrackHeightDrag(synth::TrackId track);
+    void relayoutTrackRows();
+    int trackIndexOf(synth::TrackId track) const;
+    synth::TrackId heightDragTrack_;
+    int heightDragStartPx_ = 0;
+    double heightDragScale_ = 1.0;
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
+    // Mouse-wheel notch easing (axis 0 = beats, 1 = px); see UI/Layout/ScrollTween.h.
+    void scrollByWheel(int axis, double amount, bool eased);
+    void applyWheelScroll(int axis, double amount);
+    synth::ui::ScrollTweenRunner wheelTween_;
     void zoomTrackRows(double factor, double anchorLaneY);
+    // Resets every track's own height (one undo step); false when none had one.
+    bool clearTrackHeightOverrides();
     // anchorX is in the ruler's coordinate space (== TimelineViewState's x origin) -- see its
     // definition in TimelinePanelLayout.cpp for why this is the ONE horizontal-zoom writer.
     void zoomHorizontalAroundX(double factor, double anchorX);
@@ -653,9 +936,7 @@ private:
     // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
     bool zoomScrollInverted_ = false;
 
-    // Non-owning, may stay null (see setShortcutManager). Expected to outlive this component --
-    // see the destructor's definition in TimelinePanelComponent.cpp for the lifetime contract and
-    // why the destructor itself does not trust this pointer directly.
+    // Non-owning, may stay null (see setShortcutManager); the destructor's definition has the lifetime contract.
     ShortcutManager* shortcuts_ = nullptr;
     // Mirrors `shortcuts_` (set together in setShortcutManager), used ONLY by the destructor.
     // Automatically null once the referenced ShortcutManager is destroyed, unlike `shortcuts_`
@@ -666,10 +947,7 @@ private:
     // Rebuilds every dynamic shortcut-hint tooltip this panel owns -- see its definition in
     // TimelinePanelComponent.cpp for the full call-site list.
     void refreshShortcutTooltips();
-    // True when `key` is what the user has bound to `actionId`. With no manager installed this is
-    // `key == fallback`; with one installed the fallback is not consulted at all. See its
-    // definition in TimelinePanelShortcuts.cpp for why this duplicates PianoRollComponent's own
-    // copy rather than sharing it.
+    // True when `key` is what the user has bound to `actionId`; the fallback applies only with no manager installed.
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
     // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
     // columns are brought back in step after any scroll/zoom writer.
@@ -686,30 +964,35 @@ private:
     };
     HeaderViewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_{*this};
+    // One per track whose automation/modulator rows are open: the same resize edge as the row's own, continued
+    // along the bottom of the block so the seam above the next track still resizes this track.
+    std::map<synth::TrackId, std::unique_ptr<EdgeResizeHandle>> laneSeamHandles_;
 
-    // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
-    // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
+    // Declared in this order so the button unbinds from the pane, and the pane lets go of its content, before either
+    // is destroyed.
+    TimelineRoutingPane routingPane_;
+    SidePane sidePane_;
+    SidePaneToggleButton sidePaneButton_;
+
+    // The panel's own copy of the undo manager (markers, the add-track menu's marker entry).
     AppUndoManager* undoManager_ = nullptr;
 
-    // Automation strip chrome — docked at the bottom of gridLanesBounds_ when automationStripVisible_.
-    // All start invisible (addChildComponent, not addAndMakeVisible); resized()/showAutomationLane()/
-    // closeAutomationStrip() are the only things that flip their visibility.
-    synth::ui::AutomationLaneEditor automationEditor_{viewState_};
-    juce::TextButton automationToolPointerButton_;
-    juce::TextButton automationToolPencilButton_;
-    juce::TextButton automationToolLineButton_;
-    juce::TextButton automationToolEraserButton_;
-    juce::ComboBox laneCombo_;
-    juce::ComboBox recordModeCombo_;
-    juce::TextButton automationCloseButton_;
-    bool automationStripVisible_ = false;
+    // After trackHeaderList_, which holds its lane headers and so must outlive it.
+    TimelineAutomationLanes automationLanes_{viewState_, trackHeaderList_};
     synth::LaneId selectedAutomationLane_;
-    juce::Rectangle<int> automationStripBounds_; // empty when the strip is closed
 
+    DrawShape drawShape_ = DrawShape::Free;
+    DrawPenButton* penButton_ = nullptr;                        // the Draw entry of toolButtons_
+    std::unique_ptr<PopoverSlot> shapeFlyoutSlot_;              // made on first use
+    juce::Component::SafePointer<DrawShapeFlyout> shapeFlyout_; // the open flyout (or the test hook's)
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;
     juce::Rectangle<int> lanesBounds_;
     juce::Rectangle<int> gridLanesBounds_; // lanesBounds_ minus the ruler strip at its top
+
+    std::vector<juce::Component*> topBarStops();
+    std::unique_ptr<KeyRing> topBarKeys_;              // the top bar's key ring, built in the constructor
+    std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelinePanelComponent)
 };

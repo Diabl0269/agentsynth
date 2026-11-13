@@ -18,6 +18,7 @@
 // lets a test drive this class directly, with no VBlank and no Component peer required.
 
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <vector>
@@ -49,6 +50,14 @@ public:
      *  a complete no-op — isLive() stays false, nothing to apply, nothing to paint. */
     bool arm(const std::vector<VisibleCable>& before, const std::vector<VisibleCable>& after, uint32_t crossingNodeUid,
              juce::Rectangle<int> flashBounds);
+
+    /** Arms a slide for every cable in `after` that is not in `before` and has an endpoint on a macro port
+     *  (`isPortUid` says whether a node uid is one): that port-side endpoint starts at `dropPoint` (canvas
+     *  coordinates, where the user released the cable) and slides to its settled anchor; the other endpoint
+     *  stays put. A cable with no port end (a same-level drop) arms nothing, and there is no module flash.
+     *  Same contract as arm(): true when something was armed, and a false return is a complete no-op. */
+    bool armSlideFrom(const std::vector<VisibleCable>& before, const std::vector<VisibleCable>& after,
+                      juce::Point<float> dropPoint, const std::function<bool(uint32_t)>& isPortUid);
 
     /** Per-frame: `t` is the driver's eased 0->1 progress through the current tween. Also the
      *  manual test seam (GraphEditor::advanceMacroCrossingAnimForTest) — no VBlank required. */

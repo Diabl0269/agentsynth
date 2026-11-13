@@ -5,6 +5,7 @@
 
 #include "ControllerSurfaceCell.h"
 
+#include "UI/Layout/DragCursor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -18,7 +19,10 @@ constexpr int kNameHeight = 14;
 constexpr int kLabelHeight = 12;
 } // namespace
 
-ControllerSurfaceCell::ControllerSurfaceCell() = default;
+ControllerSurfaceCell::ControllerSurfaceCell() {
+    setMouseCursor(dragGrabCursor()); // the whole cell is a grab handle
+}
+
 ControllerSurfaceCell::~ControllerSurfaceCell() = default;
 
 void ControllerSurfaceCell::configure(const synth::Control& control, const juce::String& assignmentLabel,
@@ -30,6 +34,9 @@ void ControllerSurfaceCell::configure(const synth::Control& control, const juce:
     mapped_ = isMapped;
     lastValue_ = juce::jlimit(0.0f, 1.0f, initialValue);
     lastPressed_ = false;
+    // The inert widget inside is what a screen reader meets, so it carries the control's name and what
+    // it drives; hovering the cell shows the same.
+    setTooltip(control.name + ": " + (assignmentLabel.isNotEmpty() ? assignmentLabel : juce::String("not assigned")));
     buildWidgetForKind(); // rebuilds slider_/button_ at rest (0 / not pressed) -- seed from lastValue_ below
     if (slider_ != nullptr)
         slider_->setValue((double)lastValue_, juce::dontSendNotification);
@@ -68,12 +75,16 @@ void ControllerSurfaceCell::buildWidgetForKind() {
     }
 
     if (slider_ != nullptr) {
+        slider_->setTitle(control_.name);
+        slider_->setDescription(assignmentLabel_);
         slider_->setRange(0.0, 1.0, 0.0);
         slider_->setValue(0.0, juce::dontSendNotification);
         slider_->setInterceptsMouseClicks(false, false);
         addAndMakeVisible(*slider_);
     }
     if (button_ != nullptr) {
+        button_->setTitle(control_.name);
+        button_->setDescription(assignmentLabel_);
         button_->setClickingTogglesState(false); // mouse-inert: this cell drives the toggle state, not clicks
         button_->setToggleState(false, juce::dontSendNotification);
         button_->setInterceptsMouseClicks(false, false);
@@ -147,8 +158,8 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
     const juce::Colour warningColour = lf != nullptr ? lf->getTheme().colors.warning : juce::Colours::orange;
-    const juce::Colour selectedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
-    const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
+    const juce::Colour selectedColour = synth::theme::themeOf(*this).colors.accent;
+    const juce::Colour badgeColour = synth::theme::themeOf(*this).colors.midiMapped;
 
     if (selected_) {
         g.setColour(selectedColour.withAlpha(0.15f));
@@ -186,8 +197,7 @@ void ControllerSurfaceCell::paintOverChildren(juce::Graphics& g) {
 
     if (pulseSinceMs_ == 0.0 && flashUntilMs_ == 0.0)
         return;
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
     const auto now = juce::Time::getMillisecondCounterHiRes();
     if (flashUntilMs_ != 0.0 && now < flashUntilMs_) {
         g.setColour(accent);
@@ -237,8 +247,8 @@ namespace {
 // Property keys used to remember the last DELTA (in whole cells) this cell actually fired during
 // the live drag, so a slow drag across many pixels reports once per crossed cell boundary rather
 // than once per pixel. Stashed on juce::Component::getProperties() rather than a new private
-// member -- ControllerSurfaceCell.h is a locked contract for this ticket (see the header's own
-// comment), and getProperties() is ordinary per-instance Component state, not shared/static.
+// member -- ControllerSurfaceCell.h stays free of test/gesture bookkeeping, and getProperties() is ordinary
+// per-instance Component state, not shared/static.
 const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace
@@ -253,10 +263,6 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
-    // A hand cursor for the whole press-to-release span, not only once a whole-cell move is
-    // detected below -- gives a press immediate "this can be dragged" feedback even if it turns out
-    // to be a plain click, which reverts it in mouseUp() below just as promptly.
-    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     if (onSelected)
         onSelected(event.mods);
 }
@@ -275,6 +281,8 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 // stayed under the rounding threshold and looked fine, which is why this went unnoticed until a
 // group drag crossing several other controls' cells made an 8+ cell drag common enough to hit it.
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
+    if (onPointer)
+        onPointer(event, false);
     const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
     const int dCols = (int)std::floor((float)offset.x / (float)kCellPitch + 0.5f);
     const int dRows = (int)std::floor((float)offset.y / (float)kCellPitch + 0.5f);
@@ -300,10 +308,11 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
         onDraggedByCells(dCols, dRows);
 }
 
-void ControllerSurfaceCell::mouseUp(const juce::MouseEvent&) {
+void ControllerSurfaceCell::mouseUp(const juce::MouseEvent& event) {
+    if (onPointer)
+        onPointer(event, true);
     const bool didDrag = isDragging_;
     isDragging_ = false;
-    setMouseCursor(juce::MouseCursor::NormalCursor);
     if (didDrag) {
         repaint(); // clears the dim-while-dragging overlay
         if (onDragEnded)

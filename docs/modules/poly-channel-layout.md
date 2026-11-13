@@ -22,9 +22,10 @@ output that only ever produces one signal.
 
 **A second audio leg goes on a dedicated `kRightBase` block, never on ch1.** On the voice modules ch1
 is already a CV input (Waveform, Position, Cutoff, gain), so relabelling it "Right" would repoint
-every saved patch that modulates it. Each module's `kRightBase` is `kNumInputs` — the first channel
-above its whole input block — and an end-of-block CV clear must be bounded at `kRightBase` rather
-than running to `getNumChannels()`, or it erases the right leg.
+every saved patch that modulates it. A module's `kRightBase` starts as the first channel above its
+input block and is then a **literal** that never moves: inputs added later go above it or alias it
+(read before any write), so saved Audio R routings keep their channel. An end-of-block CV clear must
+be bounded at `kRightBase` rather than running to `getNumChannels()`, or it erases the right leg.
 
 ## Channel table
 
@@ -41,9 +42,15 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Oscillator (poly)** | ch13 | In | Shared Pan CV |
 | **Oscillator (poly/mono)** | ch14 | In | Unison CV (FRO314, same channel both modes) |
 | **Oscillator (poly/mono)** | ch15 | In | Detune CV (FRO314, same channel both modes) |
+| **Oscillator (poly/mono)** | ch16 | In | Pulse Width CV (same channel both modes) |
+| **Oscillator (poly/mono)** | ch17 | In | Glide CV (same channel both modes) |
+| **Oscillator (poly/mono)** | ch18 | In | Blend CV (same channel both modes) |
+| **Oscillator (poly/mono)** | ch19 | In | Width CV (same channel both modes) |
+| **Oscillator (poly)** | ch20-27 | In | Per-voice `Gate` (`kGateBase`): a rising edge restarts that voice's phase; Poly MIDI's ch8-15 |
 | **Oscillator (poly)** | ch0-7 | Out | Per-voice audio — `Audio L` |
 | **Oscillator (poly)** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
-| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`); ch14/15 alias the Unison/Detune CV inputs above |
+| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`); ch14-19 alias the Unison..Width CV inputs and ch20-21 the first two Gate inputs above |
+| **Oscillator (poly/mono)** | ch22-27 | Out | Silent pass-throughs, so the output count (28) stays at or above every input |
 | **Oscillator (mono)** | ch0 | In/Out | Pitch CV in / `Audio L` out (shared channel, CV saved before clear) |
 | **Oscillator (mono)** | ch1 | In | Waveform CV |
 | **Oscillator (mono)** | ch2 | In | Octave CV |
@@ -51,7 +58,8 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
 | **Oscillator (mono)** | ch6 | In | Pan CV |
-| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`); aliases the Unison CV input above |
+| **Oscillator (mono)** | ch20 | In | `Gate`: a rising edge restarts the phase, like a MIDI note-on |
+| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`); aliases the Unison CV input above; ch15-27 are further silent outputs |
 | **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
 | **Wavetable (poly)** | ch8 | In | Shared Position CV |
 | **Wavetable (poly)** | ch9 | In | Shared Octave CV |
@@ -59,6 +67,7 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Wavetable (poly)** | ch11 | In | Shared Fine CV |
 | **Wavetable (poly)** | ch12 | In | Shared Level CV |
 | **Wavetable (poly)** | ch13-22 | In | Shared Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync CV |
+| **Wavetable (poly)** | ch23-30 | In | Per-voice `Gate` (`kGateBase`): a rising edge restarts that voice's phase; aliases the Audio R block, read before any write |
 | **Wavetable (poly)** | ch0-7 | Out | Per-voice audio **L** |
 | **Wavetable (poly)** | ch8-22 | Out | Silent pass-throughs (prevent buffer aliasing) |
 | **Wavetable (poly)** | ch23-30 | Out | Per-voice audio **R** (`kRightBase`) |
@@ -69,17 +78,25 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Wavetable (mono)** | ch4 | In | Fine CV |
 | **Wavetable (mono)** | ch5 | In | Level CV |
 | **Wavetable (mono)** | ch6-15 | In | Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync CV |
+| **Wavetable (mono)** | ch16 | In | `Gate`: a rising edge restarts the phase, like a MIDI note-on |
 | **Wavetable (mono)** | ch23 | Out | Audio R (`kRightBase`) |
 | **Filter (poly)** | ch0-7 | In/Out | Per-voice audio — `Audio L`, filtered in place |
 | **Filter (poly)** | ch8 | In | Shared Cutoff CV |
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
 | **Filter (poly)** | ch10 | In | Shared Drive CV |
 | **Filter (poly)** | ch11-18 | In/Out | Per-voice audio — `Audio R` (`kRightBase`), own ladder per voice |
+| **Filter (poly)** | ch19-26 | In | Per-voice `Pitch` (Hz) for Key Track and the Custom type's per-note modes (`kPitchBase`); one jack, eight wide |
+| **Filter (poly/mono)** | ch27 | In | Key Track CV (same channel both modes) |
+| **Filter (poly/mono)** | ch28 | In | Morph X CV, Custom type (`kMorphXCVChannel`, same channel both modes) |
+| **Filter (poly/mono)** | ch29 | In | Morph Y CV, Custom type (`kMorphYCVChannel`, same channel both modes) |
+| **Filter (poly/mono)** | ch30 | In | Shift CV, Custom type (`kShiftCVChannel`, same channel both modes) |
+| **Filter (poly/mono)** | ch31 | In | Depth CV, Custom type (`kDepthCVChannel`, same channel both modes) |
 | **Filter (mono)** | ch0 | In/Out | `Audio L` in / filtered out |
 | **Filter (mono)** | ch1 | In | Cutoff CV |
 | **Filter (mono)** | ch2 | In | Resonance CV |
 | **Filter (mono)** | ch3 | In | Drive CV |
 | **Filter (mono)** | ch11 | In/Out | `Audio R` (`kRightBase`) in / filtered out |
+| **Filter (mono)** | ch19 | In | `Pitch` (Hz) for Key Track and the Custom type's per-note modes (`kPitchBase`); ch20-26 unused in mono |
 | **VCA (poly)** | ch0-7 | In | Per-voice audio — `Audio L` |
 | **VCA (poly)** | ch8-15 | In | Per-voice envelope/CV |
 | **VCA (poly)** | ch16-23 | In | Per-voice audio — `Audio R` (`kRightBase`) |
@@ -96,8 +113,9 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **ADSR** | ch11 | In | Shared Decay CV |
 | **ADSR** | ch12 | In | Shared Sustain CV |
 | **ADSR** | ch13 | In | Shared Release CV |
+| **ADSR** | ch14 | In | Shared Velocity CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
-| **ADSR** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **ADSR** | ch8-14 | Out | Silent pass-throughs (prevent buffer aliasing) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |
 | **Sample & Hold** | ch2 | In | Rate CV |

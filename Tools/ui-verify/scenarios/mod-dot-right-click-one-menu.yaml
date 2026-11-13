@@ -1,0 +1,22 @@
+# Right-clicking a mod dot opens the knob's one menu (Automate / MIDI learn) and no sources panel.
+#
+# What a user does:
+#   1. Opens a project with two LFOs modulating the Filter's Cutoff.
+#   2. Right-clicks the dot on the Cutoff knob: the knob's menu opens, the sources panel does not.
+#   3. Closes the menu, then left-clicks the same dot: the sources panel opens.
+motion: true
+record: true
+save_project: mod-dot-right-click-one-menu
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot-two-lfos.agsproj"}
+  - wait: {}
+  - click: {id: "Cutoff modulation, 2 sources", button: right}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: false}
+  - screenshot: {name: knob-menu-only}
+  - mark: {check: 1, name: knob-menu-only}  # the menu is open and the panel is not
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: "Cutoff modulation, 2 sources"}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - screenshot: {name: left-click-opens-panel}

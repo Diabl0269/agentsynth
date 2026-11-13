@@ -1,0 +1,28 @@
+# A held Alt+Right carried a lane dot out of sight past the right edge of the view; now the view scrolls along with the
+# dot's drawn place, never jumping.
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 52, near the right edge of the view
+# (fixture lane-edge.agsproj), clicks it and holds Alt+Right: the view scrolls along so the dot stays in sight. One Cmd+Z
+# puts it back.
+record: true
+motion: true
+save_project: lane-key-hold-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1}
+  - click: {id: automationLaneState, x: 1248, y: 65}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - screenshot: {name: before-hold}
+  - glide: {name: key-hold-follows, frames: 16, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {keyDown: {keys: alt+right}}}
+  - keyUp: {}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, holding: false, dragging: false}
+  - screenshot: {name: after-hold}
+  - mark: {check: 1, name: dot-in-view-after-key-hold}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: hold-undone}
+  - mark: {check: 2, name: one-undo-after-key-hold}

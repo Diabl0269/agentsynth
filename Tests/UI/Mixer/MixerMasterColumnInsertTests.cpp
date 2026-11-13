@@ -6,6 +6,7 @@
 //   * layout    -- the real MixerPanelComponent's Master column shows its rows and lays out without overlap;
 //   * meter     -- with no inserts the column reads Master's own latch, with >= 1 it reads the engine's post-graph
 //                  output peak, and a Limiter's ceiling shows on the meter (the acceptance test).
+#include "../../Mixer/MasterSafetyOff.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -14,7 +15,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Modules/MasterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeterScale.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -96,8 +97,7 @@ struct MasterListFixture {
         juce::StringArray names;
         if (column == nullptr)
             return names;
-        list.setEntries(column->inserts, column->insertChainIsLinear, column->editOnCanvasTargetUuid,
-                        column->sourceNodeId, column->chainEndNodeId);
+        list.setEntries(column->inserts, column->insertChainIsLinear, column->sourceNodeId, column->chainEndNodeId);
         for (const auto& entry : column->inserts)
             names.add(entry.name);
         return names;
@@ -294,6 +294,7 @@ TEST(MixerMasterColumnInsertTests, GateSplicesIntoTheMasterChainLikeAnyOtherInse
 TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWithoutOverlap) {
     MainComponent mc(std::make_unique<MockProviderMMCI>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // the first channel creates Master
 
@@ -313,26 +314,30 @@ TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWitho
     ASSERT_EQ(master->getInsertListForTest().getEntryCountForTest(), 2);
 
     master->setSize(140, 320);
+    // The list sits inside the Inserts section, a viewport sized by the panel's shared section layout.
     auto& list = master->getInsertListForTest();
+    auto& section = master->getInsertViewportForTest();
     auto& meter = master->getMeterForTest();
     auto& readout = master->getMeterReadoutForTest();
     auto& faderSlider = master->getAccessibilityFocusTargetForTest();
     const auto faderBounds = master->getLocalArea(&faderSlider, faderSlider.getLocalBounds());
 
-    EXPECT_GE(list.getY(), 2 + 24) << "the list sits below the 24 px header";
-    EXPECT_EQ(list.getHeight(), list.getPreferredHeight()) << "both rows fit at this height";
-    EXPECT_LE(list.getBottom(), readout.getY()) << "no overlap with the readout row";
-    EXPECT_LE(list.getBottom(), meter.getY());
-    EXPECT_LE(list.getBottom(), faderBounds.getY());
+    EXPECT_GE(section.getY(), 2 + 24) << "the Inserts section sits below the 24 px header";
+    EXPECT_GE(section.getHeight(), list.getPreferredHeight()) << "both rows fit at this height";
+    EXPECT_FALSE(section.isScrollable());
+    EXPECT_LE(section.getBottom(), readout.getY()) << "no overlap with the readout row";
+    EXPECT_LE(section.getBottom(), meter.getY());
+    EXPECT_LE(section.getBottom(), faderBounds.getY());
     EXPECT_LE(readout.getBottom(), meter.getY());
     EXPECT_GT(meter.getHeight(), 0);
     EXPECT_GT(faderBounds.getHeight(), 0) << "the fader keeps real height under the list";
-    EXPECT_TRUE(master->getLocalBounds().contains(list.getBounds()));
+    EXPECT_TRUE(master->getLocalBounds().contains(section.getBounds()));
 }
 
-TEST(MixerMasterColumnInsertTests, MasterColumnListShrinksToAThirdOfATightColumnInsteadOfCrowdingTheFader) {
+TEST(MixerMasterColumnInsertTests, MasterColumnInsertsGiveWayInATightColumnInsteadOfCrowdingTheFader) {
     MainComponent mc(std::make_unique<MockProviderMMCI>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
@@ -349,8 +354,12 @@ TEST(MixerMasterColumnInsertTests, MasterColumnListShrinksToAThirdOfATightColumn
     auto& list = master->getInsertListForTest();
     auto& faderSlider = master->getAccessibilityFocusTargetForTest();
     const auto faderBounds = master->getLocalArea(&faderSlider, faderSlider.getLocalBounds());
-    EXPECT_LE(list.getHeight(), (181 - 4 - 24) / 3) << "capped at a third of what's under the header";
-    EXPECT_LE(list.getBottom(), faderBounds.getY());
+    auto& section = master->getInsertViewportForTest();
+    EXPECT_GE(master->getFaderForTest().getHeight(), synth::ui::MixerSectionLayout::kMinFaderHeight)
+        << "the shared sections give way before the fader drops under its minimum";
+    EXPECT_LE(section.getBottom(), faderBounds.getY());
+    EXPECT_TRUE(section.isScrollable()) << "the four rows scroll inside what is left of the section";
+    EXPECT_GE(list.getHeight(), list.getPreferredHeight());
     EXPECT_GT(faderBounds.getHeight(), 0);
 }
 
@@ -488,6 +497,7 @@ TEST(MixerMasterColumnInsertTests, MeterShowsThePostLimiterLevelNotMastersPreIns
         return f.engine.takeOutputMeterPeak(synth::MeterReader::Mixer, leg);
     };
 
+    testutil::turnOffMasterSafetyLimiter(*f.master()); // this test is about the insert, not the safety limiter
     f.engine.prepareForHost(kSampleRate, kBlock, 2, 2);
     juce::AudioBuffer<float> buffer(2, kBlock);
     juce::MidiBuffer midi;

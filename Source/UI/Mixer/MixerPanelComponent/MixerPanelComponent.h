@@ -1,13 +1,31 @@
 #pragma once
 
 #include "MacroSet.h"
+#include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyRing.h"
+#include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
+#include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
+#include "UI/Mixer/MixerRowFocus.h"
+#include "UI/Mixer/MixerRowsMotion.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
+#include <optional>
+#include <unordered_map>
 #include <vector>
 
 class AppUndoManager;
@@ -17,11 +35,15 @@ class ShortcutManager;
 
 namespace synth {
 class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
-}
+struct MixerColumn;         // Forward declaration (Source/Mixer/MixerModel/MixerModel.h)
+struct MixerSnapshot;
+} // namespace synth
 
 namespace synth::ui {
+class ColourPickerPopup;
 class MixerColumnComponent;
-}
+class MixerSendList;
+} // namespace synth::ui
 
 // MixerPanelComponent.h (docs/mixer/panel.md#what-the-mixer-shows): the columns container -- a
 // horizontally scrolling row of columns built from synth::buildMixerSnapshot(), rebuilt on every
@@ -32,13 +54,23 @@ class MixerColumnComponent;
 // navigation") -- a region ROOT, not per-column leaves: MixerColumnComponent/MixerMasterColumn/
 // MixerDirectColumn's own controls all give up keyboard focus (setWantsKeyboardFocus(false)), so
 // this panel is the single focusable leaf and keyPressed() (MixerPanelKeyboard.cpp) owns Left/
-// Right column walk, Up/Down fader nudge, Enter select-on-canvas and the rebindable M/S/R actions.
+// Right column walk, Up/Down fader nudge, Enter select-on-canvas, the rebindable M/S/R actions, and
+// Tab into the focused column's send and insert rows (MixerPanelRowKeyboard.cpp).
 namespace synth::ui {
 
-class MixerPanelComponent : public juce::Component {
+class MixerPanelComponent
+    : public juce::Component
+    , public DockBackSlot
+    , public KeyboardContextMenuProvider
+    , public KeyboardColourProvider {
 public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
+
+    /** An insert row's "Show on canvas" or a send row menu's "Show <bus> on canvas": selects THE module (never its
+     * channel's macro), unfolding any collapsed macro that hides it first, then centres its card once the unfold has
+     * landed. */
+    void revealModuleOnCanvas(const juce::String& moduleUuid);
 
     // `meterReader` -- own consume-on-read latch slot per live view (see .cpp).
     void configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
@@ -48,6 +80,70 @@ public:
     // Call once, right after configure() -- see .cpp for exactly what this copies.
     void copyWiringFrom(const MixerPanelComponent& other);
 
+    /** Where the shared section heights persist (nullable; must outlive this panel). Loads them now. */
+    void setSettingsStore(juce::PropertiesFile* settings);
+
+    /** Whether the panel's host can grow taller right now (null or false: the content scrolls instead). */
+    std::function<bool()> canGrowHost;
+    /** Grows the host by `extraPx` (0 with `commit` only persists); message thread only. */
+    std::function<void(int extraPx, bool commit)> growHost;
+
+    /** Grows the host (only grows) so every section fits beside a minimum-height fader. */
+    void growHostToFitSections();
+
+    /** The panel height at which the toolbar and every column at its full section heights fit. */
+    int requiredPanelHeight() const noexcept;
+
+    // ---- Side pane, zones and visibility (docs/mixer/panel.md#side-pane-zones-and-visibility) ----
+
+    /** The pane at the left of the panel, which travels with it into a detached window. */
+    SidePane& getSidePane() noexcept { return sidePane_; }
+    void setDockBackButton(juce::Button* button) override { toolbar_.setDockBackButton(button); }
+    /** The toolbar button that shows and hides it. */
+    SidePaneToggleButton& getSidePaneButton() noexcept { return toolbar_.getSidePaneButton(); }
+    /** The toolbar's Inserts / Sends / EQ toggle and the shortcut action it mirrors (shortcut hints). */
+    juce::Button& getSectionToggle(MixerSection section) noexcept { return toolbar_.getSectionToggle(section); }
+    static juce::String sectionToggleActionId(MixerSection section);
+    /** The "Show button labels" preference for the toolbar's buttons: names beside the icons, or icons only. */
+    void setToolbarLabelsShown(bool shown) { toolbar_.setLabelsShown(shown); }
+    /** Shows or hides the side pane; `forceOpen` only ever opens it. Always true (the mixer has a pane). */
+    bool toggleSidePane(bool forceOpen = false);
+
+    /** The project's pin / hide document; the panel owns a default until setViewDoc() shares another. */
+    synth::MixerViewDoc& getViewDoc() noexcept { return *viewDoc_; }
+    /** `doc` (null restores the panel's own) must outlive this panel; the docked panel and its mirror share one. */
+    void setViewDoc(synth::MixerViewDoc* doc) noexcept { viewDoc_ = doc != nullptr ? doc : &ownedViewDoc_; }
+    /** Fired after a pin / hide edit and after its undo or redo; the owner rebuilds every live mixer view. */
+    std::function<void()> onMixerViewChanged;
+
+    /** Each of these is one undo step and rebuilds the mixer. `channelId` is a MixerViewDoc id. */
+    void pinChannel(const juce::String& channelId, synth::MixerZone zone);
+    /** Moves `channelId` to the place `targetId` holds: tracks via onMoveTrack, buses in the saved bus order. */
+    void moveChannelWithinZone(const juce::String& channelId, const juce::String& targetId);
+    void setChannelHidden(const juce::String& channelId, bool hidden);
+    void showAllChannels();
+    /** Shows only this channel, or restores the previous hidden set when it already is the only one. */
+    void soloShowChannel(const juce::String& channelId);
+
+    MixerZonesPane& getZonesPaneForTest() noexcept { return zonesPane_; }
+    int getColumnIndexContainingForTest(const juce::Component* focused) const { return columnIndexContaining(focused); }
+    juce::Viewport& getLeftZoneViewportForTest() noexcept { return leftZone_.viewport; }
+    juce::Viewport& getRightZoneViewportForTest() noexcept { return rightZone_.viewport; }
+    /** The zone the Nth laid-out column (see getFocusedColumnIndexForTest) sits in. */
+    synth::MixerZone getColumnZoneForTest(int index) const {
+        return index >= 0 && index < (int)columnEntries_.size() ? columnEntries_[(size_t)index].zone
+                                                                : synth::MixerZone::Scrolling;
+    }
+    /** The header context menu's "Pin left / Pin right / Unpin" items are driven through this seam. */
+    void setShowZoneMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) { showZoneMenuHook_ = std::move(hook); }
+    void showChannelMenuForTest(const juce::String& channelId) { showChannelMenu(channelId); }
+
+    MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
+    MixerPanelToolbar& getToolbarForTest() noexcept { return toolbar_; }
+    /** The drag bubble's text ("5 rows"), empty while no divider is being dragged. */
+    juce::String getDragBubbleTextForTest() const;
+    juce::Viewport& getViewportForTest() noexcept { return viewport_; }
+
     /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
      *  MainComponent::makeChannelForNode, the same "Make channel" entry point every other trigger
      *  (header menu, canvas menu, module-card menu) already uses. */
@@ -56,18 +152,35 @@ public:
     /** Forwarded from every column's insert list after an add/reorder/remove mutation --
      *  BottomDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
+    /** Fired before a column or insert selects its card on the canvas, so the canvas is on screen first. */
+    std::function<void()> onRevealCanvas;
 
     /** Fired after a real interactive mute/solo/pan-law change -- see the .cpp wiring. */
     std::function<void()> onLiveMixerStateChanged;
 
     /** Creates a group/send bus channel -- bypassed EQ -> bypassed Compressor -> Stereo Strip ->
      *  Master(Mix), boxed in a macro named "Bus N" -- as ONE recordGraphAndMacroChange step, and
-     *  returns its strip's node id (invalid on failure). Wired to the dock's "Add bus" button and
+     *  returns its strip's node id (invalid on failure). Wired to the toolbar's "Add Bus" button and
      *  to every send row's "New bus..." item (see docs/mixer/sends-and-buses.md). */
     juce::AudioProcessorGraph::NodeID createBus();
 
     // Drag-reorders a send row, one undo step (see docs/mixer/sends-and-buses.md#reordering-sends).
     bool moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow);
+
+    // A dropped send row's settle, kept across the rebuild its commit causes (the send list is
+    // destroyed with its column): rebuild() hands it to the new column of the same strip, then clears it.
+    struct PendingSendSettle {
+        juce::AudioProcessorGraph::NodeID strip;
+        int row = -1;
+        float fromY = 0.0f;
+    };
+    PendingSendSettle pendingSendSettle_;
+
+    // The same for a moved insert row: set by the list just before its commit, played on the rebuilt column.
+    PendingSendSettle pendingInsertSettle_;
+    // Hands `list` (of the column whose strip or Master node is `columnNode`) the panel's rebuild hold and settle.
+    void playInsertSettle();
+    void wireInsertReorder(MixerInsertList& list, juce::AudioProcessorGraph::NodeID columnNode);
 
     // Nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
     void setMidiRemoteDoc(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDoc_ = doc; }
@@ -84,6 +197,31 @@ public:
      *  through regardless). */
     std::function<void(synth::TrackId)> onArmTrack;
 
+    /** Builds the colour picker of one track -- the one its Timeline swatch opens. MainComponent wires it through
+     *  BottomDockComponent; left null, a track column's dot is a plain swatch (a column with a macro still opens the
+     *  macro's picker). */
+    std::function<std::unique_ptr<ColourPickerPopup>(synth::TrackId)> buildTrackColourPicker;
+
+    /** What a column's colour dot recolours: its one feeding track, its channel macro, or nothing. */
+    enum class ColourRoute { None, Track, Macro };
+    /** Test seam: the route the strip column `uuid` would take; None when there is no such column. */
+    ColourRoute getColourRouteForTest(const juce::String& uuid) const;
+    /** Test seam: receives the picker a dot click built (null when there is none) instead of opening a CallOutBox,
+     *  the same split ColourPickerPopup's own seams use. A null hook restores the real launch. */
+    void setShowColourPickerHookForTest(
+        std::function<void(ColourRoute, std::unique_ptr<ColourPickerPopup>, juce::Rectangle<int>)> hook) {
+        showColourPickerHook_ = std::move(hook);
+    }
+
+    /** Fired when a track column is dropped in a new place: moves `trackId` to timeline index
+     *  `newIndex`. BottomDockComponent wires this to MainComponent::performTrackEdit(moveTrack) --
+     *  one undo step -- and rebuilds the mixer; never a direct TimelineDoc write. */
+    std::function<void(synth::TrackId, int newIndex)> onMoveTrack;
+
+    /** The strip menu's "Duplicate Track": the same action as the timeline row's menu and Cmd+D. BottomDockComponent
+     *  wires this to MainComponent::duplicateTrack. */
+    std::function<void(synth::TrackId)> onDuplicateTrack;
+
     /** The ShortcutManager the M/S/R keys resolve their rebindable bindings against
      *  ("timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/"timelineArmFocusedTrack" -- the
      *  SAME action ids the Timeline track header row already binds, deliberately: a new id would
@@ -91,12 +229,16 @@ public:
      *  letters, same "no manager installed" contract every other surface action in this app
      *  follows. Safe to call before or after columns exist -- keyPressed() always reads the
      *  member, never a value captured at bind time. */
-    void setShortcutManager(ShortcutManager* manager) { shortcuts_ = manager; }
+    void setShortcutManager(ShortcutManager* manager) {
+        shortcuts_ = manager;
+        refreshShortcutHints();
+    }
+    /** Re-reads the section toggles' and the colour dots' shortcut hints after a rebind. */
+    void refreshShortcutHints();
 
-    /** Re-runs buildMixerSnapshot() and rebuilds the column set. Cheap enough to call on every
-     *  graph/timeline/macro change (a handful of strips, never per-frame) -- see MixerModel.h.
-     *  Also re-resolves focusedColumnIndex_ by NodeID/uuid across the rebuild -- see
-     *  MixerPanelKeyboard.cpp's resolveFocusAfterRebuild() for the by-identity match rule. */
+    /** Re-runs buildMixerSnapshot() and brings the column set in line with it, keeping every strip column whose
+     *  column did not change (MixerPanelColumnReuse.cpp). Also re-resolves focusedColumnIndex_ by NodeID/uuid across
+     *  the rebuild -- see MixerPanelKeyboard.cpp's resolveFocusAfterRebuild() for the by-identity match rule. */
     void rebuild();
 
     /** Unbinds every strip column's + Master's fader/pan/mute/solo/meter from whatever
@@ -108,18 +250,47 @@ public:
      *  and buildMixerSnapshot()'s eventual re-bind against the NEW graph both then run afterwards,
      *  from the after-restore hook -- see docs/mixer/panel.md#unbinding-before-a-graph-change. */
     void unbindAllColumns();
+    /** unbindAllColumns() for a restore that frees only `doomed`: only the strip columns (and Master) bound to one of
+     *  them are unbound, and only those are rebuilt. */
+    void unbindColumnsFor(const std::vector<juce::AudioProcessorGraph::NodeID>& doomed);
 
-    /** Rebuild ONLY if unbindAllColumns() has left the columns detached since the last
-     *  rebuild. The graph-replacing paths (undo/redo restore, New Patch, Load, AI apply) already
-     *  rebuild the mixer from their own after-hook, but the single-node removal commands --
-     *  GraphEditor::deleteSelection(), requestDeleteModule(), replaceModule() -- do not: the only
-     *  post-apply hook they reach is reconcileTimelineBindingsOnly(), which deliberately never
-     *  rebuilds the mixer. Without this, deleting ANY module from the canvas left every column on
-     *  screen but bound to nothing until an unrelated later change happened to rebuild. Wired to
-     *  GraphEditor::onGraphStructureChanged (MainComponent's own setup), which fires at the end of
-     *  updateComponents() on all three of those paths; it is a no-op whenever the columns are
-     *  already live, so it does not turn every structural change into a full mixer rebuild. */
-    void rebuildIfUnbound();
+    /** Rebuild ONLY when what is shown no longer matches the graph: the columns are detached (unbindAllColumns()
+     *  or unbindColumnsFor() since the last rebuild), or a fresh snapshot differs from the one the last rebuild
+     *  showed (a module patched into or out of a track's chain, a cable moved). Edits that rebuild nothing of
+     *  their own reach it: a single-node removal (deleteSelection(), requestDeleteModule(), replaceModule()),
+     *  whose only post-apply hook is reconcileTimelineBindingsOnly(), and a cable patched on the canvas, which
+     *  fires no component rebuild at all. Wired to GraphEditor::onGraphStructureChanged and to every recorded
+     *  edit (MainComponent's undo-manager broadcast). Unchanged graph: one snapshot build and compare, no
+     *  rebuild; and rebuild() itself keeps every column that did not change. */
+    void rebuildIfStale();
+
+    /** Catches up on the rebuildIfStale() calls skipped while this panel was hidden (docs/layout/rendering.md, "A
+     *  closed panel does no work"). */
+    void visibilityChanged() override;
+    /** rebuild() now when shown; when hidden, only remembers to rebuild once shown. For the callers that rebuild on
+     *  every graph change rather than on a known mixer edit. */
+    void rebuildWhenShown();
+    /** How many times rebuild() has laid the columns out. */
+    int getRebuildCountForTest() const noexcept { return rebuildCount_; }
+
+    /** Column motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows. A rebuild of a
+     *  showing panel that adds or removes one scrolling column animates it by itself, in every mixer instance and
+     *  whichever path made the change; a load, a catch-up on becoming visible and a change that adds and removes
+     *  together land at once. noteColumnsLeaving() before a change that may remove a track's column and
+     *  finishColumnChange() once it and its rebuilds have landed group several rebuilds into one motion. The columns
+     *  after a removed one close the gap; a column an undo brings back is made room for, grows back and gets a fading
+     *  outline. Only the scrolling group moves; no-ops off screen. */
+    void noteColumnsLeaving();
+    /** Before an add or duplicate that spans several rebuilds: the column that arrives grows in once they have all
+     *  landed. The arm lasts until the next finishColumnChange(). */
+    void armColumnInsertMotion() noexcept { columnInsertArmed_ = true; }
+    void finishColumnChange();
+    /** `copy` is a duplicate of `source`: the copy's column comes out of the source's column (and, on undo, goes back
+     *  into it) in one movement with the others. Call before finishColumnChange(). */
+    void noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source);
+    /** Test seam: animate even though the panel is not showing. */
+    void forceColumnMotionForTest(bool on) noexcept { columnMotionForced_ = on; }
+    synth::ui::ExitEnterListMotion& getColumnMotionForTest() noexcept { return columnMotion_; }
 
     int getColumnCount() const noexcept { return (int)columnEntries_.size(); }
 
@@ -130,7 +301,17 @@ public:
         return index >= 0 && index < (int)stripColumns_.size() ? stripColumns_[(size_t)index].get() : nullptr;
     }
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
+    /** Strip columns constructed since this panel was made (a kept column is not counted). */
+    int getStripColumnsBuiltForTest() const noexcept { return stripColumnsBuilt_; }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
+    /** True from the first drag step of a column reorder until its drop has finished settling. */
+    /** A dropped send row's settle is waiting for the rebuild that will consume it. */
+    bool hasPendingSendSettleForTest() const noexcept { return pendingSendSettle_.row >= 0; }
+    bool isColumnReorderActiveForTest() const noexcept { return columnReorder_.isReordering(); }
+    /** The Esc key press a real column drag would receive from the window. */
+    bool sendEscapeToColumnDragForTest() {
+        return columnCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
+    }
 
     /** The empty-state hint (see emptyHint_). */
     const juce::Label& getEmptyHintForTest() const noexcept { return emptyHint_; }
@@ -138,6 +319,10 @@ public:
     /** -1 when nothing is focused, else an index into the same left-to-right order
      *  rebuild() lays out (strips, then Direct if visible, then Master if visible). */
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
+    /** The focused column's outline shows (a column has the keys and the keyboard is still in the panel). */
+    bool isFocusedColumnOutlineShownForTest() const noexcept {
+        return !isKeyboardAwayNow() && focusedColumnIndex_ >= 0 && focusedColumnIndex_ < (int)columnEntries_.size();
+    }
 
     /** The component setFocusedColumnIndex() would call grabAccessibilityFocus()
      *  toward for the CURRENTLY focused column -- null when nothing is focused. Lets a test assert
@@ -166,7 +351,7 @@ public:
      *  to render real audio through the graph just to observe a meter move. */
     int getRefreshMetersCallCountForTest() const noexcept { return refreshMetersCallCount_; }
 
-    /** The mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
+    /** The toolbar's "Reset Meters" action, and an Option/Alt-click on ANY
      *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
     void resetAllMeterReadouts();
 
@@ -190,16 +375,83 @@ public:
     /** Re-syncs every column's + Master's mute/solo/pan-law visuals -- see the .cpp definition. */
     void refreshLiveMixerVisuals();
 
+    void refreshTrackColours(); // see the .cpp definition
+
+    /** Opens the Parametric EQ window of the EQ insert at `nodeId` (the "mixerOpenEq" key). The default
+     *  finds the node's card on the canvas and opens its pop-out editor; a test replaces it. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenEqWindow;
+
+    /** The send or insert row the keyboard focus sits on, or none while it is on a column
+     *  ("mixerEnterRows" moves into the rows, Esc back out). See MixerPanelRowKeyboard.cpp. */
+    std::optional<MixerRowRef> getFocusedRowForTest() const noexcept { return rowFocus_; }
+    /** What a screen reader hears for the focused row ("Send to Reverb Bus, -6.0 dB"); empty in column mode. */
+    juce::String getFocusedRowDescriptionForTest() const { return getDescription(); }
+    /** The focused row's ring rectangle in this panel's coordinates; empty when none or scrolled out of view. */
+    juce::Rectangle<int> getFocusedRowBoundsForTest() const { return focusedRowBounds(); }
+
     bool keyPressed(const juce::KeyPress& key) override;
+    /** The top bar's key ring (docs/mixer/top-bar-keys.md). */
+    KeyRing& getTopBarRingForTest() noexcept { return topBarRing_; }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+        return topBarRing_.createAccessibilityHandler();
+    }
+    /** Leaving the panel (another control or region takes focus) ends row mode and the top-bar ring. */
+    void focusLost(FocusChangeType cause) override;
+    /** Coming back shows the focused column's ring again (focusLost hid it). */
+    void focusGained(FocusChangeType cause) override;
+    void focusOfChildComponentChanged(FocusChangeType cause) override;
+    /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
+    bool showContextMenuForKeyboardFocus() override;
+    /** The focused strip's colour picker, as the colour key opens it. False on a column with nothing to recolour. */
+    bool openColourForKeyboardFocus() override { return openFocusedColour(); }
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
 private:
+    /** What a column's canvas target resolves to: a macro to select, else a bare node. */
+    struct CanvasTarget {
+        juce::String macroId;
+        juce::AudioProcessorGraph::NodeID nodeId;
+    };
+    std::optional<CanvasTarget> resolveCanvasTarget(const juce::String& targetId) const;
     void selectOnCanvas(const juce::String& targetId);
+    void revealOnCanvas(const juce::String& targetId);
+    // ---- Colour dot -- implemented in MixerPanelColour.cpp ----
+    ColourRoute colourRouteFor(const std::vector<synth::TrackId>& feedingTracks, const juce::String& uuid) const;
+    void openColourPicker(const juce::String& uuid, juce::Rectangle<int> dotScreenBounds);
+    juce::String bypassShortcutText() const;
+    juce::String colourShortcutText() const;
+    bool openFocusedColour();
+    bool panFocused(float delta);
+    bool hideFocusedChannel();
+    juce::String panShortcutText() const;
+    juce::String faderShortcutText() const;
+    static constexpr float kPanStep = 0.1f; // a tenth of the way to one side
+    void wireSectionLayout();
+    void onSectionGeometryChanged();
+    void wireSectionFades();
+    void onSectionAppearanceChanged();
+    void onSectionLayoutCommitted();
+    bool contentScrollsVertically() const;
+    void paintDragBubble(juce::Graphics& g) const;
+    void repaintDragBubbleStrip();
 
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
-     *  rebuildIfUnbound(). */
+     *  rebuildIfStale(). */
     bool columnsUnbound_ = false;
+    /** A rebuildIfStale() came in while the panel was hidden and did nothing; visibilityChanged() runs it. */
+    bool staleCheckPending_ = false;
+    bool rebuildPending_ = false; // a rebuildWhenShown() came in while hidden
+    /** Above 0 while a column's own mutation is mid-flight: rebuildIfStale() / rebuildWhenShown() do nothing, because
+     *  they would destroy the list that is still committing. The mutation's own onMutated() does the one rebuild. */
+    int rebuildHoldDepth_ = 0;
+    /** The rows of the strip columns the running rebuildFrom() replaced, by column uuid (MixerRowsMotion). */
+    std::vector<std::pair<juce::String, MixerRowsMotion::Snapshot>> pendingRowMotions_;
+    int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
+    std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
+    /** rebuild() with the snapshot already built (and its saved bus order applied) by the caller. */
+    void rebuildFrom(synth::MixerSnapshot snapshot);
+    synth::MixerSnapshot snapshotShown_; // what the last rebuild() laid out; rebuildIfStale() compares to it
 
     /** One entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so
@@ -209,20 +461,92 @@ private:
         enum class Kind { Strip, Direct, Master };
         Kind kind = Kind::Strip;
         juce::Component* component = nullptr;
-        juce::AudioProcessorGraph::NodeID nodeId;  // invalid for Direct
-        juce::String uuid;                         // stable re-resolve key; empty for Direct
+        juce::AudioProcessorGraph::NodeID nodeId; // invalid for Direct
+        juce::String uuid;                        // stable re-resolve key; empty for Direct
+        juce::String channelId;                   // MixerViewDoc's id for this column
+        synth::MixerZone zone = synth::MixerZone::Scrolling;
+        int zoneIndex = 0;                         // position among the columns of the same zone
         bool linkedToTrack = false;                // Strip only
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
+    struct FocusIdentity {
+        ColumnEntry::Kind kind;
+        juce::String uuid;
+    };
+    std::optional<FocusIdentity> focusFallback_; // where focus goes when the focused column is gone after a rebuild
+
+    // ---- Incremental column rebuild -- implemented in MixerPanelColumnReuse.cpp -------------------
+    /** What the panel itself gave a strip column; with MixerColumnComponent::showsColumn it decides reuse. */
+    struct StripColumnState {
+        bool colourEditable = false;
+        synth::MixerZone zone = synth::MixerZone::Scrolling;
+        bool unbound = false; // released by unbindColumnsFor(): rebuilt, never kept
+    };
+    using StripColumnsByUuid = std::map<juce::String, std::unique_ptr<MixerColumnComponent>>;
+    /** Moves every strip column out of stripColumns_, keyed by uuid, for rebuild() to take back. */
+    StripColumnsByUuid releaseStripColumns();
+    /** The column rebuild() shows for `column`: the one in `previous` when it is still bound and was built from the
+     *  same inputs, else a fresh one. */
+    std::unique_ptr<MixerColumnComponent> takeOrBuildStripColumn(StripColumnsByUuid& previous,
+                                                                 const synth::MixerColumn& column,
+                                                                 const juce::String& channelId);
+    std::unique_ptr<MixerColumnComponent> buildStripColumn(const synth::MixerColumn& column,
+                                                           const juce::String& channelId, const juce::String& sources,
+                                                           const StripColumnState& state);
+    juce::String sourcesTextFor(const synth::MixerColumn& column) const;
+    bool anyStripColumnUnbound() const;
+    std::unordered_map<const MixerColumnComponent*, StripColumnState> stripColumnState_;
+    int stripColumnsBuilt_ = 0;
+    bool masterColumnUnbound_ = false; // released by unbindColumnsFor(); the next rebuild() re-binds it
 
     // ---- Keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------------
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+    static juce::KeyPress defaultSectionToggleKey(MixerSection section);
+    juce::String sectionToggleShortcutText(MixerSection section) const;
     bool moveFocus(int direction);
     bool nudgeFocusedFader(float deltaDb);
+    /** The dB step the fader nudge keys give `key`: +-1 dB, +-0.1 dB with Alt added, else 0. */
+    float faderNudgeFor(const juce::KeyPress& key) const;
     bool selectFocusedOnCanvas();
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
+    int columnIndexContaining(const juce::Component* focused) const;
+    int columnIndexOf(const juce::Component* c) const; // the column holding `c`, or -1
+    /** A press anywhere in a column (a control, the header or empty space) focuses that column. */
+    void focusColumnFromClick(const juce::MouseEvent& e);
+    bool duplicateFocusedTrack();   // the Duplicate key: the focused strip's one feeding track
+    void noteKeyboardMoved();       // shows or hides the focused column's ring as the keyboard leaves or returns
+    bool isKeyboardAwayNow() const; // the keyboard is not on the panel, read from real focus and visibility now
+    bool renameFocusedColumn();     // the Rename key: the focused column's header name editor
+
+    // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
+    /** The focused column's insert / send lists while their sections are shown; null otherwise. */
+    MixerInsertList* focusedInsertList() const;
+    MixerSendList* focusedSendList() const;
+    /** The focused column's rows in walk order: its inserts, then its sends. */
+    std::vector<MixerRowRef> focusedRows() const;
+    MixerColumnComponent* focusedEqColumn() const;
+    bool enterRows();
+    void exitRows();
+    bool handleRowKey(const juce::KeyPress& key);
+    bool stepRow(int direction);
+    bool nudgeFocusedSend(float deltaDb);
+    /** On an insert split row, opens (Right) or folds (Left) it; Left on a path row steps up to its split row. */
+    bool foldFocusedRow(bool open);
+    bool removeFocusedRow();
+    bool toggleFocusedRowBypass();
+    bool moveFocusedRow(int delta);
+    bool openFocusedRow();
+    bool openFocusedEq();
+    void openEqWindowOnCanvas(juce::AudioProcessorGraph::NodeID nodeId);
+    void setRowFocus(std::optional<MixerRowRef> row);
+    /** Keeps the row focus valid after the rows or the sections shown changed under it. */
+    void reconcileRowFocus();
+    void syncRowVisuals();
+    void refreshRowAccessibility();
+    juce::Rectangle<int> focusedRowBounds() const;
+    void paintRowFocusRing(juce::Graphics& g) const;
     /** Re-resolves focusedColumnIndex_ after a rebuild by IDENTITY, never by raw index -- a
      *  strip insert/removal elsewhere in the column order would otherwise silently reattach focus
      *  to the wrong column. `hadFocus` is false when nothing was focused before the rebuild (then
@@ -240,11 +564,126 @@ private:
      *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
     void grabAccessibilityFocusForFocusedColumn();
 
-    juce::Viewport viewport_;
-    juce::Component content_;
+    // ---- Zones -- implemented in MixerPanelZones.cpp ------------------------------------------
+    struct Zone;
+    /** Sorts columnEntries_ into left / scrolling / right zone order, numbers each zone and parents
+     *  every column to its zone's content. */
+    void assignZones();
+    Zone& zoneFor(synth::MixerZone zone) noexcept;
+    juce::Component& zoneContentFor(synth::MixerZone zone) noexcept;
+    /** Lays the zone viewports, dividers and scrolling viewport out inside `area`; returns the column height. */
+    int layoutZones(juce::Rectangle<int> area, bool scrollsVertically);
+    void syncVerticalScroll(juce::Viewport& source);
+    void scrollToColumn(const ColumnEntry& entry);
+    void publishChannelsToPane(const synth::MixerSnapshot& snapshot);
+    static juce::String channelIdFor(const synth::MixerColumn& column);
+    /** `anchor` (screen coordinates) places the menu at a column; empty opens it at the mouse. */
+    void showChannelMenu(const juce::String& channelId, std::optional<juce::Rectangle<int>> anchor = {});
+    void wireHeaderMenus();
+
+    // ---- View edits (pin / hide) -- implemented in MixerPanelViewEdits.cpp ---------------------
+    void applyViewEdit(const std::function<void(synth::MixerViewDoc&)>& edit, bool keepSoloRestore = false);
+    void refreshAfterViewChange();
+
+    // ---- Column drag-reorder (track strips among themselves, buses among themselves) --------------
+    // ---- implemented in MixerPanelColumnDrag.cpp -------------------------------------------------
+    /** Reorders the snapshot's track-less columns by the view document's saved bus order. */
+    void applySavedBusOrder(synth::MixerSnapshot& snapshot);
+    /** True for a scrolling-zone strip/bus column of the group the active drag moves. */
+    bool inActiveReorderGroup(const ColumnEntry& entry) const;
+    std::vector<juce::String> mergeBusOrder(const std::vector<juce::String>& visibleBefore,
+                                            const std::vector<juce::String>& visibleAfter) const;
+    void wireColumnReorder(MixerColumnComponent& column, const juce::String& uuid);
+    void beginColumnDrag(const juce::String& uuid, const juce::MouseEvent& e);
+    void dragColumn(const juce::MouseEvent& e);
+    /** True when the gesture was a drag (the header must not also treat the release as a click). */
+    bool endColumnDrag();
+    void commitColumnDrag();
+    void cancelColumnDrag();
+    void discardColumnDrag();
+    void onColumnReorderFrame();
+    void startColumnFramesIfNeeded();
+    void autoscrollForPointer(juce::Point<int> pointer);
+    float pointerXInContent(const juce::MouseEvent& e);
+    /** Positions every column; a reorder in flight shifts the track strips to their animated places. */
+    void placeColumns(int columnHeight, bool relayout);
+    void paintColumnDragChrome(juce::Graphics& g);
+
+    struct ColumnsContent : juce::Component {
+        std::function<void(juce::Graphics&)> onPaint;
+        void paint(juce::Graphics& g) override {
+            if (onPaint)
+                onPaint(g);
+        }
+    };
+
+    struct ScrollReportingViewport : juce::Viewport {
+        std::function<void()> onScrolled;
+        void visibleAreaChanged(const juce::Rectangle<int>&) override {
+            if (onScrolled)
+                onScrolled();
+        }
+    };
+
+    struct ZoneDivider : juce::Component {
+        void paint(juce::Graphics& g) override;
+    };
+
+    /** A pinned zone: its own viewport (so a zone wider than its cap scrolls inside itself), the content
+     *  its columns live in, and the 2 px divider that sets it off from the scrolling middle. */
+    struct Zone {
+        ScrollReportingViewport viewport;
+        ColumnsContent content;
+        ZoneDivider divider;
+        FadeVisibility fade{{&viewport, &divider}}; // a zone fades in when a column is pinned to it, out when empty
+    };
+
+    MixerSectionLayout sectionLayout_;
+    // Declared before toolbar_ so it is destroyed after it: the toolbar's toggle button unbinds from
+    // this pane in its destructor (SidePaneToggleButton: the pane must outlive the button).
+    SidePane sidePane_;
+    MixerPanelToolbar toolbar_;
+    MixerZonesPane zonesPane_;
+    std::vector<juce::Component*> topBarStops();
+    std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
+    // Hidden; reports `focusedColumn` to test mode (the title of the column whose focus ring shows, empty when none),
+    // so this widely included header stays free of TestModeStateSource.h.
+    std::unique_ptr<juce::Component> focusedColumnProbe_;
+    void fillFocusedColumnState(juce::DynamicObject& into) const;
+    KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
+    // Hears every press inside the panel (a nested listener), so a click on any control in a column focuses it.
+    struct ClickFocus : juce::MouseListener {
+        explicit ClickFocus(MixerPanelComponent& o)
+            : owner(o) {}
+        void mouseDown(const juce::MouseEvent& e) override { owner.focusColumnFromClick(e); }
+        MixerPanelComponent& owner;
+    };
+    ClickFocus clickFocus_{*this};
+    bool keyboardAway_ = false; // the keyboard left the panel: the focused column keeps its place, not its ring
+    Zone leftZone_;
+    Zone rightZone_;
+    synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();
+    synth::MixerViewDoc* viewDoc_ = &ownedViewDoc_;
+    std::function<void(juce::PopupMenu&)> showZoneMenuHook_; // empty = show the real menu
+    std::vector<juce::String> channelIds_;                   // every channel of the last rebuild, hidden ones too
+    juce::String soloShownId_;                               // the channel an Alt-click is showing alone
+    std::vector<juce::String> soloRestoreHidden_;            // the hidden set to bring back
+    bool syncingScroll_ = false;
+    juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
+    bool grewHostThisDrag_ = false;
+    std::array<bool, MixerSectionLayout::kSectionCount> lastHidden_{}; // detects a re-show
+    ScrollReportingViewport viewport_;
+    ColumnsContent content_;
 
     /** Shown only while there are no columns; see the ctor and rebuild(). */
     juce::Label emptyHint_;
+    FadeVisibility emptyHintFade_{&emptyHint_};
+
+    /** One empty, zero-size probe per section whose fade carries the section's open amount (1 open, 0 the strip):
+     *  FadeVisibility's progress() is what every column lays its section height out from, so the shared geometry
+     *  and Master slide together (onSectionGeometryChanged, MixerPanelSections.cpp). */
+    std::array<juce::Component, MixerSectionLayout::kSectionCount> sectionProbes_;
+    std::array<std::unique_ptr<FadeVisibility>, MixerSectionLayout::kSectionCount> sectionFades_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
@@ -254,14 +693,59 @@ private:
     synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // See setMidiRemoteDoc
     AudioEngine* audioEngine_ = nullptr;
     ShortcutManager* shortcuts_ = nullptr;
+    std::function<void(ColourRoute, std::unique_ptr<ColourPickerPopup>, juce::Rectangle<int>)> showColourPickerHook_;
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer; // See configure()
 
     std::vector<std::unique_ptr<MixerColumnComponent>> stripColumns_;
     std::unique_ptr<MixerDirectColumn> directColumn_;
     std::unique_ptr<MixerMasterColumn> masterColumn_;
+    // Declared after the columns, so a fade is gone before the column it drives.
+    std::unique_ptr<FadeVisibility> directFade_;
+    std::unique_ptr<FadeVisibility> masterFade_;
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
+    std::optional<MixerRowRef> rowFocus_; // set only while the focused column's rows hold the keys
+
+    // Delete and undo motion: the picture of the columns taken before a removal, which channels the rebuilds added and
+    // removed, and the overlay that plays them.
+    struct ColumnPicture {
+        juce::Image image;
+        float scale = 1.0f;
+        std::vector<synth::ui::ExitEnterListRow> rows;
+        std::map<juce::String, std::vector<synth::TrackId>> feeders; // column key -> tracks it carried
+    };
+    std::vector<synth::ui::ExitEnterListRow> scrollingColumnRows() const;
+    synth::ui::ExitEnterListPlan::SourceOf
+    columnSources(const std::vector<juce::String>& keys,
+                  const std::map<juce::String, std::vector<synth::TrackId>>& feeders) const;
+    bool canAnimateColumnMotion() const { return isShowing() || columnMotionForced_; }
+    void noteColumnSetChange(const std::vector<juce::String>& added, const std::vector<juce::String>& removed);
+    void noteColumnSetComing(const synth::MixerSnapshot& snapshot);
+    std::optional<ColumnPicture> pendingColumnPicture_;
+    std::vector<juce::String> columnsAdded_, columnsRemoved_;
+    std::map<std::int64_t, std::int64_t> duplicateOrigins_; // copy track id -> source track id
+    bool columnSetRestored_ = false;                        // the last column-set change was an undo or redo
+    bool columnInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new columns grow in
+    bool columnMotionForced_ = false;
+    bool autoColumnFinish_ = false;      // this rebuild started the motion itself and ends it
+    bool catchingUp_ = false;            // a rebuild that only catches up on edits made while hidden
+    std::int64_t replaceCountSeen_ = -1; // the doc's replace count at the last rebuild: a move means a load
+    synth::ui::ExitEnterListMotion columnMotion_{*this};
+
+    ReorderDragAnimator columnReorder_;
+    ReorderFramePump columnFrames_{*this};
+    ReorderCancelKey columnCancelKey_;
+    std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
+    std::vector<juce::String> busUuidsInOrder_;      // every track-less strip/bus uuid (hidden too), in shown order
+    bool reorderingBuses_ = false;                   // the active drag moves track-less columns
+    std::vector<synth::TrackId> reorderFirstTracks_; // animator keys -> first feeding track
+    juce::String liftedUuid_;                        // the column drawn lifted (dragged, then settling)
+    unsigned columnGenerationSeen_ = 0;
+    float lastDraggedStart_ = 0.0f;
+    int lastScrollX_ = 0;
+    bool columnDragCancelled_ = false; // Esc pressed in this gesture: the release must not click
+    bool committingColumnDrag_ = false;
 
     juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_;     // Invalid = nothing armed
     juce::AudioProcessorGraph::NodeID midiLearnArmedSoloNodeId_; // Invalid = nothing armed

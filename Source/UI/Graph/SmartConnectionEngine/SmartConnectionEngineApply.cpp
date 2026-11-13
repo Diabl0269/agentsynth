@@ -9,6 +9,8 @@
 
 #include "SmartConnectionEngine.h"
 
+#include "MacroOwnerIndex.h"
+
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -20,19 +22,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
     const auto previous = smartSuggestions_;
     smartSuggestions_.clear();
 
-    if (!drag.active || drag.ghost.isEmpty() || !shouldOfferSmartConnections(drag)) {
-        if (previous != smartSuggestions_)
-            host_.repaintCanvas();
-        return;
-    }
-
-    juce::AudioProcessor* ghostProc = nullptr;
-    if (drag.selfId.uid != 0) {
-        if (auto* mc = host_.moduleComponentFor(drag.selfId))
-            ghostProc = mc->getModule();
-    } else {
-        ghostProc = drag.probe;
-    }
+    auto* ghostProc = ghostProcessorFor(drag);
     if (ghostProc == nullptr) {
         if (previous != smartSuggestions_)
             host_.repaintCanvas();
@@ -71,6 +61,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
     const bool ghostAcceptsMidi = ghostProc->acceptsMidi();
     const bool ghostProducesMidi = ghostProc->producesMidi();
 
+    const synth::MacroOwnerIndex owners(host_.getMacros()); // only cards facing `target` (sidesFacing) are wired
+    const auto target = dropContainer(drag);
+
     for (auto* neighbor : host_.modules()) {
         if (neighbor == nullptr || neighbor->getModule() == nullptr)
             continue;
@@ -78,6 +71,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             continue;
         // Hidden attenuverter nodes are never smart-wired.
         if (dynamic_cast<AttenuverterModule*>(neighbor->getModule()) != nullptr)
+            continue;
+        const auto sides = sidesFacing(owners, target, *neighbor);
+        if (!sides.inputs && !sides.outputs)
             continue;
 
         const auto neighborBounds = neighbor->getBounds();
@@ -117,8 +113,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             auto* dMb = dynamic_cast<ModuleBase*>(dProc);
             const auto link = GraphEditor::resolvePolyLink(sMb, sJack, dMb, dJack);
             for (int v = 0; v < link.voiceCount; ++v) {
-                const int rawSrc = link.sourceRawChannel + v * link.sourceStride;
-                const int rawDst = link.destRawChannel + v;
+                const int rawSrc = link.sourceChannel(v);
+                const int rawDst = link.destChannel(v);
                 SmartSuggestion::InsertLink leg;
                 leg.fromJack = sMb != nullptr ? sMb->mapOutputChannel(rawSrc).visibleJackIndex : rawSrc;
                 leg.toJack = dMb != nullptr ? dMb->mapInputChannel(rawDst).visibleJackIndex : rawDst;
@@ -134,6 +130,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
         auto pushAudioGroup = [&](bool ghostIsSource, juce::AudioProcessor* srcProc, juce::AudioProcessor* dstProc,
                                   juce::AudioProcessorGraph::NodeID srcNodeIdForFreeCheck,
                                   juce::AudioProcessorGraph::NodeID dstNodeIdForFreeCheck, bool checkDstFree) {
+            if (!(ghostIsSource ? sides.inputs : sides.outputs))
+                return;
             const auto srcLegs = collectSmartAudioLegs(srcProc, false);
             const auto dstLegs = collectSmartAudioLegs(dstProc, true);
             auto pairs = expandAudioJackPairs(srcLegs, dstLegs);
@@ -172,8 +170,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             // moved beyond, e.g. the upstream it is being spliced in after. Final geometry is
             // findFreeSlot's business either way, so a transiently overlapping ghost is harmless.
             const auto& insertAim = aimBounds.isEmpty() ? ghostBounds : aimBounds;
-            const bool relaxFlowForInsert =
-                ghostIsSource && isInsertModifierDown() && insertAim.getCentreX() <= neighborBounds.getRight();
+            const bool relaxFlowForInsert = ghostIsSource && relaxesFlowForInsert(drag, neighbor, insertAim);
 
             const size_t beforeProximity = pairs.size();
             if (!relaxFlowForInsert) {
@@ -197,15 +194,15 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
             // What an already-occupied destination jack means depends on the modifier and the node:
             //
-            //   * Cmd held  -> INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
-            //                 through the ghost. This is the only way to insert; nothing inserts
-            //                 without the modifier.
-            //   * No Cmd, terminal audio sink -> plain ADDITIVE parallel connection. The sink is
+            //   * Insert allowed (Ctrl held, or the side-by-side preference is Always, the default)
+            //                 -> INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
+            //                 through the ghost.
+            //   * Insert not allowed, terminal audio sink -> plain ADDITIVE parallel connection. The sink is
             //                 wired in essentially every real patch, so a hard stop there means a
             //                 module parked next to it can never be offered anything; and summing
             //                 into the mix bus is exactly what dragging a cable there by hand does.
             //                 Existing cables are left alone.
-            //   * No Cmd, any other module -> hard stop, unchanged. Silently summing into a jack the
+            //   * Insert not allowed, any other module -> hard stop, unchanged. Silently summing into a jack the
             //                 user wired mid-patch is never something to suggest.
             //
             // insertPlan is set for the whole group, or left empty for an ordinary add.
@@ -223,7 +220,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                 // Proximity to the destination's INPUT side is already what gates us here: the
                 // jack-to-jack filter above measures the ghost's output jack against
                 // jackPoint(dstJack, isInput=true), and rejects a source sitting to the right of it.
-                if (anyOccupied && !isInsertModifierDown()) {
+                if (anyOccupied && !insertIsAllowedNow()) {
                     // Parallel add is offered at the terminal sink only.
                     if (!(ghostIsSource && isTerminalAudioSink(dstProc)))
                         return;
@@ -252,6 +249,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                     auto* upstreamComp = upstreamNode.has_value() ? componentForNode(*upstreamNode) : nullptr;
                     if (upstreamComp == nullptr || upstreamComp->getModule() == ghostProc)
                         return;
+                    if (containerFacing(owners, *upstreamNode, /*throughInput=*/false) != target)
+                        return; // the cable comes from another container: rerouting it rewires another track
                     auto upstreamCategory = synth::ui::ModuleCategory::Utility;
                     if (auto* umb = dynamic_cast<ModuleBase*>(upstreamComp->getModule()))
                         upstreamCategory = synth::ui::categoryFor(umb->getModuleType());
@@ -303,9 +302,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                                                                       ghostInJack);
                         bool addsGhostIn = false, addsUpstreamOut = false;
                         for (int v = 0; v < fan.voiceCount; ++v) {
-                            if (claimedRawGhostIns.insert(fan.destRawChannel + v).second)
+                            if (claimedRawGhostIns.insert(fan.destChannel(v)).second)
                                 addsGhostIn = true;
-                            if (claimedRawUpstreamOuts.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                            if (claimedRawUpstreamOuts.insert(fan.sourceChannel(v)).second)
                                 addsUpstreamOut = true;
                         }
                         if (!addsGhostIn && !addsUpstreamOut)
@@ -357,9 +356,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                     const auto fan = GraphEditor::resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
                     bool addsDst = false, addsSrc = false;
                     for (int v = 0; v < fan.voiceCount; ++v) {
-                        if (claimedRawDsts.insert(fan.destRawChannel + v).second)
+                        if (claimedRawDsts.insert(fan.destChannel(v)).second)
                             addsDst = true;
-                        if (claimedRawSrcs.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                        if (claimedRawSrcs.insert(fan.sourceChannel(v)).second)
                             addsSrc = true;
                     }
                     if (addsDst || addsSrc)
@@ -439,6 +438,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
         // MIDI
         auto considerMidi = [&](bool ghostIsSource) {
+            if (!(ghostIsSource ? sides.inputs : sides.outputs))
+                return;
             const juce::String ghostName = ghostProc->getName();
             const juce::String neighborName = neighborProc->getName();
             if (ghostIsSource) {
@@ -565,6 +566,33 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
     if (smartSuggestions_ != previous)
         host_.repaintCanvas();
+}
+
+// Whether an insert into `neighbor` is judged by where it is aimed rather than by jack-to-jack distance (the comment at
+// the call). The aim's centre must not be past the neighbour's right edge; then Ctrl relaxes it anywhere, and without
+// Ctrl a drag plainly aimed between two wired cards does too: it has opened an insert-between gap in front of
+// `neighbor` (or found the gap already wide enough), or the aim sits inside the box spanned by `neighbor` and a card
+// that feeds it. The ghost is then in the slot between them, level with neither jack. Only where inserting is allowed.
+bool SmartConnectionEngine::relaxesFlowForInsert(const DragPreviewState& drag, ModuleComponent* neighbor,
+                                                 const juce::Rectangle<int>& aim) const {
+    if (aim.getCentreX() > neighbor->getBounds().getRight())
+        return false;
+    if (isInsertModifierDown())
+        return true;
+    if (!insertIsAllowedNow())
+        return false;
+    if (drag.gapAnchorId.uid != 0 && neighbor->getNodeId() == drag.gapAnchorId)
+        return true;
+    for (const auto& conn : host_.graph().getConnections()) {
+        if (conn.destination.nodeID != neighbor->getNodeId() || conn.destination.isMIDI() ||
+            conn.source.nodeID == drag.selfId)
+            continue;
+        if (auto* src = host_.moduleComponentFor(conn.source.nodeID);
+            src != nullptr && src != neighbor &&
+            src->getBounds().getUnion(neighbor->getBounds()).contains(aim.getCentre()))
+            return true;
+    }
+    return false;
 }
 
 void SmartConnectionEngine::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {

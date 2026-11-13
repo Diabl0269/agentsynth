@@ -1,659 +1,187 @@
 #pragma once
 
-#include "../ModuleBase.h"
+#include "Modules/FX/ParametricEQ/ParametricEQBandTypes.h"
+#include "Modules/ModuleBase.h"
 #include <array>
 #include <atomic>
-#include <cmath>
 #include <juce_dsp/juce_dsp.h>
 
-/** Four-band parametric EQ for surgical tone shaping, in the traditional console/DAW idiom.
+/** Parametric EQ with 24 fixed band slots, each with its own type and (for cuts) slope.
  *
- *  Band slots (fixed types, as in Cubase's channel EQ):
- *    1  Low Shelf   — broad bottom-end lift/cut
- *    2  Peak        — fully parametric bell
- *    3  Peak        — fully parametric bell
- *    4  High Shelf  — broad top-end lift/cut
- *
- *  **All four bands start disabled**, so a freshly dropped EQ is a straight wire and the curve
- *  starts empty. Points are added by double-clicking the response curve (EQCurveComponent), which
- *  enables whichever slot best fits the clicked frequency — see findBandForNewPoint().
- *
- *  Every band exposes Freq / Gain / Q uniformly, so the same drag-and-scroll gestures work on all
- *  of them; the only difference between slots is the shape their type gives them.
- *
- *  DSP: RBJ cookbook biquads (juce::dsp::IIR::Filter per channel per band). Coefficient objects
- *  are allocated once in prepareToPlay and rewritten in place each block, so processBlock never
- *  touches the heap. Coefficients are shared between the two channels — juce::dsp::IIR keeps its
- *  filter state in the Filter, not the Coefficients, so this is safe (it is what
- *  ProcessorDuplicator does internally). A disabled band is written as a literal unity biquad.
- *
- *  The analytic magnitude helpers (bandMagnitudeDb / responseDb) use the analog prototypes the
- *  digital coefficients are derived from. EQCurveComponent draws the curve with them, and they
- *  are pure static functions so the response can be unit-tested headlessly.
+ *  Slots 1-4 are the original four bands (Low Shelf, Bell, Bell, High Shelf by default, each with its own home
+ *  frequency); slots 5-24 are added on demand. Every slot is shown on every surface and has a Type and a Slope.
+ *  Every band starts off, so a fresh EQ is a straight wire. Saved ids, the append order of the
+ *  parameters and the slope set: docs/modules/fx-modules.md#parametric-eq-module.
  */
 class ParametricEQModule : public ModuleBase {
 public:
-    static constexpr int kNumBands = 4;
+    using BandType = synth::eq::BandType;
+
+    static constexpr int kMaxBands = 24;
+    /** The original four slots: they keep their default types and home frequencies, their jacks and the 1-4 keys. */
+    static constexpr int kOriginalBands = 4;
+    static constexpr int kMaxStages = synth::eq::kMaxStages;
     static constexpr float kMaxGainDb = 24.0f;
     static constexpr float kMinFreq = 20.0f;
     static constexpr float kMaxFreq = 20000.0f;
     static constexpr float kMinQ = 0.1f;
     static constexpr float kMaxQ = 10.0f;
-    /** Default shelf/bell slope. Q = 1/sqrt(2) is the RBJ "S = 1" case — maximally flat. */
+    /** Q = 1/sqrt(2): maximally flat. */
     static constexpr float kDefaultQ = 0.70710678f;
+    static constexpr int kMixCvChannel = 15;
+    static constexpr int kPanCvChannel = 16;
+    /** Bands 5-24 each own three raw CV channels (Freq, Gain, Q) from here on, reached only through their knobs. */
+    static constexpr int kFirstBandCvChannel = 17;
+    static constexpr int kBandCvFields = 3;
+    static constexpr int kTotalInputChannels = kFirstBandCvChannel + (kMaxBands - kOriginalBands) * kBandCvFields;
+    /** Raw CV channel of band `band`'s Freq (field 0), Gain (1) or Q (2): the original four keep their old channels. */
+    static int bandCvChannel(int band, int field) noexcept;
 
-    enum class BandType { LowShelf = 0, Peak = 1, HighShelf = 2 };
-
-    /** Resolved (post-CV) settings of one band — what the visualiser draws. */
+    /** Resolved (post-CV) settings of one band: what the visualiser draws. */
     struct BandSnapshot {
         BandType type = BandType::Peak;
         bool enabled = false;
         float freqHz = 1000.0f;
         float gainDb = 0.0f;
         float q = kDefaultQ;
+        int slopeDbPerOct = synth::eq::kSlopesDbPerOct[synth::eq::kDefaultSlopeIndex];
     };
+    using BandSnapshots = std::array<BandSnapshot, kMaxBands>;
 
-    ParametricEQModule()
-        : ModuleBase("Parametric EQ", 15, 2) { // 0-1 audio, 2-14 CV: B2/B3 Freq+Gain (2-5, bespoke
-                                               // exponential/linear curves), then B1/B4 Freq+Gain,
-                                               // every band's Q, and Output (6-14, normalised CV)
-        // Parameters are grouped band-by-band so the custom module layout can walk them in rows.
-        // The on/off parameter's display name doubles as the row's label, which is why it reads
-        // "1 Low Shelf" rather than "Band 1 On".
-        for (int b = 0; b < kNumBands; ++b) {
-            const juce::String id = "band" + juce::String(b + 1);
-            const juce::String prefix = "B" + juce::String(b + 1) + " ";
+    ParametricEQModule();
 
-            addParameter(bands[(size_t)b].on = new juce::AudioParameterBool(id + "On", rowLabelFor(b), false));
-            addParameter(bands[(size_t)b].freq = new juce::AudioParameterFloat(
-                             id + "Freq", prefix + "Freq", freqRange(), defaultFreqFor(b), hzAttributes()));
-            addParameter(bands[(size_t)b].gain = new juce::AudioParameterFloat(id + "Gain", prefix + "Gain",
-                                                                               gainRange(), 0.0f, dbAttributes()));
-            addParameter(bands[(size_t)b].q = new juce::AudioParameterFloat(id + "Q", prefix + "Q", qRange(), kDefaultQ,
-                                                                            plainAttributes(2)));
-        }
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
-        addParameter(outputGainParam =
-                         new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
-        addMuteParameter();
-        enableVisualBuffer(true);
-    }
-
-    void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        lastSampleRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
-
-        juce::dsp::ProcessSpec monoSpec{lastSampleRate, static_cast<juce::uint32>(std::max(1, samplesPerBlock)), 1};
-
-        for (int b = 0; b < kNumBands; ++b) {
-            // Allocate once here; processBlock only ever rewrites the raw values in place.
-            coefficients[(size_t)b] = new Coefs(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-            for (int ch = 0; ch < kNumAudioChannels; ++ch) {
-                auto& filter = filters[(size_t)ch][(size_t)b];
-                filter.prepare(monoSpec);
-                filter.coefficients = coefficients[(size_t)b];
-                filter.reset();
-            }
-        }
-
-        // Every band's Freq / Gain / Q is smoothed, not just the two CV-driven bells: they all
-        // land in writeBiquad, and swapping a biquad's coefficients wholesale puts a step in the
-        // output. Snapped to the knobs here so a static render is bit-identical.
-        for (int b = 0; b < kNumBands; ++b) {
-            smoothedFreq[(size_t)b].reset(lastSampleRate, 0.02);
-            smoothedGain[(size_t)b].reset(lastSampleRate, 0.02);
-            smoothedQ[(size_t)b].reset(lastSampleRate, 0.02);
-            smoothedFreq[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].freq->get());
-            smoothedGain[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].gain->get());
-            smoothedQ[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].q->get());
-        }
-        smoothedOutputGain.reset(lastSampleRate, 0.02);
-        smoothedOutputGain.setCurrentAndTargetValue(juce::Decibels::decibelsToGain(outputGainParam->get()));
-
-        updateCoefficients();
-    }
-
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        // Borrow Left into Right's raw channel, sample-exact, while Dual I/O is
-        // split and only Left is patched. Must run before the bypass/mute branches below so
-        // both see a filled Right leg exactly as if the user had cabled it.
-        applyLeftRightNormalling(buffer);
-
-        juce::ignoreUnused(midiMessages);
-
-        if (isBypassed()) {
-            // Dry pass-through; clear CV channels so mod signals don't leak downstream as audio.
-            for (int ch = kNumAudioChannels; ch < buffer.getNumChannels(); ++ch)
-                buffer.clear(ch, 0, buffer.getNumSamples());
-            return;
-        }
-        if (isMuted()) {
-            buffer.clear();
-            return;
-        }
-
-        const int numSamples = buffer.getNumSamples();
-        const int numAudioCh = std::min(kNumAudioChannels, buffer.getNumChannels());
-        if (numSamples == 0 || numAudioCh == 0)
-            return;
-
-        // ---- Band targets, plus CV (sampled once per block, RMS-gated like the rest of the FX
-        // suite). Channels 2-5 modulate the two bell bands: freq then gain, bell 1 then bell 2.
-        for (int b = 0; b < kNumBands; ++b) {
-            smoothedFreq[(size_t)b].setTargetValue(bands[(size_t)b].freq->get());
-            smoothedGain[(size_t)b].setTargetValue(bands[(size_t)b].gain->get());
-            smoothedQ[(size_t)b].setTargetValue(bands[(size_t)b].q->get());
-        }
-        for (int i = 0; i < kNumBellBands; ++i) {
-            const auto& band = bands[(size_t)kBellBandIndex[i]];
-            const float cvFreq = readCV(buffer, 2 + i * 2, numSamples);
-            const float cvGain = readCV(buffer, 3 + i * 2, numSamples);
-            smoothedFreq[(size_t)kBellBandIndex[i]].setTargetValue(applyFreqCV(band.freq->get(), cvFreq));
-            smoothedGain[(size_t)kBellBandIndex[i]].setTargetValue(applyGainCV(band.gain->get(), cvGain));
-            // readCV returns exactly 0 for an unpatched (gated) jack, so this also tells the
-            // visualiser whether to show the CV-modulated value or the plain knob value.
-            const bool bellActive = (cvFreq != 0.0f || cvGain != 0.0f);
-            freqCVActive[(size_t)kBellBandIndex[i]].store(bellActive, std::memory_order_relaxed);
-            gainCVActive[(size_t)kBellBandIndex[i]].store(bellActive, std::memory_order_relaxed);
-        }
-
-        // ---- Remaining continuous parameters (ch6-14): B1/B4 Freq+Gain, every band's Q, and
-        // Output. These follow the normalised CV convention (base + CV in the parameter's own
-        // 0-1 range, docs/modules/modulation.md#cv-in-normalised-units) rather than the bells'
-        // bespoke exponential/linear curves above, which stay exactly as they were so no saved
-        // patch changes sound. `base` is each parameter's current smoothed value, same as every
-        // other smoothed CV target in the FX suite (e.g. Compressor Threshold/Ratio).
-        // Each active flag is published so getBandSnapshots() can overlay the CV-resolved value
-        // instead of the raw knob — otherwise the visualiser (and any headless caller) never
-        // sees these jacks do anything, even though they are already driving the audio below.
-        const float freq0Cv = blockCV(buffer, 6);
-        smoothedFreq[0].setTargetValue(modulateNormalised(*bands[0].freq, smoothedFreq[0].getCurrentValue(), freq0Cv));
-        freqCVActive[0].store(freq0Cv != 0.0f, std::memory_order_relaxed);
-
-        const float gain0Cv = blockCV(buffer, 7);
-        smoothedGain[0].setTargetValue(modulateNormalised(*bands[0].gain, smoothedGain[0].getCurrentValue(), gain0Cv));
-        gainCVActive[0].store(gain0Cv != 0.0f, std::memory_order_relaxed);
-
-        const float freq3Cv = blockCV(buffer, 8);
-        smoothedFreq[3].setTargetValue(modulateNormalised(*bands[3].freq, smoothedFreq[3].getCurrentValue(), freq3Cv));
-        freqCVActive[3].store(freq3Cv != 0.0f, std::memory_order_relaxed);
-
-        const float gain3Cv = blockCV(buffer, 9);
-        smoothedGain[3].setTargetValue(modulateNormalised(*bands[3].gain, smoothedGain[3].getCurrentValue(), gain3Cv));
-        gainCVActive[3].store(gain3Cv != 0.0f, std::memory_order_relaxed);
-
-        for (int b = 0; b < kNumBands; ++b) {
-            const float qCv = blockCV(buffer, 10 + b);
-            smoothedQ[(size_t)b].setTargetValue(
-                modulateNormalised(*bands[(size_t)b].q, smoothedQ[(size_t)b].getCurrentValue(), qCv));
-            qCVActive[(size_t)b].store(qCv != 0.0f, std::memory_order_relaxed);
-        }
-
-        smoothedOutputGain.setTargetValue(juce::Decibels::decibelsToGain(
-            modulateNormalised(*outputGainParam, outputGainParam->get(), blockCV(buffer, 14))));
-
-        // Coefficients update once per block from the smoothed values. With 20 ms smoothing the
-        // per-block step is small enough that swapping coefficients wholesale is inaudible, and
-        // it keeps the inner loops to a plain biquad.
-        for (int b = 0; b < kNumBands; ++b) {
-            smoothedFreq[(size_t)b].skip(numSamples);
-            smoothedGain[(size_t)b].skip(numSamples);
-            smoothedQ[(size_t)b].skip(numSamples);
-        }
-
-        updateCoefficients();
-
-        // ---- Filter the audio channels ----
-        for (int ch = 0; ch < numAudioCh; ++ch) {
-            auto* data = buffer.getWritePointer(ch);
-            for (int b = 0; b < kNumBands; ++b) {
-                if (!bands[(size_t)b].on->get())
-                    continue; // a disabled band is a straight wire — skip the work entirely
-                auto& filter = filters[(size_t)ch][(size_t)b];
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = filter.processSample(data[i]);
-                filter.snapToZero();
-            }
-        }
-
-        // ---- Output gain (per-sample so the smoothing actually applies) ----
-        for (int i = 0; i < numSamples; ++i) {
-            const float g = smoothedOutputGain.getNextValue();
-            for (int ch = 0; ch < numAudioCh; ++ch)
-                buffer.getWritePointer(ch)[i] *= g;
-        }
-
-        if (auto* vb = getVisualBuffer()) {
-            const auto* ch0 = buffer.getReadPointer(0);
-            for (int i = 0; i < numSamples; ++i)
-                vb->pushSample(ch0[i]);
-        }
-
-        // Clear CV channels to prevent leaking to downstream modules
-        for (int ch = kNumAudioChannels; ch < buffer.getNumChannels(); ++ch)
-            buffer.clear(ch, 0, numSamples);
-    }
-
-    juce::String getInputPortLabel(int i) const override {
-        // Appended after the original four (ch2-5) so saved patches that modulate B2/B3 keep
-        // working; see docs/modules/modulation.md#every-continuous-parameter-is-a-target.
-        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain", "B1 Freq", "B1 Gain", "B4 Freq",
-                                   "B4 Gain", "B1 Q",    "B2 Q",    "B3 Q",    "B4 Q",    "Output"};
-        return stereoInputLabel(i, kNumCvInputs, cv);
-    }
+    juce::String getInputPortLabel(int i) const override;
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
     int getVisibleInputPortCount() const override { return stereoVisibleInputCount(kNumCvInputs); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, kNumCvInputs); }
-    // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
-    // above -- a genuine stereo pair, eligible for render-time L->R normalling.
+    LogicalPort mapInputChannel(int raw) const override;
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
-
-    std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"B2 Freq", 2, "band2Freq"}, {"B2 Gain", 3, "band2Gain"}, {"B3 Freq", 4, "band3Freq"},
-                {"B3 Gain", 5, "band3Gain"}, {"B1 Freq", 6, "band1Freq"}, {"B1 Gain", 7, "band1Gain"},
-                {"B4 Freq", 8, "band4Freq"}, {"B4 Gain", 9, "band4Gain"}, {"B1 Q", 10, "band1Q"},
-                {"B2 Q", 11, "band2Q"},      {"B3 Q", 12, "band3Q"},      {"B4 Q", 13, "band4Q"},
-                {"Output", 14, "outputGain"}};
-    }
-    // Pure audio FX — processBlock never touches the MIDI buffer.
+    std::vector<ModulationTarget> getModulationTargets() const override;
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
-
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::ParametricEQ; }
 
-    // ---------- visualiser accessors / mutators (message thread) ----------
+    // ---------- band model (message thread) ----------
 
-    /** Band settings as the visualiser should draw them.
-     *
-     *  Values come from the parameters, so an edit is visible immediately — the curve must track
-     *  a dragged point even when no audio is flowing through the module. The two bell bands then
-     *  have their live CV-modulated frequency/gain overlaid, but only while CV is actually
-     *  driving them; otherwise the knob value is the effective value.
-     */
-    std::array<BandSnapshot, kNumBands> getBandSnapshots() const {
-        std::array<BandSnapshot, kNumBands> out{};
-        for (int b = 0; b < kNumBands; ++b) {
-            out[(size_t)b].type = bandTypeFor(b);
-            out[(size_t)b].enabled = bands[(size_t)b].on->get();
-            out[(size_t)b].freqHz = bands[(size_t)b].freq->get();
-            out[(size_t)b].gainDb = bands[(size_t)b].gain->get();
-            out[(size_t)b].q = bands[(size_t)b].q->get();
-        }
-        // Every band's Freq/Gain/Q can be CV-modulated now (bells via ch2-5, everything else via
-        // the normalised ch6-14 jacks) — overlay the CV-resolved value per-parameter, band by
-        // band, but only while that parameter's own jack is actually driving it; otherwise the
-        // knob value stands, which is what lets the curve track a drag with no audio running.
-        for (int b = 0; b < kNumBands; ++b) {
-            if (freqCVActive[(size_t)b].load(std::memory_order_relaxed))
-                out[(size_t)b].freqHz = resolvedFreq[(size_t)b].load(std::memory_order_relaxed);
-            if (gainCVActive[(size_t)b].load(std::memory_order_relaxed))
-                out[(size_t)b].gainDb = resolvedGain[(size_t)b].load(std::memory_order_relaxed);
-            if (qCVActive[(size_t)b].load(std::memory_order_relaxed))
-                out[(size_t)b].q = resolvedQ[(size_t)b].load(std::memory_order_relaxed);
-        }
-        return out;
-    }
-
+    /** Parameter values, with a jack's CV-resolved value overlaid while that jack drives it. */
+    BandSnapshots getBandSnapshots() const;
     bool isBandEnabled(int band) const { return isValidBand(band) && bands[(size_t)band].on->get(); }
-    int getEnabledBandCount() const {
-        int count = 0;
-        for (int b = 0; b < kNumBands; ++b)
-            if (bands[(size_t)b].on->get())
-                ++count;
-        return count;
-    }
+    int getEnabledBandCount() const;
+    BandType getBandType(int band) const;
+    int getBandSlope(int band) const;
 
-    // Setters take real-world units and notify the host, so attached sliders in the module card
-    // follow along when the user drags a point on the curve.
-    void setBandEnabled(int band, bool enabled) {
-        if (isValidBand(band))
-            bands[(size_t)band].on->setValueNotifyingHost(enabled ? 1.0f : 0.0f);
-    }
-    void setBandFreq(int band, float freqHz) {
-        if (isValidBand(band))
-            setFloat(bands[(size_t)band].freq, juce::jlimit(kMinFreq, kMaxFreq, freqHz));
-    }
-    void setBandGain(int band, float gainDb) {
-        if (isValidBand(band))
-            setFloat(bands[(size_t)band].gain, juce::jlimit(-kMaxGainDb, kMaxGainDb, gainDb));
-    }
-    void setBandQ(int band, float q) {
-        if (isValidBand(band))
-            setFloat(bands[(size_t)band].q, juce::jlimit(kMinQ, kMaxQ, q));
-    }
+    // Setters take real-world units and notify the host; an out-of-range band is ignored.
+    void setBandEnabled(int band, bool enabled);
+    void setBandFreq(int band, float freqHz);
+    void setBandGain(int band, float gainDb);
+    void setBandQ(int band, float q);
+    void setBandType(int band, BandType type);
+    /** `slopeDbPerOct` snaps to the nearest listed slope. */
+    void setBandSlope(int band, int slopeDbPerOct);
 
-    /** Which slot a new point at `freqHz` should occupy: the disabled band whose home frequency
-     *  is closest on a log axis, so a click down low lands on the low shelf and one up top on the
-     *  high shelf. Returns -1 when all four slots are already in use.
-     */
-    int findBandForNewPoint(float freqHz) const {
-        int best = -1;
-        float bestDistance = 0.0f;
-        const float target = std::log(juce::jlimit(kMinFreq, kMaxFreq, freqHz));
-        for (int b = 0; b < kNumBands; ++b) {
-            if (bands[(size_t)b].on->get())
-                continue;
-            const float distance = std::abs(target - std::log(defaultFreqFor(b)));
-            if (best < 0 || distance < bestDistance) {
-                best = b;
-                bestDistance = distance;
-            }
-        }
-        return best;
-    }
+    /** The shown slot (1-4) a new curve point at `freqHz` takes, or -1 when all four are on. */
+    int findBandForNewPoint(float freqHz) const;
+    /** The lowest slot of all 24 that is off, or -1 when every slot is on. */
+    int findFreeBand() const;
+    /** Turns the lowest free slot on at `freqHz` as `type` (gain 0, default Q); returns it, or -1. */
+    int addBand(float freqHz, BandType type);
+
+    // ---------- solo audition (any thread; not saved) ----------
+
+    /** Plays only band `band`'s region while it is on; an invalid band clears the solo. */
+    void setSoloBand(int band) { soloBand.store(isValidBand(band) ? band : -1, std::memory_order_relaxed); }
+    void clearSolo() { soloBand.store(-1, std::memory_order_relaxed); }
+    int getSoloBand() const { return soloBand.load(std::memory_order_relaxed); }
 
     float getOutputGainDb() const { return outputGainParam->get(); }
     double getLastSampleRate() const { return lastSampleRate; }
 
-    /** Which band type sits in slot `index` (0=LowShelf, 1/2=Peak, 3=HighShelf). */
-    static BandType bandTypeFor(int index) noexcept {
-        if (index == 0)
-            return BandType::LowShelf;
-        if (index == kNumBands - 1)
-            return BandType::HighShelf;
-        return BandType::Peak;
-    }
-
+    /** The type slot `index` starts as: 0 Low Shelf, 3 High Shelf, every other slot Bell. */
+    static BandType bandTypeFor(int index) noexcept;
     /** Row label / on-off toggle text for slot `index`, e.g. "1 Low Shelf". */
-    static juce::String rowLabelFor(int index) {
-        switch (bandTypeFor(index)) {
-        case BandType::LowShelf:
-            return juce::String(index + 1) + " Low Shelf";
-        case BandType::HighShelf:
-            return juce::String(index + 1) + " High Shelf";
-        case BandType::Peak:
-            break;
-        }
-        return juce::String(index + 1) + " Peak";
-    }
+    static juce::String rowLabelFor(int index);
+    /** Home frequency of slot `index`: its default, and what findBandForNewPoint ranks against. */
+    static float defaultFreqFor(int index) noexcept;
 
-    /** Home frequency of slot `index` — its default, and what findBandForNewPoint ranks against. */
-    static float defaultFreqFor(int index) noexcept {
-        constexpr float defaults[kNumBands] = {100.0f, 500.0f, 3000.0f, 8000.0f};
-        return defaults[juce::jlimit(0, kNumBands - 1, index)];
-    }
+    // ---------- pure static helpers ----------
 
-    // ---------- pure static helpers (unit-testable without a graph or a GUI) ----------
-
-    /** Magnitude in dB of one band's analog prototype at `freq`.
-     *  Returns 0 dB far from the band's action, and exactly `gainDb` where the band is fully
-     *  effective (DC for a low shelf, the centre for a bell, Nyquist-ward for a high shelf).
-     */
-    static float bandMagnitudeDb(BandType type, float centreHz, float gainDb, float q, float freq) noexcept {
-        if (centreHz <= 0.0f || freq <= 0.0f || !std::isfinite(centreHz) || !std::isfinite(freq))
-            return 0.0f;
-
-        const float A = std::pow(10.0f, gainDb / 40.0f);
-        const float Q = std::max(0.05f, q);
-        const float w = freq / centreHz;
-        const float w2 = w * w;
-        const float sqrtA = std::sqrt(A);
-
-        float numSq = 1.0f;
-        float denSq = 1.0f;
-
-        switch (type) {
-        case BandType::Peak: {
-            // H(s) = (s^2 + (A/Q)s + 1) / (s^2 + s/(A*Q) + 1),  s = jw,  w = f/f0
-            const float base = (1.0f - w2) * (1.0f - w2);
-            const float numImag = A * w / Q;
-            const float denImag = w / (A * Q);
-            numSq = base + numImag * numImag;
-            denSq = base + denImag * denImag;
-            break;
-        }
-        case BandType::LowShelf: {
-            // H(s) = A * (s^2 + (sqrt(A)/Q)s + A) / (A*s^2 + (sqrt(A)/Q)s + 1)
-            const float imag = w * sqrtA / Q;
-            numSq = A * A * ((A - w2) * (A - w2) + imag * imag);
-            denSq = (1.0f - A * w2) * (1.0f - A * w2) + imag * imag;
-            break;
-        }
-        case BandType::HighShelf: {
-            // H(s) = A * (A*s^2 + (sqrt(A)/Q)s + 1) / (s^2 + (sqrt(A)/Q)s + A)
-            const float imag = w * sqrtA / Q;
-            numSq = A * A * ((1.0f - A * w2) * (1.0f - A * w2) + imag * imag);
-            denSq = (A - w2) * (A - w2) + imag * imag;
-            break;
-        }
-        }
-
-        if (!(denSq > 0.0f))
-            return 0.0f;
-        // 10*log10 of a squared magnitude ratio == 20*log10 of the magnitude ratio.
-        return 10.0f * std::log10(std::max(numSq / denSq, 1.0e-12f));
-    }
-
-    /** Combined response of the ENABLED bands plus the output trim, in dB, at `freq`.
-     *  Disabled bands contribute nothing, so an all-off EQ is flat at the trim value.
-     */
-    static float responseDb(const std::array<BandSnapshot, kNumBands>& bands, float outputGainDb, float freq) noexcept {
-        float total = outputGainDb;
-        for (const auto& band : bands)
-            if (band.enabled)
-                total += bandMagnitudeDb(band.type, band.freqHz, band.gainDb, band.q, freq);
-        return total;
-    }
-
-    /** Writes RBJ cookbook biquad coefficients for one band into `dest[0..4]`, normalised the way
-     *  juce::dsp::IIR::Coefficients stores them: {b0/a0, b1/a0, b2/a0, a1/a0, a2/a0}.
-     *  `dest` must have room for 5 floats.
-     */
+    /** Analog magnitude in dB of one band at `freq`, every stage included. */
+    static float
+    bandMagnitudeDb(BandType type, float centreHz, float gainDb, float q, float freq,
+                    int slopeDbPerOct = synth::eq::kSlopesDbPerOct[synth::eq::kDefaultSlopeIndex]) noexcept;
+    /** Enabled bands plus the output trim, in dB, at `freq`. */
+    static float responseDb(const BandSnapshots& bands, float outputGainDb, float freq) noexcept;
+    /** One band's first stage into `dest[0..4]`, normalised as juce::dsp::IIR::Coefficients stores it. */
     static void writeBiquad(BandType type, float centreHz, float gainDb, float q, double sampleRate,
-                            float* dest) noexcept {
-        const double fs = (sampleRate > 0.0) ? sampleRate : 44100.0;
-        // Keep the pole away from Nyquist, where the bilinear transform degenerates.
-        const double f0 = juce::jlimit(1.0, fs * 0.49, static_cast<double>(centreHz));
-        const double A = std::pow(10.0, static_cast<double>(gainDb) / 40.0);
-        const double Q = std::max(0.05, static_cast<double>(q));
-        const double w0 = 2.0 * juce::MathConstants<double>::pi * f0 / fs;
-        const double cosW0 = std::cos(w0);
-        const double alpha = std::sin(w0) / (2.0 * Q);
-        const double sqrtA = std::sqrt(A);
-
-        double b0 = 1.0, b1 = 0.0, b2 = 0.0, a0 = 1.0, a1 = 0.0, a2 = 0.0;
-
-        switch (type) {
-        case BandType::Peak:
-            b0 = 1.0 + alpha * A;
-            b1 = -2.0 * cosW0;
-            b2 = 1.0 - alpha * A;
-            a0 = 1.0 + alpha / A;
-            a1 = -2.0 * cosW0;
-            a2 = 1.0 - alpha / A;
-            break;
-        case BandType::LowShelf:
-            b0 = A * ((A + 1.0) - (A - 1.0) * cosW0 + 2.0 * sqrtA * alpha);
-            b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cosW0);
-            b2 = A * ((A + 1.0) - (A - 1.0) * cosW0 - 2.0 * sqrtA * alpha);
-            a0 = (A + 1.0) + (A - 1.0) * cosW0 + 2.0 * sqrtA * alpha;
-            a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cosW0);
-            a2 = (A + 1.0) + (A - 1.0) * cosW0 - 2.0 * sqrtA * alpha;
-            break;
-        case BandType::HighShelf:
-            b0 = A * ((A + 1.0) + (A - 1.0) * cosW0 + 2.0 * sqrtA * alpha);
-            b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cosW0);
-            b2 = A * ((A + 1.0) + (A - 1.0) * cosW0 - 2.0 * sqrtA * alpha);
-            a0 = (A + 1.0) - (A - 1.0) * cosW0 + 2.0 * sqrtA * alpha;
-            a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cosW0);
-            a2 = (A + 1.0) - (A - 1.0) * cosW0 - 2.0 * sqrtA * alpha;
-            break;
-        }
-
-        const double inv = (std::abs(a0) > 1.0e-12) ? 1.0 / a0 : 1.0;
-        dest[0] = static_cast<float>(b0 * inv);
-        dest[1] = static_cast<float>(b1 * inv);
-        dest[2] = static_cast<float>(b2 * inv);
-        dest[3] = static_cast<float>(a1 * inv);
-        dest[4] = static_cast<float>(a2 * inv);
-    }
-
-    /** Exponential CV mapping over the full 20 Hz - 20 kHz band range: cv=+1 sweeps the band to
-     *  20 kHz, cv=-1 down to 20 Hz. Matches FilterModule's cutoff-CV feel so a single LFO drives
-     *  both the same way.
-     */
-    static float applyFreqCV(float base, float cv) noexcept {
-        base = juce::jlimit(kMinFreq, kMaxFreq, base);
-        cv = juce::jlimit(-1.0f, 1.0f, cv);
-        if (cv == 0.0f)
-            return base;
-        if (cv > 0.0f)
-            return juce::jlimit(kMinFreq, kMaxFreq, base * std::pow(kMaxFreq / base, cv));
-        return juce::jlimit(kMinFreq, kMaxFreq, base * std::pow(kMinFreq / base, -cv));
-    }
-
-    /** CV maps linearly onto the band's full +/-24 dB range and adds to the knob value. */
-    static float applyGainCV(float baseDb, float cv) noexcept {
-        cv = juce::jlimit(-1.0f, 1.0f, cv);
-        return juce::jlimit(-kMaxGainDb, kMaxGainDb, baseDb + cv * kMaxGainDb);
-    }
+                            float* dest) noexcept;
+    /** cv +1 sweeps to 20 kHz, -1 to 20 Hz, exponentially. */
+    static float applyFreqCV(float base, float cv) noexcept;
+    /** cv maps linearly onto +/-24 dB, added to the knob. */
+    static float applyGainCV(float baseDb, float cv) noexcept;
 
 private:
     static constexpr int kNumAudioChannels = 2;
-    /** Every band's Freq/Gain/Q plus Output — ch2-14. See getInputPortLabel for the CV order. */
-    static constexpr int kNumCvInputs = 13;
-    /** The two Peak slots are the CV-modulated ones — the musically useful sweep targets. */
+    static constexpr int kNumCvInputs = 15;
     static constexpr int kNumBellBands = 2;
     static constexpr int kBellBandIndex[kNumBellBands] = {1, 2};
 
     using Coefs = juce::dsp::IIR::Coefficients<float>;
     using Filter = juce::dsp::IIR::Filter<float>;
+    using FreqSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>;
+    using GainSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>;
 
     struct BandParams {
         juce::AudioParameterBool* on = nullptr;
         juce::AudioParameterFloat* freq = nullptr;
         juce::AudioParameterFloat* gain = nullptr;
         juce::AudioParameterFloat* q = nullptr;
+        juce::AudioParameterChoice* type = nullptr;
+        juce::AudioParameterChoice* slope = nullptr;
     };
 
-    static bool isValidBand(int band) noexcept { return band >= 0 && band < kNumBands; }
+    static bool isValidBand(int band) noexcept { return band >= 0 && band < kMaxBands; }
+    void addBandParameters(int band);
+    void addTypeAndSlopeParameters(int band);
+    BandType typeOf(int band) const noexcept;
+    int slopeOf(int band) const noexcept;
+    static float readCV(const juce::AudioBuffer<float>& buffer, int channel, int numSamples) noexcept;
+    void readTargetsAndCV(const juce::AudioBuffer<float>& buffer, int numSamples);
+    void updateCoefficients();
+    void updateSoloCoefficients(const float* freq, const float* q);
+    void filterRange(juce::AudioBuffer<float>& buffer, int numAudioCh, int start, int numSamples);
+    void renderSoloed(juce::AudioBuffer<float>& buffer, int numAudioCh, int numSamples);
 
-    static void setFloat(juce::AudioParameterFloat* param, float value) {
-        if (param != nullptr)
-            param->setValueNotifyingHost(param->convertTo0to1(value));
-    }
-
-    static juce::NormalisableRange<float> freqRange() {
-        juce::NormalisableRange<float> range(kMinFreq, kMaxFreq);
-        range.setSkewForCentre(1000.0f);
-        return range;
-    }
-
-    static juce::NormalisableRange<float> gainRange() { return {-kMaxGainDb, kMaxGainDb}; }
-
-    static juce::NormalisableRange<float> qRange() {
-        juce::NormalisableRange<float> range(kMinQ, kMaxQ);
-        range.setSkewForCentre(1.0f);
-        return range;
-    }
-
-    // Readout formatting. Without these the skewed ranges surface values like "2999.9" and
-    // "0.7071". Kept compact deliberately: these share the standard 50px knob text box with every
-    // other module, so "3.0k" fits where "3.00 kHz" would be truncated. The knob's own label
-    // ("B2 Freq" / "B2 Gain") already carries the unit.
-    static juce::AudioParameterFloatAttributes hzAttributes() {
-        return juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
-            if (v >= 10000.0f)
-                return juce::String(juce::roundToInt(v / 1000.0f)) + "k";
-            if (v >= 1000.0f)
-                return juce::String(v / 1000.0f, 1) + "k";
-            return juce::String(juce::roundToInt(v));
-        });
-    }
-
-    static juce::AudioParameterFloatAttributes dbAttributes() {
-        return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
-            [](float v, int) { return juce::String(v, 1); });
-    }
-
-    static juce::AudioParameterFloatAttributes plainAttributes(int decimals) {
-        return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
-            [decimals](float v, int) { return juce::String(v, decimals); });
-    }
-
-    /** Per-block CV sample, gated on RMS so an unconnected (silent) jack reads as exactly 0. */
-    static float readCV(const juce::AudioBuffer<float>& buffer, int channel, int numSamples) noexcept {
-        if (channel >= buffer.getNumChannels() || numSamples <= 0)
-            return 0.0f;
-        const auto* cv = buffer.getReadPointer(channel);
-        float sumSq = 0.0f;
-        for (int i = 0; i < numSamples; ++i)
-            sumSq += cv[i] * cv[i];
-        if ((sumSq / static_cast<float>(numSamples)) <= 1.0e-6f)
-            return 0.0f;
-        return cv[numSamples / 2];
-    }
-
-    /** Rewrites every band's biquad from the smoothed (and, for the bells, CV-resolved) values. */
-    void updateCoefficients() {
-        float bandFreq[kNumBands];
-        float bandGain[kNumBands];
-        float bandQ[kNumBands];
-        for (int b = 0; b < kNumBands; ++b) {
-            bandFreq[b] = smoothedFreq[(size_t)b].getCurrentValue();
-            bandGain[b] = smoothedGain[(size_t)b].getCurrentValue();
-            bandQ[b] = smoothedQ[(size_t)b].getCurrentValue();
-        }
-
-        for (int b = 0; b < kNumBands; ++b) {
-            if (coefficients[(size_t)b] == nullptr)
-                continue;
-            if (bands[(size_t)b].on->get())
-                writeBiquad(bandTypeFor(b), bandFreq[b], bandGain[b], bandQ[b], lastSampleRate,
-                            coefficients[(size_t)b]->getRawCoefficients());
-            else
-                writeUnity(coefficients[(size_t)b]->getRawCoefficients());
-        }
-
-        // Publish the CV-resolved values for every band for the visualiser to overlay.
-        for (int b = 0; b < kNumBands; ++b) {
-            resolvedFreq[(size_t)b].store(bandFreq[b], std::memory_order_relaxed);
-            resolvedGain[(size_t)b].store(bandGain[b], std::memory_order_relaxed);
-            resolvedQ[(size_t)b].store(bandQ[b], std::memory_order_relaxed);
-        }
-    }
-
-    /** A pass-through biquad: b == a, so H(z) == 1 at every frequency. */
-    static void writeUnity(float* dest) noexcept {
-        dest[0] = 1.0f;
-        dest[1] = 0.0f;
-        dest[2] = 0.0f;
-        dest[3] = 0.0f;
-        dest[4] = 0.0f;
-    }
-
-    std::array<std::array<Filter, kNumBands>, kNumAudioChannels> filters;
-    std::array<Coefs::Ptr, kNumBands> coefficients;
+    // [channel][band][stage]; coefficients are shared by both channels (state lives in the Filter).
+    std::array<std::array<std::array<Filter, kMaxStages>, kMaxBands>, kNumAudioChannels> filters;
+    std::array<std::array<Coefs::Ptr, kMaxStages>, kMaxBands> coefficients;
+    std::array<int, kMaxBands> activeStages{};
+    std::array<Filter, kNumAudioChannels> soloFilters;
+    Coefs::Ptr soloCoefficients;
+    juce::AudioBuffer<float> soloScratch;
+    std::atomic<int> soloBand{-1};
+    int appliedSolo = -1; // audio thread only
+    bool soloAudible = false;
 
     double lastSampleRate = 44100.0;
 
-    // Multiplicative for Freq and Q so the ramp is even in pitch / in shape; the ctor arguments
-    // only have to be non-zero (Multiplicative cannot start at 0) — prepareToPlay snaps them to
-    // the real knob values.
-    using FreqSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>;
-    using GainSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>;
-
-    std::array<FreqSmoother, kNumBands> smoothedFreq{
-        {FreqSmoother(100.0f), FreqSmoother(500.0f), FreqSmoother(3000.0f), FreqSmoother(8000.0f)}};
-    std::array<GainSmoother, kNumBands> smoothedGain{};
-    std::array<FreqSmoother, kNumBands> smoothedQ{
-        {FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ)}};
+    std::array<FreqSmoother, kMaxBands> smoothedFreq{};
+    std::array<GainSmoother, kMaxBands> smoothedGain{};
+    std::array<FreqSmoother, kMaxBands> smoothedQ{};
     GainSmoother smoothedOutputGain{1.0f};
 
-    std::array<BandParams, kNumBands> bands{};
+    std::array<BandParams, kMaxBands> bands{};
     juce::AudioParameterFloat* outputGainParam = nullptr;
 
-    // Written from the audio thread each block, read by EQCurveComponent (and getBandSnapshots)
-    // on the message thread. Every band's Freq/Gain/Q can be CV-modulated (bells via ch2-5,
-    // everything else via ch6-14), so these are sized to kNumBands, not just the two bells; the
-    // *Active flags gate the overlay so a band with no CV patched keeps tracking its knob live,
-    // which is what lets the curve track an edit with no audio running.
-    std::array<std::atomic<float>, kNumBands> resolvedFreq{};
-    std::array<std::atomic<float>, kNumBands> resolvedGain{};
-    std::array<std::atomic<float>, kNumBands> resolvedQ{};
-    std::array<std::atomic<bool>, kNumBands> freqCVActive{};
-    std::array<std::atomic<bool>, kNumBands> gainCVActive{};
-    std::array<std::atomic<bool>, kNumBands> qCVActive{};
+    // Written by the audio thread each block, read by getBandSnapshots on the message thread.
+    std::array<std::atomic<float>, kMaxBands> resolvedFreq{};
+    std::array<std::atomic<float>, kMaxBands> resolvedGain{};
+    std::array<std::atomic<float>, kMaxBands> resolvedQ{};
+    std::array<std::atomic<bool>, kMaxBands> freqCVActive{};
+    std::array<std::atomic<bool>, kMaxBands> gainCVActive{};
+    std::array<std::atomic<bool>, kMaxBands> qCVActive{};
 };

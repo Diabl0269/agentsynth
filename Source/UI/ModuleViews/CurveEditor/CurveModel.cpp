@@ -1,4 +1,5 @@
 #include "CurveModel.h"
+#include "Modules/Envelope/EnvelopeGenerator.h"
 #include <algorithm>
 #include <stdexcept>
 
@@ -9,7 +10,7 @@ CurveModel::CurveModel(CurveMode mode, ShapeFn shapeFn)
     , shapeFn_(std::move(shapeFn)) {}
 
 CurveModel::ShapeFn CurveModel::defaultShape() {
-    return [](float progress, float bend) { return synth::EnvelopeGenerator::shape(progress, bend); };
+    return [](float progress, float bend, int) { return synth::EnvelopeGenerator::shape(progress, bend); };
 }
 
 void CurveModel::setNodes(std::vector<CurveNode> nodes) {
@@ -62,7 +63,7 @@ float CurveModel::valueAt(int segment, float progress) const {
     checkSegmentIndex(segment);
     const float start = entries_[(size_t)segment].node.y;
     const float end = entries_[(size_t)segment + 1].node.y;
-    const float shaped = shapeFn_ ? shapeFn_(progress, entries_[(size_t)segment].outgoingBend) : progress;
+    const float shaped = shapeFn_ ? shapeFn_(progress, entries_[(size_t)segment].outgoingBend, segment) : progress;
     return start + (end - start) * shaped;
 }
 
@@ -146,6 +147,8 @@ bool CurveModel::canRemovePoint(int index) const {
 }
 
 int CurveModel::addPoint(double x, float y) {
+    if (getNumNodes() >= kMaxNodes)
+        return -1;
     auto it = std::upper_bound(entries_.begin(), entries_.end(), x,
                                [](double value, const NodeEntry& e) { return value < e.node.x; });
     const int insertAt = (int)(it - entries_.begin());

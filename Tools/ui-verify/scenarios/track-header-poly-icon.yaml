@@ -1,0 +1,43 @@
+# Bug: the track header's two-word Mono | Poly switch did not fit (the word "Mono" was cut off). It is now one icon
+# toggle (a note for mono, a stack of notes for poly) with P as its key while the header is focused.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track; clicks the track's name so its
+#      header holds the keyboard focus.
+#   2. Sees one small icon in the header's bottom row: a single note (mono), nothing cut off.
+#   3. Clicks it: the stack of notes lights in the accent (poly).
+#   4. Presses P: back to the single note. Presses Cmd+Z: the stack again (the P press was one undo step).
+#   5. Presses Cmd+Z once more: the single note (the click was one undo step).
+# Not asserted: the half poly look (some modules poly, some mono); the unit test paints it.
+record: true
+save_project: track header poly
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: trackNameLabel}                                  # the header takes the keyboard focus
+  - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: false}           # one note: mono
+  - mark: {check: 1, name: header-poly-icon}
+  - click: {id: trackVoiceToggle}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: true, within_ms: 1500}   # stacked notes: poly
+  - mark: {check: 2, name: header-poly-on}
+  - screenshot: {id: trackVoiceToggle, name: voice-toggle-poly, scale: 6}
+  - key: {keys: p}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: false, within_ms: 1500}  # P flips it back
+  - mark: {check: 3, name: header-poly-p-off}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: true, within_ms: 1500}   # undo of the P press
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: false, within_ms: 1500}  # undo of the click
+  - mark: {check: 4, name: header-poly-undone}
+  - screenshot: {id: trackVoiceToggle, name: voice-toggle-mono, scale: 6}

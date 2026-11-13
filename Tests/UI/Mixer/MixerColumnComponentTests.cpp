@@ -14,7 +14,7 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/Theme/Theme.h"
@@ -25,6 +25,7 @@
 // calls before freeing the node) requires an actual predecessor/successor signal edge, which the
 // rest of this file's hand-built MixerColumn models never wire.
 #include "../../Mixer/MixerModel/MixerModelTestFixture.h"
+#include "../../TestWait.h"
 
 namespace {
 
@@ -166,9 +167,10 @@ TEST(MixerColumnComponentTests, FaderKeepsItsMinimumHeightAtTheDockDefaultColumn
         << "the fader's own slider (not just its dB readout) must stay usable, not squeezed to nothing";
 }
 
-// The flip side of the guarantee above -- with plenty of room, every part still gets
-// exactly what it asked for, same as before this fix (only a too-short column ever trims anything).
-TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnIsTall) {
+// The flip side of the guarantee above -- with plenty of room, every section gets its full SHARED
+// height (never a height sized to this column's own content, so every column's fader lines up), and
+// each list inside its section is at least that tall, scrolling only when it holds more rows.
+TEST(MixerColumnComponentTests, SectionsGetTheirSharedHeightWhenColumnIsTall) {
     AudioEngine engine;
     auto& graph = engine.getGraph();
     graph.setPlayConfigDetails(0, 2, 44100.0, 512);
@@ -189,10 +191,19 @@ TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnI
     column.setSize(140, 600);
     column.setColumn(columnModel, "");
 
-    EXPECT_EQ(column.getInsertListForTest().getHeight(), column.getInsertListForTest().getPreferredHeight())
-        << "plenty of room: the insert list must still get exactly its preferred height";
-    EXPECT_EQ(column.getSendListForTest().getHeight(), column.getSendListForTest().getPreferredHeight())
-        << "plenty of room: the send list must still get exactly its preferred height";
+    using synth::ui::MixerSection;
+    using Layout = synth::ui::MixerSectionLayout;
+    auto& inserts = column.getSectionViewportForTest(MixerSection::Inserts);
+    auto& sends = column.getSectionViewportForTest(MixerSection::Sends);
+    EXPECT_EQ(inserts.getHeight(), Layout::defaultHeightOf(MixerSection::Inserts))
+        << "plenty of room: the Inserts section gets its full shared height";
+    EXPECT_EQ(sends.getHeight(), Layout::defaultHeightOf(MixerSection::Sends));
+    EXPECT_EQ(column.getInsertListForTest().getHeight(),
+              juce::jmax(inserts.getHeight(), column.getInsertListForTest().getPreferredHeight()))
+        << "the list is never shorter than its section";
+    EXPECT_FALSE(inserts.isScrollable()) << "3 inserts fit in 5 rows";
+    EXPECT_EQ(column.getEqThumbnailForTest().getHeight(), Layout::kEqHeight - 2 * Layout::kPartGap)
+        << "a part gap above and below keeps the curve off the dividers";
 }
 
 TEST(MixerColumnComponentTests, ClickForwardsEqUuidThroughOnClicked) {
@@ -424,4 +435,86 @@ TEST(MixerColumnComponentTests, RenamingABoxedStripGoesToItsMacroNotASecondStrip
         << "a boxed strip's rename goes to its macro, the same one the column's own name already came from";
     EXPECT_TRUE(strip->getStripName().isEmpty())
         << "never ALSO written to the strip's own name -- that would be a second, competing name for one column";
+}
+
+namespace {
+
+// A strip column on its own (no panel), with `inserts` listed after the strip's node.
+struct EditOnCanvasRig {
+    AudioEngine engine;
+    AppUndoManager undoManager;
+    std::unique_ptr<GraphEditor> editor;
+    synth::ui::MixerColumnComponent column;
+    juce::AudioProcessorGraph::Node::Ptr stripNode;
+    synth::MixerColumn model;
+    juce::String clicked;
+
+    EditOnCanvasRig() {
+        auto& graph = engine.getGraph();
+        graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+        editor = std::make_unique<GraphEditor>(engine, &undoManager);
+        editor->setSize(900, 600);
+        stripNode = addUuidNode(graph, std::make_unique<ChannelStripModule>(), "strip-uuid");
+        dynamic_cast<ChannelStripModule*>(stripNode->getProcessor())->setShape(ChannelStripModule::Shape::Stereo);
+        column.configure(graph, undoManager, editor->getMacros(), *editor, engine);
+        column.setSize(140, 300);
+        column.onEditOnCanvas = [this](const juce::String& target) { clicked = target; };
+        model.nodeId = stripNode->nodeID;
+        model.uuid = "strip-uuid";
+        model.name = "Strip";
+        model.insertChainIsLinear = true;
+        model.sourceNodeId = stripNode->nodeID; // anything but empty: the chain has a start to add after
+    }
+
+    synth::ui::TrackShowModuleButton& button() { return column.getHeaderForTest().getEditOnCanvasButtonForTest(); }
+};
+
+} // namespace
+
+// Regression test for FRO894: the column always carries an "Edit on canvas" button, named and tooltipped like the
+// timeline header's target button, and the "+ Insert" row is not what it turns into.
+TEST(MixerColumnComponentTests, EveryColumnShowsAnEditOnCanvasButtonBesideItsInsertRow) {
+    EditOnCanvasRig rig;
+    rig.column.setColumn(rig.model, "");
+
+    auto& button = rig.button();
+    EXPECT_TRUE(button.isShowing() || button.isVisible());
+    EXPECT_TRUE(button.getWantsKeyboardFocus()) << "a Tab stop, like the track header's button";
+    EXPECT_EQ(button.getTitle(), "Edit Strip on canvas");
+    EXPECT_TRUE(button.getTooltip().containsIgnoreCase("canvas"));
+    EXPECT_TRUE(rig.column.getInsertListForTest().hasAddRow()) << "an editable chain still ends in \"+ Insert\"";
+
+    button.triggerClick();
+    synth::test::waitUntil([&] { return (rig.clicked) == ("strip-uuid"); });
+    EXPECT_EQ(rig.clicked, "strip-uuid") << "an unboxed straight chain edits the channel itself";
+}
+
+TEST(MixerColumnComponentTests, TheEditOnCanvasButtonStaysWhenTheChainBranchesAndTargetsItsMacro) {
+    EditOnCanvasRig rig;
+    rig.model.insertChainIsLinear = false;
+    rig.model.editOnCanvasTargetUuid = "macro-1";
+    rig.column.setColumn(rig.model, "");
+
+    EXPECT_FALSE(rig.column.getInsertListForTest().hasAddRow()) << "a read-only chain has no \"+ Insert\"";
+    EXPECT_EQ(rig.column.getInsertListForTest().getRowCount(), 0) << "and no link row stands in for it";
+    EXPECT_TRUE(rig.button().isVisible()) << "the button does not come and go with the chain's shape";
+    EXPECT_EQ(rig.button().getTitle(), "Edit Strip on canvas");
+
+    rig.button().triggerClick();
+    synth::test::waitUntil([&] { return (rig.clicked) == ("macro-1"); });
+    EXPECT_EQ(rig.clicked, "macro-1");
+}
+
+TEST(MixerColumnComponentTests, TheEditOnCanvasButtonPressesFromTheKeyboardAndFollowsTheChannelName) {
+    EditOnCanvasRig rig;
+    rig.column.setColumn(rig.model, "");
+    rig.model.name = "Lead";
+    rig.column.setColumn(rig.model, "");
+
+    EXPECT_EQ(rig.button().getTitle(), "Edit Lead on canvas");
+    EXPECT_TRUE(rig.button().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(rig.clicked, "strip-uuid");
+    rig.clicked.clear();
+    EXPECT_TRUE(rig.button().keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(rig.clicked, "strip-uuid");
 }

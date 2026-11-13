@@ -564,4 +564,59 @@ TEST_F(TimelineDocTest, SplitDuplicateAndJoinCarryMuteFlags) {
     EXPECT_TRUE(joinDoc.getClip(mutedC)->muted);
 }
 
+// ------------------------------------------------------------ clip scale --
+
+TEST_F(TimelineDocTest, SetClipScaleChangesTheDocAndAnUnchangedValueIsANoOp) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "A");
+    const auto scale = synth::makeScaleFromMask(2, 0x06AD, "Dorian");
+    CountingListener listener;
+    doc.addListener(&listener);
+
+    const auto revisionBefore = doc.getRevision();
+    ASSERT_TRUE(doc.setClipScale(clip, scale, true));
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1);
+    EXPECT_EQ(listener.calls, 1);
+    EXPECT_EQ(doc.getClip(clip)->scale, scale);
+    EXPECT_TRUE(doc.getClip(clip)->scaleVisible);
+
+    EXPECT_TRUE(doc.setClipScale(clip, scale, true));
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1) << "the same choice again changes nothing";
+    EXPECT_FALSE(doc.setClipScale(ClipId{9999}, scale, true)) << "no such clip";
+
+    // An empty mask is no scale at all, so it clears the choice instead of storing one.
+    ASSERT_TRUE(doc.setClipScale(clip, synth::makeScaleFromMask(0, 0), false));
+    EXPECT_FALSE(doc.getClip(clip)->scale.has_value());
+    doc.removeListener(&listener);
+}
+
+TEST_F(TimelineDocTest, DuplicateAndSplitCarryTheClipScale) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 8.0, "A");
+    doc.addNote(clip, makeNote(1.0, 62));
+    const auto scale = synth::makeScaleFromMask(2, 0x06AD, "Dorian");
+    ASSERT_TRUE(doc.setClipScale(clip, scale, true));
+
+    const auto dup = doc.duplicateClip(clip);
+    ASSERT_TRUE(dup.isValid());
+    EXPECT_EQ(doc.getClip(dup)->scale, scale);
+    EXPECT_TRUE(doc.getClip(dup)->scaleVisible);
+
+    const auto halves = doc.splitClip(clip, 4.0);
+    ASSERT_TRUE(halves.first.isValid() && halves.second.isValid());
+    for (const auto half : {halves.first, halves.second}) {
+        EXPECT_EQ(doc.getClip(half)->scale, scale);
+        EXPECT_TRUE(doc.getClip(half)->scaleVisible);
+    }
+}
+
+TEST_F(TimelineDocTest, ClipScaleIsNotSharedAcrossALinkGroup) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Keys");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "A");
+    const auto linked = doc.duplicateClipLinked(clip);
+    ASSERT_TRUE(linked.isValid());
+    ASSERT_TRUE(doc.setClipScale(clip, synth::makeScaleFromMask(2, 0x06AD, "Dorian"), true));
+    EXPECT_FALSE(doc.getClip(linked)->scale.has_value()) << "the scale is how one roll views a clip, not its content";
+}
+
 // -------------------------------------------------------------- 16. markers --

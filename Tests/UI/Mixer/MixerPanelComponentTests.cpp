@@ -2,11 +2,13 @@
 // set, PNG render smoke test (dark + light built-in theme, per the ticket's own test list), and
 // the column-click-selects-macro gesture. Drives a real, off-screen MainComponent
 // (newPatchForTest() + simulateAddAudioTrackClick(), the ChannelFlow suite's own rig style).
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
@@ -46,6 +48,7 @@ private:
 TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusMaster) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();
@@ -64,6 +67,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -89,6 +93,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestLightTheme) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
@@ -112,6 +117,7 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestLightTheme) {
 TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
 
@@ -142,6 +148,37 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     EXPECT_TRUE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }
 
+// Regression test for FRO894: the button selects the channel's macro like a header click does, and brings it into
+// view, so a press always shows something.
+TEST(MixerPanelComponentTests, TheEditOnCanvasButtonSelectsTheMacroAndBringsItIntoView) {
+    MainComponent mc(std::make_unique<MockProviderMPCT>());
+    mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    mixerPanel.setSize(1400, 300);
+    mixerPanel.resized();
+
+    auto& canvas = mc.getGraphEditor();
+    ASSERT_EQ(canvas.getMacros().size(), 1);
+    const auto macro = canvas.getMacros().getAll().front();
+    const auto macroCentre = macro.bounds.toFloat().getCentre();
+    canvas.centreViewOn({macroCentre.x + 1500.0f, macroCentre.y + 1500.0f});
+    ASSERT_FALSE(canvas.getVisibleCanvasRect().contains(macroCentre)) << "the macro starts off screen";
+    ASSERT_FALSE(canvas.getMacroController().isMacroSelected(macro.id));
+
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    column->getHeaderForTest().getEditOnCanvasButtonForTest().triggerClick();
+    synth::test::waitUntil([&] { return canvas.getMacroController().isMacroSelected(macro.id); });
+
+    EXPECT_TRUE(canvas.getMacroController().isMacroSelected(macro.id));
+    EXPECT_TRUE(canvas.getVisibleCanvasRect().contains(macroCentre));
+}
+
 // An empty graph (the default new patch, before any track or bus exists) shows a hint
 // instead of a blank panel; adding a channel hides it again, and removing that channel brings it
 // back -- exercised with createBus() (public, and the smallest path to a column) rather than
@@ -149,6 +186,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
 TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists) {
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
     mc.newPatchForTest();
 
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
@@ -175,4 +213,45 @@ TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists
 
     EXPECT_EQ(mixerPanel.getColumnCount(), 0);
     EXPECT_TRUE(mixerPanel.getEmptyHintForTest().isVisible());
+}
+
+// (docs/mixer/panel.md#what-the-mixer-shows): a column's header swatch + top stripe show the linked track's
+// colour, and a track colour edit re-tints it live -- through the real doc notification, no manual rebuild().
+TEST(MixerPanelComponentTests, ColumnHeaderShowsLinkedTrackColourAndFollowsColourEdits) {
+    MainComponent mc(std::make_unique<MockProviderMPCT>());
+    mc.setSize(1400, 900);
+    mc.getBottomDock().getMixerPanel().setVisible(true); // a hidden mixer defers its rebuilds
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+    mc.simulateAddAudioTrackClick();
+
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(doc.getTracks().size(), 2u);
+    const auto idA = doc.getTracks()[0].id;
+    const auto idB = doc.getTracks()[1].id;
+    doc.setTrackColour(idA, 0xffe0503c);
+    doc.setTrackColour(idB, 0xff3cb0e0);
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* colA = mixerPanel.getStripColumnForTest(0);
+    auto* colB = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(colA, nullptr);
+    ASSERT_NE(colB, nullptr);
+    EXPECT_EQ(colA->getHeaderForTest().getColour(), juce::Colour(0xffe0503c));
+    EXPECT_EQ(colB->getHeaderForTest().getColour(), juce::Colour(0xff3cb0e0));
+
+    // A colour edit in the doc (what the timeline header's picker does) re-tints in place -- same column objects.
+    doc.setTrackColour(idB, 0xff11aa11);
+    EXPECT_EQ(mixerPanel.getStripColumnForTest(1), colB) << "re-tinted in place, not rebuilt";
+    EXPECT_EQ(colB->getHeaderForTest().getColour(), juce::Colour(0xff11aa11));
+    EXPECT_EQ(colA->getHeaderForTest().getColour(), juce::Colour(0xffe0503c)) << "the other column is untouched";
+
+    // The painted header carries the stripe in that colour.
+    auto& header = colB->getHeaderForTest();
+    header.setBounds(0, 0, 140, 28);
+    const auto img = header.createComponentSnapshot(header.getLocalBounds(), false);
+    ASSERT_GT(img.getWidth(), 0);
+    EXPECT_EQ(img.getPixelAt(img.getWidth() / 2, 0), juce::Colour(0xff11aa11));
+    EXPECT_NE(img.getPixelAt(img.getWidth() / 2, 6), juce::Colour(0xff11aa11));
 }

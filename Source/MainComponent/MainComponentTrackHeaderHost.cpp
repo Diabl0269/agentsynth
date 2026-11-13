@@ -5,32 +5,35 @@
 // MainComponent.h; the rest of its implementation lives in the sibling MainComponent*.cpp units
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
-#include "Mixer/MixerSends/MixerSends.h" // synth::describeSendSlotLabel, ChannelStripModule send-slot lane options
+#include "Mixer/ChannelFlows/ChannelFlows.h" // findMidiNodesReachedFrom, isMacroPortNode
+#include "Mixer/MixerSends/MixerSends.h"     // synth::describeSendSlotLabel, ChannelStripModule send-slot lane options
 #include "Modules/ChannelStripModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include <map>
 #include <set>
 
 namespace {
 
-// Human-readable identity for a graph node — the binding chip's base label and the re-bind menu's
-// starting point. Plain processor name only: appending "#id" unconditionally was itself the source
-// of founder confusion (a chip reading "Track In #16" reads like a module name, not a binding), and
-// the id means nothing outside a menu actually showing two same-named candidates at once.
+// Human-readable identity for a graph node: its card title (synth::moduleTitle), the binding chip's base
+// label and the re-bind and MIDI-destination menus' starting point. Appending "#id" unconditionally was
+// itself the source of founder confusion (a chip reading "Track In #16" reads like a module name, not a
+// binding), and the id means nothing outside a menu actually showing two same-named candidates at once.
 // getAvailableTrackInNodes (below) is where that disambiguation happens, over the option list it is
-// building — never here, and never on the chip.
+// building, never here, and never on the chip.
 juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     if (node == nullptr || node->getProcessor() == nullptr)
         return {};
-    return node->getProcessor()->getName();
+    return synth::moduleTitle(*node);
 }
 
-// The automation strip lane picker's "Add lane..." entries for a hosted plugin's own parameters,
+// The timeline's "Add lane..." lane choices for a hosted plugin's own parameters,
 // which have no ModuleComponent knob to right-click (the plugin has its own editor; see
 // docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes's Hosted Plugin table).
 // Every live HostedPluginModule with a published instance offers every parameter that doesn't
@@ -58,17 +61,19 @@ void collectHostedPluginLaneOptions(juce::AudioProcessorGraph& graph, const synt
             option.paramId = param.paramId;
             option.paramIndex = param.index;
             option.label = moduleLabel + juce::String::fromUTF8(" \xC2\xB7 ") + param.displayName;
+            option.moduleTitle = moduleLabel;
+            option.parameterName = param.displayName;
             options.push_back(std::move(option));
         }
     }
 }
 
-// FRO292: the same "Add lane..." surface, for every ACTIVE, not-yet-automated send slot on every
+// The same "Add lane..." surface, for every ACTIVE, not-yet-automated send slot on every
 // ChannelStripModule in the graph — a send level has no ModuleComponent knob either (Channel Strip
 // is internal-only/hidden, docs/modules/modules.md#channel-strip-module-mixer-channel-hidden), so
 // this is its only lane-creation entry point, same reasoning as the hosted-plugin case above.
 // Inactive slots are never offered (docs/mixer/sends-and-buses.md#the-send-and-bus-ui). The label
-// mirrors the send knob's own FRO301 accessible title (synth::describeSendSlotLabel), so the picker
+// mirrors the send knob's own accessible title (synth::describeSendSlotLabel), so the picker
 // entry and the knob it automates always read the same "Send to <target>" / "Send N (no target)".
 void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const synth::MacroSet& macros,
                                         const synth::TimelineDoc& timelineDoc,
@@ -87,7 +92,7 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
         for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot) {
             if (!strip->isSendActive(slot))
                 continue;
-            // FRO294: a send's pan is automatable the same way its level is.
+            // A send's pan is automatable the same way its level is.
             const juce::String slotLabel = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
             const std::pair<juce::String, juce::String> params[] = {
                 {ChannelStripModule::getSendLevelParameterId(slot), slotLabel},
@@ -100,6 +105,8 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
                 option.paramId = paramId;
                 option.paramIndex = -1; // unused for a plain RangedAudioParameter
                 option.label = label;
+                option.moduleTitle = synth::moduleTitle(*node);
+                option.parameterName = label;
                 options.push_back(std::move(option));
             }
         }
@@ -181,6 +188,40 @@ juce::String MainComponent::getParameterDisplayName(const juce::String& uuid, co
     return {};
 }
 
+// A lane header's value readout. A lane stores values in the parameter's own units (a hosted
+// parameter's are already 0..1), so a ranged parameter is normalised through its own range before
+// asking it for its text -- the same text its knob shows.
+juce::String MainComponent::getParameterValueText(const juce::String& uuid, const juce::String& paramId, double value) {
+    auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return {};
+    auto* processor = node->getProcessor();
+    const auto resolution =
+        synth::resolveLaneParameter(processor, paramId, synth::captureParamIndexHint(processor, paramId));
+    if (resolution.rangedParam != nullptr)
+        return resolution.rangedParam->getText(resolution.rangedParam->convertTo0to1((float)value), 16);
+    if (resolution.hostedParam != nullptr)
+        return resolution.hostedParam->getText(juce::jlimit(0.0f, 1.0f, (float)value), 16);
+    return {};
+}
+
+// The inverse of getParameterValueText: the parameter's own text-to-value gives a normalised value, which a ranged
+// parameter's range turns back into the lane's units (a hosted parameter's lane values are already 0..1).
+std::optional<double> MainComponent::getParameterValueFromText(const juce::String& uuid, const juce::String& paramId,
+                                                               const juce::String& text) {
+    auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return std::nullopt;
+    auto* processor = node->getProcessor();
+    const auto resolution =
+        synth::resolveLaneParameter(processor, paramId, synth::captureParamIndexHint(processor, paramId));
+    if (resolution.rangedParam != nullptr)
+        return (double)resolution.rangedParam->convertFrom0to1(resolution.rangedParam->getValueForText(text));
+    if (resolution.hostedParam != nullptr)
+        return (double)resolution.hostedParam->getValueForText(text);
+    return std::nullopt;
+}
+
 void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
     if (uuid.isEmpty())
         return;
@@ -211,7 +252,7 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
         graphEditor.selectModule(node->nodeID, /*additive=*/false);
 }
 
-// FRO292: combines two sources, each split into its own free function above so neither grows past
+// Combines two sources, each split into its own free function above so neither grows past
 // a screen -- a hosted plugin's not-yet-automated instance parameters, and every ACTIVE,
 // not-yet-automated ChannelStripModule send slot (inactive slots are never offered, see
 // docs/mixer/sends-and-buses.md#the-send-and-bus-ui).
@@ -224,53 +265,12 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
 }
 
 synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
-    if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
-        return {};
-
-    auto* node = findNodeByUuid(option.nodeUuid);
-    auto* processor = node != nullptr ? node->getProcessor() : nullptr;
-    if (processor == nullptr)
-        return {}; // the node disappeared between offering and choosing
-
-    // resolveLaneParameter branches internally on whether `processor` is a live HostedPluginModule
-    // instance (normalised 0..1, index-hint rescue) or one of our own modules (an exact paramID
-    // match against a real RangedAudioParameter, e.g. ChannelStripModule's sendNLevel, FRO292) — see
-    // AutomationBinding.h's class comment. laneValueBoundsFor/laneDefaultValueFor below read off
-    // whichever branch resolved, so this call needs no case split of its own.
-    const auto resolved = synth::resolveLaneParameter(processor, option.paramId, option.paramIndex);
-    if (!resolved.resolved())
-        return {}; // the parameter vanished between offering and choosing
-
-    synth::LaneId laneId;
-    const juce::String uuidCopy = option.nodeUuid;
-    const juce::String paramIdCopy = option.paramId;
-    const int paramIndexCopy = option.paramIndex;
-    auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
-        if (!trackId.isValid())
-            return;
-
-        synth::AutomationLane::RangeSnapshot range;
-        const auto bounds = synth::laneValueBoundsFor(resolved);
-        range.minValue = static_cast<float>(bounds.minValue);
-        range.maxValue = static_cast<float>(bounds.maxValue);
-        range.defaultValue = static_cast<float>(synth::laneDefaultValueFor(resolved));
-        laneId = timelineDoc.addLane(trackId, uuidCopy, paramIdCopy, range, paramIndexCopy);
-    };
-    undoManager.recordTimelineChange(timelineDoc, mutate);
+    const synth::LaneId laneId = addLaneForOption(option, std::nullopt);
     if (!laneId.isValid())
         return {};
 
-    ensureBottomDockOpen();
-    timelinePanel.showAutomationLane(laneId);
+    ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::Timeline);
+    detail::showLaneWhenSettled(timelineSlide_, timelinePanel, isBottomDockVisible, laneId, *this);
     return laneId;
 }
 
@@ -301,10 +301,15 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         if (node == nullptr)
             continue;
         auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (module == nullptr || !module->acceptsMidi())
+        if (module == nullptr || !module->acceptsMidi() || synth::isMacroPortNode(module))
             continue;
         candidates.push_back(node);
     }
+
+    // "Connected" means the Track In's MIDI reaches the node, directly or through macro ports.
+    std::set<juce::uint32> reachedUids;
+    for (const auto& leg : synth::findMidiNodesReachedFrom(graph, trackInNode->nodeID))
+        reachedUids.insert(leg.node.uid);
 
     std::map<juce::String, int> nameOccurrences;
     for (auto* node : candidates)
@@ -314,8 +319,7 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         const juce::String name = describeNodeForBinding(node);
         const juce::String display =
             nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
-        const bool connected = graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-                                                  {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+        const bool connected = reachedUids.count(node->nodeID.uid) != 0;
         options.push_back({display, node->nodeID.uid, connected, detail::isMidiInstrumentNode(node->getProcessor())});
     }
     return options;
@@ -341,39 +345,95 @@ void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::u
     if (targetNode == nullptr)
         return; // stale popup: the target node no longer resolves
 
-    const juce::AudioProcessorGraph::Connection connection{
-        {trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-        {targetNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}};
+    const auto trackInId = trackInNode->nodeID;
+    const auto targetId = targetNode->nodeID;
+    const auto reachLegs = [&graph, trackInId, targetId] {
+        std::vector<juce::AudioProcessorGraph::Connection> legs;
+        for (const auto& leg : synth::findMidiNodesReachedFrom(graph, trackInId))
+            if (leg.node == targetId)
+                legs.push_back(leg.lastLeg);
+        return legs;
+    };
+    if (connect == !reachLegs().empty())
+        return; // already in the requested state
 
-    undoManager.recordStructuralChange(graph, [&graph, connection, connect] {
+    // The cable enters and leaves macros through MIDI ports like a mixer send does; disconnecting removes
+    // the last leg onto the target (not the Track In's first edge) so a port shared by another
+    // destination in the same macro survives.
+    const auto mutation = [&graph, &reachLegs, trackInId, targetId, connect] {
         if (connect)
-            graph.addConnection(connection);
-        else
-            graph.removeConnection(connection);
+            return graph.addConnection({{trackInId, juce::AudioProcessorGraph::midiChannelIndex},
+                                        {targetId, juce::AudioProcessorGraph::midiChannelIndex}});
+        bool removed = false;
+        for (const auto& leg : reachLegs())
+            removed = graph.removeConnection(leg) || removed;
+        return removed;
+    };
+    undoManager.recordGraphAndMacroChange(graph, graphEditor.getMacros(), [&] {
+        graphEditor.getMacroController().applyProgrammaticConnectionChange(
+            graphEditor.getAutoCreateMacroPortsOnDragEnabled(), mutation);
+        graphEditor.updateComponents();
     });
-    graphEditor.updateComponents();
     reconcileTimelineAfterGraphChange();
 }
 
+std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
+MainComponent::getMidiDestinationOptionsForTest(synth::TrackId id) {
+    return getMidiDestinationOptions(id);
+}
+
+void MainComponent::setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect) {
+    setMidiDestinationConnected(id, nodeUid, connect);
+}
+
 void MainComponent::auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) {
-    // Deliberately the SAME resolution the two functions above use — track -> bindingUuid -> live
-    // node — because that node's MIDI output is where the track's destinations are wired FROM. Going
-    // anywhere else (AudioEngine's own midiMessageCollector, say) would reach the global MIDI-in
-    // path instead of this track's instruments, so the preview would play the wrong thing or nothing.
-    const auto* track = timelineDoc.getTrack(forTrack);
-    if (track == nullptr || track->bindingUuid.isEmpty())
-        return; // an unbound track plays nowhere, so a preview on it is silence
-
-    auto* trackInNode = findNodeByUuid(track->bindingUuid);
-    if (trackInNode == nullptr)
-        return; // orphaned binding — the chip already says so; a preview must not crash on it
-
-    auto* source = dynamic_cast<TimelineMidiSourceModule*>(trackInNode->getProcessor());
+    // The Track In node's MIDI output is where the track's destinations are wired FROM (see trackInSource).
+    auto* source = trackInSource(forTrack);
     if (source == nullptr)
-        return; // the uuid resolves to something that is not a Track In node
+        return;
 
     // NO structural change, NO undo step and NO doc mutation: a preview is not an edit. The push is
     // wait-free and a full FIFO simply drops the event (see pushAuditionNote) — nothing here may
     // block, because this is the mouse-down that is still unwinding.
     source->pushAuditionNote(pitch, velocity, noteOn);
+}
+
+bool MainComponent::isPluginScanInProgress() const { return getPluginScanService().isScanning(); }
+
+void MainComponent::ensureInstrumentPluginsScanned() { maybeStartEagerPluginScan(); }
+
+// The colour picker's favourites shelf persists here: the only TrackHeaderHost override that isn't
+// graph/timeline plumbing (see ColourPickerPopup.h).
+juce::ApplicationProperties* MainComponent::getAppProperties() { return &appProperties; }
+
+synth::ui::TrackChannelLinkSurface* MainComponent::getChannelLinkSurface() { return &trackChannelLink_; }
+
+std::shared_ptr<void> MainComponent::holdTrackPolyStates() {
+    return std::make_shared<synth::ui::PolyChainController::StateBatch>(graphEditor.getPolyChain());
+}
+
+// The Mono/Poly switch on a track header: the voice graph that starts at the track's source node, switched by the
+// same controller (question, ONE undo step, toast) a card's Poly pill uses.
+synth::ui::TrackPolyState MainComponent::getTrackPolyState(synth::TrackId forTrack) {
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return synth::ui::TrackPolyState::none;
+    auto* source = findNodeByUuid(track->bindingUuid);
+    return source != nullptr ? graphEditor.getPolyChain().trackPolyState(source->nodeID)
+                             : synth::ui::TrackPolyState::none;
+}
+
+void MainComponent::setTrackPoly(synth::TrackId forTrack, bool poly) {
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return;
+    if (auto* source = findNodeByUuid(track->bindingUuid))
+        graphEditor.getPolyChain().trackPolyClicked(source->nodeID, poly);
+}
+
+std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> MainComponent::getMidiInputDevices() {
+    std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> devices;
+    for (const auto& info : audioEngine.getAvailableMidiInputs())
+        devices.push_back({info.identifier, info.name});
+    return devices;
 }

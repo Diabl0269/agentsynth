@@ -2,6 +2,8 @@
 // (Up/Down/Left/Right/Enter, including the searchEditor KeyListener interception) and starting a
 // drag-and-drop session for a row.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/DragCursor.h"
 
 void ModuleLibraryComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     if (verticalScrollBar.isVisible())
@@ -36,7 +38,7 @@ void ModuleLibraryComponent::mouseMove(const juce::MouseEvent& e) {
         } else if (hoveredIndex >= 0) {
             setTooltip(tooltipForEntry(hoveredIndex));
         } else {
-            setTooltip({});
+            setTooltip(kDefaultTooltip);
         }
 
         repaint();
@@ -45,7 +47,7 @@ void ModuleLibraryComponent::mouseMove(const juce::MouseEvent& e) {
     // Update cursor: grab hand for draggable items, pointing hand for the clickable chrome.
     // An unavailable row is not draggable, so it must not advertise the grab hand.
     if (hoveredIndex >= 0 && isDraggableEntry(hoveredIndex) && isEntryEnabled(hoveredIndex))
-        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        setMouseCursor(synth::ui::dragGrabCursor());
     else if (topStripHovered || isHeaderEntry(entryUnderMouse) || isSubHeaderEntry(entryUnderMouse) ||
              isActionEntry(hoveredIndex))
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -58,7 +60,7 @@ void ModuleLibraryComponent::mouseExit(const juce::MouseEvent&) {
         hoveredIndex = -1;
         topStripHovered = false;
         helpButtonHovered = false;
-        setTooltip({});
+        setTooltip(kDefaultTooltip);
         setMouseCursor(juce::MouseCursor::NormalCursor);
         repaint();
     }
@@ -110,13 +112,7 @@ void ModuleLibraryComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     if (entry.kind == RowKind::Snippet && pressSuppressesRowDrag(e.mods)) {
-        const auto name = entry.text;
-        juce::PopupMenu m;
-        m.addItem("Delete Snippet", [this, name] {
-            if (onSnippetDeleteRequested)
-                onSnippetDeleteRequested(name);
-        });
-        m.showMenuAsync(juce::PopupMenu::Options());
+        showSnippetContextMenu(index);
         return;
     }
 
@@ -129,6 +125,35 @@ void ModuleLibraryComponent::mouseDown(const juce::MouseEvent& e) {
         return;
 
     startDragForEntry(index);
+}
+
+void ModuleLibraryComponent::showSnippetContextMenu(int index, std::optional<juce::Rectangle<int>> screenAnchor) {
+    const auto name = entries[(size_t)index].text;
+    juce::PopupMenu m;
+    m.addItem("Delete Snippet", [this, name] {
+        if (onSnippetDeleteRequested)
+            onSnippetDeleteRequested(name);
+    });
+    if (showContextMenuHook_) {
+        showContextMenuHook_(m);
+        return;
+    }
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
+    m.showMenuAsync(options);
+}
+
+bool ModuleLibraryComponent::showContextMenuForKeyboardFocus() {
+    if (keyboardFocusedIndex < 0 || keyboardFocusedIndex >= (int)entries.size() ||
+        entries[(size_t)keyboardFocusedIndex].kind != RowKind::Snippet)
+        return false;
+    for (const auto& row : buildRows()) {
+        if (row.entryIndex != keyboardFocusedIndex)
+            continue;
+        const juce::Rectangle<int> rowBounds(0, row.y - scrollOffset, getWidth(), row.height);
+        showSnippetContextMenu(keyboardFocusedIndex, localAreaToGlobal(rowBounds));
+        return true;
+    }
+    return false;
 }
 
 void ModuleLibraryComponent::mouseDrag(const juce::MouseEvent& e) {
@@ -175,10 +200,23 @@ bool ModuleLibraryComponent::keyPressed(const juce::KeyPress& key, juce::Compone
         return moveKeyboardFocus(-1);
     if (key.isKeyCode(juce::KeyPress::downKey))
         return moveKeyboardFocus(1);
-    // Only once a row is already keyboard-focused — otherwise Return keeps its normal
-    // (consumed, no-op) TextEditor behaviour, since the query has nothing to insert yet.
-    if (key == juce::KeyPress::returnKey && keyboardFocusedIndex >= 0)
+    if (key != juce::KeyPress::returnKey)
+        return false;
+    if (keyboardFocusedIndex >= 0)
         return handleEnterKey();
+    // Typing a query and pressing Return inserts the first match (type "filt", Return -> Filter), the same as
+    // arrowing down to that row and pressing Return. With no query there is nothing to pick, so Return keeps its
+    // normal (consumed, no-op) TextEditor behaviour.
+    if (searchEditor.getText().isEmpty())
+        return false;
+    for (const int index : navigableEntryIndices()) {
+        if (!isDraggableEntry(index) || !isEntryEnabled(index))
+            continue;
+        keyboardFocusedIndex = index;
+        refreshAccessibilityValue();
+        repaint();
+        return handleEnterKey();
+    }
     return false;
 }
 
@@ -210,6 +248,7 @@ bool ModuleLibraryComponent::moveKeyboardFocus(int delta) {
     const int next = (pos < 0) ? (delta > 0 ? 0 : (int)navigable.size() - 1)
                                : juce::jlimit(0, (int)navigable.size() - 1, pos + delta);
     keyboardFocusedIndex = navigable[(size_t)next];
+    refreshAccessibilityValue();
     scrollKeyboardFocusIntoView();
     repaint();
     return true;
@@ -221,10 +260,12 @@ bool ModuleLibraryComponent::handleFoldKey(bool collapse) {
     const auto& entry = entries[(size_t)keyboardFocusedIndex];
     if (entry.kind == RowKind::Header) {
         setSectionCollapsed(entry.text, collapse);
+        refreshAccessibilityValue();
         return true;
     }
     if (entry.kind == RowKind::SubHeader) {
         setSectionCollapsed(subsectionKey(entry.section, entry.text), collapse);
+        refreshAccessibilityValue();
         return true;
     }
     return false;
@@ -258,6 +299,7 @@ void ModuleLibraryComponent::scrollKeyboardFocusIntoView() {
 void ModuleLibraryComponent::setKeyboardFocusedIndexForTest(int index) {
     keyboardFocusedIndex = isKeyboardNavigableEntry(index) ? index : -1;
     clampKeyboardFocusToVisibleRow();
+    refreshAccessibilityValue();
     repaint();
 }
 

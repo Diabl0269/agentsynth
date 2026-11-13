@@ -11,6 +11,7 @@
 
 #include "SmartConnectionEngine.h"
 #include "AudioEngine/AudioEngine.h"
+#include "MacroOwnerIndex.h"
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -18,6 +19,14 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
+
+namespace {
+juce::String nodeUuidOf(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId) {
+    static const juce::Identifier key("uuid"); // interned once: this runs per candidate, per drag tick
+    auto* node = graph.getNodeForId(nodeId);
+    return node != nullptr ? node->properties[key].toString() : juce::String();
+}
+} // namespace
 
 SmartConnectionEngine::SmartConnectionMode SmartConnectionEngine::smartConnectionModeFromString(const juce::String& s) {
     if (s == "Off")
@@ -41,6 +50,14 @@ juce::String SmartConnectionEngine::smartConnectionModeToString(SmartConnectionM
     default:
         return "NewAndUnwired";
     }
+}
+
+SmartConnectionEngine::SideBySideMode SmartConnectionEngine::sideBySideModeFromString(const juce::String& s) {
+    return s == "OnlyWithCtrl" ? SideBySideMode::OnlyWithCtrl : SideBySideMode::Always;
+}
+
+juce::String SmartConnectionEngine::sideBySideModeToString(SideBySideMode mode) {
+    return mode == SideBySideMode::OnlyWithCtrl ? "OnlyWithCtrl" : "Always";
 }
 
 bool SmartConnectionEngine::isInsertModifierDown() const {
@@ -84,6 +101,57 @@ bool SmartConnectionEngine::shouldOfferSmartConnections(const DragPreviewState& 
     return false;
 }
 
+// Mirrors what the drop does to membership: a library drop joins the open macro under the pointer (none on the open
+// canvas); a moved card joins its pending join target, goes to the top level on a pending leave with no join (the
+// drop's own membership walk), and otherwise stays where it is, which already includes a crossing applied live.
+juce::String SmartConnectionEngine::dropContainer(const DragPreviewState& drag) const {
+    const auto join = host_.getMacroDragJoinId();
+    if (drag.selfId.uid == 0 || join.isNotEmpty())
+        return join;
+    if (host_.getMacroDragLeaveId().isNotEmpty())
+        return {};
+    const auto* owner = synth::MacroOwnerIndex(host_.getMacros()).ownerOf(nodeUuidOf(host_.graph(), drag.selfId));
+    return owner != nullptr ? owner->id : juce::String();
+}
+
+// A card belongs to the macro that lists it directly. A port node is the exception: it is a member of its macro but
+// sits on the border, so one side faces the macro and the other the macro's own container. An inlet takes its signal
+// from outside and hands it in (inputs face the parent, outputs the macro); an outlet is the reverse. Without this a
+// module dropped inside a macro could never feed its outlet, and one outside could never be fed by it.
+juce::String SmartConnectionEngine::containerFacing(const synth::MacroOwnerIndex& owners,
+                                                    juce::AudioProcessorGraph::NodeID nodeId, bool throughInput) const {
+    const auto uuid = nodeUuidOf(host_.graph(), nodeId);
+    const auto* owner = uuid.isEmpty() ? nullptr : owners.ownerOf(uuid);
+    if (owner == nullptr)
+        return {};
+    for (const auto& port : owner->ports)
+        if (port.nodeUuid == uuid)
+            return port.isInput == throughInput ? owner->parentId : owner->id;
+    return owner->id;
+}
+
+// A folded macro keeps its members' cards on the canvas, hidden, at their old places, often right over another track:
+// they are never neighbours. A visible card offers each jack side only when that side faces the drop's container.
+SmartConnectionEngine::ScopeSides SmartConnectionEngine::sidesFacing(const synth::MacroOwnerIndex& owners,
+                                                                     const juce::String& target,
+                                                                     const ModuleComponent& neighbor) const {
+    if (!neighbor.isVisible())
+        return {};
+    return {containerFacing(owners, neighbor.getNodeId(), /*throughInput=*/true) == target,
+            containerFacing(owners, neighbor.getNodeId(), /*throughInput=*/false) == target};
+}
+
+// A canvas drag's own card's processor, else the library drag's short-lived probe. Null also when the drag offers
+// nothing at all, so the caller has one early return.
+juce::AudioProcessor* SmartConnectionEngine::ghostProcessorFor(const DragPreviewState& drag) const {
+    if (!drag.active || drag.ghost.isEmpty() || !shouldOfferSmartConnections(drag))
+        return nullptr;
+    if (drag.selfId.uid == 0)
+        return drag.probe;
+    auto* mc = host_.moduleComponentFor(drag.selfId);
+    return mc != nullptr ? mc->getModule() : nullptr;
+}
+
 bool SmartConnectionEngine::isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const {
     auto& graph = host_.graph();
     if (isMidi) {
@@ -102,7 +170,7 @@ bool SmartConnectionEngine::isInputJackFree(juce::AudioProcessorGraph::NodeID no
     if (mb != nullptr) {
         for (const auto& t : mb->getJackTargets(jack, true)) {
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
         }
     } else {
         rawChannels.push_back(jack); // Audio I/O identity mapping
@@ -144,7 +212,7 @@ bool SmartConnectionEngine::isOutputJackFree(juce::AudioProcessorGraph::NodeID n
     if (mb != nullptr) {
         for (const auto& t : mb->getJackTargets(jack, false)) {
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
         }
         if (rawChannels.empty())
             rawChannels.push_back(jack);
@@ -192,8 +260,8 @@ bool SmartConnectionEngine::areJacksAlreadyConnected(juce::AudioProcessorGraph::
     const auto link = GraphEditor::resolvePolyLink(srcMb, srcJack, dstMb, dstJack);
 
     for (int v = 0; v < link.voiceCount; ++v) {
-        const int sCh = link.sourceRawChannel + v * link.sourceStride;
-        const int dCh = link.destRawChannel + v;
+        const int sCh = link.sourceChannel(v);
+        const int dCh = link.destChannel(v);
         for (const auto& c : graph.getConnections()) {
             if (c.source.nodeID == srcId && c.destination.nodeID == dstId && c.source.channelIndex == sCh &&
                 c.destination.channelIndex == dCh)
@@ -221,7 +289,7 @@ SmartConnectionEngine::findSingleUpstreamAudioLink(juce::AudioProcessorGraph::No
     if (dstMb != nullptr) {
         for (const auto& t : dstMb->getJackTargets(dstJack, true))
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
     } else {
         rawChannels.push_back(dstJack); // Audio I/O identity mapping
     }
@@ -277,6 +345,5 @@ void SmartConnectionEngine::disconnectAudioLink(juce::AudioProcessorGraph::NodeI
     const auto link = GraphEditor::resolvePolyLink(dynamic_cast<ModuleBase*>(srcNode->getProcessor()), srcJack,
                                                    dynamic_cast<ModuleBase*>(dstNode->getProcessor()), dstJack);
     for (int v = 0; v < link.voiceCount; ++v)
-        graph.removeConnection(
-            {{srcId, link.sourceRawChannel + v * link.sourceStride}, {dstId, link.destRawChannel + v}});
+        graph.removeConnection({{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}});
 }

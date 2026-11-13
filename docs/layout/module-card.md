@@ -23,10 +23,29 @@ Attenuverter modules are excluded from the visible card grid entirely — they d
 
 ## Body layout
 
-Every module without a bespoke layout (the exceptions are Sequencer, PolySequencer, MidiKeyboard,
-ADSR and Attenuverter) is laid out by one function, `layoutDefaultContent(bool apply)`. It runs
-twice per size change: once with `apply = false` to measure the height, once with `apply = true`
-from `resized()` to position the children.
+A built-in module's parameter widgets are built, bound and laid out by its **card body**, `CardBody`
+(`Source/UI/Graph/CardBody/`), from a plan of the module's parameters and its resolved layout
+([module-card-layout.md](module-card-layout.md#rendering)). No module has a code default yet, so
+every card draws the **automatic layout**, which is the generic card exactly: all combos, then all
+toggles, then the Threshold view, then a 3-column knob grid, each group in parameter declaration
+order. Widgets are built in declaration order whatever the layout, so child, Tab and screen-reader
+order never depend on placement. The bespoke cards (Sequencer, Poly Sequencer, Macros, Parametric
+EQ, Attenuverter) build their widgets through the same card body but place them themselves; MIDI
+Keyboard, External MIDI and a hosted plugin build their own.
+
+**Section headers and renamed controls.** A section with a title (one the user added or renamed in the
+layout editor) starts with a header row, `kSectionHeaderHeight` tall across the content width: a small
+bold label in the title's own case (UI text is never all caps), created after every widget so it never
+changes Tab or screen-reader order, and measured by the same walk, so measure == apply holds. An
+untitled section (every automatic layout) has none, which keeps those cards pixel for pixel as before.
+A control the layout renames shows the new name as its caption (a toggle's text), with the full
+parameter name as the caption's tooltip; its component ID stays the parameter's own name.
+
+Around the body, `layoutDefaultContent(bool apply)` adds the card's chrome (Sampler and Wavetable
+rows above it; the LFO wave editor, Show Envelope Graph / Response / Spectrum / Scope rows below it;
+the More row last). It runs twice per size change: once with `apply = false` to measure the
+height, once with `apply = true` from `resized()` to position the children, and the card body's
+own `layout(apply)` follows the same rule. A long card function such as `layoutDefaultContent` gets a new step by extracting a named sibling function first, never by growing the function itself.
 
 **Why one function runs twice instead of two functions.** The measured height and the real positions
 cannot drift apart when they come from the same code. They previously did: two hand-maintained
@@ -40,8 +59,26 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kLabelHeight` | 18 | label above a knob or combo |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
-| `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
+| `kFaderVHeight` | 96 | a vertical fader's travel plus its text box (40 px wide, centred in its cell) |
+| `kFaderVLongHeight` | 144 | a long vertical fader's travel plus its text box |
+| `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
+| `kWaveformHeight` | 72 | Sampler waveform overview (Instrument mode: picker, caption and key strip fill the same 112 px with the load row) |
+| `kSectionHeaderHeight` | 18 | a titled section's header row |
+| `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
+| `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
+
+**Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
+checks (on macOS only, where its known-gap list is measured; Windows fonts and audio devices differ) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
+dialog of the theme sweep registry, discovered rather than listed. It runs at the default size in every built-in theme and
+at the smallest size (the main window's 480 x 400 minimum, a dialog's constrainer minimum) in the first theme. It fails
+on: sibling leaves that touch or overlap (a mouse-transparent overlay and buttons joined by connected edges are exempt);
+a caption that is not `theme.metrics.spacingUnit` (6 px, the `space-unit` token) from its control (the attached component
+of a `juce::Label`, else the nearest control directly below or to the right within 24 px); a Label, TextButton or combo box
+whose text is wider than its text area and has no tooltip; a TextButton whose text ink is off centre by more than 1 px
+(measured by painting it with and without its text). A finding is `<surface> / <component>: <what>`; known ones live in
+the test's `kKnownGaps`, which may only shrink.
 
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
 out at full `contentX` / `contentW`, flush-left with the knob grid, rather than the centred
@@ -57,56 +94,335 @@ row fit inside the 280 px card.
 The header-to-first-port gap is 9 px (base header offset constant 38 in both `getContentTopY()` and
 `getPortCenter()`), giving the MIDI In/Out row breathing room under the header hairline.
 
-Measured heights. `GraphEditor::estimateModuleSize()` mirrors these for the library drag ghost, and
-`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
-type and fails if this table drifts from what `layoutDefaultContent()` actually produces:
+Measured heights. `GraphEditor::estimateModuleSize()` gives the library drag ghost and drop
+placement a card's size before the card exists. A card drawn from layout data is **measured** from
+its card-body plan (`CardBodyMeasure.cpp`: the same plan and layout walk, built from the type's code
+default with its conditions read at the fresh module's values, the knob-bound jack rule from the plan,
+and the chrome rows, footer row and More row around the body); only the bespoke cards read a small
+table. `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` builds every library type and
+fails if either path drifts from the real card, and `CardBodyGolden` pins every child's bounds of
+every card against one file per type, `Tests/fixtures/card-body/<Type>.golden`. Fresh cards, single
+width (280) unless noted, one table per module family, so the work on one family's default layouts
+edits only its own table:
 
-| Module | Height (px) | Module | Height (px) |
-|---|---|---|---|
-| Oscillator | 553 | Sample & Hold | 571 |
-| Filter | 463 | Comparator | 205 |
-| LFO | 401 | Sampler | 665 |
-| VCA | 273 | Chorus / Phaser / Flanger | 297 |
-| ADSR | 489 | Bitcrusher | 343 |
-| Poly MIDI | 205 | Pitch Shifter | 487 |
-| Distortion | 343 | Compressor | 257 |
-| Ring Modulator | 411 | Limiter | 181 |
-| Delay | 257 | Voice Mixer | 321 |
-| Reverb | 257 | External MIDI | 146 |
-| Noise | 301 | Rec Tap / Track Audio / Hosted Plugin | 131 |
-| Envelope Follower | 315 | Math | 259 |
+| Sources | Height (px) |
+|---|---|
+| Oscillator | 471 |
+| Noise | 245 |
+| Sampler | 565 |
+| Drum Kit | 617 (8 pads: the pads area is the `kBlockGap` under the Level box, the Pads row with its Show all chip, the grid, the caption and the picked pad's controls) |
+| LFO | 391 |
+| Wavetable | 578 (double width, 560) |
 
-Outside that function: Sequencer and PolySequencer 406, MidiKeyboard 150, Macros (tracks its
-`Knobs` count), Attenuverter (square, `kNarrowWidth`), Wavetable 554, Parametric EQ 592, and
-AudioInput / AudioOutput on a 100 px floor.
+| Envelopes and utilities | Height (px) |
+|---|---|
+| ADSR (Amp Env, Filter Env) | 597 |
+| VCA | 193 |
+| Envelope Follower | 245 |
+| Sample & Hold | 427 (Clock External: the trigger meter opens above the knobs) |
+| Math | 249 |
+| Voice Mixer | 277 |
+| Poly MIDI | 169 |
+
+| Filter and dynamics | Height (px) |
+|---|---|
+| Filter | 477 |
+| Compressor | 365 |
+| Gate | 293 |
+| Limiter | 309 |
+
+| Effects | Height (px) |
+|---|---|
+| Delay | 343 |
+| Reverb | 423 |
+| Chorus / Phaser / Flanger | 309 |
+| Distortion | 375 |
+| Bitcrusher | 229 |
+| Ring Modulator | 249 |
+| Pitch Shifter | 419 |
+
+| Other | Height (px) |
+|---|---|
+| Comparator | 185 |
+| Channel Strip | 409 |
+| Master | 221 |
+| Rec Tap / Track Audio | 131 |
+| Track In | 100 |
+
+The Sequencer and Poly Sequencer (560x482 at the default lanes) are measured from their layout like any other. From the table (bespoke): MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (a layout card, 560 wide: its height follows the layout and the `Knobs` count), Attenuverter (square, `kNarrowWidth`),
+Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
+100 px floor.
+
+## The More row
+
+A layout lists what it hides; every parameter it hides or does not place renders in a folded **More**
+row at the very bottom of the card, under the Scope row (or the footer row). The row exists only when something is hidden,
+so a card whose layout hides nothing shows none; it comes from the module type's default layout or a stored
+layout (the node's `cardLayout` override, [module-card-layout.md](module-card-layout.md#where-a-layout-comes-from)).
+
+- **Folded** (the default, also after a load): one full-width button, "More controls (N)", a Tab stop
+  after the body's controls with the accent focus ring; a click, Return or Space toggles it. The
+  hidden parameters' widgets exist and stay bound (value, attachment, MIDI Learn, automation), but are
+  out of view, so a hidden knob's CV jack draws in the port gutter again.
+- **Unfolded**: the hidden controls lay out under the button in the body's runs (combos, toggles, a
+  3-column knob grid), and a knob-bound jack leaves the gutter as usual.
+- **Height.** Folding and unfolding change the card's height: the card re-measures and calls
+  `GraphEditor::handleModuleResized`, the same make-room path every growing card takes. A value drag
+  never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`). A row a cable opens
+  is the exception: it peeks over its neighbours (the card comes to the front) and the neighbours make room only
+  when the cable lands on one of its controls, so a live cable never moves a card it may still land on.
+- **Motion.** The hidden controls fade in (160 ms) and out (110 ms) and the card's height follows the fade, the
+  card's bottom edge clipping the controls while the row opens or closes; the neighbours make room once
+  (`CardBody::setMoreUnfolded`, `CardBlockFade`; [animation](animation.md#fading-things-in-and-out)).
+- **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
+  can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable). The cable only folds
+  what it opened (`CardBody::isMoreOpenedByCableDrag`; a row opened by hand never folds): when the cable leaves the
+  card the row folds after a 120 ms grace, so crossing the edge does not flicker, and coming back cancels it; a
+  release anywhere but on one of the row's controls folds it, and so does Esc (`GraphEditor::keyPressed` ends the drag as a release over nothing; the canvas takes the keyboard
+  for the drag and gives it back to what had it). A cable that lands on a hidden control keeps the row open and hands it to the person,
+  so it then stays like a row they opened. The refold is the usual fade (above); a refold after a peek moves nothing.
+  A drop that keeps the row open, the room it makes for the cards below and the connection are **one undo step**
+  (`GraphEditor::endConnectionDrag` groups them; `MoreRowKeptOpenAction`): Cmd+Z removes the cable, folds the row and
+  glides the pushed cards back, Cmd+Shift+Z replays all of it.
+- **Highlight.** While the row is open (a person's, or a cable's peek) its area, the More button and the controls under
+  it, carries a soft accent wash (8 %) with a hairline (35 %) in the theme's accent, so it is clear where the person
+  is working. Only that area is tinted, never the whole card, and it fades with the row (`CardBody::paintMoreHighlight`,
+  drawn by the card's paint under its controls; instant under Reduce Motion or Animations Off like the row itself).
+
+## The footer row
+
+A layout's section with the reserved id `footer` (`CardSection::kFooterId`) is drawn as one compact
+row at the bottom of the body, under the card's chrome panels and above the More row, wherever the
+layout lists it (`CardBodyFooter.cpp`). No card has one by default yet; a code default or a stored
+layout adds it.
+
+- **What goes in it.** A toggle is the **small toggle pill** (below); anything continuous is a
+  horizontal fader (`faderH`, whatever widget the item names); a choice, switch or stepper is its own
+  widget. A fader, combo, switch or stepper carries its caption inline on its left, in the pill's
+  12 px text; the pills keep their width and the rest share what is left. Items that do not fit wrap
+  onto another row, 28 px tall each.
+- **Chrome toggles join it.** On a card whose layout has a footer, Show Envelope Graph (the ADSR),
+  Show Response, Show Spectrum (while the response view is open) and Show Scope are pills at the end
+  of the row instead of full-width
+  rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
+  `poly` toggle in the footer unless the layout places it elsewhere or hides it, so a default layout
+  never lists it. The Poly pill is the one pill that does not toggle itself: a click switches the module's whole
+  voice graph as one undo step ([`modulation.md`](../modules/modulation.md#the-poly-toggle)), and the pill then
+  follows the parameter. Its tooltip is "Play several notes at once. Switches every connected module in this track."
+  and its screen-reader name stays "Poly". A card without a footer section keeps today's chrome rows exactly.
+- **Bindings are the widgets' own.** A pill is the parameter's ordinary toggle (attachment, MIDI
+  Learn, Tab stop, title, tooltip), drawn differently; a footer fader is a `CardFader` with every knob
+  gesture, so a cable lands on it and a knob-bound jack stays off the gutter.
+- **The pill.** `synth::ui::setTogglePillStyle` (`CardWidgets/CardTogglePill.h`) marks a
+  `juce::ToggleButton`, and `AppLookAndFeel::paintTogglePill` draws it: a 20 px rounded pill, filled
+  with the tick colour and the text in the background colour when on, an outlined surface when off,
+  the accent focus ring round the pill. Width is the text plus 10 px each side
+  (`AppLookAndFeel::togglePillWidth`, which the size estimate uses too). Pill and footer-caption
+  text is measured and painted in the embedded Inter (`AppLookAndFeel::uiTextWidth` / `uiFont`), never
+  the system typeface, so every width is the same on every platform.
+
+## Tab strips
+
+A run of consecutive `presentation: tab` sections in a layout is drawn as one **tab strip** with one
+tab's controls under it (`CardBodyTabs.cpp`, laid out by `CardBodyLayout.cpp`;
+[module-card-layout.md](module-card-layout.md#rendering)). The Wavetable, Pluck and Mallet code defaults
+have tabs; a stored layout keeps them.
+
+- **Geometry.** The strip spans the content width, `kRowHeight` tall, `kTabStripGap` below where the
+  run's first section stands; the selected tab's section follows after `kTabStripGap`, laid out like any section (a tab draws
+  no header row: its title is on the tab). The group is as tall as its **tallest** tab whichever is
+  selected, measured by the same walk (measure == apply on every tab), so a tab switch never resizes the
+  card or moves anything outside the group.
+- **Hidden tabs.** The other tabs' widgets are hidden but keep their bounds, bindings, MIDI Learn and
+  automation; a hidden knob paints no modulation ring and takes no cable drop (it is off the card for
+  `CardBodyPlan::isOnCard`).
+- **Jacks and cables.** A knob on a tab never binds its CV jack, selected or not
+  (`knobAnchorForVisibleInputJack`; the size estimate applies the same rule): the jack stays in the gutter, so the
+  jack layout and the content top are the same on every tab. While its tab is shown, the knob has its own landing
+  dot (a Tab stop after the knob, the focus ring, a title and tooltip) and its cables end on it; on another tab they
+  end on the jack, or, for a knob-only target, park apart at the card's left edge by the strip, and a switch glides
+  the ends ([cables](cables.md#knob-landing)).
+- **The strip.** A `CardSegmentedSwitch`, componentID `cardTabStrip`: joined buttons with connected
+  edges, the look the Wavetable's own strip had. One Tab stop between the controls above it and the
+  tab's controls; Left/Right step through the tabs and stop at the ends, Home/End jump to the first and
+  last; the accent focus ring; titled "Control tabs" with a tooltip naming the keys; to a screen reader,
+  a group of radio buttons titled with the tab names, each with a tooltip. A switch re-lays the card out
+  and repaints the canvas so cables re-anchor (`CardBody::selectTab`).
+- **State.** The selected tab is per card and never saved; a new or rebuilt card opens on its first tab.
+
+## Conditions: swap and dim
+
+A layout item's `when` and a section's `visibleWhen` are read live (`CardBodyConditions.cpp`): the
+card listens to the parameters its conditions read, and a change (from a click, automation, undo or
+a preset) re-reads them on the message thread and re-lays out the card only when a result changed.
+
+- **Dim.** `effect: dim` greys the control out unless the condition holds; a code default may add
+  numeric dim rules a stored layout cannot express (Detune while Unison is 1). A dimmed control is not
+  disabled (that would take it out of Tab order and, through JUCE's focus traverser, out of the
+  accessibility tree): it and its caption carry `AppLookAndFeel::kDimmedProperty`, which every card
+  painter honours (knob, fader, toggle, pill, combo, segmented switch, stepper, caption) by painting at
+  `AppLookAndFeel::kDisabledControlAlpha`, the focus ring staying at full strength. It keeps its cell,
+  its Tab stop, its right-click menu and its bindings, and stays operable; its accessible description
+  reads "Inactive in this mode" and its tooltip ends "(inactive in this mode)", both removed when the
+  dim lifts. A genuinely disabled knob or toggle anywhere in the app paints at the same alpha.
+- **Swap.** Consecutive `effect: show` items testing the same parameter form a **swap group** (an
+  item repeating a condition already in the group starts the next group): one
+  cell, laid out in the run of its tallest member, showing the member whose condition holds (the cell
+  stays, empty, when none does). Every member takes that cell at its own height, so a swap moves
+  nothing; a swapped-out knob keeps its knob-bound jack in the cell (`CardBody::isSwappedOut`, the same
+  rule as the ADSR's BPM swap), so the gutter never changes either. A swapped-out control is not
+  hidden: it never appears in the More row.
+- **Sections.** A section whose `visibleWhen` does not hold takes no space, with its header. Showing or
+  hiding it changes the card's height, through `GraphEditor::handleModuleResized` like any other growth:
+  neighbours are pushed clear and come back when it shrinks. A plain section (no tab or look, no swap group, no view)
+  fades: it is laid out at once when it comes and its controls and header fade in; when it goes it stays laid out
+  until its controls have faded out, then the card closes up and the neighbours come back (`CardBodyFades.cpp`,
+  `Section::holding`). A look or tab switch and a swap group are swaps and keep the swap motion.
+
+## Faders, switches and steppers
+
+A stored layout can draw a parameter as a widget other than the automatic one (`ParamItem.widget`,
+[module-card-layout.md](module-card-layout.md#widgets)); no card does by default, so every card still
+draws the automatic layout above. The plan honours the widget only where it suits the parameter and
+otherwise falls back to the automatic kind (`cardBodyKindFor` in `CardBodyPlan.cpp`). Each kind lays
+out as its own run, by the same measure-and-apply walk:
+
+| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 18 px caption |
+|---|---|---|---|---|
+| `knobLarge` | `CardKnobSlider` | a float or int | a grid, one per cell | 80 |
+| `faderV` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 96 |
+| `faderVLong` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 144 |
+| `faderH` | `CardFader` (horizontal) | a float or int | one per row, full width | 28 |
+| `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
+| `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band, as wide as its widest value plus the arrows | 24 |
+
+- **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
+  (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
+  fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter
+  also draws its focus ring round the cap. It takes the fader style from Settings > Appearance > Controls, and its fill takes the card's family colour like a knob (`AppLookAndFeel::knobValueColour`). A vertical fader's value box is 40 px, so it shows the parameter's text without spaces ("1.00s") at the theme's label size (`CardFader::useCompactValueText`) rather than truncating. A horizontal fader's travel ends one cap half-length plus 6 px (its focus ring and a gap) before its value box, so the cap and its ring stay clear of the text at any value (`CardBodyOverlap` checks `capBounds`, widened by the ring and a 2 px gap, against the box at the lowest, default and highest value). It carries every knob gesture through
+  `CardControlGestures` (the modulation-amount drag, the cable pickup on its landing dot, the hover
+  that highlights the landing cable, the keyboard steps) and is in the card's slider list, so
+  Automate, MIDI Learn, value reflection and the modulation-target lookup treat it as a knob. Its own
+  drag is the mixer fader's: Shift drags at an eighth of the rate (re-anchored where the drag is, so
+  the value never jumps), Cmd-click and double-click reset to the parameter's default, each one change
+  gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
+  one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
+- **A choice beside a fader.** A choice in a swap group with a vertical fader (the ADSR's note division
+  taking its time's place in Tempo mode) stays a choice: a compact `NoteLengthBox` ([note-length-menu](note-length-menu.md#the-adsr-stage-divisions)),
+  one row tall in the middle of the fader's cell with the caption on the cell's top edge, so a swap moves nothing
+  else. A layout can still ask for a stepped fader on a choice (`CardWidget::FaderV` in an alternative look), which
+  steps over the choice's integer values.
+- **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
+  bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
+  "Tempo"); the switch
+  is the one Tab stop and the segments take no clicks themselves (the switch hit-tests them), so a
+  right click reaches the card as the switch's.
+- **Stepper.** `CardStepper` is the one number field (the sequencer's Steps, the MIDI Keyboard octave, the Drum Kit
+  Pads counts, the drum machine's Swing). It is ONE component and ONE Tab stop with a focus ring, drawn as a bar with
+  a range fill (when the owner gives a range), `<` and `>` arrows at the ends and the value centred, vertically,
+  between them; its width is the widest value plus the arrows, so every field of this kind is as narrow as it can be.
+  In a tall cell (`setOrientation(vertical)`) the arrows sit above and below. Up/Down or Left/Right step; a click on
+  an arrow steps; holding it pauses 0.4 s, then repeats from 6 to 30 steps a second, and stops on release or focus
+  loss; dragging the number steps every `CardControlGestures::stepperDragPixelsPerStep` (about 3 px, fewer for a long
+  range), Shift at an eighth of the rate, never jumping when Shift toggles mid-drag; a double-click (or Enter, or a
+  digit) opens a text box over the number (Enter commits, Escape cancels; a typable field only); Cmd-click resets to
+  the default. A step blocked at a limit turns the number amber. The owner applies each step (`onStep`) and groups the
+  steps of one gesture between `onGestureBegin` and `onGestureEnd`, so a click, a hold, a drag, a reset or a typed
+  value is one undo step and an unmoved press creates none (`bindStepperToParameter`, `CardStepperBinding.h`, does
+  this for an int parameter). To a screen reader it is one element named after the parameter whose value is the
+  value text; the tooltip names the gestures. A right click resolves to the stepper's registered parameter.
+- **Height.** Switching a control between a knob and a fader changes the card's height, as a discrete
+  layout edit; a value change on any widget never does
+  (`CardBodyWidgetKind.NoValueChangeOnAnyNewWidgetResizesTheCard`).
+
+### Hide or show from the right-click menu
+
+Every control on a card drawn from layout data adds to its right-click menu, after Automate and the
+MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
+fader** / **Show as knob** for a float or int on the card and **Edit Layout...**, which turns the card itself
+into the layout editor ([module-card-layout.md](module-card-layout.md#editing-a-layout)); the module menu carries
+**Edit Layout...** too. The bespoke cards offer none of these. Every card with a knob or a fader, bespoke and hosted
+included, also has **Control Style...** in its module menu, right after **Edit Layout...**: a call-out with the
+knob and fader style for this module or for every module of its type
+([theming](theming.md#per-module-control-style)). Each click is one write of the node's `cardLayout` override, one undo step,
+starting from the layout the card draws now (the automatic layout written out as explicit items,
+which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
+Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the
+last section; Show as fader picks `faderV`. A card builds its body once, so `updateComponents`
+rebuilds a card whose override no longer matches the one it was built from: the quick path writes,
+rebuilds and makes room inside one undo record, and undo and redo rebuild the same way
+(`CardLayoutQuickEdit.cpp`, `GraphEditorCanvas.cpp`).
 
 ## Modules that resize at runtime
 
-Widths are static; one module's **height** is not. The LFO (FRO114) stays `Single` width even with
-its Custom-waveform section open — the section adds `24 + 2` px (the Grid/Shapes/Tools toolbar
-row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
-of 184 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
+Widths are static; a few modules' **heights** are not (the More row above also folds a card's height). The LFO (FRO114) stays `Single` width even with
+its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 6` px (the Grid/Shapes/Tools toolbar
+row and `cardbody::kBlockGap`, the one gap under a button row and between neighbouring blocks) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 6` px (`kBlockGap` again, bottom breathing room), a total
+of 192 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
-401 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
+369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.
 
-The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component layout,
-the output-jack hit test and `estimateModuleSize` all read the same numbers:
-
-```cpp
-kMacroHeaderH  = 94   // title bar + Knobs / Bipolar row
-kMacroRowH     = 44   // one macro knob and its output jack
-kMacroBottomPad = 12
-
-macroBankHeight(count) == kMacroHeaderH + count * kMacroRowH + kMacroBottomPad
-macroRowCentreY(index) == kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2
-```
+The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. It is a layout card ([module-card-layout.md](module-card-layout.md)): its height is measured from its layout, so the component layout, the output-jack hit test and `estimateModuleSize` read the same number. It is double width (560, `kDoubleWidth`), its body sits beside a 60 px right-edge gutter, and its output jacks sit in that gutter in macro order, whatever the layout.
 
 **Growth is anchored at the top-left and pushes neighbours, never itself.** Moving the module the
 user is currently interacting with would teleport it out from under the cursor, so
-`GraphEditor::handleModuleResized` feeds every module box to
-`LayoutUtil::resolveOverlapsAfterResize` and applies the displacements it returns. Shrinking returns
-an empty result set: nothing is pulled back up, the canvas just gains space.
+`GraphEditor::handleModuleResized` hands the card to `MacroGroupController::reflowForResizedModule`, for a loose card
+and a macro member alike. It first offers every neighbour this card pushed earlier its way back, then pushes whatever
+the new rect covers by the macro rules (the shortest way, cascade, canvas wall, pinned output dock, 160 ms glide). The
+pushes are remembered per card (transient, never saved) so a shrink returns them: a neighbour comes home only if the
+user has not moved it since and its old spot is clear (a spot the card still covers stays blocked and keeps its record).
+Undo/redo, Auto Arrange, a project load and deleting the card drop the records. See
+[layout.md](layout.md#making-room-when-something-grows).
+
+**Which in-place size changes reach `handleModuleResized`:**
+
+| Change | Entry point |
+|---|---|
+| Macros bank `Knobs` count | `applyMacroCountChange` |
+| Poly toggle (each module the click switches, not only the clicked one) | `applyPolyStateChange` |
+| Dual I/O toggle (and the stereo-pair sweep) | `applyDualIOLayoutChange` |
+| Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
+| LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
+| Show Scope / Show Response toggles (the panels fade and the card's height follows, `ModuleComponentCardView.cpp`) | `setScopeShown` / `setResponseShown` |
+| A layout section shown or hidden by its condition (`visibleWhen`) | `CardBody::refreshConditions` |
+| ADSR Show Envelope Graph (opens or closes the card body's `envelope` view) | the toggle's `onClick`, `CardBody::setViewOpen` |
+
+Not wired because the card height does not change: the Spectrum toggle (a backdrop only), a layout's swap group or dim,
+the ADSR's Time|Tempo switch (a swap group: each stage fader for its division in the same cell) and a tab switch (a tab group is as tall as its tallest tab). A card that
+is still being constructed never makes room (it is not on the canvas yet).
+
+## Replace with... (FRO651)
+
+A card's right-click menu has one "Replace with..." item (absent for the singleton Audio Input and Output). It opens
+the shared searchable picker (`synth::ui::ModMatrixPicker`, the one the Mod Matrix and the add-automation and
+add-modulator pickers use) in a call-out over the card, with the search field focused. The rows are every module type the
+old nested submenu listed, under the same category headers and without the card's own type, then every scanned plugin
+(instruments and effects) under "Plugins", each with its format (VST3 or AU) as the second line; the plugin the card
+already hosts is left out. The plugin list comes from `GraphEditor::installedPluginsProvider`, which `MainComponent`
+points at the same scan list the module library shows. Typing filters ("diva" finds Diva), Up and Down move, Return or a
+click picks the highlighted row, Escape closes. Rows and launcher: `ReplaceWithPicker.h/.cpp`.
+
+Picking a module row calls `GraphEditor::replaceModule(card, type)`; picking a plugin row calls it with `"Hosted
+Plugin"` and a `configure` hook that sets the identity (`HostedPluginModule::loadPlugin`) before the node joins the
+graph, so it is inside the undo snapshot and undo and redo remember which plugin. Position, compatible cables,
+modulation routings and MIDI Remote mappings carry over exactly as for a module replace, in one undo step
+(`GraphEditorReplace.cpp`).
+
+A module inside a macro stays inside it: the new node takes the old node's place in the macro's member list
+(`MacroSet::replaceMember`, before the old node is removed, so the prune in `updateComponents` never sees a gap), and the
+macro set is recorded in the same undo step as the graph (and the MIDI Remote doc when the app wires one), so Cmd+Z puts
+the old module back inside the macro (`Tests/Macros/MacroReplaceMemberTests.cpp`).
+
+## Keyboard: rename and replace
+
+With a macro selected (its whole member set, nothing else), the same keys rename the macro: inline on its card when folded, in the Rename Macro dialog when open; a single visible module card still wins. With exactly one card selected (and no track header or mixer column holding the name focus, which answer the same key first), **F2** or **Option+R** (`renameSelectedModuleAlt`, Alt+R off the Mac) opens the inline title editor (Rename) and **Cmd+Alt+R** (Ctrl+Alt+R off
+the Mac) opens the "Replace with..." picker (Replace Module With...). Both are rebindable Graph actions
+(`renameSelectedModule`, `replaceSelectedModule`) dispatched through the command table, which greys them out with no
+selection, several cards, an Attenuverter or macro port (rename) or the singleton Audio Input and Output (replace). The
+checks are `ModuleComponent::canRename()` / `canReplace()`, shared with the right-click menu, whose "Rename" and "Replace
+with..." rows show the live binding. Plain Cmd+R is Repeat and Ctrl+R is Record, so Replace takes the Alt chord. Code:
+`CanvasCardKeyboard::renameSelectedModule` / `replaceSelectedModule`. The same chord also works from the timeline, where it swaps what the lane is about rather than its module: with a modulator row focused it opens the row's Change source picker, with an automation lane header (or its editor) focused the lane's Change parameter picker, both in place (`TimelineAutomationLanes::openReplacePicker`, reached from `MainComponent::replaceModuleFromShortcut`), and it is greyed out where that picker could not open (a source that cannot be swapped, no free parameter). The canvas path above is unchanged; to replace a lane's module, use Show on canvas and then the chord.
 
 ## Header buttons
 
@@ -140,19 +456,20 @@ A split-block module (Oscillator, Filter, VCA, Wavetable) with Dual I/O switched
 and Right as two SEPARATE visible jacks — the default patch's own shape, Oscillator -> Filter ->
 VCA, all three shipping Dual I/O ON by construction. That looks like two incoming and two outgoing
 legs, which the 1-in/1-out rule would otherwise reject outright — the most common single "delete an
-effect" case there is, so `mergeDualIoStereoPairLegs` (`GraphEditorDeleteHeal.cpp`) treats a
-matching Left/Right pair as ONE logical leg when BOTH the deleted module AND its peer are genuinely
-Dual I/O split (`ModuleBase::isDualIO()`, checked on both ends — not just "jack index 0 and 1 exist"
-coincidentally, which would wrongly fold a real two-input mixer's independent jacks into a fake
-stereo pair). Healing then wires Left->Left and Right->Right as two EXPLICIT jack pairs, one
-`connectPorts` call each, validated together as all-or-nothing before either is wired —
-`resolvePolyLink` has no notion of "two separate jacks" within a single `PolyLink`, unlike a
-collapsed stereo jack's own multi-voice fan, which is why this needs its own two-call path rather
-than reusing the fan. A "mixed" shape — the module split but its peer collapsed, or its two raw legs
-landing on two different peer nodes — is deliberately left unmerged and follows the ordinary rules
-(no heal on that side): the peer's own two raw legs then land on a single jack index of its own, so
-the "same peer AND same deleted-module jack" pairing test never matches, rather than the heal trying
-to guess a width mismatch. Collapsed (Dual I/O off), a split-block
+effect" case there is, so `mergeStereoPairLegs` (`GraphEditorDeleteHeal.cpp`) treats a
+matching Left/Right pair as ONE logical leg. A pair is two jacks labelled as a Left/Right pair
+(`detail::jackIsLeftOfSplitPair`, so a collapsed jack, a Voice Mixer's eight voice inputs and a
+mixer's independent jacks never qualify), and the cable can meet the deleted module in any mix
+of presentations: split on both ends, the peer split and the deleted module collapsed, or the peer
+collapsed and the deleted module split. Healing then wires the survivors: Left->Left and
+Right->Right as two EXPLICIT jack pairs, one `connectPorts` call each, validated together as
+all-or-nothing, when both survivors are split (`resolvePolyLink` has no notion of "two separate jacks"
+within a single `PolyLink`); a collapsed upstream onto a split downstream as one `connectPorts` call
+whose `PolyLink` carries a `destStride` to the downstream's real Right leg (`kRightBase` on the
+split-block modules and the Channel Strip, never raw ch1); and a split upstream onto a collapsed
+downstream jack as two raw edges onto that jack's two channels (`healSplitPairIntoCollapsedJack`). A
+legs landing on two different peer nodes is a hand-built mix and is left unmerged (no heal on that
+side). Collapsed (Dual I/O off), a split-block
 module's one "Audio" jack is genuinely mono — its Right leg lives on a separate far block, not raw
 ch1 — unlike an auto-derived FX shape's collapsed jack (Chorus, Reverb, Delay, Distortion...),
 which owns both raw legs of a real stereo pair under that one jack; either way it is still exactly
@@ -212,15 +529,55 @@ never overlaps the title regardless of whether the LED is lit.
 
 ## Knob modulation-amount gesture
 
-Every rotary knob built by `ModuleComponent::createControls()` (the float- and int-param cases) is
+Every rotary knob a card body builds (`CardBody::createKnob`, for the float and int parameters) is
 a `synth::ui::CardKnobSlider` (`CardKnobSlider.h`), not a plain `juce::Slider` — it can redirect its
 own mouseDown/drag/up to `ModuleComponent::handleModAmountGesture()` instead of moving the knob,
 when `wantsModAmountGestureFor()` says the click should adjust a routed AttenuverterChain's amount
-(Alt-drag, or a drag starting on the ring's own annulus). See
+(Alt-drag, or a drag starting on the ring's own annulus). A card fader takes the same gesture (Alt-drag,
+or a drag starting on its modulation bar); both route their mouse through `CardControlGestures` and are
+wired by one call, `ModuleComponent::wireCardControlGestures`. See
 [`modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob`](../modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob)
-for the gesture itself and the depth band it moves; hosted-plugin card knobs
-(`ModuleComponentHostedPluginCard.cpp`) stay plain `juce::Slider`s — they are never modulation
-targets.
+for the gesture itself and the depth band it moves. Hosted-plugin card knobs
+(`ModuleComponentHostedPluginCard.cpp`) are plain `juce::Slider`s wired through the same
+`wireCardControlGestures`, so a modulated plugin knob gets the same ring, mod dot and amount gesture
+as a built-in one; their channel is the parameter's modulation slot
+([`plugin-card-layout.md#modulating-plugin-parameters`](../control/plugin-card-layout.md#modulating-plugin-parameters)).
+
+## Automated marker
+
+A knob or fader whose parameter has an automation lane on the timeline shows a small marker, so you can tell at a
+glance what is automated: a short slanted line with a dot at each end (about 8 by 6 px, 2 px dots, a 1.5 px stroke),
+at the **top-left** of the control's cell in the theme's `textPrimary` at 70 percent. The violet MIDI-mapped dot keeps the
+top-right, and the two never overlap (`automatedMarkerRect` against `midilearn::midiMappedDotRect`). It is only a marker:
+no click, no focus stop. It fades in over 160 ms and out over 110 ms (a plain 80 ms fade under Reduce Motion), driven by
+one time-bounded `AutomatedMarkerTicker` per card, made the first time a marker changes; nothing repaints once it has
+settled.
+
+The card asks the host once per gated 15 Hz tick, like the MIDI badge: `GraphEditor::onQueryAutomatedParamsForNode(nodeId)`
+returns the paramIDs with a lane (`MainComponent` answers from `TimelineDoc::automatedParamIds`), and
+`ModuleComponent::refreshAutomatedMarkers()` (`ModuleComponentAutomationMarker.cpp`) moves each registered control towards
+the answer, so adding, removing or undoing a lane is followed within a tick. The control's tooltip gains an
+"Automated: <parameter>" line and its accessible description says "Automated" (a screen reader reads "Cutoff, 1.2 kHz,
+automated") for as long as the lane exists. The glyph and fade live in `Source/UI/Layout/AutomatedMarker.{h,cpp}`; the
+mixer uses the same ones ([`mixer/panel.md#automation-markers`](../mixer/panel.md#automation-markers)). Tests:
+`AutomatedMarkerTests.cpp`, `ModuleComponentAutomationMarkerTests.cpp`, `AutomationMarkerMainTests.cpp`.
+
+## Modulation dot
+
+A knob or fader a modulation cable lands on also carries a transparent `synth::ui::ModDotButton`
+(`UI/Graph/ModDot/ModDotButton.h`), centred on the landing dot (about 16 px square; the button sits on whole pixels,
+so it also carries the dot's sub-pixel remainder and the ring is drawn round the dot's real centre, at any zoom). It is the dot's
+keyboard and screen-reader face: its own Tab stop right after its knob (`getKeyboardControls` sorts it
+with the knob it belongs to), named "<Param> modulation, N sources" with the tooltip "Modulation
+sources for <Param>", the solid accent focus ring around the dot, Up/Down for the last-chosen
+source's amount (Shift: ten times the step) and Return/Space, which open the dot's panel like a plain click on the dot (a
+press that moves under 3 px; see
+[`modules/modulation.md#the-mod-dot-menu`](../modules/modulation.md#the-mod-dot-menu)). While the panel is open the
+button draws the accent ring around the dot even without keyboard focus. It exists only
+while the knob has an attenuverter routing and is shown, so it is hidden with a knob on another tab
+page or one the layout hides; `ModuleComponent::syncModDotButtons` rebuilds it on every layout and
+whenever the GraphEditor tick sees the routing set change. The mouse passes through it to the knob. See
+[`modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot`](../modules/modulation.md#the-mod-dot-drag-an-amount-from-the-landing-dot).
 
 ## Custom card titles
 
@@ -299,14 +656,15 @@ geometry `paint()` draws, rather than by a fixed box:
   for the title's own font (`theme.type.h2`, bold). JUCE has no direct cap-height query, and 0.72x
   ascent is the standard sans-serif approximation, close to Inter's real ratio. This keeps the glyph
   proportional to the title — roughly cap-height, about 9-10 px at the default 13 pt title size —
-  instead of the header's full 24 px band, which read a touch large and heavy next to the
-  letter-spaced caps.
+  instead of the header's full 24 px band, which read a touch large and heavy next to the title.
 - **Vertical position** — centred on the title's cap-height optical centre, derived from the SAME
   centred-text-box math `drawText` uses to place the title (`textBoxTop = headerTop + (headerHeight
   - titleFont.getHeight()) / 2`, `baseline = textBoxTop + titleFont.getAscent()`, `capCentreY =
   baseline - capHeight / 2`) rather than the header band's raw geometric middle. Centring on the
-  full ascent-plus-descent box the title is drawn in reads slightly low against cap-height-only
-  glyphs, because an all-caps title never touches the descender clearance that box reserves.
+  full ascent-plus-descent box the title is drawn in reads slightly low against the capital and
+  x-height glyphs, which sit above the descender clearance that box reserves (a title is in normal
+  case, so its g, p and y do use that clearance: it fits inside the 24 px header with room to spare,
+  pinned by `ModuleCardTitleTests`).
 - **Horizontal position** — the right edge is pinned to `x = 14`, the activity LED's own right edge
   (`fillEllipse(6, 8, 8, 8)`), so the gap to the title's left inset at `x = 22` stays the
   established 8 px rhythm regardless of the glyph's resulting width.
@@ -342,65 +700,53 @@ via `ModuleLibraryComponent::categoryIconForHeader` — see [icons](icons.md).
 ## Wavetable card
 
 The Wavetable card is **double-width**: 15 knobs, 8 combos and a 16-jack port stack. Laid out flat
-that came to 560x869 — technically correct and genuinely unusable, a wall of identical knobs with no
-hierarchy. Three mechanisms bring it to 560x554 and give it a reading order.
+that came to 560x869 -- technically correct and genuinely unusable, a wall of identical knobs with no
+hierarchy. Three mechanisms bring it to 560x578 and give it a reading order.
 
 **Two-column jack gutter, both columns on the LEFT.** `getInputPortColumns()` returns 2 for a card
-with more than 10 visible input jacks at double width; `getPortCenter()` then lays the inputs out
-**column-major** — jack 0 top-left, running down then over — at `kPortColumnStride` (100 px) apart.
+with more than 10 drawn input jacks at double width; `getPortCenter()` then lays the inputs out
+**column-major** -- jack 0 top-left, running down then over -- at `kPortColumnStride` (100 px) apart.
 Sixteen jacks in one column set a roughly 390 px floor on the card height before a single control is
-placed.
+placed. Only the pinned Position and Warp Amt knobs take their jacks; the other fourteen are drawn, in
+two columns of seven, on every tab ([tab strips](#tab-strips)).
 
-**Inputs stay on the left, outputs on the right — that convention is not negotiable for a saving in
+**Inputs stay on the left, outputs on the right -- that convention is not negotiable for a saving in
 height.** It is what makes signal flow read left to right across a patch. Spilling the overflow down
 the right edge was tried and reverted: it reads as an output, and inputs and outputs are drawn
-identically, so the side is the only cue there is. The real objection to an interior column — the
-module covers the lower half of a cable being dragged towards it — is answered by not aiming at the
+identically, so the side is the only cue there is. The real objection to an interior column -- the
+module covers the lower half of a cable being dragged towards it -- is answered by not aiming at the
 gutter at all; release the cable **on the destination knob** instead, see
 [modulation.md](../modules/modulation.md#drag-to-knob-modulation).
 
-Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting —
+Everything that touches jack geometry -- wire drawing, hit-testing (`getPortForPoint`), painting --
 reads `getPortCenter`, so this is the only place that changes. One consequence:
 `getContentTopY()` takes the **maximum** y over all inputs rather than the last one's, because with
 more than one column an odd jack count leaves the second column a row short, so the last jack is not
 the lowest.
 
-**Tabbed control body.** The 23 controls are grouped into five pages — Tune / Unison / Phase / Sub /
-File — by the page table in `WavetableTabStrip.cpp`, which maps parameter *display names* to pages.
-The strip is a real collaborator: `WavetableTabStrip` (`Source/UI/Graph/ModuleComponent/`) is a
-`juce::Component` child of the card that owns the tab buttons (`wtTab0`..`wtTab4`, one radio group
-per card), the active page and the control -> page assignment. `ModuleComponent` still owns the
-sliders/combos and lends them to the strip via `addSlider`/`addCombo`, so modulation rings, drop
-targeting and MIDI Learn keep reading the card's own arrays; the strip only toggles their visibility
-and sets their bounds. `ModuleComponent` keeps just the hookup (`createWavetableTabs()`) and the
-`onPageChanged` callback (re-layout, repaint, `notifyModuleContentChanged()`). Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned**
-above it (they are what you actually perform with), and `Table` is laid out in the chrome band
-beside the display it selects.
+**Tabs are layout data.** The controls are the card body's, placed by the Wavetable's code default
+(`DefaultCardLayoutsSources.cpp`): an untitled section with Warp, Position and Warp Amt pinned above
+the strip (they are what you actually perform with; the Warp combo sits on its own row above the two
+knobs, because a run holds one widget kind), then five `tab` sections -- Tune (Octave, Coarse, Fine,
+Level, Pan), Unison (Stack; Unison, Detune, Width, Blend), Phase (Sync In; Phase, Rand Phase, Spread),
+Sub (Sub Oct, Sub Wave; Sub) and File (Import, Interp) -- drawn as one tab strip, then a footer with
+the Poly and Show Scope pills. Each tab stacks its combos above its knobs, and its section's columns
+size the knob cells to its count. The strip, its keys, its accessibility and the rule that a tab switch
+never moves anything are the card body's ([tab strips](#tab-strips)); Edit Layout lists each tab as a
+group and can hide, move and rename within it. **Table** is not a body control: it sits in the chrome
+beside the display it selects (`ModuleComponent::createWavetableTableSelector`; the body's plan skips
+the parameter).
 
-- **Jacks are never tabbed.** All 16 CV inputs stay on the card at all times, so a cable can never
-  point at a hidden port. Only knobs and combos page.
-- **Anything that paints from a knob's bounds must check visibility.** A hidden knob keeps the
-  bounds it had when its page was last laid out. Modulation rings go through
-  `getModRingSliderIndex()` and drop targeting through `getModTargetPortForPoint()`; both return
-  "none" for a knob whose page is hidden, so a ring cannot paint over empty card and a hidden knob
-  cannot swallow a cable drop.
-- The card is sized to the **tallest** page (`WavetableTabStrip::getTallestPageHeight()`), not the
-  active one. A card that grew and shrank would
-  shove its neighbours around the canvas on every tab click.
-- Page knob rows are **centred** and page combos run three across — most pages carry fewer than the
-  6 available knob columns, and left-aligning them stranded half the card's width.
-- `createWavetableTabs()` must run **after** `createControls()` (it hands the strip the controls that
-  call creates) and must end by calling `updateLayout()` — `createControls()` has already sized the card,
-  so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.
+**Chrome beside the ports.** The display, the `Table` combo, the button row and the caption sit
+**beside** the jack stack, starting 60 px down (`ModuleComponent::layoutWavetableChrome`) -- the same
+reclaim the Parametric EQ card makes for its response curve (see [visualizers](visualizers.md)). Its
+bottom, `ModuleComponent::wavetableChromeBottomY()` (242), is also what the size estimate reads; the
+body starts below both it and the lowest jack.
 
-**Chrome beside the ports.** The display, `Table` combo, button row and caption sit **beside** the
-jack stack, starting just under the header — the same reclaim the Parametric EQ card makes for its
-response curve (see [visualizers](visualizers.md)). The body still starts below the lowest jack.
-
-The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`;
-`WavetableCardSplitsItsJackGutterIntoTwoColumns` and
-`WavetableTabsSwitchContentWithoutResizingTheCard` guard the two mechanisms above, including that
-every knob is reachable from some page — a control on no page is unusable.
+The card is measured from its plan like every layout card (`CardBodyMeasure.cpp`: double width, the
+two-column gutter, the chrome bottom), pinned by `EstimatedModuleSizesMatchTheRealComponents` and
+`WavetableDefaultLayout.TheEstimateEqualsTheRealCard`; `ModuleComponentWavetableTests.cpp` guards the
+gutter, drop targets and rings, and `WavetableDefaultLayoutTests.cpp` the tabs.
 
 `ModuleComponent` also builds two file affordances for Wavetable modules: a **"Load Wavetable..."**
 `TextButton` opening an async `juce::FileChooser` starting in the module's browser folder, which on
@@ -410,4 +756,6 @@ chooser and calls `setWavetableFolder()`, `<` and `>` step the folder cursor, an
 the loaded file name and `index/total`. Both completion lambdas hold a `Component::SafePointer` and
 re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
 The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same
-import path as the Load button.
+import path as the Load button. A Sampler's single-file drop and its Load Sample button replace the sample in ONE undo step
+(`SamplerChrome::loadSampleUndoably`), and the waveform plays its replace motion. The card is a `SoundDropAdapter` too,
+so a Sound dragged from the Sounds view lands the same way ([sound-browser](sound-browser.md#dragging-a-sound)).

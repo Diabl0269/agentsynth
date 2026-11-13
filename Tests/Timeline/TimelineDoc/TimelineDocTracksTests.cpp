@@ -164,3 +164,186 @@ TEST_F(TimelineDocTest, AudioTrackKindIsFullyUsable) {
     EXPECT_TRUE(doc.setTrackArmed(track, true));
     EXPECT_TRUE(doc.setTrackBinding(track, "uuid-audio-1"));
 }
+
+TEST_F(TimelineDocTest, ResetTrackHeightScalesIsOneNotificationAndNoneWhenAllDefault) {
+    const auto a = doc.addTrack(TrackKind::Midi, "A");
+    const auto b = doc.addTrack(TrackKind::Midi, "B");
+    CountingListener listener;
+    doc.addListener(&listener);
+    EXPECT_FALSE(doc.resetTrackHeightScales());
+    EXPECT_EQ(listener.calls, 0);
+    ASSERT_TRUE(doc.setTrackHeightScale(a, 2.0));
+    ASSERT_TRUE(doc.setTrackHeightScale(b, 0.6));
+    const int before = listener.calls;
+    EXPECT_TRUE(doc.resetTrackHeightScales());
+    EXPECT_EQ(listener.calls, before + 1);
+    EXPECT_EQ(doc.getTrack(a)->heightScale, 1.0);
+    EXPECT_EQ(doc.getTrack(b)->heightScale, 1.0);
+}
+
+// A track's own row height: display data saved with the project, clamped, and left out of the file
+// at the default so older projects and fixtures stay byte-identical.
+TEST_F(TimelineDocTest, SetTrackHeightScaleClampsAndNotifiesOnlyOnAChange) {
+    const auto id = doc.addTrack(TrackKind::Midi, "Bass");
+    CountingListener listener;
+    doc.addListener(&listener);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 1.0));
+    EXPECT_EQ(listener.calls, 0) << "the value already stored: no notification";
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 2.0));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, 2.0);
+    EXPECT_EQ(listener.calls, 1);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 99.0));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, Track::kMaxHeightScale);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 0.01));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, Track::kMinHeightScale);
+    EXPECT_FALSE(doc.setTrackHeightScale(id, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.setTrackHeightScale(TrackId{9999}, 2.0));
+    doc.removeListener(&listener);
+}
+
+TEST_F(TimelineDocTest, TrackHeightScaleRoundTripsAndIsLeftOutAtTheDefault) {
+    const auto tall = doc.addTrack(TrackKind::Midi, "Tall");
+    const auto plain = doc.addTrack(TrackKind::Midi, "Plain");
+    ASSERT_TRUE(doc.setTrackHeightScale(tall, 1.75));
+
+    const auto var = doc.toVar();
+    const auto& tracks = *var.getProperty("tracks", {}).getArray();
+    EXPECT_EQ((double)tracks[0].getProperty("heightScale", {}), 1.75);
+    EXPECT_FALSE(tracks[1].getDynamicObject()->hasProperty("heightScale")) << "default: not written";
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(var));
+    EXPECT_EQ(loaded.getTrack(tall)->heightScale, 1.75);
+    EXPECT_EQ(loaded.getTrack(plain)->heightScale, 1.0);
+}
+
+TEST_F(TimelineDocTest, ALoadedTrackHeightScaleIsClampedAndANonNumberIsRefused) {
+    const auto id = doc.addTrack(TrackKind::Midi, "Bass");
+    auto var = doc.toVar();
+    var.getProperty("tracks", {}).getArray()->getReference(0).getDynamicObject()->setProperty("heightScale", 40.0);
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(var));
+    EXPECT_EQ(loaded.getTrack(id)->heightScale, Track::kMaxHeightScale);
+
+    var.getProperty("tracks", {}).getArray()->getReference(0).getDynamicObject()->setProperty("heightScale", "tall");
+    TimelineDoc rejected;
+    EXPECT_FALSE(rejected.fromVar(var));
+}
+
+// ------------------------------------------------------ duplicateTrack ---
+
+namespace {
+
+// A track with two clips (one with notes), a lane on node "n1" and one on node "shared".
+TrackId buildDuplicableTrack(TimelineDoc& doc) {
+    const auto track = doc.addTrack(TrackKind::Midi, "Lead");
+    doc.setTrackBinding(track, "n1");
+    doc.setTrackMuted(track, true);
+    doc.setTrackSoloed(track, true);
+    doc.setTrackArmed(track, true);
+    doc.setTrackHeightScale(track, 2.0);
+    const auto clip = doc.addClip(track, 4.0, 2.0, "Verse");
+    doc.addNote(clip, makeNote(0.0, 60));
+    doc.addNote(clip, makeNote(1.0, 64));
+    doc.addClip(track, 12.0, 4.0, "Chorus");
+    const auto lane = doc.addLane(track, "n1", "cutoff", makeRange(0.0f, 1.0f, 0.5f));
+    doc.addBreakpoint(lane, 0.0, 0.25);
+    doc.addBreakpoint(lane, 2.0, 0.75);
+    doc.addLane(track, "shared", "rate", makeRange(0.0f, 1.0f, 0.0f));
+    return track;
+}
+
+} // namespace
+
+TEST_F(TimelineDocTest, DuplicateTrackLandsDirectlyBelowTheSourceWithFreshIdsAndTheSameContent) {
+    const auto first = doc.addTrack(TrackKind::Midi, "First");
+    const auto source = buildDuplicableTrack(doc);
+    const auto last = doc.addTrack(TrackKind::Midi, "Last");
+
+    const auto copy = doc.duplicateTrack(source, "Lead copy", 0xff102030, {{"n1", "n1-copy"}});
+    ASSERT_TRUE(copy.isValid());
+
+    ASSERT_EQ(doc.getTracks().size(), 4u);
+    EXPECT_EQ(doc.getTracks()[0].id, first);
+    EXPECT_EQ(doc.getTracks()[1].id, source);
+    EXPECT_EQ(doc.getTracks()[2].id, copy);
+    EXPECT_EQ(doc.getTracks()[3].id, last);
+
+    const auto& original = *doc.getTrack(source);
+    const auto& dup = *doc.getTrack(copy);
+    EXPECT_EQ(dup.name, "Lead copy");
+    EXPECT_EQ(dup.colourArgb, 0xff102030u);
+    EXPECT_EQ(dup.kind, original.kind);
+    EXPECT_TRUE(dup.muted);
+    EXPECT_FALSE(dup.soloed) << "a copy never starts soloed";
+    EXPECT_FALSE(dup.armed) << "a copy never starts armed";
+    EXPECT_DOUBLE_EQ(dup.heightScale, 2.0);
+    EXPECT_EQ(dup.bindingUuid, "n1-copy");
+
+    ASSERT_EQ(dup.clips.size(), original.clips.size());
+    for (size_t i = 0; i < dup.clips.size(); ++i) {
+        EXPECT_NE(dup.clips[i].id, original.clips[i].id);
+        EXPECT_EQ(dup.clips[i].name, original.clips[i].name);
+        EXPECT_DOUBLE_EQ(dup.clips[i].startBeat, original.clips[i].startBeat);
+        ASSERT_EQ(dup.clips[i].notes.size(), original.clips[i].notes.size());
+        for (size_t n = 0; n < dup.clips[i].notes.size(); ++n) {
+            EXPECT_NE(dup.clips[i].notes[n].id, original.clips[i].notes[n].id);
+            EXPECT_EQ(dup.clips[i].notes[n].pitch, original.clips[i].notes[n].pitch);
+        }
+    }
+}
+
+TEST_F(TimelineDocTest, DuplicateTrackRebindsLanesThroughTheMapAndLeavesUnmappedOnesOff) {
+    const auto source = buildDuplicableTrack(doc);
+    const auto copy = doc.duplicateTrack(source, "Lead copy", 0xff102030, {{"n1", "n1-copy"}});
+    ASSERT_TRUE(copy.isValid());
+
+    const auto& dup = *doc.getTrack(copy);
+    ASSERT_EQ(dup.lanes.size(), 1u) << "the lane on a shared node stays with the original: one lane per (node, param)";
+    EXPECT_EQ(dup.lanes[0].nodeUuid, "n1-copy");
+    EXPECT_EQ(dup.lanes[0].paramId, "cutoff");
+    ASSERT_EQ(dup.lanes[0].points.size(), 2u);
+    EXPECT_DOUBLE_EQ(dup.lanes[0].points[1].value, 0.75);
+    EXPECT_NE(dup.lanes[0].id, doc.getTrack(source)->lanes[0].id);
+
+    const auto& original = *doc.getTrack(source);
+    EXPECT_EQ(original.lanes.size(), 2u) << "the original keeps every lane";
+    EXPECT_EQ(original.lanes[0].nodeUuid, "n1");
+    EXPECT_EQ(doc.getLaneForParam("n1", "cutoff")->id, original.lanes[0].id);
+}
+
+TEST_F(TimelineDocTest, DuplicateTrackIsOneMutation) {
+    const auto source = buildDuplicableTrack(doc);
+    CountingListener listener;
+    doc.addListener(&listener);
+    const int revisionBefore = doc.getRevision();
+
+    ASSERT_TRUE(doc.duplicateTrack(source, "Lead copy", 0xff102030, {{"n1", "n1-copy"}}).isValid());
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1);
+    EXPECT_EQ(listener.calls, 1);
+    doc.removeListener(&listener);
+}
+
+TEST_F(TimelineDocTest, DuplicateTrackRefusesAMissingSourceTheAutomationTrackAndAFullDoc) {
+    EXPECT_FALSE(doc.duplicateTrack(TrackId{999}, "x", 0, {}).isValid());
+
+    const auto automation = doc.addTrack(TrackKind::Automation, "Automation");
+    EXPECT_FALSE(doc.duplicateTrack(automation, "x", 0, {}).isValid());
+
+    const auto midi = doc.addTrack(TrackKind::Midi, "M");
+    while (static_cast<int>(doc.getTracks().size()) < TimelineDoc::kMaxTracks)
+        ASSERT_TRUE(doc.addTrack(TrackKind::Midi, "filler").isValid());
+    const int revisionBefore = doc.getRevision();
+    EXPECT_FALSE(doc.duplicateTrack(midi, "x", 0, {}).isValid());
+    EXPECT_EQ(doc.getRevision(), revisionBefore) << "a refused duplicate changes nothing";
+}
+
+TEST_F(TimelineDocTest, DuplicateTrackKeepsTheAutomationTrackLast) {
+    const auto midi = doc.addTrack(TrackKind::Midi, "M");
+    doc.addTrack(TrackKind::Automation, "Automation");
+    const auto copy = doc.duplicateTrack(midi, "M copy", 0, {});
+    ASSERT_TRUE(copy.isValid());
+    ASSERT_EQ(doc.getTracks().size(), 3u);
+    EXPECT_EQ(doc.getTracks()[1].id, copy);
+    EXPECT_EQ(doc.getTracks()[2].kind, TrackKind::Automation);
+}

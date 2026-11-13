@@ -53,14 +53,22 @@ are also accepted.
 | `error` | `#FFE5484D` | Error / muted state |
 | `knobBody` | `#FF13161B` | Knob body gradient inner stop |
 | `knobPointer` | `#FFEAEEF3` | Knob pointer line |
+| `knobSkirt` | `#FF0E1014` | Chunky control style: the fader slot (Daylight `#FFADB5BD`) |
+| `knobCapHighlight` | `#2EFFFFFF` | Chunky control style: the sheen on the fader cap (alpha varies per theme, `#B3FFFFFF` on Daylight) |
+| `hueAmber` | `#FFF5C542` | Knob family colour for Sources when "Colour controls by module family" is on (Daylight `#FF946200`) |
+| `hueGreen` | `#FF4ADE80` | Knob family colour for Sequencing and Envelopes |
+| `hueRose` | `#FFFF6FA8` | Knob family colour for Modulation FX, Time FX and Dynamics |
+| `hueViolet` | `#FFB48EF5` | Violet family hue for toolbar icons; knobs do not use it |
+| `iconInk` | `#FF0B0D10` | Dark glyph ink for icons on a light fill |
+| `iconPaper` | `#FFF4F6F8` | Light glyph paper for icons on a dark fill |
 | `meterFill` | `#FF00D1FF` | Meter LOW zone fill, below -18 dBFS — kept under this name for back-compat with themes saved before the zone model. Consumers: `synth::ui::MixerMeter` and `ChannelChipComponent` |
 | `meterMid` | `#FFFFD43B` | Meter MID zone fill, -18 to -6 dBFS (`Source/UI/Mixer/MeterColourStops.h`) |
 | `meterHigh` | `#FFFF922B` | Meter HIGH zone fill, -6 to 0 dBFS |
 | `meterClip` | `#FFFF4D4F` | Meter CLIP zone fill, above 0 dBFS — also the clip readout's "clipped" text colour (`MixerMeterReadout`) |
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
-| `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight |
-| `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)) |
+| `toolActive` | `#FF00D1FF` | Lit chips and the piano roll's held key (the edit-tool strip uses the theme's button-on colour, the accent) |
+| `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)); Daylight overrides it to `#FF9333EA` (the default is ~2.6:1 on white) |
 | `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [colour-overrides](colour-overrides.md#note-colours) |
 | `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |
 | `noteSelected` | `#FF00D1FF` | Piano-roll note border/highlight when selected |
@@ -70,6 +78,12 @@ are also accepted.
 | `trackMuteOn` | `#FFFFA033` | Timeline track header — `M` button, active state |
 | `trackSoloOn` | `#FFFFD23D` | Timeline track header — `S` button, active state |
 | `trackArmOn` | `#FFE5484D` | Timeline track header — `R` (arm/record) button, active state |
+| `eqKindBell` | `#FF00D1FF` | Parametric EQ band kind: bell (dot ring and chip). The six `eqKind*` tokens are fixed across themes |
+| `eqKindShelf` | `#FFF5B94A` | Parametric EQ band kind: low and high shelf |
+| `eqKindCut` | `#FFA78BFA` | Parametric EQ band kind: low and high cut |
+| `eqKindNotch` | `#FFFF6B9A` | Parametric EQ band kind: notch |
+| `eqKindTilt` | `#FF3DDC97` | Parametric EQ band kind: tilt |
+| `eqKindBandPass` | `#FF7BE495` | Parametric EQ band kind: band pass |
 
 **Required minimum:** `bg0`, `surface`, `accent`, `textPrimary`, `audioWire`, `modWire`. Every other
 colour token is optional and falls back to the Obsidian defaults above. `ThemeLoader::parseTheme`
@@ -138,7 +152,7 @@ rather than repeating it.
 | `guideAlpha` | `0.7` | Alignment guide line opacity (0.0-1.0) |
 | `guideLineWidth` | `1.5` | Alignment guide stroke width (px) |
 | `cornerRadiusSmall` | `4.0` | Pill / small element corner radius (px) |
-| `toolbarHeight` | `44` | Toolbar strip height (px) — sized so an 18 px icon and an 11 px label both fit; at 36 `DrawableButton`'s built-in `min(16, 25% of height)` split starved the label to 7-9 px |
+| `toolbarHeight` | `44` | Toolbar strip height (px) — fits a button's 30 x 24 icon chip 4 px from the top and its 10.5 px caption 2 px below ([toolbar buttons](chrome.md#toolbar-buttons)) |
 | `statusBarHeight` | `24` | Status bar strip height (px) |
 | `controlPadding` | `4` | Inset around toolbar buttons (px) |
 | `minWindowWidth` | `480` | Narrow-mode breakpoint, and the minimum window width (px) |
@@ -148,11 +162,12 @@ rather than repeating it.
 | `aiPanelWidth` | `300` | AI panel width when visible (px) |
 | `iconSize` | `16` | Icon render size in library and status-bar contexts (px) |
 | `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [timeline](../timeline/timeline.md#panel-height)) |
-| `timelineTrackHeaderWidth` | `190` | Timeline track-header column width (px) — wide enough that the M/S/R/A toggle row does not crush the name label when a track's automation button is visible |
+| `timelineTrackHeaderWidth` | `200` | Timeline track-header column width (px) — wide enough that the M/S/R/A toggle row does not crush the name label when a track's automation button is visible |
 | `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — sized so `TimelineTransportBar`'s 26 px glyph buttons are not clamped back down by the strip |
 | `timelineRulerHeight` | `30` | Timeline ruler strip height, top of the lanes region (px) — the strip carries TWO tiled rows, the bar/beat numbers (17 px) and the marker band (13 px); at 24 the marker flag was squeezed to 9 px |
+| `timelineSectionStripHeight` | `24` | The Sections strip above the timeline ruler (px); 0 when the strip is hidden. Code-only, not in the theme JSON ([sections](../timeline/sections.md)) |
 | `timelineTrackRowHeight` | `56` | The row height BOTH the track-header column and the clip-lane area lay their rows out at — the single source keeping header rows and clip rows aligned. `TimelineTrackHeaderComponent::kRowHeight` is only the headless literal fallback and is kept equal to this default. |
-| `timelineAutomationStripHeight` | `72` | The automation strip docked at the BOTTOM of the panel's lanes region (px) — the clip-lane area and the piano roll shrink by exactly this much while the strip is open |
+| `timelineAutomationLaneRowHeight` | `40` | One automation lane row folded out under its track (px), scaled by the vertical zoom like `timelineTrackRowHeight` ([automation](../timeline/automation.md#lane-rows)) |
 
 The chrome these govern is [chrome](chrome.md); the alignment-guide constants are
 [layout](layout.md#alignment-guides).
@@ -166,7 +181,7 @@ All optional:
 | `uiFamily` | `"Inter"` | Sans-serif family name for UI labels and text |
 | `monoFamily` | `"JetBrains Mono"` | Monospace family for value readouts |
 | `h1` | `18.0` | Large heading / window title font size (pt) |
-| `h2` | `13.0` | Card title font size (rendered uppercase and tracked) |
+| `h2` | `13.0` | Card title font size (drawn in the module's own case) |
 | `label` | `10.5` | Knob name / port label / section heading font size |
 | `value` | `10.0` | Mono value readout font size |
 | `micro` | `8.5` | Smallest caption font size |
@@ -220,6 +235,35 @@ ratio = (max(L1,L2) + 0.05) / (min(L1,L2) + 0.05)
 
 `Tests/UI/Theme/ThemeTests.cpp` enforces `ratio >= 4.5` for every built-in automatically.
 
+## Colour-code kinds
+
+Every type label in the app is colour-coded: one hue per kind, so a row's kind reads at a glance without reading the
+word. The rule holds for any new kind label (a chip, a tag, a badge naming a type): give it a slot in the table
+below, never the muted text colour. The row tags of the + Add lists and Cmd+K are the first user. A tag is 11 px bold in
+a 17 px box (the 24 px row is unchanged), its outline and text in the kind's hue over a faint wash of the same hue
+(`kTagWashAlpha`, 12 %). The hues are the eight `cableCategory` tokens of the active theme (deepened a step on a light
+theme), so each theme tunes them; `New` uses `textPrimary`. A tag that is not in the table falls back to `textMuted`,
+and a test fails for any tag the code can set that does.
+
+| Tag | Hue slot (`cableCategory`) |
+| --- | --- |
+| Module | Filters |
+| Snippet | Filters |
+| Track | Envelopes |
+| Preset | Modulation FX |
+| Track preset | Modulation FX |
+| Bus preset | Modulation FX |
+| Marker | Sources |
+| Action | Sequencing |
+| Project | Utility |
+| View | Utility |
+| Setting | Utility |
+| New | text (`textPrimary`) |
+
+Kinds that mean nearly the same share a hue: Module and Snippet (a snippet is modules), the three preset tags, and View,
+Setting and Project (the app's own); no other two kinds share a hue. The table lives in `Source/UI/Layout/TagHue.cpp`; `Tests/UI/Layout/TagHueTests.cpp` holds it to
+this table and checks 4.5:1 contrast of every tag on the row and on the highlighted row in all four themes.
+
 ## Where files live, and how reload works
 
 | Location | Description |
@@ -248,14 +292,227 @@ invalidated and re-rendered once. No animation loop or per-tick repaint is added
 
 ## Themed widgets
 
-These stock-widget overrides are implemented in `AppLookAndFeel`:
+**One shared component per control.** Every control in the app (knob, fader, button, icon button,
+toggle, chip, combo, tab, fold arrow, colour swatch, menu) is drawn by ONE shared implementation:
+an `AppLookAndFeel` override, an `IconLibrary` icon, or a shared widget class under
+`Source/UI/Layout/`. A surface never paints its own copy of a control, so changing a control's look
+in one place changes it everywhere. Each shared control also has a card in the AgentSynth Design
+System (the design reference kept in step with this code); a look change updates both together. A
+new control kind gets a shared implementation and a design-system card first, then its call sites.
+Hand-drawn copies that predate this rule are being folded onto the shared ones.
 
-- **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow),
+**Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
+`textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
+of a window's custom components (the confirm window's checkbox) on every light theme.
+`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
+shape that stuck out past the corner: a 36 px glyph (about twice the title's line height, as macOS, Cubase and Logic size
+their caution icon), a triangle with "!" for a warning and a circle with "i" or "?" for info and question.
+`synth::ui::alertIconBounds` places it in the column left of the text, 18 px before it, with its centre on the centre of
+the title's first line as the alert's `TextLayout` measures it, never outside the box. `synth::ui::alertIconColour`
+colours it: the theme's `warning` for a warning (the token a warning toast uses), `accent` for info and question, pushed
+toward black or white by `readableOn` until it reads at 3:1 on the alert surface (Daylight's orange comes out darker).
+The theme sweep checks the size, the alignment, the colour and the contrast in every theme.
+
+**Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
+opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey
+show through. `PopupMotion::launchDialog` sets it on every dialog unless the caller chose a colour (JUCE's default
+light grey showed through the shape window's grow and shrink), `DetachedPanelWindow` on every detached panel, and
+content that fills its whole window (the shape window's `ShapeListEditor`) paints it and is opaque. Each one updates
+on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme.
+
+**Theme sweep guard.** `Tests/UI/Theme/ThemeSweep/` renders every dialog, the detached panel window, the alert box,
+every module card and the main shell in each built-in theme and checks that the probe pixels in their background areas
+are opaque, are not one of JUCE's default window colours and differ between Daylight and the other themes (so a
+hard-coded colour shows), and that every visible, enabled Label, TextButton, ToggleButton and ComboBox draws its text
+at 4.5:1 or better over the background rendered behind it (disabled controls are exempt). Cards need nothing from you:
+the sweep walks every key of the module factory, so a new module type joins at once. A dialog or window is found by
+scanning `Source` for `PopupMotion::launchDialog(` and `DocumentWindow(`: a new call site fails
+`ThemeSweep.EveryDialogCallSiteIsRegistered` until it gets a line in `ThemeSweepSurfaces.cpp` (an opener that builds the
+same content with the same options as the call site, or an exemption with a reason). Findings that are known and
+ticketed sit in `kKnownGaps` in `ThemeSweepTests.cpp`; the list is shrink-only: a new finding fails, and so does an
+entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYNTH_WRITE_THEME_PNG` set the sweep (and
+`ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
+directory. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
+`ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
+built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
+A new control that shows its state only as a painted glyph joins that file.
+The popup menu's section titles (`addSectionHeader`) use `PopupMenu::headerTextColourId`, set to the theme's muted
+text; `MenuCornerTests` requires 4.5:1 against the menu surface in every theme. The sweep renders no open menu, so a
+new menu colour id needs its own check there.
+
+**Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
+test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
+returns the active theme or a default-constructed `Theme`. Never write the colour as a literal in a
+`lf ? theme colour : juce::Colour(0x...)` fallback: that leaves the control on the dark theme's cyan or
+white in a light or custom theme. `scripts/check-ui-caps.sh` rejects the default accent and text
+literals outside `Source/UI/Theme/`; a fixed product colour (not a fallback) opts out with a trailing
+`// not-fallback: <reason>`.
+
+The shared icon button, chip, fold arrow, key toggle, colour swatch and text link, then the stock-widget overrides
+implemented in `AppLookAndFeel`:
+
+- **IconButton** — `synth::ui::IconButton` (`Source/UI/Layout/IconButton.h`) is the one icon-only
+  button: transport, play/stop in the status bar, the mixer-zones eye, the macro-port delete X, the
+  help popup's pin and close, and the lane/modulator "..." menus all use it. It is a `juce::Button`
+  holding a `synth::theme::Glyph`, with four styles: `Framed` (surface fill and border), `Bare`
+  (nothing until hovered, then a faint wash), `Round` (circular accent wash) and `Danger` (error wash
+  and glyph on hover). `AppLookAndFeel::drawIconButton` paints all of them with ONE colour ladder,
+  the same one `drawDrawableButton` uses for its icons: disabled `textDisabled`, on
+  `setOnColour(...)` or `accent`, hover/press `textPrimary` (`error` for `Danger`), rest `textMuted`;
+  `IconButton::glyphColour()` exposes it. `setGlyphWhenOn` swaps the glyph with the toggle state
+  (play to stop, eye hidden to open, pin to pinned). The glyphs are paths in
+  `Source/UI/Theme/IconGlyphs.cpp`, not `IconLibrary` SVGs, so they render in the headless test build
+  where the embedded SVGs are null; use `IconLibrary` for any icon that needs an SVG and `IconGlyphs`
+  for these drawn ones. The button never sets its own title, tooltip or description, and outside any
+  `AppLookAndFeel` it paints with a default `Theme`. It lives in `Core` (not `AppUI`) because
+  `StatusBarComponent` uses it.
+- **Button states** — every button the shared drawing paints eases between its states instead of snapping:
+  text buttons (`drawButtonBackground` / `drawButtonText`), `DrawableButton`s (`drawDrawableButton`), `IconButton`s
+  (`drawIconButton`, all four styles) and toggle buttons (the tick box and the footer pill). The states are
+  rest, hover, press, toggled-on and disabled; hover, press and toggled-on ease, disabled stays instant. The ease
+  is `synth::ui::ButtonStateEase` (`Source/UI/Layout/ButtonStateEase.h`): the look-and-feel calls
+  `ButtonStateEase::update(button, hot, down)` from its draw function and blends each colour with
+  `ButtonStateEase::blend(amounts, colourFor)`, where `colourFor(on, hot, down)` is the colour that state settles
+  to, so the settled look is exactly the old one. The ease lives on the button (a component property), so a
+  button's owner writes no code for it and a new button type that uses the shared drawing gets it for free; a
+  button with its own `paintButton` (a chip, a swatch) calls the same two functions to join in. 110 ms in
+  (`easeOutCubic`), 90 ms out (`easeInCubic`), retargeting from the current amounts so a reversal never jumps;
+  80 ms under Reduce Motion (colours only, nothing moves); Animations: Off and any button that is not on screen
+  (headless tests, pixel goldens) land on the final state at once, so a draw with no VBlank reads the final
+  look. Frames run only while a tween runs and repaint only that button. A `DrawableButton`'s icon image is a
+  child the owner tints itself (`setImages`), so it still swaps instantly with the state.
+- **On/off switch** — `synth::ui::SwitchGlide` (`Source/UI/Layout/SwitchGlide.h`) is the one hand-painted switch (a
+  pill with a round knob; the Cmd+K rows use it). The owner holds one, calls `retarget(on, animate)` when its state
+  changes and `paint(g, pill, colours)` from its own paint, with the colours passed in. The knob slides and the fill
+  fades with the same timing as button states (110 ms in, 90 ms out, 80 ms under Reduce Motion, none under
+  Animations: Off); `animate` false (a first bind, another entry on a recycled row) or an owner off screen lands at
+  once. No second switch is painted by hand (`ModMatrixPickerSwitchGlideTests` scans Source for one).
+- **Toolbar button** — `synth::ui::ToolbarButton` (`Source/UI/Chrome/ToolbarButton/`) is the top
+  bar's button: a group-coloured chip, a multi-role glyph and a caption, painted by
+  `AppLookAndFeel::drawToolbarButton` (free function `paintToolbarButton` outside any
+  `AppLookAndFeel`). See [toolbar buttons](chrome.md#toolbar-buttons).
+- **Side-pane toggle** — `SidePaneToggleButton` is a `Bare` `IconButton` whose glyph is
+  `Glyph::SidePane` (a window with a divider after its left strip) while the pane is closed and
+  `Glyph::SidePaneOpen` (the strip filled) while it is open, via `setGlyphWhenOn`. It keeps its tooltip,
+  title, description and its binding to the pane; colours and the focus ring come from `drawIconButton`.
+- **Chip** — `AppLookAndFeel::drawChip(g, bounds, ChipState)` (free function `synth::theme::paintChip`,
+  which a control outside any `AppLookAndFeel` calls with a default `Theme`) paints the chip surface and
+  nothing else: `surface` fill (`surfaceHi` when `raised`, `toolActive` when `active`), brighter on hover
+  (0.12) and press (0.25), or darker when the fill is light so a white chip still shows them, a 1 px `border` outline (`warning` at 0.7 alpha when `warning`), the
+  `cornerRadiusSmall` radius. It returns the fill so a caller can pick a contrasting label colour. The
+  track channel chip, the routing pane's combo buttons and the piano-roll header chips draw their
+  background with it and add their own content (meter and name, value and chevron, glyph or word). The
+  chevron of a chip combo and of `drawComboBox` is the one `paintComboChevron`.
+- **Fold arrow** — `AppLookAndFeel::drawDisclosureChevron(g, area, openness, highlighted)` (free function
+  `synth::theme::paintDisclosureChevron`, which a call site outside any `AppLookAndFeel` calls with a
+  default `Theme`) is the one arrow every fold uses: the module library's section and format headers, the
+  help popup's sections, the settings and preferences section headers, the macro card and the open macro's
+  collapse button, and the track header's automation fold arrow. It is a filled triangle path filling
+  `area` (an 8 px square, 6 px for a library format sub-header), so it never depends on a font's arrow
+  coverage. `openness` 0 is closed (points right), 1 is open (points down) and values between are the
+  triangle turned through the quarter turn, so a call that animates its fold passes the animation
+  progress and the arrow turns with it. The colour is `textMuted` at rest and `textPrimary` while
+  highlighted; a call site never picks its own, except the macro hull's collapse button, which draws on
+  the macro's own colour and uses a fixed contrast colour. The `FoldAllButton` strip button is a text
+  link, not an arrow, and the combo chevron above is a different control.
+- **Key toggle** — `AppLookAndFeel::drawKeyToggle(g, toggle, isBlackKey, highlighted, down)` paints a
+  `juce::ToggleButton` as a piano key (the scale assist panel's custom-scale pitches): `pianoKeyWhite` or
+  `pianoKeyBlack` fill, `accent` while on, a `textPrimary` wash at 0.10 (hover) or 0.20 (press), a `border`
+  outline, the note name in the contrasting colour, and the accent focus ring. Outside any
+  `AppLookAndFeel` the same code runs with a default `Theme`.
+- **ColourSwatchButton** — `synth::ui::ColourSwatchButton` (`Source/UI/Layout/ColourSwatchButton.h`) is a
+  `juce::Button` filled with its public `colour`, painted by `AppLookAndFeel::drawColourSwatch`: a
+  `border` outline, a brighter fill and a `textPrimary` ring on hover, a darker fill on press, the accent
+  focus ring. A right-click calls `onRightClick` (never `onClick`) when it is set. The favourites shelf in
+  the colour picker, the timeline track header's colour swatch and the macro port dialog's port colour
+  swatch are all this class; the last two add their own mouse and arrow-key handlers on top. It sets no
+  title, tooltip or description. It lives in `Core` next to `IconButton`.
+- **TextLinkButton** — `synth::ui::TextLinkButton` (`Source/UI/Layout/TextLinkButton.h`) is the one text
+  link ("Show all", "Show on canvas"), painted by `AppLookAndFeel::drawTextLink`: `accent` text, brighter
+  and underlined while hovered (never underlined at rest), dimmed while disabled. The justification is a
+  constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
+  and the underline follows it. The text is its accessible title; description, tooltip and focus policy
+  stay with the call site. It lives in `Core` next to `IconButton`.
+- **SnapToggleButton** — `synth::ui::SnapToggleButton` (`Source/UI/Chrome/ToolbarButton/ToolbarButton.h`) is the one button that
+  switches snapping, on the timeline transport bar, the curve window and both Snap switches of the shape editor: a
+  `ToolbarButton` with the Snap icon on an Edit-group chip, named "Snap". Each surface sets its own layout, caption,
+  tooltip (starting "Snap to grid" or its own name) and toggle behaviour; `SnapToggleButtonTests` fails on any other
+  button built with the text "Snap". It lives in `Core` next to `ToolbarButton`.
+- **ComboBox** — `drawComboBox` (pressed/disabled states, drawn chevron arrow, and the shared focus ring from
+  `FocusRing.h` when it holds keyboard focus; the routing pane's `RoutingComboButton` paints the same ring),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).
 - **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark,
   submenu chevron, disabled dim). It also paints a 14x14 waveform glyph left of the item text for
   waveform combos; `drawComboBox` renders the selected waveform glyph in the closed combo, and
   `positionComboBoxText` shifts the label right when the selected item carries a glyph.
+  `drawPopupMenuBackground` draws the rounded surface and border (the same background serves
+  ComboBox dropdowns). JUCE's menu window fills itself white and turns opaque whenever
+  `PopupMenu::backgroundColourId` is fully opaque, which showed square white corners behind the
+  rounded shape; the theme therefore sets that colour to the surface at alpha 0.99, so the
+  window is non-opaque and the corners stay transparent in all four themes. (Platforms without
+  semi-transparent windows still get an opaque window; JUCE decides that.)
+- **Rotary sliders (the knob)** — `drawRotarySlider` (`AppLookAndFeelSliders.cpp`) keeps the disabled/dimmed
+  transparency layer and the focus ring and hands the drawing to `paintKnob` (`AppLookAndFeelKnobStyles.cpp`,
+  `KnobPainter.h`, with Chunky and Analog in `AppLookAndFeelKnobStylesChunky.cpp` /
+  `AppLookAndFeelKnobStylesAnalog.cpp` and the shared geometry in `KnobPainterInternal.h`), one painter
+  per `KnobStyle`, in picker order: **Classic** (the default: a deep body lit from the top left with a soft
+  drop shadow and a bevel rim, a glowing tip at the end of the value arc and a small tick at 12 o'clock),
+  **Chunky** (persisted id `hardware`: a ten-lobed flower skirt in the value colour that turns with the
+  value, a cream cap with a gloss highlight and a fat dark pointer), **Analog** (a realistic machined
+  knob: knurled black skirt, brushed-metal cap and a white line over a printed eleven-tick scale; no value
+  arc and no value colour, so it ignores "Colour controls by module family"; the scale's numbers -- 0, 5,
+  10, or -5, 0, +5 when bipolar -- print only on knobs at least `kAnalogNumbersMinSize` (55 px) wide, so
+  never at card size), **Neon** (no body: a thick glowing arc, a bright tip and the value as a percentage
+  in the middle) and **Ring** (fifteen LEDs round a small dark body, lighting one by one as the value
+  rises, the leading one part lit). Neon and Ring light up gradually: arc, tip, number and LED glow are
+  dim at the origin and full at the end. The glow does not depend on the theme, so Obsidian and Daylight
+  (glow 0) still glow; a theme whose glow is above `kNeonMinGlow` brightens Neon further
+  (`neonGlowStrength`, `KnobPainter.h`, which the Neon fader's bloom also uses: `max(treatment.glow,
+  kNeonMinGlow)` scaled by `0.3 + 0.7 * value`). Classic and Chunky keep a theme-driven arc glow.
+  Saved settings from removed styles load as their successors: `polished` as Analog, `soft` as Chunky;
+  any other unknown id as Classic. **Bipolar knobs**: a rotary slider whose range is symmetric round zero
+  (pan, pitch, octave, fine tune; not detune, which is 0 to 100) is drawn bipolar: `knobOriginFor`
+  (`AppLookAndFeelSliders.cpp`) passes the slider's proportion of zero as `paintKnob`'s `origin01`, and
+  every style draws its value arc (or Ring its LEDs) from 12 o'clock out to the value's side, nothing
+  at zero, with the light growing with the distance from the centre; Ring keeps its top LED as a pale
+  zero mark and Neon's number is signed. Every style shares one geometry (arc radius
+  `size/2 - knobTrackWidth`, body radius `0.26 * size`, the 270 degree
+  sweep) so the modulation ring and its anchors never move. The value colour is `accent`, or, when
+  "Colour controls by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
+  `ModuleComponent` sets the `knobFamily` component property (its `ModuleCategory` as an int) on itself and
+  `AppLookAndFeel::knobValueColour` walks the parent chain for it. The choice is `KnobAppearance`
+  (`KnobStyle.h`), stored under the settings keys `knobStyle`, `faderStyle` and `knobColourByFamily`, picked in
+  Settings > Appearance > Controls (`KnobStylePicker`: a Knobs row whose previews call the same `paintKnob` and a Faders row painted by `fader::paint`), and pushed
+  into the shared `AppLookAndFeel` by `MainComponent` at startup and on every settings write (a change
+  re-skins the whole tree, as a card's knobs are painted into its cached image). Faders take their own
+  style (`KnobAppearance::faderStyle`, picked apart from the knob style; a saved setting with no `faderStyle` loads it as the saved knob style): `drawLinearSlider` passes `KnobAppearance::faderStyle` and
+  `knobValueColour(slider)` into `fader::paint`, so a card fader takes its module's family hue and the
+  mixer and controller surfaces keep `accent` (see the Linear sliders entry below).
+- **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
+  `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
+  route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel
+  at each end), an `accent` fill from the bottom (left) to the cap centre, and a pill cap with a
+  `surfaceHi` to `knobBody` gradient, 1 px outline (`textDisabled` at rest: `border` is too close to
+  the fill on dark themes), a cheap offset drop shadow (35% black
+  scaled by `treatment.shadow`) and a 1.5 px `knobPointer` centre line, the exact value position. The size
+  follows the slider's real bounds: **large** (slot 6, cap 30x14) for a vertical slider at least 64 px
+  wide and 40 px tall (the mixer strip), **small** (slot 4, cap 18x7) for any other vertical one (the
+  56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap
+  shrinking when the bounds are shorter. `getSliderThumbRadius` insets the travel by half the cap plus
+  2 px so the cap is never clipped, and `MixerFaderSlider`'s drag maths reads the same inset through
+  `getSliderLayout`. The five styles each have a fader draw path (`fader::State::style`, the fill
+  colour in `fader::State::valueColour`; Classic is the look described here): Analog adds a soft
+  inner shadow, eleven tick dots beside the slot lit up to the value, and a fill brightening from 60%
+  to full at the cap; Chunky a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
+  grip lines; Neon a bloom round the fill (same glow rule as the knob) and a flat `knobBody` cap with a centre
+  line in the fader's colour; Ring 2 px lines for slot and fill and a round `knobPointer` dot for the
+  cap. Travel, slot length, cap
+  rectangle and `getSliderThumbRadius` are identical in every style, so hit-testing never moves.
+  States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
+  keyboard focus adds a 2 px `accent` ring 3 px outside the cap, disabled dims everything to 45% with a
+  `textDisabled` fill. No colour token is specific to it, so every theme gets a matching fader. There
+  is no readout bubble, tick marks or "automated" marker: the mixer has its own dB readout label and
+  controller-surface faders are display-only.
 - **ScrollBar** — `getDefaultScrollbarWidth()` returns 6 px; `drawScrollbar` (slim track and thumb
   with hover and press states); `drawScrollbarButton` (triangle arrows, for Windows and Linux
   parity).
@@ -279,6 +536,20 @@ cannot map `MidiKeyboardComponent` ColourIds. The on-screen keyboard is themed i
 
 The assistant panel's chat bubbles and debug console still pick their colours from hardcoded
 literals rather than tokens, so they do not re-skin with the rest of the app.
+
+### Per-module control style
+
+A module card, or every card of a module type, can
+take its own knob style and fader style (card menu > **Control Style...**, `ControlStylePanel`). A
+control resolves per kind, knob and fader independently: the node's own `controlStyle` property
+(`ControlStyleNodeOverride`, undoable, saved with the project), else the type's entry in the
+`controlStyleByType` user setting (`{"<factory type name>": {"knob": id, "fader": id}}`), else the app-wide choice
+above; **Follow** in the panel clears a level. `ModuleComponent` publishes the first two as the component
+properties `knobStyleOverride` and `faderStyleOverride` (an int `KnobStyle`, absent when neither sets one)
+and `AppLookAndFeel::knobStyleFor` / `faderStyleFor` walk the parent chain for them, as `knobValueColour`
+does for the family. `refreshControlStyle` (`ControlStyleCards.h`) runs when a card is built, in every
+`updateComponents` pass (so undo and redo restore it) and when `MainComponent` sees the setting text change.
+Controls with no card above them (the mixer strips, the controller surfaces) keep the app-wide style.
 
 ## Implementation notes
 

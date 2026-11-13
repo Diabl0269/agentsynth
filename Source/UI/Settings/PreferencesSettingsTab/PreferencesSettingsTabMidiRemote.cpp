@@ -67,6 +67,7 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteTakeoverLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(midiRemoteTakeoverCombo);
+    midiRemoteTakeoverCombo.setTitle("Controllers default takeover");
     midiRemoteTakeoverCombo.addItem("Jump", kTakeoverJumpComboId);
     midiRemoteTakeoverCombo.addItem("Pick-up", kTakeoverPickupComboId);
     midiRemoteTakeoverCombo.addItem("Scale", kTakeoverScaleComboId);
@@ -77,32 +78,37 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteTakeoverCombo.onChange = [this] { persistMidiRemoteDefaultTakeover(getMidiRemoteDefaultTakeover()); };
 
     contentHost.addAndMakeVisible(midiRemoteShowBadgesToggle);
+    midiRemoteShowBadgesToggle.setTooltip(
+        "Marks each control that a hardware controller is mapped to with a small MIDI badge.");
     setMidiRemoteShowBadgesEnabled(synth::midi::loadShowBadges(*appProperties.getUserSettings()));
     midiRemoteShowBadgesToggle.onClick = [this] {
         persistMidiRemoteShowBadges(midiRemoteShowBadgesToggle.getToggleState());
     };
+    setupPatchSaveLocationControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutMidiRemoteGroup(
     int& y, int contentWidth, bool previousGroupWasVisible,
     const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible) {
+    enterCategory(Category::MidiRemote, y);
     const std::initializer_list<juce::Component*> comps = {&midiRemoteTakeoverLabel, &midiRemoteTakeoverCombo,
                                                            &midiRemoteShowBadgesToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
-    if (!visible)
-        return;
-    if (previousGroupWasVisible) {
-        y += 10;
-        dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
-        y += 11;
+    if (visible) {
+        if (previousGroupWasVisible) {
+            y += 10;
+            dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
+            y += 11;
+        }
+        juce::Rectangle<int> row(0, y, contentWidth, 24);
+        midiRemoteTakeoverLabel.setBounds(row.removeFromLeft(190));
+        row.removeFromLeft(4);
+        midiRemoteTakeoverCombo.setBounds(row.removeFromLeft(140));
+        y += 28;
+        midiRemoteShowBadgesToggle.setBounds(0, y, contentWidth, 24);
+        y += 24;
     }
-    juce::Rectangle<int> row(0, y, contentWidth, 24);
-    midiRemoteTakeoverLabel.setBounds(row.removeFromLeft(190));
-    row.removeFromLeft(4);
-    midiRemoteTakeoverCombo.setBounds(row.removeFromLeft(140));
-    y += 28;
-    midiRemoteShowBadgesToggle.setBounds(0, y, contentWidth, 24);
-    y += 24;
+    layoutUsageStatsGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
 }

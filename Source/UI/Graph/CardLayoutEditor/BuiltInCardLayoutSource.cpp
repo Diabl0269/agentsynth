@@ -1,0 +1,308 @@
+// BuiltInCardLayoutSource.cpp -- a built-in module's card as the layout editor's source: parameters,
+// the live write that rebuilds the card, Apply to all through the per-type store, presets, and the
+// per-write undo steps. docs/layout/module-card-layout.md#editing-a-layout.
+#include "BuiltInCardLayoutSource.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
+#include "Modules/MacroControlModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <utility>
+
+namespace synth::ui {
+
+namespace {
+
+CardWidget widgetFor(CardBodyItem::Kind kind) {
+    using Kind = CardBodyItem::Kind;
+    switch (kind) {
+    case Kind::Choice:
+        return CardWidget::Choice;
+    case Kind::Toggle:
+        return CardWidget::Toggle;
+    case Kind::KnobLarge:
+        return CardWidget::KnobLarge;
+    case Kind::FaderV:
+        return CardWidget::FaderV;
+    case Kind::FaderVLong:
+        return CardWidget::FaderVLong;
+    case Kind::FaderH:
+        return CardWidget::FaderH;
+    case Kind::Segmented:
+        return CardWidget::Segmented;
+    case Kind::Stepper:
+        return CardWidget::Stepper;
+    case Kind::XYPad:
+        return CardWidget::XYPad;
+    case Kind::Button:
+        return CardWidget::Button;
+    case Kind::Knob:
+    case Kind::View:
+        break;
+    }
+    return CardWidget::Knob;
+}
+
+// The widgets that suit `param`: its automatic one first, then every other the card would really draw
+// it as (cardBodyKindFor answers the automatic kind for one that does not suit, which is left out).
+std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param) {
+    std::vector<CardWidget> choices;
+    const auto automatic = cardBodyKindFor(param, CardWidget::Auto);
+    if (!automatic.has_value())
+        return choices;
+    choices.push_back(widgetFor(*automatic));
+    for (auto widget :
+         {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH,
+          CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper, CardWidget::XYPad, CardWidget::Button}) {
+        if (widget == CardWidget::XYPad && macroIndexOf(param.paramID) < 0)
+            continue; // a pad pairs two Macros knobs
+        const auto kind = cardBodyKindFor(param, widget);
+        if (kind.has_value() && widgetFor(*kind) == widget && widget != choices.front())
+            choices.push_back(widget);
+    }
+    return choices;
+}
+
+} // namespace
+
+BuiltInCardLayoutSource::BuiltInCardLayoutSource(GraphEditor& editor, AppUndoManager* undo,
+                                                 juce::AudioProcessorGraph::NodeID nodeId)
+    : editor_(&editor)
+    , undo_(undo)
+    , nodeId_(nodeId) {
+    auto& graph = editor.getAudioEngine().getGraph();
+    if (auto* node = graph.getNodeForId(nodeId)) {
+        openedOn_ = node->getProcessor();
+        moduleType_ = AIStateMapper::getFactoryTypeName(openedOn_);
+        openingOverride_ = getCardLayoutOverride(graph, nodeId).clone();
+        if (auto* types = store()) {
+            const auto stored = types->loadDefault(moduleType_);
+            if (stored.status == ModuleCardLayoutStore::LoadStatus::Ok)
+                openingDefault_ = stored.layout;
+        }
+    }
+}
+
+// Nothing is recorded here: every write already was, so closing the editor adds no step of its own.
+BuiltInCardLayoutSource::~BuiltInCardLayoutSource() = default;
+
+// One undo step per write: the graph just before it against the graph just after, which takes in the
+// neighbours a taller card pushed aside and an Apply to all clearing the override. The "before" is taken at
+// the write, not carried from the last one, so anything else that changed the graph in between (an undo or
+// redo, a module moved) is never swept into this step. A write that changed nothing records nothing. The
+// per-type file an Apply to all wrote is a setting, not part of the graph, so undo leaves it in place.
+juce::var BuiltInCardLayoutSource::snapshotBeforeWrite() const {
+    auto* g = graph();
+    return undo_ != nullptr && g != nullptr ? AIStateMapper::graphToJSON(*g) : juce::var();
+}
+
+void BuiltInCardLayoutSource::beginGroupedWrite() {
+    if (groupDepth_++ == 0)
+        groupBefore_ = snapshotBeforeWrite();
+}
+
+void BuiltInCardLayoutSource::endGroupedWrite() {
+    if (groupDepth_ > 0 && --groupDepth_ == 0)
+        recordSince(std::exchange(groupBefore_, juce::var()));
+}
+
+void BuiltInCardLayoutSource::recordSince(const juce::var& before) {
+    if (groupDepth_ > 0)
+        return;
+    if (auto* g = graph(); undo_ != nullptr && g != nullptr)
+        undo_->recordGraphChangeSince(*g, before);
+}
+
+juce::AudioProcessorGraph* BuiltInCardLayoutSource::graph() const {
+    auto* editor = dynamic_cast<GraphEditor*>(editor_.getComponent());
+    return editor != nullptr ? &editor->getAudioEngine().getGraph() : nullptr;
+}
+
+juce::AudioProcessor* BuiltInCardLayoutSource::module() const {
+    auto* g = graph();
+    auto* node = g != nullptr ? g->getNodeForId(nodeId_) : nullptr;
+    return node != nullptr && node->getProcessor() == openedOn_ ? openedOn_ : nullptr;
+}
+
+ModuleComponent* BuiltInCardLayoutSource::card() const {
+    auto* editor = dynamic_cast<GraphEditor*>(editor_.getComponent());
+    if (editor == nullptr)
+        return nullptr;
+    for (auto* comp : editor->getModuleComponents())
+        if (comp != nullptr && comp->getNodeId() == nodeId_)
+            return comp;
+    return nullptr;
+}
+
+ModuleCardLayoutStore* BuiltInCardLayoutSource::store() const {
+    auto* editor = editor_.getComponent();
+    return editor != nullptr ? findModuleCardLayoutStore(*editor) : nullptr;
+}
+
+bool BuiltInCardLayoutSource::isAlive() const { return module() != nullptr; }
+
+juce::String BuiltInCardLayoutSource::title() const { return moduleType_ + " layout"; }
+
+juce::String BuiltInCardLayoutSource::allScopeText() const { return "All " + moduleType_ + " modules"; }
+
+juce::String BuiltInCardLayoutSource::resetTooltip() const {
+    return "Remove the chosen scope's layout, so the card goes back to the default";
+}
+
+std::vector<CardLayoutEditorParam> BuiltInCardLayoutSource::parameters() const {
+    std::vector<CardLayoutEditorParam> params;
+    auto* processor = module();
+    if (processor == nullptr)
+        return params;
+    for (const auto& item : CardBodyPlan::forModule(*processor, std::nullopt).items) {
+        if (item.param == nullptr)
+            continue;
+        params.push_back({item.param->paramID, item.param->getName(100), -1, widgetChoicesFor(*item.param)});
+    }
+    return params;
+}
+
+CardLayout BuiltInCardLayoutSource::currentLayout() const {
+    auto* comp = card();
+    const auto* body = comp != nullptr ? comp->getCardBody() : nullptr;
+    return body != nullptr ? body->explicitLayout() : CardLayout();
+}
+
+// The same rebuild the quick path does: updateComponents swaps in a card built from the new layout,
+// and the new card makes room for (or gives back) its change in height. A card the store's listener
+// already rebuilt is left alone.
+void BuiltInCardLayoutSource::refreshCard() {
+    auto* editor = dynamic_cast<GraphEditor*>(editor_.getComponent());
+    if (editor == nullptr)
+        return;
+    auto* before = card();
+    editor->updateComponents();
+    if (auto* rebuilt = card(); rebuilt != nullptr && rebuilt != before)
+        editor->handleModuleResized(rebuilt);
+}
+
+// Apply to all clears this module's own layout first, so the store's listener, which runs inside
+// setDefault, rebuilds this card with every other one of its type. Without a store the layout stays
+// on this module.
+void BuiltInCardLayoutSource::apply(const CardLayout& layout, bool allOfType) {
+    auto* g = graph();
+    if (g == nullptr || !isAlive())
+        return;
+    const auto before = snapshotBeforeWrite();
+    auto* types = store();
+    if (allOfType && types != nullptr) {
+        setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
+        defaultTouched_ = true;
+        types->setDefault(moduleType_, layout);
+    } else {
+        setCardLayoutOverride(*g, nullptr, nodeId_, layout);
+    }
+    refreshCard();
+    recordSince(before);
+}
+
+CardLayout BuiltInCardLayoutSource::reset(bool allOfType) {
+    auto* g = graph();
+    if (g == nullptr || !isAlive())
+        return currentLayout();
+    const auto before = snapshotBeforeWrite();
+    setCardLayoutOverride(*g, nullptr, nodeId_, std::nullopt);
+    if (auto* types = store(); allOfType && types != nullptr) {
+        defaultTouched_ = true;
+        types->clearDefault(moduleType_);
+    }
+    refreshCard();
+    recordSince(before);
+    return currentLayout();
+}
+
+void BuiltInCardLayoutSource::restoreOpeningLayout() {
+    auto* g = graph();
+    if (g == nullptr || !isAlive())
+        return;
+    const auto before = snapshotBeforeWrite();
+    restoreCardLayoutOverride(*g, nodeId_, openingOverride_);
+    if (auto* types = store(); defaultTouched_ && types != nullptr) {
+        defaultTouched_ = false;
+        if (openingDefault_.has_value())
+            types->setDefault(moduleType_, *openingDefault_);
+        else
+            types->clearDefault(moduleType_);
+    }
+    refreshCard();
+    recordSince(before);
+}
+
+// The type's built-in presets (code: Macros' Row, Grid and Faders) come first, then the user's own.
+const std::vector<std::pair<juce::String, CardLayout>>& BuiltInCardLayoutSource::builtInPresets() const {
+    static const std::vector<std::pair<juce::String, CardLayout>> none;
+    const auto* entry = DefaultCardLayouts::builtIn().find(moduleType_);
+    return entry != nullptr ? entry->presets : none;
+}
+
+bool BuiltInCardLayoutSource::setMacroKnob(int index, const std::optional<juce::String>& name,
+                                           std::optional<bool> bipolar) {
+    auto* macros = dynamic_cast<MacroControlModule*>(module());
+    if (macros == nullptr || index < 0 || index >= MacroControlModule::kMaxMacros)
+        return false;
+    const auto before = snapshotBeforeWrite();
+    if (name.has_value())
+        macros->setMacroName(index, *name);
+    if (bipolar.has_value())
+        if (auto* param = macros->getBipolarParameter(index))
+            param->setValueNotifyingHost(*bipolar ? 1.0f : 0.0f);
+    if (auto* c = card(); c != nullptr && c->getCardBody() != nullptr)
+        c->getCardBody()->refreshMacroNames();
+    recordSince(before);
+    return true;
+}
+
+juce::StringArray BuiltInCardLayoutSource::listPresets() const {
+    juce::StringArray names;
+    for (const auto& preset : builtInPresets())
+        names.add(preset.first);
+    if (auto* types = store())
+        for (const auto& name : types->listPresets(moduleType_))
+            names.addIfNotAlreadyThere(name);
+    return names;
+}
+
+bool BuiltInCardLayoutSource::isBuiltInPreset(const juce::String& name) const {
+    for (const auto& preset : builtInPresets())
+        if (preset.first.equalsIgnoreCase(name))
+            return true;
+    return false;
+}
+
+bool BuiltInCardLayoutSource::savePreset(const juce::String& name, const CardLayout& layout) {
+    auto* types = store();
+    return types != nullptr && !isBuiltInPreset(name) && types->savePreset(moduleType_, name, layout);
+}
+
+std::optional<CardLayout> BuiltInCardLayoutSource::loadPreset(const juce::String& name) const {
+    for (const auto& preset : builtInPresets())
+        if (preset.first.equalsIgnoreCase(name))
+            return preset.second;
+    auto* types = store();
+    if (types == nullptr)
+        return std::nullopt;
+    auto loaded = types->loadPreset(moduleType_, name);
+    if (loaded.status != ModuleCardLayoutStore::LoadStatus::Ok)
+        return std::nullopt;
+    juce::StringArray ids;
+    for (const auto& param : parameters())
+        ids.add(param.paramId);
+    return upgradeV1(loaded.layout, ids);
+}
+
+bool BuiltInCardLayoutSource::deletePreset(const juce::String& name) {
+    auto* types = store();
+    return types != nullptr && !isBuiltInPreset(name) && types->deletePreset(moduleType_, name);
+}
+
+} // namespace synth::ui

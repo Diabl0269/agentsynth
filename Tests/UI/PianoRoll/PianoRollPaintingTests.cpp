@@ -10,6 +10,7 @@
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace {
 // WCAG relative luminance / contrast ratio — same formula NoteColourTests.cpp uses, duplicated
@@ -466,9 +467,11 @@ TEST(PianoRollLayoutTest, ThePanelPutsTheToolbarRowAboveTheRulerWithNoOverlap) {
     // openPianoRoll frames a clip before the re-layout, so canvasTop() has to be right beforehand.
     const int rulerTopWhileOpen = rulerBounds.getY();
     f.panel.closePianoRoll();
-    EXPECT_EQ(f.panel.getRuler().getBounds().getY(), rollBounds.getY())
-        << "closed, the ruler is the TOP row of the lanes region again";
-    EXPECT_LT(f.panel.getRuler().getBounds().getY(), rulerTopWhileOpen) << "i.e. it moved back up";
+    // The Sections strip (hidden while the roll is open) is the top row again, with the ruler right under it.
+    EXPECT_EQ(f.panel.getRuler().getBounds().getY(), rollBounds.getY() + f.panel.getSectionStrip().getHeight())
+        << "closed, the ruler is the row under the Sections strip again";
+    EXPECT_LT(f.panel.getRuler().getBounds().getY() - f.panel.getSectionStrip().getHeight(), rulerTopWhileOpen)
+        << "i.e. without the strip it moved back up";
     EXPECT_EQ(r.getBounds(), f.panel.getClipLaneArea().getBounds())
         << "closed, the roll occupies exactly the clip-lane rect again";
     EXPECT_EQ(r.getRulerBandHeight(), rulerBounds.getHeight()) << "the band stays known while closed";

@@ -41,6 +41,14 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSp
 // cross-panel key arbitration — MainComponent::resolveEditSurface decides which panel's
 // keyPressed even gets called.
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
+    // Mid-drag, Esc abandons the drag and is spent: it must not also clear the selection.
+    if (key == juce::KeyPress::escapeKey && cancelDrag())
+        return true;
+    if (handleKeyboardClipKey(key))
+        return true;
+    if (matchesRenderToAudioKey(key) && renderSelectionToAudio())
+        return true;
+
     // P = loop the selection (Cubase's locators-to-selection). Rebindable through
     // "timelineLoopSelection" but NOT a command: it is resolved right here, on the surface that
     // knows the span, so no selection (or no owner listening) returns false and the key keeps
@@ -77,6 +85,8 @@ bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
         applyRangeChoice(mods.isShiftDown() ? RangeChoice::DeleteCloseGap : RangeChoice::Delete);
         return true;
     }
+    if (getRangeSpan() && matchesClipAction(key, "timelineMakeSection", sectionKey()))
+        return applyRangeChoice(RangeChoice::MakeSection) || true;
     if (key == juce::KeyPress::escapeKey && range_.isActive()) {
         clearRange();
         return true;
@@ -118,7 +128,7 @@ void TimelineClipLaneArea::beginMarquee(juce::Point<int> anchor, bool additive) 
     marqueeAdditive_ = additive;
     marqueeAnchor_ = anchor;
     marqueeRect_ = juce::Rectangle<int>(anchor, anchor);
-    marqueeBaseSelection_ = additive ? selection_.getSelected() : std::vector<synth::ClipId>{};
+    marqueeBaseSelection_ = selection_.getSelected(); // what an additive marquee adds to and a cancel puts back
 
     // A non-additive marquee starts from nothing, so dragging over no clip deselects.
     if (!additive)

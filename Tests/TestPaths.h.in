@@ -1,0 +1,18 @@
+#pragma once
+
+// Absolute paths into this checkout, for the few tests that read a file from the tree. They live in
+// a generated header, not in compile definitions on the Tests target, because a definition holding
+// the checkout's path changes every test file's compile command in every worktree, and ccache can
+// then never answer in direct mode across worktrees.
+#define THEMES_DIR "@CMAKE_SOURCE_DIR@/themes"
+// Tests/ itself, for data resolved relative to the test tree (Tests/reference/): a test file's own
+// __FILE__ depth changes whenever tests are reorganized into area directories.
+#define TESTS_ROOT_DIR "@CMAKE_CURRENT_SOURCE_DIR@"
+// The fixture files TimelineOpsHarness replays: one recorded set, asserted as fast gtest cases too.
+#define TIMELINE_OPS_FIXTURES_DIR "@CMAKE_SOURCE_DIR@/Tools/TimelineOpsHarness/Fixtures"
+// Real model output recorded once by Tools/AIPatchHarness (--json), replayed offline.
+#define AI_PATCH_FIXTURES_DIR "@CMAKE_SOURCE_DIR@/Tests/fixtures/ai-patches"
+// A recorded song answer that names a core pack sound, replayed through the real app host.
+#define AI_PLAN_FIXTURES_DIR "@CMAKE_SOURCE_DIR@/Tests/fixtures/ai-plans"
+// The committed project the UI-verification examples open (Tools/ui-verify/).
+#define UI_VERIFY_FIXTURES_DIR "@UI_VERIFY_FIXTURES_DIR@"
