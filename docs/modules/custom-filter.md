@@ -244,7 +244,7 @@ uncabled, cables that input from the Pitch source of the voice chain feeding the
 Pitch that drives the Oscillator upstream, found on a Poly Oscillator's Pitch input or on whatever input a Pitch
 output feeds, which is how a mono Oscillator's pitch CV is found; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
 by the same path as a hand-drawn cable (mono reads only voice 0's ch19), in the same undo step as the mode change, so one undo takes
-both back. An input that is already cabled
+both back. The same cable is also made when a new connection gives a Filter already in **By hand** or **By pitch** (type Custom) its first Pitch source: dropping the cable that completes the voice chain (for example Poly MIDI onto the Oscillator's Pitch input, or the Oscillator onto the Filter) cables the Filter's Pitch input in the same undo step as that drop (`PortConnector::connectJacks`, `PortConnectorFilterPitch.cpp`; through `connectPorts`). Only that event does it: loading a project never adds the cable, and a Pitch cable you deleted stays deleted when you later cable something unrelated. An input that is already cabled
 gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
 Pitch cable: wire a Pitch source (like Poly MIDI) to the Filter's Pitch input. Audio alone carries none." (By hand or
 By pitch, Pitch uncabled, and no source to take it from, or the cable was removed later). A mono Oscillator with no

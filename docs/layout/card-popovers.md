@@ -9,6 +9,8 @@ Space would die there.
 
 ## Opening one
 
+A popover's content paints an opaque themed panel of its own (`windowBackgroundFor(themeOf(*this))`, the theme's `border` outline and corner radius), because the call-out's bubble behind it is JUCE's translucent dark scheme: dark rows on that bubble were unreadable in the light theme. `ThemeSweepPopovers` lists every content class in `PopoverRegistry.h` and renders the ones that have a fixture in every theme (`ThemeSweepPopoverTests.cpp`); a new content that is in neither the swept nor the exempt list fails the test.
+
 Open it with `launchPopover(content, screenArea, anchor, options)` (`Source/UI/Layout/PopupHost.{h,cpp}`), never
 `CallOutBox::launchAsynchronously`. A popover a button toggles lives in a `PopoverSlot`: `open` returns `Opened`,
 `ClosedIt` (the popover was open, so the button closed it) or `Ignored` (it is already leaving). `options.trigger` is the

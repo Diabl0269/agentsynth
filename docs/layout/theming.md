@@ -332,7 +332,7 @@ same content with the same options as the call site, or an exemption with a reas
 ticketed sit in `kKnownGaps` in `ThemeSweepTests.cpp`; the list is shrink-only: a new finding fails, and so does an
 entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYNTH_WRITE_THEME_PNG` set the sweep (and
 `ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
-directory. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
+directory. The popovers have their own sweep, `ThemeSweepPopoverTests.cpp`: `ThemeSweepPopovers.EveryPopoverContentIsListed` fails when a content class named in `PopoverRegistry.h` is neither rendered nor exempt with a reason (the exempt list is shrink-only), and the pen's shape flyout is rendered in every theme to check an opaque panel in the theme's window colour and 4.5:1 for each row's name and shortcut. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
 built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
 A new control that shows its state only as a painted glyph joins that file.
