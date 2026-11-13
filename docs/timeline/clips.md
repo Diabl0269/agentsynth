@@ -340,6 +340,34 @@ itself, so a test can assert on it without decoding pixels. `mouseEnter` re-appl
 tool's cursor and `mouseExit` drops the Split preview, so a hover line never survives the pointer
 leaving the lanes.
 
+## Waveform look
+
+An audio clip's waveform is one solid shape in a deep shade of the clip's own colour, with a denser core inside
+it, on a linear amplitude scale. Picked against other DAWs:
+
+| DAW | Default look | Scale |
+|---|---|---|
+| Cubase | Event-colour tint, darker outline, optional interior fill | Linear |
+| Audacity | Peak shape in blue, RMS as a lighter inner layer | Linear (dB optional) |
+| Pro Tools, Reaper, Bitwig | Peak shape in a contrasting shade of the clip colour; RMS optional or absent (from public descriptions, not checked side by side) | Linear by default |
+
+The common thread is that the peak envelope is the solid, readable shape and RMS, when shown, is a quieter
+inner layer; nobody draws the waveform as a grey wash. So:
+
+- **Peak shape** (min to max per column): the clip colour as it shows on the lane (its fill over `bg-1`) moved
+  toward black, or toward white on a dark clip, until it reaches 3:1 contrast with the clip
+  (`kWaveformMinContrast`). It is opaque, so the lane never shows through.
+- **RMS core** (+-rms): the same shade, a further step toward black or white. A sine's core sits at about 70% of
+  its peak, a drum hit's is thin, so the core shows how loud a part sounds, the peak shape how far it swings.
+- **Sample line** (zoomed past 2 samples per pixel) and a version 1 sidecar without RMS: the peak shade.
+- **Scale**: linear, so a part 6 dB quieter draws half as tall. No dB or log display.
+- **Live strip**: the same rule from the strip's own fill (accent over `bg-1`), so a take looks the same while it
+  records and once it is a clip.
+
+`waveformInkFor()` (`TimelineClipLaneWaveform.cpp`) is the one place the colours come from.
+`TimelineClipLaneWaveformLookTests.cpp` checks the contrast for every palette colour (plain, selected, muted) in
+every built-in theme, the core step, the linear scale and live/committed parity.
+
 ## Waveform sidecar backfill
 
 An imported or relinked audio clip gets its `Peaks/<stem>.agpk` sidecar when it is imported. A project saved before

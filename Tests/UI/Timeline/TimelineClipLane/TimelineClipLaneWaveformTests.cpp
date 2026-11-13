@@ -66,13 +66,13 @@ struct WaveformScene {
         return image;
     }
 
-    // Per pixel column, how much darker than the same lane without any waveform it is, over the clip's rows.
+    // Per pixel column, how far from the same lane without any waveform it is (darker or lighter), over the clip.
     std::vector<double> inkPerColumn(const juce::Image& img, const juce::Image& base, juce::Rectangle<int> rect) const {
         std::vector<double> ink;
         for (int x = rect.getX() + 2; x < std::min(rect.getRight() - 2, img.getWidth()); ++x) {
             double sum = 0.0;
             for (int y = rect.getY() + 1; y < rect.getBottom() - 1; ++y)
-                sum += std::max(0.0f, base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness());
+                sum += std::abs(base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness());
             ink.push_back(sum);
         }
         return ink;
@@ -157,7 +157,7 @@ TEST(TimelineClipLaneWaveformZoom, ZoomedInToSingleCyclesDrawsTheRealWaveLine) {
     std::vector<int> top;
     for (int x = 2; x < 998; ++x)
         for (int y = rect.getY() + 1; y < rect.getBottom() - 1; ++y)
-            if (base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness() > 0.2f) {
+            if (std::abs(base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness()) > 0.1f) {
                 top.push_back(y);
                 break;
             }
@@ -175,7 +175,8 @@ TEST(TimelineClipLaneWaveformZoom, ZoomedInToSingleCyclesDrawsTheRealWaveLine) {
     int inked = 0, total = 0;
     for (int x = 2; x < 998; ++x)
         for (int y = rect.getY() + 1; y < rect.getBottom() - 1; ++y, ++total)
-            inked += base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness() > 0.05f ? 1 : 0;
+            inked +=
+                std::abs(base.getPixelAt(x, y).getBrightness() - img.getPixelAt(x, y).getBrightness()) > 0.05f ? 1 : 0;
     EXPECT_LT(inked, total * 0.35);
 }
 
