@@ -498,19 +498,6 @@ TEST_F(KeyboardReachDialogs, EveryControlInEveryDialogIsAKeyboardStop) {
     findings.expectOnlyKnownGaps();
 }
 
-// Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the
-// piano roll; only from inside the timeline, with Up from its track column.
-TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRegion) {
-    std::set<std::string> missing;
-    for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
-        mc_->setMainViewForTest(view);
-        if (view == Tab::Mixer) // a focused column, whose fader takes the plain arrows
-            mc_->getBottomDock().getMixerPanel().keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
-        const auto suffix = std::string(" [view ") + std::to_string((int)view) + "]";
-        const auto found = regionsMissingTheTransportBar(suffix, [this, view] { mc_->setMainViewForTest(view); });
-        missing.insert(found.begin(), found.end());
-    }
-    mc_->setMainViewForTest(Tab::Timeline); // false when it is already there
 // Regression test for FRO1525: with the bottom panel closed the key opened it but put no ring on the transport bar,
 // since the bar has no bounds until the slide lands.
 TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedInEveryMainView) {
@@ -539,6 +526,19 @@ TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedI
     }
 }
 
+// Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the
+// piano roll; only from inside the timeline, with Up from its track column.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRegion) {
+    std::set<std::string> missing;
+    for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (view == Tab::Mixer) // a focused column, whose fader takes the plain arrows
+            mc_->getBottomDock().getMixerPanel().keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+        const auto suffix = std::string(" [view ") + std::to_string((int)view) + "]";
+        const auto found = regionsMissingTheTransportBar(suffix, [this, view] { mc_->setMainViewForTest(view); });
+        missing.insert(found.begin(), found.end());
+    }
+    mc_->setMainViewForTest(Tab::Timeline); // false when it is already there
     auto& panel = mc_->getTimelinePanel();
     const auto clip = mc_->getTimelineDoc().addClip(mc_->getTimelineDoc().getTracks().front().id, 0.0, 8.0, "Clip");
     panel.openPianoRoll(clip);

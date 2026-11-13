@@ -28,11 +28,6 @@ namespace {
 
 // A gap that is known and has a ticket. Key: "<scene> / <region id> / <control>: <what>" as a finding prints it.
 const std::vector<KnownGap> kKnownGaps = {
-    // Mixer zones pane and rows: the side pane is not reached by any key.
-    {"mixer side pane / mixer / MixerZonesPane 'Zones and visibility': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Audio #': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Direct': not reached by keys", "FRO1529"},
-    {"mixer side pane / mixer / MixerZonesRow 'Master': not reached by keys", "FRO1529"},
     // Library sidebar switch and search box: the region lands on the list, no key steps to them.
     {"canvas / library / LibrarySidebarSwitch 'Sidebar view': not reached by keys", "FRO1541"},
     {"canvas / library / TextEditor 'Search library': not reached by keys", "FRO1541"},
@@ -424,6 +419,11 @@ TEST_F(ReachSweepShell, RealKeysReachEveryStopOfEveryRegionAndEachLandingShowsIt
 // Tab after the Sounds preview strip goes on to the region beside the sidebar in every main view, and comes back.
 TEST_F(ReachSweepShell, TabFromThePreviewStripLeavesForTheRegionBesideTheSidebarAndShiftTabComesBack) {
 #if !JUCE_MAC
+    GTEST_SKIP() << "measured on macOS with the other sweeps";
+#endif
+    for (const auto& scene : scenes())
+        checkPreviewStripTab(scene);
+}
 
 // Regression test for FRO1530: a strip clicked, then Cmd+1 (the timeline tab, which takes the keys onto the tab strip)
 // and Right (back to the Mixer tab) showed the strip's ring while no key acted on it.
@@ -460,9 +460,4 @@ TEST_F(ReachSweepShell, ARingedMixerStripLosesItsRingWhenAnotherTabTakesTheKeysA
     ASSERT_TRUE(takeFocus(*view().panel));
     synth::test::flushMessageQueue();
     EXPECT_EQ(view().stripsRinging, 1);
-}
-    GTEST_SKIP() << "measured on macOS with the other sweeps";
-#endif
-    for (const auto& scene : scenes())
-        checkPreviewStripTab(scene);
 }

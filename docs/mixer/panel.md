@@ -676,10 +676,10 @@ docked panel and the "both places" mirror share one `MixerViewDoc` and rebuild t
 "Show all" link have titles and descriptions. The group headings are drawn in sentence case, as written.
 
 **Keyboard.** The list is focusable (`MixerZonesPane`, `MixerZonesPaneKeyboard.cpp`): Cmd+Shift+B opening
-the pane puts focus in it, and a click on a row does too. **Up / Down** move a row cursor over the listed
+the pane puts focus in it, a click on a row does too, and **Left on the first strip** goes on into it when the pane shows (`MixerPanelComponent::moveFocus`; the strip's ring goes while the list has the keys). **Up / Down** move a row cursor over the listed
 rows (clamped, an accent outline, and the screen reader's cursor moves with it), **Space** shows or hides
 the cursor's channel (not Master), **Alt+Up / Alt+Down** move it to the previous or next group (the
-keyboard twin of dragging it across one heading), and **Esc** hands focus back to the mixer. Keys the list
+keyboard twin of dragging it across one heading), and **Esc** or **Right** hands focus back to the mixer (to the strip it came from). Tab stays the region cycle: the pane is not a region of its own. Keys the list
 does not use (M/S/R, the section toggles) fall through to the mixer panel, so they still act on the
 focused column. Closing the pane with Cmd+Shift+B while it has focus returns focus to the mixer.
 

@@ -63,7 +63,14 @@ MixerPanelComponent::MixerPanelComponent() {
     zonesPane_.onSetHidden = [this](const juce::String& id, bool hidden) { setChannelHidden(id, hidden); };
     zonesPane_.onSoloShow = [this](const juce::String& id) { soloShowChannel(id); };
     zonesPane_.onShowAll = [this] { showAllChannels(); };
-    zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
+    // Escape or Right in the side pane's list (Return or Escape in its filter box) comes back to the panel, whose strip
+    // ring returns with the keys.
+    zonesPane_.onFocusReleased = [this] {
+        grabKeyboardFocus();
+        noteKeyboardMoved();
+        syncFocusVisuals();
+        repaint();
+    };
     toolbar_.shortcutTextFor = [this](MixerSection section) { return sectionToggleShortcutText(section); };
     toolbar_.setLayout(sectionLayout_);
     refreshShortcutHints();
@@ -589,6 +596,7 @@ void MixerPanelComponent::unbindAllColumns() {
 }
 
 void MixerPanelComponent::visibilityChanged() {
+    noteKeyboardMoved(); // hidden: no ring; shown again: the ring only if the keys are back on the panel
     if (!isVisible())
         return;
     const juce::ScopedValueSetter<bool> catchingUp(catchingUp_, true);
@@ -596,7 +604,6 @@ void MixerPanelComponent::visibilityChanged() {
         rebuild();
     else if (staleCheckPending_) {
         staleCheckPending_ = false;
-    noteKeyboardMoved(); // hidden: no ring; shown again: the ring only if the keys are back on the panel
         rebuildIfStale();
     }
 }
