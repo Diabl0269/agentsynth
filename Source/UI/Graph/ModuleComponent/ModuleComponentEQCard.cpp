@@ -108,7 +108,9 @@ void ModuleComponent::layoutParametricEQ() {
         spectrumToggle->setBounds(kMargin, buttonY, 140, kButtonRow);
     if (eqPopOutButton)
         eqPopOutButton->setBounds(kMargin + 150, buttonY, 150, kButtonRow);
+    // The shared Mix is the knob left of Output: every blending module shows its Mix on the card.
     layoutNamedKnob("Output", getWidth() - kMargin - kSliderWidth, y, kSliderWidth, kKnobRow);
+    layoutNamedKnob("Mix", getWidth() - kMargin - 2 * kSliderWidth - kMargin, y, kSliderWidth, kKnobRow);
     y += kKnobRow + 6;
 
     if (scopeToggle) {

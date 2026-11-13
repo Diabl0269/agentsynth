@@ -515,7 +515,7 @@ sliderIndexForModTarget()` turns into a knob index:
 The reverse also holds: a knob can have no jack. The Oscillator's Phase and Rand have none, because they are read once when a note starts; its Fixed rate takes a cable on the knob (ch28, no gutter jack).
 
 A module sets `paramId` whenever its jack label is not the knob's name — the jack is "Rate", the
-knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Gain"; Wavetable's "Warp" jack drives
+knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Level"; Wavetable's "Warp" jack drives
 "Warp Amt". Matching the label against the knob's `componentID` (the parameter's display name) was
 the pre-`paramId` rule, and it silently found nothing on every FX module whose labels carry no
 unit: no ring, and a cable released on the knob fell through to the canvas. `paramId` is a third

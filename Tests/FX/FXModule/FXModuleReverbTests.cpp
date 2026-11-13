@@ -143,13 +143,48 @@ std::array<std::vector<float>, 2> render(ReverbModule& m, int blocks, float cvPr
     return out;
 }
 
-// The wet tail's first sample. Starts looking at `from`: juce::Reverb's dry gain begins at 0.8 and
-// ramps to the knob over 10 ms (441 samples), which is not the tail.
+// The wet tail's first sample (the tests run at Mix 100%, so no dry signal is in the output).
 int firstWetSample(const std::vector<float>& leg, int from, float threshold = 1.0e-6f) {
     for (size_t i = (size_t)from; i < leg.size(); ++i)
         if (std::abs(leg[i]) > threshold)
             return (int)i;
     return -1;
+}
+
+/** What the module rendered before Mix existed (Pre-Delay 0): juce::Reverb with the knobs' Wet and Dry values, JUCE's
+    own 3x wet and 2x dry scaling included, then the Level. `blocks` blocks of the same noise burst as render(). */
+std::array<std::vector<float>, 2> oldEngine(float wet, float dry, float level, int blocks) {
+    juce::Reverb reference;
+    reference.setSampleRate(kReverbSr);
+    juce::Reverb::Parameters params; // roomSize .5, damping .5, width 1: the knobs' defaults
+    params.wetLevel = wet;
+    params.dryLevel = dry;
+    std::array<std::vector<float>, 2> out;
+    juce::Random rng(42);
+    for (int b = 0; b < blocks; ++b) {
+        std::vector<float> l(kReverbBlock, 0.0f), r(kReverbBlock, 0.0f);
+        if (b == 0)
+            for (int i = 0; i < kReverbBlock; ++i) {
+                l[(size_t)i] = rng.nextFloat() * 2.0f - 1.0f;
+                r[(size_t)i] = l[(size_t)i] * 0.5f;
+            }
+        reference.setParameters(params);
+        reference.processStereo(l.data(), r.data(), kReverbBlock);
+        for (size_t i = 0; i < l.size(); ++i) {
+            out[0].push_back(l[i] * level);
+            out[1].push_back(r[i] * level);
+        }
+    }
+    return out;
+}
+
+float peakRatio(const std::vector<float>& a, const std::vector<float>& b) {
+    float pa = 0.0f, pb = 0.0f;
+    for (size_t i = 0; i < a.size(); ++i) {
+        pa = std::max(pa, std::abs(a[i]));
+        pb = std::max(pb, std::abs(b[i]));
+    }
+    return pb > 0.0f ? pa / pb : 0.0f;
 }
 
 } // namespace
@@ -171,34 +206,141 @@ TEST(ReverbPreDelay, ParameterRangesFromZeroToTwoHundredFiftyMs) {
     EXPECT_LT(pos("preDelay"), pos("muted"));
 }
 
-// The module's old behaviour is "juce::Reverb with the knobs' values". At Pre-Delay 0 the output is
-// bit-identical to that, first block included.
-TEST(ReverbPreDelay, ZeroIsBitIdenticalToThePlainReverb) {
+// Mix 100% is the reverb tail alone at unity tail gain: juce::Reverb run wet-only with its 3x wet factor cancelled.
+// At Pre-Delay 0 the output is bit-identical to that.
+TEST(ReverbMix, FullMixIsTheBareTailBitForBit) {
     ReverbModule m;
+    setReverbParam(m, "mix", 1.0f);
     const auto actual = render(m, 6);
+    const auto expected = oldEngine(1.0f / 3.0f, 0.0f, 1.0f, 6);
+    // From after juce::Reverb's 10 ms glide from its Parameters() defaults, which the reference has and the module
+    // (its gains already settled before the first block) does not.
+    for (size_t i = 1024; i < expected[0].size(); ++i) {
+        ASSERT_EQ(actual[0][i], expected[0][i]) << "left sample " << i;
+        ASSERT_EQ(actual[1][i], expected[1][i]) << "right sample " << i;
+    }
+}
 
-    juce::Reverb reference;
-    reference.setSampleRate(kReverbSr);
-    juce::Reverb::Parameters params; // roomSize .5, damping .5, wet .33, dry .4, width 1: the knobs' defaults
-    reference.setParameters(params);
-    std::vector<float> left, right;
+TEST(ReverbMix, ZeroMixPassesTheInputUntouched) {
+    ReverbModule m;
+    setReverbParam(m, "mix", 0.0f);
+    const auto actual = render(m, 2);
     juce::Random rng(42);
-    for (int b = 0; b < 6; ++b) {
-        std::vector<float> l(kReverbBlock, 0.0f), r(kReverbBlock, 0.0f);
-        if (b == 0)
-            for (int i = 0; i < kReverbBlock; ++i) {
-                l[(size_t)i] = rng.nextFloat() * 2.0f - 1.0f;
-                r[(size_t)i] = l[(size_t)i] * 0.5f;
-            }
-        reference.setParameters(params);
-        reference.processStereo(l.data(), r.data(), kReverbBlock);
-        left.insert(left.end(), l.begin(), l.end());
-        right.insert(right.end(), r.begin(), r.end());
+    for (int i = 0; i < kReverbBlock; ++i) {
+        const float x = rng.nextFloat() * 2.0f - 1.0f;
+        ASSERT_EQ(actual[0][(size_t)i], x) << "left sample " << i;
+        ASSERT_EQ(actual[1][(size_t)i], x * 0.5f) << "right sample " << i;
     }
-    for (size_t i = 0; i < left.size(); ++i) {
-        ASSERT_EQ(actual[0][i], left[i]) << "left sample " << i;
-        ASSERT_EQ(actual[1][i], right[i]) << "right sample " << i;
+}
+
+TEST(ReverbMix, HasTheSharedMixParameter) {
+    ReverbModule m;
+    auto* mix = reverbParam(m, "mix");
+    ASSERT_NE(mix, nullptr);
+    EXPECT_EQ(mix->getName(64), "Mix");
+    EXPECT_NEAR(mix->convertFrom0to1(mix->getValue()), ReverbModule::kDefaultMix, 1.0e-6f);
+    EXPECT_EQ(mix->getText(0.5f, 16), "50 %") << "percent, like every other Mix";
+    EXPECT_EQ(reverbParam(m, "wet"), nullptr);
+    EXPECT_EQ(reverbParam(m, "dry"), nullptr);
+}
+
+// A project saved with Wet/Dry loads as Mix + Level (AIStateMapper hands the node's params to adoptLegacyParams).
+// Wet 0.1 / Dry 0.2 sums to 0.4 + 0.3 = 0.7 <= 1, so the new render equals the old one sample for sample.
+TEST(ReverbMix, OldWetDryUnderUnitySumRendersTheSameAsBefore) {
+    juce::NamedValueSet saved;
+    saved.set("wet", 0.1);
+    saved.set("dry", 0.2);
+    ReverbModule m;
+    m.adoptLegacyParams(saved);
+    EXPECT_NEAR(m.getOutputLevel(), 0.7f, 1.0e-6f);
+    EXPECT_NEAR(reverbParam(m, "mix")->convertFrom0to1(reverbParam(m, "mix")->getValue()), 0.3f / 0.7f, 1.0e-6f);
+    const auto actual = render(m, 6);
+    const auto expected = oldEngine(0.1f, 0.2f, 1.0f, 6);
+    // juce::Reverb starts its gains at the Parameters() defaults and glides to the knobs over 10 ms; the old module
+    // had that glide too, so the comparison starts after it.
+    for (size_t i = 1024; i < expected[0].size(); ++i) {
+        ASSERT_NEAR(actual[0][i], expected[0][i], 1.0e-5f) << "left sample " << i;
+        ASSERT_NEAR(actual[1][i], expected[1][i], 1.0e-5f) << "right sample " << i;
     }
+}
+
+// The default pair (Wet 0.33 / Dry 0.4) sums to 1.79 and Level stops at 1, so the migrated project is quieter by
+// exactly 1/1.79 (-5.06 dB), the same shape: pinned so the cost of dropping the makeup gain stays the known number.
+TEST(ReverbMix, OldDefaultWetDryIsExactlyFivePointOneDecibelsQuieterAndTheSameShape) {
+    juce::NamedValueSet saved;
+    saved.set("wet", 0.33);
+    saved.set("dry", 0.4);
+    ReverbModule m;
+    m.adoptLegacyParams(saved);
+    EXPECT_FLOAT_EQ(m.getOutputLevel(), 1.0f);
+    const auto actual = render(m, 6);
+    const auto expected = oldEngine(0.33f, 0.4f, 1.0f, 6);
+    const float sum = 2.0f * 0.4f + 3.0f * 0.33f;
+    for (size_t i = 0; i < expected[0].size(); ++i)
+        ASSERT_NEAR(actual[0][i] * sum, expected[0][i], 2.0e-5f) << "left sample " << i;
+    EXPECT_NEAR(juce::Decibels::gainToDecibels(peakRatio(actual[0], expected[0])), -5.06f, 0.05f);
+}
+
+TEST(ReverbMix, OldNodeWithOnlyWetUsesTheOldDryDefaultAndAnEmptyOrNewNodeIsUntouched) {
+    juce::NamedValueSet wetOnly;
+    wetOnly.set("wet", 0.5);
+    ReverbModule m;
+    m.adoptLegacyParams(wetOnly); // a = 2 * 0.4, b = 3 * 0.5
+    EXPECT_NEAR(reverbParam(m, "mix")->convertFrom0to1(reverbParam(m, "mix")->getValue()), 1.5f / 2.3f, 1.0e-5f);
+    EXPECT_TRUE(m.isLegacyParamId("wet"));
+    EXPECT_TRUE(m.isLegacyParamId("dry"));
+    EXPECT_FALSE(m.isLegacyParamId("mix"));
+
+    ReverbModule fresh;
+    juce::NamedValueSet withMix;
+    withMix.set("mix", 0.9);
+    withMix.set("wet", 0.1); // a stray old key next to a Mix never overrides it
+    fresh.adoptLegacyParams(withMix);
+    EXPECT_NEAR(reverbParam(fresh, "mix")->convertFrom0to1(reverbParam(fresh, "mix")->getValue()),
+                ReverbModule::kDefaultMix, 1.0e-6f);
+    ReverbModule none;
+    none.adoptLegacyParams(juce::NamedValueSet());
+    EXPECT_FLOAT_EQ(none.getOutputLevel(), 1.0f);
+}
+
+// A level the user had set stays: Level = old Level * min(1, a + b).
+TEST(ReverbMix, OldLevelIsKeptAndScaledByTheMigration) {
+    ReverbModule m;
+    setReverbParam(m, "outputLevel", 0.5f);
+    juce::NamedValueSet saved;
+    saved.set("wet", 0.1);
+    saved.set("dry", 0.2);
+    m.adoptLegacyParams(saved);
+    EXPECT_NEAR(m.getOutputLevel(), 0.5f * 0.7f, 1.0e-6f);
+}
+
+// Plugin-host module state written before Mix existed holds wet and dry attributes.
+TEST(ReverbMix, OldModuleStateBlobLoadsAsMixAndLevel) {
+    juce::ValueTree state("ModuleState");
+    state.setProperty("wet", 0.1f, nullptr);
+    state.setProperty("dry", 0.2f, nullptr);
+    juce::MemoryBlock blob;
+    juce::AudioProcessor::copyXmlToBinary(*state.createXml(), blob);
+    ReverbModule loaded;
+    loaded.setStateInformation(blob.getData(), (int)blob.getSize());
+    EXPECT_NEAR(loaded.getOutputLevel(), 0.7f, 1.0e-5f);
+    EXPECT_NEAR(reverbParam(loaded, "mix")->convertFrom0to1(reverbParam(loaded, "mix")->getValue()), 0.3f / 0.7f,
+                1.0e-5f);
+}
+
+// The retired Dry channel (raw 5) keeps every later cable where it was, has no jack and takes no cable.
+TEST(ReverbMix, RetiredDryChannelKeepsLaterChannelsAndDrawsNoJack) {
+    ReverbModule m;
+    EXPECT_EQ(m.getTotalNumInputChannels(), 10);
+    EXPECT_TRUE(m.isReservedInputChannel(5));
+    EXPECT_FALSE(m.isReservedInputChannel(4));
+    EXPECT_FALSE(m.isReservedInputChannel(6));
+    EXPECT_EQ(m.getVisibleInputPortCount(), 1 + 7) << "Audio + Size, Damping, Mix, Width, Pre-Delay, Level, Pan";
+    EXPECT_EQ(m.mapInputChannel(4).visibleJackIndex, 3) << "the Mix jack, where Wet was";
+    EXPECT_EQ(m.mapInputChannel(6).visibleJackIndex, 4) << "Width keeps raw channel 6, one jack earlier";
+    EXPECT_EQ(m.mapInputChannel(9).visibleJackIndex, 7);
+    for (const auto& t : m.getModulationTargets())
+        EXPECT_NE(t.channelIndex, 5);
 }
 
 TEST(ReverbPreDelay, StateWithoutPreDelayLoadsAtZeroAndRendersTheSame) {
@@ -220,7 +362,7 @@ TEST(ReverbPreDelay, StateWithoutPreDelayLoadsAtZeroAndRendersTheSame) {
 
 TEST(ReverbPreDelay, ShiftsTheWetOnsetByTheSetTime) {
     auto wetOnly = [](ReverbModule& m, float preDelayMs) {
-        setReverbParam(m, "dry", 0.0f);
+        setReverbParam(m, "mix", 1.0f);
         setReverbParam(m, "preDelay", preDelayMs);
     };
     ReverbModule plain;
@@ -242,7 +384,7 @@ TEST(ReverbPreDelay, ShiftsTheWetOnsetByTheSetTime) {
 
 TEST(ReverbPreDelay, TheDrySignalIsNeverDelayed) {
     auto dryOnly = [](ReverbModule& m, float preDelayMs) {
-        setReverbParam(m, "wet", 0.0f);
+        setReverbParam(m, "mix", 0.0f);
         setReverbParam(m, "preDelay", preDelayMs);
     };
     ReverbModule plain;
@@ -258,19 +400,20 @@ TEST(ReverbPreDelay, TheDrySignalIsNeverDelayed) {
 TEST(ReverbPreDelay, ThePreDelayJackIsKnobBoundAndShiftsTheOnset) {
     ReverbModule m;
     EXPECT_EQ(m.getTotalNumInputChannels(), 10);
-    EXPECT_EQ(m.getInputPortLabel(6), "Pre-Delay") << "jack 6 of Audio + six CVs, raw ch7";
+    EXPECT_EQ(m.getInputPortLabel(5), "Pre-Delay")
+        << "jack 5 of Audio + five CVs (the retired Dry jack is gone), raw ch7";
     const auto targets = m.getModulationTargets();
-    ASSERT_EQ(targets.size(), 8u);
-    EXPECT_EQ(targets[5].name, "Pre-Delay");
-    EXPECT_EQ(targets[5].channelIndex, 7);
-    ASSERT_NE(m.parameterForModTarget(targets[5]), nullptr);
-    EXPECT_EQ(m.parameterForModTarget(targets[5])->paramID, "preDelay");
+    ASSERT_EQ(targets.size(), 7u);
+    EXPECT_EQ(targets[4].name, "Pre-Delay");
+    EXPECT_EQ(targets[4].channelIndex, 7);
+    ASSERT_NE(m.parameterForModTarget(targets[4]), nullptr);
+    EXPECT_EQ(m.parameterForModTarget(targets[4])->paramID, "preDelay");
 
     ReverbModule plain;
-    setReverbParam(plain, "dry", 0.0f);
+    setReverbParam(plain, "mix", 1.0f);
 
     ReverbModule modulated;
-    setReverbParam(modulated, "dry", 0.0f);
+    setReverbParam(modulated, "mix", 1.0f);
     // +0.04 of the 0..250 ms range = 10 ms. The CV rides the 50 ms smoothing ramp, so the burst
     // arrives in block 6 (70 ms in), after it has landed.
     const int burstAt = 6 * kReverbBlock;

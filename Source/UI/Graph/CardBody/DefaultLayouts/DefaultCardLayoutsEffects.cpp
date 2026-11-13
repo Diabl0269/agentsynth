@@ -11,6 +11,7 @@ namespace {
 using namespace cardlayout;
 
 constexpr int kRevision = 1;
+constexpr int kReverbRevision = 2;
 
 CardLayout layoutOf(std::vector<CardSection> sections) {
     CardLayout layout;
@@ -28,11 +29,10 @@ CardLayout delayLayout() {
                      footer({param("pingPong"), param("outputLevel")})});
 }
 
+// One Mix knob like every other blending effect (revision 2; revision 1 had separate Dry and Wet faders).
 CardLayout reverbLayout() {
     return layoutOf({section("room", juce::String("Room"), {param("roomSize"), param("damping"), param("preDelay")}),
-                     section("mix", juce::String("Mix"),
-                             {param("dry", CardWidget::FaderV), param("wet", CardWidget::FaderV), param("width")}),
-                     footer({param("outputLevel")})});
+                     section("main", std::nullopt, {param("mix"), param("width")}), footer({param("outputLevel")})});
 }
 
 // Chorus, Phaser and Flanger share the shape; `centre` is the tone control that differs. The delay-based
@@ -76,7 +76,7 @@ CardLayout pitchShifterLayout() {
 
 void registerEffectCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Delay", delayLayout(), kRevision);
-    defaults.add("Reverb", reverbLayout(), kRevision);
+    defaults.add("Reverb", reverbLayout(), kReverbRevision);
     defaults.add("Chorus", modulationLayout(labelled(param("centreDelay"), "Delay (ms)")), kRevision);
     defaults.add("Flanger", modulationLayout(labelled(param("centreDelay"), "Delay (ms)")), kRevision);
     defaults.add("Phaser", modulationLayout(param("centreFreq")), kRevision);

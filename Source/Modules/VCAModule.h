@@ -38,8 +38,8 @@ public:
         // right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("VCA", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(gainParam =
-                         new juce::AudioParameterFloat("gain", "Gain", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
-                                                       synth::fractionPercentAttributes()));
+                         new juce::AudioParameterFloat("gain", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // gates in stereo). Collapsed, its jack layout is the plain mono one — Audio, CV.
@@ -167,7 +167,7 @@ public:
             buffer.clear(ch, 0, numSamples);
     }
 
-    // The CV jack drives the Gain knob (paramId), so the card rings and knob-drops on Gain.
+    // The CV jack drives the Level knob (paramId "gain"), so the card rings and knob-drops on Level.
     std::vector<ModulationTarget> getModulationTargets() const override { return {{"CV", 1, "gain"}}; }
     /** Audio R sits next to Audio L; CV keeps its raw channel, only its visible slot moves. */
     juce::String getInputPortLabel(int i) const override {

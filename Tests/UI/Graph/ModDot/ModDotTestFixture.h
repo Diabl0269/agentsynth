@@ -110,7 +110,7 @@ struct Fixture {
         };
         refresh();
         vcaCard = findModuleComp(*editor, vcaNode->getProcessor());
-        gainKnob = vcaCard != nullptr ? findKnob(*vcaCard, "Gain") : nullptr;
+        gainKnob = vcaCard != nullptr ? findKnob(*vcaCard, "Level") : nullptr;
     }
 
     // Cards go before the engine frees their processors: an ADSR card's parameter attachment unhooks itself

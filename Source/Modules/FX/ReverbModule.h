@@ -4,33 +4,36 @@
 #include "Modules/ParameterText.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 
-// Wet/Dry can exceed unity gain: juce::Reverb::updateParameters() (JUCE's code, not this
-// module's) applies its own internal wetScaleFactor = 3.0 and dryScaleFactor = 2.0 to the 0-1
-// Wet/Dry knobs before mixing, so neither is a plain 0-1 balance control at the signal level -
-// maxing Wet feeds the algorithmic tail at up to 3x, maxing Dry passes the input at up to 2x.
-// ModuleGainAudit (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst case of
-// +8.91 dB (Wet at max) and +7.77 dB (Dry at max) against a continuous, hot test tone;
-// allow-listed there. See docs/modules/fx-modules.md#reverb-module.
+// One Mix control (0 = dry, 1 = wet tail), like every other blending effect. The juce::Reverb
+// inside is run wet-only at unity tail gain: JUCE's own wetScaleFactor = 3.0 is cancelled by feeding it
+// wetLevel = 1/3, so Mix is a plain crossfade and Level scales the sum. Projects saved with the old Wet/Dry
+// knobs load through adoptLegacyParams (mix = b/(a+b), level = min(1, a+b), a = 2*dry, b = 3*wet, JUCE's
+// own factors); the default pair (0.33 / 0.4) lands up to ~5 dB quieter, accepted before v1.
+// See docs/modules/fx-modules.md#reverb-module.
 class ReverbModule : public ModuleBase {
 public:
+    static constexpr float kDefaultMix = 0.3f;
+    static constexpr int kMixCvChannel = 4;
+    static constexpr int kRetiredDryCvChannel = 5;
     static constexpr int kLevelCvChannel = 8;
     static constexpr int kPanCvChannel = 9;
 
     ReverbModule()
-        : ModuleBase("Reverb", 10, 2) { // 2 audio + 8 CV (Size, Damping, Wet, Dry, Width, Pre-Delay, Level, Pan)
+        // 2 audio + 8 raw CV channels: Size, Damping, Mix, (retired Dry), Width, Pre-Delay, Level, Pan. The retired
+        // Dry channel stays so no saved cable moves; it is reserved, never drawn as a jack.
+        : ModuleBase("Reverb", 10, 2) {
         addParameter(roomSizeParam = new juce::AudioParameterFloat("roomSize", "Room Size",
                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
                                                                    synth::fractionPercentAttributes()));
         addParameter(dampingParam =
                          new juce::AudioParameterFloat("damping", "Damping", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        0.5f, synth::fractionPercentAttributes()));
-        addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                              0.33f, synth::fractionPercentAttributes()));
-        addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                              0.4f, synth::fractionPercentAttributes()));
         addParameter(widthParam =
                          new juce::AudioParameterFloat("width", "Width", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        1.0f, synth::fractionPercentAttributes()));
+        // Mix: 0 = dry only, 1 = reverb tail only (id and look shared with the other blending effects).
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              kDefaultMix, synth::fractionPercentAttributes()));
         // Pre-Delay: a delay in front of the reverb's wet path only (the dry signal is not delayed).
         // 0 ms is the plain reverb, sample for sample.
         addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay (ms)", 0.0f, 250.0f, 0.0f));
@@ -73,16 +76,13 @@ public:
         juce::Reverb::Parameters params;
         params.roomSize = modulateNormalised(*roomSizeParam, *roomSizeParam, blockCV(buffer, 2));
         params.damping = modulateNormalised(*dampingParam, *dampingParam, blockCV(buffer, 3));
-        params.wetLevel = modulateNormalised(*wetParam, *wetParam, blockCV(buffer, 4));
-        params.dryLevel = modulateNormalised(*dryParam, *dryParam, blockCV(buffer, 5));
         params.width = modulateNormalised(*widthParam, *widthParam, blockCV(buffer, 6));
-        // The dry pass is added here, not inside juce::Reverb: the reverb sees only the pre-delayed
-        // signal, so its own dry gain is held at 0 and `dryGain` below replays juce::Reverb's dry law
-        // (2x scale, 10 ms ramp) on the undelayed input. At Pre-Delay 0 that is the same arithmetic in
-        // the same order, so the output is bit-identical to the plain reverb.
-        dryGain.setTargetValue(params.dryLevel * kJuceDryScale);
+        // Wet-only at unity tail gain (see the header comment); the dry pass and the crossfade are done here so
+        // the dry signal skips the pre-delay.
+        params.wetLevel = kJuceWetUnity;
         params.dryLevel = 0.0f;
         reverb.setParameters(params);
+        smoothedMix.setTargetValue(modulateNormalised(*mixParam, *mixParam, blockCV(buffer, kMixCvChannel)));
         smoothedPreDelay.setTargetValue(modulateNormalised(*preDelayParam, *preDelayParam, blockCV(buffer, 7)));
 
         const int numChannels = juce::jmin(buffer.getNumChannels(), 2);
@@ -90,8 +90,7 @@ public:
             renderChunk(buffer, numChannels, start,
                         juce::jmin(dryScratch.getNumSamples(), buffer.getNumSamples() - start));
 
-        // Scales wet+dry together — Wet/Dry set the balance, Level sets how loud the
-        // whole thing lands downstream.
+        // Scales the crossfaded sum: Mix sets the balance, Level how loud it lands downstream.
         applyOutputLevel(buffer, 2);
 
         // Clear CV channels to prevent leaking to downstream modules
@@ -100,13 +99,23 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay", "Level", "Pan"};
-        return stereoInputLabel(i, 8, cv);
+        const juce::String cv[] = {"Size", "Damping", "Mix", "Width", "Pre-Delay", "Level", "Pan"};
+        return stereoInputLabel(i, kVisibleCv, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(8); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(kVisibleCv); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 8); }
+    LogicalPort mapInputChannel(int raw) const override {
+        // The retired Dry channel has no jack: channels past it sit one jack earlier.
+        if (raw == kRetiredDryCvChannel) {
+            LogicalPort p = mapStereoPairInput(kMixCvChannel, kVisibleCv);
+            p.role = PortRole::Other;
+            p.isPolyGroupHead = false;
+            return p;
+        }
+        return mapStereoPairInput(raw > kRetiredDryCvChannel ? raw - 1 : raw, kVisibleCv);
+    }
+    bool isReservedInputChannel(int raw) const override { return raw == kRetiredDryCvChannel; }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
@@ -116,8 +125,7 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Size", 2, "roomSize"},
                 {"Damping", 3, "damping"},
-                {"Wet", 4, "wet"},
-                {"Dry", 5, "dry"},
+                {"Mix", kMixCvChannel, "mix"},
                 {"Width", 6, "width"},
                 {"Pre-Delay", 7, "preDelay"},
                 {"Level", kLevelCvChannel, "outputLevel", true},
@@ -130,18 +138,65 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::Reverb; }
 
+    /** A node saved with the old Wet/Dry knobs (or a patch that names them) becomes Mix + Level, so the balance and
+     *  loudness carry over: old output = L * (a*in + b*tail) with a = 2*dry and b = 3*wet; new output =
+     *  Level * ((1 - mix)*in + mix*tail). mix = b/(a+b); Level = L * min(1, a+b), so a sum above 1 (the default
+     *  pair gives 1.79) lands quieter by 1/(a+b), up to ~5 dB. A node that already has `mix` is left alone. */
+    void adoptLegacyParams(const juce::NamedValueSet& params) override {
+        if (params.contains("mix") || !(params.contains("wet") || params.contains("dry")))
+            return;
+        const auto read = [&params](const char* key, float fallback) {
+            const juce::var v = params[key];
+            return juce::jlimit(0.0f, 1.0f, v.isVoid() ? fallback : (float)v);
+        };
+        float mix = 0.0f, levelScale = 1.0f;
+        legacyMixAndLevel(read("dry", kLegacyDryDefault), read("wet", kLegacyWetDefault), mix, levelScale);
+        mixParam->setValueNotifyingHost(mixParam->convertTo0to1(mix));
+        if (outputLevelParam != nullptr)
+            outputLevelParam->setValueNotifyingHost(
+                outputLevelParam->convertTo0to1(juce::jlimit(0.0f, 1.0f, outputLevelParam->get() * levelScale)));
+    }
+    bool isLegacyParamId(const juce::String& id) const override { return id == "wet" || id == "dry"; }
+
+    /** The Mix and the Level factor an old Wet/Dry pair becomes (see adoptLegacyParams). */
+    static void legacyMixAndLevel(float dry, float wet, float& mix, float& levelScale) {
+        const float a = kJuceDryScale * dry;
+        const float b = kJuceWetScale * wet;
+        const float sum = a + b;
+        mix = sum > 0.0f ? b / sum : kDefaultMix;
+        levelScale = juce::jmin(1.0f, sum);
+    }
+
+    /** Module state from a plugin host saved before Mix existed holds `wet` / `dry` attributes. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes); xml != nullptr && xml->hasTagName("ModuleState")) {
+            juce::NamedValueSet legacy;
+            for (const char* key : {"mix", "wet", "dry"})
+                if (xml->hasAttribute(key))
+                    legacy.set(key, xml->getDoubleAttribute(key));
+            adoptLegacyParams(legacy);
+        }
+    }
+
 private:
-    // juce::Reverb's private dryScaleFactor (see the header comment): the dry knob reaches the mix at 2x.
+    // juce::Reverb's private scale factors (JUCE's code): the old Wet knob reached the tail at 3x, Dry the input at 2x.
     static constexpr float kJuceDryScale = 2.0f;
-    static constexpr double kJuceDrySmoothSeconds = 0.01;
+    static constexpr float kJuceWetScale = 3.0f;
+    static constexpr float kJuceWetUnity = 1.0f / kJuceWetScale; // wetLevel that gives the tail unity gain
+    static constexpr float kLegacyWetDefault = 0.33f;
+    static constexpr float kLegacyDryDefault = 0.4f;
+    static constexpr int kVisibleCv = 7; // Size, Damping, Mix, Width, Pre-Delay, Level, Pan
+    static constexpr double kMixSmoothSeconds = 0.01;
     static constexpr double kMaxPreDelaySeconds = 0.25;
 
     /** Allocates every buffer the audio thread uses and resets the smoothers. Message thread only. */
     void allocateBuffers(double sampleRate, int samplesPerBlock) {
         sr = sampleRate;
-        // juce::Reverb resets its smoothers in setSampleRate, so zero its dry gain first: it then
-        // starts at 0 instead of ramping down from its default 0.4 * 2.
+        // juce::Reverb resets its smoothers in setSampleRate, so set its wet-only, unity-tail state first: it then
+        // starts there instead of ramping from its defaults (wet 0.33 * 3, dry 0.4 * 2).
         juce::Reverb::Parameters wetOnly;
+        wetOnly.wetLevel = kJuceWetUnity;
         wetOnly.dryLevel = 0.0f;
         reverb.setParameters(wetOnly);
         reverb.setSampleRate(sampleRate);
@@ -151,15 +206,13 @@ private:
         preDelayWritePos = 0;
         dryScratch.setSize(2, juce::jmax(1, samplesPerBlock));
 
-        // Start where a fresh juce::Reverb's dry gain starts (default dry 0.4 at 2x), so the first
-        // block ramps exactly as it always did.
-        dryGain.reset(sampleRate, kJuceDrySmoothSeconds);
-        dryGain.setCurrentAndTargetValue(juce::Reverb::Parameters().dryLevel * kJuceDryScale);
+        smoothedMix.reset(sampleRate, kMixSmoothSeconds);
+        smoothedMix.setCurrentAndTargetValue(*mixParam);
         smoothedPreDelay.reset(sampleRate, 0.05); // 50 ms ramp, like Delay's Time: a jump would zip
         smoothedPreDelay.setCurrentAndTargetValue(*preDelayParam);
     }
 
-    /** One chunk of the block: pre-delay the wet feed, run the reverb, add the undelayed dry. */
+    /** One chunk of the block: pre-delay the wet feed, run the reverb, crossfade with the undelayed dry. */
     void renderChunk(juce::AudioBuffer<float>& buffer, int numChannels, int start, int count) {
         const int ringSize = preDelayLine.getNumSamples();
         int writePos = preDelayWritePos;
@@ -184,9 +237,11 @@ private:
             reverb.processMono(buffer.getWritePointer(0) + start, count);
 
         for (int i = 0; i < count; ++i) {
-            const float dry = dryGain.getNextValue();
-            for (int ch = 0; ch < numChannels; ++ch)
-                buffer.getWritePointer(ch)[start + i] += dryScratch.getReadPointer(ch)[i] * dry;
+            const float mix = smoothedMix.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch) {
+                float& out = buffer.getWritePointer(ch)[start + i];
+                out = out * mix + dryScratch.getReadPointer(ch)[i] * (1.0f - mix);
+            }
         }
     }
 
@@ -209,13 +264,12 @@ private:
     juce::AudioBuffer<float> preDelayLine; // 250 ms of history per leg, written every sample
     juce::AudioBuffer<float> dryScratch;   // the undelayed input of the current chunk
     int preDelayWritePos = 0;
-    juce::SmoothedValue<float> dryGain;
+    juce::SmoothedValue<float> smoothedMix;
     juce::SmoothedValue<float> smoothedPreDelay; // ms
     juce::Reverb reverb;
     juce::AudioParameterFloat* roomSizeParam;
     juce::AudioParameterFloat* dampingParam;
-    juce::AudioParameterFloat* wetParam;
-    juce::AudioParameterFloat* dryParam;
+    juce::AudioParameterFloat* mixParam;
     juce::AudioParameterFloat* widthParam;
     juce::AudioParameterFloat* preDelayParam;
 };

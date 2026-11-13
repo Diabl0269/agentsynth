@@ -1,4 +1,5 @@
 // Concern: serialisation (toVar/fromVar JSON dialect).
+#include "Modules/LegacyParamIds.h"
 #include "TimelineDoc.h"
 #include "TimelineDocInternal.h"
 
@@ -838,8 +839,8 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         return false;
                     if (lane.nodeUuid.isEmpty() || lane.paramId.isEmpty())
                         return false;
-                    // The doc-wide one-lane-per-parameter rule is an invariant of the model, so
-                    // a file that breaks it is malformed, not something to silently merge.
+                    lane.paramId = synth::currentParamId(lane.paramId); // a Reverb's old Wet lane is its Mix now
+                    // One lane per parameter is a model invariant: a file that breaks it is malformed, not merged.
                     if (!seenLaneParams.insert({lane.nodeUuid, lane.paramId}).second)
                         return false;
 

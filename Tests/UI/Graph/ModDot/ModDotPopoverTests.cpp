@@ -40,7 +40,7 @@ TEST_F(ModuleComponentTest, AClickOnTheDotOpensThePanelListingTheKnobsSourcesByN
     ASSERT_EQ(page.rowCount(), 1);
     const auto sources = synth::ui::knobModSources(*f.editor, f.vcaId, f.gainChannel);
     EXPECT_EQ(page.rowAt(0)->source().sourceName, sources[0].sourceName);
-    EXPECT_EQ(page.titleText(), juce::String("Gain") + juce::String::fromUTF8(" \xC2\xB7 modulation"));
+    EXPECT_EQ(page.titleText(), juce::String("Level") + juce::String::fromUTF8(" \xC2\xB7 modulation"));
     EXPECT_TRUE(page.rowAt(0)->isSelected()) << "the source a drag would edit starts selected";
     EXPECT_TRUE(f.vcaCard->getModDotButton(f.gainChannel)->isMenuOpen()) << "the dot carries the accent ring";
     EXPECT_FALSE(f.undo.canUndo()) << "opening it edits nothing";

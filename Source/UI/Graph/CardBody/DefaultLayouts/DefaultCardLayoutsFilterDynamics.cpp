@@ -44,7 +44,8 @@ CardLayout filterLayout() {
 
 // The meter first, so the reduction reads at a glance above the controls that cause it. Threshold and
 // Makeup are two faders side by side, their levels compared at a glance; the three time and ratio knobs
-// share one row. "Makeup Gain (dB)" is relabelled: at a knob's width it would ellipsise.
+// share one row. Mix, the same control every blending effect has, is the last footer fader. "Makeup Gain
+// (dB)" is relabelled: at a knob's width it would ellipsise.
 CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
@@ -54,7 +55,7 @@ CardLayout compressorLayout() {
             {param("threshold", CardWidget::FaderV), labelled(param("makeupGain", CardWidget::FaderV), "Makeup (dB)")},
             2),
         section("dynamics", std::nullopt, {param("ratio"), param("attack"), param("release")}),
-        footer({param("knee")}),
+        footer({param("knee"), param("mix")}),
     };
     return layout;
 }
@@ -78,7 +79,7 @@ CardLayout gateLayout() {
     CardLayout layout;
     layout.sections = {
         section("main", std::nullopt, {param("threshold"), param("attack"), param("hold"), param("release")}),
-        footer({param("range"), param("outputLevel")}),
+        footer({param("range"), param("mix"), param("outputLevel")}),
     };
     return layout;
 }

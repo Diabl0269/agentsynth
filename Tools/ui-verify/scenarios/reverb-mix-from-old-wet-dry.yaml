@@ -1,0 +1,24 @@
+# Feature (FRO1084): every effect that blends dry and wet has one Mix control in percent, and the Reverb lost its
+# Wet and Dry faders. A project saved with Wet 0.33 / Dry 0.4 opens with Mix at 55 % (3 * 0.33 over 2 * 0.4 + 3 * 0.33)
+# and Level at 100 %, with no Wet or Dry on the card.
+#
+# What a user does: opens an older project that has a Reverb, a Compressor, a Gate and a Parametric EQ, and looks at
+# each card: Mix is a knob (a footer fader on the Compressor and Gate) reading in percent.
+record: true
+record_target: {id: "card:Reverb", scale: 2}
+save_project: reverb-mix-from-old-wet-dry
+steps:
+  - openProject: {path: "${FIXTURES}/pre-level-cv.agsproj"}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Reverb > Mix", exists: true, within_ms: 3000}
+  - expect: {id: "card:Reverb > Mix", value: 0.5530726313591}
+  - expect: {id: "card:Reverb > Wet", exists: false}
+  - expect: {id: "card:Reverb > Dry", exists: false}
+  - mark: {check: 1, name: reverb-old-project-mix}
+  - screenshot: {id: "card:Reverb", name: reverb-card, scale: 2}
+  - expect: {id: "card:Compressor > Mix", exists: true}
+  - screenshot: {id: "card:Compressor", name: compressor-card, scale: 2}
+  - expect: {id: "card:Gate > Mix", exists: true}
+  - screenshot: {id: "card:Gate", name: gate-card, scale: 2}
+  - expect: {id: "card:Parametric EQ > Mix", exists: true}
+  - screenshot: {id: "card:Parametric EQ", name: eq-card, scale: 2}

@@ -163,8 +163,11 @@ TEST(FilterDynamicsDefaultLayout,
     EXPECT_EQ(makeupLabel->getText(), "Makeup (dB)");
     EXPECT_EQ(makeupLabel->getTooltip(), "Makeup Gain (dB)");
     EXPECT_GT(knee->getY(), built.body->findWidget("release")->getBottom());
-    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Mix and Pan are left unplaced";
-    for (const char* id : {"threshold", "ratio", "makeupGain", "attack", "release", "knee"})
+    EXPECT_NE(built.body->findWidget("mix"), nullptr) << "the shared Mix is on the card, in the footer";
+    EXPECT_EQ(built.body->findWidget("mix")->getY(), knee->getY()) << "Mix shares the Knee row";
+    EXPECT_GT(built.body->findWidget("mix")->getX(), knee->getX()) << "Mix follows Knee";
+    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Pan is left unplaced";
+    for (const char* id : {"threshold", "ratio", "makeupGain", "attack", "release", "knee", "mix"})
         expectReachable(built, id);
 }
 
@@ -193,13 +196,15 @@ TEST(FilterDynamicsDefaultLayout, TheGateHasThresholdAttackHoldReleaseAndARangeA
     Built built("Gate");
     ASSERT_NE(built.body, nullptr);
     ASSERT_TRUE(built.body->hasFooter());
-    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Mix and Pan are left unplaced";
+    EXPECT_TRUE(built.body->hasMoreRow()) << "the shared Pan is left unplaced";
     auto* range = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("range"));
     auto* level = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("outputLevel"));
     ASSERT_NE(range, nullptr);
     ASSERT_NE(level, nullptr);
     EXPECT_GT(range->getY(), built.body->findWidget("release")->getBottom());
-    for (const char* id : {"threshold", "attack", "hold", "release", "range", "outputLevel"})
+    ASSERT_NE(built.body->findWidget("mix"), nullptr) << "the shared Mix is on the card, in the footer";
+    EXPECT_LT(built.body->findWidget("mix")->getY(), level->getY()) << "Mix sits above Level, the last control";
+    for (const char* id : {"threshold", "attack", "hold", "release", "range", "mix", "outputLevel"})
         expectReachable(built, id);
 }
 

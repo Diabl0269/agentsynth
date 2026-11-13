@@ -159,6 +159,7 @@ add_executable(Tests
     Mixer/MixerSoloTests.cpp
     Mixer/SidechainKeyGraphTests.cpp
     Mixer/ProjectLoadStripGainTests.cpp
+    Project/ProjectLoadReverbMixTests.cpp
     Mixer/ChannelStripOutputCollapseProjectTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/MasterDualIOTests.cpp

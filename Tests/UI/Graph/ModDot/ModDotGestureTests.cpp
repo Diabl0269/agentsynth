@@ -146,12 +146,12 @@ TEST_F(ModuleComponentTest, TheDotButtonExistsOnlyWithARoutingAndIsNamedAndTippe
     Fixture f;
     auto* button = f.vcaCard->getModDotButton(f.gainChannel);
     ASSERT_NE(button, nullptr);
-    EXPECT_EQ(button->getTitle(), "Gain modulation, 1 source");
-    EXPECT_EQ(button->getTooltip(), "Modulation sources for Gain. Double-click to remove");
+    EXPECT_EQ(button->getTitle(), "Level modulation, 1 source");
+    EXPECT_EQ(button->getTooltip(), "Modulation sources for Level. Double-click to remove");
     EXPECT_TRUE(button->getWantsKeyboardFocus());
 
     f.addSecondLfo();
-    EXPECT_EQ(f.vcaCard->getModDotButton(f.gainChannel)->getTitle(), "Gain modulation, 2 sources");
+    EXPECT_EQ(f.vcaCard->getModDotButton(f.gainChannel)->getTitle(), "Level modulation, 2 sources");
 
     // Centred on the landing dot.
     EXPECT_EQ(button->getBounds().getCentre(), f.vcaCard->getModTargetKnobAnchor(f.gainChannel)->roundToInt());

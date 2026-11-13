@@ -59,6 +59,8 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 > preset by `EveryFactoryPreset/PresetStereoTest.RendersBothChannels`.
 
 > **Level parameters.** There is no universal per-module gain. Modules that output audio expose a level control: Oscillator, LFO, Noise and Voice Mixer have their own `level`; VCA has `gain`; Filter and the FX modules use the shared opt-in output-level stage documented in [`fx-modules.md § Output Level`](fx-modules.md#output-level-shared-stage). Modules that output **pitch/gate CV or MIDI** (Sequencer, Poly Sequencer, ADSR, Poly MIDI, MIDI Keyboard, External MIDI) deliberately have none — scaling a V/oct pitch CV transposes it, and scaling a gate drops it below the `> 0.5f` trigger threshold. Attenuverter has none because it already is a gain stage.
+>
+> **Naming and display of level controls (FRO1084).** Three words, each with one display. **Level** is a 0-100 % amount of a signal at unity (every module's output Level, Oscillator, Noise, Sampler, Voice Mixer, LFO, the VCA's `gain`). **Gain** is a signed dB value relative to unity, only on mixer faders (Master, Channel Strip) and on the corrective gains of dynamics and EQ: the names carry the unit when it is not a percent (Makeup Gain (dB), Input Gain (dB), Ceiling (dB)), like the millisecond controls. **Mix** is the dry/wet balance in percent, one per module. The VCA's `gain` used to read "Gain" in percent beside Master's "Gain" in dB; its label is Level now (the id `gain` is unchanged, so saved patches, automation and the AI format keep working). Leading products agree: Ableton, FabFilter and Serum show amounts of a signal in percent and gains and makeup in dB.
 
 ## Oscillator Module
 - **Waveforms**: Sine, Square, Saw, Triangle.

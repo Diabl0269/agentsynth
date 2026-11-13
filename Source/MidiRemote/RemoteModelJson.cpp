@@ -1,4 +1,5 @@
 // Concern: serialisation (toVar/fromVar JSON dialect) for every type in RemoteModel.h.
+#include "Modules/LegacyParamIds.h"
 #include "RemoteModel.h"
 
 #include <cmath>
@@ -588,6 +589,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
             return false;
         if (!readString(p->getProperty("paramId"), param.paramId) || param.paramId.isEmpty())
             return false;
+        param.paramId = synth::currentParamId(param.paramId); // a Reverb's old Wet binding is its Mix now
         if (!readOptionalInt(p->getProperty("paramIndexHint"), param.paramIndexHint))
             return false;
 
