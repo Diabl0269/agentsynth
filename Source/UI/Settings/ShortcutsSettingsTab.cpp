@@ -184,6 +184,7 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm, juce::Applicatio
 
     addAndMakeVisible(resetButton);
     resetButton.setButtonText("Reset to Defaults");
+    resetButton.setComponentID("shortcutsResetButton");
     resetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xffcc3333));
     resetButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
     resetButton.setTooltip("Reset all keyboard shortcuts to their factory defaults");

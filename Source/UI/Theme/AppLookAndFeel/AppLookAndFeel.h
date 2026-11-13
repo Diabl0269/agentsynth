@@ -179,11 +179,14 @@ public:
                                          const juce::String& button1, const juce::String& button2,
                                          const juce::String& button3, juce::MessageBoxIconType iconType, int numButtons,
                                          juce::Component* associatedComponent) override;
-    // Alert boxes (AppLookAndFeelAlertBox.cpp): V4's look with a small accent icon drawn inside the box.
+    // Alert boxes (AppLookAndFeelAlertBox.cpp): V4's look with a title-height icon drawn inside the box.
     void drawAlertBox(juce::Graphics&, juce::AlertWindow&, const juce::Rectangle<int>& textArea,
                       juce::TextLayout&) override;
     // The icon rectangle the last alert painted, in that alert's coordinates; empty when it had no icon.
     juce::Rectangle<int> getLastAlertIconBounds() const noexcept { return lastAlertIconBounds_; }
+    // The colour the last alert's icon was painted in, and the vertical span of that alert's title line.
+    juce::Colour getLastAlertIconColour() const noexcept { return lastAlertIconColour_; }
+    juce::Range<float> getLastAlertTitleSpan() const noexcept { return lastAlertTitleSpan_; }
     int getCallOutBoxBorderSize(const juce::CallOutBox&) override;
     void drawPopupMenuBackground(juce::Graphics&, int width, int height) override;
     void drawPopupMenuItem(juce::Graphics&, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
@@ -348,6 +351,8 @@ private:
 
     Theme theme{}; // active theme copy
     juce::Rectangle<int> lastAlertIconBounds_;
+    juce::Colour lastAlertIconColour_;
+    juce::Range<float> lastAlertTitleSpan_;
 
     // The user's pinned stop set (nullopt = follow the theme) and the effective, cached
     // result recomputeMeterColourStops() derives from it -- see the public accessors above.

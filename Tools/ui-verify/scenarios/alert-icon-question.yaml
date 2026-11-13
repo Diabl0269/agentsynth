@@ -1,0 +1,20 @@
+# A question alert keeps the accent colour at the same size and alignment as a warning. Check 3.
+#
+# What a user does: deletes a card (an unsaved change), then quits: the "Unsaved Changes" question appears with an
+# accent "?" circle level with its title.
+record: true
+motion: true
+pop_check: {off: "the card delete is only setup for an unsaved change; this scenario proves the alert icon, which the glide films"}
+save_project: fro1770 alert question
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator 2", x: 60, y: 12}
+  - wait: {}
+  - key: {keys: delete}
+  - wait: {}
+  - glide: {name: question-opens, frames: 12, do: {requestQuit: {}}}
+  - expect: {id: "Unsaved Changes", showing: true, within_ms: 3000}
+  - wait: {}
+  - mark: {check: 3, name: question-icon}
+  - screenshot: {id: "Unsaved Changes", name: question-alert}
