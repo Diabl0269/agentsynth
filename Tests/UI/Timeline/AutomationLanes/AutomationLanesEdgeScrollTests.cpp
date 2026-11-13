@@ -46,6 +46,17 @@ struct EdgeLane : LanesPanel {
     }
     juce::Point<float> leftEdge(double value) { return {2.0f, (float)editor->valueToY(value)}; }
 
+    using Snap = synth::ui::TimelineViewState::Snap;
+    // The pointer `dx` pixels in from the right edge (negative: past it); `leftDx` likewise for the left edge.
+    juce::Point<float> fromRight(float dx, double value) {
+        return {(float)editor->getWidth() - dx, (float)editor->valueToY(value)};
+    }
+    // The lane's x of a beat sits inside [0, width].
+    bool inLane(double beat) {
+        const double x = view().beatToX(beat);
+        return x >= -1e-6 && x <= (double)editor->getWidth() + 1e-6;
+    }
+
     void press(juce::Point<float> p) { editor->mouseDown(makeClickEvent(*editor, p, leftButton())); }
     void dragTo(juce::Point<float> p, juce::Point<float> from) {
         editor->mouseDrag(makeDragEvent(*editor, p, from, leftButton()));
@@ -347,4 +358,120 @@ TEST(AutomationLanesEdgeScroll, ASelectionBoxHeldAtTheEdgeScrollsAndKeepsItsCorn
     EXPECT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "Escape stops the scroll with the box";
     EXPECT_EQ(f.doc.getRevision(), rev) << "a box selects; it never edits the lane";
+}
+
+namespace {
+struct HeldPointer {
+    const char* name;
+    float rightIn; // pixels in from the right edge; negative is past it
+};
+constexpr HeldPointer kRightPointers[] = {
+    {"in the zone", 20.0f}, {"on the edge", 0.0f}, {"200 px past the edge", -200.0f}};
+} // namespace
+
+// Regression test for FRO1779: a lane dot dragged to the edge and past it was drawn outside the visible area and was
+// dropped there; with a coarse snap the nearest grid line sat up to half a bar past the edge even inside it.
+TEST(AutomationLanesEdgeScroll, ADotHeldAtEitherEdgeStaysInsideTheView) {
+    using Snap = EdgeLane::Snap;
+    for (const Snap snap : {Snap::Bar, Snap::Quarter, Snap::Off})
+        for (const auto& held : kRightPointers) {
+            SCOPED_TRACE(std::string(held.name) + ", snap " + std::to_string((int)snap));
+            EdgeLane f;
+            f.view().snap = snap;
+            f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+            f.undo.beginNewTransaction();
+            const auto rev = f.doc.getRevision();
+            const auto from = f.at(2.0, 50.0);
+            const auto to = f.fromRight(held.rightIn, 50.0);
+            f.press(from);
+            f.dragTo(to, from);
+            EXPECT_TRUE(f.inLane(f.editor->getPreviewBeatForTest())) << "after the drag";
+            for (int tick = 0; tick < 12; ++tick) {
+                f.ticks(1);
+                f.dragTo(to, from);
+                ASSERT_TRUE(f.inLane(f.editor->getPreviewBeatForTest()))
+                    << "tick " << tick << ": the dot is at x " << f.view().beatToX(f.editor->getPreviewBeatForTest());
+            }
+            const double firstBefore = f.first();
+            f.release(to, from);
+            EXPECT_DOUBLE_EQ(f.first(), firstBefore) << "the release does not move the view";
+            ASSERT_EQ(f.points().size(), 1u);
+            EXPECT_TRUE(f.inLane(f.points()[0].beat)) << "dropped at beat " << f.points()[0].beat;
+            EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one undo step";
+            f.undo.undo();
+            EXPECT_EQ(f.points()[0].beat, 2.0) << "undo puts it back";
+        }
+
+    // The left edge: the view stops at beat 0 and the dot with it.
+    for (const Snap snap : {Snap::Bar, Snap::Quarter, Snap::Off})
+        for (const float past : {20.0f, 0.0f, -200.0f}) {
+            SCOPED_TRACE("left, " + std::to_string(past) + " px in, snap " + std::to_string((int)snap));
+            EdgeLane f;
+            f.view().snap = snap;
+            f.view().firstVisibleBeat = 8.0;
+            f.doc.addBreakpoint(f.lane, 12.0, 50.0);
+            f.undo.beginNewTransaction();
+            const auto from = f.at(12.0, 50.0);
+            const juce::Point<float> to(past, (float)f.editor->valueToY(50.0));
+            f.press(from);
+            f.dragTo(to, from);
+            for (int tick = 0; tick < 60; ++tick) {
+                f.ticks(1);
+                f.dragTo(to, from);
+                ASSERT_TRUE(f.inLane(f.editor->getPreviewBeatForTest())) << "tick " << tick;
+                ASSERT_GE(f.editor->getPreviewBeatForTest(), 0.0);
+            }
+            f.release(to, from);
+            ASSERT_EQ(f.points().size(), 1u);
+            EXPECT_TRUE(f.inLane(f.points()[0].beat)) << "dropped at beat " << f.points()[0].beat;
+            EXPECT_GE(f.points()[0].beat, 0.0);
+            f.undo.undo();
+            EXPECT_EQ(f.points()[0].beat, 12.0);
+        }
+}
+
+// Regression test for FRO1779: a selection dragged past the edge keeps its outermost dot inside the view.
+TEST(AutomationLanesEdgeScroll, ADraggedSelectionKeepsItsOutermostDotsInsideTheView) {
+    for (const auto snap : {EdgeLane::Snap::Bar, EdgeLane::Snap::Off}) {
+        EdgeLane f;
+        f.view().snap = snap;
+        for (const double b : {1.0, 2.0, 3.0})
+            f.doc.addBreakpoint(f.lane, b, 50.0);
+        f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});
+        const auto from = f.at(2.0, 50.0);
+        const auto to = f.fromRight(-200.0f, 50.0);
+        f.press(from);
+        f.dragTo(to, from);
+        for (int tick = 0; tick < 12; ++tick) {
+            f.ticks(1);
+            f.dragTo(to, from);
+            const auto moved = f.editor->getDragMovedPointsForTest();
+            ASSERT_EQ(moved.size(), 3u);
+            ASSERT_TRUE(f.inLane(moved.back().beat)) << "tick " << tick << ": the rightmost dot left the view";
+        }
+        f.release(to, from);
+        ASSERT_EQ(f.points().size(), 3u);
+        EXPECT_TRUE(f.inLane(f.points().back().beat));
+    }
+}
+
+// Regression test for FRO1779: the stretch box's right edge dragged past the edge stays inside the view.
+TEST(AutomationLanesEdgeScroll, TheStretchBoxRightEdgeDraggedPastTheEdgeStaysInsideTheView) {
+    EdgeLane f;
+    f.view().snap = EdgeLane::Snap::Bar;
+    for (const double b : {1.0, 2.0, 3.0})
+        f.doc.addBreakpoint(f.lane, b, 50.0);
+    f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});
+    f.editor->resized();
+    const auto from = f.editor->getStretchHandleRectForTest(StretchHandle::Right).getCentre();
+    const auto to = f.fromRight(-200.0f, 50.0);
+    f.press(from);
+    f.dragTo(to, from);
+    for (int tick = 0; tick < 12; ++tick) {
+        f.ticks(1);
+        f.dragTo(to, from);
+        ASSERT_TRUE(f.inLane(f.editor->getStretchForTest().result().moved.back().beat)) << "tick " << tick;
+    }
+    f.release(to, from);
+    EXPECT_TRUE(f.inLane(f.points().back().beat));
 }

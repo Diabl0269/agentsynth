@@ -39,6 +39,13 @@ inline void lift(Surface& s) {
     s.drag(s.pressAt + 12.0f);
 }
 
+/** The dragged thing is where the user can see it: its position is inside the view, whatever the pointer does. */
+inline void expectInside(const Surface& s, const char* when) {
+    const float extent = (float)s.extent();
+    EXPECT_GE(s.draggedPosition(), 0.0f) << when << ": the dragged thing is before the start of the view";
+    EXPECT_LE(s.draggedPosition(), extent) << when << ": the dragged thing is past the end of the view";
+}
+
 /** The whole checklist: a pointer held at the far edge scrolls on every tick with the dragged thing staying under it,
  *  deeper into the zone is faster, the near edge scrolls back, moving back in stops it, and the drop is one step. */
 inline void expectHeldEdgeFollows(const Make& make) {
@@ -56,6 +63,7 @@ inline void expectHeldEdgeFollows(const Make& make) {
         EXPECT_GT(s.viewPosition(), before) << "tick " << tick << ": a pointer held at the edge scrolls the view";
         EXPECT_NEAR(s.draggedPosition(), underPointer, 1.0f)
             << "tick " << tick << ": the dragged thing left the pointer";
+        expectInside(s, "a held tick");
     }
     EXPECT_GT(s.viewPosition(), start);
 
@@ -84,6 +92,8 @@ inline void expectHeldEdgeFollows(const Make& make) {
     const int commitsBefore = s.commits();
     s.release(extent * 0.5f);
     EXPECT_EQ(s.commits() - commitsBefore, 1) << "the whole drag, scroll included, is one step";
+    // Not asserted after the release: the list surfaces rebuild their rows on the drop, so draggedPosition then names
+    // whatever row now sits at the pressed index, not the dropped one.
 }
 
 /** The release ends the scroll with the gesture (no timer runs on, and the button's up stops the drag events), and

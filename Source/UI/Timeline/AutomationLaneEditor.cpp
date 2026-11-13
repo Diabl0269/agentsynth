@@ -48,7 +48,8 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and
     // `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
-    // shows and `holdSegments` how many segments are Hold.
+    // shows and `holdSegments` how many segments are Hold and `dotsOutsideView` how many dots are drawn outside the
+    // lane.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -68,6 +69,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         }
         into.setProperty("selectedInView", inView);
         into.setProperty("holdSegments", holds);
+        into.setProperty("dotsOutsideView", dotsOutsideView());
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);

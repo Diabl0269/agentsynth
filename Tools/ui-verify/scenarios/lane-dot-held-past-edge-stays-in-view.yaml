@@ -1,0 +1,35 @@
+# A lane dot dragged to the right edge of the lane (and past it) was drawn outside the visible area while held and
+# dropped there; with a one-bar grid the nearest bar line could lie half a bar past the edge even with the pointer
+# inside. The lane ends at the window's edge, so the pointer's last pixel is as far as a scenario can go; the 200 px
+# past case is in AutomationLanesEdgeScrollTests. Now the dot rides the scrolling view at the last bar line inside it, and the drop stays there.
+#
+# What a user does: with the grid at one bar, opens a project whose Cutoff lane has one point at beat 52 (fixture
+# lane-edge.agsproj), drags the dot to the right edge and holds there while the view scrolls
+# several bars: the dot stays inside the lane, stepping from bar line to bar line. Lets go: the dot stays where it was
+# shown, inside the view. One Cmd+Z puts it back.
+record: true
+motion: true
+settings:
+  timelineSnap: 1   # Snap::Bar
+pop_check: {undo: false}   # undo off: the scenario's own undo is what it checks
+save_project: "FRO1779 test"
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, dotsOutsideView: 0}
+  - mouseDown: {id: automationLaneState, x: 1248, y: 65}
+  - mouseMoveHeld: {id: automationLaneState, x: 1300, y: 65}
+  - glide: {name: ride-the-scroll, frames: 20, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1398, y: 65}}}
+  - glide: {name: held-past-the-edge, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: automationLaneState, x: 1398, y: 65}}}
+  - expect: {id: automationLaneState, dragging: true, dotsOutsideView: 0}
+  - mark: {check: 1, name: dot-held-at-edge}
+  - glide: {name: release-inside, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseUp: {id: automationLaneState, x: 1398, y: 65}}}
+  - mark: {check: 2, name: dot-dropped-inside}
+  - expect: {id: automationLaneState, points: 1, dragging: false, dotsOutsideView: 0}
+  - screenshot: {name: after-drop}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1, dotsOutsideView: 0}
+  - screenshot: {name: drag-undone}

@@ -105,7 +105,10 @@ existing rebindable commands. Return stays free.
 A dot, a selection or the stretch box dragged into the 24 px zone at either end of the lane scrolls the shared timeline
 view, faster nearer the edge, and stays under the still pointer (each 30 Hz tick re-derives the preview from the last
 pointer: `AutomationLaneEditorEdgeScroll.cpp`). A selection box held there does the same: its pressed corner stays on
-its beat while the view scrolls, so the box grows over the points that scroll in. Moving back in, releasing, Escape or
+its beat while the view scrolls, so the box grows over the points that scroll in. The pointer may go past the lane's
+edge: the dragged dot (the selection's outermost dot, the stretch box's dragged edge) is held inside the visible span,
+a dot's radius in from each end, and with a coarse snap it takes the last grid line inside rather than the nearest one
+(`snappedBeatWithin`); a view at beat 0 lets a dot sit on beat 0. Moving back in, releasing, Escape or
 a tool change stops it; the view stops at beat 0. A held Alt+Left/Right scrolls the view continuously
 once the moving dot's DRAWN place (rest place plus its eased offset) passes the margin line, a tenth of the view in
 from the edge it is leaving by (`kScrollIntoViewMargin`): the view moves by exactly the excess every frame, so the
