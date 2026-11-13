@@ -277,8 +277,14 @@ run_parallel() {
         running=$((running + 1))
         if [ "$running" -ge "$max" ]; then
             # bash 3.2 has no `wait -n`; the oldest of a batch is a fine throttle for a handful of checks.
-            wait "${pids[$((i - running))]}" || rc=1
-            [ "$rc" -ne 0 ] && { echo "--- ${labels[$((i - running))]} FAILED ---"; cat "$dir/$((i - running)).log"; }
+            # Judge each check on its own exit, not on rc: once one failed, rc stays 1 and every later pass would print FAILED.
+            local oldest=$((i - running)) failed=0
+            wait "${pids[$oldest]}" || failed=1
+            if [ "$failed" -ne 0 ]; then
+                rc=1
+                echo "--- ${labels[$oldest]} FAILED ---"
+                cat "$dir/$oldest.log"
+            fi
             running=$((running - 1))
         fi
     done
