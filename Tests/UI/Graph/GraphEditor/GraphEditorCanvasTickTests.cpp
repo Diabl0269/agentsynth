@@ -230,6 +230,10 @@ TEST(GraphEditorCanvasTick, ABorderMeasuredBeforeAMembershipChangeStillGlides) {
 
 // Zoomed in on a few cards (dragging a knob) the tick redraws only where its dots move, not every card in view.
 TEST(GraphEditorCanvasTick, TheTickRepaintsOnlyTheVisibleCables) {
+    struct RestoreMode {
+        ~RestoreMode() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+    } restore;
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
     Canvas c;
     const auto lone = addModuleAt(c.editor, c.engine, std::make_unique<FilterModule>(), 300, 1500); // no cable
     c.settle();
@@ -259,4 +263,39 @@ TEST(GraphEditorCanvasTick, TheCableFlowDotsStepByTheLoopRate) {
     EXPECT_NEAR(stepOf(synth::ui::AnimationMode::full), 0.02f, 1e-4f);
     EXPECT_NEAR(stepOf(synth::ui::AnimationMode::reduced), 0.006f, 1e-4f);
     EXPECT_NEAR(std::fmod(stepOf(synth::ui::AnimationMode::off) + 0.5f, 1.0f), 0.5f, 1e-6f);
+}
+
+// With the flow dots held (Animations Off) an idle canvas repaints nothing, however big the project: the
+// Load test project burned about a core repainting every cable 30 times a second. A cable whose look changes still
+// repaints.
+TEST(GraphEditorCanvasTick, AnIdleCanvasWithHeldFlowDotsRepaintsNothing) {
+    struct RestoreMode {
+        ~RestoreMode() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+    } restore;
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    Canvas c;
+    c.tick();
+    EXPECT_TRUE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "nothing changed, nothing is redrawn";
+
+    const auto lfo = addModuleAt(c.editor, c.engine, std::make_unique<LFOModule>(), 200, 900);
+    const auto atten = c.engine.addModRouting(lfo, 0, c.filter, 1);
+    c.editor.updateComponents();
+    c.settle();
+    c.tick();
+    EXPECT_TRUE(c.editor.getLastTickRepaintAreaForTest().isEmpty());
+    auto* amount = findParameterByID(c.engine.getGraph().getNodeForId(atten)->getProcessor(), "amount");
+    ASSERT_NE(amount, nullptr);
+    amount->setValueNotifyingHost(0.25f);
+    c.tick();
+    EXPECT_FALSE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "a cable that changed is redrawn";
+}
+
+TEST(GraphEditorCanvasTick, AnIdleCanvasWithMovingFlowDotsKeepsRepainting) {
+    struct RestoreMode {
+        ~RestoreMode() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+    } restore;
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+    Canvas c;
+    c.tick();
+    EXPECT_FALSE(c.editor.getLastTickRepaintAreaForTest().isEmpty()) << "the dots move along the cable";
 }
