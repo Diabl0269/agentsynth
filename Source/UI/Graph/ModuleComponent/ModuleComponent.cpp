@@ -46,6 +46,8 @@ using namespace detail;
 
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
+    if (freqResponseComponent != nullptr)
+        freqResponseComponent->addSpectrumTestState(into);
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
     const auto chipStack =
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
@@ -65,8 +67,7 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));
-    // The canvas's cable flow-dot phase and the Animations mode in force, so a scenario can see Off hold the dots still
-    // and Reduced move them slower (docs/layout/animation.md#continuous-loops).
+    // The canvas's cable flow-dot phase and the Animations mode in force (docs/layout/animation.md#continuous-loops).
     into.setProperty("cableFlowPhase", owner.getCableFlowPhaseForTest());
     into.setProperty("animationMode", synth::ui::animationModeToString(synth::ui::animationMode()));
     // The macro the module is a member of ("" when it is in none), so a scenario can tell "inside the macro" from

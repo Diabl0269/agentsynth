@@ -143,6 +143,9 @@ public:
     bool isSpectrumTimerRunning() const;
     /** Reads the newest spectrum and repaints the curve; what the timer does each tick. */
     void pollSpectrum();
+    /** Test mode: the loudest point of the spectrum drawn now, in dB (-80 at the floor), through the hidden child
+     *  `shapeSpectrumState` (`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`). */
+    float spectrumPeakDbForTest() const;
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
     /** The message under the map ("No room after this point"); empty once it has faded. */
@@ -161,6 +164,7 @@ private:
     class Chip;
     class ChipStrip;
     class SpectrumTicker;
+    class SpectrumStateProbe;
 
     void timerCallback() override;
     void loadSelectedCurve();
@@ -229,6 +233,7 @@ private:
     std::unique_ptr<juce::ToggleButton> guidesToggle_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;
+    std::unique_ptr<SpectrumStateProbe> spectrumProbe_;
     std::vector<float> spectrumDb_;
     std::vector<float> responseDb_; ///< the live response, kept only while the cursor is the selection
     juce::Rectangle<int> gridLabelArea_;

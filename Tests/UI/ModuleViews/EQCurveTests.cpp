@@ -13,6 +13,8 @@
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <set>
@@ -612,4 +614,81 @@ TEST(EQWindowTest, PaintSmoke) {
     juce::Image img(juce::Image::ARGB, 700, 400, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(window.paintEntireComponent(g, false));
+}
+
+// A muted EQ's spectrum falls to the floor: its curve ticks through spectrumTickForTest after the audio has run through
+// ModuleBase::processBlock past the click-free mute fade.
+namespace {
+
+constexpr double kMuteRate = 44100.0;
+constexpr int kMuteBlock = 512;
+constexpr float kMuteFloor = -80.0f;
+
+void feedTone(ModuleBase& m, int blocks, long& phase) {
+    juce::MidiBuffer midi;
+    for (int b = 0; b < blocks; ++b) {
+        juce::AudioBuffer<float> buffer(std::max(m.getTotalNumInputChannels(), m.getTotalNumOutputChannels()),
+                                        kMuteBlock);
+        buffer.clear();
+        for (int i = 0; i < kMuteBlock; ++i, ++phase) {
+            const auto v =
+                (float)(0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 1000.0 * (double)phase / kMuteRate));
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.setSample(ch, i, v);
+        }
+        m.processBlock(buffer, midi);
+    }
+}
+
+float muteDbPeak(const std::vector<float>& db) { return *std::max_element(db.begin(), db.end()); }
+
+} // namespace
+
+// The EQ's own spectrum used to skip a silent buffer and leave the last picture painted.
+TEST(MuteSpectrumFallEQ, TheEqCurveFallsToTheFloorAfterMuteAndPaintsIt) {
+    ParametricEQModule eq;
+    eq.prepareToPlay(kMuteRate, kMuteBlock);
+    long phase = 0;
+    feedTone(eq, 20, phase);
+    EQCurveComponent view(eq);
+    view.setBounds(0, 0, 400, 180);
+    view.setShowSpectrum(true);
+    for (int i = 0; i < 12; ++i)
+        view.spectrumTickForTest();
+    ASSERT_GT(muteDbPeak(view.getSpectrumDbForTest()), -30.0f) << "the tone must show before the mute";
+
+    eq.setMuted(true);
+    feedTone(eq, 40, phase);
+    int repaints = 0;
+    bool lastRepainted = false;
+    for (int i = 0; i < 120; ++i) {
+        lastRepainted = view.spectrumTickForTest();
+        repaints += lastRepainted ? 1 : 0;
+    }
+    EXPECT_FLOAT_EQ(muteDbPeak(view.getSpectrumDbForTest()), kMuteFloor);
+    EXPECT_GT(repaints, 5) << "the fall is painted frame by frame";
+    EXPECT_FALSE(lastRepainted) << "once at rest, an idle patch repaints nothing";
+}
+
+TEST(MuteSpectrumFallEQ, TheLastFallingFrameIsPainted) {
+    ParametricEQModule eq;
+    eq.prepareToPlay(kMuteRate, kMuteBlock);
+    long phase = 0;
+    feedTone(eq, 20, phase);
+    EQCurveComponent view(eq);
+    view.setShowSpectrum(true);
+    for (int i = 0; i < 12; ++i)
+        view.spectrumTickForTest();
+    eq.setMuted(true);
+    feedTone(eq, 40, phase);
+    int lastPainted = -1;
+    int firstAtFloor = -1;
+    for (int i = 0; i < 120; ++i) {
+        if (view.spectrumTickForTest())
+            lastPainted = i;
+        if (firstAtFloor < 0 && muteDbPeak(view.getSpectrumDbForTest()) <= kMuteFloor)
+            firstAtFloor = i;
+    }
+    ASSERT_GE(firstAtFloor, 0);
+    EXPECT_GT(lastPainted, firstAtFloor - 1) << "the frame that reaches the floor is painted";
 }

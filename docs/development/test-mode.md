@@ -222,6 +222,13 @@ into the next block's MIDI (`down: false` a note-off); it reaches the modules th
 refused while a real device is running and stops on its own once the main window is gone
 (`Source/TestMode/TestModeAudioPump.cpp`).
 
+The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
+spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
+`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
+reports the loudest point drawn now. No fixture pushes a
+signal into a buffer: a source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
+`ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
+
 ## Scenarios
 
 A scenario is a YAML file under `Tools/ui-verify/scenarios/` that replays what a user does and checks what the app then

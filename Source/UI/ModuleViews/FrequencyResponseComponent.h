@@ -121,6 +121,20 @@ public:
         if (lastFilterType == FilterModule::kCustomTypeIndex && onCustomDoubleClick)
             onCustomDoubleClick();
     }
+    /** Test mode: the card's `filterSpectrumPeakDb` (-80 at the floor) and `filterSpectrumAtFloor`. */
+    void addSpectrumTestState(juce::DynamicObject& into) const {
+        const float peak = getSpectrumPeakDbForTest();
+        into.setProperty("filterSpectrumPeakDb", (double)peak);
+        into.setProperty("filterSpectrumAtFloor", peak <= synth::ui::FilterSpectrumAnalyser::kMinDb + 0.01f);
+    }
+    /** The loudest point of the spectrum, in dB (kMinDb at the floor), for tests and test mode. */
+    float getSpectrumPeakDbForTest() const {
+        const auto& db = spectrum.getDb();
+        float peak = synth::ui::FilterSpectrumAnalyser::kMinDb;
+        for (float v : db)
+            peak = v > peak ? v : peak;
+        return peak;
+    }
     /** The smoothed spectrum points (1024 values in dB), for tests. */
     const std::vector<float>& getSpectrumDbForTest() const { return spectrum.getDb(); }
     /** How many times the curve was recomputed (and repainted for it), for tests. */
