@@ -8,6 +8,7 @@
 #include "../Mixer/MixerKeyWalk.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
+#include "ReachSweepRings.h"
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -17,6 +18,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -371,6 +373,62 @@ class KeyboardReachDialogs : public KeyboardReachDialogFixture {};
 } // namespace
 
 void KeyboardReachFixture::rebuildMixer() { mc_->getBottomDock().getMixerPanel().rebuild(); }
+
+namespace synth::test::reach {
+
+namespace {
+synth::ui::MixerZonesRow* cursorRow(synth::ui::MixerZonesPane& pane) {
+    for (int i = 0; i < pane.getRowCountForTest(); ++i)
+        if (auto* row = pane.getRowForTest(i); row != nullptr && row->hasKeyboardCursor())
+            return row;
+    return nullptr;
+}
+} // namespace
+
+std::vector<RingSource> mixerRingSources(juce::Component& mixerPanel) {
+    auto& panel = static_cast<synth::ui::MixerPanelComponent&>(mixerPanel);
+    std::vector<RingSource> sources;
+    sources.push_back(detail::keyRingSource("top bar", panel.getTopBarRingForTest(), panel));
+    RingSource column;
+    column.name = "focused column";
+    column.owner = &panel;
+    column.active = [&panel] { return panel.isFocusedColumnOutlineShownForTest(); };
+    column.stops = [] { return std::vector<juce::Component*>{}; };
+    column.ringed = [] { return nullptr; };
+    sources.push_back(column);
+    auto& zones = panel.getZonesPaneForTest();
+    RingSource cursor;
+    cursor.name = "zones cursor";
+    cursor.owner = &zones;
+    cursor.active = [&zones] { return cursorRow(zones) != nullptr; };
+    cursor.stops = [&zones] {
+        std::vector<juce::Component*> rows;
+        for (int i = 0; i < zones.getRowCountForTest(); ++i)
+            if (auto* row = zones.getRowForTest(i); row != nullptr && row->isShowing())
+                rows.push_back(row);
+        return rows;
+    };
+    cursor.ringed = [&zones]() -> juce::Component* { return cursorRow(zones); };
+    sources.push_back(cursor);
+    return sources;
+}
+
+bool insideMixerColumn(juce::Component& c) {
+    for (auto* p = c.getParentComponent(); p != nullptr; p = p->getParentComponent())
+        if (dynamic_cast<synth::ui::MixerColumnComponent*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerDirectColumn*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerMasterColumn*>(p) != nullptr)
+            return true;
+    return false;
+}
+
+void setMixerSidePaneOpen(MainComponent& mc, bool open) {
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    if (panel.getSidePane().isOpen() != open)
+        panel.toggleSidePane(open);
+}
+
+} // namespace synth::test::reach
 
 TEST_F(KeyboardReachShell, EveryControlInEveryMainViewRegionIsAKeyboardStop) {
     Findings findings;

@@ -21,6 +21,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyboardReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/LayoutGapSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyStandardsSweepTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReachSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/TabOrderReadingSweepTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/EditorHeaderTabReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MenuFieldSpaceTests.cpp

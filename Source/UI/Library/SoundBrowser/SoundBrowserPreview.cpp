@@ -26,6 +26,7 @@ void SoundBrowserComponent::setupPreview() {
         if (onPreviewSettingsChanged)
             onPreviewSettingsChanged();
     };
+    footer_.setTitle("Preview strip"); // what the screen reader calls the group, as the docs name it on screen
     addAndMakeVisible(footer_);
 }
 

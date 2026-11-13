@@ -319,6 +319,10 @@ public:
     /** -1 when nothing is focused, else an index into the same left-to-right order
      *  rebuild() lays out (strips, then Direct if visible, then Master if visible). */
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
+    /** The focused column's outline shows (a column has the keys and the keyboard is still in the panel). */
+    bool isFocusedColumnOutlineShownForTest() const noexcept {
+        return !keyboardAway_ && focusedColumnIndex_ >= 0 && focusedColumnIndex_ < (int)columnEntries_.size();
+    }
 
     /** The component setFocusedColumnIndex() would call grabAccessibilityFocus()
      *  toward for the CURRENTLY focused column -- null when nothing is focused. Lets a test assert
