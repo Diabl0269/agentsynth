@@ -5,10 +5,10 @@
 // shared Key field for Notes, the Root box for Harmonics. Every choice is remembered in the user's settings.
 #include "PitchGrid.h"
 #include "ShapeListAdapter.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FollowKeyField.h"
-#include "UI/Layout/SnapToggleButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>

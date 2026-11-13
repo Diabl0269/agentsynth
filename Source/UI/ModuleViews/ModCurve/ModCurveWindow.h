@@ -6,8 +6,8 @@
 
 #include "ModCurveEditorView.h"
 #include "ModCurvePresetStore.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
-#include "UI/Layout/SnapToggleButton.h"
 #include <functional>
 #include <memory>
 
