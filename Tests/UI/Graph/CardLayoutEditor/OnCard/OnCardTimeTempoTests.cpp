@@ -568,3 +568,196 @@ TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize
     EXPECT_GT(checked, 10) << "the enumeration found the default faders";
     EXPECT_GE(divisions, 4) << "and the Tempo look's division faders among them";
 }
+
+namespace {
+
+constexpr int kSepLooks = 1;
+
+void sepSetParam(juce::AudioProcessor& module, const juce::String& id, float plainValue) {
+    for (auto* parameter : module.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+            ranged != nullptr && ranged->paramID == id)
+            ranged->setValueNotifyingHost(ranged->convertTo0to1(plainValue));
+}
+
+void sepFlipSync(OnCardRig& rig, CardLayoutOnCardEditor& editor, NodeID id, bool tempo) {
+    sepSetParam(*rig.canvas.processor(id), "tempoSync", tempo ? 1.0f : 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor.runQueuedSyncForTest();
+}
+
+// What the card draws for Sustain in the look showing now.
+struct SepDrawn {
+    bool visible = false;
+    juce::Rectangle<int> bounds;
+    juce::String caption;
+    int kind = -1;
+    bool operator==(const SepDrawn& o) const {
+        return visible == o.visible && bounds == o.bounds && caption == o.caption && kind == o.kind;
+    }
+};
+
+SepDrawn sepDrawnSustain(OnCardRig& rig, NodeID id) {
+    SepDrawn drawn;
+    const auto& plan = rig.card(id)->getCardBody()->getPlan();
+    for (int i = 0; i < (int)plan.items.size(); ++i) {
+        const auto& item = plan.items[(size_t)i];
+        if (item.param == nullptr || item.param->paramID != "sustain" || !plan.isOnCard(i))
+            continue;
+        drawn.caption = item.captionText();
+        drawn.kind = (int)item.kind;
+        drawn.visible = item.widget != nullptr && item.widget->isShowing();
+        if (item.widget != nullptr)
+            drawn.bounds = item.widget->getBounds();
+    }
+    return drawn;
+}
+
+const synth::CardSection* sepSectionOf(const synth::CardLayout& layout, const char* id) {
+    for (const auto& section : layout.sections)
+        if (section.id == id)
+            return &section;
+    return nullptr;
+}
+
+struct SepPath {
+    const char* name;
+    std::function<void(OnCardRig&, CardLayoutOnCardEditor&)> run;
+};
+
+std::vector<SepPath> sepWritePaths() {
+    return {
+        {"panel label",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onLabel("Sustained");
+         }},
+        {"panel range",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onRange(juce::Range<double>(0.2, 0.8));
+         }},
+        {"panel show as",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onShowAs(CardWidget::KnobLarge);
+         }},
+        {"panel fader size",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
+             panel->getFaderSizeForTest()->setSelectedIndex(1, juce::sendNotificationSync);
+         }},
+        {"drag",
+         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
+             Pointer pointer(editor, "sustain");
+             pointer.moveBy({-90, 0});
+             pointer.release();
+         }},
+        {"nudge",
+         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
+             const juce::KeyPress key(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier),
+                                      0);
+             editor.getOutlineForTest("sustain")->keyPressed(key);
+             editor.flushNudgeForTest();
+         }},
+    };
+}
+
+} // namespace
+
+TEST(OnCardSeparateLooks, EveryWritePathOfSustainStaysInTheVisibleLookAndUndoesPerLook) {
+    for (const bool editTempo : {false, true}) {
+        for (const auto& path : sepWritePaths()) {
+            const auto where = juce::String(path.name) + (editTempo ? " (edited in Tempo)" : " (edited in Time)");
+            OnCardRig rig;
+            const auto id = rig.add(std::make_unique<ADSRModule>());
+            auto* editor = rig.openOnCard(id);
+            ASSERT_NE(editor, nullptr);
+            editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+            const char* look = editTempo ? "stages-tempo" : "stages-time";
+            const char* other = editTempo ? "stages-time" : "stages-tempo";
+
+            // The other look as it draws now, then back to the look that is edited.
+            sepFlipSync(rig, *editor, id, !editTempo);
+            const auto otherDrawn = sepDrawnSustain(rig, id);
+            sepFlipSync(rig, *editor, id, editTempo);
+            const auto before = rig.card(id)->getCardBody()->explicitLayout();
+            ASSERT_NE(sepSectionOf(before, other), nullptr) << where;
+
+            path.run(rig, *editor);
+            if (::testing::Test::HasFatalFailure())
+                return;
+            editor->flushNudgeForTest();
+            const auto after = rig.card(id)->getCardBody()->explicitLayout();
+            EXPECT_NE(after, before) << where << " wrote nothing, the guard would prove nothing";
+            ASSERT_NE(sepSectionOf(after, other), nullptr) << where;
+            EXPECT_EQ(*sepSectionOf(after, other), *sepSectionOf(before, other)) << where << ": the other look's items";
+            EXPECT_EQ(after.hidden, before.hidden) << where << ": the hidden list";
+
+            sepFlipSync(rig, *editor, id, !editTempo);
+            EXPECT_EQ(sepDrawnSustain(rig, id), otherDrawn) << where << ": what the other look draws";
+            sepFlipSync(rig, *editor, id, editTempo);
+
+            ASSERT_TRUE(rig.canvas.undo.undo()) << where;
+            editor->runQueuedSyncForTest();
+            EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before) << where << ": one undo restores the look";
+            (void)look;
+        }
+    }
+}
+
+// Hide from card is global by design: the layout's hidden list names parameters, not looks, so a hidden Sustain is
+// off the card in both looks. Both looks keep their items (nothing of the other look is rewritten), so Add control
+// and one undo each bring every look's Sustain back exactly as it was.
+TEST(OnCardSeparateLooks, HideFromCardHidesSustainInBothLooksAndKeepsEachLooksItemForAddControlAndUndo) {
+    for (const bool viaKey : {false, true}) {
+        OnCardRig rig;
+        const auto id = rig.add(std::make_unique<ADSRModule>());
+        auto* editor = rig.openOnCard(id);
+        ASSERT_NE(editor, nullptr);
+        editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+        sepFlipSync(rig, *editor, id, true);
+        const auto tempoDrawn = sepDrawnSustain(rig, id);
+        sepFlipSync(rig, *editor, id, false);
+        const auto timeDrawn = sepDrawnSustain(rig, id);
+        const auto before = rig.card(id)->getCardBody()->explicitLayout();
+
+        if (viaKey)
+            editor->getOutlineForTest("sustain")->keyPressed(juce::KeyPress(juce::KeyPress::backspaceKey));
+        else
+            hideThroughPanel(rig, *editor, "sustain");
+        const auto hidden = rig.card(id)->getCardBody()->explicitLayout();
+        EXPECT_TRUE(hidden.hidden.contains("sustain"));
+        for (const char* look : {"stages-time", "stages-tempo"})
+            EXPECT_EQ(*sepSectionOf(hidden, look), *sepSectionOf(before, look)) << look << " keeps its item";
+
+        auto* addPanel = openAddPanel(rig, *editor);
+        ASSERT_NE(addPanel, nullptr);
+        ASSERT_NE(addPanel->getRowForTest("sustain"), nullptr);
+        clickRow(*addPanel->getRowForTest("sustain"));
+        sepFlipSync(rig, *editor, id, true);
+        EXPECT_EQ(sepDrawnSustain(rig, id), tempoDrawn) << "Add control brings the Tempo look's Sustain back as it was";
+        sepFlipSync(rig, *editor, id, false);
+        EXPECT_EQ(sepDrawnSustain(rig, id), timeDrawn) << "and the Time look's";
+
+        ASSERT_TRUE(rig.canvas.undo.undo());
+        ASSERT_TRUE(rig.canvas.undo.undo());
+        editor->runQueuedSyncForTest();
+        EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before);
+    }
+}
+
+// The looks have no title row, so there is no group handle to move one look's Sustain with.
+TEST(OnCardSeparateLooks, TheLooksHaveNoGroupHandleSoNoGroupMoveCanReachSustain) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+    EXPECT_EQ(editor->getGroupHandleCountForTest(), 0);
+}

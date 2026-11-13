@@ -436,6 +436,12 @@ Separate form (both groups always shown, each dimmed while the other mode was on
 read in the current form when it is resolved (`withAdsrSeparateLooks`, called from `resolveModuleCardLayout`): each
 group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Sustain.
 
+Every editor write to a control in Separate looks lands in the look that shows (`visibleLayoutSection` resolves it
+from the plan): the panel's Show as, Size, Label, Range, a drag and a keyboard nudge, so the other look's items and
+what it draws stay as they were, and one undo restores the visible look. **Hide from card is the exception, by
+design:** `hidden` lists parameter ids, not looks, so hiding Sustain in one look takes it off the card in both; both
+looks keep their items, so Add control and one undo bring each back as it was. The looks have no title row, so
+no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` runs every write path.
 
 ### Decisions (2026-10-01)
 
