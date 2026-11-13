@@ -5,6 +5,8 @@
 #   2. Clicks the Curve chip on the routing's row: the curve box opens beside it.
 #   3. Clicks the Exp preset: the editor redraws and the chip on the row gets its accent border.
 #   4. Presses Esc: the box closes.
+record: true
+save_project: fro1764-curve-box
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
   - wait: {}
