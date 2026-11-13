@@ -52,8 +52,8 @@ inline void renderHeld(OscillatorModule& m, std::vector<float>& left, std::vecto
     }
 }
 
-/** Mono-leg stack: the Saw at 220 Hz, `unison` voices, Rand at 100 %, the reference detune. */
-inline Stats measureStack(int unison, float blend, float width) {
+/** Mono-leg stack: the Saw at 220 Hz, `unison` voices, Rand at 100 % unless given, the reference detune. */
+inline Stats measureStack(int unison, float blend, float width, float randPercent = 100.0f) {
     OscillatorModule m;
     setActual(m, "level", 1.0f);
     setActual(m, "waveform", 2.0f);
@@ -61,7 +61,7 @@ inline Stats measureStack(int unison, float blend, float width) {
     setActual(m, "detune", kDetuneCents);
     setActual(m, "blend", blend);
     setActual(m, "width", width);
-    setActual(m, "randomPhase", 100.0f);
+    setActual(m, "randomPhase", randPercent);
     std::vector<float> l, r;
     renderHeld(m, l, r);
 

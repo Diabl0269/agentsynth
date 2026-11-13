@@ -322,6 +322,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
 void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     juce::ignoreUnused(samplesPerBlock);
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+    lowBandK = synth::lowBandCoefficient(currentSampleRate);
     syncEdgeSamples = (int)(currentSampleRate * synth::kSyncEdgeSeconds);
 
     const float initFreq = tunedFrequency(frequencyForMidiNote(voices[0].lastMidiNote));
