@@ -10,6 +10,7 @@
 
 namespace synth::ui {
 
+struct CurveHitResult;      // by value in showPointMenu; complete in UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
 class CurveEditorComponent; // held behind a pointer so the views that hold a box do not reach the whole editor
 
 class ModCurveEditorView final : public juce::Component {
