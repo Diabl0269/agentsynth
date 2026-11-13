@@ -3,9 +3,12 @@
 // step), and is absent on any other card; in Separate only the look the card's own Sync switch is on is shown
 // and outlined, the Sync switch stays usable under the overlay, and ending the session puts Sync back.
 // docs/layout/module-card-layout.md#editing-a-layout.
+// It also holds the guards that every vertical fader's panel offers the fader rows and that every Sustain write
+// path stays in the visible look (bug class sibling-gap).
 
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapperInternal.h"
 #include "Modules/ADSRModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -15,6 +18,8 @@
 
 using namespace oncard_test;
 using synth::AdsrTimeTempo;
+using synth::CardBodyItem;
+using synth::CardWidget;
 
 namespace {
 
@@ -460,4 +465,106 @@ TEST(OnCardTimeTempo, AddControlKeepsTheFullWidthOnCardsWithoutTheSwitch) {
     ASSERT_NE(editor, nullptr);
     EXPECT_EQ(editor->getAddButtonForTest().getX(), 0);
     EXPECT_EQ(editor->getAddButtonForTest().getRight(), editor->getWidth());
+}
+
+// ---- Fader rows and Separate-looks write paths ----
+
+namespace {
+
+void fsSetParam(juce::AudioProcessor& module, const juce::String& id, float plainValue) {
+    for (auto* parameter : module.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+            ranged != nullptr && ranged->paramID == id)
+            ranged->setValueNotifyingHost(ranged->convertTo0to1(plainValue));
+}
+
+void fsFlipSync(OnCardRig& rig, CardLayoutOnCardEditor& editor, NodeID id, bool tempo) {
+    fsSetParam(*rig.canvas.processor(id), "tempoSync", tempo ? 1.0f : 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor.runQueuedSyncForTest();
+}
+
+bool fsIsVerticalFader(CardBodyItem::Kind kind) {
+    return kind == CardBodyItem::Kind::FaderV || kind == CardBodyItem::Kind::FaderVLong;
+}
+
+// The params the card draws now as a vertical fader.
+std::vector<juce::String> fsDrawnFaders(OnCardRig& rig, NodeID id) {
+    std::vector<juce::String> ids;
+    const auto& plan = rig.card(id)->getCardBody()->getPlan();
+    for (int i = 0; i < (int)plan.items.size(); ++i) {
+        const auto& item = plan.items[(size_t)i];
+        if (item.param != nullptr && plan.isOnCard(i) && fsIsVerticalFader(item.kind))
+            ids.push_back(item.param->paramID);
+    }
+    return ids;
+}
+
+} // namespace
+
+TEST(OnCardFaderSize, ATempoLooksDivisionFaderOffersShowAsDirectionAndSizeAndLongGrowsIt) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->getTimeTempoSwitchForTest().setSelectedIndex(1, juce::sendNotificationSync);
+    fsFlipSync(rig, *editor, id, true);
+
+    auto* panel = openControlPanel(rig, *editor, "attackDiv");
+    ASSERT_NE(panel, nullptr);
+    EXPECT_NE(panel->getShowAsForTest(), nullptr);
+    EXPECT_TRUE(panel->isDirectionRowShownForTest());
+    ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVHeight);
+
+    panel->getFaderSizeForTest()->setSelectedIndex(1, juce::sendNotificationSync);
+    ASSERT_NE(storedItem(*rig.storedLayout(id), "attackDiv"), nullptr);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "attackDiv")->widget, CardWidget::FaderVLong);
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVLongHeight);
+
+    panel->getFaderSizeForTest()->setSelectedIndex(0, juce::sendNotificationSync);
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVHeight);
+}
+
+// The enumerating guard (sibling-gap): every vertical fader a default layout draws, in every look, offers the
+// fader rows. A fader the plan draws but whose panel hides Direction or Fader size is the gap this catches.
+TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize) {
+    int checked = 0;
+    int divisions = 0;
+    for (const auto& entry : synth::detail::moduleFactory()) {
+        for (const bool separate : {false, true}) {
+            for (const bool tempo : {false, true}) {
+                if (!separate && tempo && !synth::hasAdsrTimeTempo(entry.first))
+                    continue;
+                OnCardRig rig;
+                const auto id = rig.add(entry.second());
+                auto* editor = rig.openOnCard(id);
+                if (editor == nullptr)
+                    continue;
+                if (separate) {
+                    if (!synth::hasAdsrTimeTempo(entry.first))
+                        continue;
+                    editor->getTimeTempoSwitchForTest().setSelectedIndex(1, juce::sendNotificationSync);
+                }
+                if (synth::hasAdsrTimeTempo(entry.first))
+                    fsFlipSync(rig, *editor, id, tempo);
+                for (const auto& paramId : fsDrawnFaders(rig, id)) {
+                    if (editor->getOutlineForTest(paramId) == nullptr)
+                        continue;
+                    auto* panel = openControlPanel(rig, *editor, paramId);
+                    ASSERT_NE(panel, nullptr) << entry.first << " " << paramId;
+                    const auto where = entry.first + " " + paramId + (separate ? " separate" : " shared") +
+                                       (tempo ? " tempo" : " time");
+                    EXPECT_NE(panel->getShowAsForTest(), nullptr) << where;
+                    EXPECT_TRUE(panel->isDirectionRowShownForTest()) << where;
+                    EXPECT_TRUE(panel->isFaderSizeRowShownForTest()) << where;
+                    ++checked;
+                    if (paramId.endsWith("Div"))
+                        ++divisions;
+                }
+            }
+        }
+    }
+    EXPECT_GT(checked, 10) << "the enumeration found the default faders";
+    EXPECT_GE(divisions, 4) << "and the Tempo look's division faders among them";
 }

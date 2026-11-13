@@ -436,6 +436,7 @@ Separate form (both groups always shown, each dimmed while the other mode was on
 read in the current form when it is resolved (`withAdsrSeparateLooks`, called from `resolveModuleCardLayout`): each
 group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Sustain.
 
+
 ### Decisions (2026-10-01)
 
 - **New controls: the full candidate list.** Oscillator pulse width and glide; LFO phase and fade-in;
@@ -622,7 +623,11 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     lies down (Horizontal from a long fader gives `faderH`, Vertical from `faderH` gives the short `faderV`). Only
     the rows that apply show, between Show as and Label, and a size or direction change is one undo step like any
     other field. A long fader is a vertical fader everywhere (`CardBodyItem::isVerticalFader`), and a footer still
-    draws it as a horizontal one. The widget names are "Small knob",
+    draws it as a horizontal one. A Choice (the Tempo look's note divisions) may also be drawn as a stepped fader
+    in a look of an alternative group, so its panel offers the same Show as, Direction and Fader size rows:
+    `steppedFaderAllowed` (`CardBodyPlan`) is the one rule, asked by the plan (`kindOf`) and by
+    `readControlOptions`, which appends the fader widgets to that item's choices; a division in a shared swap pair
+    is the planned second case of that same rule. The widget names are "Small knob",
     "Large knob", "Vertical fader", "Long vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
     widget menu (`cardLayoutWidgetName`); never two sizes both called "Knob". **Label** renames the
     caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),
