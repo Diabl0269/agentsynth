@@ -54,7 +54,8 @@ there is no per-file class boundary. Source layout:
   `buildInstrumentInserts`/`buildInstrumentChannelAndMacro`) sharing state through the private
   `InstrumentChainBuild` struct.
 - `MainComponentTrackDelete.cpp` — delete track (what leaves with it: node, macro, strip, modules only it used; one
-  undo step) and the Cmd+Backspace confirm.
+  undo step), the Remove macro / Keep macro / Cancel question for a track whose macro would go with it, and the
+  Cmd+Backspace confirm ([tracks](../timeline/tracks.md#row-context-menu)).
 - `MainComponentMacroDelete.cpp` — deleting a macro a track plays: which tracks play it, the Remove track / Keep track /
   Cancel question and what each answer does ([tracks](../timeline/tracks.md#row-context-menu)).
 - `MainComponentTimelineOpsHost.{h,cpp}` — the `synth::TimelineOpsHost` adapter a timelineOps

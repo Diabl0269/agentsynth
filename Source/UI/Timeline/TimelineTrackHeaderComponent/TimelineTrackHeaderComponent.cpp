@@ -714,7 +714,7 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
     if (menuId == kDeleteTrackMenuId && bulkTargets().size() > 1)
         host_->deleteTrackAfterConfirm(trackId_); // every selected track, after one question
     else if (menuId == kDeleteTrackMenuId)
-        host_->deleteTrack(trackId_);
+        host_->deleteTrackFromMenu(trackId_);
     else if (menuId == kDuplicateTrackMenuId)
         host_->duplicateTrack(trackId_);
     else if (menuId == kMakeChannelMenuId && host_->canMakeChannelForTrack(trackId_))

@@ -3,6 +3,7 @@
 // motion. Drives a real off-screen MainComponent: the timeline row's Delete Track menu item, then the app's undo
 // manager.
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Timeline/DeleteTrackMacroAutoAnswer.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -53,6 +54,7 @@ struct ReducedMotionGuard {
 
 struct Rig {
     BottomDockActiveTabResetGuardMDT resetGuard;
+    DeleteTrackMacroAutoRemove removeMacroWhenAsked;
     MainComponent mc{std::make_unique<MockProviderTDS>()};
 
     explicit Rig(bool animate = false) {

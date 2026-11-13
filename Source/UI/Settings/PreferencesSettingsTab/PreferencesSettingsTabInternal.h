@@ -64,6 +64,9 @@ constexpr const char* kTimelineAskBeforeDeletingTrackKey = "timelineAskBeforeDel
 // The answer the macro-delete dialog's "Remember my choice" box stored ("keep" or "remove";
 // kDeleteMacroChoiceKey in DeleteTrackConfirm.h is the same string). Turning the question back on forgets it.
 constexpr const char* kTimelineDeleteMacroChoiceKey = "timelineDeleteMacroChoice";
+// Likewise for the track-delete dialog's macro question ("keep" or "remove"; kDeleteTrackMacroChoiceKey in
+// DeleteTrackConfirm.h is the same string).
+constexpr const char* kTimelineDeleteTrackMacroChoiceKey = "timelineDeleteTrackMacroChoice";
 
 // Read at use time by MainComponent::handleRecordToggle (and the record button's tooltip). DEFAULT TRUE: every major
 // DAW's Record also rolls the transport, so an install that never opens this tab is unaffected.

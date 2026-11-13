@@ -803,12 +803,27 @@ The menu's items:
   track and stays. The output dock, a node another track is bound to, and a module in a different macro are never taken.
   When the track's macro is shared (another track is bound to a node in it, or another track feeds a strip in it) the
   macro stays and only the track's own node and strip go. A channel other tracks feed too, a bus and any strip no
-  track owns stay: only the strip the deleted track alone feeds goes. The menu item never asks;
-  **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
+  track owns stay: only the strip the deleted track alone feeds goes. The menu item asks only when a macro would go with
+  the track (below); **Cmd+Backspace** on the focused row (rebindable `timelineDeleteFocusedTrack`, shown beside the item) runs the same
   `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
   Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
   ("Ask before deleting a track or its macro") turns the question back on. Cmd+Z brings the track back either way.
+  **A track whose macro would go with it asks Remove macro / Keep macro / Cancel** from every route (the row menu's Delete,
+  Cmd+Backspace, several selected rows: one question, "Delete 3 tracks?"), on the shared three-way window (`showConfirmChoice`,
+  the mirror of "Delete the macro of a track" below; `confirmDeleteTrackMacro`). **Remove macro** (Return) is the delete above. **Keep
+  macro** drops only the track row with its clips and lanes: the macro, every module in it, the bound Track In / Track
+  Audio node, the mixer strip, the sends and every cable stay as they were, so the macro is a plain macro (its Track In
+  is claimed by no track, and the binding chip of any track can pick it again) and its strip is a channel no track feeds,
+  listed in the mixer after the track channels like any other track-less channel
+  (`MainComponent::deleteTrackKeepingMacro`). **Cancel** (Escape) changes nothing. The macro "would go" when
+  `macroLeavingWith` is not empty: the macro holding the bound node is not shared with a track outside the deleted set
+  (two tracks deleted together that only share a macro with each other count as taking it); a track with no macro, or one
+  whose macro stays for another track, deletes as before with no macro question. The **Remember my choice** box turns the shared Preferences
+  question off and stores `timelineDeleteTrackMacroChoice` ("keep" or "remove"; no value reads as "remove", what a delete
+  did before Keep macro existed); with the question off that answer is applied without asking, and turning the Preferences
+  switch back on forgets it. A Cancel stores nothing. Every answer is ONE undo step (`recordGraphTimelineAndMacroChange`),
+  and Cmd+Z brings the track back with its channel linked again.
   The row (header and its lane line) shrinks away toward its centre and the rows below close the gap, while the macro
   card and the other cards that leave shrink away on the canvas with it; Cmd+Z makes room, grows them all back and fades
   a thin accent outline around each ([delete and undo](../layout/animation.md#delete-and-undo-animation),

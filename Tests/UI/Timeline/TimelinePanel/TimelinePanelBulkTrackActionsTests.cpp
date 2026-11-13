@@ -32,6 +32,7 @@ protected:
     }
     void TearDown() override {
         synth::ui::test_hooks::deleteTrackConfirmHookForTest() = nullptr;
+        synth::ui::test_hooks::deleteTrackMacroConfirmHookForTest() = nullptr;
         mc.reset();
         MainComponentTest::TearDown();
     }
@@ -176,10 +177,10 @@ TEST_F(BulkTrackActionsTest, CmdBackspaceOnThreeSelectedTracksAsksOnceAndOneUndo
     const auto nodesBefore = graph().getNodes().size();
     int asked = 0;
     juce::String title;
-    synth::ui::test_hooks::deleteTrackConfirmHookForTest() = [&](const auto& text, auto done) {
-        ++asked;
+    synth::ui::test_hooks::deleteTrackMacroConfirmHookForTest() = [&](const auto& text, auto done) {
+        ++asked; // every audio track plays a macro, so the Remove / Keep macro question is the one asked
         title = text.title;
-        done(true, false);
+        done(synth::ui::DeleteTrackMacroChoice::removeMacro, false);
     };
     select({1, 2, 4});
 
@@ -204,9 +205,9 @@ TEST_F(BulkTrackActionsTest, BulkDeleteTakesEachTracksMacroAndOneUndoBringsTrack
     const auto before = ids();
     EXPECT_GE(macrosBefore, 3) << "every audio track lives in its own macro";
     int asked = 0;
-    synth::ui::test_hooks::deleteTrackConfirmHookForTest() = [&](const auto&, auto done) {
+    synth::ui::test_hooks::deleteTrackMacroConfirmHookForTest() = [&](const auto&, auto done) {
         ++asked;
-        done(true, false);
+        done(synth::ui::DeleteTrackMacroChoice::removeMacro, false);
     };
     select({1, 2});
 

@@ -31,6 +31,23 @@ DeleteTrackConfirmText deleteMacroConfirmText(const juce::StringArray& trackName
                 undoShortcutText() + " brings it all back."};
 }
 
+DeleteTrackConfirmText deleteTrackMacroConfirmText(const juce::String& trackName) {
+    return {"Delete " + trackName + "?",
+            trackName +
+                " has a macro. Remove macro also deletes the macro and the modules only the track uses; Keep "
+                "macro deletes only the track and leaves the macro, its modules and its mixer channel. " +
+                undoShortcutText() + " brings it all back."};
+}
+
+DeleteTrackConfirmText deleteTrackMacroConfirmText(int trackCount, int withMacro) {
+    const juce::String who = withMacro == trackCount ? "They each have" : juce::String(withMacro) + " of them have";
+    return {"Delete " + juce::String(trackCount) + " tracks?",
+            who +
+                " a macro. Remove macro also deletes each macro and the modules only its track uses; Keep macro "
+                "deletes only the tracks and leaves those macros, their modules and mixer channels. " +
+                undoShortcutText() + " brings it all back."};
+}
+
 DeleteTrackConfirmText deleteTrackConfirmText(int count) {
     return {"Delete " + juce::String(count) + " tracks?",
             "The tracks, their clips and their instrument nodes go. " + undoShortcutText() + " brings them back."};
@@ -70,6 +87,43 @@ void confirmDeleteMacro(const DeleteTrackConfirmText& text, std::function<void(D
     });
 }
 
+void confirmDeleteTrackMacro(const DeleteTrackConfirmText& text,
+                             std::function<void(DeleteTrackMacroChoice, bool)> done) {
+    if (auto& hook = test_hooks::deleteTrackMacroConfirmHookForTest()) {
+        hook(text, std::move(done));
+        return;
+    }
+    ConfirmDontAskSpec spec{text.title,
+                            text.message,
+                            "Remove macro",
+                            "deleteTrackMacroRememberChoice",
+                            "Stop asking and do this every time. You can turn the question back on in "
+                            "Preferences, Timeline.",
+                            "Keep macro",
+                            "Remember my choice"};
+    showConfirmChoice(spec, [done = std::move(done)](ConfirmChoice choice, bool remember) {
+        if (!done)
+            return;
+        done(choice == ConfirmChoice::confirm     ? DeleteTrackMacroChoice::removeMacro
+             : choice == ConfirmChoice::alternate ? DeleteTrackMacroChoice::keepMacro
+                                                  : DeleteTrackMacroChoice::cancel,
+             remember);
+    });
+}
+
+void rememberDeleteTrackMacroChoice(juce::PropertiesFile& settings, DeleteTrackMacroChoice choice) {
+    if (choice == DeleteTrackMacroChoice::cancel)
+        return;
+    settings.setValue(kAskBeforeDeletingTrackKey, "0");
+    settings.setValue(kDeleteTrackMacroChoiceKey, choice == DeleteTrackMacroChoice::keepMacro ? "keep" : "remove");
+    settings.saveIfNeeded();
+}
+
+DeleteTrackMacroChoice rememberedDeleteTrackMacroChoice(const juce::PropertiesFile& settings) {
+    return settings.getValue(kDeleteTrackMacroChoiceKey) == "keep" ? DeleteTrackMacroChoice::keepMacro
+                                                                   : DeleteTrackMacroChoice::removeMacro;
+}
+
 void rememberDeleteMacroChoice(juce::PropertiesFile& settings, DeleteMacroChoice choice) {
     if (choice == DeleteMacroChoice::cancel)
         return;
@@ -84,6 +138,12 @@ DeleteMacroChoice rememberedDeleteMacroChoice(const juce::PropertiesFile& settin
 }
 
 namespace test_hooks {
+std::function<void(const DeleteTrackConfirmText&, std::function<void(DeleteTrackMacroChoice, bool)>)>&
+deleteTrackMacroConfirmHookForTest() {
+    static std::function<void(const DeleteTrackConfirmText&, std::function<void(DeleteTrackMacroChoice, bool)>)> hook;
+    return hook;
+}
+
 std::function<void(const DeleteTrackConfirmText&, std::function<void(DeleteMacroChoice, bool)>)>&
 deleteMacroConfirmHookForTest() {
     static std::function<void(const DeleteTrackConfirmText&, std::function<void(DeleteMacroChoice, bool)>)> hook;

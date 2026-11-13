@@ -97,15 +97,15 @@ struct TrackHeaderHost {
      *  compound (graph + timeline) undo step. */
     virtual void createAndBindTrackInNode(synth::TrackId track) = 0;
 
-    /** Chip click on a track whose binding resolves: highlight that node in the graph editor's
-     *  selection. A highlight only — the canvas is not scrolled and focus is not moved. */
+    /** Chip click on a bound track: highlights that node in the graph editor; the canvas is not scrolled. */
     virtual void selectNodeInGraph(const juce::String& uuid) = 0;
 
     /** Cmd+Backspace on a focused row: asks first (unless switched off), then deleteTrack. */
     virtual void deleteTrackAfterConfirm(synth::TrackId track) { deleteTrack(track); }
-
     /** Right-click -> "Delete Track": removes the track AND its bound Track In node as one compound undo step. */
     virtual void deleteTrack(synth::TrackId track) = 0;
+    /** The row menu's Delete: asks (Remove or Keep macro) only when a macro would go with the track. */
+    virtual void deleteTrackFromMenu(synth::TrackId track) { deleteTrack(track); }
 
     /** Cmd+D / right-click -> "Duplicate Track": a copy of the track directly below it with its modules, clips and
      *  automation, as ONE compound undo step. Non-pure inert default so every existing implementer keeps compiling. */

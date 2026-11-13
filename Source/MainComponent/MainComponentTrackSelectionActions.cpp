@@ -8,7 +8,6 @@
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
-#include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 
@@ -116,31 +115,4 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
     } else {
         statusBar.showMessage("Could not duplicate the tracks");
     }
-}
-
-// One question for the whole selection (unless it is switched off), then deleteTrack per track in ONE undo step.
-void MainComponent::deleteTracksAfterConfirm(const std::vector<synth::TrackId>& tracks) {
-    const auto deleteAll = [this, tracks] {
-        const AppUndoManager::ScopedUndoGroup group(undoManager);
-        for (const auto id : tracks)
-            deleteTrack(id);
-    };
-    const auto* settings = appProperties.getUserSettings();
-    if (settings != nullptr && !settings->getBoolValue(synth::ui::kAskBeforeDeletingTrackKey, true)) {
-        deleteAll();
-        return;
-    }
-    juce::Component::SafePointer<MainComponent> safeThis(this);
-    synth::ui::confirmDeleteTrack(synth::ui::deleteTrackConfirmText(static_cast<int>(tracks.size())),
-                                  [safeThis, deleteAll](bool confirmed, bool dontAskAgain) {
-                                      auto* self = safeThis.getComponent();
-                                      if (self == nullptr || !confirmed)
-                                          return;
-                                      if (dontAskAgain)
-                                          if (auto* userSettings = self->appProperties.getUserSettings()) {
-                                              userSettings->setValue(synth::ui::kAskBeforeDeletingTrackKey, "0");
-                                              userSettings->saveIfNeeded();
-                                          }
-                                      deleteAll(); // captures `this`: checked alive through safeThis above
-                                  });
 }
