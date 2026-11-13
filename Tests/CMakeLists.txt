@@ -229,6 +229,7 @@ add_executable(Tests
     AI/AIStateMapper/AIStateMapperModulationEntriesTests.cpp
     AI/AIStateMapper/AIStateMapperIdScopeTests.cpp
     AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp
+    AI/AIStateMapper/AIStateMapperMidiWiringTests.cpp
     AI/AIStateMapper/AIStateMapperPatchFormatTests.cpp
     AI/AIPatchValidationTests.cpp
     AI/AIPatchRetryTests.cpp
