@@ -102,124 +102,107 @@ const std::vector<KnownGap> kKnownGaps = {
     {"piano roll open / timeline / PianoRollVelocityLane 'Velocity strip': not reached by keys", "FRO1550"},
     {"piano roll open / timeline / TextEditor 'Velocity of selected notes': not reached by keys", "FRO1550"},
     // AIChatComponent is a plain-container region with no Up/Down stepping, so none of its controls is reachable.
-    {"canvas, AI panel and Mod Matrix / aiPanel / ComboBox 'AI model': not reached by keys", "TBD-ai-panel"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'History': not reached by keys", "TBD-ai-panel"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'New Chat': not reached by keys", "TBD-ai-panel"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Send': not reached by keys", "TBD-ai-panel"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Sign in': not reached by keys", "TBD-ai-panel"},
-    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Upgrade to Pro': not reached by keys", "TBD-ai-panel"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / ComboBox 'AI model': not reached by keys", "FRO1816"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'History': not reached by keys", "FRO1816"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'New Chat': not reached by keys", "FRO1816"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Send': not reached by keys", "FRO1816"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Sign in': not reached by keys", "FRO1816"},
+    {"canvas, AI panel and Mod Matrix / aiPanel / TextButton 'Upgrade to Pro': not reached by keys", "FRO1816"},
     {"canvas, AI panel and Mod Matrix / aiPanel / TextEditor 'Message to the AI assistant': not reached by keys",
-     "TBD-ai-panel"},
+     "FRO1816"},
     // Card header buttons (Bypass, Mute, Delete, Dual I/O) are DrawableButtons and drawDrawableButton paints no focus
     // ring.
-    {"canvas / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "TBD-card-header-rings"},
-    {"canvas / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "TBD-card-header-rings"},
-    {"canvas / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring", "TBD-card-header-rings"},
-    {"canvas / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "TBD-card-header-rings"},
+    {"canvas / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / DrawableButton 'Delete': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
+     "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
+     "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
+     "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"canvas, dock closed / canvas / DrawableButton 'Delete': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"canvas, dock closed / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"drum machine open / canvas / DrawableButton 'Delete': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"drum machine open / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"drum machine open / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"timeline side pane / canvas / DrawableButton 'Delete': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"timeline side pane / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
-    {"timeline side pane / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring",
-     "TBD-card-header-rings"},
+     "FRO1815"},
+    {"canvas, dock closed / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas, dock closed / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas, dock closed / canvas / DrawableButton> 'Dual I/O': lands on a stop that draws no ring", "FRO1815"},
+    {"canvas, dock closed / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
+    {"drum machine open / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
+    {"drum machine open / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
+    {"drum machine open / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
+    {"timeline side pane / canvas / DrawableButton 'Delete': lands on a stop that draws no ring", "FRO1815"},
+    {"timeline side pane / canvas / DrawableButton> 'Bypass': lands on a stop that draws no ring", "FRO1815"},
+    {"timeline side pane / canvas / DrawableButton> 'Mute': lands on a stop that draws no ring", "FRO1815"},
     // Gain knob and Safety limiter, seen only in the scene with the Mod Matrix open over the canvas: no ring shows
     // where the Mod Matrix overlaps the card.
-    {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring",
-     "TBD-card-rings"},
+    {"canvas, AI panel and Mod Matrix / canvas / CardKnobSlider 'Gain': lands on a stop that draws no ring", "FRO1815"},
     {"canvas, AI panel and Mod Matrix / canvas / ToggleButton> 'Safety limiter': lands on a stop that draws no ring",
-     "TBD-card-rings"},
+     "FRO1815"},
     // With the dock closed the tab strip has no height, so landing on it draws no ring.
-    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring",
-     "TBD-dock-tabs-ring"},
+    {"canvas, dock closed / dockTabs / TabStripFocus 'Panel tabs': lands on a stop that draws no ring", "FRO1819"},
     // The panel is a plain-container region with no Up/Down stepping (FocusStepWithin is not used), so its buttons and
     // the controller surface are unreachable.
-    {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys",
-     "TBD-midi-remote"},
-    {"midiRemote / midiRemote / TextButton 'addControllerButton': not reached by keys", "TBD-midi-remote"},
-    {"midiRemote / midiRemote / TextButton 'moreButton': not reached by keys", "TBD-midi-remote"},
+    {"midiRemote / midiRemote / ControllerSurfaceComponent 'Controller surface': not reached by keys", "FRO1816"},
+    {"midiRemote / midiRemote / TextButton 'addControllerButton': not reached by keys", "FRO1816"},
+    {"midiRemote / midiRemote / TextButton 'moreButton': not reached by keys", "FRO1816"},
     // MidiRemotePanelComponent takes focus as the region landing and paints no ring.
     {"canvas, AI panel and Mod Matrix / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that "
      "draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
     {"drum machine open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
     {"library sounds / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
-    {"midiRemote / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
+    {"midiRemote / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring", "FRO1819"},
     {"mixer side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
     {"piano roll open / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
     {"timeline side pane / midiRemote / MidiRemotePanelComponent 'Controllers': lands on a stop that draws no ring",
-     "TBD-midi-remote-ring"},
+     "FRO1819"},
     // The Mod Matrix is a plain-container region with no Up/Down stepping, so flatSources and addModulation are
     // unreachable.
-    {"library sounds / modMatrix / TextButton 'addModulation': not reached by keys", "TBD-mod-matrix"},
-    {"library sounds / modMatrix / ToggleButton 'flatSources': not reached by keys", "TBD-mod-matrix"},
-    {"mixer side pane / modMatrix / TextButton 'addModulation': not reached by keys", "TBD-mod-matrix"},
-    {"mixer side pane / modMatrix / ToggleButton 'flatSources': not reached by keys", "TBD-mod-matrix"},
-    {"piano roll open / modMatrix / TextButton 'addModulation': not reached by keys", "TBD-mod-matrix"},
-    {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "TBD-mod-matrix"},
-    {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "TBD-mod-matrix"},
-    {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "TBD-mod-matrix"},
+    {"library sounds / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
+    {"library sounds / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
+    {"mixer side pane / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
+    {"mixer side pane / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
+    {"piano roll open / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
+    {"piano roll open / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
+    {"timeline / modMatrix / TextButton 'addModulation': not reached by keys", "FRO1816"},
+    {"timeline / modMatrix / ToggleButton 'flatSources': not reached by keys", "FRO1816"},
     // Resize handles are Tab stops (setKeyboardFocusable) but Tab is the region cycle and no region key steps to them.
-    {"canvas / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
+    {"canvas / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
     {"canvas, AI panel and Mod Matrix / timeline / EdgeResizeHandle 'Track column width': not reached by keys",
-     "TBD-resize-handles"},
-    {"drum machine open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"library sounds / library / EdgeResizeHandle 'Resize Sounds column': not reached by keys", "TBD-resize-handles"},
-    {"library sounds / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"midiRemote / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"mixer / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"mixer side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"piano roll open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"timeline / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "TBD-resize-handles"},
-    {"timeline side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys",
-     "TBD-resize-handles"},
+     "FRO1817"},
+    {"drum machine open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"library sounds / library / EdgeResizeHandle 'Resize Sounds column': not reached by keys", "FRO1817"},
+    {"library sounds / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"midiRemote / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"mixer / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"mixer side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"piano roll open / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"timeline / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
+    {"timeline side pane / timeline / EdgeResizeHandle 'Track column width': not reached by keys", "FRO1817"},
     // SoundBrowserComponent takes the landing and forwards focus to its list, which draws no ring at the landing.
-    {"library sounds / library / SoundBrowserComponent 'Sounds': lands on a stop that draws no ring",
-     "TBD-sounds-list-ring"},
+    {"library sounds / library / SoundBrowserComponent 'Sounds': lands on a stop that draws no ring", "FRO1541"},
     // The section strip and clip lanes are documented Tab stops that the region cycle skips; Clips is entered only by
     // Return on a track holding a clip (enterTrackClips).
-    {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"canvas / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"canvas, AI panel and Mod Matrix / timeline / TimelineSectionStrip 'Sections': not reached by keys",
-     "TBD-timeline-lanes"},
-    {"library sounds / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"library sounds / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"midiRemote / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"midiRemote / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"mixer / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"mixer / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"mixer side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"timeline / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"timeline / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
-    {"timeline side pane / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "TBD-timeline-lanes"},
-    {"timeline side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "TBD-timeline-lanes"},
+    {"canvas / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"canvas / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"canvas, AI panel and Mod Matrix / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"library sounds / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"library sounds / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"midiRemote / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"midiRemote / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"mixer / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"mixer / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"mixer side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"piano roll open / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"timeline / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"timeline / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
+    {"timeline side pane / timeline / TimelineClipLaneArea 'Clips': not reached by keys", "FRO1818"},
+    {"timeline side pane / timeline / TimelineSectionStrip 'Sections': not reached by keys", "FRO1818"},
 };
 
 class FocusHelper : public juce::Component {
@@ -361,25 +344,48 @@ protected:
         return all;
     }
 
-    // Where Tab from the last control of the Sounds preview strip lands, in a scene.
-    void reportPreviewStripTab(const Scene& scene) {
+    // The Sounds preview strip's Tab order in a scene: Tab from the list lands on the strip's first control, Tab from
+    // any strip control leaves the sidebar for the region after it in the cycle (the one beside it on screen, never
+    // the window's top toolbar), and Shift+Tab from a strip control comes back to the list.
+    void checkPreviewStripTab(const Scene& scene) {
         scene.setup();
         showSounds(true);
-        auto& footer = mc_->getLibrarySidebarForTest().getSounds().getPreviewFooter();
-        const auto stops = synth::ui::shownFocusableDescendants(footer);
+        auto& sounds = mc_->getLibrarySidebarForTest().getSounds();
+        auto& strip = sounds.getPreviewFooter();
+        const auto stops = synth::ui::shownFocusableDescendants(strip);
         const auto& registry = mc_->getFocusRegionsForTest();
-        if (stops.empty() || !footer.isShowing() || !takeFocus(*stops.back())) {
-            std::cout << "[ reach ] " << scene.name << ": Tab from the preview strip: no strip control takes focus\n";
-            return;
+        ASSERT_TRUE(strip.isShowing() && !stops.empty()) << scene.name << ": the preview strip shows no control";
+        const auto expected = registry.nextOpenRegionId("library", true);
+        ASSERT_NE(expected, juce::String("toolbar")) << scene.name;
+        for (auto* stop : stops) {
+            juce::Component::SafePointer<juce::Component> control(stop);
+            ASSERT_TRUE(takeFocus(*control)) << scene.name << " / " << describe(*control);
+            const auto name = describe(*control);
+            deliver(*control, kTabKey());
+            const auto* landed = registry.regionContaining(juce::Component::getCurrentlyFocusedComponent());
+            EXPECT_TRUE(landed != nullptr && landed->id == expected)
+                << scene.name << ": Tab from the preview strip's " << name << " lands in "
+                << (landed != nullptr ? landed->id.toStdString() : std::string("no region")) << ", not "
+                << expected.toStdString();
+            if (control == nullptr || !takeFocus(*control))
+                continue;
+            deliver(*control, kShiftTabKey());
+            auto* back = juce::Component::getCurrentlyFocusedComponent();
+            EXPECT_TRUE(back == &sounds || (back != nullptr && sounds.isParentOf(back) && !strip.isParentOf(back)))
+                << scene.name << ": Shift+Tab from the preview strip's " << name << " does not return to the list";
         }
-        const auto name = describe(*stops.back());
-        deliver(*stops.back(), kTabKey());
-        auto* f = juce::Component::getCurrentlyFocusedComponent();
-        const auto* landed = registry.regionContaining(f);
-        std::cout << "[ reach ] " << scene.name << ": Tab from the preview strip's last control (" << name
-                  << ") lands in " << (landed != nullptr ? landed->id.toStdString() : std::string("no region"))
-                  << " on " << (f != nullptr ? describe(*f) : std::string("nothing")) << ", library's next is "
-                  << registry.nextOpenRegionId("library", true).toStdString() << "\n";
+        sounds.focusList();
+        synth::test::flushMessageQueue();
+        if (auto* list = juce::Component::getCurrentlyFocusedComponent()) {
+            deliver(*list, kTabKey());
+            EXPECT_EQ(juce::Component::getCurrentlyFocusedComponent(), stops.front())
+                << scene.name << ": Tab from the Sounds list does not land on the preview strip's first control";
+        }
+    }
+
+    static const juce::KeyPress& kShiftTabKey() {
+        static const juce::KeyPress key(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+        return key;
     }
 
     static const juce::KeyPress& kTabKey() {
@@ -409,7 +415,15 @@ TEST_F(ReachSweepShell, RealKeysReachEveryStopOfEveryRegionAndEachLandingShowsIt
         synth::test::flushMessageQueue();
         synth::test::reach::ReachWalker walker(*mc_, helper_, findings, scene.name, scene.setup);
         walker.walkAll();
-        reportPreviewStripTab(scene);
     }
     findings.expectOnlyKnownGaps();
+}
+
+// Tab after the Sounds preview strip goes on to the region beside the sidebar in every main view, and comes back.
+TEST_F(ReachSweepShell, TabFromThePreviewStripLeavesForTheRegionBesideTheSidebarAndShiftTabComesBack) {
+#if !JUCE_MAC
+    GTEST_SKIP() << "measured on macOS with the other sweeps";
+#endif
+    for (const auto& scene : scenes())
+        checkPreviewStripTab(scene);
 }
