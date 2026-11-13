@@ -111,6 +111,13 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
 `forceAnimateForTest`). The LFO card's Custom-wave editor takes the same path: its poll passes the restore flag to
 `setModel`. Track header rows and automation lane rows land at once under Reduce Motion, with no fade.
+- **Sequencer pitch bars.** `StepGridComponent` glides its bars (160 ms `easeOutCubic`, a 4 ms stagger per column) to
+  a pattern changed from outside a drag, and, since a scale change moves every played note without touching the pattern,
+  to the notes a new Key or Scale plays: `syncSettings` starts the glide from the old scale on the card tick, so a Key
+  pick, its undo and its redo all travel and the written-note outlines fade with them. Reduce Motion shortens it to an
+  80 ms glide with no stagger (no fade: the bars still move); Animations Off lands at once. A second Cmd+Z or
+  Cmd+Shift+Z mid-glide starts every bar from where it is drawn then (`captureDrawnAsGlideStart`). Guard: the `Sequencer key
+  bars` entry in `UndoGlideSurfaces` (`shortGlideUnderReduceMotion`).
 - **Drum Kit pad knobs.** `DrumPadControls` draws each of the four pad knobs at its parameter's value plus what is left of a
   `KeyedPointTween` glide (one key per knob, the value as a proportion of its range). A change the parameter makes while
   `AppUndoManager::isRestoring()` is true (an undo or redo of a knob change) and a pad pick both glide the drawn value from

@@ -207,7 +207,13 @@ TEST(UndoGlideSurfaces, UnderReduceMotionARestoredThingLandsAtOnceAndFadesIn) {
         synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
         synth::ui::setReducedMotionForTest(true);
         ASSERT_TRUE(s->undo());
-        EXPECT_NEAR(s->drawn(), before, 1.5) << "it is at its new place on the first frame";
+        if (entry.shortGlideUnderReduceMotion) {
+            EXPECT_TRUE(s->gliding()) << "the shortened glide runs";
+            s->stepTo(80.0);
+            EXPECT_FALSE(s->gliding()) << "and has landed within the 80 ms of Reduce Motion";
+        } else {
+            EXPECT_NEAR(s->drawn(), before, 1.5) << "it is at its new place on the first frame";
+        }
         if (entry.fadesUnderReduceMotion) {
             EXPECT_LT(s->alpha(), 0.9f) << "and starts faint";
             EXPECT_TRUE(s->gliding()) << "the fade runs";

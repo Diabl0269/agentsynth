@@ -279,7 +279,9 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
 - **Undo.** A gesture (a pad stroke, a bar drag, a pitch drag, a menu pick, one key press) is one undo step: the
   module's extra state is snapshotted when the gesture starts and recorded once at its end
   (`AppUndoManager::recordNodeExtraStateChange`). A change from outside (undo, a preset, the AI) is not an edit; the
-  bars glide to it.
+  bars glide to it. A new Key or Scale (a pick, or the undo and redo of one) glides the bars too: `syncSettings` sees the
+  scale change on the card tick and starts the same glide from the pattern as it stands, played through the OLD scale
+  (`glideFromScale_`), so every note that the scale moves travels to its new row instead of redrawing at once.
 - **Motion** (all time-bounded, none free-running): lanes fold 160 ms (the card's height follows every frame, the
   neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
   per-column stagger, dimming 120 ms (every column heads for its new 0 or 1 from the level it shows when Steps changes

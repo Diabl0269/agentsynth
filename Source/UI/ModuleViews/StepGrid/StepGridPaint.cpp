@@ -40,7 +40,8 @@ float StepGridComponent::shownNormal(SequencerLane lane, int step) const {
     const float to = laneNormal(lane, module_.getPattern().steps[(size_t)step]);
     if (!gliding_)
         return to;
-    const float from = laneNormal(lane, glideFrom_.steps[(size_t)step]);
+    const float from =
+        fromDrawn_ ? fromNormal_[(size_t)lane][(size_t)step] : laneNormal(lane, glideFrom_.steps[(size_t)step]);
     return from + (to - from) * glideMix(step);
 }
 
@@ -48,9 +49,10 @@ float StepGridComponent::shownPitch(int step) const {
     const float to = (float)playedPitchOf(step);
     if (!gliding_)
         return to;
-    const int from = glideFromScale_.snapPitch(
-        juce::jlimit(0, 127, (int)glideFrom_.steps[(size_t)step].pitch + glideFromTranspose_));
-    return (float)from + (to - (float)from) * glideMix(step);
+    const float from = fromDrawn_ ? fromPitch_[(size_t)step]
+                                  : (float)glideFromScale_.snapPitch(juce::jlimit(
+                                        0, 127, (int)glideFrom_.steps[(size_t)step].pitch + glideFromTranspose_));
+    return from + (to - from) * glideMix(step);
 }
 
 // The label over a bar: the note for a mono step or a single note, the chord (and its numeral) on the Poly Sequencer.

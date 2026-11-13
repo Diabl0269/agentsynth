@@ -180,6 +180,8 @@ window afresh, and takes the pixels that differ from the "before" picture (outsi
 1%), or when no presented frame shows it at all. A fade or slide has frames in between (`intermediateFrames`). The check
 answers either way; the runner decides.
 
+`popWatchCheck` also waits for the window to stop changing (100 ms with no new presented frame, given up on 500 ms after `ms`), because a fade on a VBlank driver, such as the status bar's message, is no desktop animation and a check that ended in its tail started the next watch on a picture still mid-fade (a pop in the undo step of the first action).
+
 A scenario with `motion: true` runs it around every action that can change the window: `click`, `drag` (the whole drag),
 `key`, `wheel`, `mouseUp`, `keyUp` and a `glide`'s `do`. Not checked: runner steps (`type` makes text appear per key
 by design), `hover`, `mouseDown`, `mouseMoveHeld`, `keyDown`, `openProject`, `saveProject`, `restart`, `quit`, `wait`
