@@ -59,8 +59,16 @@ void MixerInsertList::updateHoverCursor(juce::Point<int> position) {
 
 // The pointer is converted into this list's own coordinates on every event; the grab offset is captured once here.
 void MixerInsertList::beginRowDrag(int rowIndex, const juce::MouseEvent& event) {
-    const auto [first, last] = moveRunOf(rowIndex);
+    auto [first, last] = moveRunOf(rowIndex);
     if (first < 0)
+        return;
+    // The preview slots stack rows without a gap, so a drag stays between the not-connected rows (Alt+Up/Down moves
+    // past them).
+    while (first < rowIndex && danglingWithin(first, rowIndex))
+        ++first;
+    while (last > rowIndex && danglingWithin(rowIndex, last))
+        --last;
+    if (first == last)
         return;
     dragRunFirst_ = first;
     dragRunLast_ = last;
@@ -129,9 +137,9 @@ void MixerInsertList::startSettleFrom(int rowIndex, float fromY) {
     if (rowIndex < 0 || rowIndex >= (int)visible_.size())
         return;
     int first = rowIndex, last = rowIndex;
-    while (first > 0 && inSameRun(first - 1, rowIndex))
+    while (first > 0 && inSameRun(first - 1, rowIndex) && !danglingWithin(first - 1, first))
         --first;
-    while (last + 1 < (int)visible_.size() && inSameRun(last + 1, rowIndex))
+    while (last + 1 < (int)visible_.size() && inSameRun(last + 1, rowIndex) && !danglingWithin(last, last + 1))
         ++last;
     dragRunFirst_ = first;
     dragRunLast_ = last;

@@ -9,6 +9,7 @@
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 
 class AppUndoManager;
@@ -40,6 +41,11 @@ class ModMatrixPicker;
 // outlives the list, so a column rebuilt after an edit keeps it. Rows can be bypassed, moved within their path and
 // removed; the split row's bypass covers every module under it.
 //
+// Not-connected modules (docs/mixer/mixer.md#not-connected-modules): a module hanging off the chain that leads nowhere
+// shows as a dimmed row with a dashed rail, in place right after the row it hangs off. It is not a chain row: it has no
+// row index, so keyboard focus, Alt+Up/Down and drag-reorder never land on it, and an add or move acts on the chain
+// rows around it as if it were not there. A double-click on it, like on any module row, shows its card on the canvas.
+//
 // Any other branch: the same list, read-only (no "+ Insert" row; the column header's "Edit on canvas" button is the
 // way into the canvas for every chain, whatever its shape).
 //
@@ -59,7 +65,8 @@ public:
 
     /** `stripNodeId` is the node the chain feeds: the strip itself, or Master's chain terminator. */
     void setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
-                    juce::AudioProcessorGraph::NodeID sourceNodeId, juce::AudioProcessorGraph::NodeID stripNodeId);
+                    juce::AudioProcessorGraph::NodeID sourceNodeId, juce::AudioProcessorGraph::NodeID stripNodeId,
+                    const std::vector<synth::MixerDanglingEntry>& dangling = {});
 
     /** Fires when a split folds or opens (every frame while it animates): the column re-reads getPreferredHeight(). */
     std::function<void()> onPreferredHeightChanged;
@@ -106,6 +113,26 @@ public:
      *  this list's coordinates. See MixerRowsMotion. */
     std::vector<juce::String> entryKeys() const;
     std::vector<ExitEnterListRow> motionRows() const;
+    /** The not-connected rows, in the order they are drawn (they are no part of the row index space above). */
+    int getDanglingCount() const noexcept { return (int)dangling_.size(); }
+    /** Dangling row `index`'s bounds in this list's coordinates; empty when out of range. */
+    juce::Rectangle<int> getDanglingBounds(int index) const;
+    /** What a screen reader says for it: "Distortion, not connected". */
+    juce::String describeDangling(int index) const;
+    /** The not-connected row under `position`, or -1. */
+    int danglingIndexAt(juce::Point<int> position) const;
+    /** A module joined or left the chain between two builds (a not-connected row became an insert or the reverse): each
+     *  row (key = the module's uuid, start = where its row stood) slides to where it stands now while its look dims or
+     *  brightens. */
+    void startKindFlip(const std::vector<ExitEnterListRow>& flips);
+    bool isKindFlipRunning() const noexcept { return !flipFrom_.empty(); }
+    /** How not-connected the module's row looks now: 1 dimmed, 0 a chain row's (0 when it is not flipping). */
+    float kindFlipDimFor(const juce::String& uuid) const;
+    /** Puts the flip at `t` (0 start, 1 landed), what each frame does; tests call it by hand. */
+    void setKindFlipAmountForTest(float t);
+    juce::Component* getDanglingAccessibilityComponentForTest(int index) const noexcept {
+        return index >= 0 && index < (int)danglingProxies_.size() ? danglingProxies_[(size_t)index].get() : nullptr;
+    }
     /** The row's module uuid (what "select on canvas" resolves), or empty when out of range or a split row. */
     juce::String getRowUuid(int rowIndex) const;
     /** A linear or split chain can be edited row by row; any other branch is read-only. */
@@ -175,7 +202,7 @@ public:
     static void resetSplitOpenStateForTest();
 
     /** The tooltip for whatever part of the list the pointer is over. */
-    juce::String getTooltip() override { return tooltipAt(getMouseXYRelative()); }
+    juce::String getTooltip() override { return tooltipAt(pointer_.x >= 0 ? pointer_ : getMouseXYRelative()); }
     /** The tooltip at `position`: on a split row "Split" over its icon, else the split's paths, one line each. */
     juce::String tooltipAt(juce::Point<int> position) const;
 
@@ -274,6 +301,11 @@ private:
     /** The width a row's buttons take at its right edge: bypass, and "Show on canvas" for a module. */
     int rowButtonsWidth(const synth::MixerInsertEntry& entry) const noexcept;
     int rowIndexAt(juce::Point<int> position) const;
+    /** Not-connected rows that sit right after chain row `slot` (-1: before the first row). */
+    int danglingAfterSlot(int slot) const noexcept;
+    /** Whether a dragged run of rows `first..last` has a not-connected row between two of its rows. */
+    bool danglingWithin(int first, int last) const noexcept;
+    void paintDangling(juce::Graphics& g, int index);
     int rowTop(int rowIndex) const;
     int rowHeight(int rowIndex) const;
     int contentHeight() const;
@@ -337,6 +369,11 @@ private:
     GraphEditor* graphEditor_ = nullptr;
 
     std::vector<synth::MixerInsertEntry> entries_;
+    /** The not-connected modules, and for each the visible row it sits after (-1: above the first), read when the rows
+     *  were last rebuilt. */
+    std::vector<synth::MixerDanglingEntry> dangling_;
+    std::vector<int> danglingSlot_;
+    std::vector<std::unique_ptr<RowAccessibilityProxy>> danglingProxies_;
     /** The entries on screen, in order: every row except those under a folded split. */
     std::vector<int> visible_;
     bool linear_ = false;
@@ -348,6 +385,14 @@ private:
     bool animatingOpen_ = false;
     juce::VBlankAnimatorUpdater vblank_{this};
     AnimationDriver foldAnimation_;
+    // A module flipping between a chain row and a not-connected row: where its row came from, how far along it is, and
+    // whether it ends up dimmed.
+    std::map<juce::String, float> flipFrom_;
+    float flipAmount_ = 1.0f;
+    AnimationDriver flipAnimation_;
+    float flipOffsetFor(const juce::String& uuid, float top) const;
+    // Where the last mouse move or hover landed; (-1, -1) once the pointer has left.
+    juce::Point<int> pointer_{-1, -1};
     int focusedRow_ = -1;
     // The row boundary the pointer is on with a "+" showing there, or -1.
     int hoverGap_ = -1;

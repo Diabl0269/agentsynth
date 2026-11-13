@@ -17,6 +17,7 @@ namespace {
 using Kind = synth::MixerInsertEntry::Kind;
 
 constexpr double kFoldMs = 180.0;
+constexpr double kFlipMs = 220.0;
 
 // The splits a person opened, by the uuid of the node that fans out. View state, so it lives outside every list:
 // the column that shows a split is rebuilt after any recorded edit (bypassing one of its paths included), and the
@@ -40,7 +41,10 @@ MixerInsertList::MixerInsertList() {
     setInterceptsMouseClicks(true, false);
 }
 
-MixerInsertList::~MixerInsertList() { foldAnimation_.stop(vblank_); }
+MixerInsertList::~MixerInsertList() {
+    foldAnimation_.stop(vblank_);
+    flipAnimation_.stop(vblank_);
+}
 
 void MixerInsertList::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                                 GraphEditor& graphEditor) {
@@ -52,11 +56,15 @@ void MixerInsertList::configure(juce::AudioProcessorGraph& graph, AppUndoManager
 
 void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
                                  juce::AudioProcessorGraph::NodeID sourceNodeId,
-                                 juce::AudioProcessorGraph::NodeID stripNodeId) {
+                                 juce::AudioProcessorGraph::NodeID stripNodeId,
+                                 const std::vector<synth::MixerDanglingEntry>& dangling) {
     foldAnimation_.stop(vblank_);
+    flipAnimation_.stop(vblank_);
+    flipFrom_.clear();
     rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
     animatingSplit_ = -1;
     entries_ = entries;
+    dangling_ = dangling;
     linear_ = linear;
     hasSplits_ = std::any_of(entries_.begin(), entries_.end(), [](const auto& e) { return e.kind == Kind::Split; });
     sourceNodeId_ = sourceNodeId;
@@ -94,6 +102,23 @@ void MixerInsertList::rebuildVisibleRows() {
         visible_.push_back(i);
         i = entries_[(size_t)i].kind == Kind::Split && !isEntryOpen(i) ? subtreeEnd(i) : i + 1;
     }
+    // A not-connected row sits after the last row on screen that begins at or before the chain row it hangs off (a
+    // folded split stands in for the paths it hides).
+    danglingSlot_.clear();
+    for (const auto& d : dangling_) {
+        int slot = -1;
+        for (int v = 0; v < (int)visible_.size() && visible_[(size_t)v] <= d.anchorRow; ++v)
+            slot = v;
+        danglingSlot_.push_back(slot);
+    }
+}
+
+int MixerInsertList::danglingAfterSlot(int slot) const noexcept {
+    return (int)std::count(danglingSlot_.begin(), danglingSlot_.end(), slot);
+}
+
+bool MixerInsertList::danglingWithin(int first, int last) const noexcept {
+    return std::any_of(danglingSlot_.begin(), danglingSlot_.end(), [&](int s) { return s >= first && s < last; });
 }
 
 const synth::MixerInsertEntry* MixerInsertList::entryForRow(int rowIndex) const noexcept {
@@ -110,16 +135,46 @@ int MixerInsertList::rowHeight(int rowIndex) const {
     return kRowHeight;
 }
 
+// The not-connected rows that sit above row `rowIndex` take their own height in the stack.
 int MixerInsertList::rowTop(int rowIndex) const {
     int top = 0;
     for (int i = 0; i < rowIndex && i < (int)visible_.size(); ++i)
         top += rowHeight(i);
+    const int limit = juce::jmin(rowIndex, (int)visible_.size());
+    for (int slot : danglingSlot_)
+        if (slot < limit)
+            top += kRowHeight;
     return top;
+}
+
+juce::Rectangle<int> MixerInsertList::getDanglingBounds(int index) const {
+    if (index < 0 || index >= (int)dangling_.size())
+        return {};
+    const int slot = danglingSlot_[(size_t)index];
+    int nth = 0;
+    for (int j = 0; j < index; ++j)
+        nth += danglingSlot_[(size_t)j] == slot ? 1 : 0;
+    const int top = slot < 0 ? 0 : rowTop(slot) + rowHeight(slot);
+    return getLocalBounds().withY(top + nth * kRowHeight).withHeight(kRowHeight);
+}
+
+int MixerInsertList::danglingIndexAt(juce::Point<int> position) const {
+    for (int i = 0; i < (int)dangling_.size(); ++i)
+        if (getDanglingBounds(i).contains(position))
+            return i;
+    return -1;
+}
+
+juce::String MixerInsertList::describeDangling(int index) const {
+    if (index < 0 || index >= (int)dangling_.size())
+        return {};
+    const auto& d = dangling_[(size_t)index];
+    return d.name + ", not connected" + (d.bypassed ? ", bypassed" : "");
 }
 
 // The listed rows, or the "(no inserts)" placeholder when there are none and nothing to add either.
 int MixerInsertList::listedRowsHeight() const {
-    if (visible_.empty())
+    if (visible_.empty() && dangling_.empty())
         return hasAddRow() ? 0 : kRowHeight;
     return rowTop((int)visible_.size());
 }
@@ -352,6 +407,14 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
         addAndMakeVisible(*proxy);
         rowProxies_.push_back(std::move(proxy));
     }
+    danglingProxies_.clear();
+    for (int i = 0; i < (int)dangling_.size(); ++i) {
+        auto proxy = std::make_unique<RowAccessibilityProxy>();
+        proxy->setInterceptsMouseClicks(false, false);
+        proxy->setTitle(describeDangling(i));
+        addAndMakeVisible(*proxy);
+        danglingProxies_.push_back(std::move(proxy));
+    }
     if (hasAddRow()) {
         auto proxy = std::make_unique<RowAccessibilityProxy>();
         proxy->setInterceptsMouseClicks(false, false);
@@ -370,6 +433,8 @@ std::vector<juce::String> MixerInsertList::entryKeys() const {
     std::vector<juce::String> keys;
     for (const auto& entry : entries_)
         keys.push_back(MixerRowsMotion::insertKey(entry));
+    for (const auto& d : dangling_)
+        keys.push_back(MixerRowsMotion::danglingKey(d));
     return keys;
 }
 
@@ -380,6 +445,13 @@ std::vector<ExitEnterListRow> MixerInsertList::motionRows() const {
         rows.push_back({MixerRowsMotion::insertKey(entries_[(size_t)visible_[i]]), (float)bounds.getY(),
                         (float)bounds.getHeight()});
     }
+    for (int i = 0; i < (int)dangling_.size(); ++i) {
+        const auto bounds = getDanglingBounds(i);
+        rows.push_back(
+            {MixerRowsMotion::danglingKey(dangling_[(size_t)i]), (float)bounds.getY(), (float)bounds.getHeight()});
+    }
+    std::sort(rows.begin(), rows.end(),
+              [](const ExitEnterListRow& a, const ExitEnterListRow& b) { return a.start < b.start; });
     return rows;
 }
 
@@ -428,6 +500,9 @@ juce::String MixerInsertList::tooltipAt(juce::Point<int> mouse) const {
         return !gap->isAcross()   ? "Add an effect here"
                : gap->behindPaths ? "Add an effect after all paths"
                                   : "Add an effect before all paths";
+    if (const int d = danglingIndexAt(mouse); d >= 0)
+        return dangling_[(size_t)d].name + " is not connected, so it is not in the sound: double-click to show it on "
+                                           "the canvas";
     const int row = rowIndexAt(mouse);
     if (isAddRow(row))
         return endAcrossTarget_.has_value() && endTarget().isAcross() ? "Add an effect after all paths"
@@ -455,10 +530,9 @@ int MixerInsertList::rowButtonsWidth(const synth::MixerInsertEntry& entry) const
 int MixerInsertList::rowIndexAt(juce::Point<int> position) const {
     if (position.y < 0)
         return -1;
-    int top = 0;
     for (int i = 0; i < (int)visible_.size(); ++i) {
-        top += rowHeight(i);
-        if (position.y < top)
+        const int top = rowTop(i);
+        if (position.y >= top && position.y < top + rowHeight(i))
             return i;
     }
     if (hasAddRow() && position.y >= listedRowsHeight() && position.y < listedRowsHeight() + kRowHeight)
@@ -480,6 +554,9 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
     if (row.getHeight() <= 0)
         return;
     juce::Graphics::ScopedSaveState clip(g);
+    const float flipDim = kindFlipDimFor(entry.uuid);
+    if (entry.kind == Kind::Module && isKindFlipRunning())
+        g.addTransform(juce::AffineTransform::translation(0.0f, flipOffsetFor(entry.uuid, (float)row.getY())));
     g.reduceClipRegion(row);
     // A growing row reveals from the top: lay it out at full height and let the clip show what fits.
     auto full = row.withHeight(kRowHeight);
@@ -514,16 +591,96 @@ void MixerInsertList::paintRow(juce::Graphics& g, int i, float lift) {
                    true);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
     } else {
-        g.setColour(entry.bypassed ? disabled : text);
+        g.setColour((entry.bypassed ? disabled : text).interpolatedWith(disabled, flipDim));
+        if (flipDim > 0.5f)
+            g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
         g.drawText(entry.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
     }
+}
+
+// ---- Joining and leaving the chain -----------------------------------------------------------------------------
+
+void MixerInsertList::startKindFlip(const std::vector<ExitEnterListRow>& flips) {
+    flipAnimation_.stop(vblank_);
+    flipFrom_.clear();
+    for (const auto& flip : flips)
+        flipFrom_[flip.key] = flip.start;
+    if (flipFrom_.empty())
+        return;
+    flipAmount_ = 0.0f;
+    flipAnimation_.start(
+        vblank_, kFlipMs, easeOutCubic,
+        [this](float t) {
+            flipAmount_ = t;
+            repaint();
+        },
+        [this] {
+            flipFrom_.clear();
+            flipAmount_ = 1.0f;
+            repaint();
+        });
+    repaint();
+}
+
+void MixerInsertList::setKindFlipAmountForTest(float t) {
+    flipAmount_ = t;
+    if (t >= 1.0f)
+        flipFrom_.clear();
+    repaint();
+}
+
+float MixerInsertList::kindFlipDimFor(const juce::String& uuid) const {
+    if (flipFrom_.count(uuid) == 0)
+        return 0.0f;
+    const bool nowDangling = std::any_of(dangling_.begin(), dangling_.end(),
+                                         [&](const synth::MixerDanglingEntry& d) { return d.uuid == uuid; });
+    return nowDangling ? flipAmount_ : 1.0f - flipAmount_;
+}
+
+// How far the row is drawn from where it stands now: the whole way as the flip begins, none once it lands.
+float MixerInsertList::flipOffsetFor(const juce::String& uuid, float top) const {
+    const auto it = flipFrom_.find(uuid);
+    return it == flipFrom_.end() ? 0.0f : (1.0f - flipAmount_) * (it->second - top);
+}
+
+// A module that leads nowhere: its name dimmed and italic with "not connected" after it, and a dashed rail where a
+// chain row has its solid one, so it reads as hanging off the row above rather than as part of the sound.
+void MixerInsertList::paintDangling(juce::Graphics& g, int index) {
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto& d = dangling_[(size_t)index];
+    const auto row = getDanglingBounds(index);
+    const bool flipping = flipFrom_.count(d.uuid) != 0;
+    const float dim = flipping ? kindFlipDimFor(d.uuid) : 1.0f;
+    const float railAlpha = dim;
+    juce::Graphics::ScopedSaveState state(g);
+    if (flipping)
+        g.addTransform(juce::AffineTransform::translation(0.0f, flipOffsetFor(d.uuid, (float)row.getY())));
+    const int anchorDepth =
+        d.anchorRow >= 0 && d.anchorRow < (int)entries_.size() ? entries_[(size_t)d.anchorRow].depth : 0;
+    const int level = anchorDepth + d.depth;
+    g.setColour(theme.colors.textDisabled.withMultipliedAlpha(railAlpha));
+    for (int y = row.getY() + 1; y < row.getBottom(); y += 6)
+        g.fillRect((level - 1) * kIndent + 6, y, 2, juce::jmin(3, row.getBottom() - y));
+    auto content = row.withTrimmedLeft(2 + level * kIndent).withTrimmedRight(2);
+    g.setColour(theme.colors.textPrimary.interpolatedWith(theme.colors.textDisabled, dim));
+    g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::italic)));
+    g.drawText(d.name, content.reduced(2, 0), juce::Justification::centredLeft, true);
+    const int nameWidth = juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), d.name);
+    const auto caption = content.reduced(2, 0).withTrimmedLeft(nameWidth + 6);
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    if (caption.getWidth() >= juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "not connected")) {
+        g.setColour(theme.colors.textMuted.withMultipliedAlpha(railAlpha));
+        g.drawText("not connected", caption, juce::Justification::centredLeft, true);
+    }
+    g.setFont(juce::Font(juce::FontOptions(12.0f)));
 }
 
 void MixerInsertList::paint(juce::Graphics& g) {
     const auto& theme = synth::theme::themeOf(*this);
 
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    if (visible_.empty() && !hasAddRow()) {
+    if (visible_.empty() && dangling_.empty() && !hasAddRow()) {
         g.setColour(theme.colors.textMuted);
         g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft, true);
     }
@@ -534,6 +691,8 @@ void MixerInsertList::paint(juce::Graphics& g) {
             paintRow(g, i, 0.0f);
     if (lifted >= 0)
         paintRow(g, lifted, rowDrag_.animator().getLift());
+    for (int i = 0; i < (int)dangling_.size(); ++i)
+        paintDangling(g, i);
     const auto accent = theme.colors.accent;
     if (hasAddRow()) {
         g.setColour(accent);
@@ -561,6 +720,8 @@ void MixerInsertList::resized() { placeRows(); }
 void MixerInsertList::placeRows() {
     for (int i = 0; i < (int)rowProxies_.size(); ++i)
         rowProxies_[(size_t)i]->setBounds(drawBounds(i)); // the last one is "+ Insert" when there is one
+    for (int i = 0; i < (int)danglingProxies_.size(); ++i)
+        danglingProxies_[(size_t)i]->setBounds(getDanglingBounds(i));
     const int lifted = liftedRow();
     for (int i = 0; i < (int)bypassButtons_.size(); ++i) {
         if (bypassButtons_[(size_t)i] == nullptr)
