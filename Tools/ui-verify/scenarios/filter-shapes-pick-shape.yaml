@@ -1,0 +1,47 @@
+# Feature: the shape window's button that opens the list of built-in, saved and factory shapes is called Pick shape, like
+# the card's button beside Edit shapes, with the card's tooltip word for word; it still opens the same list.
+#
+# What a user does: sets a Filter to Custom, presses Edit shapes (Return on it) (the window opens with Pick shape between Rename and
+# Draw), then presses the window's Pick shape (the list of shapes opens).
+record: true
+save_project: fro1746 pick shape
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "card:Filter > Pick shape", exists: true, within_ms: 3000}
+  - expect: {id: "card:Filter > Pick shape", tooltip: "Choose a saved or factory shape from a list with a small picture of each; the selected shape takes its curve (Cmd+Z undoes it)"}
+  - key: {keys: return, target: Edit shapes}                 # the card is taller than the canvas here; Return presses it
+  - wait: {settleMs: 800}
+  - expect: {id: "Filter shapes: Filter > Pick shape", exists: true, within_ms: 5000}
+  - hover: {id: "Filter shapes: Filter > Pick shape"}         # its tooltip: only the explanation, the card's words
+  - wait: {settleMs: 1500}
+  - mark: {check: 1, name: pick-shape}
+  - expect: {id: "Filter shapes: Filter > Pick shape", text: "Pick shape", title: "Pick shape"}
+  - expect: {id: "Filter shapes: Filter > Pick shape", tooltip: "Choose a saved or factory shape from a list with a small picture of each; the selected shape takes its curve (Cmd+Z undoes it)"}   # the card's, word for word
+  - expect: {count: {prefix: "Start from", equals: 0}}
+  - click: {id: "Filter shapes: Filter > Pick shape"}
+  - wait: {settleMs: 800}
+  - mark: {check: 2, name: pick-shape-list}
+  - key: {keys: escape}
+  - wait: {}

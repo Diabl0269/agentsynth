@@ -1,5 +1,5 @@
 // ShapeEditorTests.cpp -- the Filter shape editor window's content: selection, the curve editor driven through real
-// mouse events, the buttons, Start from, the lane draw shapes, undo and Escape.
+// mouse events, the buttons, Pick shape, the lane draw shapes, undo and Escape.
 #include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
@@ -149,13 +149,13 @@ TEST(ShapeEditor, RenameButtonEditsTheSelectedShapesNameInPlace) {
     EXPECT_EQ(static_cast<juce::Button*>(editor.getChip(1))->getButtonText(), "bright");
 }
 
-TEST(ShapeEditor, StartFromListsTheBuiltInsThenTheFactoryShapesAndStampsTheCurveOnTheSelectedShape) {
+TEST(ShapeEditor, PickShapeListsTheBuiltInsThenTheFactoryShapesAndStampsTheCurveOnTheSelectedShape) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 2);
     CapturedMenu captured;
     editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
 
-    click(editor.getStartFromButton());
+    click(editor.getPickShapeButton());
 
     // The built-ins as before; the factory shapes whose curve is already a built-in (the vowels) are not repeated.
     const std::vector<std::string> expected{"ah, Factory",
@@ -335,7 +335,7 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVis
                                             "Add shape",
                                             "Duplicate",
                                             "Rename",
-                                            "Start from",
+                                            "Pick shape",
                                             "Draw",
                                             "Ring helpers",
                                             "Save shape",
@@ -357,7 +357,7 @@ TEST(ShapeEditor, DeleteSitsAtTheRightEndOfTheButtonRowAndIsRed) {
     ShapeListEditor editor(rig.adapter, 0);
     auto& del = editor.getDeleteButton();
     for (auto* other : {&editor.getAddButton(), &editor.getDuplicateButton(), &editor.getRenameButton(),
-                        &editor.getStartFromButton(), &editor.getDrawButton(), &editor.getSaveShapeButton()}) {
+                        &editor.getPickShapeButton(), &editor.getDrawButton(), &editor.getSaveShapeButton()}) {
         EXPECT_EQ(other->getY(), del.getY());
         EXPECT_LT(other->getRight(), del.getX()) << other->getTitle();
     }

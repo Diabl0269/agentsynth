@@ -106,10 +106,8 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(duplicateButton_, "A copy of the selected shape");
     styleButton(deleteButton_, "Remove the selected shape (one always stays)");
     styleButton(renameButton_, "Name the selected shape");
-    styleButton(startFromButton_,
-                "Pick a built-in, a saved shape or a factory shape from a list with a small picture of each, to "
-                "replace the selected shape's curve");
-    styleButton(drawButton_, {}); // updatePenButton gives it the tooltip of the pen state
+    styleButton(pickShapeButton_, actiontext::kPickShapeTip); // the card's Pick shape: one action, one text
+    styleButton(drawButton_, {});                             // updatePenButton gives it the tooltip of the pen state
     styleButton(saveShapeButton_, "Keep the selected shape's curve under a name, in the Sounds tab's Shapes");
     styleButton(ringButton_, "One click places dots at the harmonic ratios of a note, so a resonant "
                              "filter rings at those pitches");
@@ -117,7 +115,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     int order = 3;
     buildToolbar(order);
     curve_.setExplicitFocusOrder(order++);
-    std::vector<juce::TextButton*> buttons{&addButton_, &duplicateButton_, &renameButton_, &startFromButton_,
+    std::vector<juce::TextButton*> buttons{&addButton_, &duplicateButton_, &renameButton_, &pickShapeButton_,
                                            &drawButton_};
     if (pitchRows_ != nullptr)
         buttons.push_back(&ringButton_);
@@ -132,7 +130,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     duplicateButton_.onClick = [this] { controller_.duplicateShape(selected_); };
     deleteButton_.onClick = [this] { controller_.deleteShape(selected_); };
     renameButton_.onClick = [this] { map_.beginRename(selected_); };
-    startFromButton_.onClick = [this] { openStartFromMenu(); };
+    pickShapeButton_.onClick = [this] { openPickShapeMenu(); };
     drawButton_.onClick = [this] {
         if (pen_.has_value())
             setPen(std::nullopt); // pressing it again leaves draw mode
@@ -389,7 +387,7 @@ void ShapeListEditor::resized() {
     // fit; with Ring helpers the row holds one more button, so the padding and the gaps are smaller.
     const bool ring = pitchRows_ != nullptr;
     deleteButton_.setBounds(buttons.removeFromRight(ring ? 56 : 64));
-    juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &startFromButton_,
+    juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &pickShapeButton_,
                                  &drawButton_, &ringButton_,      &saveShapeButton_};
     const int gap = ring ? kGap / 2 : kGap;
     std::vector<juce::TextButton*> shown;
