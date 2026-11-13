@@ -304,7 +304,14 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 **Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
-`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon: a 22 px accent glyph (triangle with "!" for a warning, a circle with "i" or "?") inside the box at `synth::ui::alertIconBounds`, in place of JUCE's oversized translucent shape that stuck out past the corner.
+`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
+shape that stuck out past the corner: a 36 px glyph (about twice the title's line height, as macOS, Cubase and Logic size
+their caution icon), a triangle with "!" for a warning and a circle with "i" or "?" for info and question.
+`synth::ui::alertIconBounds` places it in the column left of the text, 18 px before it, with its centre on the centre of
+the title's first line as the alert's `TextLayout` measures it, never outside the box. `synth::ui::alertIconColour`
+colours it: the theme's `warning` for a warning (the token a warning toast uses), `accent` for info and question, pushed
+toward black or white by `readableOn` until it reads at 3:1 on the alert surface (Daylight's orange comes out darker).
+The theme sweep checks the size, the alignment, the colour and the contrast in every theme.
 
 **Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
 opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey

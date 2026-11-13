@@ -1,0 +1,16 @@
+# An alert's icon is a title-height glyph in the theme's warning colour, level with the title. Check 1.
+#
+# What a user does: opens Settings (Cmd+,), Keyboard Shortcuts, clicks Reset to Defaults: the "Reset Shortcuts" warning
+# appears with a large yellow triangle whose centre lines up with the title.
+record: true
+save_project: fro1770 alert warning
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {}
+  - mark: {check: 1, name: warning-icon}
+  - screenshot: {id: "Reset Shortcuts", name: warning-alert}
