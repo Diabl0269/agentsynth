@@ -524,7 +524,25 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
             // second feed there would sum L+R into one mono jack (+6 dB). So re-point ONLY when the
             // left leg has nothing at all — otherwise the collapse legitimately drops the cable.
             const int leftCh = c.destination.channelIndex - hiddenBase;
-            if (!audioChannelReachableFromJack(*mb, leftCh, /*isInput=*/true) || inputChannelIsFed(leftCh))
+            if (!audioChannelReachableFromJack(*mb, leftCh, /*isInput=*/true))
+                continue;
+            // A Dual I/O contiguous-pair FX source's RIGHT output (raw ch1) keeps its signal through our
+            // collapse: re-point it onto our surviving left jack as the SUMMED second cable the source's own split
+            // would have drawn (mirroring the toggle-the-source direction), so half the stereo is not lost. Only when
+            // its left twin already feeds that same jack. Split-block sources are NOT summed: see
+            // CollapsingDoesNotDoubleFeedACollapsedInputJack.
+            if (auto* srcNode = graph.getNodeForId(c.source.nodeID)) {
+                auto* srcMb = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
+                if (srcMb != nullptr && srcMb->isDualIO() && !srcMb->hasSplitBlockStereo() &&
+                    srcMb->rightAudioLegChannel() == 1 && c.source.channelIndex == 1 &&
+                    graph.isConnected({{c.source.nodeID, 0}, {nodeId, leftCh}})) {
+                    const juce::AudioProcessorGraph::Connection summed{c.source, {nodeId, leftCh}};
+                    if (!hasEdge(summed))
+                        graph.addConnection(summed);
+                    continue;
+                }
+            }
+            if (inputChannelIsFed(leftCh))
                 continue;
             const juce::AudioProcessorGraph::Connection moved{c.source, {nodeId, leftCh}};
             if (!hasEdge(moved))
