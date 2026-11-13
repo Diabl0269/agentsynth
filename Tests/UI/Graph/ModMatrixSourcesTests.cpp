@@ -2,13 +2,17 @@
 //
 // The Mod Matrix's source list offers the jacks a module's card draws, not its raw channels: an
 // LFO (one CV jack, two silent pass-through channels behind it) is one entry. A routing saved from a
-// channel the list no longer offers still shows its source instead of a blank box.
+// channel the list no longer offers still shows its source instead of a blank box. A routing row that is added or
+// removed (Add Modulation, undo, redo) grows in or shrinks away through the shared ExitEnterListMotion
+// (ModMatrixRowMotion.cpp); Tools/ui-verify/scenarios/mod-matrix-edits-no-pop.yaml runs it on screen.
 
 #include "ModMatrixCanvasHelpers.h"
 
 #include "Modules/PolyMidiModule.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -22,6 +26,23 @@ std::unique_ptr<ModMatrixPicker> openSourcePicker(MatrixCanvas& c) {
     c.matrix().getRowSourceComboForTest(0)->showPopup();
     return std::unique_ptr<ModMatrixPicker>(dynamic_cast<ModMatrixPicker*>(captured.release()));
 }
+
+struct RowMotionRig {
+    MatrixCanvas c{Boxed::DestInside};
+    synth::ui::AnimationMode savedMode = synth::ui::animationMode();
+    RowMotionRig() {
+        c.matrix().setRowMotionForcedForTest(true);
+        c.matrix().setVisible(true);
+        c.matrix().resized();
+    }
+    ~RowMotionRig() { synth::ui::setAnimationMode(savedMode); }
+    synth::ui::ExitEnterListMotion* motion() { return c.matrix().getRowMotionForTest(); }
+    bool running() { return motion() != nullptr && motion()->isRunning(); }
+    void finish() {
+        if (motion() != nullptr)
+            motion()->finishNow();
+    }
+};
 
 } // namespace
 
@@ -81,4 +102,51 @@ TEST(ModMatrixSources, ARoutingFromAnUnlistedChannelKeepsItsSourceVisible) {
     ASSERT_NE(picker, nullptr);
     picker->setSearchTextForTest("out 2");
     EXPECT_EQ(picker->getVisibleItemTextsForTest().size(), 1u);
+}
+
+TEST(ModMatrixRowMotion, AnAddedRowGrowsInInsteadOfLandingInOneFrame) {
+    RowMotionRig r;
+    r.c.addRow();
+    ASSERT_EQ(r.c.matrix().getNumRowsForTest(), 1);
+    ASSERT_TRUE(r.running()) << "the new row grows in";
+    EXPECT_EQ(r.motion()->enterGhostCount(), 0) << "at the first frame it has no height yet";
+    r.motion()->applyAtMs(r.motion()->timeline().totalMs() * 0.7);
+    EXPECT_EQ(r.motion()->enterGhostCount(), 1) << "part way, it is drawn";
+    r.motion()->applyAtMs(r.motion()->timeline().totalMs());
+}
+
+TEST(ModMatrixRowMotion, UndoShrinksTheRowAwayAndRedoGrowsItBack) {
+    RowMotionRig r;
+    r.c.addRow();
+    r.finish();
+    ASSERT_TRUE(r.c.undo.undo());
+    r.c.matrix().updateRowsFromGraph();
+    ASSERT_EQ(r.c.matrix().getNumRowsForTest(), 0);
+    ASSERT_TRUE(r.running()) << "the undone row shrinks away";
+    EXPECT_EQ(r.motion()->exitGhostCount(), 1);
+    r.finish();
+
+    ASSERT_TRUE(r.c.undo.redo());
+    r.c.matrix().updateRowsFromGraph();
+    ASSERT_EQ(r.c.matrix().getNumRowsForTest(), 1);
+    EXPECT_TRUE(r.running()) << "the redone row grows back";
+}
+
+TEST(ModMatrixRowMotion, AnimationsOffLandsAtOnce) {
+    RowMotionRig r;
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    r.c.addRow();
+    EXPECT_FALSE(r.running());
+    ASSERT_TRUE(r.c.undo.undo());
+    r.c.matrix().updateRowsFromGraph();
+    EXPECT_FALSE(r.running());
+}
+
+TEST(ModMatrixRowMotion, ReduceMotionPlaysTheSharedReducedMotion) {
+    RowMotionRig r;
+    synth::ui::setReducedMotionForTest(true);
+    r.c.addRow();
+    synth::ui::setReducedMotionForTest(std::nullopt);
+    ASSERT_TRUE(r.running());
+    EXPECT_TRUE(r.motion()->isReducedMotion());
 }

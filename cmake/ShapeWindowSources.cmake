@@ -36,5 +36,6 @@ include(cmake/ButtonTooltipSources.cmake) # appends the shared button words and 
 include(cmake/ModCurveUISources.cmake)
 # The Mod Matrix source picker's create rows.
 include(cmake/ModMatrixPickerCreateSources.cmake)
+include(cmake/ModMatrixRowMotionSources.cmake)
 # The Hosted Plugin card's outputs strip and Outputs panel.
 include(cmake/HostedOutputsSources.cmake)
