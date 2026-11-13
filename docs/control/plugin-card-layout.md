@@ -391,6 +391,16 @@ widget choice.
 
 ---
 
+## Outputs panel
+
+A plugin with more than one output bus (a drum sampler, Maschine) gets an Outputs panel instead of the card header's Dual I/O flip; a plain 2-out plugin keeps the flip. The routing button (the same fork icon, at the same place) and the card's right-click item "Outputs..." open it through `launchPopover` (a `PopoverSlot` held by `HostedOutputsStrip`, so the button toggles it).
+
+- **Panel** (`Source/UI/Graph/HostedOutputs/HostedOutputsPanel.*`): one row per bus with a Show switch (the shared `SwitchGlide`; the main bus is locked on), the plugin's own bus name, its channel range, and a Joined | L/R `CardSegmentedSwitch` on 2-channel buses (the main bus joins and splits through Dual I/O). Footer pairs: Show all / Main only and Join all / Split all. Up/Down walk the rows, Space or Return toggles Show, Esc closes. It re-reads on undo (`AppUndoAware`).
+- **One undo step per action.** `editHostedOutputs` snapshots the cables, runs the edit inside one `recordStructuralChange` and retracts the cables that went. Hiding an output removes its cables in the same step, so one Cmd+Z brings the output and its cables back. A footer action that would change nothing records nothing.
+- **Fold line** (`HostedOutputsStrip`, `OutputFoldLine`): under the main jacks the card shows "+ N more outputs"; the plus turns into a minus as it opens. It is a Tab stop (Enter or Space toggles, with a focus ring), has a title and a tooltip, and toggling it is one undo step. Folded, the cables of shown aux outputs leave from the dot at the line's right end and a folded jack takes no new cable; expanded, every switched-on output shows on its own row. The fold persists in the module's extra state.
+- **Motion.** `getPortCenter` asks the strip where an aux jack is. Each aux jack carries its own row and alpha, so showing, hiding, folding and undo glide and fade through `AnimationDriver` (160 ms in, 110 ms out, Reduce Motion and Animations Off honoured), the cable ends follow through `getPortCenter`, and the card grows to its final height once.
+- The macro "Configure I/O" dialog does not reuse the switch: it edits the ports of a macro (name, colour, shape, order), which are not a plugin's output buses, so there is nothing to show or hide there.
+
 ## Persistence
 
 - **Per-instance:** extra-state key `"cardLayout"` on the `HostedPlugin` node, saved with the
@@ -446,6 +456,11 @@ Any parameter of a hosted plugin can take a mod cable, up to 48 at once per plug
   or not (`hostedDestinations`, the one list of them; a modulated one says "Modulated"). A pick binds it with the same
   code as a drop on the card's body (`bindHostedModTarget`: knob shown, slot claimed) and re-points the routing as
   one undo step; this is also the keyboard path to a parameter that is not on the card.
+- **A saved routing with no knob.** A project saved before a cable always added its knob can hold a routing on a
+  parameter that is not on the card. When the project opens and the plugin loads, that parameter gets its knob
+  (`ModuleComponent::reconcileHostedModKnobs`, once per publish), so the cable ends on a control. It is written to
+  this card's own layout, never the plugin's shared default, and is not an undo step: a knob hidden afterwards stays
+  hidden. Test: `HostedPluginCardModTests.cpp`, `ASavedRoutingOnAParameterWithNoKnob...`.
 - **The cable's end.** A cable on a plugin knob shows the parameter's short name, without the plugin's, in a small
   pill beside its landing dot (`CableEndName`), so a cable always says which control it drives.
 - **Replace with...** Another plugin: each cable follows its parameter id onto the new plugin's slot for it (a

@@ -27,6 +27,10 @@ public:
     /** The user's folder: where downloaded packs are installed. */
     static juce::File userRoot();
 
+    /** Test mode: this folder replaces both the bundled and the user's folder, so a run starts from the packs it was
+     *  given (set once at launch, before any lookup). */
+    static void setOnlyRoot(const juce::File& root);
+
     /** Test-only: searches `roots` instead; nullopt restores the normal roots. Set before any lookup runs. */
     static void setRootsForTests(std::optional<std::vector<juce::File>> roots);
 

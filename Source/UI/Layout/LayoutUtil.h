@@ -30,22 +30,6 @@ inline constexpr int kSingleWidth = 280; // standard module
 inline constexpr int kDoubleWidth = 560; // Sequencer / PolySequencer / MidiKeyboard (= 2 × kSingleWidth)
 // Note: kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 (no duplicate constant needed)
 
-// ---- Macro Control bank geometry ----
-// The Macro bank is the one module whose footprint changes at runtime (its "Knobs" parameter
-// picks how many macros are exposed). Its geometry lives here, not in ModuleComponent, so the
-// three places that must agree on it — the component layout, the output-jack hit test, and the
-// drag-preview size estimate — all read the same numbers, and so the growth maths stays
-// headless-testable.
-inline constexpr int kMacroHeaderH = 94;   // title bar + the Knobs / Bipolar row
-inline constexpr int kMacroRowH = 44;      // one macro knob and its output jack
-inline constexpr int kMacroBottomPad = 12; // padding below the last row
-
-// Total component height for a bank showing `count` macros.
-inline constexpr int macroBankHeight(int count) { return kMacroHeaderH + count * kMacroRowH + kMacroBottomPad; }
-
-// Vertical centre of macro row `index` — where both the knob and its output jack sit.
-inline constexpr int macroRowCentreY(int index) { return kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2; }
-
 enum class ModuleWidthBucket { Narrow, Single, Double };
 
 // Maps a ModuleType to its width bucket.
@@ -75,6 +59,11 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 // grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to x,y >= 0 only (the canvas frame grows to fit).
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
+/** How many boxes findFreeSlot and intersectsAny have tested a spot against; message thread only (ScaleHangTests). */
+struct FreeSlotSearchCounters {
+    long long boxTests = 0;
+};
+FreeSlotSearchCounters& freeSlotSearchCountersForTest() noexcept;
 
 // Like findFreeSlot, but the search only walks DOWN from `desired` (snapped, clamped to x,y >= 0) in kGridSize
 // steps, so the result keeps the desired x: the first clear row under a spot beside a card. Gives up after

@@ -27,13 +27,14 @@ Known pops are listed in `known-pops.txt` (see docs/development/test-mode.md#no-
     - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl+R"}}
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
+    - click: {id: "card:LFO 1", approach: false}        # with `record`, a click is preceded by a 4-frame pointer approach; this skips it
     - mark: {check: 2, name: picker-open}               # proof for check 2, see below
     - glide: {name: card-slides, frames: 12, do: {click: {id: "macroCard:Macro", x: 262, y: 18}}}   # a motion, frame by frame
 
 `mark: {check: N, name: <slug>}` (N an integer >= 1, name [a-z0-9-]+, unique in the scenario) is the moment a check's
 claim is on screen. It takes one frame held 1.5 s, saves that image as `<out>/proof/<name>.png` (also without `record`)
 and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the mark to 3 s after (4 to 6 s
-long when the video allows). Put it while the popup or hover it shows is still open; the summary lists the stills and
+long when the video allows). With `record`, each `click` first films the pointer gliding in (four `hover`s from 60 px up-left, 0.1 s a frame; `approach: false` skips it), so a mark right after a click that changes the screen has a clip of before, approach and after. Put it while the popup or hover it shows is still open; the summary lists the stills and
 clips.
 
 `glide: {name: <slug>, do: {<command>: {args}}, frames: N}` (needs `record: true`; `frames` 4 to 40, default 12; `crop: {x, y, w, h}` limits the strip image to that part of the frame, in two columns) sends
@@ -44,7 +45,8 @@ after the command; follow it with a `wait` and a `mark` on the landed state.
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
-changes its project and must not change the committed copy. An `expect` is retried for `within_ms` (default 500) so a
+changes its project and must not change the committed copy; `from: <bundle>` (`~` expanded) copies a project that is not
+in the repository instead (a private one on this machine), without its autosave sidecars. An `expect` is retried for `within_ms` (default 500) so a
 repaint that is still settling is not a failure; one that never arrives still is.
 """
 
@@ -72,11 +74,14 @@ RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
+APPROACH_OFFSET = 60  # px up and left of the click point the recorded pointer starts from
+APPROACH_STEPS = 4  # hovers (and frames) before a recorded click
 POP_CHECKED = {"click", "drag", "key", "wheel", "mouseUp", "keyUp"}  # protocol actions that can change the window; a glide's `do` too
 POP_KEYS = {"ignore", "ms", "undo", "off"}
 KNOWN_POPS = os.path.join(HERE, "known-pops.txt")
 KNOWN_STEP = re.compile(r"^(\d+)([ur]?)$")
 UNDO_STEPS = (("u", "undoButton"), ("r", "redoButton"))  # the toolbar buttons: Cmd+Z in a text field would undo its text
+UNDO_KEYS = {"cmd+z", "ctrl+z"}
 
 
 class ScenarioError(ValueError):
@@ -482,9 +487,21 @@ class Runner:
         self._record(index, "popWatchCheck", args, dict(reply, step=label), not message, message or None)
         return reply, message
 
-    def _undo_redo(self, index, command, instant):
-        """After an edit: undo, then redo, each under a watch and each must animate too. Returns a failure message."""
-        for suffix, button in UNDO_STEPS:
+    @staticmethod
+    def _is_undo(command, args):
+        """Whether the step is itself an undo: Cmd+Z, the Undo button, or a glide whose `do` is one of those."""
+        if command == "glide":
+            inner = args.get("do") or {}
+            return len(inner) == 1 and Runner._is_undo(*next(iter(inner.items())))
+        if command == "key":
+            return str(args.get("keys", "")).lower() in UNDO_KEYS
+        return command == "click" and args.get("id") == "undoButton"
+
+    def _undo_redo(self, index, command, args, instant):
+        """After an edit: undo, then redo, each under a watch and each must animate too. After an undo the order is
+        redo, then undo: undoing first would undo the edit before it, or nothing when the stack is empty, and the redo
+        that follows would then put back the edit the step had just undone. Returns a failure message."""
+        for suffix, button in reversed(UNDO_STEPS) if self._is_undo(command, args) else UNDO_STEPS:
             label = "%d%s" % (index, suffix)
             self.app.call("popWatchStart")
             self.app.call("click", id=button)
@@ -514,7 +531,7 @@ class Runner:
             print("ui-verify: %s: undo and redo are not pop-checked: the app reports no undo serial" % self.scenario.name)
         if "undoSerialBefore" in reply and edited and self.scenario.pop_check.get("undo", True):
             self.undo_available = True
-            message = self._undo_redo(index, command, instant)
+            message = self._undo_redo(index, command, args, instant)
         return (False, message) if message else (True, "")
 
     def _record(self, index, command, args, reply, ok, error=None):
@@ -559,6 +576,29 @@ class Runner:
             self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
         self.app.call("mouseUp", id=target, x=end[0], y=end[1], **mods)
         return {"from": args["from"], "to": args["to"]}
+
+    def _recorded_approach(self, args):
+        """Before a recorded `click`: the pointer glides in from APPROACH_OFFSET px up-left (kept inside the main
+        window) in APPROACH_STEPS `hover`s with a frame after each, so a clip of a static state shows the pointer
+        arriving and not one picture twice. Does nothing (the click is sent as it is) when the click point is not in
+        main-window coordinates or the step says `approach: false`."""
+        if args.get("approach") is False or "id" not in args:
+            return
+        try:
+            end = self._point(args["id"], args.get("x"), args.get("y"))
+        except TestModeError:
+            return
+        if end is None:
+            return
+        window = self.app.call("getState", id="window")["bounds"]
+        start = (max(0, end[0] - APPROACH_OFFSET), max(0, end[1] - APPROACH_OFFSET))
+        start = (min(start[0], window["w"] - 1), min(start[1], window["h"] - 1))
+        for index in range(APPROACH_STEPS):
+            fraction = index / APPROACH_STEPS  # the last hover stays short of the click point; the click lands there
+            x = round(start[0] + (end[0] - start[0]) * fraction)
+            y = round(start[1] + (end[1] - start[1]) * fraction)
+            self.app.call("hover", id="window", x=x, y=y)
+            self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
 
     def _glide(self, args):
         """Sends `do`, then films the screen `frames` times in a row. The strip image tiles those frames."""
@@ -616,7 +656,14 @@ class Runner:
             reply = {"typed": len(str(args.get("text", "")))}
         elif command == "copyFixture":
             destination = os.path.join(self.settings_dir, args["name"])
-            shutil.copytree(os.path.join(FIXTURES, args["name"]), destination)
+            source = os.path.expanduser(args["from"]) if args.get("from") else os.path.join(FIXTURES, args["name"])
+            if not os.path.isdir(source):
+                self._record(index, command, args, None, False, "no project at " + source)
+                return False, "copyFixture: no project at %s" % source
+            shutil.copytree(source, destination)
+            for leftover in os.listdir(destination):  # openProject refuses a bundle with an autosave sidecar
+                if leftover.startswith("autosave") and leftover.endswith(".json"):
+                    os.remove(os.path.join(destination, leftover))
             reply = {"copied": destination}
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays
@@ -634,6 +681,9 @@ class Runner:
             reply = self._glide(args)
         elif command == "drag" and self.recorder is not None:
             reply = self._recorded_drag(args)
+        elif command == "click" and self.recorder is not None:
+            self._recorded_approach(args)
+            reply = app.call("click", **{k: v for k, v in args.items() if k != "approach"})
         else:
             args = dict(args)
             timeout = args.pop("timeoutMs", None)

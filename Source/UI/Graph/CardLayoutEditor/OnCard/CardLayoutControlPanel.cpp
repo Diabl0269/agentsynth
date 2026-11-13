@@ -3,6 +3,8 @@
 #include "CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/ModuleViews/ModCurve/ModCurveBox.h"
+#include "UI/ModuleViews/ModCurve/ModCurveEditTarget.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -36,10 +38,15 @@ void styleCaption(juce::Label& label) {
 
 } // namespace
 
+CardLayoutControlPanel::~CardLayoutControlPanel() = default;
+
+ModCurveBox* CardLayoutControlPanel::getCurveBoxForTest() const noexcept { return curveBox_.get(); }
+
 CardLayoutControlPanel::CardLayoutControlPanel() {
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
-    for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
-                          &rangeCaption_, &rangeTo_, &hint_}) {
+    for (auto* caption :
+         {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_, &nameCaption_,
+          &polarityCaption_, &yMacroCaption_, &modeCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
         styleCaption(*caption);
         addAndMakeVisible(*caption);
     }
@@ -47,6 +54,50 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     styleEditor(label_, "Label", "The control's name on the card. Empty puts the parameter's own name back");
     styleEditor(minimum_, "Minimum", "The lowest value the control reaches, in the parameter's own units");
     styleEditor(maximum_, "Maximum", "The highest value the control reaches, in the parameter's own units");
+    styleEditor(name_, "Name", "This knob's name: its caption on the card, its output jack and what the AI sees");
+    name_.setExplicitFocusOrder(5);
+    name_.setInputRestrictions(24);
+    name_.onReturnKey = [this] { commitName(); };
+    name_.onFocusLost = [this] { commitName(); };
+    yMacro_.setTitle("Y macro");
+    yMacro_.setTooltip("The macro the pad's vertical axis drives. Its own knob is replaced by the pad");
+    yMacro_.setExplicitFocusOrder(4);
+    removeHiddenTabStops(yMacro_);
+    addAndMakeVisible(yMacro_);
+    yMacro_.onChange = [this] {
+        const int index = yMacro_.getSelectedId() - 1;
+        if (options_.xyPartner.has_value() && index >= 0 && index < (int)options_.xyPartner->ids.size() && onXYPartner)
+            onXYPartner(options_.xyPartner->ids[(size_t)index]);
+    };
+    yMacroFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
+    yMacroFade_.setShown(false);
+    mode_ = std::make_unique<CardSegmentedSwitch>("Mode", juce::StringArray{"Toggle", "Momentary"});
+    mode_->setTooltip("Toggle: each click switches it on or off. Momentary: on while held, off when let go");
+    mode_->setExplicitFocusOrder(4);
+    mode_->onChange = [this](int index) {
+        if ((index == 0 || index == 1) && onButtonMode)
+            onButtonMode(index == 1);
+    };
+    addChildComponent(*mode_);
+    modeFade_ = std::make_unique<synth::ui::FadeVisibility>(
+        std::initializer_list<juce::Component*>{&modeCaption_, mode_.get()});
+    modeFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+    modeFade_->setShown(false);
+    polarity_ = std::make_unique<CardSegmentedSwitch>("Polarity", juce::StringArray{"Uni", "Bi"});
+    polarity_->setTooltip("Uni sends 0 to 1; Bi sends -1 to 1, so a centred knob means no change");
+    polarity_->setExplicitFocusOrder(5);
+    polarity_->onChange = [this](int index) {
+        if ((index == 0 || index == 1) && onMacroPolarity)
+            onMacroPolarity(index == 1);
+    };
+    addChildComponent(*polarity_);
+    polarityFade_ = std::make_unique<synth::ui::FadeVisibility>(
+        std::initializer_list<juce::Component*>{&polarityCaption_, polarity_.get()});
+    polarityFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+    nameFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
+    labelFade_.onFrame = [this] { setSize(getWidth(), arrange()); };
+    nameFade_.setShown(false);
+    polarityFade_->setShown(false);
     label_.setExplicitFocusOrder(5);
     minimum_.setExplicitFocusOrder(6);
     maximum_.setExplicitFocusOrder(7);
@@ -64,7 +115,7 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     };
     hide_.setTitle("Hide from card");
     hide_.setTooltip("Hide this control from the card. It goes to the More row");
-    hide_.setExplicitFocusOrder(8);
+    hide_.setExplicitFocusOrder(9);
     hide_.onClick = [this] {
         if (onHide)
             onHide();
@@ -159,17 +210,64 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
     size_->setSelectedIndex(options_.widget == CardWidget::KnobLarge ? 1 : 0, juce::dontSendNotification);
     direction_->setSelectedIndex(options_.widget == CardWidget::FaderH ? 1 : 0, juce::dontSendNotification);
     faderSize_->setSelectedIndex(options_.widget == CardWidget::FaderVLong ? 1 : 0, juce::dontSendNotification);
+    const bool isMacro = options_.macroKnob.has_value();
+    yMacro_.clear(juce::dontSendNotification);
+    if (options_.xyPartner.has_value()) {
+        yMacro_.addItemList(options_.xyPartner->names, 1);
+        yMacro_.setSelectedId(options_.xyPartner->selected + 1, juce::dontSendNotification);
+    }
+    yMacroFade_.setShown(options_.xyPartner.has_value());
+    modeFade_->setShown(options_.widget == CardWidget::Button);
+    mode_->setSelectedIndex(options_.momentary ? 1 : 0, juce::dontSendNotification);
+    labelFade_.setShown(!isMacro);
+    nameFade_.setShown(isMacro);
+    polarityFade_->setShown(isMacro);
     const bool hasRange = options_.fullRange.has_value();
     rangeFade_.setShown(hasRange);
     hintFade_.setShown(false);
     fillFields();
-    const int width = juce::jlimit(kMinWidth, kMaxWidth, std::max(kMinWidth, showAsWidth_ + 2 * kPad));
+    const int width = preferredWidth();
+    setSize(width, 0);
+    setSize(width, arrange());
+}
+
+int CardLayoutControlPanel::preferredWidth() const {
+    const int box = curveBox_ != nullptr ? ModCurveBox::kWidth + 2 * kPad : 0;
+    return juce::jlimit(kMinWidth, kMaxWidth, std::max({kMinWidth, showAsWidth_ + 2 * kPad, box}));
+}
+
+// The Macros knob's curve: the shared small box, in a row of its own between Range and Hide.
+void CardLayoutControlPanel::setCurveTarget(std::shared_ptr<ModCurveEditTarget> target) {
+    curveFade_.reset();
+    curveBox_.reset();
+    if (target != nullptr) {
+        curveBox_ = std::make_unique<ModCurveBox>(std::move(target), ModCurvePresetStore::app());
+        curveBox_->setTabOrder(8); // after Range, before Hide
+        curveBox_->onEnlarge = [this] {
+            if (onEnlargeCurve)
+                onEnlargeCurve();
+        };
+        curveBox_->onClose = [this] {
+            if (onRequestClose)
+                onRequestClose();
+        };
+        addAndMakeVisible(*curveBox_);
+        curveFade_ =
+            std::make_unique<synth::ui::FadeVisibility>(std::initializer_list<juce::Component*>{curveBox_.get()});
+        curveFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+        curveFade_->setShown(true);
+    }
+    const int width = preferredWidth();
     setSize(width, 0);
     setSize(width, arrange());
 }
 
 void CardLayoutControlPanel::fillFields() {
     label_.setText(options_.caption, false);
+    if (options_.macroKnob.has_value()) {
+        name_.setText(options_.macroKnob->name, false);
+        polarity_->setSelectedIndex(options_.macroKnob->bipolar ? 1 : 0, juce::dontSendNotification);
+    }
     const auto& range = options_.range;
     minimum_.setText(range.has_value() ? formatRangeValue(range->getStart()) : juce::String(), false);
     maximum_.setText(range.has_value() ? formatRangeValue(range->getEnd()) : juce::String(), false);
@@ -205,9 +303,40 @@ int CardLayoutControlPanel::arrange() {
         squeeze(*faderSize_, kPad, y, width, kCaptionH, kSwitchH, faderSlot);
         y += faderSlot + scaled(kGap, faderSizeShown);
     }
-    labelCaption_.setBounds(kPad, y, width, kCaptionH);
-    label_.setBounds(kPad, y + kCaptionH, width, kFieldH);
-    y += kCaptionH + kFieldH + kGap;
+    {
+        // An XY pad's Y macro sits under the Show as row and fades in and out on its own.
+        const float yShown = yMacroFade_.progress();
+        const int ySlot = scaled(kCaptionH + kFieldH, yShown);
+        squeeze(yMacroCaption_, kPad, y, width, 0, kCaptionH, ySlot);
+        squeeze(yMacro_, kPad, y, width, kCaptionH, kFieldH, ySlot);
+        y += ySlot + scaled(kGap, yShown);
+    }
+    {
+        // A Button's Mode sits in the same place, under Show as, and fades in and out on its own.
+        const float modeShown = modeFade_->progress();
+        const int modeSlot = scaled(kCaptionH + kSwitchH, modeShown);
+        squeeze(modeCaption_, kPad, y, width, 0, kCaptionH, modeSlot);
+        squeeze(*mode_, kPad, y, width, kCaptionH, kSwitchH, modeSlot);
+        y += modeSlot + scaled(kGap, modeShown);
+    }
+    {
+        // Label (any other control) and Name then Polarity (a Macros knob) fade in each other's place.
+        const float labelShown = labelFade_.progress();
+        const int labelSlot = scaled(kCaptionH + kFieldH, labelShown);
+        squeeze(labelCaption_, kPad, y, width, 0, kCaptionH, labelSlot);
+        squeeze(label_, kPad, y, width, kCaptionH, kFieldH, labelSlot);
+        y += labelSlot + scaled(kGap, labelShown);
+        const float nameShown = nameFade_.progress();
+        const int nameSlot = scaled(kCaptionH + kFieldH, nameShown);
+        squeeze(nameCaption_, kPad, y, width, 0, kCaptionH, nameSlot);
+        squeeze(name_, kPad, y, width, kCaptionH, kFieldH, nameSlot);
+        y += nameSlot + scaled(kGap, nameShown);
+        const float polarityShown = polarityFade_ != nullptr ? polarityFade_->progress() : 0.0f;
+        const int polaritySlot = scaled(kCaptionH + kSwitchH, polarityShown);
+        squeeze(polarityCaption_, kPad, y, width, 0, kCaptionH, polaritySlot);
+        squeeze(*polarity_, kPad, y, width, kCaptionH, kSwitchH, polaritySlot);
+        y += polaritySlot + scaled(kGap, polarityShown);
+    }
     {
         const float shown = rangeFade_.progress();
         const int slot = scaled(kCaptionH + kFieldH, shown);
@@ -220,6 +349,13 @@ int CardLayoutControlPanel::arrange() {
         const int hintSlot = scaled(kCaptionH + 2, hintFade_.progress());
         squeeze(hint_, kPad, y, width, 2, kCaptionH, hintSlot);
         y += hintSlot + scaled(kGap, shown);
+    }
+    if (curveBox_ != nullptr) {
+        const float curveShown = curveFade_ != nullptr ? curveFade_->progress() : 1.0f;
+        const int slot = scaled(ModCurveBox::kHeight, curveShown);
+        squeeze(*curveBox_, kPad + (width - ModCurveBox::kWidth) / 2, y, ModCurveBox::kWidth, 0, ModCurveBox::kHeight,
+                slot);
+        y += slot + scaled(kGap, curveShown);
     }
     hide_.setBounds(kPad, y, width, kSwitchH);
     return y + kSwitchH + kPad;
@@ -243,6 +379,14 @@ void CardLayoutControlPanel::commitLabel() {
         return;
     if (onLabel)
         onLabel(label_.getText());
+}
+
+// A Macros knob's name: an empty one puts the default back; the editor writes it and hands the state back.
+void CardLayoutControlPanel::commitName() {
+    if (!options_.macroKnob.has_value() || name_.getText().trim() == options_.macroKnob->name)
+        return;
+    if (onMacroName)
+        onMacroName(name_.getText());
 }
 
 // A refused entry puts the stored values back and says why; an accepted one is written, and the editor
@@ -277,7 +421,7 @@ bool CardLayoutControlPanel::keyPressed(const juce::KeyPress& key) {
 void CardLayoutControlPanel::applyColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
     for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
-                          &rangeCaption_, &rangeTo_})
+                          &nameCaption_, &polarityCaption_, &yMacroCaption_, &modeCaption_, &rangeCaption_, &rangeTo_})
         caption->setColour(juce::Label::textColourId, colours.textMuted);
     hint_.setColour(juce::Label::textColourId, colours.warning);
 }
@@ -287,7 +431,8 @@ void CardLayoutControlPanel::lookAndFeelChanged() { applyColours(); }
 juce::Component* CardLayoutControlPanel::firstFocusStop() const {
     if (showAs_ != nullptr)
         return showAs_.get();
-    return const_cast<juce::TextEditor*>(&label_);
+    return options_.macroKnob.has_value() ? const_cast<juce::TextEditor*>(&name_)
+                                          : const_cast<juce::TextEditor*>(&label_);
 }
 
 bool CardLayoutControlPanel::focusIsInside() const {

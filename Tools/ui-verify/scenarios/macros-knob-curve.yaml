@@ -1,0 +1,38 @@
+# FRO1287: each Macros knob has its own response curve. In Edit Layout the control panel of a macro knob holds the shared
+# small curve box; picking Exp bends that knob's curve, and the knob's tiny curve glyph beside its value changes from a
+# muted straight line to an accent bend. One undo takes the curve back.
+#
+# What a user does: opens a patch with a Macros card, picks Edit Layout..., double-clicks the M3 knob's outline to open its
+# panel, picks Exp in the curve box, then closes the panel and undoes. The `glide` step films the box redrawing its line.
+record: true
+save_project: fro1287 knob curve macro
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 533, y: 330, clicks: 2}
+  - wait: {settleMs: 500}
+  - screenshot: {name: panel-open}
+  - mark: {check: 1, name: panel-has-a-curve-box-and-glyphs-are-straight}
+  - glide: {name: curve-bent, frames: 14, do: {click: {id: "Exp curve"}}}
+  - wait: {settleMs: 500}
+  - screenshot: {name: curve-bent}
+  - mark: {check: 2, name: curve-bent-in-panel-glyph-changes-under-knob}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - screenshot: {name: panel-closed}
+  - mark: {check: 3, name: panel-closed-the-knob-keeps-its-bent-glyph}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - screenshot: {name: undone}
+  - mark: {check: 4, name: undo-takes-the-glyph-back-to-straight}

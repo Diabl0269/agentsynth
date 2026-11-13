@@ -1,18 +1,35 @@
 #include "AlertIconBounds.h"
 #include "AppLookAndFeel.h"
+#include "UI/Timeline/TrackColour.h"
 
 namespace synth::ui {
 
-// JUCE draws an alert's message 80 px in from the window's inner left edge and 30 px down whenever there is
-// an icon, so the column left of that is the icon's: the icon ends a fixed gap before the message and
-// starts level with the title.
-juce::Rectangle<int> alertIconBounds(const juce::Rectangle<int>& windowBounds) {
-    constexpr int kMessageLeft = 81;
-    constexpr int kGapBeforeMessage = 10;
-    constexpr int kTitleTop = 30;
-    const juce::Rectangle<int> icon(windowBounds.getX() + kMessageLeft - kGapBeforeMessage - kAlertIconSize,
-                                    windowBounds.getY() + kTitleTop, kAlertIconSize, kAlertIconSize);
+// JUCE sizes an alert window for an 80 px icon column left of its text (plus the 1 px border), so the text
+// starts kAlertTextLeft in; drawAlertBox draws it kAlertTextTop down. The icon is about twice the title's line
+// height, the size macOS, Cubase and Logic give their caution icon, and its centre sits on the title line's centre
+// so the two read as one heading. A layout with no lines (no title) falls back to one line at the text top.
+juce::Range<float> alertTitleLineSpan(const juce::TextLayout& text) {
+    if (text.getNumLines() == 0)
+        return {(float)kAlertTextTop, (float)kAlertTextTop + 18.0f};
+    return text.getLine(0).getLineBoundsY() + (float)kAlertTextTop;
+}
+
+juce::Rectangle<int> alertIconBounds(const juce::Rectangle<int>& windowBounds, const juce::TextLayout& text) {
+    const auto title = alertTitleLineSpan(text);
+    const int titleCentre = juce::roundToInt(title.getStart() + title.getLength() / 2.0f);
+    const juce::Rectangle<int> icon(windowBounds.getX() + kAlertTextLeft - kAlertIconGap - kAlertIconSize,
+                                    windowBounds.getY() + titleCentre - kAlertIconSize / 2, kAlertIconSize,
+                                    kAlertIconSize);
     return icon.constrainedWithin(windowBounds);
+}
+
+// The warning token is the one a warning toast uses, so an alert and a toast about the same kind of problem agree.
+// JUCE has no error icon type; info and question stay in the accent. A light theme's orange warning is pushed
+// darker until it reads at 3:1 on the alert surface (WCAG's ratio for non-text marks).
+juce::Colour alertIconColour(juce::MessageBoxIconType type, juce::Colour accent, juce::Colour warning,
+                             juce::Colour background) {
+    const auto colour = type == juce::MessageBoxIconType::WarningIcon ? warning : accent;
+    return readableOn(colour, background.withAlpha(1.0f));
 }
 
 } // namespace synth::ui
@@ -44,12 +61,11 @@ const char* glyphFor(juce::MessageBoxIconType type) {
 } // namespace
 
 // Everything LookAndFeel_V4 draws (outline, surface fill, the message) except its icon, which is a huge
-// translucent shape offset past the window's top-left corner and clipped there. The icon here is a small
-// accent glyph inside the box.
+// translucent shape offset past the window's top-left corner and clipped there. The icon here is a glyph about
+// twice the title's height, centred on the title's line, in the warning colour for a warning and the accent otherwise.
 void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, const juce::Rectangle<int>&,
                                   juce::TextLayout& textLayout) {
     constexpr float kCornerSize = 4.0f;
-    constexpr int kIconSpace = 80;
 
     g.setColour(alert.findColour(juce::AlertWindow::outlineColourId));
     g.drawRoundedRectangle(alert.getLocalBounds().toFloat(), kCornerSize, 2.0f);
@@ -60,18 +76,23 @@ void AppLookAndFeel::drawAlertBox(juce::Graphics& g, juce::AlertWindow& alert, c
     g.fillRoundedRectangle(bounds.toFloat(), kCornerSize);
 
     lastAlertIconBounds_ = {};
+    lastAlertTitleSpan_ = {};
     int iconSpaceUsed = 0;
     if (alert.getAlertType() != juce::MessageBoxIconType::NoIcon) {
-        lastAlertIconBounds_ = synth::ui::alertIconBounds(alert.getLocalBounds());
+        lastAlertIconBounds_ = synth::ui::alertIconBounds(alert.getLocalBounds(), textLayout);
+        lastAlertTitleSpan_ = synth::ui::alertTitleLineSpan(textLayout);
         const auto glyph = juce::Drawable::parseSVGPath(glyphFor(alert.getAlertType()));
-        g.setColour(theme.colors.accent);
+        lastAlertIconColour_ =
+            synth::ui::alertIconColour(alert.getAlertType(), theme.colors.accent, theme.colors.warning,
+                                       alert.findColour(juce::AlertWindow::backgroundColourId));
+        g.setColour(lastAlertIconColour_);
         const auto box = lastAlertIconBounds_.toFloat();
         g.fillPath(glyph, juce::AffineTransform::scale(box.getWidth() / 24.0f).translated(box.getX(), box.getY()));
-        iconSpaceUsed = kIconSpace;
+        iconSpaceUsed = synth::ui::kAlertTextLeft - bounds.getX();
     }
 
     g.setColour(alert.findColour(juce::AlertWindow::textColourId));
-    const juce::Rectangle<int> messageBounds(bounds.getX() + iconSpaceUsed, 30, bounds.getWidth(),
+    const juce::Rectangle<int> messageBounds(bounds.getX() + iconSpaceUsed, synth::ui::kAlertTextTop, bounds.getWidth(),
                                              bounds.getHeight() - getAlertWindowButtonHeight() - 20);
     textLayout.draw(g, messageBounds.toFloat());
 }

@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "0f58957a-78f5-4fb1-b9b9-145f694601f2",
+      "params": {},
+      "position": {
+        "x": 1768,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Macros",
+      "uuid": "275ce7ea-5736-44f4-99be-e87de00e14c2",
+      "params": {
+        "bypassed": false,
+        "macroCount": 8.0,
+        "macro1": 0.0,
+        "macro2": 0.0,
+        "macro3": 0.0,
+        "macro4": 0.0,
+        "macro5": 0.0,
+        "macro6": 0.0,
+        "macro7": 0.0,
+        "macro8": 0.0,
+        "macro9": 0.0,
+        "macro10": 0.0,
+        "macro11": 0.0,
+        "macro12": 0.0,
+        "macro13": 0.0,
+        "macro14": 0.0,
+        "macro15": 0.0,
+        "macro16": 0.0,
+        "macro1Bipolar": false,
+        "macro2Bipolar": false,
+        "macro3Bipolar": false,
+        "macro4Bipolar": false,
+        "macro5Bipolar": false,
+        "macro6Bipolar": false,
+        "macro7Bipolar": false,
+        "macro8Bipolar": false,
+        "macro9Bipolar": false,
+        "macro10Bipolar": false,
+        "macro11Bipolar": false,
+        "macro12Bipolar": false,
+        "macro13Bipolar": false,
+        "macro14Bipolar": false,
+        "macro15Bipolar": false,
+        "macro16Bipolar": false,
+        "muted": false
+      },
+      "position": {
+        "x": 1408,
+        "y": 160
+      },
+      "cardLayout": {
+        "version": 2,
+        "sections": [
+          {
+            "id": "bank",
+            "columns": 4,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "macroCount",
+                "widget": "auto",
+                "span": 1
+              }
+            ]
+          },
+          {
+            "id": "macros",
+            "columns": 4,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "macro1",
+                "widget": "button",
+                "span": 1
+              },
+              {
+                "paramId": "macro2",
+                "widget": "button",
+                "mode": "momentary",
+                "span": 1
+              },
+              {
+                "paramId": "macro3",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro4",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro5",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro6",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro7",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro8",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro9",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro10",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro11",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro12",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro13",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro14",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro15",
+                "widget": "knob",
+                "span": 1
+              },
+              {
+                "paramId": "macro16",
+                "widget": "knob",
+                "span": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": "Oscillator",
+      "uuid": "99932f2f-33cb-4808-9ffb-9dbc88807451",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 35.000003814697266,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 100.0,
+        "blend": 0.75,
+        "width": 1.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 1112,
+        "y": 104
+      }
+    },
+    {
+      "id": 19,
+      "type": "LFO",
+      "uuid": "3bdc7d19-550a-4c2e-b712-2ac394599643",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 400,
+        "y": 504
+      }
+    },
+    {
+      "id": 20,
+      "type": "ADSR",
+      "uuid": "10133312-57d0-4501-8c37-d8a496ebf6ef",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": 0.0,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 704,
+        "y": 712
+      }
+    }
+  ],
+  "connections": [],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [
+    {
+      "id": "5dcc3bf9-40b1-49ae-95e7-8e68d8c61f78",
+      "name": "Open macro",
+      "colour": "ff5a7dff",
+      "collapsed": false,
+      "bounds": {
+        "x": 400,
+        "y": 504,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "3bdc7d19-550a-4c2e-b712-2ac394599643",
+        "10133312-57d0-4501-8c37-d8a496ebf6ef"
+      ],
+      "ports": []
+    }
+  ],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": -144.0,
+    "panY": -613.0
+  }
+}

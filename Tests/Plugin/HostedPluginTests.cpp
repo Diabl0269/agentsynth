@@ -12,7 +12,7 @@
 // Groups:
 //   1. Pass-through until ready — the dry path, and bypass sharing it.
 //   2. Publication — an async load renders, and the visible ports follow the instance.
-//   3. Refusal — an instance wider than kMaxPluginChannels, and an identity that does not resolve.
+//   3. Refusal — an instance wider than kMaxPluginInputChannels, and an identity that does not resolve.
 //   4. State — the trusted round-trip through graphToJSON/applyJSONToGraph, and the assertion that
 //      no path is ever serialized.
 //   5. Trust — the untrusted path cannot author the type at all.
@@ -28,6 +28,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginProcessor.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -47,9 +48,9 @@ namespace {
 constexpr double kSampleRate = 48000.0;
 constexpr int kBlockSize = 64;
 
-/** Wider than HostedPluginModule::kMaxPluginChannels — the whole point of the refusal test. */
+/** Wider than HostedPluginModule::kMaxPluginInputChannels — the whole point of the refusal test. */
 constexpr int kTooManyChannels = 32;
-static_assert(kTooManyChannels > HostedPluginModule::kMaxPluginChannels,
+static_assert(kTooManyChannels > HostedPluginModule::kMaxPluginInputChannels,
               "the refusal test must have something to refuse");
 
 /** Pumps the JUCE message loop until `predicate` holds or the timeout expires — the bounded-poll
@@ -97,7 +98,7 @@ TEST(HostedPluginTest, PassThroughUntilReady) {
     module.prepareToPlay(kSampleRate, kBlockSize);
     ASSERT_FALSE(module.hasInstance());
 
-    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
     fillRamp(buffer);
     juce::AudioBuffer<float> expected;
     expected.makeCopyOf(buffer);
@@ -132,8 +133,8 @@ TEST(HostedPluginTest, PassThroughUntilReady) {
 TEST(HostedPluginTest, BareModuleShowsOneJackASide) {
     HostedPluginModule module;
     EXPECT_EQ(module.getTotalNumInputChannels(),
-              HostedPluginModule::kMaxPluginChannels + HostedPluginModule::kMaxModSlots); // audio + mod slots
-    EXPECT_EQ(module.getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels);
+              HostedPluginModule::kMaxPluginInputChannels + HostedPluginModule::kMaxModSlots); // audio + mod slots
+    EXPECT_EQ(module.getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginOutputChannels);
     EXPECT_EQ(module.getVisibleInputPortCount(), 1);
     EXPECT_EQ(module.getVisibleOutputPortCount(), 1);
 }
@@ -158,14 +159,14 @@ TEST(HostedPluginTest, AsyncLoadPublishesAndProcesses) {
     // The visible ports are the instance's REAL counts, not the node's 16.
     EXPECT_EQ(module.getVisibleInputPortCount(), 2);
     EXPECT_EQ(module.getVisibleOutputPortCount(), 2);
-    EXPECT_EQ(module.getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels)
+    EXPECT_EQ(module.getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginOutputChannels)
         << "the node's channel count is fixed at construction and must NOT follow the instance";
 
     // The instance was prepared to OUR stream format, not to whatever it defaulted to.
     EXPECT_DOUBLE_EQ(backend.lastSampleRate, kSampleRate);
     EXPECT_EQ(backend.lastBlockSize, kBlockSize);
 
-    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
     fillRamp(buffer);
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);
@@ -192,7 +193,7 @@ TEST(HostedPluginTest, InstrumentWithNoInputsGetsItsOutputChannelsCleared) {
     EXPECT_EQ(module.getVisibleInputPortCount(), 0) << "an instrument really does have no input jacks";
     EXPECT_EQ(module.getVisibleOutputPortCount(), 2);
 
-    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
     fillRamp(buffer);
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);
@@ -206,8 +207,8 @@ TEST(HostedPluginTest, InstrumentWithNoInputsGetsItsOutputChannelsCleared) {
 // 3. Refusal
 // ============================================================================
 
-TEST(HostedPluginTest, AuxBusesAreDroppedSoAWidePluginPublishesWithItsMainBuses) {
-    // 2/2 main + 8 stereo aux outs = 18 outputs: over the cap only because of the aux buses.
+TEST(HostedPluginTest, AuxBusesBeyondSixteenChannelsStayOnAndRenderWhileOnlyTheMainBusShows) {
+    // 2/2 main + 8 stereo aux outs = 18 outputs: over the old 16-channel limit, inside the 64-channel one.
     StubBackend backend([] {
         return std::make_unique<StubPluginInstance>(2, 2, "Multi Out", 0x5754424, "VST3",
                                                     std::vector<synth::test::StubParamSpec>{}, false, 0, false,
@@ -219,28 +220,44 @@ TEST(HostedPluginTest, AuxBusesAreDroppedSoAWidePluginPublishesWithItsMainBuses)
     ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
 
     ASSERT_TRUE(module.hasInstance()) << module.getStatusMessage();
-    EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumOutputChannels(), 2);
+    EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumOutputChannels(), 18);
     EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumInputChannels(), 2);
+    EXPECT_EQ(module.getVisibleOutputPortCount(), 2) << "a fresh load shows the main bus only";
     EXPECT_TRUE(module.getStatusMessage().isEmpty());
 }
 
-TEST(HostedPluginTest, WideAuxPluginThatCannotDropItsAuxBusesIsStillRefused) {
-    StubBackend backend([] {
-        return std::make_unique<StubPluginInstance>(2, 2, "Rigid Multi Out", 0x5754424, "VST3",
-                                                    std::vector<synth::test::StubParamSpec>{}, false, 0, false,
-                                                    synth::test::StubAuxOutputs{8, 2, false});
-    });
-    HostedPluginModule module;
-    module.prepareToPlay(kSampleRate, kBlockSize);
-    module.loadPlugin(stubDescription("Rigid Multi Out"), backend);
-    ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
-
-    EXPECT_FALSE(module.hasInstance());
-    EXPECT_TRUE(module.getStatusMessage().contains("at most 16"));
+TEST(HostedPluginTest, PluginWiderThanSixtyFourOutputsSwitchesOnWhatFitsWhenItCanAndIsRefusedWhenItCannot) {
+    // 2 + 40 stereo aux = 82 outputs.
+    auto make = [](bool droppable) {
+        return [droppable] {
+            return std::make_unique<StubPluginInstance>(2, 2, "Huge Multi Out", 0x5754424, "VST3",
+                                                        std::vector<synth::test::StubParamSpec>{}, false, 0, false,
+                                                        synth::test::StubAuxOutputs{40, 2, droppable});
+        };
+    };
+    {
+        StubBackend backend(make(true));
+        HostedPluginModule module;
+        module.prepareToPlay(kSampleRate, kBlockSize);
+        module.loadPlugin(stubDescription("Huge Multi Out"), backend);
+        ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
+        ASSERT_TRUE(module.hasInstance()) << module.getStatusMessage();
+        EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumOutputChannels(), 64)
+            << "the aux buses that fit within 64 channels are switched on, the rest stay off";
+    }
+    {
+        StubBackend backend(make(false));
+        HostedPluginModule module;
+        module.prepareToPlay(kSampleRate, kBlockSize);
+        module.loadPlugin(stubDescription("Huge Multi Out"), backend);
+        ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
+        EXPECT_FALSE(module.hasInstance());
+        EXPECT_TRUE(module.getStatusMessage().contains("64 out"));
+    }
 }
 
-TEST(HostedPluginTest, PluginUnderTheCapKeepsItsAuxBuses) {
-    // 2 + 3 stereo aux = 8 outputs: fits, so the aux buses must stay enabled.
+TEST(HostedPluginTest, PluginUnderTheCapKeepsItsAuxBusesRenderingButShowsOnlyTheMainBus) {
+    // 2 + 3 stereo aux = 8 outputs.
     StubBackend backend([] {
         return std::make_unique<StubPluginInstance>(2, 2, "Small Multi Out", 0x5754424, "VST3",
                                                     std::vector<synth::test::StubParamSpec>{}, false, 0, false,
@@ -252,7 +269,9 @@ TEST(HostedPluginTest, PluginUnderTheCapKeepsItsAuxBuses) {
     ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); }));
 
     ASSERT_TRUE(module.hasInstance());
-    EXPECT_EQ(module.getVisibleOutputPortCount(), 8) << "the full default layout, aux buses included";
+    EXPECT_EQ(module.getActiveInstanceForEditor()->getTotalNumOutputChannels(), 8);
+    EXPECT_EQ(module.getOutputBuses().size(), 4u);
+    EXPECT_EQ(module.getVisibleOutputPortCount(), 2);
 }
 
 TEST(HostedPluginTest, OverMaxRefusedWithMessage) {
@@ -264,16 +283,16 @@ TEST(HostedPluginTest, OverMaxRefusedWithMessage) {
     module.loadPlugin(stubDescription("Wide Plugin"), backend);
     ASSERT_TRUE(pumpUntil([&] { return !module.isLoading(); })) << "the load never completed";
 
-    EXPECT_FALSE(module.hasInstance()) << "an instance wider than kMaxPluginChannels must be refused";
+    EXPECT_FALSE(module.hasInstance()) << "an instance wider than kMaxPluginInputChannels must be refused";
     EXPECT_TRUE(module.getStatusMessage().isNotEmpty()) << "a refusal the user cannot see is a silent failure";
     EXPECT_TRUE(module.getStatusMessage().contains(juce::String(kTooManyChannels)))
         << "the message must say how wide the plugin was: " << module.getStatusMessage();
-    EXPECT_TRUE(module.getStatusMessage().contains(juce::String(HostedPluginModule::kMaxPluginChannels)))
+    EXPECT_TRUE(module.getStatusMessage().contains(juce::String(HostedPluginModule::kMaxPluginInputChannels)))
         << "...and what the limit is: " << module.getStatusMessage();
 
     // Refused, not broken: the module keeps passing audio through.
     EXPECT_EQ(module.getVisibleInputPortCount(), 1);
-    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
     fillRamp(buffer);
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);
@@ -735,7 +754,7 @@ TEST(HostedPluginTest, AudioThreadNeverFrees) {
     std::atomic<bool> renderThreadFreedSomething{false};
 
     std::thread renderThread([&] {
-        juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+        juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
         juce::MidiBuffer midi;
         while (!stop.load(std::memory_order_acquire)) {
             fillRamp(buffer);
@@ -785,7 +804,7 @@ TEST(HostedPluginTest, TheLastRetiredInstanceIsReapedWithoutAnotherLoad) {
 
     // The audio thread moves on. Nothing else will ever ask for a reap: no further load, no unload,
     // no releaseResources — which is exactly the case a retire-time-only reap leaked.
-    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginInputChannels, kBlockSize);
     juce::MidiBuffer midi;
     for (int block = 0; block < 4; ++block) {
         fillRamp(buffer);
@@ -863,11 +882,12 @@ TEST(HostedPluginTest, RegisteredButInternalOnly) {
     ASSERT_NE(module, nullptr);
 
     EXPECT_EQ(module->getModuleType(), ModuleType::HostedPlugin);
-    // THE invariant: 16 audio in (+ the modulation slots) / 16 out at construction, whatever it ends up hosting.
+    // THE invariant: 16 audio in (+ the modulation slots) / 64 out at construction, whatever it ends up hosting.
     EXPECT_EQ(module->getTotalNumInputChannels(),
-              HostedPluginModule::kMaxPluginChannels + HostedPluginModule::kMaxModSlots);
-    EXPECT_EQ(module->getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginChannels);
-    EXPECT_EQ(HostedPluginModule::kMaxPluginChannels, 16);
+              HostedPluginModule::kMaxPluginInputChannels + HostedPluginModule::kMaxModSlots);
+    EXPECT_EQ(module->getTotalNumOutputChannels(), HostedPluginModule::kMaxPluginOutputChannels);
+    EXPECT_EQ(HostedPluginModule::kMaxPluginInputChannels, 16);
+    EXPECT_EQ(HostedPluginModule::kMaxPluginOutputChannels, 64);
     EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(module), "Hosted Plugin");
 
     // Never offered to a model. (The full golden lives in AIStateMapperTests.)

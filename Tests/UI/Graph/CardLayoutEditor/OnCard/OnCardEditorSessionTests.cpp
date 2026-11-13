@@ -2,6 +2,7 @@
 // was already its own undo step), Cancel and Esc put the layout back as it opened as one more undo step.
 
 #include "OnCardTestHelpers.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 
 using namespace oncard_test;
 

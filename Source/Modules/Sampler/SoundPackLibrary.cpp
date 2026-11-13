@@ -11,6 +11,11 @@ std::optional<std::vector<juce::File>>& rootsOverride() {
     return roots;
 }
 
+juce::File& onlyRoot() {
+    static juce::File root;
+    return root;
+}
+
 juce::File bundledRoot() {
 #if JUCE_MAC
     return juce::File::getSpecialLocation(juce::File::currentApplicationFile)
@@ -77,7 +82,11 @@ bool readPack(const juce::File& packDir, std::set<juce::String>& seenIds, std::v
 
 } // namespace
 
+void SoundPackLibrary::setOnlyRoot(const juce::File& root) { onlyRoot() = root; }
+
 juce::File SoundPackLibrary::userRoot() {
+    if (onlyRoot() != juce::File())
+        return onlyRoot();
     auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
 #if JUCE_MAC
     base = base.getChildFile("Application Support"); // where the settings file lives (UserSettings.h)
@@ -88,6 +97,8 @@ juce::File SoundPackLibrary::userRoot() {
 std::vector<juce::File> SoundPackLibrary::roots() {
     if (rootsOverride().has_value())
         return *rootsOverride();
+    if (onlyRoot() != juce::File())
+        return {onlyRoot()};
     return {bundledRoot(), userRoot()};
 }
 

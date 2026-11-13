@@ -13,7 +13,9 @@
 #include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModMatrixPickerCreate.h"
+#include "UI/Graph/ModMatrixRowMotion.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
+#include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -241,8 +243,17 @@ void ModMatrixComponent::clearRows() {
         clearPending = true;
         return;
     }
+    if (!clearedRows_)
+        clearedRows_ = snapshotRows(); // the rows that come back after the clear are the ones that stay
     rows.clear();
     repaint();
+}
+
+std::vector<synth::ui::ExitEnterListRow> ModMatrixComponent::rowMotionRows() const {
+    std::vector<synth::ui::ExitEnterListRow> list;
+    for (size_t i = 0; i < rows.size(); ++i)
+        list.push_back({juce::String(rows[i]->attenuverterId.uid), (float)i * kRowHeight, (float)kRowHeight});
+    return list;
 }
 
 juce::String ModMatrixComponent::getRowSourceComboTextForTest(int rowIndex) const {
@@ -401,6 +412,10 @@ void ModMatrixComponent::updateRowsFromGraph() {
     if (std::exchange(clearPending, false))
         clearRows();
     auto activeRoutings = audioEngine.getActiveModRoutings();
+    auto before = std::move(clearedRows_);
+    std::vector<juce::String> startKeys;
+    for (const auto& row : before ? before->rows : rowMotionRows())
+        startKeys.push_back(row.key);
 
     // Stable sort by NodeID so row numbers are consistent
     std::sort(activeRoutings.begin(), activeRoutings.end(),
@@ -420,6 +435,8 @@ void ModMatrixComponent::updateRowsFromGraph() {
     hasRow.reserve(rows.size());
     for (int i = (int)rows.size() - 1; i >= 0; --i) {
         if (routingByAttenuverter.count(rows[(size_t)i]->attenuverterId.uid) == 0) {
+            if (!before && !componentsChanged)
+                before = snapshotRows(); // the picture a removal shrinks away from
             rows.erase(rows.begin() + i);
             componentsChanged = true;
         } else {
@@ -456,10 +473,11 @@ void ModMatrixComponent::updateRowsFromGraph() {
         rows[(size_t)i]->refresh(*routingByAttenuverter.at(rows[(size_t)i]->attenuverterId.uid), cables);
     }
 
-    if (componentsChanged) {
+    if (componentsChanged || before) {
         setHoveredRow(-1);
         resized();
         repaint();
+        playRowMotion(std::move(before), startKeys);
     }
 }
 

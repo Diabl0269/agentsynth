@@ -135,6 +135,8 @@ struct AlignmentGuide {
 // ---- Drum Kit card hooks -----------------------------------------------------------------------
 // Set by MainComponent; the card owns no timeline.
 struct DrumKitCardHooks {
+    // The instrument picker's "Get more sounds..." row (Sampler and Drum Kit): opens Settings > Sound packs.
+    std::function<void()> openSoundPacks;
     // Is a track playing the kit (else the card's "Drum machine" button is disabled), and a press of that button.
     std::function<bool(juce::AudioProcessorGraph::NodeID)> hasTrack;
     std::function<void(juce::AudioProcessorGraph::NodeID)> openDrumMachine;

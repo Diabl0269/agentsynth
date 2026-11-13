@@ -3,6 +3,7 @@
 // read-only.
 #include "MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include <cmath>
 
@@ -42,7 +43,7 @@ void MorphShapesCard::setUpCurveView() {
     host_.card->addChildComponent(curveView_);
 
     curveToggle_.setTitle("Show Curve");
-    curveToggle_.setTooltip("Show Curve: the shape under the morph cursor as a small curve");
+    setButtonTooltip(curveToggle_, "Show the shape under the morph cursor as a small curve");
     curveToggle_.onClick = [this] {
         const bool show = curveToggle_.getToggleState();
         host_.rememberView([show](synth::CardViewState& state) { state.showCurveView = show; });

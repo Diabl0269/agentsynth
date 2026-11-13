@@ -1,7 +1,8 @@
 #pragma once
 
-// The rows of an instrument picker: the built-in sound pack instruments (all of them, or one category) and the "Your
-// files" loaders; the Drum Kit's adds a "Synth drums" row that drops the kit.
+// The rows of an instrument picker: the built-in sound pack instruments (all of them, or one category), the "Your
+// files" loaders and a last "Get more sounds..." row that opens Settings > Sound packs; the Drum Kit's adds a "Synth
+// drums" row that drops the kit.
 
 #include "UI/Graph/ModMatrixPicker.h"
 #include <vector>
@@ -9,7 +10,7 @@
 namespace synth::ui {
 
 struct InstrumentChoice {
-    enum class Kind { Pack, SfzFile, Recordings, SynthDrums };
+    enum class Kind { Pack, SfzFile, Recordings, SynthDrums, GetMore };
     Kind kind = Kind::Pack;
     juce::String packId, instrumentId;
 };

@@ -1,4 +1,4 @@
-// SamplerPackOfferTests.cpp -- the offer under the Sampler's instrument list: made only while no pack is installed,
+// SamplerPackOfferTests.cpp -- the offer under the Sampler's instrument list: made until the core pack is installed,
 // downloads in place with progress, fills the list when done and goes away. The installer is the app's shared one,
 // faked at the network.
 #include "../../../SoundPacks/SoundPackTestKit.h"
@@ -72,17 +72,84 @@ TEST(SamplerPackOffer, IsMadeWhenNoPackIsInstalledAndOffersTheCorePackWithItsSiz
     EXPECT_FALSE(offer->isBusyShown());
 }
 
-TEST(SamplerPackOffer, IsNotMadeWhenAPackIsAlreadyInstalled) {
-    SharedRig rig;
-    const auto pack = rig.dir.path().getChildFile("keys");
+// Writes a one-instrument pack folder into the rig's root.
+static void installFakePack(const juce::File& root, const juce::String& id) {
+    const auto pack = root.getChildFile(id);
     pack.createDirectory();
     pack.getChildFile("a.sfz").replaceWithText("<region> sample=x.wav");
     pack.getChildFile("pack.json")
-        .replaceWithText(R"({"id":"keys","instruments":[{"id":"p","name":"P","sfz":"a.sfz"}]})");
+        .replaceWithText(R"({"id":")" + id + R"(","instruments":[{"id":"p","name":"P","sfz":"a.sfz"}]})");
+}
+
+TEST(SamplerPackOffer, IsMadeWhenOnlyAnotherPackIsInstalled) {
+    SharedRig rig;
+    installFakePack(rig.dir.path(), "animals");
+    Scene scene;
+    auto list = scene.openPicker();
+    ASSERT_NE(list, nullptr);
+    ASSERT_NE(offerOf(*list), nullptr) << "the animals alone leave the core offer showing";
+    EXPECT_EQ(list->getVisibleItemTextsForTest().front(), "P");
+}
+
+TEST(SamplerPackOffer, IsNotMadeWhenTheCorePackIsInstalled) {
+    SharedRig rig;
+    installFakePack(rig.dir.path(), "core");
     Scene scene;
     auto list = scene.openPicker();
     ASSERT_NE(list, nullptr);
     EXPECT_EQ(list->getFooter(), nullptr);
+}
+
+TEST(SamplerPackOffer, TheListEndsWithGetMoreSoundsWhetherOrNotTheOfferShows) {
+    SharedRig rig;
+    for (const bool coreInstalled : {false, true}) {
+        if (coreInstalled)
+            installFakePack(rig.dir.path(), "core");
+        Scene scene;
+        auto list = scene.openPicker();
+        ASSERT_NE(list, nullptr);
+        const auto texts = list->getVisibleItemTextsForTest();
+        ASSERT_FALSE(texts.empty());
+        EXPECT_EQ(texts.back(), "Get more sounds...") << "core installed: " << coreInstalled;
+        EXPECT_TRUE(list->isVisibleItemPickableForTest((int)texts.size() - 1));
+    }
+}
+
+// The real path: type in the search box, press Enter on the highlighted row; Settings > Sound packs is asked for.
+TEST(SamplerPackOffer, EnterOnGetMoreSoundsOpensSoundPacks) {
+    SharedRig rig;
+    Scene scene;
+    int opened = 0;
+    scene.canvas.editor.drumKit.openSoundPacks = [&opened] { ++opened; };
+    auto list = scene.openPicker();
+    ASSERT_NE(list, nullptr);
+    list->setSearchTextForTest("more sounds");
+    ASSERT_EQ(list->getVisibleItemTextsForTest().size(), 1u);
+    EXPECT_TRUE(list->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(opened, 1);
+}
+
+TEST(SamplerPackOffer, ClickingGetMoreSoundsOpensSoundPacksFromTheDrumKitListToo) {
+    SharedRig rig;
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<DrumKitModule>(), 0, 0);
+    canvas.editor.updateComponents();
+    int opened = 0;
+    canvas.editor.drumKit.openSoundPacks = [&opened] { ++opened; };
+    auto* chrome = dynamic_cast<synth::ui::DrumKitChrome*>(canvas.card(id)->getInstrumentChrome());
+    ASSERT_NE(chrome, nullptr);
+    std::unique_ptr<ModMatrixPicker> list;
+    synth::ui::InstrumentPickerRow::pickerHookForTest() = [&list](std::unique_ptr<ModMatrixPicker> p) {
+        list = std::move(p);
+    };
+    chrome->getRow().picker().keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    synth::ui::InstrumentPickerRow::pickerHookForTest() = nullptr;
+    ASSERT_NE(list, nullptr);
+    const auto texts = list->getVisibleItemTextsForTest();
+    ASSERT_FALSE(texts.empty());
+    EXPECT_EQ(texts.back(), "Get more sounds...");
+    list->chooseVisibleItemForTest((int)texts.size() - 1);
+    EXPECT_EQ(opened, 1);
 }
 
 TEST(SamplerPackOffer, DownloadsInPlaceThenFillsTheListAndGoesAway) {

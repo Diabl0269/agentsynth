@@ -109,7 +109,7 @@ class RecordingTests(unittest.TestCase):
 
     def test_a_frame_follows_each_step_that_can_change_the_window(self):
         app = DrawingApp(self.STATES)
-        text = "record: true\nsteps:\n  - click: {id: a}\n  - expect: {id: a, exists: true}\n  - getState: {id: a}\n  - wait: {}\n"
+        text = "record: true\nsteps:\n  - click: {id: a, approach: false}\n  - expect: {id: a, exists: true}\n  - getState: {id: a}\n  - wait: {}\n"
         with tempfile.TemporaryDirectory() as out:
             (ok, _), encoded = self.run_scenario(text, app, out)
         self.assertTrue(ok)
@@ -142,6 +142,80 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(all(c[1]["id"] == "a" for c in mouse))
         self.assertEqual([(c[1]["x"], c[1]["y"]) for c in (mouse[0], mouse[-1])], [(5, 6), (45, 6)])
 
+    def approach_run(self, text):
+        """Runs `text` against an app whose screenshots differ by pointer position. Returns the app, the frames that
+        fall in the first mark's clip window (as image bytes) and the run's ok."""
+        class PointerApp(DrawingApp):
+            pointer = (0, 0)
+
+            def call(self, cmd, timeout_ms=None, **args):
+                if cmd in ("hover", "click"):
+                    self.pointer = (args.get("x", 0), args.get("y", 0))
+                if cmd == "screenshot":
+                    write_png(args["path"], width=4 + self.pointer[0] % 50, height=4 + self.pointer[1] % 50)
+                    return {"path": args["path"], "width": 4, "height": 4}
+                return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+        app = PointerApp(self.STATES)
+        seen = {}
+
+        def write_video(recorder, path, ffmpeg=None):
+            start, length = recorder.clip_window(seen["mark"])
+            seen["frames"] = [open(p, "rb").read() for (p, _), t in zip(recorder.frames, recorder.timeline)
+                              if start <= t < start + length]
+            return True, path
+
+        original = run.Runner._mark
+
+        def mark(runner, args):
+            reply = original(runner, args)
+            seen["mark"] = runner.marks[-1]["start"]
+            return reply
+
+        with tempfile.TemporaryDirectory() as out, mock.patch.object(recording.Recorder, "write_video", write_video), \
+                mock.patch.object(run.Runner, "_mark", mark):
+            runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app)
+            ok, _ = runner.run()
+        return app, seen["frames"], ok
+
+    def test_a_recorded_click_films_the_pointer_arriving_so_a_click_and_mark_clip_has_four_distinct_frames(self):
+        text = "record: true\nsteps:\n  - click: {id: b}\n  - mark: {check: 1, name: dot-selected}\n"
+        app, frames, ok = self.approach_run(text)
+        self.assertTrue(ok)
+        hovers = [c[1] for c in app.calls if c[0] == "hover"]
+        self.assertEqual(len(hovers), 4)
+        self.assertEqual(hovers[0], {"id": "window", "x": 265, "y": 365})  # b's centre (325, 425) less 60 px
+        self.assertTrue(all(0 <= h["x"] < 800 and 0 <= h["y"] < 600 for h in hovers))
+        names = [c[0] for c in app.calls if c[0] in ("hover", "click")]
+        self.assertEqual(names, ["hover"] * 4 + ["click"])
+        self.assertGreaterEqual(len(set(frames)), 4)
+
+    def test_approach_false_keeps_the_single_click_frame(self):
+        text = "record: true\nsteps:\n  - click: {id: b, approach: false}\n  - mark: {check: 1, name: dot-selected}\n"
+        app, frames, ok = self.approach_run(text)
+        self.assertTrue(ok)
+        self.assertEqual([c for c in app.calls if c[0] == "hover"], [])
+        click = [c[1] for c in app.calls if c[0] == "click"][0]
+        self.assertNotIn("approach", click)  # the opt-out is the runner's, not the protocol's
+        self.assertLessEqual(len(set(frames)), 2)
+
+    def test_a_click_whose_point_cannot_be_resolved_in_the_main_window_is_sent_as_before(self):
+        for target in ("popup", "missing"):
+            text = "record: true\nsteps:\n  - click: {id: %s}\n  - mark: {check: 1, name: x}\n" % target
+            app, _, _ = self.approach_run(text)
+            self.assertEqual([c for c in app.calls if c[0] == "hover"], [], target)
+            self.assertEqual(len([c for c in app.calls if c[0] == "click"]), 1, target)
+
+    def test_a_click_near_the_window_corner_keeps_the_approach_inside_the_window(self):
+        app = DrawingApp(self.STATES)
+        text = "record: true\nsteps:\n  - click: {id: a, x: 2, y: -15}\n"
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), _ = self.run_scenario(text, app, out)
+        self.assertTrue(ok)
+        for c in app.calls:
+            if c[0] == "hover":
+                self.assertTrue(0 <= c[1]["x"] and 0 <= c[1]["y"], c)
+
     def test_a_drag_leaving_the_main_window_stays_one_command(self):
         app = DrawingApp(self.STATES)
         with tempfile.TemporaryDirectory() as out:
@@ -167,7 +241,7 @@ class RecordingTests(unittest.TestCase):
             self.assertTrue(os.path.isdir(os.path.join(out, "end.agsproj")))
         self.assertFalse(ok)
         self.assertIn("step 2", message)
-        self.assertEqual(encoded, [2])
+        self.assertEqual(encoded, [6])  # the launch, four approach frames, the click
 
     def test_a_save_that_fails_fails_a_passing_scenario(self):
         class NoSave(DrawingApp):
@@ -409,6 +483,32 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(project, "Audio", "tone.wav")))  # the original is untouched
             self.assertEqual([e["cmd"] for e in log], ["copyFixture", "openProject"])
 
+    def test_copy_fixture_from_copies_a_bundle_outside_the_repo_without_its_autosave(self):
+        with tempfile.TemporaryDirectory() as elsewhere:
+            project = os.path.join(elsewhere, "Private.agsproj")
+            os.makedirs(project)
+            for name in ("project.json", "autosave.json", "autosave-2.json"):
+                with open(os.path.join(project, name), "w") as f:
+                    f.write("{}")
+            seen = {}
+
+            class Checking(FakeApp):
+                def call(self, cmd, timeout_ms=None, **args):
+                    if cmd == "openProject":
+                        seen["files"] = sorted(os.listdir(args["path"]))
+                    return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+            (ok, _), _ = self.run_steps('- copyFixture: {name: p.agsproj, from: "%s"}\n'
+                                        '- openProject: {path: "${SCRATCH}/p.agsproj"}\n' % project, Checking())
+            self.assertTrue(ok)
+            self.assertEqual(seen["files"], ["project.json"])
+            self.assertEqual(len(os.listdir(project)), 3)  # the original keeps its sidecars
+
+    def test_copy_fixture_from_a_missing_bundle_fails_the_step(self):
+        (ok, message), _ = self.run_steps('- copyFixture: {name: p.agsproj, from: /nonexistent/x.agsproj}\n', FakeApp())
+        self.assertFalse(ok)
+        self.assertIn("/nonexistent/x.agsproj", message)
+
 
 class StalePixelCheckTests(unittest.TestCase):
     def run_steps(self, text, app):
@@ -597,6 +697,15 @@ class PopCheckTests(unittest.TestCase):
         self.assertEqual(buttons, ["undoButton", "redoButton"])
         dirs = [os.path.basename(c[1]["dir"]) for c in app.calls if c[0] == "popWatchCheck"]
         self.assertEqual(dirs, ["pop-step-01", "pop-step-02", "pop-step-02u", "pop-step-02r"])
+
+    def test_after_an_undo_step_the_check_redoes_first_so_the_step_stays_undone(self):
+        for steps in ["  - key: {keys: cmd+z}\n", "  - click: {id: undoButton}\n", "  - glide: {name: g, do: {key: {keys: cmd+z}}}\n"]:
+            app = PopApp([edit(SETTLED), SETTLED, SETTLED])
+            text = ("motion: true\nrecord: true\nsteps:\n" if "glide" in steps else self.MOTION) + steps
+            (ok, message), _, _ = self.run_steps(text, app)
+            self.assertTrue(ok, message)
+            buttons = [c[1]["id"] for c in app.calls if c[0] == "click" and c[1]["id"].endswith("Button")]
+            self.assertEqual(buttons[-2:], ["redoButton", "undoButton"], steps)
 
     def test_a_pop_in_an_undo_fails_unless_that_step_is_listed(self):
         replies = [edit(SETTLED), POPPED, SETTLED]

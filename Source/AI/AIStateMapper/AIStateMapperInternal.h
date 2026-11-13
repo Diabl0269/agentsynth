@@ -429,5 +429,10 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
 // always did.
 void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuverter);
 
+// Merge-mode auto-connect, MIDI half (AIStateMapperMidiWiring.cpp): each new MIDI-accepting node with no MIDI input
+// gets a cable from the Track In (or other MIDI source) of the track whose modules it feeds or modulates.
+void autoConnectNewNodesToMidi(juce::AudioProcessorGraph& graph, const ConnectionIndex& cables,
+                               const std::set<juce::AudioProcessorGraph::NodeID>& newlyCreatedNodes);
+
 } // namespace detail
 } // namespace synth

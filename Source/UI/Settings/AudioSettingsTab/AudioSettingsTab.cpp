@@ -98,6 +98,7 @@ AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
         open_[(size_t)i] = saved.isEmpty() ? !foldedByDefault(section) : !saved.contains(persistedName(section));
 
         headers_[(size_t)i] = std::make_unique<synth::ui::FoldSectionHeader>(sectionName(section));
+        headers_[(size_t)i]->setComponentID("audioSection:" + persistedName(section));
         headers_[(size_t)i]->setTooltip("Fold or unfold " + sectionName(section) + " (Left/Right)");
         headers_[(size_t)i]->setOpen(open_[(size_t)i]);
         headers_[(size_t)i]->onOpenRequested = [this, section](bool open) { setSectionOpen(section, open); };

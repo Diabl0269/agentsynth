@@ -12,7 +12,7 @@ Scripts for it live in [`Tools/ui-verify/`](../../Tools/ui-verify/README.md).
 | Flag | Effect |
 |---|---|
 | `--automation <port>` | Starts the server. Port `0` picks a free port, which is what the client always uses. Implies `--no-audio-device` and `--no-keychain`; the client passes both anyway (and sets their environment variables), and refuses a binary built without test mode, since such a build ignores `--automation`, starts normally and asks for the keychain. Use the build of your own worktree. |
-| `--settings-dir <absolute dir>` | Every setting and user-data folder of this process (settings file, themes, snippets, history, recordings, the default projects folder, the stretched-loop cache) lives under that directory; installed sound packs stay shared and are only read. Under `--automation` without it, a fresh temporary directory is used, so a running real instance's files are never shared. |
+| `--settings-dir <absolute dir>` | Every setting and user-data folder of this process (settings file, themes, snippets, history, recordings, the default projects folder, the stretched-loop cache) lives under that directory; installed sound packs stay shared and are only read, unless the directory holds a `SoundPacks` folder: then that folder is the only one searched and downloads land in it (a scenario seeds it with `copyFixture: {name: SoundPacks}` and a `restart`). Under `--automation` without it, a fresh temporary directory is used, so a running real instance's files are never shared. |
 | `--automation-info <file>` | Also writes `{"port":N,"pid":P}` to the file once the server listens. |
 | `--automation-visible` | Keeps the windows on screen and focusable, for a person who wants to watch (see [Hidden windows](#hidden-windows)). Without it an automation launch is hidden. |
 | `--automation-motion` | Keeps animations on. Under `--automation` they are otherwise switched off, so a click lands in its final state. |
@@ -60,6 +60,7 @@ thread is never blocked and timers and animations run in between.
 | `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created. `id: "screen"` is what a user sees (see [Screen frame](#screen-frame)) and also answers `windows` and `pointer` |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
+| `skipPluginForNextLoad` | `name`, `bundlePath?` | `{name}`; what answering "Open without it" at launch does (an automation launch never asks): that plugin is switched off for the next `openProject` only, so its card is a placeholder with a Turn on button |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
@@ -81,8 +82,9 @@ do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
 (`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip stack under a hovered knob (or a dragged mod dot) is drawn, `modHoverChipRows`: its row texts, `macro`: the name of the macro the module sits in, empty when none, `macroPath`: every macro around it, outermost first, as `Outer macro > Nested macro`, `cabledTargets`: the modulation targets with a cable on them, `audioFrom`: the titles of the cards feeding its audio inputs, sorted and comma-separated, `cabledInputs`: every input jack with a cable, by its label, `cableEnd`, `cableEndOnKnob`, `cableEndGliding`: the first cable end on the card relative to it, whether it ends on a knob and whether an end glides, `cableEnds`: every cable end on the card as `x y` (plus ` knob` when on one) joined by `; `, `modDots`: the titles of the mod dots shown, `landingOutline`: the drag outline shown now as `x y w h`, empty when none, `canvasBounds`: its bounds in canvas coordinates) and
-`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `waveformSource`, what the last waveform paint drew from: `peaks`, `samples` (exact columns from the audio file), `line` (the sample line) or `none`; `sizingReadout`, the percentage pill an edge drag shows, empty when none) and a 1x1 child of the timeline's playhead overlay (id `timelinePlayhead`: `frameCount` and `medianFrameIntervalMs`, the frames of the current or last frame run and the median gap of the last 64, and `frameRunning`) do. `getState` also reports a component's `tooltip`
+`MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none; `focusedRow` and `focusedRowIndex`, the row the keys are on and its screen-reader text, empty and -1 in column mode; `zonesCursor`, the channel the side pane's list cursor is on while the list holds the keys, else empty) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and a hidden child of the toast (id `toastState`: `severity`, `info`, `warning` or `error`, and `message`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`, `playScaleOn`, `playScaleEnabled`) and a hidden 1x1 child of every number field (`CardStepper`; id `<name> state`, for example `Steps state`: `value`, `valueText`, `editing`, `editorText`, `repeating`, and `downX`, `numberX`, `upX`, the centre of each zone in the field's own coordinates) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph` (the icon's mode name), `caption` (the text shown, empty with labels off), `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipDrawn`, every clip's rectangle as drawn now, `name:x,y,width,height` (it trails the clip's place while a snapped drag step or a restore glides); `clipGliding`, whether a clip glide runs; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `waveformSource`, what the last waveform paint drew from: `peaks`, `samples` (exact columns from the audio file), `line` (the sample line) or `none`; `sizingReadout`, the percentage pill an edge drag shows, empty when none) and a hidden child of the piano roll (id `pianoRollZoomState`: `pixelsPerBeat` and `pixelsPerSemitone`, its own zoom on both axes) and a 1x1 child of the timeline's playhead overlay (id `timelinePlayhead`: `frameCount` and `medianFrameIntervalMs`, the frames of the current or last frame run and the median gap of the last 64, and `frameRunning`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
+The Sampler map window's keys report through a hidden child (id `samplerMapKeys`: `heldKey`, the key the mouse or the play key holds, -1 for none, and `litKeys`, the sounding keys as comma-separated note numbers); the map itself is `samplerMapBlocks`.
 The minimap has the id `minimap` (a scenario clicks it by that id).
 The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` tell the window where the synthetic pointer is (`AppTooltipWindow::setSyntheticPointer`) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
 
@@ -178,6 +180,8 @@ window afresh, and takes the pixels that differ from the "before" picture (outsi
 1%), or when no presented frame shows it at all. A fade or slide has frames in between (`intermediateFrames`). The check
 answers either way; the runner decides.
 
+`popWatchCheck` also waits for the window to stop changing (100 ms with no new presented frame, given up on 500 ms after `ms`), because a fade on a VBlank driver, such as the status bar's message, is no desktop animation and a check that ended in its tail started the next watch on a picture still mid-fade (a pop in the undo step of the first action).
+
 A scenario with `motion: true` runs it around every action that can change the window: `click`, `drag` (the whole drag),
 `key`, `wheel`, `mouseUp`, `keyUp` and a `glide`'s `do`. Not checked: runner steps (`type` makes text appear per key
 by design), `hover`, `mouseDown`, `mouseMoveHeld`, `keyDown`, `openProject`, `saveProject`, `restart`, `quit`, `wait`
@@ -187,7 +191,7 @@ and every query. Frames of a `record` video and of a `glide` are still taken bef
   `ignore: [ids]` (components that change on their own; the toolbar's Undo and Redo buttons are always ignored), `ms` and `undo: false`.
 - `instant: "<reason>"` in a step's arguments (in a `glide`, beside `do`) lets that step pop: a deliberately instant
   change of text, a value, a selection or a caret. The reason is required and is not sent to the app.
-- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes, each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
+- Undo and redo: when the app's edit serial changed during a checked step (an edit), the runner undoes and then redoes (after a step that is itself an undo, Cmd+Z or the Undo button, it redoes and then undoes, so the step stays undone), each under its own watch, and neither may pop (steps `NNu` and `NNr` in the log and in
   `<out>/pop-step-NNu/`). An `instant` step is also instant in its undo and redo. They click the toolbar's `undoButton` and
   `redoButton`, not Cmd+Z, which a focused text field would take as a text undo. Without an undo serial the app
   answers they are skipped and one line says so. The click takes focus, so a name field an edit opened (a new
@@ -220,6 +224,13 @@ into the next block's MIDI (`down: false` a note-off); it reaches the modules th
 refused while a real device is running and stops on its own once the main window is gone
 (`Source/TestMode/TestModeAudioPump.cpp`).
 
+The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
+spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
+`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
+reports the loudest point drawn now. No fixture pushes a
+signal into a buffer: a source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
+`ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
+
 ## Scenarios
 
 A scenario is a YAML file under `Tools/ui-verify/scenarios/` that replays what a user does and checks what the app then
@@ -242,7 +253,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `type: {text, target?}` | one `key` per character, each sent to `target` when given (a text field of another window, e.g. `name` in the Save Snippet dialog) |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
-| `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
+| `copyFixture: {name, from?}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy; `from` (`~` expanded) copies a bundle outside the repository instead, such as the private Load test project, without its autosave sidecars, and fails the step when it is missing |
 | `screenshot: {id?, name}` | saves `<name>.png` in the output folder (default id `window`) |
 | `expect: {id, field: value, ...}` | equality on `getState` fields |
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
@@ -294,6 +305,12 @@ takes no frame of its own after the command, films `frames` screen frames back t
 into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part of the frame that moves, two to a row).
 Then `wait`, and put the `mark` on the landed state, never mid-motion. Start the clip in the state the check starts from
 and end the scenario in it too, so the `save_project` bundle opens there. Read the strip before attaching the clip.
+
+A check of a static state (a selected dot, a tag's position) puts its mark right after the click that changes the screen
+(click the dot, open the picker). With `record`, a `click` first films the pointer approaching: four `hover` frames
+from 60 px up-left of the click point, 0.1 s each (`approach: false` on the step skips it; a click point outside the
+main window is sent as it is), so the clip holds the before, the approach and the after, which the review needs at least
+four distinct frames of. If there is truly nothing to see, the review says why there is no video.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an

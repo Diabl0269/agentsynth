@@ -1,0 +1,27 @@
+# Hover tips showed nowhere inside a popover (and a greyed row never said why): a popover is its own native window and
+# the main window's tooltip window draws under it. Every popover launchPopover opens now hosts its own tooltip window.
+#
+# What a user does: opens the Song key picker and rests the pointer on the Preview sound dropdown, then on the search field:
+# each tip appears inside the picker. (The greyed
+# row's reason needs the transport rolling, which test mode cannot do: PopupHostBehaviourTests hovers it for real.)
+record: true
+save_project: popover hover tooltips
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: popoverTooltip, showing: false}
+  - hover: {id: keyPickerPreviewSound}
+  - expect: {id: popoverTooltip, showing: true, within_ms: 3000}
+  - mark: {check: 1, name: key-preview-sound-tip}
+  - hover: {id: keyPickerSearch}
+  - wait: {settleMs: 1500}
+  - expect: {id: popoverTooltip, showing: true, within_ms: 3000}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}

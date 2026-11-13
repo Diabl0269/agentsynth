@@ -31,7 +31,11 @@ include(cmake/PointEditingSources.cmake)
 include(cmake/SongKeySources.cmake)
 include(cmake/ColourPickerSources.cmake)
 include(cmake/CommandRowSources.cmake)
+include(cmake/ButtonTooltipSources.cmake) # appends the shared button words and the tooltip rule helper
 # The modulation curve views keep their own list for the same reason.
 include(cmake/ModCurveUISources.cmake)
 # The Mod Matrix source picker's create rows.
 include(cmake/ModMatrixPickerCreateSources.cmake)
+include(cmake/ModMatrixRowMotionSources.cmake)
+# The Hosted Plugin card's outputs strip and Outputs panel.
+include(cmake/HostedOutputsSources.cmake)

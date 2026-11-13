@@ -314,13 +314,23 @@ void MixerPanelComponent::focusOfChildComponentChanged(FocusChangeType) { noteKe
 
 // The ring leaves with the keyboard when another control takes it (a click on the canvas). It stays while the panel or
 // a child holds it (the rename editor, the colour dot), while a pop-up window (a menu) does, and when the app goes to
-// the background (nothing holds it).
-void MixerPanelComponent::noteKeyboardMoved() {
+// the background (nothing holds it). A panel that is hidden (its dock tab was swapped away) has no keyboard:
+// JUCE drops its focus while nothing is focused yet, which reads as the app being in the background, and the focus
+// then lands on a sibling that never tells the panel, so the hidden panel is away by itself.
+bool MixerPanelComponent::isKeyboardAwayNow() const {
+    if (!isVisible())
+        return true;
+    if (zonesPane_.hasKeyboardFocus(true))
+        return true; // the side pane's list holds the keys and shows its own cursor
     const auto* now = juce::Component::getCurrentlyFocusedComponent();
     const auto* peer = now != nullptr ? now->getPeer() : nullptr;
     const bool popup =
         peer != nullptr && peer != getPeer() && (peer->getStyleFlags() & juce::ComponentPeer::windowIsTemporary) != 0;
-    const bool away = now != nullptr && now != this && !isParentOf(now) && !popup;
+    return now != nullptr && now != this && !isParentOf(now) && !popup;
+}
+
+void MixerPanelComponent::noteKeyboardMoved() {
+    const bool away = isKeyboardAwayNow();
     if (away == keyboardAway_)
         return;
     keyboardAway_ = away;

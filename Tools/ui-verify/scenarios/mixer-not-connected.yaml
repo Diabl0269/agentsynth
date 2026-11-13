@@ -1,0 +1,58 @@
+# FRO1209: a module hung off an Oscillator track's chain that leads nowhere shows in that track's mixer column as a
+# dimmed "not connected" row, in place under the row it hangs off.
+# What a user does: adds an Oscillator track, opens the Mixer tab and the track on the canvas, adds a Delay and cables
+# Oscillator out -> Delay in (the Delay has no output: a marked row grows in under Oscillator, the sound is unchanged),
+# cables Delay out -> VCA audio in (the mark goes, the Delay is a real insert), undoes it (the marked row is back),
+# then double-clicks the marked row (the canvas shows and selects the Delay).
+record: true
+motion: true
+save_project: end
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - click: {id: macroCard, clicks: 2}
+  - wait: {}
+  - expect: {id: "card:VCA", exists: true}
+  - expect: {count: {prefix: "Split into", field: title, equals: 0}}
+  - key: {keys: cmd+f}
+  - type: {text: delay}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 250, toX: 1300, toY: 430}
+  - wait: {}
+  - drag: {from: "card:Delay", to: window, fromX: 40, fromY: 17, toX: 1380, toY: 400, steps: 30}
+  - wait: {}
+  - glide: {name: not-connected-grows-in, frames: 12, do: {drag: {from: "card:Oscillator > Audio output", to: "card:Delay > Audio input"}}}
+  - wait: {}
+  - expect: {count: {prefix: "Delay, not connected", field: title, equals: 1}, within_ms: 1500}
+  - expect: {count: {prefix: "Split into", field: title, equals: 0}}
+  - mark: {check: 1, name: not-connected-row}
+  - screenshot: {name: mixer-not-connected}
+  - drag: {from: "card:Delay > Audio output", to: "card:VCA > Audio input"}
+  - wait: {}
+  - expect: {count: {prefix: "Delay, not connected", field: title, equals: 0}, within_ms: 1500}
+  - expect: {count: {prefix: "Split into 2 paths", field: title, equals: 1}, within_ms: 1500}
+  - mark: {check: 2, name: plugged-in-becomes-insert}
+  - glide: {name: unplug-by-undo, frames: 12, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - expect: {count: {prefix: "Delay, not connected", field: title, equals: 1}, within_ms: 1500}
+  - mark: {check: 3, name: unplugged-goes-back}
+  - hover: {id: mixerInsertList, x: 40, y: 27}
+  - expect: {id: mixerInsertList, contains: {tooltip: "Delay is not connected"}, within_ms: 2000}
+  - click: {id: mixerInsertList, x: 40, y: 27, clicks: 2}
+  - wait: {settleMs: 1200}
+  - expect: {id: "card:Delay", selected: true, within_ms: 2000}
+  - mark: {check: 4, name: double-click-reveals}

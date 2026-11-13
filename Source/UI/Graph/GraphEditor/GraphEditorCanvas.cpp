@@ -147,6 +147,7 @@ void GraphEditor::updateComponents() {
     // modulation slot.
     audioEngine.releaseUnconnectedHostedModSlots();
     const juce::ScopedValueSetter<bool> reentrancyGuard(updatingComponents, true);
+    ++graph_editor_paint::workCounters().componentUpdates;
 
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
@@ -200,6 +201,7 @@ void GraphEditor::updateComponents() {
         ModuleComponent* existingComp = known != cardOf.end() ? known->second : nullptr;
 
         if (existingComp == nullptr) {
+            ++graph_editor_paint::workCounters().cardsBuilt;
             auto* newComp = modules.add(new ModuleComponent(processor, node->nodeID, *this, undoManager));
             content.addAndMakeVisible(newComp);
             existingComp = newComp;
@@ -207,6 +209,7 @@ void GraphEditor::updateComponents() {
             if (dragDropController_.isDragPreviewActive() &&
                 existingComp->getNodeId() == dragDropController_.getDragPreviewSelfId())
                 cancelLiveDragGestures();
+            ++graph_editor_paint::workCounters().cardsBuilt;
             existingComp = rebuildCard(modules, content, *existingComp, [&] {
                 return new ModuleComponent(processor, node->nodeID, *this, undoManager);
             });

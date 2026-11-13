@@ -43,7 +43,7 @@ visible set. This is a **rendering** rule — the underlying graph edges are unt
 
 ## The macro model
 
-Each macro knob takes a knob-only cable on the input channel of its number (Macro 1 on channel 0 through Macro 16 on 15); the cable moves the knob inside its own range, live, and the output follows. `macroCount` and the Bipolar switch take none.
+Each macro knob takes a knob-only cable on the input channel of its number (Macro 1 on channel 0 through Macro 16 on 15); the cable moves the knob inside its own range, live, and the output follows. `macroCount` and the per-knob Bipolar switches take none.
 
 **Macros nest.** Create Macro and `Cmd+G` group whole macros, or modules inside an open macro, into a
 macro inside a macro; a selection spread across different macros is refused with a status message

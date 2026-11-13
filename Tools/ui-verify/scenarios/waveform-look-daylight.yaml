@@ -1,0 +1,23 @@
+# The same clip in Daylight Studio: the shade goes darker until it reads on the pale clip. Checks 3 and 4.
+#
+# What a user does: in the light theme, opens the project, shows the timeline, zooms in and back out.
+record: true
+save_project: waveform-look-daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - copyFixture: {name: waveform-sweep.agsproj}
+  - openProject: {path: "${SCRATCH}/waveform-sweep.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Sweep:columns", within_ms: 10000}
+  - mark: {check: 3, name: whole-clip-daylight}
+  - glide: {name: zoom-in, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: 0.9, mods: cmd}}}
+  - wait: {}
+  - mark: {check: 4, name: zoomed-in-daylight}
+  - glide: {name: zoom-back-out, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: -0.9, mods: cmd}}}
+  - wait: {}

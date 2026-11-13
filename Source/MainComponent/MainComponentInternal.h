@@ -9,6 +9,12 @@
 
 #include "Modules/ModuleBase.h"
 #include "ProjectBundle.h"
+#include <map>
+
+class GraphEditor;
+// Bulk duplicate (MainComponentTrackDuplicate.cpp): builds the cards of every copied node once, then glides each out
+// of its original. `copies` maps an original's node uid to its copy.
+void showDuplicatedTrackCards(GraphEditor& editor, const std::map<int, juce::AudioProcessorGraph::NodeID>& copies);
 
 namespace detail {
 

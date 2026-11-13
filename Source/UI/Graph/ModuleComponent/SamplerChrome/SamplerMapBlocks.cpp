@@ -1,6 +1,9 @@
 // SamplerMapBlocks.cpp -- the map's keyboard, rows and blocks: layout, painting, the arrow keys and the file drop.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h"
+#include "Modules/DrumKit/DrumKitPads.h"
 #include "Modules/SamplerModule.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -25,6 +28,8 @@ constexpr float kSoftDarken = 0.35f;
 constexpr float kBlockFontSize = 11.0f;
 constexpr float kLabelFontSize = 12.0f;
 constexpr int kLabelMinBlockWidth = 28;
+constexpr int kSoftestKeyVelocity = 64; // at the top of a key; the bottom plays 127
+constexpr int kLoudestKeyVelocity = 127;
 
 bool isBlackKey(int note) {
     const int pitchClass = note % kOctave;
@@ -52,20 +57,46 @@ juce::Range<int> keySpanFor(const std::vector<synth::sampler::RegionSpec>& specs
     return {low, high};
 }
 
+// Reports the keys to test mode; never painted, never focused, never heard.
+class MapKeysProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit MapKeysProbe(const SamplerMapBlocks& blocks)
+        : blocks_(blocks) {
+        setComponentID("samplerMapKeys");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override { blocks_.addTestModeState(into); }
+
+private:
+    const SamplerMapBlocks& blocks_;
+};
+
 } // namespace
+
+// The drum a region plays: the General MIDI drum on its root key, else the one on its lowest key; empty for none.
+static int padNote(const synth::sampler::RegionSpec& spec) {
+    return synth::drums::soundName(spec.rootKey).isNotEmpty() ? spec.rootKey : spec.loKey;
+}
 
 // One recording on the map. Not a Tab stop: the map is, and its arrow keys walk the blocks.
 class SamplerMapBlock : public juce::Button {
 public:
-    SamplerMapBlock(SamplerMapBlocks& owner, int region, const synth::sampler::RegionSpec& spec, int attackRow)
-        : juce::Button(juce::File(spec.samplePath).getFileNameWithoutExtension())
+    SamplerMapBlock(SamplerMapBlocks& owner, int region, const synth::sampler::RegionSpec& spec, int attackRow,
+                    const juce::String& pad)
+        : juce::Button(pad.isNotEmpty() ? pad : juce::File(spec.samplePath).getFileNameWithoutExtension())
         , owner_(owner)
         , region_(region)
         , row_(attackRow)
         , release_(spec.releaseTrigger) {
         setWantsKeyboardFocus(false);
-        setTitle(synth::sampler::describeRegion(spec));
-        setTooltip(synth::sampler::describeRegion(spec) + ". Click to edit.");
+        const auto prefix =
+            pad.isNotEmpty() ? pad + ", " + synth::sampler::keyName(padNote(spec)) + ". " : juce::String();
+        setTitle(prefix + synth::sampler::describeRegion(spec));
+        setTooltip(prefix + synth::sampler::describeRegion(spec) + ". Click to edit.");
         onClick = [this] {
             owner_.select(region_);
             owner_.grabKeyboardFocus();
@@ -110,16 +141,36 @@ SamplerMapBlocks::SamplerMapBlocks() {
     setWantsKeyboardFocus(true);
     setTitle("Instrument map");
     setTooltip("Instrument map: the arrow keys move between recordings, Enter edits the selected one, Delete removes "
-               "it, Esc closes. Drop a recording on a block to replace it, or on a key to add one.");
+               "it, Esc closes. Drop a recording on a block to replace it, or on a key to add one. Click a key to "
+               "play it; P plays the selected recording.");
+    setComponentID("samplerMapBlocks");
+    probe_ = std::make_unique<MapKeysProbe>(*this);
+    addChildComponent(*probe_);
 }
 
-SamplerMapBlocks::~SamplerMapBlocks() = default;
+SamplerMapBlocks::~SamplerMapBlocks() {
+    releaseMouseKey();
+    releasePlayKey();
+}
 
 void SamplerMapBlocks::setRegions(const std::vector<synth::sampler::RegionSpec>& specs, int selected) {
     specs_ = specs;
     layers_ = synth::sampler::mapLayers(specs_);
     span_ = keySpanFor(specs_);
     selected_ = selected >= 0 && selected < (int)specs_.size() ? selected : -1;
+    rebuildBlocks();
+    updateTitle();
+    repaint();
+}
+
+juce::String SamplerMapBlocks::padNameFor(const synth::sampler::RegionSpec& spec) const {
+    return drumKit_ ? synth::drums::soundName(padNote(spec)) : juce::String();
+}
+
+void SamplerMapBlocks::setDrumKit(bool drumKit) {
+    if (drumKit_ == drumKit)
+        return;
+    drumKit_ = drumKit;
     rebuildBlocks();
     updateTitle();
     repaint();
@@ -134,7 +185,8 @@ void SamplerMapBlocks::rebuildBlocks() {
     blocks_.resize(specs_.size());
     for (size_t row = 0; row < layers_.size(); ++row)
         for (const int index : layers_[row].regions) {
-            blocks_[(size_t)index] = std::make_unique<SamplerMapBlock>(*this, index, specs_[(size_t)index], (int)row);
+            blocks_[(size_t)index] = std::make_unique<SamplerMapBlock>(*this, index, specs_[(size_t)index], (int)row,
+                                                                       padNameFor(specs_[(size_t)index]));
             addAndMakeVisible(*blocks_[(size_t)index]);
         }
     layoutBlocks();
@@ -210,8 +262,15 @@ void SamplerMapBlocks::select(int index) {
 }
 
 void SamplerMapBlocks::updateTitle() {
-    setTitle(selected_ >= 0 ? "Instrument map, " + synth::sampler::describeRegion(specs_[(size_t)selected_])
-                            : juce::String("Instrument map"));
+    if (selected_ < 0) {
+        setTitle("Instrument map");
+        return;
+    }
+    const auto& spec = specs_[(size_t)selected_];
+    const auto pad = padNameFor(spec);
+    setTitle("Instrument map, " +
+             (pad.isNotEmpty() ? pad + ", " + synth::sampler::keyName(padNote(spec)) + ". " : juce::String()) +
+             synth::sampler::describeRegion(spec));
 }
 
 // Every semitone gets an equal column so the keys line up with the blocks below. The white keys form one band under
@@ -235,6 +294,11 @@ void SamplerMapBlocks::paintKeys(juce::Graphics& g, juce::Rectangle<float> area)
             g.fillRect(juce::Rectangle<float>(x, area.getY(), 0.5f, area.getHeight()));
         }
     }
+    g.setColour(colors.accent);
+    for (int note = span_.getStart(); note <= span_.getEnd(); ++note)
+        if (lit_.test((size_t)note))
+            g.fillRect(juce::Rectangle<float>(area.getX() + (float)(note - span_.getStart()) * kw, area.getY(), kw,
+                                              isBlackKey(note) ? blackHeight : area.getHeight()));
     g.setColour(colors.pianoKeyWhite.contrasting(0.7f));
     g.setFont(juce::Font(juce::FontOptions(kBlockFontSize - 1.0f)));
     for (int note = span_.getStart(); note <= span_.getEnd(); ++note)
@@ -302,8 +366,105 @@ void SamplerMapBlocks::paintOverChildren(juce::Graphics& g) {
         paintFocusRing(g, getLocalBounds().toFloat(), *this, theme.metrics.cornerRadiusSmall);
 }
 
+juce::KeyPress SamplerMapBlocks::playBinding() const {
+    return shortcuts_ != nullptr ? shortcuts_->getBinding("samplerMapPlaySelected")
+                                 : juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+}
+
+bool SamplerMapBlocks::isPlayKey(const juce::KeyPress& key) const {
+    return ShortcutManager::keyPressMatches(playBinding(), key);
+}
+
+void SamplerMapBlocks::setLitKeys(const std::bitset<128>& notes) {
+    if (notes == lit_)
+        return;
+    lit_ = notes;
+    repaint(keysArea());
+}
+
+void SamplerMapBlocks::pressKey(int note, int velocity) {
+    if (onPlayKey)
+        onPlayKey(note, velocity);
+}
+
+void SamplerMapBlocks::releaseMouseKey() {
+    if (mouseKey_ < 0)
+        return;
+    const int note = std::exchange(mouseKey_, -1);
+    if (onReleaseKey)
+        onReleaseKey(note);
+}
+
+void SamplerMapBlocks::releasePlayKey() {
+    if (playKey_ < 0)
+        return;
+    const int note = std::exchange(playKey_, -1);
+    if (onReleaseKey)
+        onReleaseKey(note);
+}
+
+// Louder toward the front edge of the key, the way a sampler's mapping keyboard answers.
+int SamplerMapBlocks::velocityAt(int y) const {
+    const auto area = keysArea();
+    const float down = juce::jlimit(0.0f, 1.0f, (float)(y - area.getY()) / (float)area.getHeight());
+    return kSoftestKeyVelocity + juce::roundToInt(down * (float)(kLoudestKeyVelocity - kSoftestKeyVelocity));
+}
+
+void SamplerMapBlocks::mouseDown(const juce::MouseEvent& e) {
+    if (e.mods.isPopupMenu() || !keysArea().contains(e.getPosition()))
+        return;
+    mouseKey_ = keyAt(e.x);
+    if (mouseKey_ >= 0)
+        pressKey(mouseKey_, velocityAt(e.y));
+}
+
+void SamplerMapBlocks::mouseDrag(const juce::MouseEvent& e) {
+    const int next = keyAt(e.x);
+    if (mouseKey_ < 0 || next == mouseKey_)
+        return;
+    releaseMouseKey();
+    if (next < 0)
+        return;
+    mouseKey_ = next;
+    pressKey(next, velocityAt(e.y));
+}
+
+void SamplerMapBlocks::mouseUp(const juce::MouseEvent&) { releaseMouseKey(); }
+
+void SamplerMapBlocks::focusLost(FocusChangeType) {
+    releasePlayKey();
+    repaint();
+}
+
+bool SamplerMapBlocks::keyStateChanged(bool) {
+    if (playKey_ < 0)
+        return false;
+    const int code = playBinding().getKeyCode();
+    const bool down = isKeyDownProbe ? isKeyDownProbe(code) : juce::KeyPress::isKeyCurrentlyDown(code);
+    if (!down)
+        releasePlayKey();
+    return false;
+}
+
+void SamplerMapBlocks::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("heldKey", getHeldKey());
+    juce::StringArray lit;
+    for (int note = 0; note < 128; ++note)
+        if (lit_.test((size_t)note))
+            lit.add(juce::String(note));
+    into.setProperty("litKeys", lit.joinIntoString(","));
+}
+
 bool SamplerMapBlocks::keyPressed(const juce::KeyPress& key) {
     using synth::sampler::MapMove;
+    if (isPlayKey(key) && selected_ >= 0) {
+        if (playKey_ < 0) {
+            const auto& spec = specs_[(size_t)selected_];
+            playKey_ = juce::jlimit(0, 127, spec.rootKey);
+            pressKey(playKey_, juce::jlimit(1, 127, spec.hiVel));
+        }
+        return true;
+    }
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     if (key == juce::KeyPress::escapeKey)

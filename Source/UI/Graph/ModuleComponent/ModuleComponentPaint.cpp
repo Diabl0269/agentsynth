@@ -6,7 +6,6 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
-#include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -17,6 +16,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -194,20 +194,30 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // For now, we assume MIDI out takes the "first" audio output slot.
     // A more robust solution would involve explicit port mapping.
     int audioOutStartIndex = midiOutDrawn ? 1 : 0;
-    for (int i = audioOutStartIndex; i < numOuts + audioOutStartIndex;
+    // A multi-output plugin's aux jacks fade with their glide, and one just switched off fades out after the model
+    // dropped it (the ghosts, drawn past the model's own jacks).
+    const int ghosts = hostedOutputs_ != nullptr ? hostedOutputs_->ghostJackCount() : 0;
+    for (int i = audioOutStartIndex; i < numOuts + ghosts + audioOutStartIndex;
          ++i) { // Adjust index for display if midi out is present
+        const float jackAlpha = hostedOutputs_ != nullptr ? hostedOutputs_->jackAlpha(i) : 1.0f;
+        if (jackAlpha <= 0.0f)
+            continue;
         auto p = getPortCenter(i, false);
-        g.setColour(jackAccentColour);
+        g.setColour(jackAccentColour.withMultipliedAlpha(jackAlpha));
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
         juce::String label = "Out " + juce::String(i);
-        if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        if (i >= numOuts + audioOutStartIndex)
+            label = hostedOutputs_->ghostLabel(i);
+        else if (auto* mb = dynamic_cast<ModuleBase*>(module))
             label = mb->getOutputPortLabel(i);
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
-        g.setColour(labelColour);
+        g.setColour(labelColour.withMultipliedAlpha(jackAlpha));
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
     }
+    if (hostedOutputs_ != nullptr)
+        hostedOutputs_->paintFoldDot(g, jackAccentColour);
 
     paintModulationRings(g, mod, jackAccentColour);
 
@@ -494,10 +504,10 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
     if (morphCard_ != nullptr)
         if (const auto anchor = morphCard_->anchorFor(destChannel))
             return anchor;
-    auto* mb = dynamic_cast<ModuleBase*>(module);
-    if (mb == nullptr)
+    if (dynamic_cast<ModuleBase*>(module) == nullptr)
         return std::nullopt;
-    for (const auto& target : mb->getModulationTargets()) {
+    std::vector<ModulationTarget> fresh;
+    for (const auto& target : modulationTargetsForPass(fresh)) {
         if (target.channelIndex != destChannel)
             continue;
         const int si = sliderIndexForModTarget(target);
@@ -527,80 +537,6 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         return modRingPointForNorm(centre, landingRadius, 0.0f);
     }
     return std::nullopt;
-}
-
-// True when visible input jack `index` is a ModulationTarget whose knob resolves on this
-// card RIGHT NOW -- recomputed live off getModulationTargets()/mapInputChannel()/
-// sliderIndexForModTarget() every call (poly toggle and Dual I/O change what resolves; a tabbed knob
-// with a gutter jack never binds it, knobAnchorForVisibleInputJack), never cached across a layout. A module with no
-// ModulationTarget mapping to `index` (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g.
-// Oscillator's Pitch CV) is never knob-bound, matching the plain gutter behaviour exactly.
-bool ModuleComponent::isInputJackKnobBound(int index) const { return knobAnchorForVisibleInputJack(index).has_value(); }
-
-// Shared by isInputJackKnobBound (the "is it hidden" question) and getPortCenter's redirect
-// branch (the "where does it land" question) so the two can never resolve a different target for
-// the same visible index -- see the declaration's comment (ModuleComponent.h).
-std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack(int index) const {
-    auto* mb = dynamic_cast<ModuleBase*>(module);
-    if (mb == nullptr)
-        return std::nullopt;
-    for (const auto& target : mb->getModulationTargets()) {
-        if (mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
-            continue;
-        if (!target.knobOnly && tabbedKnobFor(target) != nullptr)
-            return std::nullopt; // a tabbed knob's jack keeps its gutter row; the re-anchor pass moves its cable
-        return getModTargetKnobAnchor(target.channelIndex);
-    }
-    return std::nullopt;
-}
-
-namespace {
-juce::uint32 activeJackLayoutPass = 0; // 0: no pass open; message thread only
-juce::uint32 lastJackLayoutPass = 0;
-} // namespace
-
-// A cable rebuild asks every card for the position of each of its cable ends, and each answer re-derived the whole
-// jack column through getModulationTargets() (allocating every target's name): the rebuild cost grew with ports x
-// cables and took most of a zoom frame at 80 tracks. Within one pass nothing changes a card, so each card's column is
-// worked out once; the pass ends with the rebuild, so nothing is cached across one.
-ModuleComponent::JackLayoutPass::JackLayoutPass() {
-    jassert(activeJackLayoutPass == 0); // passes do not nest
-    activeJackLayoutPass = ++lastJackLayoutPass;
-}
-
-ModuleComponent::JackLayoutPass::~JackLayoutPass() { activeJackLayoutPass = 0; }
-
-// paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
-// THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never
-// disagree about what's actually on screen. Never cached across a call outside a JackLayoutPass --
-// isInputJackKnobBound recomputes live off current slider visibility every time (poly toggle, Dual I/O, the More row).
-std::vector<int> ModuleComponent::drawnInputJackIndices() const {
-    if (activeJackLayoutPass != 0 && drawnJacksPass_ == activeJackLayoutPass)
-        return drawnJacksMemo_;
-    std::vector<int> drawn;
-    if (module == nullptr)
-        return drawn;
-    int visible = 0;
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        visible = mb->getVisibleInputPortCount();
-    else
-        visible = module->getTotalNumInputChannels(); // no ModuleBase (e.g. Audio Input/Output) -- never knob-bound
-    drawn.reserve(visible);
-    // A knob-only target's jack (ModulationTarget::knobOnly, e.g. the Filter's Custom CV) never takes a
-    // row, even while its knob is hidden: a card whose mode hides those knobs keeps its old jack column.
-    std::vector<int> knobOnly;
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        for (const auto& target : mb->getModulationTargets())
-            if (target.knobOnly)
-                knobOnly.push_back(mb->mapInputChannel(target.channelIndex).visibleJackIndex);
-    for (int i = 0; i < visible; ++i)
-        if (!isInputJackKnobBound(i) && std::find(knobOnly.begin(), knobOnly.end(), i) == knobOnly.end())
-            drawn.push_back(i);
-    if (activeJackLayoutPass != 0) {
-        drawnJacksMemo_ = drawn;
-        drawnJacksPass_ = activeJackLayoutPass;
-    }
-    return drawn;
 }
 
 bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
@@ -685,14 +621,10 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {x, kMacroPortWidgetHeaderY + clamped * kMacroPortWidgetRowStep};
     }
 
-    // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        if (!isInput) {
-            const int visible = macro->getVisibleOutputPortCount();
-            const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
-            return {getWidth() - 10, synth::LayoutUtil::macroRowCentreY(clamped)};
-        }
-    }
+    // A shown aux output of a multi-output plugin sits where the fold line and its glide put it.
+    if (!isInput && hostedOutputs_ != nullptr)
+        if (const auto centre = hostedOutputs_->jackCentre(index))
+            return *centre;
 
     int yStep = 20;
     int headerHeight = kPortGutterHeaderHeight;
@@ -769,7 +701,8 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
             nearest(best, bestDistance, getMidiPortCenter(true), juce::AudioProcessorGraph::midiChannelIndex, false,
                     true); // Matches paint()
         for (int i = 0; i < numOuts; ++i)
-            nearest(best, bestDistance, getPortCenter(i, false), i, false, false);
+            if (hostedOutputs_ == nullptr || hostedOutputs_->jackHittable(i)) // a folded aux jack is not a target
+                nearest(best, bestDistance, getPortCenter(i, false), i, false, false);
         return best;
     };
     // Inputs -- a knob-bound jack is never hit-tested here at all (it draws no gutter dot
@@ -866,11 +799,6 @@ void ModuleComponent::resized() {
 
     if (dualIOButton)
         dualIOButton->setBounds(getWidth() - 98, 2, 22, 20);
-
-    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
-        layoutMacroBank(macro->getMacroCount());
-        return;
-    }
 
     if (getType(module) == ModuleType::ParametricEQ) {
         layoutParametricEQ();

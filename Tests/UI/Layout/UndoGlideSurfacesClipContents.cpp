@@ -62,13 +62,20 @@ public:
     }
 
     void move() override {
+        dragStep();
+        releaseDrag();
+    }
+    bool dragStep() override {
         const auto rect = f_.lane.getClipRect(clip_);
         const float grabX = edge_ == ClipEdge::Left ? (float)rect.getX() + 3.0f : (float)rect.getRight() - 3.0f;
-        const juce::Point<float> grab(grabX, (float)rect.getCentreY());
-        const juce::Point<float> dragged(grab.x + (float)dragBeats(edge_) * 40.0f, grab.y);
-        f_.lane.mouseDown(leftClick(f_.lane, grab));
-        f_.lane.mouseDrag(leftDrag(f_.lane, dragged, grab));
-        f_.lane.mouseUp(leftDrag(f_.lane, dragged, grab));
+        grab_ = {grabX, (float)rect.getCentreY()};
+        dragged_ = {grab_.x + (float)dragBeats(edge_) * 40.0f, grab_.y};
+        f_.lane.mouseDown(leftClick(f_.lane, grab_));
+        f_.lane.mouseDrag(leftDrag(f_.lane, dragged_, grab_));
+        return true;
+    }
+    void releaseDrag() override {
+        f_.lane.mouseUp(leftDrag(f_.lane, dragged_, grab_));
         f_.lane.refreshFromDoc();
     }
     bool undo() override { return restore(false); }
@@ -96,6 +103,7 @@ private:
     mutable ClipLaneFixture f_;
     synth::ClipId clip_;
     ClipEdge edge_;
+    juce::Point<float> grab_, dragged_;
 };
 
 std::string label(ClipSizingMode mode, ClipEdge edge) {

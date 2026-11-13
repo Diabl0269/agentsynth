@@ -6,3 +6,4 @@ target_sources(Core PRIVATE
     Source/Plugin/Hosting/PluginCrashRecovery.h
     Source/Plugin/Hosting/PluginCrashRecovery.cpp
 )
+include(cmake/HostedPluginOutputsSources.cmake)

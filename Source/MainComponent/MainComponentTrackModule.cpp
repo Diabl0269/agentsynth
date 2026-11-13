@@ -48,6 +48,15 @@ juce::AudioProcessorGraph::Node* MainComponent::trackModuleNode(synth::TrackId t
     return instrument != nullptr ? instrument : bound;
 }
 
+// One pass over the nodes: while none is a Drum Kit no track's instrument has to be found (a walk over every cable
+// per track, on every timeline change).
+bool MainComponent::anyDrumKit() const {
+    for (auto* node : const_cast<MainComponent*>(this)->audioEngine.getGraph().getNodes())
+        if (drumKitOf(node) != nullptr)
+            return true;
+    return false;
+}
+
 // A track's clips open in the drum machine when its instrument is a Drum Kit; `rows` gets the kit's shown pads.
 bool MainComponent::drumKitRows(synth::TrackId trackId, synth::ui::KitRows* rows) const {
     auto* kit = drumKitOf(const_cast<MainComponent*>(this)->trackModuleNode(trackId));

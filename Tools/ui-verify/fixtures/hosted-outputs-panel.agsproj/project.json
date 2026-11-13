@@ -1,0 +1,85 @@
+{
+ "schemaVersion": 1,
+ "timeline": {
+  "version": 1,
+  "nextTrackId": 1,
+  "nextClipId": 1,
+  "nextLaneId": 1,
+  "nextNoteId": 1,
+  "nextMarkerId": 1,
+  "tracks": [],
+  "markers": []
+ },
+ "midiRemote": {
+  "version": 1,
+  "assignments": [],
+  "controllers": []
+ },
+ "mixerPanLaw": "compensated",
+ "mixerView": {
+  "zones": {
+   "master": "right"
+  },
+  "hidden": []
+ },
+ "transport": {
+  "bpm": 120.0,
+  "timeSigNum": 4,
+  "timeSigDen": 4,
+  "loopStartBeat": 0.0,
+  "loopEndBeat": 4.0,
+  "loopEnabled": false
+ },
+ "connections": [],
+ "modulations": [],
+ "macros": [],
+ "nodes": [
+  {
+   "id": 1,
+   "type": "Audio Output",
+   "uuid": "0b9a7e10-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+   "params": {},
+   "position": {
+    "x": 1200,
+    "y": 40
+   }
+  },
+  {
+   "id": 3,
+   "type": "Hosted Plugin",
+   "uuid": "3b222222-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+   "params": {},
+   "position": {
+    "x": 60,
+    "y": 60
+   },
+   "state": {
+    "pluginFormat": "AudioUnit",
+    "pluginName": "Maschine 2",
+    "pluginUid": 0
+   }
+  },
+  {
+   "id": 4,
+   "type": "Delay",
+   "uuid": "3b444444-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+   "params": {
+    "bypassed": false,
+    "dualIO": false,
+    "time": 250.0,
+    "feedback": 0.5,
+    "mix": 0.3,
+    "tempoSync": false,
+    "timeDiv": "1/4",
+    "pingPong": false,
+    "outputLevel": 1.0,
+    "muted": false,
+    "pan": 0.0
+   },
+   "position": {
+    "x": 640,
+    "y": 60
+   }
+  }
+ ]
+}

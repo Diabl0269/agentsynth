@@ -408,6 +408,10 @@ juce::ApplicationProperties* MainComponent::getAppProperties() { return &appProp
 
 synth::ui::TrackChannelLinkSurface* MainComponent::getChannelLinkSurface() { return &trackChannelLink_; }
 
+std::shared_ptr<void> MainComponent::holdTrackPolyStates() {
+    return std::make_shared<synth::ui::PolyChainController::StateBatch>(graphEditor.getPolyChain());
+}
+
 // The Mono/Poly switch on a track header: the voice graph that starts at the track's source node, switched by the
 // same controller (question, ONE undo step, toast) a card's Poly pill uses.
 synth::ui::TrackPolyState MainComponent::getTrackPolyState(synth::TrackId forTrack) {

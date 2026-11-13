@@ -60,6 +60,15 @@ public:
 
     ~ThresholdControlComponent() override { stopTimer(); }
 
+    /** True while the slider is bound to the module's threshold parameter. */
+    bool isBoundToParameter() const noexcept { return attachment != nullptr; }
+
+    /** Gives up the parameter binding without detaching it. Used when the processor is already gone:
+        ~ParameterAttachment would call removeListener on a freed parameter (an access violation on
+        Windows). The attachment is leaked on purpose, as CardBody::releaseBindings does; the
+        slider it points at is deleted with this component, so it never fires again. */
+    void releaseParameterBinding() noexcept { (void)attachment.release(); }
+
     int getPreferredHeight() const noexcept { return slider != nullptr ? kSliderModeHeight : kMeterOnlyHeight; }
 
     juce::Slider* getSlider() const noexcept { return slider.get(); }

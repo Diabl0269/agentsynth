@@ -117,6 +117,15 @@ the drag's preview from it (`TimelineClipLaneArea::resizePreviewFor`) and the dr
 length, so it previews and takes every mode's change too, except a left Trim, which unlinks the dragged clip
 ([linked clips](linked-clips.md)).
 
+**With snap on, the drawn clip glides from one grid line to the next** instead of popping. The preview jumps to each
+new line at once (hit tests and the drop read it, never the drawn rectangle) and `TimelineClipLaneArea::updateDragPreviewFromLastPointer`
+retargets the clip's `clipGlide_` tween, the one an undo uses, from where the clip is drawn to the new line, for the
+dragged clip and its linked copies. The notes inside follow by the sizing rule (Trim keeps them on their beat under the
+sliding edge, Carry takes them along with the left edge, Stretch scales them), and a whole-clip move drag glides the same
+way. A step under 1 px (snap off, where the preview moves a pixel or less per pointer event) is not eased, so the clip
+stays with the pointer. The glide still running at the drop carries across the commit, and Cmd+Z glides back. An
+Option copy-drag moves ghosts, not the clips, so nothing glides. Plain under Reduce Motion and Animations Off.
+
 While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
 length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
 once it is back at the original length.
@@ -330,6 +339,34 @@ overlay's own seam use; `getSplitPreviewForTest()` / `getDrawGhostRectForTest()`
 itself, so a test can assert on it without decoding pixels. `mouseEnter` re-applies the active
 tool's cursor and `mouseExit` drops the Split preview, so a hover line never survives the pointer
 leaving the lanes.
+
+## Waveform look
+
+An audio clip's waveform is one solid shape in a deep shade of the clip's own colour, with a denser core inside
+it, on a linear amplitude scale. Picked against other DAWs:
+
+| DAW | Default look | Scale |
+|---|---|---|
+| Cubase | Event-colour tint, darker outline, optional interior fill | Linear |
+| Audacity | Peak shape in blue, RMS as a lighter inner layer | Linear (dB optional) |
+| Pro Tools, Reaper, Bitwig | Peak shape in a contrasting shade of the clip colour; RMS optional or absent (from public descriptions, not checked side by side) | Linear by default |
+
+The common thread is that the peak envelope is the solid, readable shape and RMS, when shown, is a quieter
+inner layer; nobody draws the waveform as a grey wash. So:
+
+- **Peak shape** (min to max per column): the clip colour as it shows on the lane (its fill over `bg-1`) moved
+  toward black, or toward white on a dark clip, until it reaches 3:1 contrast with the clip
+  (`kWaveformMinContrast`). It is opaque, so the lane never shows through.
+- **RMS core** (+-rms): the same shade, a further step toward black or white. A sine's core sits at about 70% of
+  its peak, a drum hit's is thin, so the core shows how loud a part sounds, the peak shape how far it swings.
+- **Sample line** (zoomed past 2 samples per pixel) and a version 1 sidecar without RMS: the peak shade.
+- **Scale**: linear, so a part 6 dB quieter draws half as tall. No dB or log display.
+- **Live strip**: the same rule from the strip's own fill (accent over `bg-1`), so a take looks the same while it
+  records and once it is a clip.
+
+`waveformInkFor()` (`TimelineClipLaneWaveform.cpp`) is the one place the colours come from.
+`TimelineClipLaneWaveformLookTests.cpp` checks the contrast for every palette colour (plain, selected, muted) in
+every built-in theme, the core step, the linear scale and live/committed parity.
 
 ## Waveform sidecar backfill
 

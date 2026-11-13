@@ -11,6 +11,11 @@ void DefaultCardLayouts::add(const juce::String& moduleType, CardLayout layout, 
     entries_[moduleType] = Entry{std::move(layout), defaultRevision, std::move(dimRules)};
 }
 
+void DefaultCardLayouts::addPreset(const juce::String& moduleType, const juce::String& name, CardLayout layout) {
+    if (const auto it = entries_.find(moduleType); it != entries_.end())
+        it->second.presets.emplace_back(name, std::move(layout));
+}
+
 const DefaultCardLayouts::Entry* DefaultCardLayouts::find(const juce::String& moduleType) const {
     const auto it = entries_.find(moduleType);
     return it != entries_.end() ? &it->second : nullptr;
@@ -24,6 +29,7 @@ const DefaultCardLayouts& DefaultCardLayouts::builtIn() {
         registerFilterDynamicsCardLayouts(defaults);
         registerEffectCardLayouts(defaults);
         registerSequencerCardLayouts(defaults);
+        registerMacroCardLayouts(defaults);
         return defaults;
     }();
     return registry;

@@ -287,7 +287,7 @@ guard (`statusBarTickCount_`), and repaints only itself.
 
 - `formatCpu(float fraction)` — fraction is 0..1; `0.756f` becomes `"75.6%"`
 - `formatVoices(int n)` — `0` becomes `"0 voices"`, `1` becomes `"1 voice"`, `8` becomes `"8 voices"`
-  The count (`AudioEngine::getDisplayVoiceCount`) sums Poly MIDI voices plus every module implementing `synth::VoiceCountSource` (Sampler Instrument mode, Pluck, Mallet), each reading a count its audio thread published per block.
+  The count (`AudioEngine::getDisplayVoiceCount`) sums Poly MIDI voices plus every module implementing `synth::VoiceCountSource` (Sampler Instrument mode, Pluck, Mallet), each reading a count its audio thread published per block. The Sampler, Pluck and Mallet publish notes held (a note fading out after its key came up is not counted); the Drum Kit counts a recorded hit until it ends.
 - `formatPatch(const juce::String& s)` — empty or whitespace-only becomes `"Untitled"`
 - `formatRoundTrip(double ms, bool available)` — `(12.34, true)` becomes `"RT 12.3 ms"`;
   `(anything, false)` becomes `"RT --"`; negative input clamps to `0.0`
@@ -556,6 +556,13 @@ Between the Recent Projects list and the footer the card carries a low-key contr
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
 
+Help menu hints: on macOS each Help item with a command description (Help build Agent Synth..., Join the
+Discord..., Check for Updates...) shows it as the system menu's hover hint after about a second. JUCE's
+`PopupMenu::Item` has no tooltip and its macOS menu never sets `NSMenuItem.toolTip`, so `UI/Layout/MainMenuTooltips.h`
+(`MainMenuTooltipsMac.mm`) sets it from `collectCommandTooltips()` after `setMacMainMenu`, and again each time macOS
+opens a menu, because JUCE refills the menu then. The Windows menu is a JUCE popup and cannot carry a hint: there the
+text stays on the Welcome button and the Cmd+K row. Test: `MainComponentTest.HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint`.
+
 The footer row carries five social icon buttons between the version label and What's New (28 px, 4 px apart,
 right-aligned against What's New): Discord, YouTube, GitHub, TikTok, Instagram, in that visual and Tab order. They are
 `synth::ui::IconButton`s (Bare) drawn with the `Glyph::Social*` glyphs, the same drawings as the website, each with a
@@ -569,7 +576,9 @@ The same page opens from Help > Join the Discord... (`AppCommands::joinDiscord`)
 `ToastComponent` (`Source/UI/Chrome/Toast/`) is a small message pill with one optional action, for a change that is
 bigger than what the user clicked ("Made 4 modules poly" with **Undo**). `MainComponent` owns one, a plain child laid
 out by `resized()` (centred, 20 px above the canvas' bottom edge) and raised when shown; a second `show()` replaces the
-first. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
+first: while the first is on screen the pill glides to the new width and the old icon, text, bar and action cross-fade
+into the new (140 ms `easeOutCubic`, no second slide-in; a plain 80 ms cross-fade without the width glide under Reduce
+Motion, at once under Animations Off), and an action that goes is not pressable while it fades. It slides up 10 px while fading in (170 ms, `easeOutCubic`) and fades out in 130 ms; under Reduce Motion it only
 fades (80 ms), under Animations Off or while its parent is not on screen it lands at once. It hides itself 4 s after
 the last `show()` unless the pointer is over it or its action holds the keyboard focus; Esc dismisses it. The action
 is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this change"); it dismisses the toast, then

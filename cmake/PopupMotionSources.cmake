@@ -14,11 +14,14 @@ target_sources(Core PRIVATE
     Source/UI/Layout/DialogTooltip.cpp
     Source/UI/Layout/ReducedMotion.h
     Source/UI/Layout/ReducedMotion.cpp
+    Source/UI/Layout/MainMenuTooltips.h
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelWindowMotion.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelAlertBox.cpp
 )
 if(APPLE)
-    target_sources(Core PRIVATE Source/UI/Layout/PopupMotionMac.mm Source/UI/Layout/ReducedMotionMac.mm)
+    target_sources(Core PRIVATE Source/UI/Layout/PopupMotionMac.mm Source/UI/Layout/ReducedMotionMac.mm
+                                      Source/UI/Layout/MainMenuTooltipsMac.mm)
     set_source_files_properties(Source/UI/Layout/PopupMotionMac.mm Source/UI/Layout/ReducedMotionMac.mm
+                                Source/UI/Layout/MainMenuTooltipsMac.mm
                                 PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()

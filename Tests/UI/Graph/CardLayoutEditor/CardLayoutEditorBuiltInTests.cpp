@@ -9,6 +9,7 @@
 #include "CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"

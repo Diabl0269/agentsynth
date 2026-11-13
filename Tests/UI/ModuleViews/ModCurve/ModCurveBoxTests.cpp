@@ -1,12 +1,13 @@
-// The small curve box, the line-click editing it opts into, and the enlarged window: its presets, bend handle, range
-// handles and saved curves edit the attenuverter's curve, each gesture is one undo step, and an open box follows undo
-// and a deleted attenuverter. docs/modules/modulation.md.
+// The small curve box, the point editing it shares with the enlarged window, and that window: its presets, bend handle,
+// range handles and saved curves edit the attenuverter's curve, each gesture is one undo step, and an open box follows
+// undo and a deleted attenuverter. docs/modules/modulation.md.
 
 #include "../../../TestWait.h"
 #include "ModCurveTestRig.h"
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorCableCurveChips.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 
@@ -22,6 +23,17 @@ TEST_F(ModuleComponentTest, CurveBoxPresetChipsSetTheCurve) {
     for (const auto& [index, preset] : chips) {
         clickNow(r.box->presetChip(index));
         EXPECT_EQ(r.curve(), ModCurve::preset(preset)) << index;
+    }
+}
+
+TEST_F(ModuleComponentTest, CurveBoxButtonsSayLoadSaveAndEnlargeAndEveryOneIsNamed) {
+    BoxRig r;
+    EXPECT_EQ(r.box->savedButton().getButtonText(), "Load");
+    EXPECT_EQ(r.box->saveButton().getButtonText(), "Save...");
+    EXPECT_EQ(r.box->enlargeButton().getButtonText(), "Enlarge");
+    for (auto* b : {&r.box->savedButton(), &r.box->saveButton(), &r.box->enlargeButton()}) {
+        EXPECT_FALSE(b->getTitle().isEmpty()) << b->getButtonText();
+        EXPECT_FALSE(b->getTooltip().isEmpty()) << b->getButtonText();
     }
 }
 
@@ -162,72 +174,44 @@ TEST_F(ModuleComponentTest, CurveBoxSavedCurvesRoundTripAndShowInASecondBox) {
     EXPECT_FALSE(second.applySavedCurve("Nope"));
 }
 
-// The Free-mode line-click opt-in on the shared curve editor and the box's use of it: a press on the line adds a point,
-// a right-click on a point removes it, and an editor that has not opted in (the LFO and envelope cards) is unchanged.
+// Points on the mod curve: a single click on the line adds nothing, a double-click on the line adds a point that
+// stays, a double-click on a point removes it, and a right-click on a point opens the shared point menu without
+// deleting. Each is driven through the editor's real mouse path and is one undo step.
 
 using synth::ui::CurveEditorComponent;
 using synth::ui::CurveEditorGeometry;
 using namespace synth::ui::test;
 
-namespace {
-synth::ui::CurveModel diagonalModel() { return synth::ui::curveModelFromWave(synth::ModCurve::straightShape()); }
-
-juce::Point<float> lineAt(CurveEditorComponent& ed, double x) {
-    const CurveEditorGeometry g(ed.getModel(), ed.getLocalBounds().toFloat());
-    return g.playheadPosition(ed.getModel().playheadForX(x));
-}
-} // namespace
-
-TEST(CurveEditorLineClick, OptInPressOnTheLineAddsAPointInOneGesture) {
-    CurveEditorComponent ed;
-    ed.setSize(300, 200);
-    ed.setModel(diagonalModel());
-    ed.setLineClickEditing(true);
-    int starts = 0, ends = 0;
-    ed.onGestureStart = [&] { ++starts; };
-    ed.onGestureEnd = [&] { ++ends; };
-
-    const auto p = lineAt(ed, 0.25);
-    ed.mouseDown(curveLeftClick(ed, p));
-    ed.mouseDrag(curveLeftDrag(ed, p.translated(0.0f, -20.0f), p));
-    ed.mouseUp(curveLeftClick(ed, p.translated(0.0f, -20.0f)));
-    EXPECT_EQ(ed.getModel().getNumNodes(), 3);
-    EXPECT_EQ(starts, 1);
-    EXPECT_EQ(ends, 1) << "the add and the drag that follows it are one gesture";
-}
-
-TEST(CurveEditorLineClick, OptInPressAwayFromTheLineAddsNothing) {
-    CurveEditorComponent ed;
-    ed.setSize(300, 200);
-    ed.setModel(diagonalModel());
-    ed.setLineClickEditing(true);
-    const auto p = lineAt(ed, 0.25);
-    ed.mouseDown(curveLeftClick(ed, p.translated(0.0f, 50.0f)));
-    ed.mouseUp(curveLeftClick(ed, p.translated(0.0f, 50.0f)));
-    EXPECT_EQ(ed.getModel().getNumNodes(), 2);
-}
-
-TEST(CurveEditorLineClick, DefaultEditorIgnoresALineClickAndKeepsDoubleClickAdding) {
-    CurveEditorComponent ed;
-    ed.setSize(300, 200);
-    ed.setModel(diagonalModel());
-    const auto p = lineAt(ed, 0.25);
-    ed.mouseDown(curveLeftClick(ed, p));
-    ed.mouseUp(curveLeftClick(ed, p));
-    EXPECT_EQ(ed.getModel().getNumNodes(), 2) << "the LFO and envelope cards do not add on a single click";
-    ed.mouseDoubleClick(curveDoubleClick(ed, p.translated(40.0f, -40.0f)));
-    EXPECT_EQ(ed.getModel().getNumNodes(), 3);
-}
-
-TEST_F(ModuleComponentTest, CurveBoxLineClickAddsAndRightClickRemovesEachAsOneUndoStep) {
+TEST_F(ModuleComponentTest, CurveBoxSingleClickOnTheLineAddsNothing) {
     BoxRig r;
     const auto p = r.onLine(0.25);
     r.pressDragRelease(p, p);
+    EXPECT_EQ(r.editor().getModel().getNumNodes(), 2);
+    EXPECT_TRUE(r.curve().isLinear());
+    EXPECT_FALSE(r.f.undo.canUndo());
+}
+
+TEST_F(ModuleComponentTest, CurveBoxDoubleClickOnTheLineAddsAPointThatStaysAsOneUndoStep) {
+    BoxRig r;
+    r.doubleClick(r.onLine(0.25));
+    synth::test::flushMessageQueue();
     ASSERT_EQ(r.editor().getModel().getNumNodes(), 3);
     EXPECT_EQ(r.curve().shape.points.size(), 3u) << "the new point reached the attenuverter";
 
-    const auto node = r.geometry().nodePosition(1);
-    r.editor().mouseDown(curveRightClick(r.editor(), node));
+    r.f.undo.undo();
+    EXPECT_TRUE(r.curve().isLinear());
+    EXPECT_EQ(r.editor().getModel().getNumNodes(), 2) << "the editor followed the undo";
+    EXPECT_FALSE(r.f.undo.canUndo()) << "the add was exactly one step";
+}
+
+TEST_F(ModuleComponentTest, CurveBoxDoubleClickOnAPointRemovesItAsOneUndoStep) {
+    BoxRig r;
+    r.doubleClick(r.onLine(0.25));
+    synth::test::flushMessageQueue();
+    ASSERT_EQ(r.editor().getModel().getNumNodes(), 3);
+
+    r.doubleClick(r.geometry().nodePosition(1));
+    synth::test::flushMessageQueue();
     EXPECT_EQ(r.editor().getModel().getNumNodes(), 2);
     EXPECT_TRUE(r.curve().isLinear());
 
@@ -238,11 +222,35 @@ TEST_F(ModuleComponentTest, CurveBoxLineClickAddsAndRightClickRemovesEachAsOneUn
     EXPECT_FALSE(r.f.undo.canUndo());
 }
 
-TEST_F(ModuleComponentTest, CurveBoxEndPointsCannotBeRemovedByRightClick) {
+TEST_F(ModuleComponentTest, CurveBoxRightClickOnAPointOpensTheMenuAndDeletesNothingUntilItIsPicked) {
+    BoxRig r;
+    r.doubleClick(r.onLine(0.25));
+    synth::test::flushMessageQueue();
+    ASSERT_EQ(r.editor().getModel().getNumNodes(), 3);
+
+    const auto node = r.geometry().nodePosition(1);
+    r.editor().mouseDown(curveRightClick(r.editor(), node));
+    EXPECT_EQ(r.menus, 1) << "a right-click on a point opens the point menu";
+    EXPECT_EQ(r.editor().getModel().getNumNodes(), 3) << "and removes nothing";
+    EXPECT_EQ(r.curve().shape.points.size(), 3u);
+    ASSERT_TRUE(r.deleteEnabled);
+    ASSERT_TRUE(r.deleteAction);
+
+    r.deleteAction();
+    EXPECT_EQ(r.editor().getModel().getNumNodes(), 2);
+    EXPECT_TRUE(r.curve().isLinear());
+    r.f.undo.undo(); // the removal
+    EXPECT_EQ(r.curve().shape.points.size(), 3u);
+}
+
+TEST_F(ModuleComponentTest, CurveBoxEndPointsOfferNoDelete) {
     BoxRig r;
     r.editor().mouseDown(curveRightClick(r.editor(), r.geometry().nodePosition(0)));
     EXPECT_EQ(r.editor().getModel().getNumNodes(), 2);
+    EXPECT_FALSE(r.deleteEnabled) << "an end point cannot be deleted";
     EXPECT_FALSE(r.f.undo.canUndo());
+    r.doubleClick(r.geometry().nodePosition(0));
+    EXPECT_EQ(r.editor().getModel().getNumNodes(), 2) << "nor removed by a double-click";
 }
 
 // The enlarged curve window's content: Escape and Done close it through one path, Reset returns to a straight line,
@@ -298,8 +306,8 @@ TEST_F(ModuleComponentTest, CurveWindowClosesWhenItsAttenuverterIsDeleted) {
 
 // Regression test for FRO1446: the enlarged curve window does what its hint says, each sentence proved through the
 // real mouse path of the editor in the window (press, drag, release, right-click), with the change watchers and the
-// message queue running between the steps: click the line adds a point, drag moves it, right-click removes it, the
-// ring on a sloping segment bends it, Snap rounds to the grid and Shift places freely.
+// message queue running between the steps: double-click adds a point, drag moves it, double-click on it removes it,
+// right-click opens its menu, the ring on a sloping segment bends it, Snap rounds to the grid and Shift places freely.
 namespace {
 
 using synth::ui::CurveEditorComponent;
@@ -311,7 +319,11 @@ struct WindowEditRig {
         std::make_shared<synth::ui::ModCurveEditTarget>(*f.editor, f.attenId);
     // A box open beside the window keeps its own view in step through the same watchers.
     synth::ui::ModCurveWindowContent content{target};
-    WindowEditRig() { content.setSize(520, 440); }
+    int menus = 0;
+    WindowEditRig() {
+        content.setSize(520, 440);
+        content.view().showMenu = [this](juce::PopupMenu&, juce::Rectangle<int>) { ++menus; };
+    }
 
     CurveEditorComponent& ed() { return content.view().editor(); }
     synth::ModCurve curve() const { return target->read().value(); }
@@ -334,6 +346,19 @@ struct WindowEditRig {
         ed().mouseUp(synth::ui::test::makeCurveMouseEvent(ed(), p, mods, true, from));
         settle();
     }
+    // A real double-click: press, release, press again (click count 2), then the release that raises the double-click.
+    void doubleClick(juce::Point<float> p) {
+        using synth::ui::test::makeCurveMouseEvent;
+        const juce::ModifierKeys left(juce::ModifierKeys::leftButtonModifier);
+        for (const int clicks : {1, 2}) {
+            ed().mouseDown(makeCurveMouseEvent(ed(), p, left, false, p, clicks));
+            settle();
+            ed().mouseUp(makeCurveMouseEvent(ed(), p, left, false, p, clicks));
+            settle();
+        }
+        ed().mouseDoubleClick(makeCurveMouseEvent(ed(), p, left, false, p, 2));
+        settle();
+    }
     void drag(juce::Point<float> from, juce::Point<float> to,
               juce::ModifierKeys mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier)) {
         press(from, mods);
@@ -344,10 +369,19 @@ struct WindowEditRig {
 
 } // namespace
 
-TEST_F(ModuleComponentTest, WindowClickOnTheLineAddsAPointThatStaysAndReachesTheCurve) {
+TEST_F(ModuleComponentTest, WindowSingleClickOnTheLineAddsNothing) {
     WindowEditRig r;
     const auto p = r.onLine(0.25);
     r.drag(p, p);
+    EXPECT_EQ(r.ed().getModel().getNumNodes(), 2);
+    EXPECT_TRUE(r.curve().isLinear());
+    EXPECT_FALSE(r.f.undo.canUndo());
+}
+
+TEST_F(ModuleComponentTest, WindowDoubleClickOnTheLineAddsAPointThatStaysAndReachesTheCurve) {
+    WindowEditRig r;
+    const auto p = r.onLine(0.25);
+    r.doubleClick(p);
     EXPECT_EQ(r.ed().getModel().getNumNodes(), 3) << "the point is in the editor";
     EXPECT_EQ(r.curve().shape.points.size(), 3u) << "and in the attenuverter's curve";
     r.settle();
@@ -358,26 +392,26 @@ TEST_F(ModuleComponentTest, WindowAddedPointsAtEveryAlongTheLineStayAndKeepTheir
     for (const double x : {0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9}) {
         WindowEditRig r;
         const auto p = r.onLine(x);
-        r.drag(p, p);
+        r.doubleClick(p);
         ASSERT_EQ(r.curve().shape.points.size(), 3u) << "x " << x;
         EXPECT_NEAR(r.curve().shape.points[1].x, x, 0.03) << "x " << x;
         EXPECT_NEAR(r.curve().shape.points[1].y, x, 0.06) << "on the line it was clicked on, x " << x;
     }
 }
 
-TEST_F(ModuleComponentTest, WindowSeveralClicksOnTheLineAddSeveralPoints) {
+TEST_F(ModuleComponentTest, WindowSeveralDoubleClicksOnTheLineAddSeveralPoints) {
     WindowEditRig r;
     for (const double x : {0.2, 0.8, 0.4}) {
         const auto p = r.onLine(x);
-        r.drag(p, p);
+        r.doubleClick(p);
     }
     EXPECT_EQ(r.curve().shape.points.size(), 5u);
     EXPECT_EQ(r.ed().getModel().getNumNodes(), 5);
 }
 
-TEST_F(ModuleComponentTest, WindowDragMovesAPointAndRightClickRemovesIt) {
+TEST_F(ModuleComponentTest, WindowDragMovesAPointAndDoubleClickRemovesIt) {
     WindowEditRig r;
-    r.drag(r.onLine(0.25), r.onLine(0.25));
+    r.doubleClick(r.onLine(0.25));
     ASSERT_EQ(r.ed().getModel().getNumNodes(), 3);
 
     const float yBefore = r.curve().shape.points[1].y;
@@ -391,6 +425,10 @@ TEST_F(ModuleComponentTest, WindowDragMovesAPointAndRightClickRemovesIt) {
     const auto at = r.geometry().nodePosition(1);
     r.ed().mouseDown(synth::ui::test::curveRightClick(r.ed(), at));
     r.settle();
+    EXPECT_EQ(r.menus, 1) << "a right-click opens the point menu";
+    EXPECT_EQ(r.ed().getModel().getNumNodes(), 3) << "and removes nothing";
+
+    r.doubleClick(at);
     EXPECT_EQ(r.ed().getModel().getNumNodes(), 2);
     EXPECT_EQ(r.curve().shape.points.size(), 2u);
     EXPECT_TRUE(r.curve().isLinear());
@@ -408,8 +446,8 @@ TEST_F(ModuleComponentTest, WindowDraggingTheRingOnASlopingSegmentBendsIt) {
 
 TEST_F(ModuleComponentTest, WindowBendHandlesStayOnEverySlopingSegmentAfterPointsAreAdded) {
     WindowEditRig r;
-    r.drag(r.onLine(0.25), r.onLine(0.25));
-    r.drag(r.onLine(0.75), r.onLine(0.75));
+    r.doubleClick(r.onLine(0.25));
+    r.doubleClick(r.onLine(0.75));
     ASSERT_EQ(r.ed().getModel().getNumNodes(), 4);
     for (int seg = 0; seg < 3; ++seg)
         EXPECT_TRUE(r.geometry().bendHandlePosition(seg).has_value()) << "segment " << seg;
@@ -417,11 +455,11 @@ TEST_F(ModuleComponentTest, WindowBendHandlesStayOnEverySlopingSegmentAfterPoint
 
 TEST_F(ModuleComponentTest, WindowSnapRoundsNewAndMovedPointsToTheGridAndShiftPlacesFreely) {
     WindowEditRig r;
-    r.content.gridBox().setSelectedId(2, juce::sendNotificationSync); // Grid 1/4
+    r.content.gridBox().setSelectedId(2, juce::sendNotificationSync); // 1/4
     r.content.snapButton().setToggleState(true, juce::sendNotificationSync);
 
     const auto p = r.onLine(0.3);
-    r.drag(p, p);
+    r.doubleClick(p);
     ASSERT_EQ(r.curve().shape.points.size(), 3u);
     EXPECT_NEAR(r.curve().shape.points[1].x, 0.25f, 1e-4f) << "x snapped to a quarter";
     EXPECT_NEAR(r.curve().shape.points[1].y * 4.0f, std::round(r.curve().shape.points[1].y * 4.0f), 1e-3f);
@@ -435,7 +473,7 @@ TEST_F(ModuleComponentTest, WindowSnapRoundsNewAndMovedPointsToTheGridAndShiftPl
 
     r.content.snapButton().setToggleState(false, juce::sendNotificationSync);
     const auto q = r.onLine(0.85);
-    r.drag(q, q);
+    r.doubleClick(q);
     bool offGrid = false;
     for (const auto& pt : r.curve().shape.points)
         offGrid = offGrid || std::abs(pt.x * 4.0f - std::round(pt.x * 4.0f)) > 0.02f;
@@ -444,12 +482,13 @@ TEST_F(ModuleComponentTest, WindowSnapRoundsNewAndMovedPointsToTheGridAndShiftPl
 
 TEST_F(ModuleComponentTest, WindowEveryHintSentenceNamesAThingTheWindowHas) {
     const auto hint = synth::ui::ModCurveWindowContent::hintText();
-    for (const char* sentence : {"Click the line to add a point.", "Drag a point to move it.",
-                                 "Right-click a point to remove it.", "Drag the ring on a sloping segment to bend it.",
-                                 "Snap rounds points to the grid; hold Shift to place them freely."})
+    for (const char* sentence :
+         {"Double-click to add a point; double-click a point to remove it.",
+          "Drag a point to move it, or right-click it for more.", "Drag the ring on a sloping segment to bend it.",
+          "Snap rounds points to the grid; hold Shift to place them freely."})
         EXPECT_TRUE(hint.contains(sentence)) << sentence << " is proved by a test of this file";
     WindowEditRig r;
-    EXPECT_EQ(r.content.snapButton().getTitle(), "Snap to grid");
+    EXPECT_EQ(r.content.snapButton().getTitle(), "Snap");
     EXPECT_EQ(r.content.gridBox().getTitle(), "Curve grid");
     EXPECT_TRUE(r.content.snapButton().getWantsKeyboardFocus());
     EXPECT_TRUE(r.content.gridBox().getWantsKeyboardFocus());
@@ -458,11 +497,60 @@ TEST_F(ModuleComponentTest, WindowEveryHintSentenceNamesAThingTheWindowHas) {
 }
 
 TEST_F(ModuleComponentTest, WindowGridBoxNamesAreCellsAcrossTheRange) {
-    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/8"), 8);
-    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/2"), 2);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("1/8"), 8);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("1/2"), 2);
+    EXPECT_EQ(synth::ui::ModCurveWindowContent::gridDivisions("Grid 1/16"), 16) << "an old saved name still reads";
     WindowEditRig r;
-    EXPECT_EQ(r.content.gridBox().getText(), "Grid 1/8");
+    EXPECT_EQ(r.content.gridBox().getText(), "1/8");
+    for (const auto& name : r.content.gridBox().getChoices())
+        EXPECT_FALSE(name.containsIgnoreCase("grid")) << "the word Grid is the label's, once";
     EXPECT_FALSE(r.content.snapButton().getToggleState()) << "Snap starts off: nothing moves until it is asked to";
+}
+
+TEST_F(ModuleComponentTest, WindowSnapButtonFlipsOnAClickAndOnReturnAndShowsItsWord) {
+    WindowEditRig r;
+    auto& snap = r.content.snapButton();
+    EXPECT_EQ(snap.getButtonText(), "Snap") << "icon and word, like the timeline's";
+    EXPECT_EQ(snap.getComponentID(), "modCurveSnap");
+    EXPECT_EQ(snap.getIcon(), synth::theme::Icon::ToolbarSnap) << "the one shared Snap button";
+    snap.triggerClick();
+    r.settle();
+    EXPECT_TRUE(snap.getToggleState());
+    EXPECT_TRUE(static_cast<juce::Component&>(snap).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    r.settle();
+    EXPECT_FALSE(snap.getToggleState());
+}
+
+namespace {
+void expectBottomRowClear(synth::ui::ModCurveWindowContent& content, int w, int h) {
+    content.setSize(w, h);
+    auto& reset = content.resetButton();
+    auto& done = content.doneButton();
+    auto& snap = content.snapButton();
+    auto& label = content.gridLabel();
+    auto& box = content.gridBox();
+    const std::vector<std::pair<const char*, juce::Component*>> row{
+        {"Snap", &snap}, {"Grid label", &label}, {"Grid box", &box}, {"Reset", &reset}, {"Done", &done}};
+    for (size_t i = 0; i < row.size(); ++i) {
+        EXPECT_GT(row[i].second->getWidth(), 0) << row[i].first << " at " << w << "x" << h;
+        EXPECT_TRUE(content.getLocalBounds().contains(row[i].second->getBounds())) << row[i].first;
+        for (size_t j = i + 1; j < row.size(); ++j)
+            EXPECT_FALSE(row[i].second->getBounds().intersects(row[j].second->getBounds()))
+                << row[i].first << " overlaps " << row[j].first << " at " << w << "x" << h;
+    }
+    EXPECT_LE(label.getRight(), box.getX()) << "the label sits left of its box";
+    EXPECT_GE(label.getX(), snap.getRight());
+}
+} // namespace
+
+TEST_F(ModuleComponentTest, WindowGridLabelSitsLeftOfItsBoxAndNothingInTheBottomRowOverlaps) {
+    WindowEditRig r;
+    EXPECT_EQ(r.content.gridLabel().getText(), "Grid");
+    EXPECT_TRUE(r.content.gridLabel().isShowing() || r.content.gridLabel().isVisible());
+    EXPECT_FALSE(r.content.gridLabel().getWantsKeyboardFocus()) << "the label is not a Tab stop";
+    expectBottomRowClear(r.content, 520, 440);
+    expectBottomRowClear(r.content, synth::ui::ModCurveWindowContent::kMinWidth,
+                         synth::ui::ModCurveWindowContent::kMinHeight);
 }
 
 // Regression test for FRO1449: a click on the anchor of an open panel closes it, and never re-opens it. A press on its

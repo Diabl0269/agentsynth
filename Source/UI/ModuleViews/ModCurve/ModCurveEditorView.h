@@ -5,29 +5,38 @@
 // when another view, an undo or a redo changes it.
 
 #include "ModCurveEditTarget.h"
-#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <functional>
 #include <memory>
 
 namespace synth::ui {
 
+struct CurveHitResult;      // by value in showPointMenu; complete in UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
+class CurveEditorComponent; // held behind a pointer so the views that hold a box do not reach the whole editor
+
 class ModCurveEditorView final : public juce::Component {
 public:
     explicit ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> target);
+    ~ModCurveEditorView() override;
 
-    CurveEditorComponent& editor() noexcept { return editor_; }
+    /** Needs UI/ModuleViews/CurveEditor/CurveEditorComponent.h where it is used. */
+    CurveEditorComponent& editor() noexcept { return *editor_; }
     /** Re-reads the target's curve; reports `onTargetGone` once when the attenuverter has vanished. */
     void refreshFromTarget(bool glide = false);
     /** Runs when the attenuverter is gone (deleted, or undone away). */
     std::function<void()> onTargetGone;
 
+    /** Shows the right-click point menu (a seam for tests: it sees the menu and the screen area it opens at); unset
+     *  opens it at the pointer. */
+    std::function<void(juce::PopupMenu&, juce::Rectangle<int>)> showMenu;
+
     void resized() override;
 
 private:
     void pushToTarget();
+    void showPointMenu(const juce::MouseEvent& e, CurveHitResult hit);
 
     std::shared_ptr<ModCurveEditTarget> target_;
-    CurveEditorComponent editor_;
+    std::unique_ptr<CurveEditorComponent> editor_;
     synth::ModCurve shown_;
     bool dragging_ = false;
     bool goneReported_ = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/FadeAmount.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -14,6 +15,7 @@ class LaneNameButton : public juce::Button {
 public:
     LaneNameButton();
 
+    /** Sets the name; the owner re-lays the button out at its new width (wire onPreferredWidthChanged). */
     void setName(const juce::String& text);
     /** The screen-reader name and the tooltip: what a press does ("Change source of LFO 1 on Cutoff"). */
     void setActionText(const juce::String& accessibleName, const juce::String& tooltip);
@@ -22,6 +24,9 @@ public:
     int getPreferredWidth() const;
     void setHovered(bool hovered);
     bool isHovered() const noexcept { return hovered_; }
+
+    /** Fires from setName when the name now needs a different width than before. */
+    std::function<void()> onPreferredWidthChanged;
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
     bool keyPressed(const juce::KeyPress& key) override;

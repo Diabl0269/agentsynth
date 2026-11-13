@@ -1,8 +1,13 @@
 // StepGridWrittenOutlineTests.cpp -- a step a scale moved shows the note it was written at as a solid outline in the
 // text colour that stands out from the row on a dark and a light theme, from the moment the scale changes, and goes
 // when the scale does.
+#include "../../Layout/UndoGlideSurfaces.h"
+#include "Music/MusicalScale.h"
+#include "Music/SongKey.h"
 #include "StepGridCardFixture.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 
@@ -172,3 +177,96 @@ TEST(StepGridWrittenOutline, FitToScaleFadesTheOutlinesOutWhileTheBarsGlide) {
     EXPECT_TRUE(c.grid->writtenOutlineBounds(0).isEmpty()) << "written == played now: no outline";
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
+
+// A key change moves every note the steps play: the bars glide from where the old scale put them instead of
+// redrawing at once. The same holds for the undo and redo of the change, which land here as the same parameter write.
+TEST(StepGridWrittenOutline, ChangingTheKeyGlidesTheBarsAndTheirOutlinesInsteadOfRedrawingAtOnce) {
+    SeqCard c;
+    scaledCardWithE(c);
+    ASSERT_FALSE(c.grid->isMotionRunning());
+    for (const char* scale : {"No scale", "Natural Minor"}) {
+        c.setChoice("scale", scale);
+        c.grid->poll();
+        ASSERT_TRUE(c.grid->isMotionRunning()) << "a key change starts a glide: " << scale;
+        c.grid->stepMotionForTest(40.0);
+        const float fromSide = c.grid->writtenOutlineAlpha(0, true);
+        const float toSide = c.grid->writtenOutlineAlpha(0, false);
+        EXPECT_TRUE((fromSide > 0.0f && fromSide < 1.0f) || (toSide > 0.0f && toSide < 1.0f))
+            << "partway: the outline is neither where it was nor where it goes, " << scale;
+        c.grid->finishMotionForTest();
+    }
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(StepGridWrittenOutline, ChangingTheKeyLandsAtOnceWithAnimationsOff) {
+    SeqCard c;
+    scaledCardWithE(c);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    c.setChoice("scale", "No scale");
+    c.grid->poll();
+    EXPECT_FALSE(c.grid->isMotionRunning());
+    EXPECT_TRUE(c.grid->writtenOutlineBounds(0).isEmpty());
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+// ---- The registry entry for the Key's bars (UndoGlideSurfaces.h): here because the card fixture is, and CardBody.h
+// stays out of the Layout tests' header reach. ----
+namespace undo_glide_test {
+
+namespace {
+
+/** Step 1 is written E and the Key goes from No scale to C Natural Minor, so the bar moves from E down to D sharp. */
+class SequencerKeySurface : public Surface {
+public:
+    SequencerKeySurface() {
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(true); // a headless grid gets no VBlank
+        c_.useOwnKey();
+        c_.setChoice("scaleRoot", "C");
+        c_.setChoice("scale", "No scale");
+        auto pattern = c_.module->getPattern();
+        pattern.steps[0].pitch = 64; // E
+        c_.module->setPattern(pattern);
+        tick();
+        c_.grid->finishMotionForTest();
+        c_.canvas.undo.getUndoManager().clearUndoHistory();
+    }
+    ~SequencerKeySurface() override { synth::ui::FadeVisibility::setAnimateOffScreenForTest(false); }
+
+    void move() override {
+        keyField()->pickOwn(synth::makeScale(0, synth::scalePresetIndex("Natural Minor")));
+        tick();
+        grid().finishMotionForTest();
+    }
+    bool undo() override { return restore(false); }
+    bool redo() override { return restore(true); }
+    double drawn() const override { return grid().drawnPitchForTest(0) * 10.0; }
+    bool gliding() const override { return grid().isMotionRunning(); }
+    void stepTo(double elapsedMs) override { grid().stepMotionForTest(elapsedMs); }
+
+private:
+    synth::ui::StepGridComponent& grid() const {
+        auto* found = dynamic_cast<synth::ui::StepGridComponent*>(
+            c_.canvas.card(c_.id)->getCardBody()->findView(synth::CardView::StepGrid));
+        jassert(found != nullptr);
+        return *found;
+    }
+    synth::ui::SequencerKeyField* keyField() const {
+        return dynamic_cast<synth::ui::SequencerKeyField*>(
+            c_.canvas.card(c_.id)->getCardBody()->findWidget("scaleRoot"));
+    }
+    void tick() const { c_.canvas.card(c_.id)->timerCallback(); }
+    bool restore(bool forward) {
+        const bool did = forward ? c_.canvas.undo.redo() : c_.canvas.undo.undo();
+        tick(); // the card's 15 Hz tick, which is where the grid reads the restored key
+        return did;
+    }
+
+    mutable SeqCard c_;
+};
+
+} // namespace
+
+std::unique_ptr<Surface> makeSequencerKey() { return std::make_unique<SequencerKeySurface>(); }
+
+} // namespace undo_glide_test

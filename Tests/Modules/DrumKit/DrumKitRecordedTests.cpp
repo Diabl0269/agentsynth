@@ -9,6 +9,7 @@
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/Sampler/SamplerInstrumentPlayer.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
+#include "Modules/SamplerModule.h"
 #include "Project/DeferredAssetLoads.h"
 #include <algorithm>
 #include <cmath>
@@ -471,4 +472,34 @@ TEST(DrumKitRecorded, ASavedStateWithNoKitClearsTheKitAndTheSavedKitSurvivesTheP
             loaded = k;
     ASSERT_NE(loaded, nullptr);
     EXPECT_TRUE(loaded->hasRecordedKit());
+}
+
+// C1 (note 36, the kick) is heard whichever way its Recorded switch is set, in the Drum Kit and in a Sampler that
+// loaded the same kit.
+TEST(DrumKitRecorded, NoteC1IsAudibleWithKickRecordedOnAndOff) {
+    KitFiles files;
+    auto on = makeKitWith(files);
+    EXPECT_GT(peakOf(render(*on, {{kKick}}, 0.5), 0.05, 0.4), 0.1f) << "the recorded kick";
+    auto off = makeKitWith(files);
+    setActual(*off, "kickRecorded", 0.0f);
+    EXPECT_GT(peakOf(render(*off, {{kKick}}, 0.5), 0.0, 0.4), 0.1f) << "the synth kick";
+}
+
+TEST(DrumKitRecorded, ASamplerWithTheKitLoadedPlaysNoteC1) {
+    KitFiles files;
+    SamplerModule sampler;
+    sampler.prepareToPlay(kRate, kBlock);
+    ASSERT_TRUE(sampler.loadInstrumentFromSfz(files.sfz()));
+    float peak = 0.0f;
+    for (int start = 0; start < (int)(0.5 * kRate); start += kBlock) {
+        juce::AudioBuffer<float> block(SamplerModule::kNumChannels, kBlock);
+        block.clear();
+        juce::MidiBuffer midi;
+        if (start == 0)
+            midi.addEvent(juce::MidiMessage::noteOn(1, kKick, 1.0f), 0);
+        sampler.processBlock(block, midi);
+        for (int c = 0; c < 2; ++c)
+            peak = std::max(peak, block.getMagnitude(c, 0, kBlock));
+    }
+    EXPECT_GT(peak, 0.05f);
 }

@@ -30,8 +30,9 @@ And it starts at `trackHeaderBounds_.getY()`, i.e. **below the transport strip**
 strip is one continuous row of chrome across the full width — cutting it in half would imply a
 column boundary its own controls do not respect.
 
-**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) straddles
-the seam, added last so it wins the hit test over the header rows and the clips. Dragging it sets the
+**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) runs down the
+column's right edge beside the track rows, inside the column and 1 px short of the lanes so it never overlaps the
+ruler or the lanes (the Add Track button stops 1 px short of it), added last so it wins the hit test over the header rows. Dragging it sets the
 column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[168, 420]` px; a
 double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
 user settings under `timelineTrackHeaderWidth` (written on release, restored in
@@ -313,7 +314,7 @@ its clips, its lanes and the scroll all follow. A fixed override (the Unassigned
   second strip (`trackHeightHandleBelowLanes`, owned by the panel, same name, tooltip, drag and double-click)
   runs along the bottom of that lane block: the seam above the next track resizes the track it belongs to
   with lanes open or folded.
-- **Vertical zoom:** zooming the tracks in or out (Cmd+Shift+wheel, a plain or Option/Shift pinch, or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
+- **Vertical zoom:** zooming the tracks in or out (Cmd+Shift+wheel, Option + a vertical scroll, a plain or Option/Shift pinch, or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
   for all of them. `TimelinePanelComponent::zoomTrackRows()` first clears every track's own height with
   `TimelineDoc::resetTrackHeightScales()` through `performTrackEdit` (one undo step that brings the mixed heights
   back; a run of zoom ticks writes it once, as the heights are then equal), then scales the shared
@@ -560,13 +561,21 @@ at once: the same plan, the same question when other tracks' modules would chang
   button, like the show-module and drum buttons; every child of the header stays inside it and none overlap at any row
   height (`TimelineTrackHeaderRowFitTests.cpp` sweeps heights, widths and control sets).
 - **Keyboard and screen reader.** A Tab stop (Return or Space presses it) that leaves focus on the row when clicked, with
-  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly).
+  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly). With the
+  row (or the toggle) focused, **P** (`trackHeaderTogglePoly`, rebindable, Track Header category, [shortcuts](../control/shortcuts.md#timeline))
+  presses it; the tooltip ends with the key's current text. P sits in its own category so it does not collide with the
+  Timeline's bare P (loop selection); a row with no toggle lets P bubble to loop selection.
+- **Why this icon.** Ableton Live and Bitwig have no per-track poly control (voices are a device setting), so there is
+  no convention to copy; a note head against a stack of note heads reads as "one note or a chord" without a word, and
+  the old two-word Mono | Poly switch could not show "Mono" in the 168 px minimum header width.
 - **Staying current.** A pill click, the toggle and an undo all end in a header refresh
   (`PolyChainController::onVoiceGraphChanged`, `reconcileTimelineAfterGraphChange`), so the toggle and the cards never
   disagree. The toggle fades in and out with the chip row ([header chips fade](#header-chips-fade)).
 
 Tests: `Tests/UI/Timeline/TimelineTrackVoiceToggleTests.cpp` (the header, against a stub host),
-`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height) and
+`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height, no part's words
+clipped at the narrowest width), `Tests/App/MainComponent/MainComponentTrackVoiceToggleTests.cpp` (P and a click end to
+end, one undo step) and
 `Tests/UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp` (the voice-graph switch from a track source).
 
 ## Routing from the side pane

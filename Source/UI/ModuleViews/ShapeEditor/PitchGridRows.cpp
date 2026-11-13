@@ -3,7 +3,6 @@
 #include "PitchGridRows.h"
 #include "Music/SongKey.h"
 #include "ShapeWindowPrefs.h"
-#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -13,11 +12,13 @@ namespace synth::ui {
 namespace {
 constexpr int kRowsGridLabelWidth = 34;
 constexpr int kKindWidth = 232;
-constexpr int kSnapWidth = 52;
 constexpr int kPillGap = 4;
 constexpr int kGroupGap = 14;
 constexpr int kLevelLabelWidth = 38;
 constexpr int kLevelWidth = 150;
+// The first row without its two Snap buttons.
+constexpr int kRow1WithoutSnaps =
+    kRowsGridLabelWidth + kKindWidth + kPillGap + kGroupGap + kLevelLabelWidth + kLevelWidth + kPillGap;
 constexpr int kStepsLabelWidth = 42;
 constexpr int kStepsWidth = 286;
 constexpr int kKeyLabelWidth = 34;
@@ -78,9 +79,10 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
     snapLevel_.setTitle("Snap level");
     snapLevel_.setTooltip("Snap level: points land on the level lines. Off: the lines stay as a guide and levels "
                           "move freely");
-    for (auto* pill : {&snapAcross_, &snapLevel_}) {
-        setTogglePillStyle(*pill, true);
-        pill->setWantsKeyboardFocus(true);
+    for (auto* snap : {&snapAcross_, &snapLevel_}) {
+        snap->setLayout(ToolbarButtonLayout::Inline);
+        snap->setClickingTogglesState(true);
+        snap->setWantsKeyboardFocus(true);
     }
     key_.setTooltip("Key: the notes the Notes grid snaps to; the other notes are dotted. Set Song Key: Shift+Cmd+K");
     root_.setTitle("Root");
@@ -311,15 +313,24 @@ void PitchGridRows::lookAndFeelChanged() {
 void PitchGridRows::resized() {
     auto row1 = getLocalBounds().removeFromTop(kRowHeight);
     auto row2 = getLocalBounds().withTrimmedTop(kRowHeight + kRowGap).withHeight(kRowHeight);
+    // The caption "Snap" shows only while both buttons with it fit the row; otherwise they are icon only (their
+    // tooltips start with their names).
+    const bool captioned = kRow1WithoutSnaps + 2 * snapAcross_.getPreferredWidthFor("Snap") <= getWidth();
+    for (auto* snap : {&snapAcross_, &snapLevel_})
+        snap->setLabel(snap == &snapAcross_ ? "Snap across" : "Snap level", false);
+    if (captioned)
+        for (auto* snap : {&snapAcross_, &snapLevel_})
+            snap->setButtonText("Snap");
+    const int snapWidth = snapAcross_.getPreferredWidth();
     gridLabel_.setBounds(row1.removeFromLeft(kRowsGridLabelWidth));
     kind_.setBounds(row1.removeFromLeft(kKindWidth));
     row1.removeFromLeft(kPillGap);
-    snapAcross_.setBounds(row1.removeFromLeft(kSnapWidth));
+    snapAcross_.setBounds(row1.removeFromLeft(snapWidth));
     row1.removeFromLeft(kGroupGap);
     levelLabel_.setBounds(row1.removeFromLeft(kLevelLabelWidth));
     level_.setBounds(row1.removeFromLeft(kLevelWidth));
     row1.removeFromLeft(kPillGap);
-    snapLevel_.setBounds(row1.removeFromLeft(kSnapWidth));
+    snapLevel_.setBounds(row1.removeFromLeft(snapWidth));
 
     auto steps = row2;
     stepsLabel_.setBounds(steps.removeFromLeft(kStepsLabelWidth));

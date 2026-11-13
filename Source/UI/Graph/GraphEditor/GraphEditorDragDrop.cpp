@@ -25,7 +25,6 @@
 #include "CanvasAccessibilityClip.h"
 #include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
@@ -57,10 +56,6 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
-    if (typeName == "Macros")
-        // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
-        return {synth::LayoutUtil::kSingleWidth,
-                synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, a one-row band strip (a
         // fresh EQ has every band off), the selected band's row and the Output trim row. Mirrors parametricEQHeight().
@@ -266,12 +261,16 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             animateDropLanding(newComp, initialPlaced, toPos);
 
             // A drop that snapped into a connection settles from where the cursor aimed to its slot (the Scope in
-            // placeNode glides it; geometry stays final). Without a suggestion the card just appears, as before.
+            // placeNode glides it; geometry stays final).
             const auto aim = dragDropController_.getDragPreviewAim();
             if (!joining && !inGap && smartConnections_.getSmartSuggestionCount() > 0 && !aim.isEmpty() &&
                 aim.getPosition() != toPos)
                 cardGlide_.noteStartRect(newComp, newNodeId.uid,
                                          {aim.getX(), aim.getY(), newComp->getWidth(), newComp->getHeight()});
+            // A card that lands where it was placed, with nothing to travel (Return on a library row, a double click),
+            // grows in at its slot like one an insert makes; a drop that travels keeps its landing glide.
+            else if (!joining && !inGap && initialPlaced == toPos)
+                cardGlide_.noteEnter(newComp, newNodeId.uid);
 
             // The nearest free spot can be well away from the pointer (a crowded macro hull has none beside it), and
             // a card that landed below the window would look like the drop did nothing: bring it into view.
@@ -347,11 +346,24 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
     if (mb == nullptr)
         return;
 
+    // A raw channel is hidden when no visible jack owns it. Jack index == raw channel only holds for a module whose
+    // jacks are a prefix of its channels (Audio Input); a Hosted Plugin can hide the middle of its outputs.
     const int visible = mb->getVisibleOutputPortCount();
+    std::vector<bool> reachable((size_t)juce::jmax(0, mb->getTotalNumOutputChannels()), false);
+    for (int jack = 0; jack < visible; ++jack)
+        for (const auto& t : mb->getJackTargets(jack, /*isInput=*/false))
+            for (int v = 0; v < t.voiceSpan; ++v) {
+                const int raw = t.rawHeadChannel + v * t.rawStride;
+                if (raw >= 0 && raw < (int)reachable.size())
+                    reachable[(size_t)raw] = true;
+            }
     std::vector<juce::AudioProcessorGraph::Connection> toRemove;
 
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+        if (c.source.nodeID != nodeId || c.source.isMIDI())
+            continue;
+        if (c.source.channelIndex >= 0 && c.source.channelIndex < (int)reachable.size() &&
+            reachable[(size_t)c.source.channelIndex])
             continue;
 
         if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {

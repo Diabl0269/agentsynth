@@ -1,4 +1,4 @@
-// The shape library inside the shape window and on the canvas: Save shape, the Start from menu that lists the library,
+// The shape library inside the shape window and on the canvas: Save shape, the Pick shape menu that lists the library,
 // and a dragged library shape stamped onto a chip or a card in one undo step.
 #include "../../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../../TestWait.h"
@@ -119,7 +119,7 @@ TEST(ShapeLibraryWindow, AnEmptyNameIsRefusedAndAnExistingOneAsksBeforeReplacing
               rig.filter->getCustomShapes().shapes[0].curve);
 }
 
-TEST(ShapeLibraryWindow, StartFromListsTheFactoryShapesAndTheUsersSavedShapeOfThatKind) {
+TEST(ShapeLibraryWindow, PickShapeListsTheFactoryShapesAndTheUsersSavedShapeOfThatKind) {
     TempShapes shapes;
     ShapeRig rig;
     ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
@@ -127,7 +127,7 @@ TEST(ShapeLibraryWindow, StartFromListsTheFactoryShapesAndTheUsersSavedShapeOfTh
     ShapeListEditor editor(rig.adapter, 2);
     CapturedMenu captured;
     editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
-    click(editor.getStartFromButton());
+    click(editor.getPickShapeButton());
 
     const auto has = [&](const char* name) {
         return std::find(captured.items.begin(), captured.items.end(), name) != captured.items.end();
@@ -351,14 +351,14 @@ TEST(ShapePicker, ListsTheSavedShapesFirstBadgedYoursThenTheFactorySetBadgedFact
     EXPECT_EQ(entries.size(), 1u + ShapeLibrary::factoryShapes(ShapeKind::Filter).size());
 }
 
-TEST(ShapePicker, TheShapeWindowsStartFromRowsAreThumbnailRowsWithTheirBadgeInTheirName) {
+TEST(ShapePicker, TheShapeWindowsPickShapeRowsAreThumbnailRowsWithTheirBadgeInTheirName) {
     TempShapes shapes;
     ShapeRig rig;
     ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
     ShapeListEditor editor(rig.adapter, 2);
     CapturedMenu captured;
     editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
-    editor.getStartFromButton().onClick();
+    editor.getPickShapeButton().onClick();
 
     bool sawMine = false;
     bool sawFactory = false;
@@ -465,9 +465,9 @@ TEST(ShapePicker, EveryRowOfThePickerMenuPaintsItsThumbnailAndItsBadgeAndTheShee
     }
 }
 
-// Regression test for FRO1172: the Start from menu worked out "is this row a saved shape" from a variable that
+// Regression test for FRO1172: the Pick shape menu worked out "is this row a saved shape" from a variable that
 // shadowed the saved-shape count, so the origin it passed on was stale. A saved shape picked there is noted as Yours.
-TEST(ShapePicker, AShapePickedFromStartFromIsNotedAsYoursAndAFactoryOneAsFactory) {
+TEST(ShapePicker, AShapePickedFromPickShapeIsNotedAsYoursAndAFactoryOneAsFactory) {
     struct Heard : ShapeLibrary::Listener {
         std::vector<synth::shapes::LibraryShape> used;
         void shapeLibraryChanged() override {}
@@ -480,7 +480,7 @@ TEST(ShapePicker, AShapePickedFromStartFromIsNotedAsYoursAndAFactoryOneAsFactory
     ShapeListEditor editor(rig.adapter, 2);
     CapturedMenu captured;
     editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
-    editor.getStartFromButton().onClick();
+    editor.getPickShapeButton().onClick();
     ASSERT_TRUE(captured.run("mine, Yours"));
     ASSERT_TRUE(captured.run("double peak, Factory"));
     ShapeLibrary::shared().removeListener(&heard);

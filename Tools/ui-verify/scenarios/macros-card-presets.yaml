@@ -1,0 +1,64 @@
+# FRO1286: the Macros card draws from a card layout like every other card, so Edit Layout opens on it and its Preset
+# menu lists the built-in Row, Grid and Faders presets. Each reshapes the card in one undo step, the output jacks
+# stay in the right-edge gutter in macro order, and the card's size follows what it draws.
+#
+# What a user does: opens a patch with a Macros card, right-clicks its title, picks Edit Layout..., opens Preset and
+# picks Row (eight knobs in one row), then Faders (a fader per macro), then Grid (two rows of four), and presses
+# Undo to step back through them.
+record: true
+save_project: macros-card-presets
+steps:
+  - openProject: {path: "${FIXTURES}/macros-bank.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: -6.2, dy: 2.7}
+  - wait: {}
+  - screenshot: {name: macros-card-default-grid}
+  - mark: {check: 1, name: default-is-a-grid-of-two-rows-of-four}
+  - click: {id: "card:Macros", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - screenshot: {id: screen, name: preset-menu-lists-row-grid-faders}
+  - mark: {check: 2, name: preset-menu-lists-row-grid-faders}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {name: row-preset}
+  - mark: {check: 3, name: row-puts-eight-knobs-in-one-row}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {name: faders-preset}
+  - mark: {check: 4, name: faders-draws-a-fader-per-macro}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - screenshot: {name: undo-back-to-row}
+  - mark: {check: 5, name: one-undo-step-goes-back-to-row}
+  - click: {id: window, x: 554, y: 188}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {name: grid-again}
+  - mark: {check: 6, name: grid-puts-the-knobs-back-in-two-rows}
+  - click: {id: window, x: 741, y: 188}
+  - wait: {settleMs: 500}
+  - screenshot: {name: done}

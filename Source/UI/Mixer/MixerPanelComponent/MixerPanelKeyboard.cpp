@@ -27,6 +27,8 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
                       juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0))) {
         if (!topBarRing_.enter())
             return false;
+        if (zonesPane_.hasKeyboardFocus(true)) // the ring's keys come to the panel root, so the panel takes the keys
+            grabKeyboardFocus();
         exitRows();
         return true;
     }
@@ -100,6 +102,12 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
 bool MixerPanelComponent::showContextMenuForKeyboardFocus() {
     if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
         return false;
+    // A focused insert row opens its own menu (a split's "Add before/after all paths", a module's "Add after"), the
+    // way a right-click on the row does; no row focused, or any other row, keeps the channel menu.
+    if (rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Insert)
+        if (auto* inserts = focusedInsertList();
+            inserts != nullptr && inserts->showMenuForKeyboardRow(rowFocus_->index))
+            return true;
     const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
     showChannelMenu(entry.channelId, entry.component->getScreenBounds());
     return true;
@@ -136,6 +144,12 @@ bool MixerPanelComponent::moveFocus(int direction) {
     // From nothing focused, either direction seeds column 0 (plan (a): "from -1, Right lands on
     // column 0" -- Left mirrors it rather than leaving the key unclaimed). Otherwise clamp at
     // either end, never wrap -- the same rule TimelinePanelComponent::moveFocusedTrack uses.
+    // Left of the first strip goes on into the side pane's channel list when it shows; it is the only way in by arrows.
+    if (direction < 0 && focusedColumnIndex_ == 0 && zonesPane_.isVisible() && !zonesPane_.getBounds().isEmpty()) {
+        zonesPane_.focusList();
+        noteKeyboardMoved(); // the list has the keys now: the strip's ring goes
+        return true;
+    }
     const int newIndex = focusedColumnIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedColumnIndex_ + direction);
     setFocusedColumnIndex(newIndex);
     return true;
@@ -235,6 +249,8 @@ void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) cons
     const bool inRows = shown && rowFocus_.has_value();
     into.setProperty("focusedRow", inRows ? getDescription() : juce::String());
     into.setProperty("focusedRowIndex", inRows ? rowFocus_->index : -1);
+    // The side pane's list holds the keys (Left from the first strip): the channel its cursor is on.
+    into.setProperty("zonesCursor", zonesPane_.getKeyboardCursorName());
 }
 
 // Direct and Master have no name to edit, so the key falls through there.
@@ -415,6 +431,9 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     // with no native peer (same accepted gap TimelineTrackFocusTests documents). The two may
     // co-paint, same as a region root and a focused row elsewhere in this app.
     synth::ui::paintFocusRegionOutline(*this, g);
+    // No event can leave a ring that lies: a paint that finds the keys elsewhere takes the ring down (and repaints).
+    if (isKeyboardAwayNow() != keyboardAway_)
+        noteKeyboardMoved();
     paintRowFocusRing(g);
     topBarRing_.paintRing(g);
     paintDragBubble(g);

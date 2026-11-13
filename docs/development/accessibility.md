@@ -23,6 +23,12 @@ Every new or changed control:
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
 4. **Has a tooltip** that names its shortcut when it has one (`Play (Space)`).
+   A button that shows its words gets only the explanation ("Draw the filter's output...", never "Show Spectrum: draw
+   ..."); an icon-only button's tooltip starts with its name. `synth::ui::setButtonTooltip` (`Source/UI/Layout/ButtonTooltip.h`)
+   applies both, and an action with a button on two surfaces (a card and the window it opens) takes its label and tooltip
+   from one constant in `Source/UI/Layout/ActionTexts.h`. `Tests/UI/Accessibility/TooltipRulesTests.cpp` walks every card
+   and the EQ and Sampler windows for both, and `ShapeWindowThemeTests.cpp` runs the same walk
+   (`TooltipRulesWalk.h`) on the Filter and LFO shape windows.
 
 ## Lists with painted rows or messages
 
@@ -87,7 +93,7 @@ A stepper (`CardStepper`, the number field) is ONE Tab stop titled after the par
 focus ring; Up/Down (Left/Right in a row) step, Enter or a digit opens the type-in box (typable fields), and to a screen
 reader it is one element whose value is the value text. Its tooltip names the gestures. A composite control (the stepper) is registered for
 MIDI Learn as a whole: a right click on any part of it resolves to the registered ancestor
-(`ModuleComponent::mouseDown`). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
+(`ModuleComponent::mouseDown`). A Hosted Plugin's "+ N more outputs" fold line is a Tab stop that Enter or Space toggles, and its Outputs panel is a popover whose Show switches are Tab stops (Up/Down move between rows, Space toggles, Esc closes), each titled and with a tooltip ([plugin-card-layout](../control/plugin-card-layout.md#outputs-panel)). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
 "Audio L input" and so on, for the accessibility tree only; there is no keyboard cable creation.
 
 ## Which focus helper
@@ -155,7 +161,7 @@ A panel that keeps real focus on its root while a ring moves across its top bar 
 drawn in `paintOverChildren`), so it tells a screen reader nothing by itself: the owner returns
 `KeyRing::createAccessibilityHandler()` from its own `createAccessibilityHandler()` (role group, value = the ringed
 control's name, empty when off) and the ring notifies `valueChanged` on every enter, move and leave. The owner's
-`focusLost` calls `leave()`. The Timeline sorts stops by on-screen X; the Mixer passes `Order::given` because its
+`focusLost` calls `leave()`. Down leaves the ring and then runs the owner's optional `KeyRing::onDown`, which puts focus on the first control below the bar (the Timeline's Add Track, the Mixer's strip), so the key never ends on a panel root that draws no ring; Escape only leaves. The Timeline sorts stops by on-screen X; the Mixer passes `Order::given` because its
 reading order is not left to right. A stop is skipped unless it is enabled, visible up to the owner and laid out to a
 non-empty rectangle, and the step helper's Up/Down (`neighbourStop` over `shownFocusableDescendants`, `FocusStepWithin.h`) skips zero-size
 controls the same way, so a key
@@ -169,6 +175,8 @@ the ringed control's name to test mode (`topBarRing`). The main Toolbar and Canv
 ## Key standards on every control
 
 `Tests/UI/Layout/KeyStandardsSweepTests.cpp` gives every focusable control of every focus region (the reach test's scenes) and every dialog real keyboard focus and presses keys through `RealKeyDelivery.h`, which hands the key to the window's `ComponentPeer::handleKeyPress` (key listeners, then `keyPressed` up the parents) and reports whether and by which component it was handled. It checks: Space reaches the transport (a focused button that consumes it to press itself is fine; a modal prompt keeps it, a tool window hands it to the app) and opens no menu; Cmd+Z reaches the app's undo (not in a text field, nor in the Controllers panel, which has its own history); Return clicks a button once and opens a combo box's menu, which appears touching the combo box and closes on the next Escape; Escape closes a dialog (a text field keeps it). Failures are `<surface> / <control>: <what>`; known ones are in `kKnownGaps` and may only shrink. It runs on macOS only, where that list is measured. `RealKeyDelivery.h` is the helper for any test that needs a key delivered as the OS does.
+
+`Tests/UI/Layout/ReachSweepTests.cpp` (walker in `ReachSweepWalk.h`) is the real-key reach sweep. In each scene (every main view with the dock open, the canvas with it closed, the library showing Sounds, the timeline's and the mixer's side panes, a piano roll, a drum machine, the AI panel with the Mod Matrix) it focuses each region and presses Down, Up, Left, Right, Tab, Shift+Tab and Escape from every place focus lands, walks the key rings (toolbars, the timeline's and mixer's top bars, the mixer's focused column, the zones pane's cursor) to their end, and presses Cmd+1..4 and Cmd+Shift+Up each followed by the arrows, all through `RealKeyDelivery.h`. After every key it asserts: focus is in some region; the stop it landed on draws a ring (a ring source of its region shows, or rendering the region with focus on the stop and on a neutral helper differs around it); no ring is left on after focus left its owner; Tab and Shift+Tab that leave a region land in the next open one. After the walk every stop of the region (and every ring stop) must have been reached by keys. Failures are `<scene> / <region id> / <control>: <what>` and known ones live in `kKnownGaps`, a list that may only shrink; a gap marked `varies` shows on some machines only (the CI runner's screen and timing differ) and is not judged when it is not found. `AGENTSYNTH_REACH_VERBOSE=1` prints every step.
 
 ## Tab order follows reading order
 
@@ -261,7 +269,7 @@ keyboard there and a click back in the window returns it; the window opens with 
 sense there (Space, undo, redo) still work from it (`AppShortcutRelay`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), its Snap
-pill ("Snap across"), Level ("Level"), its Snap pill ("Snap level"), then the second row's one visible control: Steps,
+button ("Snap across"), Level ("Level"), its Snap button ("Snap level"), then the second row's one visible control: Steps,
 the shared Key field (its picker opens on Return or Down) or the Root box ("Root"), and Guides. Each has a tooltip
 saying what it does; the Root's says when the Played note needs a Pitch cable. Grid lines never rely on hue: a
 landmark is brighter and wider than a snap line, and an out-of-key note is dotted; the kind hue (accent for notes,

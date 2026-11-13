@@ -111,6 +111,11 @@ TimelinePanelComponent::TimelinePanelComponent()
     addAndMakeVisible(addTrackButton_);
     setComponentID("timelinePanel");
     topBarRingProbe_ = makeKeyRingProbe(*topBarKeys_, "timelineTopBarRing");
+    // Down from the bar and Down on the panel root are one key path: both land on Add Track, the column's first stop.
+    topBarKeys_->onDown = [this] {
+        addTrackFromTop_ = true;
+        focusAddTrackButton();
+    };
     addChildComponent(*topBarRingProbe_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
     addTrackButton_.setIcon(synth::theme::Icon::ToolbarAddTrack, ToolbarGroup::Edit);
@@ -177,7 +182,6 @@ TimelinePanelComponent::TimelinePanelComponent()
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
     snapToggleButton_.setComponentID("timelineSnapToggle");
-    snapToggleButton_.setIcon(synth::theme::Icon::ToolbarSnap, ToolbarGroup::Edit);
     setToolbarLabelsShown(true);
     // Tooltip text is set by refreshShortcutTooltips() below.
     snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
@@ -302,9 +306,9 @@ TimelinePanelComponent::TimelinePanelComponent()
     // inset from its strip, so with an editor open it would be visited after the editor beside it; every focusable
     // sibling is named here (one that is missing sorts after all of these).
     synth::ui::setReadingFocusOrder({&sidePaneButton_, &transportBar_, clipSizingButton_.get(), &followPlayheadButton_,
-                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(),
-                                     &trackHeaderWidthHandle_, &addTrackButton_, &trackHeaderViewport_, &clipLaneArea_,
-                                     &pianoRoll_, &drum_->grid});
+                                     &snapToggleButton_, &snapCombo_, &sidePane_, sectionStrip_.get(), &addTrackButton_,
+                                     &trackHeaderWidthHandle_, &trackHeaderViewport_, &clipLaneArea_, &pianoRoll_,
+                                     &drum_->grid});
 }
 
 // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component --

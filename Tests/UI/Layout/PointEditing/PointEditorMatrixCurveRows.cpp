@@ -3,6 +3,7 @@
 // edit target into a real graph with an undo manager).
 #include "../../ModuleViews/ModCurve/ModCurveTestRig.h"
 #include "PointEditorMatrixCurveDriver.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/ModCurve/ModCurveEditorView.h"
 
 namespace point_matrix {
@@ -54,6 +55,7 @@ public:
         , view_(target_) {
         view_.setBounds(0, 0, 400, 160);
         view_.editor().setModel(looseCurveModel());
+        view_.showMenu = [](juce::PopupMenu&, juce::Rectangle<int>) {}; // no real popup in a test
     }
     ~ModCurveEditor() override { view_.onTargetGone = nullptr; }
     synth::ui::CurveEditorComponent& curve() override { return view_.editor(); }

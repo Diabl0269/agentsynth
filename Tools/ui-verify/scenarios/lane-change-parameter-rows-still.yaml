@@ -7,7 +7,9 @@
 #      swap (getState swapsStarted stays 0). Cmd+Z and Cmd+Shift+Z: the same.
 #   3. Presses Cmd+Alt+R on the LFO 1 row and picks a new envelope: that row's swapsStarted becomes 1.
 motion: true
-pop_check: {undo: false}   # undo off: an undo and redo after each edit changes the lanes its later steps expect
+# undo off: an undo and redo after each edit changes the lanes its later steps expect. The canvas in the bottom panel is
+# ignored: its cables' flow dots move on their own (a decorative loop), and a frame that catches them reads as a pop.
+pop_check: {undo: false, ignore: [GraphEditor]}
 record: true
 save_project: end
 steps:

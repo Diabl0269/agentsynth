@@ -43,6 +43,8 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
     if (dynamic_cast<const juce::AudioParameterBool*>(&param) != nullptr &&
         (id == "bypassed" || id == "muted" || id == "dualIO"))
         return true;
+    if (MacroControlModule::isBipolarParamId(id) && dynamic_cast<const MacroControlModule*>(&module) != nullptr)
+        return true; // each Macros knob's polarity is set in Edit Layout's per-control panel
     if (isAdsr(module)) {
         if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve")
             return true;
@@ -160,6 +162,10 @@ int cellHeight(CardBodyItem::Kind kind) {
         return cardbody::kLabelHeight + cardbody::kFaderVHeight;
     case Kind::FaderVLong:
         return cardbody::kLabelHeight + cardbody::kFaderVLongHeight;
+    case Kind::XYPad:
+        return cardbody::kLabelHeight + cardbody::kXYPadHeight;
+    case Kind::Button:
+        return cardbody::kLabelHeight + cardbody::kButtonHeight;
     case Kind::KnobLarge:
         return cardbody::kLabelHeight + cardbody::kKnobLargeHeight;
     case Kind::Knob:
@@ -212,6 +218,7 @@ struct SectionPlacer {
         planned.when = source.when;
         planned.at = source.at;
         planned.range = source.range;
+        planned.momentary = source.momentary;
         if (source.at && !section.footer)
             section.freeform = true;
         if (section.footer)
@@ -257,7 +264,8 @@ CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, c
     if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong) && kind == CardBodyItem::Kind::Choice &&
         section.visibleWhen.has_value() && dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
         kind = p.widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
-    return kind;
+    // A pad needs its partner, which only placeItem binds; any other path draws the knob.
+    return kind == CardBodyItem::Kind::XYPad ? CardBodyItem::Kind::Knob : kind;
 }
 
 // A parameter named again in the other look of an alternative group stands in both looks, each at its own place.
@@ -299,6 +307,19 @@ void placeAlternate(CardBodyPlan& plan, int index, const CardParamItem& source, 
         section.freeform = true;
 }
 
+// An XY pad item draws a pad when its partner exists, is not the pad's own parameter and is not drawn anywhere else;
+// the partner then stands in the pad (no cell, no More-row entry of its own). Any other pad item draws a knob.
+void bindXYPartner(CardBodyPlan& plan, int index, const CardParamItem& source, std::set<int>& named) {
+    const int partner = source.yParamId.has_value() ? plan.findParam(*source.yParamId) : -1;
+    if (partner < 0 || partner == index || named.count(partner) > 0 || plan.items[(size_t)partner].section >= 0 ||
+        plan.items[(size_t)partner].kind != CardBodyItem::Kind::Knob)
+        return;
+    plan.items[(size_t)index].kind = CardBodyItem::Kind::XYPad;
+    plan.items[(size_t)index].partner = plan.items[(size_t)partner].param;
+    plan.items[(size_t)partner].consumed = true;
+    named.insert(partner);
+}
+
 // One layout item: a parameter (its widget, caption, and place unless hidden) or a view. An id the
 // module does not have, or one named a second time (but in an alternative look), is ignored.
 void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const CardItem& item, SectionPlacer& placer,
@@ -318,9 +339,11 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         planned.kind = kindOf(planned, *p, placer.section);
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
-        if (!layout.hidden.contains(p->paramId))
+        if (!layout.hidden.contains(p->paramId)) {
+            if (p->widget == CardWidget::XYPad && planned.kind == CardBodyItem::Kind::Knob)
+                bindXYPartner(plan, index, *p, named);
             placer.place(index, *p);
-        else
+        } else
             named.erase(index);
     } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
         placer.openGroupParam.clear();
@@ -401,7 +424,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     for (const auto* source : order) {
         CardBodyPlan::Section section;
         section.id = source->id;
-        section.columns = juce::jlimit(1, 6, source->columns);
+        section.columns = juce::jlimit(1, 8, source->columns);
         section.title = source->title;
         section.visibleWhen = source->visibleWhen;
         section.footer = source->id == CardSection::kFooterId;
@@ -417,7 +440,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     groupAlternatives(plan);
     for (int i = 0; i < (int)plan.items.size(); ++i)
         if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&
-            plan.items[(size_t)i].section < 0)
+            plan.items[(size_t)i].section < 0 && !plan.items[(size_t)i].consumed)
             plan.more.push_back(i);
 }
 
@@ -430,6 +453,8 @@ void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& 
         bound.item = index;
         bound.dims = rule.dims;
         bound.hides = rule.hides;
+        bound.collapses = rule.hides && rule.collapses;
+        plan.items[(size_t)index].collapses = bound.collapses;
         bound.disabledHint = rule.disabledHint;
         for (const auto& id : rule.watched)
             if (auto* param = findParameterByID(&module, id))
@@ -455,6 +480,24 @@ std::vector<CardDimRule> joinedJackRules(juce::AudioProcessor& module) {
     return {pan, width};
 }
 
+// The Macros knobs above the Knobs count are not on the card, and take no cell, so a layout keeps its place for them
+// and growing the count brings them back in order. The rules describe the module, so they apply to every layout.
+std::vector<CardDimRule> macroCountRules(juce::AudioProcessor& module) {
+    if (dynamic_cast<MacroControlModule*>(&module) == nullptr)
+        return {};
+    std::vector<CardDimRule> rules;
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i) {
+        CardDimRule rule{"macro" + juce::String(i + 1), {"macroCount"}, [i](juce::AudioProcessor& m) {
+                             const auto* macros = dynamic_cast<MacroControlModule*>(&m);
+                             return macros != nullptr && i >= macros->getMacroCount();
+                         }};
+        rule.hides = true;
+        rule.collapses = true;
+        rules.push_back(std::move(rule));
+    }
+    return rules;
+}
+
 } // namespace
 
 CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
@@ -465,10 +508,16 @@ CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::op
         placeFromLayout(module, *layout, plan);
         bindDimRules(module, dimRules, plan);
         bindDimRules(module, joinedJackRules(module), plan);
+        bindDimRules(module, macroCountRules(module), plan);
         plan.evaluateConditions(module);
     } else {
         placeAutomatically(module, plan);
+        if (dynamic_cast<MacroControlModule*>(&module) != nullptr) {
+            bindDimRules(module, macroCountRules(module), plan);
+            plan.evaluateConditions(module);
+        }
     }
+    applyMacroNames(module, plan);
     return plan;
 }
 
@@ -503,6 +552,10 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
         return continuous ? Kind::FaderVLong : automatic;
     case CardWidget::FaderH:
         return continuous ? Kind::FaderH : automatic;
+    case CardWidget::XYPad:
+        return continuous ? Kind::XYPad : automatic;
+    case CardWidget::Button:
+        return continuous && macroIndexOf(param.paramID) >= 0 ? Kind::Button : automatic;
     case CardWidget::Segmented:
         return (choice != nullptr || isBool(param)) && suitsSegmented(param) ? Kind::Segmented : automatic;
     case CardWidget::Stepper:
@@ -528,6 +581,32 @@ int CardBodyPlan::findParam(const juce::String& paramId) const {
     return -1;
 }
 
+// The Macros knob named `paramId` ("macro3" is 3), or -1.
+int macroIndexOf(const juce::String& paramId) {
+    if (!paramId.startsWith("macro") || !paramId.substring(5).containsOnly("0123456789") || paramId.length() <= 5)
+        return -1;
+    const int number = paramId.substring(5).getIntValue();
+    return number >= 1 && number <= MacroControlModule::kMaxMacros ? number - 1 : -1;
+}
+
+// A Macros knob is captioned with its own name (Edit Layout's Name field), whatever label a layout gave it.
+void applyMacroNames(juce::AudioProcessor& module, CardBodyPlan& plan) {
+    auto* macros = dynamic_cast<MacroControlModule*>(&module);
+    if (macros == nullptr)
+        return;
+    for (auto& item : plan.items) {
+        const int index = item.param != nullptr ? macroIndexOf(item.param->paramID) : -1;
+        if (index < 0)
+            continue;
+        const auto name = macros->getMacroName(index);
+        if (item.kind == CardBodyItem::Kind::XYPad && item.partner != nullptr) {
+            item.caption = name + " / " + macros->getMacroName(macroIndexOf(item.partner->paramID));
+            continue;
+        }
+        item.caption = name == MacroControlModule::macroName(index) ? std::nullopt : std::optional(name);
+    }
+}
+
 bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module) {
     return dynamic_cast<MidiKeyboardModule*>(&module) == nullptr &&
            dynamic_cast<ExternalMidiModule*>(&module) == nullptr &&
@@ -537,7 +616,7 @@ bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module) {
 // The bespoke cards lay their widgets out themselves, so a stored layout never moves anything on them;
 // they always build from the automatic plan.
 bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module) {
-    if (!cardBodyBuildsWidgetsFor(module) || dynamic_cast<MacroControlModule*>(&module) != nullptr)
+    if (!cardBodyBuildsWidgetsFor(module))
         return false;
     switch (typeOf(module)) {
     case ModuleType::Attenuverter:

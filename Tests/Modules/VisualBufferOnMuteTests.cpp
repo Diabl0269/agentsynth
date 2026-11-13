@@ -57,8 +57,14 @@ TEST(VisualBufferOnMute, EveryMutedModuleShowsSilence) {
         long phase = 0;
         run(*m, 20, phase);
         m->setMuted(true);
-        run(*m, 60, phase);
-        EXPECT_LT(peakOf(*m->getVisualBuffer()), 1.0e-4f) << type << " keeps showing its last audible block when muted";
+        run(*m, 4, phase); // through ModuleBase::processBlock: the 5 ms click-free mute fade ends inside these blocks
+        // From here the module is on its muted branch: every block must leave silence in the buffer, not just the
+        // last one, so a view that reads at any moment of the fall sees nothing audible.
+        for (int b = 0; b < 56; ++b) {
+            run(*m, 1, phase);
+            ASSERT_LT(peakOf(*m->getVisualBuffer()), 1.0e-4f)
+                << type << " keeps showing its last audible block when muted (block " << b << " after the fade)";
+        }
         ++checked;
     }
     EXPECT_GT(checked, 5);

@@ -278,12 +278,13 @@ TEST_F(GraphEditorTest, MacroBankGrowsAndPushesTheModuleBelowItClear) {
     ASSERT_NE(vcaComp, nullptr);
 
     const auto macroTopLeftBefore = macroComp->getPosition();
+    const int heightAtFour = macroComp->getHeight();
     const auto vcaBefore = vcaComp->getPosition();
     ASSERT_LT(macroComp->getBottom(), vcaComp->getY()) << "test setup: the two must start clear of each other";
 
     setKnobs(macroNode->getProcessor(), 16);
 
-    EXPECT_EQ(macroComp->getHeight(), synth::LayoutUtil::macroBankHeight(16));
+    EXPECT_GT(macroComp->getHeight(), heightAtFour) << "growing the bank grows the card";
     EXPECT_EQ(macroComp->getPosition(), macroTopLeftBefore) << "the resized module must not move";
     // It leaves by the shortest way (here sideways, not necessarily down), with the usual clearance.
     EXPECT_NE(vcaComp->getPosition(), vcaBefore) << "the module below must be pushed clear";

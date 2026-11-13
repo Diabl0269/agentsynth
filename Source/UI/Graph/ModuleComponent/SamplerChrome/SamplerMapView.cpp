@@ -1,8 +1,10 @@
 // SamplerMapView.cpp -- the instrument map window's content: how a control or a drop becomes an edit of the
 // instrument's regions, and how the view follows the module.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -11,6 +13,7 @@ namespace {
 constexpr int kMargin = 14;
 constexpr int kGap = 10;
 constexpr int kNoticeHeight = 30;
+constexpr int kHintHeight = 20;
 constexpr int kFieldsHeight = 124; // the file row, a gap and two rows of captioned fields
 constexpr int kBottomBarHeight = 30;
 constexpr int kButtonWidth = 130;
@@ -30,13 +33,17 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     setTitle("Instrument map");
     addAndMakeVisible(blocks_);
     addAndMakeVisible(fields_);
-    for (juce::Component* c : {(juce::Component*)&notice_, (juce::Component*)&copyButton_,
+    for (juce::Component* c : {(juce::Component*)&notice_, (juce::Component*)&drumHint_, (juce::Component*)&copyButton_,
                                (juce::Component*)&addButton_, (juce::Component*)&doneButton_})
         addAndMakeVisible(*c);
     notice_.setAccessible(false);
+    drumHint_.setVisible(false);
+    drumHint_.setTitle(drumHint_.getText());
+    drumHint_.setComponentID("samplerMapDrumHint"); // test mode reads that the caption shows
+    drumHint_.setTooltip("A drum kit plays one drum per key; the Drum Kit module has a pad for each");
     styleButton(copyButton_, "Make your own copy of this built-in instrument so its recordings can be changed");
     styleButton(addButton_, "Add one or more recordings after the selected one");
-    styleButton(doneButton_, "Close the map (Esc)");
+    styleButton(doneButton_, synth::ui::actiontext::kDoneCloseWindowTip);
     blocks_.setExplicitFocusOrder(1);
     fields_.setExplicitFocusOrder(2);
     copyButton_.setExplicitFocusOrder(3);
@@ -52,6 +59,8 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
         if (!readOnly_)
             removeSelected();
     };
+    blocks_.onPlayKey = [this](int note, int velocity) { playNote(note, velocity); };
+    blocks_.onReleaseKey = [this](int note) { releaseNote(note); };
     blocks_.onDrop = [this](const MapDrop& drop) {
         if (drop.replaceRegion >= 0)
             replaceFile(drop.replaceRegion, drop.paths[0]);
@@ -70,9 +79,33 @@ SamplerMapView::SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit)
     noticeFade_.snapTo(readOnly_);
 }
 
-SamplerMapView::~SamplerMapView() = default;
+SamplerMapView::~SamplerMapView() { releaseAll(); }
+
+void SamplerMapView::playNote(int note, int velocity) {
+    if (sampler_ == nullptr)
+        return;
+    heldNotes_.push_back(note);
+    sampler_->noteInbox().push(note, velocity, 0);
+}
+
+void SamplerMapView::releaseNote(int note) {
+    const auto it = std::find(heldNotes_.begin(), heldNotes_.end(), note);
+    if (it == heldNotes_.end())
+        return;
+    heldNotes_.erase(it);
+    if (sampler_ != nullptr)
+        sampler_->noteInbox().push(note, 0, 0);
+}
+
+void SamplerMapView::releaseAll() {
+    if (sampler_ != nullptr)
+        for (const int note : heldNotes_)
+            sampler_->noteInbox().push(note, 0, 0);
+    heldNotes_.clear();
+}
 
 void SamplerMapView::detach() {
+    releaseAll();
     sampler_ = nullptr;
     applyEdit_ = nullptr;
     blocks_.setRegions({}, -1);
@@ -98,6 +131,13 @@ void SamplerMapView::applyReadOnly() {
     fields_.setEditable(!pack && sampler_ != nullptr);
     addButton_.setEnabled(!pack && sampler_ != nullptr);
     noticeFade_.setShown(pack);
+    const bool drums = sampler_ != nullptr && sampler_->isDrumKitInstrument();
+    blocks_.setDrumKit(drums);
+    if (drums != drumKit_) {
+        drumKit_ = drums;
+        drumHint_.setVisible(drums);
+        resized();
+    }
 }
 
 // Shows the module's list with `selected` selected (nothing when the list no longer has it).
@@ -112,6 +152,12 @@ void SamplerMapView::refresh(int selected) {
 }
 
 void SamplerMapView::poll() {
+    if (sampler_ != nullptr) {
+        auto lit = sampler_->getSoundingNotes();
+        for (const int note : heldNotes_)
+            lit.set((size_t)note);
+        blocks_.setLitKeys(lit);
+    }
     if (sampler_ != nullptr && !committing_ && sampler_->getInstrumentGeneration() != shownGeneration_)
         refresh(blocks_.getSelected());
 }
@@ -217,11 +263,17 @@ void SamplerMapView::resized() {
     copyButton_.setBounds(notice.removeFromRight(kButtonWidth + 20));
     notice_.setBounds(notice);
     area.removeFromTop(kGap);
+    if (drumKit_) {
+        drumHint_.setBounds(area.removeFromTop(kHintHeight));
+        area.removeFromTop(kGap);
+    }
     blocks_.setBounds(area);
 }
 
 bool SamplerMapView::keyPressed(const juce::KeyPress& key) {
-    return key == juce::KeyPress::escapeKey && closeHostingWindow(*this);
+    if (key != juce::KeyPress::escapeKey)
+        return onAppShortcut && onAppShortcut(key);
+    return closeHostingWindow(*this);
 }
 
 } // namespace synth::ui

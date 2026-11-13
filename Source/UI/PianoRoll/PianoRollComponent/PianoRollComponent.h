@@ -341,17 +341,13 @@ public:
 
     // THE refresh seam, called on every doc mutation — see PianoRollComponent.cpp.
     void refreshFromDoc();
-
     // ---- The roll's OWN horizontal mapping ----
-
     // Absolute beat <-> this component's x — see PianoRollComponent.cpp.
     double beatToX(double absBeat) const noexcept;
     double xToBeat(double x) const noexcept;
-
     double getPixelsPerBeat() const noexcept;
     double getFirstVisibleBeat() const noexcept;
     double getPixelsPerSemitone() const noexcept;
-
     // Pins the horizontal mapping directly — see PianoRollComponent.cpp.
     void setHorizontalView(double pixelsPerBeat, double firstVisibleBeat);
     void setPixelsPerSemitone(double pixelsPerSemitone);
@@ -992,6 +988,8 @@ private:
     std::array<std::unique_ptr<PianoRollHeaderChip>, 9> headerChips_; // indexed by HeaderButtonId - 1
     juce::String announcedValueText_;
     bool focusRingForced_ = false;
+    void addTestModeProbe();
+    std::unique_ptr<juce::Component> testModeProbe_;    // reports the roll's zoom to test mode; no size, no input
     std::unique_ptr<synth::ui::EditorTabWalk> tabWalk_; // set up in PianoRollAccessibility.cpp
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollComponent)

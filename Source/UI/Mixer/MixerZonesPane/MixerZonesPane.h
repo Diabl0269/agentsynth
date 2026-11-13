@@ -48,6 +48,8 @@ public:
 
     /** Takes keyboard focus for the channel list and puts the cursor on a row (the first one if none). */
     void focusList();
+    /** The name of the channel under the list's keyboard cursor while the list holds the keys; empty otherwise. */
+    juce::String getKeyboardCursorName() const;
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;

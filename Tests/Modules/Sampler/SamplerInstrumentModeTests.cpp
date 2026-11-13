@@ -185,6 +185,45 @@ TEST(SamplerInstrumentMode, AChordPlaysThreeVoicesOnBothChannels) {
     EXPECT_EQ(rig.module.displayVoiceCount(), 0) << "back to zero once the releases finish";
 }
 
+// Checked by render: two notes one after the other, not overlapping, with the display count sampled after every
+// block. The first note's fade-out (Release 0.3 s) runs under the second note; the count must never read 2.
+TEST(SamplerInstrumentMode, TwoNonOverlappingNotesNeverShowTwoVoicesInTheStatusBar) {
+    Fixture f(0.2f, 0.2f);
+    Rig rig;
+    setActual(rig.module, "release", 0.3f);
+    ASSERT_TRUE(rig.module.loadInstrumentFromSfz(f.dir.file("layers.sfz")));
+    constexpr int kBlocks = 400; // about 2.3 s
+    int worst = 0, atFirstFade = -1, sawOne = 0;
+    for (int b = 0; b < kBlocks; ++b) {
+        juce::AudioBuffer<float> block(SamplerModule::kNumChannels, kBlock);
+        block.clear();
+        juce::MidiBuffer midi;
+        const auto at = [&](int n) { return b == n; };
+        if (at(0))
+            midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+        if (at(40))
+            midi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+        if (at(41))
+            midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 0); // the first still fades
+        if (at(100))
+            midi.addEvent(juce::MidiMessage::noteOff(1, 64), 0);
+        if (at(101))
+            midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 0);
+        if (at(160))
+            midi.addEvent(juce::MidiMessage::noteOff(1, 67), 0);
+        rig.module.processBlock(block, midi);
+        const int shown = rig.module.displayVoiceCount();
+        worst = std::max(worst, shown);
+        sawOne += shown == 1 ? 1 : 0;
+        if (b == 41)
+            atFirstFade = shown;
+    }
+    EXPECT_EQ(worst, 1) << "never above 1 across three sequential notes";
+    EXPECT_GT(sawOne, 100) << "and it does show the held notes";
+    EXPECT_EQ(atFirstFade, 1) << "while the first note fades under the second";
+    EXPECT_EQ(rig.module.displayVoiceCount(), 0);
+}
+
 TEST(SamplerInstrumentMode, VelocityPicksTheSoftOrLoudLayer) {
     Fixture f;
     Rig soft, loud;

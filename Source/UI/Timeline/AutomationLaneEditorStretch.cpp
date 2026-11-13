@@ -144,13 +144,14 @@ bool AutomationLaneEditor::beginStretchAt(juce::Point<int> pos) {
 }
 
 // The dragged edge moves by how far the pointer has travelled since the press, so grabbing a handle off-centre
-// does not jump; a beat edge snaps, a value edge does not.
+// does not jump; a beat edge snaps and stays inside the visible span, a value edge does not.
 void AutomationLaneEditor::dragStretch(juce::Point<int> pos) {
     if (!stretch_.isActive())
         return;
     if (isSideHandle(stretch_.handle())) {
-        const double raw = stretch_.edgeStart() + viewState_.xToBeat((double)pos.x) - stretchGrabBeat_;
-        stretch_.update(std::max(0.0, snappedBeatAt(raw)));
+        const double raw = stretch_.edgeStart() + viewState_.xToBeat((double)insideLane(pos).x) - stretchGrabBeat_;
+        const auto [low, high] = visibleDotBeats();
+        stretch_.update(std::max(0.0, snappedBeatWithin(raw, low, high)));
     } else {
         stretch_.update(stretch_.edgeStart() + yToValue((double)pos.y) - stretchGrabValue_);
     }

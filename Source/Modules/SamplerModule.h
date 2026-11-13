@@ -264,12 +264,12 @@ public:
 
     /** What the loaded instrument came from (None when nothing is loaded). */
     synth::sampler::InstrumentSource::Kind getInstrumentKind() const;
+    bool isDrumKitInstrument() const; // a sound pack instrument in the Drums category
 
     /** Drops the instrument; Instrument mode then renders silence. */
     void clearInstrument() override { instrumentSlot.clear(); }
 
     juce::String getInstrumentName() const override { return instrumentPlayer.name(); }
-
     /** Bumped on every publish or clear so UI caches know to rebuild. */
     int getInstrumentGeneration() const noexcept override { return instrumentPlayer.generation(); }
 
@@ -288,7 +288,7 @@ public:
     /** Any thread. The notes sounding at the end of the last block. */
     std::bitset<128> getSoundingNotes() const { return instrumentPlayer.getSoundingNotes(); }
 
-    int displayVoiceCount() const noexcept override { return instrumentPlayer.activeVoiceCount(); }
+    int displayVoiceCount() const noexcept override { return instrumentPlayer.heldNoteCount(); }
 
     // =========================================================================
     // Non-parameter state (survives undo / preset load — see ModuleBase::getExtraState)

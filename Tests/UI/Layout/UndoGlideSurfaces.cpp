@@ -273,12 +273,14 @@ const std::vector<Entry>& surfaces() {
         {"EQ window curve band", true, [] { return makeEqWindowCurve(); }},
         {"EQ mixer thumbnail curve", true, [] { return makeEqMixerThumbnail(); }},
         {"Drum Kit pad knob", true, [] { return makeDrumPadKnob(); }},
+        {"Sequencer key bars", false, [] { return makeSequencerKey(); }, true},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };
     static const std::vector<Entry> all = [] {
         auto withContents = list;
         appendClipContentsEntries(withContents);
+        appendClipDragEntries(withContents);
         return withContents;
     }();
     return all;

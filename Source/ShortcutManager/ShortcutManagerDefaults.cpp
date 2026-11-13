@@ -611,6 +611,19 @@ void ShortcutManager::addPianoRollDefaultBindings() {
 // The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it
 // (the list's plain Up/Down move the focus), Return renames it. The panel is the only thing focused
 // while it is open, so these share keys freely with the other categories.
+// Bare P flips the focused track's Poly voice toggle. The Timeline's own bare P (loop the selection) is a different
+// category on purpose: a header row holding focus claims P only when it has a toggle, and every other surface keeps
+// its P, so the two never meet in one focus context.
+void ShortcutManager::addTrackHeaderDefaultBindings() {
+    bindings["trackHeaderTogglePoly"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+}
+
+// Bare P plays the selected recording while the Sampler's map window has focus. Its own category: the map window
+// holds the keyboard alone, and no other P is read there.
+void ShortcutManager::addSamplerMapDefaultBindings() {
+    bindings["samplerMapPlaySelected"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+}
+
 void ShortcutManager::addLayoutEditorDefaultBindings() {
     bindings["layoutEditorToggleShown"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
     bindings["layoutEditorMoveUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);

@@ -38,6 +38,7 @@ table, `DrumKitModulePads.cpp` for the message thread, `DrumKitModulePadAudio.cp
   - All of it is written only when the table differs from the defaults, so an untouched kit saves what it saved before.
   - Everything is clamped on read, and a file pad without a file reads as a built-in pad.
   - File pads decode on `DeferredAssetLoads` while a project opens.
+- **Status bar count.** A recorded hit counts as a voice until its sound ends (`displayVoiceCount` reads the recorded pool's active voices): a drum one-shot's tail is the sound and Note-Off is ignored, so there is no held key to follow. This differs on purpose from the Sampler, Pluck and Mallet, which count keys held ([`sampler-instruments.md`](sampler-instruments.md)).
 - **Threads.** The table and the decoded samples reach the audio thread as one immutable `PadSnapshot` under a
   try-lock (as with `InstrumentPlayer`). Replaced snapshots and samples wait in message-thread lists until the audio
   thread lets go of them.
@@ -56,6 +57,10 @@ A project saved before pads opens as 8 pads carrying its group values, and rende
 
 One intended difference: two notes that shared an old voice (35/36, 38/40, 42/44, 49/57, 51/59) now overlap instead
 of restarting each other, and the second one starts from a fresh voice instead of the filter state the first left.
+
+## Kits in a Sampler
+
+A kit loaded into a Sampler (Edit map) says it is best played from the Drum Kit module and names its pads ([sampler-instruments](sampler-instruments.md#the-map-window)). Note 36 (C1, the kick) is heard with the kick's Recorded switch on (the recording) and off (the synth kick), and in a Sampler with the kit loaded (`DrumKitRecorded.NoteC1IsAudibleWithKickRecordedOnAndOff`, `ASamplerWithTheKitLoadedPlaysNoteC1`).
 
 ## The card
 

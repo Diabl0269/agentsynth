@@ -25,6 +25,9 @@ namespace {
 // doesn't grow wider than necessary.
 constexpr int kMeterWidth = 32;
 
+static_assert(synth::ui::MixerFader::kClearBelowReadout == synth::ui::MixerSectionLayout::kFaderToButtonsGap,
+              "the fader leaves the gap the layout reckons with under its readout");
+
 // applyPanAccessibilityText moved to MixerPanAccessibilityText.h so MixerSendList's
 // own per-send pan knobs can share the exact same "Center"/"50% left"/"50% right" phrasing instead
 // of a second copy -- see that header's own comment for why every caller must reapply it AFTER
@@ -189,7 +192,8 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     header_.setSources(showsSources_ ? sources : juce::String());
     // A branching chain names its own target (the first boxed module's macro); any other column edits its channel.
     editOnCanvasTarget_ = column.editOnCanvasTargetUuid.isNotEmpty() ? column.editOnCanvasTargetUuid : column.uuid;
-    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId);
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.sourceNodeId, column.nodeId,
+                           column.dangling);
 
     // The first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -551,15 +555,20 @@ void MixerColumnComponent::resized() {
     layoutSections(geometry, inner);
 
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
-    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight).reduced(8, 0));
+    // A part gap above and below keeps the pan slider off the divider over it and the peak readout under it.
+    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight)
+                             .reduced(8, 0)
+                             .withTrimmedTop(MixerSectionLayout::kPartGap)
+                             .withTrimmedBottom(MixerSectionLayout::kPartGap));
 
     auto msRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight);
-    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(2));
-    soloButton_.setBounds(msRow.reduced(2));
+    muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(MixerSectionLayout::kMsButtonInset));
+    soloButton_.setBounds(msRow.reduced(MixerSectionLayout::kMsButtonInset));
 
     // The clip readout sits directly above the meter+fader row it reports on (Cubase's own
     // "Meter Peak Level" placement).
-    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight));
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight)
+                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
     auto faderRow = row(geometry.faderTop, geometry.faderHeight);
     meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
     faderRow.removeFromRight(2);
@@ -584,7 +593,10 @@ void MixerColumnComponent::layoutSections(const MixerSectionLayout::Geometry& ge
         if (section == MixerSection::Eq) {
             const float open = sectionLayout_->getShownAmount(section);
             eqThumbnail_.setAlpha(open);
-            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0) : area);
+            // A part gap above and below keeps the curve off the two dividers around its section.
+            eqThumbnail_.setBounds(hidden && open <= 0.0f ? area.withHeight(0)
+                                                          : area.withTrimmedTop(MixerSectionLayout::kPartGap)
+                                                                .withTrimmedBottom(MixerSectionLayout::kPartGap));
             continue;
         }
         auto& viewport = section == MixerSection::Inserts ? insertViewport_ : sendViewport_;
@@ -600,6 +612,8 @@ MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::
     std::vector<juce::String> insertKeys, sendKeys;
     for (const auto& entry : next.inserts)
         insertKeys.push_back(MixerRowsMotion::insertKey(entry));
+    for (const auto& entry : next.dangling)
+        insertKeys.push_back(MixerRowsMotion::danglingKey(entry));
     for (const auto& entry : next.sends)
         sendKeys.push_back(MixerRowsMotion::sendKey(entry));
     MixerRowsMotion::Snapshot snapshot;
@@ -610,8 +624,11 @@ MixerRowsMotion::Snapshot MixerColumnComponent::captureRowSnapshot(const synth::
 
 void MixerColumnComponent::playRowMotion(const MixerRowsMotion::Snapshot& before) {
     const auto background = synth::theme::themeOf(*this).colors.surface;
-    rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts,
-                     MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows()), background);
+    const auto insertsAfter = MixerRowsMotion::rowsIn(insertViewport_, insertList_.motionRows());
+    const bool played = rowsMotion_.play(MixerRowsMotion::List::Inserts, before.inserts, insertsAfter, background);
+    // A module that only joined or left the chain keeps its row: it slides and dims (or brightens) in place.
+    if (!played && !insertsAfter.rows.empty())
+        insertList_.startKindFlip(MixerRowsMotion::kindFlips(before.inserts, insertsAfter));
     rowsMotion_.play(MixerRowsMotion::List::Sends, before.sends,
                      MixerRowsMotion::rowsIn(sendViewport_, sendList_.motionRows()), background);
 }

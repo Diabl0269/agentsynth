@@ -17,6 +17,7 @@ ModuleWidthBucket getModuleWidthBucket(ModuleType t) {
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
     case ModuleType::MidiKeyboard:
+    case ModuleType::MacroControl: // its body sits beside the jack gutter, so four knobs across fit
     // Parametric EQ needs the extra width for a readable response curve plus four band rows of
     // On / Freq / Gain / Q laid out side by side.
     case ModuleType::ParametricEQ:
@@ -59,6 +60,7 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
     for (const auto& box : others) {
         if (box.id == selfId)
             continue;
+        ++freeSlotSearchCountersForTest().boxTests;
         if (inflated.intersects(box.rect))
             return true;
     }
@@ -68,6 +70,80 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 //==============================================================================
 // findFreeSlot
 //==============================================================================
+namespace {
+
+FreeSlotSearchCounters searchCounters;
+
+// The boxes of one findFreeSlot call, filed by the square cells of a grid laid over them, so a candidate is tested
+// only against the boxes in the cells it touches: the search tries up to every spot of 256 rings, and testing each
+// against every box made placing one module on a big canvas cost spots x boxes (most of an add on the Load test
+// project). A box is in every cell it overlaps; the answer is the same as intersectsAny's.
+class BoxGrid {
+public:
+    BoxGrid(const std::vector<Box>& boxes, NodeID selfId)
+        : boxes_(boxes) {
+        bool any = false;
+        for (const auto& box : boxes)
+            if (box.id != selfId && !box.rect.isEmpty()) {
+                area_ = any ? area_.getUnion(box.rect) : box.rect;
+                any = true;
+            }
+        if (!any)
+            return;
+        constexpr int kMostCellsPerSide = 256;
+        cell_ = juce::jmax(kMinCell, (juce::jmax(area_.getWidth(), area_.getHeight()) + kMostCellsPerSide - 1) /
+                                         kMostCellsPerSide);
+        cols_ = area_.getWidth() / cell_ + 1;
+        rows_ = area_.getHeight() / cell_ + 1;
+        cells_.resize((size_t)(cols_ * rows_));
+        for (int i = 0; i < (int)boxes.size(); ++i) {
+            const auto& box = boxes[(size_t)i];
+            if (box.id == selfId || box.rect.isEmpty())
+                continue;
+            const auto span = cellsOf(box.rect);
+            for (int r = span.getY(); r <= span.getBottom(); ++r)
+                for (int c = span.getX(); c <= span.getRight(); ++c)
+                    cells_[(size_t)(r * cols_ + c)].push_back(i);
+        }
+    }
+
+    bool intersects(const juce::Rectangle<int>& candidate, int gap) const {
+        const auto inflated = candidate.expanded(gap); // as intersectsAny: only the candidate is inflated
+        if (cells_.empty() || !inflated.intersects(area_))
+            return false;
+        const auto span = cellsOf(inflated.getIntersection(area_));
+        for (int r = span.getY(); r <= span.getBottom(); ++r)
+            for (int c = span.getX(); c <= span.getRight(); ++c)
+                for (const int i : cells_[(size_t)(r * cols_ + c)]) {
+                    ++searchCounters.boxTests;
+                    if (inflated.intersects(boxes_[(size_t)i].rect))
+                        return true;
+                }
+        return false;
+    }
+
+private:
+    static constexpr int kMinCell = 256;
+
+    // The first and last column and row `r` (inside area_) covers; getRight()/getBottom() are inclusive here.
+    juce::Rectangle<int> cellsOf(const juce::Rectangle<int>& r) const {
+        const int c0 = juce::jlimit(0, cols_ - 1, (r.getX() - area_.getX()) / cell_);
+        const int r0 = juce::jlimit(0, rows_ - 1, (r.getY() - area_.getY()) / cell_);
+        const int c1 = juce::jlimit(0, cols_ - 1, (r.getRight() - 1 - area_.getX()) / cell_);
+        const int r1 = juce::jlimit(0, rows_ - 1, (r.getBottom() - 1 - area_.getY()) / cell_);
+        return {c0, r0, c1 - c0, r1 - r0};
+    }
+
+    const std::vector<Box>& boxes_;
+    juce::Rectangle<int> area_;
+    int cell_ = kMinCell, cols_ = 0, rows_ = 0;
+    std::vector<std::vector<int>> cells_;
+};
+
+} // namespace
+
+FreeSlotSearchCounters& freeSlotSearchCountersForTest() noexcept { return searchCounters; }
+
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap) {
     auto clamp = [&](juce::Point<int> p) -> juce::Point<int> {
@@ -77,8 +153,8 @@ juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std:
     auto snapped = snap(desired);
     snapped = clamp(snapped);
 
-    auto candidate = juce::Rectangle<int>{snapped.x, snapped.y, w, h};
-    if (!intersectsAny(candidate, others, selfId, gap))
+    const BoxGrid grid(others, selfId);
+    if (!grid.intersects({snapped.x, snapped.y, w, h}, gap))
         return snapped;
 
     // Square spiral search around the desired point. Every spot of one ring is as far as the next by the ring, but not
@@ -90,7 +166,7 @@ juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std:
         int64_t bestDist = 0;
         auto consider = [&](int dx, int dy) {
             const auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y + dy}));
-            if (intersectsAny(juce::Rectangle<int>{pt.x, pt.y, w, h}, others, selfId, gap))
+            if (grid.intersects({pt.x, pt.y, w, h}, gap))
                 return;
             const int64_t ex = pt.x - snapped.x, ey = pt.y - snapped.y;
             if (!best.has_value() || ex * ex + ey * ey < bestDist) {

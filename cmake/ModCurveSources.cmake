@@ -4,4 +4,5 @@ target_sources(Core PRIVATE
     Source/Modules/ModCurve.h
     Source/Modules/ModCurve.cpp
     Source/Modules/AttenuverterModule.cpp
+    Source/Modules/MacroControlModule.cpp
 )

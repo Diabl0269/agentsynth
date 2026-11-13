@@ -1,5 +1,7 @@
 #include "ProjectBundle.h"
+
 #include "Branding.h"
+#include "MacroPortRepair.h"
 #include "Project/ModuleFileRefs.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UserSettings.h"
@@ -338,6 +340,8 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         }
         macros.retainOnly(aliveUuids);
     }
+    // A port module no macro lists (an older save can hold one) goes back to the one macro its cables meet.
+    adoptStrayMacroPorts(graph, macros);
 
     if (outMixerView != nullptr) {
         MixerViewDoc localView;

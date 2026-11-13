@@ -3,6 +3,7 @@
 #include "ShapeDrawing.h"
 #include "ShapeListEditor.h"
 #include "ShapeWindowPrefs.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include <algorithm>
@@ -38,12 +39,13 @@ void ShapeListEditor::updatePenButton() {
     drawButton_.setPen(pen_, lastPen_);
     const juce::String name = drawShapeName(lastPen_);
     drawButton_.setTitle(pen_.has_value() ? "Draw, " + name + " pen on" : "Draw");
-    drawButton_.setTooltip(
+    setButtonTooltip(
+        drawButton_,
         pen_.has_value()
-            ? "Draw: the " + name +
+            ? "The " + name +
                   " pen is on. Drag on the curve to draw that stretch (Shift: no grid snap, Esc: cancel); with the "
                   "curve focused, Enter applies it to the selected stretch. Press again to leave draw mode"
-            : "Draw: pick a pen (Free, Line, Sine, Triangle, Saw or Square), then drag on the curve to draw that "
+            : "Pick a pen (Free, Line, Sine, Triangle, Saw or Square), then drag on the curve to draw that "
               "stretch of it");
 }
 

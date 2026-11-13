@@ -42,6 +42,8 @@ public:
     void refresh();
     /** Closes the box (onClose) when its attenuverter has vanished; cheap enough for a 30 Hz tick. */
     void tick() { view_.refreshFromTarget(); }
+    /** Where a panel with its own Tab order walks the whole box (its controls in the box's own child order). */
+    void setTabOrder(int order);
     /** Gives the keyboard to the first control. */
     void focusFirstControl();
 
@@ -63,7 +65,7 @@ private:
     ModCurveRangeHandle maxHandle_{"Curve maximum"};
     std::vector<ModCurvePresetStore::Entry> builtIns_;
     std::vector<std::unique_ptr<juce::TextButton>> chips_;
-    juce::TextButton savedButton_{"Mine"};
+    juce::TextButton savedButton_{"Load"};
     juce::TextButton saveButton_{"Save..."};
     juce::TextButton enlargeButton_{"Enlarge"};
     juce::String title_;

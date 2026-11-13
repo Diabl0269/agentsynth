@@ -16,9 +16,22 @@
 
 #include "GraphEditorInternal.h"
 #include "MacroOwnerIndex.h"
+#include "MacroPortRepair.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+namespace {
+// A port module that no macro lists as one of its ports. Only the dock places a port's widget (on its macro's hull
+// edge); a stray has no hull to sit on, and its saved position can be the canvas origin, so it stays hidden. The node
+// is untouched, and so is its cable until GraphEditor::reanchorCablesAroundCollapsedMacros drops the cable from view.
+bool isStrayPortIn(const synth::MacroOwnerIndex& owners, const juce::String& uuid, const juce::AudioProcessor* p) {
+    if (uuid.isEmpty() || !synth::isMacroPortModule(p))
+        return false;
+    const auto* owner = owners.ownerOf(uuid);
+    return owner == nullptr || !owner->memberIsPort(uuid);
+}
+} // namespace
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)
 // member ModuleComponents. Called at the end of updateComponents(), the same seam that
@@ -65,7 +78,8 @@ void GraphEditor::syncMacroCards() {
                 break;
             }
         }
-        if (card == nullptr) {
+        const bool isNew = card == nullptr;
+        if (isNew) {
             card = cards.add(new MacroCardComponent(*this, macro.id));
             content.addAndMakeVisible(card);
         }
@@ -79,7 +93,10 @@ void GraphEditor::syncMacroCards() {
         card->setBounds(macro.bounds.withHeight(detail::macroCardHeightFor(juce::jmax(inputs, outputs))));
         // A nested macro inside a collapsed ancestor shows no card: the ancestor's card stands in for
         // it. Its own collapsed flag is kept, so it comes back as a card when the ancestor expands.
-        card->setVisible(macro.collapsed && macros.isVisible(macro.id));
+        const bool wasShown = !isNew && card->isVisible();
+        const bool shown = macro.collapsed && macros.isVisible(macro.id);
+        card->setVisible(shown);
+        card->refreshPortRows(wasShown && shown); // a row that came or went fades; a fold or expand just takes them
     }
 
     // 3. A member's own ModuleComponent is hidden exactly while any macro in its owner chain is
@@ -90,7 +107,9 @@ void GraphEditor::syncMacroCards() {
         if (comp == nullptr)
             continue;
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
-        comp->setVisible(uuid.isEmpty() || !owners.hiddenByCollapse(uuid));
+        const bool hidden =
+            !uuid.isEmpty() && (owners.hiddenByCollapse(uuid) || isStrayPortIn(owners, uuid, comp->getModule()));
+        comp->setVisible(!hidden);
     }
     cardGlide_.fold().reassertHolds(); // this pass showed every card the model shows; a running fold holds its own
 }

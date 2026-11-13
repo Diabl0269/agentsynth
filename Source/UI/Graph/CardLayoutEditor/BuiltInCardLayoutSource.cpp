@@ -5,8 +5,10 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Modules/MacroControlModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -35,6 +37,10 @@ CardWidget widgetFor(CardBodyItem::Kind kind) {
         return CardWidget::Segmented;
     case Kind::Stepper:
         return CardWidget::Stepper;
+    case Kind::XYPad:
+        return CardWidget::XYPad;
+    case Kind::Button:
+        return CardWidget::Button;
     case Kind::Knob:
     case Kind::View:
         break;
@@ -50,8 +56,11 @@ std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param
     if (!automatic.has_value())
         return choices;
     choices.push_back(widgetFor(*automatic));
-    for (auto widget : {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong,
-                        CardWidget::FaderH, CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper}) {
+    for (auto widget :
+         {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH,
+          CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper, CardWidget::XYPad, CardWidget::Button}) {
+        if (widget == CardWidget::XYPad && macroIndexOf(param.paramID) < 0)
+            continue; // a pad pairs two Macros knobs
         const auto kind = cardBodyKindFor(param, widget);
         if (kind.has_value() && widgetFor(*kind) == widget && widget != choices.front())
             choices.push_back(widget);
@@ -229,17 +238,56 @@ void BuiltInCardLayoutSource::restoreOpeningLayout() {
     recordSince(before);
 }
 
+// The type's built-in presets (code: Macros' Row, Grid and Faders) come first, then the user's own.
+const std::vector<std::pair<juce::String, CardLayout>>& BuiltInCardLayoutSource::builtInPresets() const {
+    static const std::vector<std::pair<juce::String, CardLayout>> none;
+    const auto* entry = DefaultCardLayouts::builtIn().find(moduleType_);
+    return entry != nullptr ? entry->presets : none;
+}
+
+bool BuiltInCardLayoutSource::setMacroKnob(int index, const std::optional<juce::String>& name,
+                                           std::optional<bool> bipolar) {
+    auto* macros = dynamic_cast<MacroControlModule*>(module());
+    if (macros == nullptr || index < 0 || index >= MacroControlModule::kMaxMacros)
+        return false;
+    const auto before = snapshotBeforeWrite();
+    if (name.has_value())
+        macros->setMacroName(index, *name);
+    if (bipolar.has_value())
+        if (auto* param = macros->getBipolarParameter(index))
+            param->setValueNotifyingHost(*bipolar ? 1.0f : 0.0f);
+    if (auto* c = card(); c != nullptr && c->getCardBody() != nullptr)
+        c->getCardBody()->refreshMacroNames();
+    recordSince(before);
+    return true;
+}
+
 juce::StringArray BuiltInCardLayoutSource::listPresets() const {
-    auto* types = store();
-    return types != nullptr ? types->listPresets(moduleType_) : juce::StringArray();
+    juce::StringArray names;
+    for (const auto& preset : builtInPresets())
+        names.add(preset.first);
+    if (auto* types = store())
+        for (const auto& name : types->listPresets(moduleType_))
+            names.addIfNotAlreadyThere(name);
+    return names;
+}
+
+bool BuiltInCardLayoutSource::isBuiltInPreset(const juce::String& name) const {
+    for (const auto& preset : builtInPresets())
+        if (preset.first.equalsIgnoreCase(name))
+            return true;
+    return false;
 }
 
 bool BuiltInCardLayoutSource::savePreset(const juce::String& name, const CardLayout& layout) {
     auto* types = store();
-    return types != nullptr && types->savePreset(moduleType_, name, layout);
+    return types != nullptr && !isBuiltInPreset(name) && types->savePreset(moduleType_, name, layout);
 }
 
 std::optional<CardLayout> BuiltInCardLayoutSource::loadPreset(const juce::String& name) const {
+    for (const auto& preset : builtInPresets())
+        if (preset.first.equalsIgnoreCase(name))
+            return preset.second;
     auto* types = store();
     if (types == nullptr)
         return std::nullopt;
@@ -254,7 +302,7 @@ std::optional<CardLayout> BuiltInCardLayoutSource::loadPreset(const juce::String
 
 bool BuiltInCardLayoutSource::deletePreset(const juce::String& name) {
     auto* types = store();
-    return types != nullptr && types->deletePreset(moduleType_, name);
+    return types != nullptr && !isBuiltInPreset(name) && types->deletePreset(moduleType_, name);
 }
 
 } // namespace synth::ui

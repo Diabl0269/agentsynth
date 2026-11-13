@@ -6,6 +6,7 @@
 #include "../../Layout/ViewportDragFollowEvents.h"
 #include "CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <memory>
 
 using namespace cardlayouteditor_test;

@@ -218,7 +218,7 @@ void MorphMap::showDotMenu(int index) {
         if (safe != nullptr && safe->onDeleteDot)
             safe->onDeleteDot(index);
     });
-    const auto area = menuAreaAt(getDotCentre(index));
+    const auto area = dotAnchorArea(index);
     if (showMenu)
         showMenu(menu, area);
     else
@@ -229,15 +229,22 @@ void MorphMap::showDotMenu(int index) {
         });
 }
 
-/** A small screen area centred on a point of this map, which a menu opens beside. */
-juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre) const {
-    return localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(localCentre.roundToInt()));
+/** A screen area centred on a point of this map and reaching `reach` px each way, which a menu or popover opens beside:
+ *  the arrow tip lands on its edge, so `reach` must clear what is drawn there. */
+juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre, float reach) const {
+    const int side = juce::roundToInt(reach * 2.0f);
+    return localAreaToGlobal(juce::Rectangle<int>(side, side).withCentre(localCentre.roundToInt()));
+}
+
+/** The dot, its selected ring and 5 px of air. */
+juce::Rectangle<int> MorphMap::dotAnchorArea(int index) const {
+    return menuAreaAt(getDotCentre(index), kDotRadius + kDotRingGap + 5.0f);
 }
 
 /** The area of a slider's menu: its landing dot, so the menu opens beside the slider. */
 void MorphMap::showStripMenu(Axis axis) {
     if (onStripMenu)
-        onStripMenu(axis, menuAreaAt(stripAnchor(axis)));
+        onStripMenu(axis, menuAreaAt(stripAnchor(axis), landingDot_ * 0.5f + 4.0f));
 }
 
 bool MorphMap::showContextMenuForKeyboardFocus() {
@@ -330,7 +337,7 @@ bool MorphMap::showDotColour(int index) {
             if (index < (int)safe->dotStops_.size())
                 safe->dotStops_[(size_t)index]->grabKeyboardFocus();
         });
-    launchPopover(std::move(popup), menuAreaAt(getDotCentre(index)), this);
+    launchPopover(std::move(popup), dotAnchorArea(index), this);
     return true;
 }
 

@@ -11,6 +11,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -496,7 +497,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     const juce::Colour fill = selected ? base.brighter(0.15f) : base; // "slight fill lift" when selected
 
     const auto bodyBounds = rect.toFloat().reduced(1.0f);
-    g.setColour(fill.withAlpha(selected ? 0.85f : 0.65f));
+    const juce::Colour bodyFill = fill.withAlpha(selected ? 0.85f : 0.65f);
+    g.setColour(bodyFill);
     g.fillRoundedRectangle(bodyBounds, 3.0f);
 
     g.setColour(selected ? base.brighter(0.6f) : base.darker(0.3f));
@@ -509,7 +511,7 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     // currently resolve gets the missing-asset placeholder instead of an (impossible) waveform.
     if (!clip.assetRef.isEmpty()) {
         if (assetExists(clip.assetRef))
-            paintWaveform(g, clip, rect);
+            paintWaveform(g, clip, rect, synth::theme::themeOf(*this).colors.bg1.overlaidWith(bodyFill));
         else
             paintMissingAssetPlaceholder(g, clip, rect);
     } else if (rect.getWidth() > kMinWidthForNotePreview) {

@@ -195,10 +195,15 @@ public:
     void timerCallback() override;
     void paint(juce::Graphics& g) override;
 
+    /** Tests: one spectrum tick; true when it asked for a repaint. */
+    bool spectrumTickForTest() { return spectrumTick(); }
+    /** Tests: the plotted spectrum, numPoints values in dB. */
+    const std::vector<float>& getSpectrumDbForTest() const { return spectrumMagnitudes; }
+
 private:
     /** The band-poll half of the timer: adopts changed settings, gliding them when `restored`. */
     void syncBands(const ParametricEQModule::BandSnapshots& bands, float outputGainDb, bool restored);
-    void spectrumTick();
+    bool spectrumTick();
 
     static constexpr int numPoints = 512;
     static constexpr int fftOrder = 10; // 1024-point FFT
@@ -212,6 +217,10 @@ private:
     static constexpr float kSpecMaxDb = 0.0f;
     /** Peak below this counts as silence, so an idle patch stops repainting the spectrum. */
     static constexpr float kSilenceThreshold = 1.0e-5f;
+    /** Per tick, how far each point moves toward its reading (silence reads the floor), and how close to the floor it
+     *  snaps there. */
+    static constexpr float kSpectrumSmoothing = 0.3f;
+    static constexpr float kSpectrumRestDb = 0.05f;
 
     bool ensureSelectedBand();
     bool matchesAction(const juce::KeyPress& key, const char* actionId) const;
@@ -271,8 +280,8 @@ private:
     int dragBand = -1;
     bool gestureActive = false;
 
-    // The spectrum is the curve's backdrop by design, so it defaults on; the silence gate in
-    // updateSpectrum() keeps that free when nothing is playing.
+    // The spectrum is the curve's backdrop by design, so it defaults on; once silence has let it fall to the floor,
+    // updateSpectrum() stops asking for repaints, so it costs nothing when nothing is playing.
     bool showSpectrum = true;
     bool spectrumWasActive = false;
     juce::dsp::FFT fft{fftOrder};

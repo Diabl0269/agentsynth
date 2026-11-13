@@ -2,6 +2,7 @@
 // optional names and the lit edge a cable is about to land on.
 #include "MorphMap.h"
 #include "MorphMapPalette.h"
+#include "MorphPlot.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FocusRegion.h"
@@ -11,25 +12,12 @@ namespace synth::ui {
 
 namespace {
 constexpr float kDotRadius = 6.0f;
-constexpr float kCursorRadius = 6.5f;
-constexpr float kCornerRadius = 6.0f;
 } // namespace
 
 void MorphMap::paint(juce::Graphics& g) {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
-    g.setColour(colors.bg1);
-    g.fillRoundedRectangle(bounds, kCornerRadius);
-    g.setColour(colors.border);
-    g.drawRoundedRectangle(bounds, kCornerRadius, 1.0f);
-
-    const auto plot = getPlotArea();
-    g.setColour(colors.border.withAlpha(0.45f));
-    for (int i = 1; i < 4; ++i) {
-        const float t = (float)i / 4.0f;
-        g.drawVerticalLine((int)(plot.getX() + t * plot.getWidth()), plot.getY(), plot.getBottom());
-        g.drawHorizontalLine((int)(plot.getY() + t * plot.getHeight()), plot.getX(), plot.getRight());
-    }
+    morphplot::paintPlot(g, bounds, getPlotArea(), colors);
 
     g.setFont(juce::Font(10.0f));
     for (int i = 0; i < (int)dots_.size(); ++i) {
@@ -41,8 +29,8 @@ void MorphMap::paint(juce::Graphics& g) {
         const float r = kDotRadius * scale;
         if (i == selected_) {
             g.setColour(colors.textPrimary.withAlpha(0.9f * alpha));
-            g.drawEllipse(c.x - (kDotRadius + 3.0f) * scale, c.y - (kDotRadius + 3.0f) * scale,
-                          (kDotRadius + 3.0f) * 2.0f * scale, (kDotRadius + 3.0f) * 2.0f * scale, 1.5f);
+            g.drawEllipse(c.x - (kDotRadius + kDotRingGap) * scale, c.y - (kDotRadius + kDotRingGap) * scale,
+                          (kDotRadius + kDotRingGap) * 2.0f * scale, (kDotRadius + kDotRingGap) * 2.0f * scale, 1.5f);
         }
         g.setColour(colour.withMultipliedAlpha(alpha));
         g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
@@ -69,10 +57,7 @@ void MorphMap::paint(juce::Graphics& g) {
     if (cursorVisible_) {
         const auto c = toPixels(getDrawnCursor().x, getDrawnCursor().y);
         const float fade = moveTween_.alphaFor(kCursorKey);
-        g.setColour(colors.bg0.withMultipliedAlpha(fade));
-        g.fillEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f);
-        g.setColour(colors.textPrimary.withMultipliedAlpha(fade));
-        g.drawEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f, 2.0f);
+        morphplot::paintCursor(g, c, fade, colors);
     }
 
     if (cursorVisible_)

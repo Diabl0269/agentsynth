@@ -15,6 +15,10 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
   glides back and forth with its cables. A card for a node the restore creates grows in, and one it removes shrinks away
   ([delete and undo animation](animation.md#delete-and-undo-animation)); a project load never goes through `undo()` and so never glides
   (it comes to life instead: [project load reveal](animation.md#project-load-reveal)).
+- **A forward edit that adds or removes cards glides the same way.** The Poly click (the pill and the track header's
+  switch) brackets its change with the same `Scope(restore=true)` and `retractCablesGoneSince(..., growAdded=true)`
+  / `glideHullsFrom`, so the Poly MIDI card grows in and its cables grow out like Cmd+Z of it. The registry of such
+  entry points is `structuralEdits()` in `Tests/UI/Layout/UndoGlideSurfacesTests.cpp`; a new structural click adds a row.
 - **Edit Layout controls.** While the on-card layout editor is open, the card an undo or redo rebuilds gives the
   editor's controls the same treatment: `CardLayoutOnCardEditor` remembers each cell's rect before the re-sync and
   glides every control whose rect changed from there to the restored place (`startGlide`, 160 ms `easeOutCubic`, the
@@ -72,6 +76,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
+  A **snapped drag step** glides through the same tween: while an edge or body drag is live, each time the snapped preview
+  jumps (a step of 1 px or more) `updateDragPreviewFromLastPointer` retargets `clipGlide_` from the clip's drawn place to the
+  new line and sets the notes' `ClipNoteGlide` from the sizing mode, the preview staying final at once. The offsets carry
+  across the drop. `UndoGlideSurfaces.EverySnappedDragStepEases` walks every surface that implements `Surface::dragStep`
+  (the clip's left edge, right edge and body, and the notes of each sizing mode and edge): the first frame is at the old
+  line, a later one between, it settles on the new line, and Reduce Motion lands it at once.
   A finished section edit and a repeat stamp glide clips too (a stamp only those in the placements it rewrote), and a
   clip that arrives on a known track grows from its left edge while one that leaves shrinks toward its centre where it
   was: `ClipLaneEnterExit` keeps a copy of every clip at each sync and draws the leaving ones with the real `paintClip`
@@ -101,6 +111,13 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
 `forceAnimateForTest`). The LFO card's Custom-wave editor takes the same path: its poll passes the restore flag to
 `setModel`. Track header rows and automation lane rows land at once under Reduce Motion, with no fade.
+- **Sequencer pitch bars.** `StepGridComponent` glides its bars (160 ms `easeOutCubic`, a 4 ms stagger per column) to
+  a pattern changed from outside a drag, and, since a scale change moves every played note without touching the pattern,
+  to the notes a new Key or Scale plays: `syncSettings` starts the glide from the old scale on the card tick, so a Key
+  pick, its undo and its redo all travel and the written-note outlines fade with them. Reduce Motion shortens it to an
+  80 ms glide with no stagger (no fade: the bars still move); Animations Off lands at once. A second Cmd+Z or
+  Cmd+Shift+Z mid-glide starts every bar from where it is drawn then (`captureDrawnAsGlideStart`). Guard: the `Sequencer key
+  bars` entry in `UndoGlideSurfaces` (`shortGlideUnderReduceMotion`).
 - **Drum Kit pad knobs.** `DrumPadControls` draws each of the four pad knobs at its parameter's value plus what is left of a
   `KeyedPointTween` glide (one key per knob, the value as a proportion of its range). A change the parameter makes while
   `AppUndoManager::isRestoring()` is true (an undo or redo of a knob change) and a pad pick both glide the drawn value from

@@ -8,7 +8,8 @@ namespace synth::ui {
 
 void TimelineClipLaneArea::refreshKitRows() {
     std::vector<std::pair<synth::TrackId, KitRows>> fresh;
-    if (doc_ != nullptr && kitRowsProvider)
+    // Every doc change lands here; finding a track's instrument walks the graph, so a project with no kit skips it.
+    if (doc_ != nullptr && kitRowsProvider && (!kitsExistProvider || kitsExistProvider()))
         for (const auto& track : doc_->getTracks())
             if (KitRows rows; kitRowsProvider(track.id, rows))
                 fresh.emplace_back(track.id, std::move(rows));

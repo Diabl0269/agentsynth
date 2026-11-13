@@ -9,6 +9,7 @@ set(SYNTH_UNITY_SKIP
     Source/Transport/StemSession.cpp
     Source/UI/DrumMachine/DrumMachineRowLength.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsMacros.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSequencers.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp
     Source/UI/Graph/CardLayoutEditor/HostedCardLayoutSource.cpp

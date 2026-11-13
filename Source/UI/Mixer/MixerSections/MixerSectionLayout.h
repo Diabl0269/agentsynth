@@ -30,6 +30,14 @@ public:
     static constexpr int kMeterReadoutHeight = 14;
     static constexpr int kMsRowHeight = 20;
     static constexpr int kMinFaderHeight = 56;
+    // The space kept between neighbouring parts of a column (pixels): the least that is not touching, the inset
+    // of the mute and solo buttons inside their row, and the design system's space unit a caption keeps to its
+    // control. The fader leaves the rest of the caption gap under its readout, so the readout sits kCaptionGap
+    // above the mute button.
+    static constexpr int kPartGap = 1;
+    static constexpr int kMsButtonInset = 2;
+    static constexpr int kCaptionGap = 6;
+    static constexpr int kFaderToButtonsGap = kCaptionGap - kMsButtonInset; // = MixerFader::kClearBelowReadout
 
     // Settings keys (the app-wide user settings file, like the bottom dock's height).
     static constexpr const char* kInsertsHeightKey = "mixerSectionInsertsHeight";

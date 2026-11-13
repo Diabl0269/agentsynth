@@ -7,7 +7,7 @@ Each owns its amplitude, so the add-track flow builds no ADSR or VCA for them an
 ## Pluck Module
 A plucked string on one MIDI track: guitar-like, harp, koto. Eight voices of its own, oldest-note stealing, no external envelope. A pure source (no inputs, a mono-summed stereo pair out, Dual I/O ships split like the Drum Kit), `acceptsMidi`. Code: `Source/Modules/Pluck/` (`PluckModule` for notes, parameters, body and mix; `PluckVoices.h` for the string); the shared note-to-Hz, quiet-voice and voice-steal helpers are `Source/Modules/InstrumentVoiceUtil.h`.
 
-A note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tune` and `Fine`). Velocity scales the level linearly and, by `Velocity brightness`, opens the pick and the damping. A note-off damps the string over `Release`; the voice is freed when it falls below -100 dB.
+A note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tune` and `Fine`). Velocity scales the level linearly and, by `Velocity brightness`, opens the pick and the damping. A note-off damps the string over `Release`; the voice is freed when it falls below -100 dB.  The status bar counts keys held, so the count drops at the note-off while the tail rings out (`heldVoiceCount`).
 
 | Parameter (id) | Range, default | What it does |
 | :-- | :-- | :-- |
@@ -42,7 +42,7 @@ Every knob on both cards takes a mod cable (drop an LFO or envelope output on it
 ## Mallet Module
 A struck bar on one MIDI track: marimba, vibraphone, xylophone, glockenspiel and bell. Eight voices of its own, oldest-note stealing, no external envelope. A pure source like the Pluck (no inputs, a mono-summed stereo pair out, Dual I/O ships split), `acceptsMidi`. Code: `Source/Modules/Mallet/` (`MalletModule` for notes, parameters, tremolo and mix; `MalletVoices.h` for the bar).
 
-A note-on strikes a bar at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tune` and `Fine`). Velocity scales the level linearly and, by `Velocity brightness`, hardens the mallet. A note-off damps the bar over `Release`; the voice is freed when it falls below -100 dB.
+A note-on strikes a bar at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tune` and `Fine`). Velocity scales the level linearly and, by `Velocity brightness`, hardens the mallet. A note-off damps the bar over `Release`; the voice is freed when it falls below -100 dB.  The status bar counts keys held, so the count drops at the note-off while the tail rings out (`heldVoiceCount`).
 
 | Parameter (id) | Range, default | What it does |
 | :-- | :-- | :-- |

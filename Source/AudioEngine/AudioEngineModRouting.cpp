@@ -4,6 +4,7 @@
 #include "AudioEngine.h"
 #include "AudioEngine/ConnectionIndex.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include <algorithm>
 #include <map>
@@ -261,8 +262,11 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
         if (!r.hasSource)
             return true;
         auto* node = mainProcessorGraph.getNodeForId(r.sourceNodeID);
-        if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr)
+        if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr) {
+            if (auto* macros = dynamic_cast<MacroControlModule*>(mb)) // each Macros knob has its own polarity
+                return macros->isModSourceBipolarAt(r.sourceChannelIndex);
             return mb->isModSourceBipolar();
+        }
         return true;
     };
 

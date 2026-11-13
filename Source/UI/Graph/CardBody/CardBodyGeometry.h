@@ -20,6 +20,10 @@ inline constexpr int kKnobHeight = 58;        // rotary + its text box
 inline constexpr int kKnobLargeHeight = 80;   // a 60 px dial + its text box
 inline constexpr int kFaderVHeight = 96;      // a vertical fader's travel + its text box
 inline constexpr int kFaderVLongHeight = 144; // a long vertical fader: half again the travel
+inline constexpr int kButtonHeight = 28;      // a Macros knob shown as a button (CardButton::kHeight)
+inline constexpr int kButtonWidth = 56;       // its widest face; a narrower cell narrows it
+inline constexpr int kXYPadWidth = 104;       // an XY pad: its square plot (CardXYPad::kSize)
+inline constexpr int kXYPadHeight = 120;      // the pad and the readout under it (CardXYPad::kHeight)
 inline constexpr int kFaderHHeight = 28;      // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
 inline constexpr int kPanelGap = 6; // between the controls and a response or scope panel under them
@@ -37,21 +41,27 @@ inline constexpr int kFooterGap = 6;         // between footer items
 inline constexpr int kFooterRowGap = 4;      // between wrapped footer rows
 inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or combo gets
 
-// The card chrome toggles' text; the size estimate measures the footer pills from the same strings.
+// The card chrome toggles' text; the size estimate measures the footer pills from the same strings. Show Spectrum's
+// words are synth::ui::actiontext::kShowSpectrum (UI/Layout/ActionTexts.h), shared with the windows.
 inline constexpr const char* kShowScopeText = "Show Scope";
 inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
-inline constexpr const char* kShowSpectrumText = "Show Spectrum";
+
+// The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.
+inline constexpr int kMacroJackGutter = 60;
 
 /** Where body content may go on a card of `width`. */
 struct BodyGeometry {
     int width = 0;
+    int rightGutter = 0; ///< Kept clear of body content; a card is "double width" only without it.
     int contentX = 0;
     int contentW = 0;
     int narrowX = 0; ///< The centred band combos use.
     int narrowW = 0;
 
-    static BodyGeometry forCardWidth(int width);
+    /** `rightGutter` keeps the card's right edge clear of the jack labels (the Macros card, whose body sits beside
+     *  its jacks); 0 for a card whose body sits below them. */
+    static BodyGeometry forCardWidth(int width, int rightGutter = 0);
     bool isDoubleWidth() const;
 };
 

@@ -3,6 +3,7 @@
 
 #include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -14,14 +15,16 @@ constexpr float kVoiceGlyphSize = 14.0f;
 TrackVoiceToggle::TrackVoiceToggle() {
     setComponentID("trackVoiceToggle");
     setToggleable(true);
-    onClick = [this] {
-        if (onSwitch) // mono -> poly, poly -> mono, half poly -> poly
-            onSwitch(state_ != TrackPolyState::poly);
-    };
+    onClick = [this] { press(); };
     setState(TrackPolyState::mono, {});
 }
 
-void TrackVoiceToggle::setState(TrackPolyState state, const juce::String& trackName) {
+void TrackVoiceToggle::press() {
+    if (onSwitch) // mono -> poly, poly -> mono, half poly -> poly
+        onSwitch(state_ != TrackPolyState::poly);
+}
+
+void TrackVoiceToggle::setState(TrackPolyState state, const juce::String& trackName, const juce::String& shortcut) {
     state_ = state;
     const juce::String name = trackName.isNotEmpty() ? trackName : juce::String("track");
     setToggleState(state == TrackPolyState::poly, juce::dontSendNotification);
@@ -38,7 +41,7 @@ void TrackVoiceToggle::setState(TrackPolyState state, const juce::String& trackN
         tooltip = "Mono: " + name + " plays one note at a time. Click to switch its whole voice chain to poly.";
         break;
     }
-    setTexts("Poly voices, " + name, tooltip);
+    setTexts("Poly voices, " + name, formatShortcutHint(tooltip, shortcut));
 }
 
 // A note for mono, a chord for poly, an outlined chord for half and half; poly is lit in the accent so the state

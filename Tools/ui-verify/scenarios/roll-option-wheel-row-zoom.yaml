@@ -1,0 +1,31 @@
+# Option plus a vertical two-finger scroll changes the piano roll's row height, the same key the timeline uses for track
+# height; Cmd+Shift+scroll still does; Option plus a sideways scroll stays a horizontal scroll.
+#
+# What a user does:
+#   1. Opens a project with a MIDI clip, shows the timeline in the main area and opens the clip in the piano roll
+#      (double-click): rows are 10 px tall.
+#   2. Holds Option and scrolls up: the rows grow (to the 40 px limit here) and the bars stay as wide as they were.
+#   3. Holds Cmd+Shift and scrolls down: the rows shrink again (to the 4 px limit here).
+#   4. Holds Option and scrolls sideways: the rows keep their height (the view scrolls along the time axis).
+record: true
+save_project: roll-option-wheel-row-zoom
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - expect: {id: pianoRollZoomState, pixelsPerSemitone: 10.0, within_ms: 2000}
+  - screenshot: {name: 1-rows-default}
+  - wheel: {id: Piano roll, x: 300, y: 200, dy: 1.0, mods: alt}
+  - expect: {id: pianoRollZoomState, pixelsPerSemitone: 40.0, within_ms: 1000}
+  - mark: {check: 1, name: option-wheel-grows-rows}
+  - wheel: {id: Piano roll, x: 300, y: 200, dy: -2.0, mods: [cmd, shift]}
+  - expect: {id: pianoRollZoomState, pixelsPerSemitone: 4.0, within_ms: 1000}
+  - screenshot: {name: 2-cmd-shift-shrinks-rows}
+  - wheel: {id: Piano roll, x: 300, y: 200, dx: 0.4, mods: alt}
+  - expect: {id: pianoRollZoomState, pixelsPerSemitone: 4.0, within_ms: 1000}
+  - screenshot: {name: 3-option-sideways-scrolls}

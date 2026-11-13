@@ -1,0 +1,32 @@
+# Gap: the mixer's left pane (the list of channels to show, hide and group) had no way in from the keyboard, so hiding
+# and regrouping channels was mouse-only.
+#
+# What a keyboard user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab (its side pane is open by default).
+#   2. Clicks the strip: it shows the focus outline.
+#   3. Presses Left on the first strip: the side pane's list gets the cursor on its first row and the strip's outline goes.
+#   4. Presses Down: the cursor moves on. Right: the keys are back on the first strip, which shows its outline again.
+record: true
+save_project: mixer-side-pane-keys
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1", zonesCursor: ""}
+  - key: {keys: left}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "", within_ms: 1000}
+  - expect: {id: mixerFocusedColumn, zonesCursor: "Oscillator 1"}
+  - mark: {check: 1, name: left-enters-side-pane}
+  - key: {keys: down}
+  - expect: {id: mixerFocusedColumn, zonesCursor: "Direct", within_ms: 1000}
+  - key: {keys: right}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1", zonesCursor: "", within_ms: 1000}
+  - mark: {check: 2, name: right-returns-to-strip}

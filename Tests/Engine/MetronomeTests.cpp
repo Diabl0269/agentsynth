@@ -398,6 +398,20 @@ TEST(MetronomeTest, DisabledMetronomeIsSilentAndFree) {
     EXPECT_EQ(metronome.getActiveVoiceCountForTest(), 0) << "the crossing scan must not run while disabled";
 }
 
+TEST(MetronomeTest, MutedMetronomeIsSilentEvenWhenEnabledAndForced) {
+    Metronome metronome;
+    metronome.setEnabled(true);
+    metronome.setForcedOn(true);
+    metronome.setMuted(true);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    metronome.renderClicks(buffer, makeInfo(kSampleRate, 120.0, 4, 4, 0.0, 512));
+
+    EXPECT_FLOAT_EQ(buffer.getMagnitude(0, 512), 0.0f) << "--mute-metronome must beat the toggle and the count-in";
+    EXPECT_EQ(metronome.getActiveVoiceCountForTest(), 0);
+}
+
 // ============================================================================
 // 7/8. Count-in choreography — MainComponent-level.
 // ============================================================================

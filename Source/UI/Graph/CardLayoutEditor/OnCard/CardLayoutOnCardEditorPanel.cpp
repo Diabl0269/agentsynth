@@ -2,6 +2,7 @@
 // beside the control, keeping it anchored to the control's outline as the card rebuilds, and the writes
 // its fields make. docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "Modules/MacroControlModule.h"
 #include "OnCardControlOptions.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
@@ -11,6 +12,8 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/ModCurve/ModCurveEditTarget.h"
+#include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 #include <utility>
 
 namespace synth::ui {
@@ -45,10 +48,11 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
         return;
     closePanel();
     const auto& layout = body->explicitLayout();
-    const auto options =
+    auto options =
         readControlOptions(*body, source_->parameters(), layout, paramId, visibleLayoutSection(*body, layout, paramId));
     if (!options.has_value())
         return;
+    addMacroKnobOptions(*options);
 
     auto panel = std::make_unique<CardLayoutControlPanel>();
     juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
@@ -65,6 +69,26 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
             return withControlLabel(std::move(l), paramId, name, text, section);
         });
     };
+    panel->onMacroName = [self, paramId](const juce::String& text) {
+        if (auto* e = self.getComponent())
+            e->changeMacroKnob(paramId, text, std::nullopt);
+    };
+    panel->onMacroPolarity = [self, paramId](bool bipolar) {
+        if (auto* e = self.getComponent())
+            e->changeMacroKnob(paramId, std::nullopt, bipolar);
+    };
+    panel->onXYPartner = [self, paramId](const juce::String& yParamId) {
+        if (auto* e = self.getComponent())
+            e->editControl(paramId, [paramId, yParamId](CardLayout l, std::optional<int> section) {
+                return withXYPartner(std::move(l), paramId, yParamId, section);
+            });
+    };
+    panel->onButtonMode = [self, paramId](bool momentary) {
+        if (auto* e = self.getComponent())
+            e->editControl(paramId, [paramId, momentary](CardLayout l, std::optional<int> section) {
+                return withButtonMomentary(std::move(l), paramId, momentary, section);
+            });
+    };
     panel->onRange = [self, paramId](std::optional<juce::Range<double>> range) {
         if (auto* e = self.getComponent())
             e->editControl(paramId, [paramId, range](CardLayout l, std::optional<int> section) {
@@ -80,9 +104,63 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
             e->closePanel();
     };
     panel->setOptions(*options);
+    // A Macros knob's response curve: the small box inside the panel; Enlarge closes the panel and opens the window.
+    if (options->macroKnob.has_value())
+        if (auto* graph = graphEditor_.getComponent()) {
+            panel->setCurveTarget(ModCurveEditTarget::forMacroKnob(*graph, nodeId_, options->macroKnob->index));
+            panel->onEnlargeCurve = [self, index = options->macroKnob->index] {
+                auto* e = self.getComponent();
+                auto* g = e != nullptr ? e->graphEditor_.getComponent() : nullptr;
+                if (g == nullptr)
+                    return;
+                const auto bank = e->nodeId_;
+                e->closePanel();
+                openModCurveWindow(ModCurveEditTarget::forMacroKnob(*g, bank, index), g);
+            };
+        }
     panel_ = panel.get();
     panelParamId_ = paramId;
     launchPanel(std::move(panel), screenAreaOf(*outline));
+}
+
+void CardLayoutOnCardEditor::addMacroKnobOptions(ControlOptions& options) const {
+    const auto* macros = card_ != nullptr ? dynamic_cast<const MacroControlModule*>(card_->getModule()) : nullptr;
+    const int index = macros != nullptr ? macroIndexOf(options.paramId) : -1;
+    if (index >= 0)
+        options.macroKnob = ControlOptions::MacroKnob{index, macros->getMacroName(index), macros->isBipolar(index)};
+    if (index < 0 || options.widget != CardWidget::XYPad)
+        return;
+    // The Y axis can be any other macro the bank shows; the one the layout names is selected.
+    ControlOptions::XYPartner partner;
+    for (int i = 0; i < macros->getMacroCount(); ++i) {
+        if (i == index)
+            continue;
+        const auto id = "macro" + juce::String(i + 1);
+        if (options.yParamId == id)
+            partner.selected = (int)partner.ids.size();
+        partner.ids.push_back(id);
+        partner.names.add(macros->getMacroName(i));
+    }
+    options.xyPartner = std::move(partner);
+}
+
+// A Macros knob's name or polarity is the module's own state, so it is written to the module (not the layout) as one
+// undo step; the card's caption and the outline's follow, and the panel takes the knob's new state.
+void CardLayoutOnCardEditor::changeMacroKnob(const juce::String& paramId, std::optional<juce::String> name,
+                                             std::optional<bool> bipolar) {
+    const int index = macroIndexOf(paramId);
+    if (closed_ || source_ == nullptr || index < 0)
+        return;
+    flushNudge();
+    writing_ = true;
+    const bool ok = source_->setMacroKnob(index, name, bipolar);
+    writing_ = false;
+    if (!ok)
+        return;
+    keepHomes_ = true;
+    syncToCard();
+    keepHomes_ = false;
+    refreshPanel();
 }
 
 // A call-out pointing at `screenArea`; a test takes the panel instead.
@@ -116,10 +194,11 @@ void CardLayoutOnCardEditor::refreshPanel() {
     if (body == nullptr || outline == nullptr || source_ == nullptr)
         return closePanel();
     const auto& layout = body->explicitLayout();
-    const auto options = readControlOptions(*body, source_->parameters(), layout, panelParamId_,
-                                            visibleLayoutSection(*body, layout, panelParamId_));
+    auto options = readControlOptions(*body, source_->parameters(), layout, panelParamId_,
+                                      visibleLayoutSection(*body, layout, panelParamId_));
     if (!options.has_value())
         return closePanel();
+    addMacroKnobOptions(*options);
     panel->setOptions(*options);
     if (auto* box = panel->findParentComponentOfClass<juce::CallOutBox>()) {
         const auto area = screenAreaOf(*outline);

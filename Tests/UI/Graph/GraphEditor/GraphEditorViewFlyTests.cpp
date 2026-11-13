@@ -218,12 +218,48 @@ TEST(ViewFlyRegistry, AUserPanOrZoomMidFlightCancelsTheFly) {
     EXPECT_LT(dist(r.viewCentre(), afterZoom), 1.0f);
 }
 
+// onNavigate is the drag: it never flies.
 TEST(ViewFlyRegistry, TheMinimapStaysInstantWhileDragging) {
     FlyRig r;
     synth::ui::setReducedMotionForTest(false);
     r.editor().getMinimap().onNavigate({1234.0f, 567.0f});
     EXPECT_FALSE(r.editor().viewFlyForTest().isActive());
     EXPECT_LT(dist(r.viewCentre(), {1234.0f, 567.0f}), 1.0f);
+}
+
+// A press on the map flies the view there like every other jump; the drag that follows moves it at once, so the view
+// stays under the pointer. Through the component's real mouse handlers.
+TEST(ViewFlyRegistry, AMinimapClickFliesTheViewAndTheDragAfterItIsInstant) {
+    FlyRig r;
+    synth::ui::setReducedMotionForTest(false);
+    auto& map = r.editor().getMinimap();
+    map.setSize(220, 150);
+    const auto at = [&map](juce::Point<float> p) {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), p, juce::ModifierKeys(), 0.0f, 0.0f,
+                                0.0f, 0.0f, 0.0f, &map, &map, juce::Time::getCurrentTime(), p,
+                                juce::Time::getCurrentTime(), 1, false);
+    };
+    r.sendViewFar();
+    const auto start = r.viewCentre();
+
+    map.mouseDown(at({20.0f, 20.0f}));
+    ASSERT_TRUE(r.editor().viewFlyForTest().isActive()) << "the click flies";
+    EXPECT_LT(dist(r.viewCentre(), start), 1.0f) << "first frame: still the old view";
+    r.editor().viewFlyForTest().stepForTest(50.0);
+    const auto mid = r.viewCentre();
+    EXPECT_GT(dist(mid, start), 5.0f);
+    r.editor().viewFlyForTest().stepForTest(600.0);
+    const auto landed = r.viewCentre();
+    EXPECT_GT(dist(landed, mid), 5.0f) << "it carries on to the target";
+
+    map.mouseDrag(at({200.0f, 130.0f}));
+    EXPECT_FALSE(r.editor().viewFlyForTest().isActive()) << "a drag follows the pointer at once";
+    EXPECT_GT(dist(r.viewCentre(), landed), 5.0f);
+
+    r.sendViewFar();
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    map.mouseDown(at({20.0f, 20.0f}));
+    EXPECT_FALSE(r.editor().viewFlyForTest().isActive()) << "Animations Off lands at once";
 }
 
 // Every `centreViewOn` call is the minimap's drag or the fly's own landing; anything else showing something on the

@@ -113,7 +113,8 @@ void Metronome::scanRange(juce::AudioBuffer<float>& buffer, double rangeStart, d
 }
 
 void Metronome::renderClicks(juce::AudioBuffer<float>& buffer, const BlockTimeInfo& info) noexcept {
-    const bool active = enabled_.load(std::memory_order_relaxed) || forcedOn_.load(std::memory_order_relaxed);
+    const bool active = !muted_.load(std::memory_order_relaxed) &&
+                        (enabled_.load(std::memory_order_relaxed) || forcedOn_.load(std::memory_order_relaxed));
     if (!active) {
         // Fully disabled: touch nothing, including voice state, so a stale ringing voice never
         // resumes with a pop when the metronome is re-enabled later (see DisabledMetronomeIsSilentAndFree).

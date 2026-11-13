@@ -48,18 +48,25 @@ public:
      *  changes anything), so undo brings the cancelled edits back. */
     void restoreOpeningLayout();
 
+    /** The Macros card: sets knob `index`'s name and/or polarity (the module's own state, not the layout's) as ONE
+     *  undo step, and puts the new name on the card's caption. False when the node is not a Macros bank. */
+    bool setMacroKnob(int index, const std::optional<juce::String>& name, std::optional<bool> bipolar);
+
     /** Writes made between these two calls (a write, then the repack the write called for) are recorded as ONE
      *  undo step, from the graph as it was at the begin. Calls nest; only the outermost end records. */
     void beginGroupedWrite();
     void endGroupedWrite();
 
-    bool hasPresets() const override { return store() != nullptr; }
+    bool hasPresets() const override { return store() != nullptr || !builtInPresets().empty(); }
     juce::StringArray listPresets() const override;
     bool savePreset(const juce::String& name, const CardLayout& layout) override;
     std::optional<CardLayout> loadPreset(const juce::String& name) const override;
     bool deletePreset(const juce::String& name) override;
 
 private:
+    /** The code presets of this module type (empty for most types). */
+    const std::vector<std::pair<juce::String, CardLayout>>& builtInPresets() const;
+    bool isBuiltInPreset(const juce::String& name) const;
     juce::AudioProcessor* module() const;
     ModuleComponent* card() const;
     ModuleCardLayoutStore* store() const;

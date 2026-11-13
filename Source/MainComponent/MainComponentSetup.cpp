@@ -344,6 +344,7 @@ void MainComponent::wireGraphEditorCallbacks() {
     // layout editor re-lays out every card of that type.
     moduleCardLayoutBinding_ = std::make_unique<synth::ModuleCardLayoutBinding>(graphEditor, moduleCardLayoutStore);
     // A Drum Kit card's "Drum machine" button: enabled while a track plays the kit; the press shows the Timeline.
+    graphEditor.drumKit.openSoundPacks = [this] { launchSettingsWindow("Sound packs"); };
     graphEditor.drumKit.hasTrack = [this](juce::AudioProcessorGraph::NodeID id) {
         return trackPlayingNode(id).isValid();
     };
@@ -740,6 +741,11 @@ bool MainComponent::initialiseAudioEngine() {
     const bool noAudioDevice =
         synth::isNoAudioDeviceLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray(),
                                      juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
+
+    // A dev/verification launch can silence the metronome click without closing the device (--mute-metronome).
+    audioEngine.getMetronome().setMuted(
+        synth::isMuteMetronomeRequested(juce::JUCEApplicationBase::getCommandLineParameterArray(),
+                                        juce::SystemStats::getEnvironmentVariable(synth::kMuteMetronomeEnvVar, {})));
 
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file

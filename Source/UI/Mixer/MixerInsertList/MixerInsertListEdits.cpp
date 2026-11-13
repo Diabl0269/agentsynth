@@ -85,7 +85,42 @@ std::function<void(std::unique_ptr<ModMatrixPicker>)>& MixerInsertList::pickerHo
     return hook;
 }
 
+std::function<void(juce::PopupMenu&, std::function<void(int)>)>& MixerInsertList::menuHookForTest() {
+    static std::function<void(juce::PopupMenu&, std::function<void(int)>)> hook;
+    return hook;
+}
+
 // ---- Mouse and menus -------------------------------------------------------------------------------------------
+
+void MixerInsertList::presentRowMenu(juce::PopupMenu& menu, const std::optional<juce::Rectangle<int>>& keyboardAnchor,
+                                     std::function<void(int)> chosen) {
+    if (auto& hook = menuHookForTest()) {
+        hook(menu, std::move(chosen));
+        return;
+    }
+    menu.showMenuAsync(synth::ui::contextMenuOptions(keyboardAnchor), std::move(chosen));
+}
+
+bool MixerInsertList::showMenuForKeyboardRow(int rowIndex) {
+    if (!isEditable() || rowIndex < 0 || rowIndex >= getRowCount())
+        return false;
+    if (isAddRow(rowIndex)) {
+        activateAddRow();
+        return true;
+    }
+    if (isDryRow(rowIndex)) {
+        activateDryRow(rowIndex);
+        return true;
+    }
+    const auto anchor = std::optional<juce::Rectangle<int>>(localAreaToGlobal(getRowBounds(rowIndex)));
+    if (isSplitRow(rowIndex))
+        showSplitMenu(rowIndex, anchor);
+    else if (entryForRow(rowIndex) != nullptr)
+        showRowMenu(rowIndex, anchor);
+    else
+        return false;
+    return true;
+}
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     pressedRow_ = -1;
@@ -97,6 +132,8 @@ void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
         return;
     }
     const int row = rowIndexAt(event.getPosition());
+    if (row < 0 && danglingIndexAt(event.getPosition()) >= 0)
+        return; // a not-connected row has no menu and no drag; a double-click shows it on the canvas
     if (isAddRow(row)) {
         activateAddRow();
         return;
@@ -144,12 +181,17 @@ void MixerInsertList::activateDryRow(int rowIndex) {
 void MixerInsertList::mouseDoubleClick(const juce::MouseEvent& event) {
     if (event.mods.isPopupMenu() || !onFocusModule)
         return;
+    if (const int d = danglingIndexAt(event.getPosition()); d >= 0) {
+        onFocusModule(dangling_[(size_t)d].uuid);
+        return;
+    }
     const auto* entry = entryForRow(rowIndexAt(event.getPosition()));
     if (entry != nullptr && entry->kind == Kind::Module && event.x < getWidth() - rowButtonsWidth(*entry))
         onFocusModule(entry->uuid);
 }
 
 void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
+    pointer_ = event.getPosition();
     updateHoverCursor(event.getPosition());
     int gap = -1;
     if (gapTargetAt(event.getPosition())) {
@@ -164,6 +206,7 @@ void MixerInsertList::mouseMove(const juce::MouseEvent& event) {
 }
 
 void MixerInsertList::mouseExit(const juce::MouseEvent&) {
+    pointer_ = {-1, -1};
     if (!rowDrag_.animator().isDragging())
         endDragCursor(*this);
     if (hoverGap_ >= 0) {
@@ -172,27 +215,35 @@ void MixerInsertList::mouseExit(const juce::MouseEvent&) {
     }
 }
 
-void MixerInsertList::showSplitMenu(int rowIndex) {
+void MixerInsertList::showSplitMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor) {
     juce::PopupMenu menu;
     menu.addItem(1, isSplitOpen(rowIndex) ? "Fold paths" : "Show paths");
     menu.addItem(2, isSplitBypassed(visible_[(size_t)rowIndex]) ? "Turn every path back on" : "Bypass every path");
     menu.addSeparator();
+    const int entryIndex = visible_[(size_t)rowIndex];
+    menu.addItem(3, "Add before all paths", beforeSplitTarget(entryIndex, forkOfSplit(entryIndex)).has_value());
+    menu.addItem(4, "Add after all paths", afterSplitTarget(entryIndex).has_value());
     const int paths = entryForRow(rowIndex)->pathCount;
     for (int p = 0; p < paths; ++p)
         menu.addItem(10 + p, "Add to path " + juce::String(p + 1), pathAddTarget(rowIndex, p).has_value());
     const auto area = getRowBounds(rowIndex);
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex, paths, area](int result) {
+    presentRowMenu(menu, keyboardAnchor, [this, rowIndex, entryIndex, paths, area](int result) {
         if (result == 1)
             setSplitOpen(rowIndex, !isSplitOpen(rowIndex));
         else if (result == 2)
             toggleBypassForRow(rowIndex);
-        else if (result >= 10 && result < 10 + paths)
+        else if (result == 3 || result == 4) {
+            const auto target =
+                result == 3 ? beforeSplitTarget(entryIndex, forkOfSplit(entryIndex)) : afterSplitTarget(entryIndex);
+            if (target)
+                showAddPicker(*target, area);
+        } else if (result >= 10 && result < 10 + paths)
             if (const auto target = pathAddTarget(rowIndex, result - 10))
                 showAddPicker(*target, area);
     });
 }
 
-void MixerInsertList::showRowMenu(int rowIndex) {
+void MixerInsertList::showRowMenu(int rowIndex, const std::optional<juce::Rectangle<int>>& keyboardAnchor) {
     juce::PopupMenu menu;
     menu.addItem(1, "Move Up", canMoveRow(rowIndex, -1));
     menu.addItem(2, "Move Down", canMoveRow(rowIndex, 1));
@@ -203,7 +254,7 @@ void MixerInsertList::showRowMenu(int rowIndex) {
     const bool canAddAfter = graph_ != nullptr && isSet(synth::soleSignalNeighbour(*graph_, node, false, stripNodeId_));
     menu.addItem(4, "Add after", canAddAfter);
     const auto area = getRowBounds(rowIndex);
-    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex, node, area](int result) {
+    presentRowMenu(menu, keyboardAnchor, [this, rowIndex, node, area](int result) {
         if (result == 1)
             moveRow(rowIndex, -1);
         else if (result == 2)
@@ -369,21 +420,82 @@ void MixerInsertList::removeRow(int rowIndex) {
 }
 
 // An add lands at the end of the chain, between its last top-level row and the strip. A chain whose last top-level
-// row is a split meets the strip on several cables, so there is no single cable to splice into there.
+// row is a split meets the strip on several cables: the add then goes across all of them, so the merged paths run
+// through it.
 bool MixerInsertList::canAddAtEnd() const noexcept {
     if (!isEditable() || stripNodeId_ == juce::AudioProcessorGraph::NodeID{})
         return false;
     for (auto it = entries_.rbegin(); it != entries_.rend(); ++it)
         if (it->depth == 0)
-            return it->kind == Kind::Module;
+            return it->kind == Kind::Module || (it->kind == Kind::Split && endAcrossTarget_.has_value());
     return sourceNodeId_ != juce::AudioProcessorGraph::NodeID{};
 }
 
-MixerInsertList::AddTarget MixerInsertList::endTarget() const noexcept {
+MixerInsertList::AddTarget MixerInsertList::endTarget() const {
     for (auto it = entries_.rbegin(); it != entries_.rend(); ++it)
-        if (it->depth == 0)
+        if (it->depth == 0) {
+            if (it->kind == Kind::Split && endAcrossTarget_.has_value())
+                return *endAcrossTarget_;
             return {it->nodeId, stripNodeId_};
+        }
     return {sourceNodeId_, stripNodeId_};
+}
+
+// The node whose cables feed the split's paths: the module on the row above it, or the track source at the top.
+juce::AudioProcessorGraph::NodeID MixerInsertList::forkOfSplit(int splitEntry) const {
+    if (graph_ == nullptr || splitEntry < 0 || splitEntry >= (int)entries_.size())
+        return {};
+    return nodeWithUuid(*graph_, entries_[(size_t)splitEntry].uuid);
+}
+
+// Every node of the split's paths, plus its fork (a dry path is the fork's own cable to the merge).
+std::vector<juce::AudioProcessorGraph::NodeID> MixerInsertList::splitRegion(int splitEntry) const {
+    std::vector<juce::AudioProcessorGraph::NodeID> region;
+    const auto push = [&region](juce::AudioProcessorGraph::NodeID id) {
+        if (isSet(id) && std::find(region.begin(), region.end(), id) == region.end())
+            region.push_back(id);
+    };
+    push(forkOfSplit(splitEntry));
+    for (int i = splitEntry + 1; i < subtreeEnd(splitEntry); ++i) {
+        const auto& entry = entries_[(size_t)i];
+        push(entry.kind == Kind::Module ? entry.nodeId : nodeWithUuid(*graph_, entry.uuid));
+    }
+    return region;
+}
+
+std::optional<MixerInsertList::AddTarget>
+MixerInsertList::beforeSplitTarget(int splitEntry, juce::AudioProcessorGraph::NodeID fork) const {
+    if (graph_ == nullptr || !isSet(fork) || splitEntry < 0 || entries_[(size_t)splitEntry].kind != Kind::Split)
+        return std::nullopt;
+    const auto exits = synth::liveExitsOf(*graph_, {fork}, stripNodeId_);
+    if (exits.empty())
+        return std::nullopt;
+    AddTarget target(fork, exits.front());
+    target.acrossPredecessors = {fork};
+    target.acrossSuccessors = exits;
+    return target;
+}
+
+std::optional<MixerInsertList::AddTarget> MixerInsertList::afterSplitTarget(int splitEntry) const {
+    if (graph_ == nullptr || splitEntry < 0 || splitEntry >= (int)entries_.size() ||
+        entries_[(size_t)splitEntry].kind != Kind::Split)
+        return std::nullopt;
+    const auto region = splitRegion(splitEntry);
+    const auto exits = synth::liveExitsOf(*graph_, region, stripNodeId_);
+    if (region.empty() || exits.size() != 1) // a split's paths meet at one node
+        return std::nullopt;
+    // The card anchors on a path's last module, the fork only when every path is dry.
+    for (size_t i = 0; i < region.size(); ++i) {
+        const auto node = region[(i + 1) % region.size()];
+        if (cablesInto(*graph_, node, exits.front())) {
+            AddTarget target(node, exits.front());
+            target.behindPaths = true;
+            target.acrossPredecessors = region;
+            target.acrossSuccessors = exits;
+            return target;
+        }
+    }
+    return std::nullopt;
 }
 
 void MixerInsertList::addModule(const juce::String& moduleTypeName) {
@@ -397,7 +509,9 @@ void MixerInsertList::activateAddRow() {
 }
 
 // The line between two rows offers an add when the two share a cable: two neighbouring modules on the same path, or
-// (at the very top) the track source and a first top-level module.
+// (at the very top) the track source and a first top-level module. A split row is not a node: the line above it adds in
+// front of all its paths (after the module or source that feeds them) and the line below its last path adds behind all
+// of them (before the module they merge into).
 std::optional<MixerInsertList::AddTarget> MixerInsertList::gapTargetAt(juce::Point<int> position) const {
     constexpr int kReach = 3;
     if (!isEditable() || position.x >= getWidth() - kBypassWidth || visible_.empty())
@@ -405,22 +519,46 @@ std::optional<MixerInsertList::AddTarget> MixerInsertList::gapTargetAt(juce::Poi
     for (int boundary = 0; boundary < (int)visible_.size(); ++boundary) {
         if (std::abs(position.y - rowTop(boundary)) > kReach)
             continue;
-        const auto& below = entries_[(size_t)visible_[(size_t)boundary]];
+        const int belowIndex = visible_[(size_t)boundary];
+        const auto& below = entries_[(size_t)belowIndex];
+        if (boundary == 0) {
+            if (below.depth != 0 || !isSet(sourceNodeId_))
+                return std::nullopt;
+            if (below.kind == Kind::Split)
+                return beforeSplitTarget(belowIndex, sourceNodeId_);
+            return below.kind == Kind::Module ? std::optional<AddTarget>(AddTarget{sourceNodeId_, below.nodeId})
+                                              : std::nullopt;
+        }
+        const auto& above = entries_[(size_t)visible_[(size_t)boundary - 1]];
+        const bool adjacent = belowIndex == visible_[(size_t)boundary - 1] + 1;
+        const bool sameRun =
+            adjacent && above.kind == Kind::Module && above.depth == below.depth && above.path == below.path;
+        if (below.kind == Kind::Split)
+            return sameRun ? beforeSplitTarget(belowIndex, above.nodeId) : std::nullopt;
         if (below.kind != Kind::Module)
             return std::nullopt;
-        if (boundary == 0)
-            return below.depth == 0 && isSet(sourceNodeId_)
-                       ? std::optional<AddTarget>(AddTarget{sourceNodeId_, below.nodeId})
-                       : std::nullopt;
-        const auto& above = entries_[(size_t)visible_[(size_t)boundary - 1]];
-        const bool sameRun = visible_[(size_t)boundary] == visible_[(size_t)boundary - 1] + 1 &&
-                             above.kind == Kind::Module && above.depth == below.depth && above.path == below.path;
-        return sameRun ? std::optional<AddTarget>(AddTarget{above.nodeId, below.nodeId}) : std::nullopt;
+        if (sameRun)
+            return AddTarget{above.nodeId, below.nodeId};
+        return afterSplitEndingAt(belowIndex);
     }
     return std::nullopt;
 }
 
-// The end of path `path`: after its last module, or (a dry path) on the fork's own cable to the merge.
+// The add behind the split whose paths end right where entry `entryIndex` begins, when that entry is the module they
+// merge into (same depth and path as the split).
+std::optional<MixerInsertList::AddTarget> MixerInsertList::afterSplitEndingAt(int entryIndex) const {
+    const auto& below = entries_[(size_t)entryIndex];
+    for (int i = entryIndex - 1; i >= 0 && entries_[(size_t)i].depth >= below.depth; --i) {
+        const auto& candidate = entries_[(size_t)i];
+        if (candidate.kind == Kind::Split && candidate.depth == below.depth && candidate.path == below.path &&
+            subtreeEnd(i) == entryIndex)
+            return afterSplitTarget(i);
+    }
+    return std::nullopt;
+}
+
+// The end of path `path`: after its last module, across the split the path ends in, or (a dry path) on the fork's
+// own cable to the merge.
 std::optional<MixerInsertList::AddTarget> MixerInsertList::pathAddTarget(int rowIndex, int path) const {
     const auto* split = entryForRow(rowIndex);
     if (split == nullptr || split->kind != Kind::Split || graph_ == nullptr)
@@ -428,27 +566,25 @@ std::optional<MixerInsertList::AddTarget> MixerInsertList::pathAddTarget(int row
     const int entryIndex = visible_[(size_t)rowIndex];
     const int end = subtreeEnd(entryIndex);
     int current = -1;
-    juce::AudioProcessorGraph::NodeID last;
+    int last = -1;
     for (int i = entryIndex + 1; i < end; ++i) {
         const auto& entry = entries_[(size_t)i];
-        if (entry.depth == split->depth + 1)
-            current = entry.path;
-        if (current == path && entry.depth == split->depth + 1 && entry.kind == Kind::Module)
-            last = entry.nodeId;
+        if (entry.depth != split->depth + 1)
+            continue;
+        current = entry.path;
+        if (current == path && (entry.kind == Kind::Module || entry.kind == Kind::Split))
+            last = i;
     }
-    if (isSet(last))
-        return AddTarget{last, {}};
-    // A dry path: the fork cables straight into the merge, the next row at the split's own depth (or the strip).
-    const auto fork = nodeWithUuid(*graph_, split->uuid);
-    juce::AudioProcessorGraph::NodeID merge;
-    if (end < (int)entries_.size() && entries_[(size_t)end].depth == split->depth &&
-        entries_[(size_t)end].kind == Kind::Module)
-        merge = entries_[(size_t)end].nodeId;
-    else if (end == (int)entries_.size() && split->depth == 0)
-        merge = stripNodeId_;
-    if (!isSet(fork) || !isSet(merge) || !cablesInto(*graph_, fork, merge))
+    if (last >= 0 && entries_[(size_t)last].kind == Kind::Split)
+        return afterSplitTarget(last); // the path ends in a nested split: the add goes behind its paths
+    if (last >= 0)
+        return AddTarget{entries_[(size_t)last].nodeId, {}};
+    // A dry path: the fork cables straight into the merge.
+    const auto fork = forkOfSplit(entryIndex);
+    const auto exits = synth::liveExitsOf(*graph_, splitRegion(entryIndex), stripNodeId_);
+    if (!isSet(fork) || exits.size() != 1 || !cablesInto(*graph_, fork, exits.front()))
         return std::nullopt;
-    return AddTarget{fork, merge};
+    return AddTarget{fork, exits.front()};
 }
 
 std::vector<juce::String> MixerInsertList::effectPickerTypesForTest() {
@@ -506,15 +642,19 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
     const auto successor = isSet(target.successor)
                                ? target.successor
                                : synth::soleSignalNeighbour(*graph_, predecessor, false, stripNodeId_);
-    if (!isSet(predecessor) || !isSet(successor) || !cablesInto(*graph_, predecessor, successor))
+    if (!isSet(predecessor) || !isSet(successor) ||
+        (!target.isAcross() && !cablesInto(*graph_, predecessor, successor)))
         return;
     const auto neighbourUuid = nodeUuid(*graph_, predecessor == sourceNodeId_ ? successor : predecessor);
     rememberPick(moduleTypeName);
     juce::Component::SafePointer<MixerInsertList> alive(this); // the edit can rebuild the mixer, as in mutateAndNotify
     const auto added = synth::insertModuleAfterNode(
         *graphEditor_, *undoManager_, *macros_, moduleTypeName, predecessor,
-        [this, predecessor, successor, neighbourUuid](juce::AudioProcessorGraph::NodeID node) {
-            if (!synth::spliceInInsert(*graph_, predecessor, successor, node))
+        [this, predecessor, successor, neighbourUuid, target](juce::AudioProcessorGraph::NodeID node) {
+            const bool spliced = target.isAcross() ? synth::spliceInInsertAcross(*graph_, target.acrossPredecessors,
+                                                                                 target.acrossSuccessors, node)
+                                                   : synth::spliceInInsert(*graph_, predecessor, successor, node);
+            if (!spliced)
                 return false;
             const auto uuid = nodeUuid(*graph_, node);
             if (macros_->findByMember(uuid) == nullptr)

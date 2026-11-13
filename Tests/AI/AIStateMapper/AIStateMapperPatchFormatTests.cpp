@@ -182,8 +182,12 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Macro MIDI In", "bypassed"},
         {"Macro MIDI Out", "bypassed"},
         {"Macro Out", "bypassed"},
-        {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
-                   "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
+        {"Macros", "bypassed, macro1, macro10, macro10Bipolar, macro11, macro11Bipolar, macro12, "
+                   "macro12Bipolar, macro13, macro13Bipolar, macro14, macro14Bipolar, macro15, "
+                   "macro15Bipolar, macro16, macro16Bipolar, macro1Bipolar, macro2, macro2Bipolar, "
+                   "macro3, macro3Bipolar, macro4, macro4Bipolar, macro5, macro5Bipolar, macro6, "
+                   "macro6Bipolar, macro7, macro7Bipolar, macro8, macro8Bipolar, macro9, macro9Bipolar, "
+                   "macroCount, muted"},
         // The mix bus: a fader and a mute, no pan.
         {"Master", "bypassed, dualIO, gain, muted, safetyLimiter"},
         {"Mallet", "brightness, bypassed, damping, decay, dualIO, fine, hardness, level, material, muted, release, "

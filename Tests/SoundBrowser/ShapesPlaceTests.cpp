@@ -357,7 +357,7 @@ TEST(ShapesPlaceTest, AStampedShapeIsUsedRecentlyAndReturnStampsOnlyWhenACardTak
     ASSERT_EQ(f.lists.recent().size(), 1);
     EXPECT_EQ(f.lists.recent()[0], "shape:filter:factory:ah");
 
-    f.library.noteUsed(*f.library.find(ShapeKind::Lfo, true, "ramp up")); // a drop or Start from
+    f.library.noteUsed(*f.library.find(ShapeKind::Lfo, true, "ramp up")); // a drop or Pick shape
     EXPECT_EQ(f.lists.recent()[0], "shape:lfo:factory:ramp up");
     f.view->showLocation(SoundBrowserComponent::kRecentId, {});
     f.view->completeListAnimationForTest();

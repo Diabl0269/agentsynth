@@ -285,22 +285,27 @@ inferred later from what gets plugged into it. This is the same rule macro ports
 ([`docs/macros/ports.md`](../macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)),
 applied to strips.
 
-Strip output is always stereo. A mono strip feeds both output legs from a single input jack, and its
+The strip's output is stereo on its raw channels in every shape (how many jacks show follows Dual I/O, below). A mono strip feeds both output legs from a single input jack, and its
 own pan is a real pan pot (see [Pan law](#pan-law) below); a stereo strip's "pan" stays a **balance**
 control (industry convention: pan pot on mono, balance on stereo). The right leg follows the
 `kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
 the split-block voice modules.
 
-**A stereo strip's inputs follow Dual I/O** (input side only; the outputs and send jacks never collapse). Split
-(the default, and what a project saved before the toggle loads as) it shows `Left` and `Right`; collapsed it
-shows one `Audio` jack whose cable feeds BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw
-channels `kRightBase` apart: `JackTarget::rawStride`, and `PolyLink::destStride` when a cable is made). A
-mono-shaped strip has one `In` jack whichever way the toggle is set, and its card hides the toggle. A strip
-made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks** preference and its
-per-module override (`Channel Strip` in the list), like every other new module; a strip loaded from a project
-or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
+**A strip's jacks follow Dual I/O.** Split (the default, and what a project saved before the toggle loads as) a
+stereo strip shows `Left` and `Right` on its input and its main output; collapsed it shows one `Audio` jack on each
+side, and each one owns BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw channels `kRightBase` apart:
+`JackTarget::rawStride`, and `PolyLink::sourceStride`/`destStride` when a cable is made). Only the visible jacks
+change: no raw edge moves, so a saved project's cables to Master, buses and the next strip, and its sends, keep
+every channel they had. Send jacks never collapse; with the main output collapsed they sit one jack higher
+(`Audio`, `Send 1 L`, `Send 1 R`, ...) and keep their `Send N` labels. A mono-shaped strip has one `In` jack
+whichever way the toggle is set, and its output collapses to one `Audio` jack the same way, so its card shows the
+toggle too. A strip made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks**
+preference and its per-module override (`Channel Strip` in the list), like every other new module; a strip loaded
+from a project or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
 [AI authorability](#ai-authorability)) yet appears in the Preferences list, which is discovered from
-`hasDualIOParameter()`.
+`hasDualIOParameter()`. The guard for the jack-raw-mismatch kind is `StripWiringHealMatrix` (collapsed and split
+strips on both sides) plus `ChannelStripOutputCollapseProject`, which collapses every strip of a saved multi-track
+project with a bus and a send and asserts no raw edge moved across a save and reopen.
 
 **Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
 same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a
@@ -408,6 +413,23 @@ the split row itself cannot be moved or removed. The dry row is dimmed italic te
 or grab handle; Return or a click on it offers the same add as the split's "Add to path N", and its screen-reader
 name is "Path N: dry, no effects".
 
+### Not-connected modules
+
+A module fed from the chain that never reaches the strip (an effect dragged off the chain with its output unplugged, or
+one whose output goes only to a CV jack) is no part of the sound, but the column still lists it so the work done on the
+canvas is not hidden. `MixerColumn::dangling` holds each one with the chain row it hangs off (`anchorRow`, -1 for the
+track's source) and its depth along a not-connected branch; every module reachable from the track's source appears
+exactly once, as an `inserts` row or here (`MixerModelNotConnectedTests`). Only modules reachable from the chain are
+listed: a module with no cable is not, and a branch fed only by note data (an instrument's Track In feeding its ADSR) is
+voice plumbing, not a loose module. The flat fallback walk, buses and Master list none.
+
+`MixerInsertList` draws each as a dimmed italic row with a dashed rail and a "not connected" caption, in place right
+under its anchor row. It has no row index: keyboard focus, Alt+Up/Down and the "+ Insert" row never land on it, the
+add gap below it still adds on the chain's own cable, and a mouse drag-reorder stays between such rows (Alt+Up/Down moves past them). A double-click
+shows its card on the canvas, like any module row; a screen reader says "<name>, not connected". Plugging it in or
+unplugging it moves it between this list and the chain rows on the next rebuild. Its motion key is `dangling:<uuid>`
+([row motion](row-motion.md)). The alternative look (a dimmed "Not connected" group under the inserts) is not built.
+
 ### Reordering inserts
 
 A module row reorders three ways, all through `MixerInsertList::moveRowTo` and ONE undo step: drag it by its name
@@ -437,9 +459,20 @@ neighbour (its downstream one right after the track source), and its card lands 
 neighbour's card on the canvas, the cards after it sliding aside as for a keyboard insert
 ([layout.md](../layout/layout.md#making-room-for-a-module-dropped-between-others),
 `synth::insertModuleAfterNode`). Module, cables, macro and pushes are one undo step. A neighbour hidden in a
-collapsed macro gets the new node one spacing to its right without moving anything. A chain whose last
-top-level row is a split meets the strip on several cables, so it has no "+ Insert"; each path still takes
-one through "Add to path".
+collapsed macro gets the new node one spacing to its right without moving anything. Next to a split the add goes across
+all its paths at once (`spliceInInsertAcross`: every cable between the fork-side nodes and the merge-side
+nodes is routed through the new module, left on ch0 and right on the module's own right leg, several cables
+into one input summing). A chain whose last top-level row is a split keeps its "+ Insert": the pick lands
+behind every path, before the strip. The line above a split row adds in front of all its paths (the module
+or track source that feeds them now feeds the new module), and the line below one, above the module they
+merge into, behind all of them; the split row's right-click menu offers "Add before all paths" and "Add after
+all paths". A module hung off the fork with no output is no path and keeps its cable. Each path still takes
+one through "Add to path". Keys: Return on the "+ Insert" row opens the picker like any other chain, and Shift+F10
+on a focused row opens that row's right-click menu beside it (`MixerInsertList::showMenuForKeyboardRow`), so a
+split row's "Add before all paths" and "Add after all paths" are reachable without the mouse; the gap lines
+themselves stay mouse entries, like the line between two modules. Tests:
+`InsertAddAffordanceMatrix` (`Tests/UI/Mixer/MixerInsertListAcrossTests.cpp`) walks every chain shape x entry
+point, and `MixerModelSpliceAcrossTests` asserts the raw edges.
 
 **A bus has no source to walk from.** A bus column carries no feeding track, so
 `buildBusInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal

@@ -209,52 +209,10 @@ void ModuleComponent::applyMacroCountChange() {
     if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
         return;
 
-    updateLayout();
-    owner.handleModuleResized(this);
+    // A glide that began (or runs) already made room and dropped the routings left on vanished jacks.
+    if (!updateLayoutGliding())
+        owner.handleModuleResized(this);
     repaint();
-}
-
-void ModuleComponent::layoutMacroBank(int count) {
-    using namespace synth::LayoutUtil;
-
-    const int margin = 20;
-
-    // Header row: the Knobs count on the left, the Bipolar toggle beside it.
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (!sliders[i]->getComponentID().equalsIgnoreCase("Knobs"))
-            continue;
-        sliderLabels[i]->setBounds(margin, 30, 80, 18);
-        sliders[i]->setBounds(margin, 48, 80, 40);
-        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 44, 16);
-    }
-
-    for (auto* toggle : toggles) {
-        if (toggle->getComponentID().equalsIgnoreCase("Bipolar"))
-            toggle->setBounds(margin + 96, 56, 100, 24);
-    }
-
-    // One row per macro: knob on the left, value beside it, output jack (drawn in paint()) on
-    // the right edge at the same y. Rows beyond the count are hidden, not destroyed — their
-    // parameters still exist and keep their values if the bank is grown again.
-    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i) {
-        const juce::String id = MacroControlModule::macroName(i);
-        const bool visible = i < count;
-
-        for (int s = 0; s < sliders.size(); ++s) {
-            if (!sliders[s]->getComponentID().equalsIgnoreCase(id))
-                continue;
-
-            sliders[s]->setVisible(visible);
-            if (s < sliderLabels.size())
-                sliderLabels[s]->setVisible(false); // the jack label already names the row
-
-            if (visible) {
-                sliders[s]->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18);
-                const int centreY = macroRowCentreY(i);
-                sliders[s]->setBounds(margin, centreY - (kMacroRowH - 8) / 2, 140, kMacroRowH - 8);
-            }
-        }
-    }
 }
 
 void ModuleComponent::captureLogicalPortMaps() {
@@ -529,6 +487,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // first, by identity against `sliders` (index-parallel to `sliderParams`, exactly like
     // reflectParameterValue()'s lookup).
     if (e.eventComponent != this) {
+        if (e.mods.isPopupMenu() && showMacroWidgetMenu(*e.eventComponent))
+            return;
         for (int i = 0; i < sliders.size(); ++i) {
             if (sliders[i] == e.eventComponent) {
                 if (e.mods.isPopupMenu()) {

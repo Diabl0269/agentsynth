@@ -417,31 +417,30 @@ synth::PeaksFile::Data makeWaveformDataWithRms(int numBuckets, float peakQuiet, 
 }
 
 struct ColumnInk {
-    int inkRows = 0;  // rows painted darker than the clip fill (outline plus body)
-    int bodyRows = 0; // rows painted at the darkest level (the RMS body)
+    int inkRows = 0;  // rows that differ from the clip fill (peak shape plus core)
+    int bodyRows = 0; // rows at the level furthest from the fill (the RMS core)
 };
 
-// Scans one pixel column of the clip body; the brightest row is the clip fill (every test leaves some rows unpainted).
-ColumnInk scanColumn(const juce::Image& image, juce::Rectangle<int> rect, int x) {
+// Scans one pixel column of the clip body against `empty`, the same lane painted with no waveform. The wave can be
+// darker or lighter than the clip (a deep shade, or a light one on a dark clip), so rows count by distance.
+ColumnInk scanColumn(const juce::Image& image, const juce::Image& empty, juce::Rectangle<int> rect, int x) {
     std::vector<float> rows;
     for (int y = rect.getY() + 3; y < rect.getBottom() - 3; ++y)
-        rows.push_back(image.getPixelAt(x, y).getBrightness());
-    const float brightest = *std::max_element(rows.begin(), rows.end());
-    const float darkest = *std::min_element(rows.begin(), rows.end());
-    const float fill = brightest;
+        rows.push_back(std::abs(image.getPixelAt(x, y).getBrightness() - empty.getPixelAt(x, y).getBrightness()));
+    const float furthest = *std::max_element(rows.begin(), rows.end());
     ColumnInk ink;
-    for (const float b : rows) {
-        ink.inkRows += b < fill - 0.01f ? 1 : 0;
-        ink.bodyRows += b <= darkest + 0.01f && darkest < fill - 0.05f ? 1 : 0;
+    for (const float d : rows) {
+        ink.inkRows += d > 0.01f ? 1 : 0;
+        ink.bodyRows += d >= furthest - 0.01f && furthest > 0.05f ? 1 : 0;
     }
     return ink;
 }
 
 } // namespace
 
-// A clip with RMS draws a lighter peak outline with a darker, narrower body inside it (like Reaper/Logic): a quiet
+// A clip with RMS draws a peak shape with a denser, narrower core inside it: a quiet
 // then loud clip has a narrow body in the quiet half and a wide one in the loud half, always inside the outline.
-TEST(TimelineClipLaneWaveformTest, RmsBodyIsDrawnDarkerAndNarrowerThanThePeakOutline) {
+TEST(TimelineClipLaneWaveformTest, RmsCoreIsDenserAndNarrowerThanThePeakShape) {
     ScopedPeaksFile peaks("agentsynth_clipslane_rms_body.agpk");
     ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformDataWithRms(400, 0.3f, 0.05f, 0.9f, 0.5f)));
     ClipLaneFixture f;
@@ -451,12 +450,13 @@ TEST(TimelineClipLaneWaveformTest, RmsBodyIsDrawnDarkerAndNarrowerThanThePeakOut
     ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
     f.lane.setSize(1000, 240);
     const juce::File resolved = peaks.file;
+    const juce::Image empty = paintLaneSoftware(f.lane);
     f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
 
     const juce::Image image = paintLaneSoftware(f.lane);
     const auto rect = f.lane.getClipRect(clipId);
-    const auto quiet = scanColumn(image, rect, rect.getX() + rect.getWidth() * 3 / 10);
-    const auto loud = scanColumn(image, rect, rect.getX() + rect.getWidth() * 8 / 10);
+    const auto quiet = scanColumn(image, empty, rect, rect.getX() + rect.getWidth() * 3 / 10);
+    const auto loud = scanColumn(image, empty, rect, rect.getX() + rect.getWidth() * 8 / 10);
 
     EXPECT_GT(quiet.bodyRows, 0) << "the quiet half still has a body";
     EXPECT_GT(quiet.inkRows, quiet.bodyRows * 3) << "outline (peak 0.3) is much taller than the body (rms 0.05)";
@@ -476,17 +476,18 @@ TEST(TimelineClipLaneWaveformTest, LoudConstantToneShowsAnOutlineAroundABody) {
     ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
     f.lane.setSize(1000, 240);
     const juce::File resolved = peaks.file;
+    const juce::Image empty = paintLaneSoftware(f.lane);
     f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
 
     const juce::Image image = paintLaneSoftware(f.lane);
     const auto rect = f.lane.getClipRect(clipId);
-    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    const auto col = scanColumn(image, empty, rect, rect.getX() + rect.getWidth() / 2);
     EXPECT_GT(col.bodyRows, 0);
-    EXPECT_GT(col.inkRows, col.bodyRows + 10) << "a lighter outline band shows above and below the body";
+    EXPECT_GT(col.inkRows, col.bodyRows + 10) << "a peak band shows above and below the core";
     EXPECT_LT(col.bodyRows, col.inkRows * 3 / 4) << "the body is not the whole column";
 }
 
-// A version 1 file (no RMS) still draws exactly as before: one flat wash, no darker body level.
+// A version 1 file (no RMS) still draws exactly as before: one flat shade, no core level.
 TEST(TimelineClipLaneWaveformTest, PeaksWithoutRmsDrawAsAPlainOutline) {
     ScopedPeaksFile peaks("agentsynth_clipslane_no_rms.agpk");
     ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformData(400, 0.6f)));
@@ -497,11 +498,12 @@ TEST(TimelineClipLaneWaveformTest, PeaksWithoutRmsDrawAsAPlainOutline) {
     ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
     f.lane.setSize(1000, 240);
     const juce::File resolved = peaks.file;
+    const juce::Image empty = paintLaneSoftware(f.lane);
     f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
 
     const juce::Image image = paintLaneSoftware(f.lane);
     const auto rect = f.lane.getClipRect(clipId);
-    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    const auto col = scanColumn(image, empty, rect, rect.getX() + rect.getWidth() / 2);
     EXPECT_GT(col.inkRows, 0);
     EXPECT_GE(col.bodyRows, col.inkRows - 4)
         << "every inked row is the same single wash (bar two antialiased edge rows)";

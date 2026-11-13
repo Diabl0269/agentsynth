@@ -293,6 +293,14 @@ start below the chip row) are painted under it by `paintMacroPortStrips` from
   (mirroring the Attenuverter's own "no header, nothing to click" early return), so nothing on the
   canvas can desync a widget from its hull. A right click is the one exception — see
   [`docs/macros/auto-ports.md`](auto-ports.md#ungroup-and-direct-deletion-of-a-port).
+- **A port module no macro lists is adopted on load, or kept out of sight.** A saved project can hold a MacroInlet/Outlet
+  (or MIDI) node that no macro lists as one of its `ports`, saved at whatever position it last had (often x=0). On load
+  `synth::adoptStrayMacroPorts` (`MacroPortRepair.h`) makes such a node a port of its macro again when its cables meet
+  members of exactly one macro (or it is already a member of one), and the dock then places it on the hull edge. One that
+  meets no macro member or several is left alone: `syncMacroCards()` keeps its card hidden (only the dock places port
+  widgets, so it would sit at its saved position) and `reanchorCablesAroundCollapsedMacros` drops its cables from view; the
+  node and its cables stay in the graph. Pinned by `MacroPortRepair.*`, `MacroProjectLoadReveal.*PortWidgets*` /
+  `*HiddenStrayPort*` (every reveal stage) and the saved-project fixture's `withPortWidgets` option.
 - **The hull-feedback trap.** `macroHullBounds()` unions only NON-PORT members. A port's own fronting
   node is excluded because if it counted toward the bounds that DEFINE the hull, docking it against
   that hull would grow the hull, which would push it out again, every layout pass. A macro made
@@ -351,11 +359,20 @@ dot and name fade in over 170 ms `easeOutCubic`. A card that grows a row for it 
   both are there at once.
 - **Undo and redo.** Cmd+Z pulls the cable back into its source jack and the card glides back to its old height, as
   every undone cable does ([cables](../layout/cables.md#retracting-removed-cables)); redo grows it out of its source
-  jack again, not from the drop point, since the drop point is not part of the undo record. The port's row goes at
-  once on undo and is there at once on redo: the card paints rows from the live macro, so a removed row has nothing
-  left to fade.
-- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames;
-  `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films it.
+  jack again, not from the drop point, since the drop point is not part of the undo record. The card paints rows from
+  the live macro, so a removed row would have nothing left to fade: `MacroCardComponent::refreshPortRows` (called by
+  `GraphEditor::syncMacroCards` on every pass) keeps a picture of it and draws that ghost fading out and shrinking
+  (170 ms `easeInCubic`, a `ShownFade`) while the cable retracts; redo grows the row back in through `growInPort`. The
+  same goes for every row that comes or goes on a shown card: the '+' button, the '-' button and Delete port.
+- **Ghost rows.** Only a row at the bottom of its side is kept: with rows below it they would move up through the
+  ghost, so that row pops. A second change lands the ghosts still fading and starts the new ones; a port that comes back
+  mid-fade drops its ghost; a card that folds away, expands or is destroyed drops them at once (no frames run for a
+  card that is not shown). Under Reduce Motion the ghost fades over 80 ms at full size; under Animations Off it is gone
+  at once. A card whose height shrinks with the row (three or more rows on a side) clips the ghost to the new height.
+  Test mode: the `macroCard` state's `leavingPortRows` counts the ghosts still fading.
+- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames and
+  `MacroCardPortExit.*` the ghost row; `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films the drop and
+  `macro-port-row-undo-fade.yaml` the undo and redo.
 
 ## Member counts report modules, not ports
 

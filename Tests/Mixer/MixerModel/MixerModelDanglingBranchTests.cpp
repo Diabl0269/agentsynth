@@ -1,8 +1,12 @@
 // MixerModelDanglingBranchTests.cpp (docs/mixer/mixer.md#inserts-in-a-free-form-graph): a branch that never reaches
 // the strip (a module wired in with no output) is no path of the chain. It neither makes the list read-only nor ends
 // the walk, and the edit primitives leave its cable alone. Headless: a bare AudioEngine/TimelineDoc/MacroSet.
+#include "../../fixtures/saved-project/SavedProjectFixture.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerModelTestFixture.h"
+#include "Modules/VCAModule.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include <algorithm>
 
 namespace {
 using Kind = synth::MixerInsertEntry::Kind;
@@ -174,4 +178,90 @@ TEST(MixerModelDanglingBranchTests, MovingTheForkModuleKeepsItsDanglingCableAndR
     EXPECT_EQ(names(rig.column()), (std::vector<juce::String>{"VCA", "Filter"}));
     EXPECT_TRUE(rig.wired(filter, dangling));
     EXPECT_FALSE(rig.wired(vca, dangling));
+}
+
+// The shape of a real Oscillator track in a saved project (Track In -> Oscillator and ADSR; Oscillator -> VCA
+// audio, ADSR -> VCA gain CV; VCA -> Gate -> EQ -> Compressor -> strip), opened through the saved-project fixture.
+namespace {
+struct OscTrackProject {
+    synth::test::SavedProjectFixture project;
+    std::unique_ptr<MainComponent> mc;
+
+    OscTrackProject() {
+        if (!project.wasSaved())
+            return;
+        mc = project.open();
+        if (mc != nullptr)
+            mc->simulateAddInstrumentTrackClick(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    }
+    juce::AudioProcessorGraph& graph() { return mc->getAudioEngine().getGraph(); }
+    Node* node(const juce::String& name) {
+        Node* found = nullptr;
+        for (auto* n : graph().getNodes())
+            if (n->getProcessor()->getName() == name)
+                found = n; // the last one: the new track's nodes are added after the fixture's
+        return found;
+    }
+    Node* addDelay() {
+        juce::String unused;
+        return addPlainNodeMMT(graph(), "Delay", unused);
+    }
+    synth::MixerColumn column() {
+        const auto snapshot =
+            synth::buildMixerSnapshot(graph(), mc->getTimelineDoc(), mc->getGraphEditor().getMacros());
+        for (const auto& c : snapshot.columns)
+            if (c.nodeId == node("Channel Strip")->nodeID)
+                return c;
+        ADD_FAILURE() << "no column for the Oscillator track's strip";
+        return {};
+    }
+};
+} // namespace
+
+std::vector<juce::String> rowNames(const synth::MixerColumn& column) { return names(column); }
+
+// Bug kind real-project: an Oscillator track (VCA with ADSR on its gain CV) with a Delay hung off the
+// oscillator. Hung with no output it is a dangling branch and shows nothing (nothing of the chain). Wired into the
+// VCA's audio input it is a real second path beside the oscillator's direct cable, so the column shows it as 2 paths
+// with the Dry row. The shape was rebuilt through the saved-project fixture because the project itself is not on
+// every machine.
+TEST(MixerModelDanglingBranchTests, ARealOscillatorTrackShowsADelayWiredIntoItsVcaAsTwoPaths) {
+    OscTrackProject rig;
+    ASSERT_NE(rig.mc, nullptr);
+    auto* osc = rig.node("Oscillator");
+    auto* vca = rig.node("VCA");
+    auto* delay = rig.addDelay();
+    ASSERT_TRUE(osc != nullptr && vca != nullptr && delay != nullptr);
+    connectStereoMMT(rig.graph(), *osc, *delay);
+
+    const std::vector<juce::String> chain{"Oscillator", "VCA", "Gate", "Parametric EQ", "Compressor"};
+    EXPECT_EQ(rowNames(rig.column()), chain) << "a Delay with no output is not part of the chain";
+
+    rig.graph().addConnection({{delay->nodeID, 0}, {vca->nodeID, 0}});
+    rig.graph().addConnection({{delay->nodeID, 1}, {vca->nodeID, VCAModule::kRightBase}});
+    const auto column = rig.column();
+    EXPECT_TRUE(column.insertChainHasSplits);
+    const auto shown = rowNames(column);
+    EXPECT_EQ(std::count(shown.begin(), shown.end(), juce::String("Delay")), 1);
+    EXPECT_EQ(std::count(shown.begin(), shown.end(), juce::String("Dry (no effects)")), 1);
+    ASSERT_GT(column.inserts.size(), 1u);
+    EXPECT_EQ(column.inserts[1].kind, Kind::Split);
+    EXPECT_EQ(column.inserts[1].pathCount, 2);
+}
+
+// The Delay's output on the VCA's gain CV input is modulation by design: it stays off the signal path, so the
+// column shows the plain chain.
+TEST(MixerModelDanglingBranchTests, ARealOscillatorTrackIgnoresADelayWiredIntoItsVcaGainCv) {
+    OscTrackProject rig;
+    ASSERT_NE(rig.mc, nullptr);
+    auto* osc = rig.node("Oscillator");
+    auto* vca = rig.node("VCA");
+    auto* delay = rig.addDelay();
+    connectStereoMMT(rig.graph(), *osc, *delay);
+    rig.graph().addConnection({{delay->nodeID, 0}, {vca->nodeID, 1}});
+
+    const auto column = rig.column();
+    EXPECT_TRUE(column.insertChainIsLinear);
+    EXPECT_EQ(rowNames(column),
+              (std::vector<juce::String>{"Oscillator", "VCA", "Gate", "Parametric EQ", "Compressor"}));
 }

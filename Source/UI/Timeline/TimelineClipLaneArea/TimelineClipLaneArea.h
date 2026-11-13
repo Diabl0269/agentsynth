@@ -4,7 +4,6 @@
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/DrumMachine/DrumLanes.h"
-#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
@@ -76,6 +75,7 @@ template <typename T>
 class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
+class RestoreWatch;
 struct ClipLaneChange;
 struct WaveformInk;
 class WaveformSampleCache;
@@ -111,8 +111,7 @@ enum class GridLineLevel { Subdivision = 0, Beat, Bar };
 constexpr double kMinGridLinePixels = 3.0;
 
 /** True when lines `spacingBeats` apart at `pixelsPerBeat` are still readable — the density guard
- *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never
- *  draws. */
+ *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never draws. */
 inline bool gridLevelIsReadable(double spacingBeats, double pixelsPerBeat) noexcept {
     if (!std::isfinite(spacingBeats) || !std::isfinite(pixelsPerBeat) || spacingBeats <= 0.0)
         return false;
@@ -431,6 +430,7 @@ public:
     void refreshFromDoc();
     /** A Drum Kit track's clips draw the kit's shown pads as their rows; set by the panel, which owns the app host. */
     std::function<bool(synth::TrackId, KitRows&)> kitRowsProvider;
+    std::function<bool()> kitsExistProvider;
     /** Re-reads every track's kit rows; repaints when they changed (a pad switched on or off on the card). */
     void refreshKitRows();
 
@@ -613,7 +613,7 @@ public:
     // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
     // its own move/trim drag is previewing. nullopt when the id does not resolve.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
-    // Where a clip is drawn right now (trails its place while an undo or redo glide runs), and the glide itself.
+    // Where a clip is drawn right now (trails its place while a restore or snapped drag step glides).
     juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
     /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
     double getDrawnNoteXForTest(synth::ClipId id, int index) const;
@@ -693,8 +693,7 @@ private:
     // The x a note's resting `restingX` is drawn at while the clip glides from its old place (RestoreGlide.cpp).
     double glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
-    // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag
-    // previews a cross-track drop (see TimelineClipLaneArea.cpp for the copy-drag exception).
+    // The row a clip PAINTS in right now: its own, except while a plain move drag previews a cross-track drop.
     int effectiveRowFor(synth::ClipId id, int trackIndex) const;
     double currentBeatsPerBar() const;
     double snappedBeatAt(double rawBeat) const;
@@ -796,9 +795,8 @@ private:
     void paintLinkMark(juce::Graphics& g, juce::Rectangle<int> clipRect, bool dimmed) const;
 
     // ---- Waveform + live-recording-strip painting ----
-    // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
-    // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
-    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
+    // Paints a committed audio clip's waveform in `rect`, inked for the clip colour `onLane`; no-op if unresolved.
+    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect, juce::Colour onLane);
     // Shared by paintWaveform() and the live strip: filled outline and RMS body paths (one outline without `rms`).
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                      const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,
@@ -864,7 +862,7 @@ private:
     std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
     std::unique_ptr<KeyedRectTween> clipGlide_;
     std::unique_ptr<ClipLaneEnterExit> enterExit_; // clips a section edit, stamp or restore brings or takes away
-    RestoreWatch restoreWatch_;
+    std::unique_ptr<RestoreWatch> restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
@@ -901,9 +899,10 @@ private:
     // rather than from a synthesized one.
     juce::Point<int> lastDragPointer_;
 
-    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` — the one
-    // thing an auto-scroll tick and a real pointer move share.
+    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` (what an auto-scroll tick and a
+    // pointer move share), easing the drawn clips onto each new snapped step.
     void updateDragPreviewFromLastPointer();
+    void stepDragPreview();
     // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_. Called after
     // every mouseDrag update and once from mouseUp.
     void updateAutoScrollArming();

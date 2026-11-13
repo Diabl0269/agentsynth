@@ -69,6 +69,9 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
+class LaneBendDrag;
+class LaneHoldBlend;
+
 struct PointKeyAction;
 
 class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
@@ -175,6 +178,12 @@ public:
     juce::Path getDrawnCurvePathForTest() const;
     /** The beat and value the keyboard drag has the grabbed point at (the committed point's when idle). */
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
+    bool isBendPreviewHoldForTest() const noexcept { return previewHold_; }
+    // The lane's points as the bend preview draws them.
+    std::vector<LaneBreakpoint> getBendPreviewPointsForTest() const;
+    float getBendPreviewTensionForTest() const noexcept { return previewTension_; }
+    void forceBendBlendAnimateForTest(bool force) noexcept;
+    bool isBendBlendRunningForTest() const noexcept;
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
     std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
@@ -326,6 +335,15 @@ private:
     // Hover/bubble: follows the point under `pos` (none = hidden), and floats over (beat, value) with its text.
     void updateHover(juce::Point<int> pos);
     void showBubbleAt(double beat, double value);
+    // ---- Segment bend drag (AutomationLaneEditorBendDrag.cpp) ----
+    void beginBendDrag(int segLeftIndex, juce::Point<int> pos);
+    void dragBend(const juce::MouseEvent& e);
+    void commitBend();
+    juce::String firstSegmentBend() const;
+    // The segment being bent, as the preview draws it (the same shape commitBend writes).
+    void applyBendPreview(std::vector<LaneBreakpoint>& pts, bool asHold) const;
+    void paintBendPreview(juce::Graphics& g, const std::vector<LaneBreakpoint>& pts, const synth::AutomationLane& lane,
+                          juce::Colour colour);
     juce::String valueText(double value) const;
     // True when `pos` is on the flat line of the active lane while it has no points.
     bool onFlatLine(juce::Point<int> pos) const;
@@ -443,10 +461,15 @@ private:
     double previewBeat_ = 0.0;
     double previewValue_ = 0.0;
 
-    // ---- TensionScrub preview ----
+    // ---- TensionScrub preview (AutomationLaneEditorBendDrag.cpp) ----
     double tensionSegLeftBeat_ = 0.0;
     float tensionOriginal_ = 0.0f;
     float previewTension_ = 0.0f;
+    int bendOriginalCurve_ = 0;
+    bool bendWasHold_ = false;
+    bool previewHold_ = false;
+    std::unique_ptr<LaneBendDrag> bendDrag_;
+    std::unique_ptr<LaneHoldBlend> holdBlend_;
 
     // ---- Pencil preview ----
     std::vector<PencilSample> pencilSamples_;
@@ -469,6 +492,14 @@ private:
     // Edge scroll (AutomationLaneEditorEdgeScroll.cpp).
     bool dragFollowsView() const noexcept;
     void previewDragAt(juce::Point<int> pos);
+    // `pos` with x held inside the lane; a drag keeps arriving from beyond its edges.
+    juce::Point<int> insideLane(juce::Point<int> pos) const noexcept;
+    // `rawBeat` snapped, then kept inside [low, high] on the grid (the last line inside, not the nearest one).
+    double snappedBeatWithin(double rawBeat, double low, double high) const;
+    // How many dots are drawn outside the lane's width now (a dot being dragged counts at its preview place).
+    int dotsOutsideView() const;
+    // The beats a dot's centre may take while its whole dot is drawn inside the lane.
+    std::pair<double, double> visibleDotBeats() const;
     void updateEdgeScrollArming();
     void edgeScrollTick();
     void stopEdgeScroll();

@@ -172,10 +172,10 @@ mapper, and an untrusted apply resolves a bad one to linear.
 Every place edits that one curve through `ModCurveEditTarget` (a node id and the editor, never a processor pointer, so a
 deleted node is a safe no-op and a safe close):
 
-- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode with line-click editing, a draggable
+- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode (double-click the line to add a point, double-click a point to remove it, right-click a point for its menu), a draggable
   middle bend handle, the chips Linear / Exp / Log / S-curve, two range handles on the left edge (min and max output,
-  Up/Down 1 percent, Shift 10), saved presets ("Mine", "Save...") and Enlarge. Enlarge opens a window titled
-  "Curve: <source> to <destination>" with a big editor, the chips, a Snap toggle and a Grid box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
+  Up/Down 1 percent, Shift 10), saved presets ("Load", "Save...") and Enlarge. Enlarge opens a window titled
+  "Curve: <source> to <destination>" with a big editor, the chips, the Snap icon button (the shared `SnapToggleButton`, icon and word) and a Grid label beside its box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
 - **Where it opens**: the curve chip (26 x 18, a Tab stop; accent border when bent) in each mod dot row between the amount
   and the timeline button, the Curve column after Amount in the Mod Matrix (row name "Routing N curve"), and the cable
   right-click item **Edit curve...**. One box is open at a time.
@@ -382,11 +382,16 @@ switches the whole **voice graph** of that module, not the one card. `PolyChainC
      Wavetable, ADSR) one **Poly MIDI** node is inserted (reused when that source already feeds one), wired source
      MIDI -> Poly MIDI, Poly MIDI pitch ch0-7 -> each Oscillator/Wavetable pitch, Poly MIDI gate ch8-15 -> each ADSR
      gate and each Oscillator/Wavetable Gate (so every note restarts the voice's phase), and placed beside what it feeds (`placeNewModulesBesideConnections`, joining that module's macro). The raw
-     MIDI cables stay: they are harmless in poly mode.
+     MIDI cable into a poly **ADSR** is then removed: a poly ADSR takes its gates from Poly MIDI and never reads raw MIDI.
+     An Oscillator's or Wavetable's raw MIDI cable stays: poly voice 0 still restarts on a raw note-on and plays a raw
+     note's pitch when no pitch CV is patched, so it is not redundant. A source's cable into a mono module is never touched.
    - **Turning poly off:** the Poly MIDI -> module cables to the modules going mono are removed, each of those modules
-     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing), and a Poly MIDI left with no outgoing
-     cable is removed. The result is a mono patch that plays every note.
-4. **Feedback.** A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
+     gets a raw MIDI cable from the source that fed the Poly MIDI (if missing; so poly on then off returns the original
+     cables), and a Poly MIDI left with no outgoing cable is removed. The result is a mono patch that plays every note.
+4. **Feedback.** The click glides like Cmd+Z of it does (`PolyChainController::commit` opens the same restore
+   `CardGlideAnimator::Scope` and cable retract/grow `AppUndoManager::applyHistoryStep` does, [undo-glide.md](../layout/undo-glide.md)):
+   the Poly MIDI card grows in or shrinks away and its cables grow out of or pull back into their jacks; Reduce Motion
+   and Animations Off are handled by the shared helpers. A change that reached beyond the clicked module shows a toast, "Made 4 modules poly" / "Made 4
    modules mono", with **Undo** ([`chrome.md`](../layout/chrome.md#toast)).
 5. **Only a user click propagates.** The pill does not toggle itself (`CardBody::installPolyPill`: `setClickingTogglesState(false)`; its attachment
    follows the parameter; the click goes to `GraphEditor::getPolyChain()`, and the track header's switch reads `TrackHeaderHost::getTrackPolyState`, never the graph), so no second or half undo step exists. Setting the parameter any other way (undo/redo
@@ -550,7 +555,10 @@ knob's own sources panel is open the stack is not drawn: the panel lists the sam
 from under it (`synth::ui::modHoverChipShows`). A left click on the dot (or Return on its button) opens the panel, and
 the chip fades out on that click through the same fade, stays gone while the panel is open and fades back in when it
 closes (Esc, a click away) with the pointer still on the knob: the dot's controller repaints the card whenever the
-panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. Tests:
+panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. The panel's window
+takes the knob's mouse-exit while it is open and no mouse-enter follows until the pointer moves, so on close
+`ModDotController::popoverClosed` restores the hovered knob when the pointer rests on the dot (the popover pointer seam,
+`PopoverPointer.h`). Tests:
 `ModChipClickHideTests.cpp` (per-frame alpha under Full, Reduce Motion and Animations Off); scenario
 `mod-chip-hides-on-dot-click`.
 

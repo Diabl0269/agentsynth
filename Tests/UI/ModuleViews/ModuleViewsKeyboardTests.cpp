@@ -452,6 +452,42 @@ TEST(ThresholdControlKeyboard, TheAttachedSliderIsTheTabStopAndArrowsAdjustIt) {
     EXPECT_NEAR(slider->getValue(), before, 1e-6);
 }
 
+// On Windows CI ~ThresholdControlComponent called removeListener on a parameter the graph had
+// already freed (access violation in ~GraphEditor). A card whose processor is gone gives the binding up.
+TEST(ThresholdControlTeardown, GivingTheBindingUpLeavesNothingToDetachFromAFreedParameter) {
+    FakeThresholdSource source;
+    auto* param = new juce::AudioParameterFloat(juce::ParameterID("trigThreshold", 1), "Threshold", 0.0f, 1.0f, 0.5f);
+    auto control = std::make_unique<ThresholdControlComponent>(source, param);
+    ASSERT_TRUE(control->isBoundToParameter());
+
+    control->releaseParameterBinding();
+    EXPECT_FALSE(control->isBoundToParameter());
+
+    delete param; // the graph freed it first
+    EXPECT_NO_THROW(control.reset()) << "the destructor must not touch the freed parameter";
+}
+
+// The card-level path: the node leaves the graph (its processor and parameters are freed) before the
+// editor is destroyed. Invisible to a normal build; it is the trigger for the ASAN job, which aborts
+// on the freed parameter without the fix.
+TEST(ThresholdControlTeardown, AnEditorDestroyedAfterItsEnvelopeProcessorWasFreedDoesNotTouchTheParameter) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "needs a native window";
+    AudioEngine engine;
+    {
+        GraphEditor editor(engine, nullptr);
+        auto node = engine.getGraph().addNode(synth::AIStateMapper::createModule("ADSR"));
+        ASSERT_NE(node, nullptr);
+        editor.updateComponents();
+        auto* card = findModuleComp(editor, node->getProcessor());
+        ASSERT_NE(card, nullptr);
+        const auto id = node->nodeID;
+        node = nullptr;
+        engine.getGraph().removeNode(id);
+    }
+    SUCCEED();
+}
+
 TEST(ThresholdControlKeyboard, TheMeterOnlyFormIsNamedAndNotATabStop) {
     FakeThresholdSource source;
     ThresholdControlComponent control(source);

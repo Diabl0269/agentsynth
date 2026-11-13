@@ -8,6 +8,7 @@
 #include "ShapeRingHelpers.h"
 #include "ShapeWindowMap.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -24,7 +25,7 @@ class PitchGridRows;
 
 /** The content of the shape editor window: a large morph map on the left; on the right a row of shape chips, the
  *  curve editor for the selected shape and the buttons that act on it (Add shape, Duplicate, Delete, Rename,
- *  Start from, Draw); the bottom bar holds the per-note settings (when the adapter has them) and Done.
+ *  Pick shape, Draw); the bottom bar holds the per-note settings (when the adapter has them) and Done.
  *
  *  It edits whatever the `ShapeListAdapter` holds, so it is not tied to the Filter. Edits are heard live (every
  *  change goes to the adapter at once) and each gesture or button is one undo step.
@@ -72,9 +73,9 @@ public:
      *  shortcuts on to the main window this way). */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
-    /** Stamps the curve of start-from entry `index` (the built-ins, then the library's) onto the selected shape. */
+    /** Stamps the curve of Pick shape entry `index` (the built-ins, then the library's) onto the selected shape. */
     void applyStartFrom(int index);
-    /** The Start from menu's entries: the adapter's built-in curves, then the user's saved shapes of this kind, then
+    /** The Pick shape menu's entries: the adapter's built-in curves, then the user's saved shapes of this kind, then
      *  the factory shapes that are not a built-in's curve. `savedCount` gets how many of the library's are the user's.
      */
     std::vector<ShapeStartFrom> startFromEntries(int* builtInCount = nullptr, int* savedCount = nullptr) const;
@@ -114,7 +115,7 @@ public:
     juce::TextButton& getDuplicateButton() noexcept { return duplicateButton_; }
     juce::TextButton& getDeleteButton() noexcept { return deleteButton_; }
     juce::TextButton& getRenameButton() noexcept { return renameButton_; }
-    juce::TextButton& getStartFromButton() noexcept { return startFromButton_; }
+    juce::TextButton& getPickShapeButton() noexcept { return pickShapeButton_; }
     juce::TextButton& getDrawButton() noexcept { return drawButton_; }
     ShapeDrawPenButton& getDrawPenButton() noexcept { return drawButton_; }
     juce::TextButton& getSaveShapeButton() noexcept { return saveShapeButton_; }
@@ -143,6 +144,9 @@ public:
     bool isSpectrumTimerRunning() const;
     /** Reads the newest spectrum and repaints the curve; what the timer does each tick. */
     void pollSpectrum();
+    /** Test mode: the loudest point of the spectrum drawn now, in dB (-80 at the floor), through the hidden child
+     *  `shapeSpectrumState` (`spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`). */
+    float spectrumPeakDbForTest() const;
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
     /** The message under the map ("No room after this point"); empty once it has faded. */
@@ -161,6 +165,7 @@ private:
     class Chip;
     class ChipStrip;
     class SpectrumTicker;
+    class SpectrumStateProbe;
 
     void timerCallback() override;
     void loadSelectedCurve();
@@ -170,7 +175,7 @@ private:
     void noteStartFromUsed(const juce::String& name, const LfoCustomWave& curve, bool saved);
     void finishSave(const juce::String& typed, const LfoCustomWave& curve);
     void writeShape(const juce::String& name, const LfoCustomWave& curve, bool replace);
-    void openStartFromMenu();
+    void openPickShapeMenu();
     void openDrawFlyout();
     void restorePen();
     void updatePenButton();
@@ -213,12 +218,12 @@ private:
     juce::TextButton duplicateButton_{"Duplicate"};
     juce::TextButton deleteButton_{"Delete"};
     juce::TextButton renameButton_{"Rename"};
-    juce::TextButton startFromButton_{"Start from"};
+    juce::TextButton pickShapeButton_{actiontext::kPickShape};
     ShapeDrawPenButton drawButton_{"Draw"};
     juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton ringButton_{"Ring helpers"};
     ringhelpers::StackOptions stackOptions_; ///< the Stack harmonics panel's last choices, for this window's life
-    juce::TextButton doneButton_{"Done"};
+    juce::TextButton doneButton_{actiontext::kDone};
     juce::Label statusLabel_;
     juce::uint32 statusClearsAtMs_ = 0;
     std::unique_ptr<PerNoteBar> perNote_;
@@ -229,6 +234,7 @@ private:
     std::unique_ptr<juce::ToggleButton> guidesToggle_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;
+    std::unique_ptr<SpectrumStateProbe> spectrumProbe_;
     std::vector<float> spectrumDb_;
     std::vector<float> responseDb_; ///< the live response, kept only while the cursor is the selection
     juce::Rectangle<int> gridLabelArea_;

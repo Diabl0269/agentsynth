@@ -6,6 +6,8 @@
 #include "../../Layout/PopupAlphaTrace.h"
 #include "ModDotTestFixture.h"
 #include "UI/Graph/ModuleComponent/ModChipFade.h"
+#include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
+#include "UI/Layout/PopoverPointer.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -132,4 +134,27 @@ TEST_F(ModuleComponentTest, ChipClickHideIsInstantWithAnimationsOff) {
     EXPECT_FLOAT_EQ(t.click.front(), 0.0f) << "gone on the click's own frame";
     EXPECT_FLOAT_EQ(t.panelOpen.back(), 0.0f);
     EXPECT_FLOAT_EQ(t.panelClosed.front(), 1.0f);
+}
+
+// Regression test for FRO1820: the panel's window takes the knob's mouse-exit while it is open, so the hovered knob is
+// empty when it closes; with the pointer still on the dot the chip must come back without another mouse move.
+TEST_F(ModuleComponentTest, ChipComesBackWhenThePanelClosesWithThePointerStillOnTheDot) {
+    Fixture f;
+    f.editor->setHoveredModTarget(graph_editor_types::HoveredModTarget{f.vcaId, f.gainChannel});
+    auto* panel = f.clickDot();
+    ASSERT_NE(panel, nullptr);
+    const auto* dot = panel->anchor();
+    ASSERT_NE(dot, nullptr);
+    f.editor->setHoveredModTarget(std::nullopt); // the knob's mouse-exit as the panel's window covers it
+    synth::ui::test_hooks::popoverMouseForTest() = dot->getScreenBounds().getCentre();
+    f.held.reset();
+    EXPECT_TRUE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "the pointer rests on the dot";
+
+    panel = f.clickDot();
+    ASSERT_NE(panel, nullptr);
+    f.editor->setHoveredModTarget(std::nullopt);
+    synth::ui::test_hooks::popoverMouseForTest() = dot->getScreenBounds().getCentre() + juce::Point<int>(500, 500);
+    f.held.reset();
+    EXPECT_FALSE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "the pointer has left: no chip";
+    synth::ui::test_hooks::popoverMouseForTest().reset();
 }

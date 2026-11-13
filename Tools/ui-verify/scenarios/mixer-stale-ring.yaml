@@ -1,0 +1,29 @@
+# Bug: a mixer strip kept its focus ring after another tab took the keyboard, so arrows seemed to act on a strip that
+# no key reached.
+#
+# What a keyboard user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks the strip: it shows the focus outline.
+#   3. Presses Cmd+1 (the Timeline tab takes the keys), then Right (the tab strip's Right: the Mixer tab again).
+#   4. The Mixer is back with no ring on any strip: the keys are on the tab strip, not on the mixer.
+record: true
+save_project: mixer-stale-ring
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
+  - key: {keys: cmd+1}                                       # the Timeline tab; the keys go to the tab strip
+  - wait: {}
+  - key: {keys: right}                                       # the Mixer tab again
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "", within_ms: 1000}
+  - mark: {check: 1, name: mixer-back-no-stale-ring}

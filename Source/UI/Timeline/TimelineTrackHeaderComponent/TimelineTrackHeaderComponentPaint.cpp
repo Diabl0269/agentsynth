@@ -27,6 +27,11 @@ constexpr int kToggleWidth = 24;
 // left them still touching.
 constexpr int kToggleGap = 4;
 constexpr int kRowPadding = 3;
+// The name keeps the design system's space unit (6 px) off the mute button it sits beside.
+constexpr int kNameGap = 6;
+constexpr int kNameTopInset = 2; // evens out what the gap under the name takes
+// What the row's content leaves at the bottom so one pixel stays free above the resize strip.
+constexpr int kHeightHandleClearance = kHeightHandleThickness + 1 - kRowPadding;
 // Narrowed from 34 now that the badge draws a themed icon rather than "MIDI"/"AUD"/"AUTO" text —
 // the icon needs far less width than the longest label did, and the freed space goes to the name.
 constexpr int kKindBadgeWidth = 20;
@@ -107,7 +112,7 @@ void TimelineTrackHeaderComponent::resized() {
     heightHandle_.toFront(false);
     auto bounds = getLocalBounds().reduced(kRowPadding);
 
-    colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth));
+    colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth).withTrimmedBottom(kHeightHandleClearance));
     bounds.removeFromLeft(kRowPadding);
 
     // Top row: (fold arrow) + kind badge + (folded lane badge) + name, then Monitor/R/S/M right to left.
@@ -121,12 +126,15 @@ void TimelineTrackHeaderComponent::resized() {
     soloButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kToggleGap);
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    topRow.removeFromRight(kNameGap);
 
     layoutFoldArrowAndBadges(topRow);
-    nameLabel_.setBounds(topRow);
+    // The name ends the design system's space unit above the binding chip under it (the chip's row starts 1 px below
+    // this one), which is the gap its caption pairing measures.
+    nameLabel_.setBounds(topRow.withTrimmedTop(kNameTopInset).withTrimmedBottom(kNameGap - 1));
 
     // Bottom row: the binding chip, sharing with the channel chip when one is showing.
-    auto bottomRow = bounds.reduced(0, 1);
+    auto bottomRow = bounds.withTrimmedTop(1).withTrimmedBottom(kHeightHandleClearance);
     const auto showSlot = bottomRow.removeFromRight(TrackShowModuleButton::kSize);
     showModuleButton_.setBounds(showSlot.withSizeKeepingCentre(
         TrackShowModuleButton::kSize, juce::jmin(TrackShowModuleButton::kSize, showSlot.getHeight())));

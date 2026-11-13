@@ -138,7 +138,11 @@ bool KeyRing::handleKey(const juce::KeyPress& key) {
     } else if (key.isKeyCode(juce::KeyPress::returnKey) ||
                (key.isKeyCode(juce::KeyPress::spaceKey) && dynamic_cast<juce::ComboBox*>(current) == nullptr)) {
         activate(*current); // Space on a menu is not ours: it stays the app's play key
-    } else if (key.isKeyCode(juce::KeyPress::downKey) || key.isKeyCode(juce::KeyPress::escapeKey)) {
+    } else if (key.isKeyCode(juce::KeyPress::downKey)) {
+        leave();
+        if (onDown) // the ring is off first, so the target's own focus code sees a plain panel
+            onDown();
+    } else if (key.isKeyCode(juce::KeyPress::escapeKey)) {
         leave();
     } else if (!key.isKeyCode(juce::KeyPress::upKey)) {
         return false; // a tool digit, a letter: the panel's own shortcuts still work with the ring up

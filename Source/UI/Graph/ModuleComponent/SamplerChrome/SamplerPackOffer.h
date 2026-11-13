@@ -36,7 +36,8 @@ public:
     void lookAndFeelChanged() override;
     void parentHierarchyChanged() override;
 
-    /** True while no installed pack lists an instrument: the only time the offer is made. */
+    /** True until the core pack is installed (another pack, like the animals, does not end it): the only time the
+     *  offer is made. */
     static bool isNeeded();
 
     // ---- Test seams ----

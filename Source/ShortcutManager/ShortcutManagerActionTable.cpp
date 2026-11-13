@@ -114,6 +114,18 @@ void appendEqRows(std::vector<Entry>& rows) {
         rows.push_back(Entry{id, ShortcutCategory::EQ});
 }
 
+// Track Header -- keys read only while a track's header row holds focus (TimelineTrackHeaderComponent); last section.
+template <class Entry>
+void spliceTrackHeaderRow(std::vector<Entry>& rows) {
+    rows.push_back(Entry{"trackHeaderTogglePoly", ShortcutCategory::TrackHeader});
+}
+
+// Sampler Map -- keys read only while the Sampler's instrument map window holds focus (SamplerMapBlocks).
+template <class Entry>
+void spliceSamplerMapRow(std::vector<Entry>& rows) {
+    rows.push_back(Entry{"samplerMapPlaySelected", ShortcutCategory::SamplerMap});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
     spliceCommandPaletteRow(rows);
@@ -123,6 +135,8 @@ void spliceRows(std::vector<Entry>& rows) {
     spliceDockKeyRows(rows);
     spliceSongKeyRow(rows);
     appendEqRows(rows);
+    spliceTrackHeaderRow(rows);
+    spliceSamplerMapRow(rows);
 }
 
 } // namespace

@@ -133,3 +133,44 @@ TEST(TimelineTrackHeaderRowFit, TheVoiceToggleKeepsItsSquareAndShrinksOnlyWithTh
     EXPECT_LE(toggle.getHeight(), header.getHeight());
     EXPECT_EQ(toggle.getWidth(), synth::ui::TrackShowModuleButton::kSize) << "the width is the icon's, not the row's";
 }
+
+// Regression test for FRO941: the Mono | Poly text switch was 54 px wide in a row that could not hold it, so "Mono" was
+// cut off. Every header part with fixed words (the M/S/R letters, any other text button) must show them whole at the
+// narrowest header width, for every track kind and every control set. Parts that show user text (the name, the
+// binding chip, the channel chip) shrink and elide on purpose, so they must keep the full text in a tooltip instead.
+TEST(TimelineTrackHeaderRowFit, FixedWordsAreWholeAndElidedTextKeepsATooltipAtTheNarrowestHeaderWidth) {
+    const std::vector<std::pair<TrackKind, juce::String>> kinds = {
+        {TrackKind::Midi, "Lead"}, {TrackKind::Audio, "Vocal"}, {TrackKind::Automation, "Unassigned"}};
+    for (const auto& [kind, name] : kinds)
+        for (const bool everything : {true, false}) {
+            TimelineDoc doc;
+            const auto id = doc.addTrack(kind, name);
+            EverythingHost host;
+            host.withVoice = host.withChannel = host.withDrum = everything;
+            TimelineTrackHeaderComponent header(doc, id, &host);
+            header.setSize(synth::ui::TimelinePanelComponent::kMinTrackHeaderWidth,
+                           TimelineTrackHeaderComponent::kRowHeight);
+            header.refreshFromDoc();
+            const juce::String where = name + (everything ? " with every control" : "");
+            for (auto* child : header.getChildren()) {
+                if (!child->isVisible() || child->getBounds().isEmpty())
+                    continue;
+                const auto id = child->getComponentID();
+                const bool elides = id == "trackNameLabel" || id == "trackBindingChip" || id == "trackChannelChip";
+                if (elides) {
+                    auto* tip = dynamic_cast<juce::SettableTooltipClient*>(child);
+                    EXPECT_TRUE((tip != nullptr && tip->getTooltip().isNotEmpty()) || header.getTooltip().isNotEmpty())
+                        << where << ": " << id << " elides its text and has no tooltip";
+                    continue;
+                }
+                auto* button = dynamic_cast<juce::TextButton*>(child);
+                if (button == nullptr || button->getButtonText().isEmpty())
+                    continue;
+                const auto font = button->getLookAndFeel().getTextButtonFont(*button, button->getHeight());
+                juce::GlyphArrangement glyphs;
+                glyphs.addLineOfText(font, button->getButtonText(), 0.0f, 0.0f);
+                EXPECT_LE(glyphs.getBoundingBox(0, -1, true).getWidth(), static_cast<float>(button->getWidth()) - 4.0f)
+                    << where << ": '" << button->getButtonText() << "' in " << id << " is clipped";
+            }
+        }
+}

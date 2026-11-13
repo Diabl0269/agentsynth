@@ -46,6 +46,16 @@ juce::String flagValueFromArgs(const juce::StringArray& commandLineArgs, const j
 // (or the given path was not absolute).
 juce::String applySettingsDirForLaunch(const juce::StringArray& commandLineArgs);
 
+// The command-line flag that silences the metronome click for this process (the toggle, the count-in and every other
+// way of turning it on). Dev launches for an agent's in-app check pass it so a verification run is never heard across
+// the room; the audio device stays open for the checks that need it.
+inline constexpr const char* kMuteMetronomeFlag = "--mute-metronome";
+// The environment-variable equivalent of kMuteMetronomeFlag; same "1"/"true"/"yes" semantics.
+inline constexpr const char* kMuteMetronomeEnvVar = "AGENTSYNTH_MUTE_METRONOME";
+
+// True if `commandLineArgs` has kMuteMetronomeFlag, or `envValue` (kMuteMetronomeEnvVar) is truthy.
+bool isMuteMetronomeRequested(const juce::StringArray& commandLineArgs, const juce::String& envValue);
+
 // True if `commandLineArgs` requests automation-launch mode via kNoAudioDeviceFlag or kAutomationFlag, or if
 // `envValue` (as read from kNoAudioDeviceEnvVar) does.
 bool isNoAudioDeviceLaunch(const juce::StringArray& commandLineArgs, const juce::String& envValue);

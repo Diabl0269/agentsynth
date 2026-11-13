@@ -244,7 +244,10 @@ static void glideCopyOutOfOriginal(GraphEditor& graphEditor,
 // The graph half, then the timeline half, inside the caller's ONE undo transaction. Returns the new
 // track, or an invalid id when the copy failed (the caller checked kMaxTracks, so only a snippet
 // the insert path refuses can fail).
-synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const juce::String& copyName) {
+// A bulk duplicate passes `deferredCopies` to collect the copies and builds their cards once, in
+// showDuplicatedTracks, instead of rebuilding the whole canvas after every track.
+synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const juce::String& copyName,
+                                                 std::map<int, juce::AudioProcessorGraph::NodeID>* deferredCopies) {
     auto& graph = audioEngine.getGraph();
     const auto* source = timelineDoc.getTrack(trackId);
     if (source == nullptr)
@@ -281,12 +284,23 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
         }
         mapInnerAmountLanes(audioEngine, copies, uuidRemap);
         rewireBoundary(audioEngine, copies, uuidRemap);
-        graphEditor.updateComponents();
-        glideCopyOutOfOriginal(graphEditor, copies);
+        if (deferredCopies != nullptr) {
+            deferredCopies->insert(copies.begin(), copies.end());
+        } else {
+            graphEditor.updateComponents();
+            glideCopyOutOfOriginal(graphEditor, copies);
+        }
     }
 
     const int index = static_cast<int>(timelineDoc.getTracks().size());
     return timelineDoc.duplicateTrack(trackId, copyName, synth::ui::trackPaletteColour(index).getARGB(), uuidRemap);
+}
+
+void showDuplicatedTrackCards(GraphEditor& editor, const std::map<int, juce::AudioProcessorGraph::NodeID>& copies) {
+    if (copies.empty())
+        return;
+    editor.updateComponents();
+    glideCopyOutOfOriginal(editor, copies);
 }
 
 void MainComponent::duplicateTrack(synth::TrackId trackId) {

@@ -1,11 +1,11 @@
 #pragma once
 
-// Fixtures for tests that need real cards but not the card-body layout code. Header-only; not registered in
-// Tests/CMakeLists.txt.
+// Fixtures for tests that need real cards but not the card-body layout code. CardCanvas::add is defined in
+// CardCanvas.cpp, so this header does not carry the layout-override header into every test that builds a canvas.
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
-#include "UI/Graph/CardBody/CardLayoutOverride.h"
+#include "Modules/CardLayout.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -26,16 +26,9 @@ struct CardCanvas {
         editor.setSize(2400, 1800);
     }
 
+    /** Adds `processor` at (x, y) with a fresh uuid and, when given, `layout` as its card layout. */
     NodeID add(std::unique_ptr<juce::AudioProcessor> processor, int x, int y,
-               std::optional<synth::CardLayout> layout = std::nullopt) {
-        auto node = engine.getGraph().addNode(std::move(processor));
-        node->properties.set("x", x);
-        node->properties.set("y", y);
-        node->properties.set("uuid", juce::Uuid().toDashedString());
-        if (layout.has_value())
-            synth::setCardLayoutOverride(engine.getGraph(), nullptr, node->nodeID, layout);
-        return node->nodeID;
-    }
+               std::optional<synth::CardLayout> layout = std::nullopt);
 
     ModuleComponent* card(NodeID id) {
         for (auto* comp : editor.getModuleComponents())

@@ -98,12 +98,12 @@ tool buttons go through, so its lit and unlit fills equal theirs in every built-
 `ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `ToolbarButton` (Edit group,
 `ToolbarButtonLayout::Inline`) like Add Track and Snap, so it has their chip, caption, hover tween and focus ring. Its
 icon is the mode: `Icon::ClipSizingTrim` (a clip edge cutting a note, the part past it faded), `ClipSizingCarry` (one
-arrow over the notes and the edge: they travel together) and `ClipSizingStretch` (a double arrow between two edges),
+arrow over the notes and the edge: they travel together) and `ClipSizingStretch` (a spring pulled between two edges),
 the way Cubase badges its sizing modes on the selection tool. With "Show button labels" on (`setToolbarLabelsShown`) the
 caption is the short mode name ("Trim", "Carry", "Stretch"); off, the button is the chip alone. Either way its width is
 `getFixedWidth()`: the widest caption's width (just the chip with labels off), so choosing a mode never resizes it or moves its
-neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off.
-A click (or Space while it has focus) opens a menu of the three modes, each its full name and one short
+neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off. A small notch in the chip's lower-right corner (a ~5 px triangle, accent mixed 70% toward the text colour, clipped inside the chip's rounded border, painted in `ClipSizingButton::paintButton`) marks the menu; it never touches the glyph, which keeps its full size and centred place, and it is the same with labels off.
+A click (or Enter while it has focus; Space stays transport play/stop) opens a menu of the three modes, each its full name and one short
 clause on what it does to the clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
 so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
 at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select

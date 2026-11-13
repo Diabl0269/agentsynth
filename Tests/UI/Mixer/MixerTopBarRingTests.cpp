@@ -67,6 +67,7 @@ struct RingFixture {
         mc.simulateAddAudioTrackClick();
         panel = &mc.getBottomDock().getMixerPanel();
         panel->setSize(1400, 300);
+        panel->setVisible(true); // a hidden panel has no keyboard
         panel->toggleSidePane(true);
         panel->rebuild();
         panel->resized();
@@ -151,6 +152,20 @@ TEST(MixerTopBarRingTest, DownLeavesAndShiftUpNudgesTheFaderAgain) {
 
     EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)));
     EXPECT_NEAR(gainOf(f.mc, nodeId), before + 1.0f, 1.0e-3f);
+}
+
+// Regression test for FRO1524: with no strip focused, Down from the bar left an unringed panel.
+TEST(MixerTopBarRingTest, DownFromTheBarLandsOnTheFirstStripInOnePress) {
+    RingFixture f;
+    ASSERT_EQ(f.panel->getFocusedColumnIndexForTest(), -1);
+    ASSERT_TRUE(f.panel->keyPressed(cmdUp()));
+    EXPECT_FALSE(f.panel->isFocusedColumnOutlineShownForTest());
+
+    EXPECT_TRUE(f.panel->keyPressed(plain(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.ring().isActive());
+    EXPECT_EQ(f.panel->getFocusedColumnIndexForTest(), 0);
+    EXPECT_TRUE(f.panel->isFocusedColumnOutlineShownForTest());
+    EXPECT_TRUE(f.panel->getStripColumnForTest(0)->isKeyboardFocusedForTest());
 }
 
 TEST(MixerTopBarRingTest, EscapeAndLosingFocusLeaveTheRing) {

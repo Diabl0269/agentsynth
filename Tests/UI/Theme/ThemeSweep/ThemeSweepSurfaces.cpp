@@ -189,6 +189,7 @@ juce::DialogWindow* openSamplerMap(SweepEnvironment& env) {
     env.keepAlive(sampler);
     auto view =
         std::make_unique<SamplerMapView>(*sampler, [](const std::vector<synth::sampler::RegionSpec>&) { return true; });
+    view->onAppShortcut = synth::ui::makeAppShortcutRelay(&env.appAnchor());
     return openSamplerMapWindow(std::move(view), nullptr);
 }
 

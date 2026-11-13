@@ -11,7 +11,10 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -64,6 +67,15 @@ ModuleComponent::HostedCardBinding::HostedCardBinding(ModuleComponent& card, syn
         card_.rebuildHostedPluginCard();
         card_.relayoutHostedPluginCard();
     };
+    // Showing, hiding or joining an output re-lays the card the way a Dual I/O change does; the cables left on an
+    // output that went hidden are dropped first (an invisible jack cannot be unplugged).
+    module.onOutputsChanged = [this] {
+        card_.owner.dropRoutingsOnHiddenJacks(card_.nodeId);
+        if (card_.hostedOutputs_ != nullptr) // the aux jacks glide, then the card is re-laid at its final rows
+            card_.hostedOutputs_->modelChanged([this] { card_.applyDualIOLayoutChange(); });
+        else
+            card_.applyDualIOLayoutChange();
+    };
     module.onParameterContextMenu = [this](const juce::String& paramId, juce::PopupMenu& menu) {
         appendParameterMenuItems(paramId, menu);
     };
@@ -84,6 +96,7 @@ void ModuleComponent::HostedCardBinding::shutdown() {
     if (auto* module = module_.get()) {
         module->removeInstanceObserver(this);
         module->onCardLayoutChanged = nullptr;
+        module->onOutputsChanged = nullptr;
         module->onParameterContextMenu = nullptr;
     }
     if (store_ != nullptr)
@@ -112,6 +125,8 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
     card_.unbindHostedPluginCard(/*paramsAlive*/ true);
     if (card_.dualIOButton != nullptr)
         card_.dualIOButton->setVisible(false); // nothing to split until the next instance publishes
+    if (card_.hostedOutputs_ != nullptr)
+        card_.hostedOutputs_->routingButton().setVisible(false);
 
     juce::Component::SafePointer<ModuleComponent> safeCard(&card_);
     juce::MessageManager::callAsync([safeCard] {
@@ -122,8 +137,8 @@ void ModuleComponent::HostedCardBinding::hostedInstanceGone() {
 
 void ModuleComponent::HostedCardBinding::hostedInstanceLive() {
     card_.repaint(); // the shown name can change when the plugin publishes
-    if (card_.dualIOButton != nullptr)
-        card_.dualIOButton->setVisible(module_.get() != nullptr && module_->hasStereoPairInstance());
+    card_.syncHostedRoutingButtons();
+    card_.reconcileHostedModKnobs();
     card_.rebuildHostedPluginCard();
     card_.refreshHostedLoadStatus(); // a success clears the reason; it re-measures only when it changed
     card_.relayoutHostedPluginCard();
@@ -268,6 +283,21 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     hostedStatusLabel->setVisible(false);
     addChildComponent(hostedStatusLabel.get());
 
+    // "Turn on": the way back after "Open without it" switched this plugin off for the open. It reloads the
+    // plugin into this module, which still holds its saved state, card layout and mod slots, so it is not an undo
+    // step (it restores what the project already holds). Same button kind as Open Editor.
+    turnPluginBackOnButton = std::make_unique<juce::TextButton>("Turn on");
+    turnPluginBackOnButton->setComponentID("turnPluginBackOn");
+    turnPluginBackOnButton->setTitle("Turn this plugin back on"); // named after the plugin when it shows
+    turnPluginBackOnButton->setTooltip("Load this plugin again in this project");
+    turnPluginBackOnButton->onClick = [this] {
+        if (auto* hostedModule = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr) {
+            hostedModule->turnBackOn();
+            refreshHostedLoadStatus(); // loading now: the status and this button go, the card re-measures
+        }
+    };
+    addChildComponent(turnPluginBackOnButton.get());
+
     // One split button for adding controls: the list picker on the left, "add by moving a control in the
     // plugin" on the right (the same split button as the mod dot panel's "Add source").
     addControlsSplit = std::make_unique<synth::ui::SplitButton>(
@@ -288,12 +318,49 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     addControlsSplit->rightHalf().onClick = [this] { setPluginTouchToAdd(!isPluginTouchToAdd()); };
     addAndMakeVisible(addControlsSplit.get());
 
+    hostedOutputs_ = std::make_unique<synth::ui::HostedOutputsStrip>(
+        *this, hosted,
+        synth::ui::HostedOutputsStrip::Callbacks{[this] {
+                                                     updateLayout();
+                                                     owner.notifyModuleContentChanged();
+                                                     repaint();
+                                                 },
+                                                 [this] { owner.handleModuleResized(this); },
+                                                 [this] { synth::ui::showHostedOutputsPanel(*this); },
+                                                 [this] { synth::ui::toggleHostedOutputsFold(*this); }});
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        hostedOutputs_->setIcon(lf->getIcon(synth::theme::Icon::ModuleDualIO).get());
     hostedCard_ = std::make_unique<HostedCardBinding>(*this, hosted, owner.getPluginCardLayoutStore());
+    syncHostedRoutingButtons();
     onChooseKnobsRequested = [this] { showPluginKnobPicker(); };
-    if (hosted.hasInstance())
+    if (hosted.hasInstance()) {
+        reconcileHostedModKnobs();
         rebuildHostedPluginCard();
-    else
+    } else
         refreshHostedLoadStatus(/*relayoutOnChange*/ false); // createControls() ends with the measure
+}
+
+// Load-time reconciliation, once per publish (not a user edit, so no undo step): a project saved before a mod cable on
+// a plugin parameter always added its knob can hold a slot whose parameter is not on the card, so the cable would
+// end at nothing. Every such parameter gets its knob, through the same source bindHostedModTarget uses. That writes
+// this instance's layout override (the card only, never the plugin's shared default). The module's layout hook is
+// off while it runs: the caller rebuilds and re-measures right after, once.
+void ModuleComponent::reconcileHostedModKnobs() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || !hosted->hasInstance() || !hosted->takeModKnobReconcile())
+        return;
+
+    synth::ui::HostedCardLayoutSource source(*hosted, owner.getPluginCardLayoutStore(),
+                                             owner.getAudioEngine().getGraph(), nodeId, /*undoManager=*/nullptr);
+    auto onLayoutChanged = std::move(hosted->onCardLayoutChanged);
+    hosted->onCardLayoutChanged = nullptr;
+    for (int k = 0; k < synth::HostedPluginModule::kMaxModSlots; ++k) {
+        const auto paramId = hosted->modSlotParamId(synth::HostedPluginModule::kModChannelBase + k);
+        if (paramId.isNotEmpty() &&
+            source.parameterState(paramId) == synth::ui::HostedCardLayoutSource::ParameterState::Available)
+            source.showParameter(paramId);
+    }
+    hosted->onCardLayoutChanged = std::move(onLayoutChanged);
 }
 
 // The reason applies while there is no instance, no load is in flight and the module holds a message. It is
@@ -306,7 +373,9 @@ void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
 
     const bool show = !hosted->hasInstance() && !hosted->isLoading() && hosted->getStatusMessage().isNotEmpty();
     const juce::String message = show ? hosted->getStatusMessage() : juce::String();
-    const bool visibilityChanged = show != hostedStatusLabel->isVisible();
+    const bool showTurnOn = show && hosted->isSwitchedOffAfterCrash() && turnPluginBackOnButton != nullptr;
+    const bool turnOnChanged = turnPluginBackOnButton != nullptr && showTurnOn != turnPluginBackOnButton->isVisible();
+    const bool visibilityChanged = show != hostedStatusLabel->isVisible() || turnOnChanged;
 
     if (hostedStatusLabel->getText() != message)
         hostedStatusLabel->setText(message, juce::dontSendNotification);
@@ -315,6 +384,13 @@ void ModuleComponent::refreshHostedLoadStatus(bool relayoutOnChange) {
         openPluginEditorButton->setTooltip(tooltip);
     if (visibilityChanged) {
         hostedStatusLabel->setVisible(show);
+        if (turnPluginBackOnButton != nullptr) {
+            turnPluginBackOnButton->setVisible(showTurnOn);
+            if (showTurnOn) {
+                turnPluginBackOnButton->setTitle("Turn " + hosted->getPluginName() + " back on");
+                turnPluginBackOnButton->setTooltip("Load " + hosted->getPluginName() + " again in this project");
+            }
+        }
         if (relayoutOnChange)
             relayoutHostedPluginCard();
     }
@@ -447,6 +523,7 @@ void ModuleComponent::releaseHostedPluginCard() {
     }
     unbindHostedPluginCard(paramsAlive);
     addControlsSplit.reset();
+    hostedOutputs_.reset();
     hostedCard_.reset();
 }
 
@@ -480,6 +557,8 @@ void ModuleComponent::handleHostedGesture(const juce::AudioProcessorParameter& p
 // Both buttons share one row at the top of the body, each half of the narrow band. The knobs, toggles and
 // combos the layout put on the card are placed by the generic grid in layoutDefaultContent, below this.
 int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply) {
+    if (apply && hostedOutputs_ != nullptr)
+        hostedOutputs_->layout();
     if (openPluginEditorButton == nullptr)
         return y;
 
@@ -496,6 +575,11 @@ int ModuleComponent::layoutHostedPluginChrome(int y, int narrowX, int narrowW, b
             hostedStatusLabel->setBounds(narrowX, y, narrowW, kHostedStatusLines * kHostedStatusLineHeight);
         y += kHostedStatusLines * kHostedStatusLineHeight + 6;
     }
+    if (turnPluginBackOnButton != nullptr && turnPluginBackOnButton->isVisible()) {
+        if (apply)
+            turnPluginBackOnButton->setBounds(narrowX, y, (narrowW - 4) / 2, kRowHeight);
+        y += kRowHeight + 6;
+    }
     return y;
 }
 
@@ -505,4 +589,19 @@ void ModuleComponent::reflectHostedRestingValues() {
         return;
     for (auto* attachment : hostedAttachments_)
         attachment->reflectRestingValue();
+}
+
+// ---- Outputs ----------------------------------------------------------------------------------------------
+
+// A plugin with more than one output bus replaces the Dual I/O button with the Outputs button (the main bus's
+// Joined | L/R switch lives in the panel); a plain stereo pair keeps the Dual I/O flip.
+void ModuleComponent::syncHostedRoutingButtons() {
+    auto* hosted = hostedCard_ != nullptr ? hostedCard_->getModule() : nullptr;
+    if (hosted == nullptr || hostedOutputs_ == nullptr)
+        return;
+    const bool multi = hosted->hasMultipleOutputBuses();
+    if (dualIOButton != nullptr)
+        dualIOButton->setVisible(hosted->hasStereoPairInstance() && !multi);
+    hostedOutputs_->syncButton();
+    hostedOutputs_->snapToModel();
 }

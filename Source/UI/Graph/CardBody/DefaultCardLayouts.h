@@ -16,6 +16,7 @@ struct CardDimRule {
     juce::StringArray watched; ///< The parameter ids whose change re-evaluates `dims`.
     std::function<bool(juce::AudioProcessor& module)> dims;
     bool hides = false; ///< The control leaves the card (its cell stays) while `dims` returns true, instead of greying.
+    bool collapses = false; ///< With `hides`: its cell goes too, so the controls after it close up (the Macros).
     juce::String
         disabledHint; ///< Not empty: while `dims` returns true the control is also disabled, and this is its tooltip.
 };
@@ -31,11 +32,15 @@ public:
         CardLayout layout;
         int defaultRevision = 1;
         std::vector<CardDimRule> dimRules; ///< Applied to any layout of this type.
+        /** Built-in presets: named layouts the Edit Layout Preset menu offers before the user's own. */
+        std::vector<std::pair<juce::String, CardLayout>> presets;
     };
 
     /** Replaces any entry for `moduleType`. */
     void add(const juce::String& moduleType, CardLayout layout, int defaultRevision,
              std::vector<CardDimRule> dimRules = {});
+    /** Adds a built-in preset to `moduleType`'s entry (the entry must exist). */
+    void addPreset(const juce::String& moduleType, const juce::String& name, CardLayout layout);
     /** Null when the type has no code default (the automatic layout applies). */
     const Entry* find(const juce::String& moduleType) const;
 

@@ -379,6 +379,7 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.h
     Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollTestState.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollCopyDrag.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
@@ -578,6 +579,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackLayout.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentJackMemo.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
     Source/UI/Graph/PortPanel/PortConnector.h
@@ -839,6 +842,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsMacros.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSequencers.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
     Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h

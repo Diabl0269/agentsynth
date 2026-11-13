@@ -26,10 +26,17 @@
 #include <vector>
 
 class AudioEngine;
+namespace synth::cardbody {
+struct BodyGeometry; // Forward declaration — see UI/Graph/CardBody/CardBodyGeometry.h
+}
 class GraphEditor;                // Forward declaration
 class EQCurveComponent;           // Forward declaration — see UI/ModuleViews/EQCurveComponent.h
 class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
 class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
+struct ModuleComponentJackMemo;   // Forward declaration — see ModuleComponentJackMemo.h
+namespace synth {
+class CardHeightGlide; // Forward declaration -- see UI/Graph/CardBody/CardHeightGlide.h
+}
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
@@ -38,6 +45,7 @@ class CurveEditorComponent;  // Forward declaration — see UI/ModuleViews/Curve
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
 class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
 class NoteLengthBox;         // Forward declaration — see UI/Layout/NoteLengthMenu/NoteLengthBox.h
+class HostedOutputsStrip;    // Forward declaration — see UI/Graph/HostedOutputs/HostedOutputsStrip.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -86,10 +94,11 @@ public:
     /** Test mode: selected, moduleType, title and nodeId (docs/development/test-mode.md). */
     void addTestModeState(juce::DynamicObject& into) const override;
     juce::AudioProcessor* getModule() const { return module; }
+    /** Where the body may go: the card's width, less the jack-label gutter on the Macros card. */
+    synth::cardbody::BodyGeometry bodyGeometry() const;
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
-    // Safely detach from the processor before graph rebuild.
-    // Removes listeners, destroys attachments, stops timer, nulls module pointer.
+    // Detach from the processor before a graph rebuild: drops listeners and attachments, stops the timer.
     void detachFromProcessor();
 
     /** A docked macro-port widget's jack colour: the port's own colour when set, else `kindTint` (same rule as
@@ -97,8 +106,7 @@ public:
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
     // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
-    // transient, so a pick pushes no undo step. Each setter is idempotent: it reports whether this
-    // surface actually changed, so a tick that left the colour alone repaints nothing.
+    // transient, so a pick pushes no undo step. Each setter is idempotent and reports whether it changed.
     bool setPortColourPreview(juce::Colour c) {
         if (portColourPreview_ && *portColourPreview_ == c)
             return false;
@@ -112,13 +120,13 @@ public:
         return true;
     }
 
-    // The jack's actual colour (preview > stored > tint) -- mirrors paint, so a headless test can read it.
+    // The jack's actual colour (preview > stored > tint), as paint draws it.
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
     bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
-    /** Re-measures the card after its visible port count changed outside a parameter gesture (Audio Input's jacks
-     *  follow the audio device); the same steps applyMacroCountChange takes. */
+    /** Re-measures the card after its visible port count changed outside a parameter gesture. */
     void refreshPortLayout();
+    synth::CardHeightGlide& heightGlideForTest(); // creates it on first use
 
     /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
      *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
@@ -207,8 +215,8 @@ public:
 
     /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
-    /** Message thread only. While alive, each card works out drawnInputJackIndices() once; nothing may change a card's
-     *  controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
+    /** Message thread only. While alive, each card reads its modulation targets, its jack column and each jack's knob
+     *  anchor once; nothing may change a card's controls or ports meanwhile (GraphEditor's cable rebuild opens one). */
     struct JackLayoutPass {
         JackLayoutPass();
         ~JackLayoutPass();
@@ -222,6 +230,8 @@ public:
     std::optional<juce::Point<float>> foldedJackCentre(int destChannel) const;
 
 private:
+    /** getModulationTargets(), read once per JackLayoutPass; outside one, filled into `fresh`. */
+    const std::vector<ModulationTarget>& modulationTargetsForPass(std::vector<ModulationTarget>& fresh) const;
     /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
@@ -355,12 +365,12 @@ public:
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
-    /** Hosted-plugin card only; empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
-    std::function<void()> onChooseKnobsRequested;
+    std::function<void()> onChooseKnobsRequested; // Hosted-plugin card only; empty otherwise
 
     /** No-op unless this is a live Hosted Plugin card: opens the parameter list picker beside the split button.
      *  See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    synth::ui::HostedOutputsStrip* getHostedOutputs() const { return hostedOutputs_.get(); } // multi-bus plugins
     /** Hosted Plugin card only: turns "add by moving a control in the plugin" on (opens the plugin's window, adds
      *  each control moved there) or off. Lights the split button's hand half and asks the owner to show or hide
      *  the window's "Adding controls" tab. Off is a no-op when it was not on. */
@@ -452,8 +462,7 @@ private:
     bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
-    mutable std::vector<int> drawnJacksMemo_; // drawnInputJackIndices() for drawnJacksPass_ (JackLayoutPass)
-    mutable juce::uint32 drawnJacksPass_ = 0;
+    mutable std::unique_ptr<ModuleComponentJackMemo> jackMemo_; // one JackLayoutPass's answers (see the .h)
     juce::ComponentDragger dragger;
 
     // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
@@ -515,11 +524,9 @@ private:
         return widget;
     }
 
-    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
-    // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
-    // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
-    // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
-    // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
+    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` / `comboBoxes`. Filled only
+    // in createControls()'s generic auto-UI branch; a control built by bespoke chrome, or the ExternalMidiModule
+    // device/channel combos, gets a null entry so the arrays stay aligned and a match is a safe no-op.
     juce::Array<juce::RangedAudioParameter*> sliderParams;
     juce::Array<juce::RangedAudioParameter*> comboParams;
 
@@ -586,7 +593,8 @@ private:
     synth::CardBlockFade scopeFade_;
     synth::CardBlockFade responseFade_;
     std::unique_ptr<synth::ui::MorphShapesCard> morphCard_; // Filter, LFO: the Custom map and button
-    bool settlingFootprint_ = false; // measuring at the final footprint (CardBlockFade::setShown)
+    bool settlingFootprint_ = false;                      // measuring at the final footprint (CardBlockFade::setShown)
+    std::unique_ptr<synth::CardHeightGlide> heightGlide_; // the Macros bank's height, drawn gliding to its count
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
@@ -595,7 +603,8 @@ private:
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
-    std::unique_ptr<juce::Label> hostedStatusLabel; // Hosted Plugin: why the load failed, under Open Editor
+    std::unique_ptr<juce::Label> hostedStatusLabel;           // Hosted Plugin: why the load failed, under Open Editor
+    std::unique_ptr<juce::TextButton> turnPluginBackOnButton; // Hosted Plugin: "Turn on", after a crash switched it off
 
     // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
@@ -603,6 +612,7 @@ private:
     juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
     class HostedCardBinding;
     std::unique_ptr<HostedCardBinding> hostedCard_;
+    std::unique_ptr<synth::ui::HostedOutputsStrip> hostedOutputs_; // the fold line and aux jack motion; multi-bus only
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     ThresholdControlComponent* thresholdControl = nullptr; // owned by cardBody_ (its Threshold view)
 
@@ -667,10 +677,9 @@ private:
     std::map<int, float> gestureStartValues;
     juce::Point<int> dragStartPosition;
 
-    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
-    // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
-    // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
-    // longer toggles-without-dragging — see cmdReparentPending below.
+    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A Shift-click toggles
+    // selection WITHOUT arming the dragger, and this flag stops the next mouseDrag from moving a component the
+    // dragger was never started on. Cmd no longer toggles-without-dragging — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
@@ -720,11 +729,12 @@ private:
     void unbindHostedPluginCard(bool paramsAlive);
     // detachFromProcessor()'s half: leaves the module's observers and unbinds; safe after the module is gone.
     void releaseHostedPluginCard();
-    // Re-measures the card and asks the canvas to accept its new size.
-    void relayoutHostedPluginCard();
+    void relayoutHostedPluginCard(); // re-measures the card and asks the canvas to accept its new size
     // Shows/hides the load-failure reason and Open Editor's tooltip; re-measures on change unless told not to.
     void refreshHostedLoadStatus(bool relayoutOnChange = true);
+    void reconcileHostedModKnobs();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
+    void syncHostedRoutingButtons(); // Outputs button on a multi-bus plugin, Dual I/O on a plain pair
     // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
     // External MIDI's device + channel combos, extracted out of createControls to keep
@@ -801,6 +811,7 @@ private:
     void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
     /** Hosted-card counterpart for a toggle/choice control (no RangedAudioParameter to key on). */
     void showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName);
+    bool showMacroWidgetMenu(juce::Component& widget); ///< Right-click on an XY pad or button; false for others.
     /** Right-click on a hosted-card KNOB: "Automate..." plus the shared MIDI Learn block. */
     void showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName);
 
@@ -872,23 +883,15 @@ private:
 
     void updateDualIOTooltip();
 
-    // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
-    // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
-    // clear of the new footprint). Message thread only.
-    void applyMacroCountChange();
+    void applyMacroCountChange(); // Macro bank only: re-lays out for the new "Knobs" count, the height gliding
+    /** updateLayout() with a Macros bank's height gliding; true when a glide began or runs (room is made). */
+    bool updateLayoutGliding();
 
-    // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
-    // rows above `count` without destroying their sliders or parameters.
-    void layoutMacroBank(int count);
-
-    // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
-    // rather than re-deriving the geometry, so content can never land on top of a port label —
-    // which is exactly what happened when two separate copies of the formula drifted apart.
+    // First y below the header, the MIDI row and every visible jack, derived from getPortCenter() so content never
+    // lands on a port label.
     int getContentTopY();
 
-    // Single source of truth for the default (non-Sequencer/ADSR/keyboard) body layout.
-    // apply == false measures only and touches no bounds; apply == true positions the children.
-    // Returns the total height the body needs, including bottom padding.
+    // The default (non-Sequencer/ADSR/keyboard) body layout; apply == false only measures. Returns the height needed.
     int layoutDefaultContent(bool apply);
 
     // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.

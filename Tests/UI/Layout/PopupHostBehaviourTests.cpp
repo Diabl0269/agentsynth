@@ -6,14 +6,19 @@
 // modes; the frames of the whole open-and-close sequence must rise once and fall once (isUnimodal), which is what a
 // close-and-reopen flicker breaks.
 #include "../../TestWait.h"
+#include "AudioEngine/AudioEngine.h"
 #include "NativeWindowTestGuard.h"
 #include "PopoverRegistry.h"
 #include "PopupAlphaTrace.h"
 #include "PopupTestCleanup.h"
 #include "TestMode/AutomationHiding.h"
+#include "TestMode/TestModeInput.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/DrumMachine/DrumIdeasPanel.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/HostedOutputs/HostedOutputsPanel.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
@@ -57,6 +62,19 @@ std::unique_ptr<juce::Component> sized(std::unique_ptr<juce::Component> content)
         content->setSize(280, 240);
     return content;
 }
+
+// The Outputs panel on a graph with no Hosted Plugin node: it shows its title and footer, which is all the open, close
+// and fade frames need. Owns the engine and editor it points at.
+struct OutputsPanelRig {
+    AudioEngine engine;
+    GraphEditor editor{engine};
+};
+struct OwnedOutputsPanel
+    : private OutputsPanelRig
+    , public synth::ui::HostedOutputsPanel {
+    OwnedOutputsPanel()
+        : synth::ui::HostedOutputsPanel(editor, juce::AudioProcessorGraph::NodeID()) {}
+};
 
 std::vector<ContentEntry> contentEntries() {
     const auto colourPicker = [] {
@@ -123,6 +141,7 @@ std::vector<ContentEntry> contentEntries() {
         {"CardLayoutControlPanel", {}, "exempt: built from a live card's control options inside an editing session"},
         {"CardLayoutOnCardEditor", {}, "exempt: opens a session on a card of a live graph with an undo manager"},
         {"ControlStylePanel", {}, "exempt: needs a GraphEditor and one of its cards"},
+        {"HostedOutputsPanel", [] { return std::make_unique<OwnedOutputsPanel>(); }, nullptr},
         {"AccountFlowPanel", {}, "exempt: needs the account service and its sign-in state"},
         {"DualIOPerModulePopupContent", {}, "exempt: the class is private to PreferencesSettingsTabGraphBehaviour.cpp"},
     };
@@ -459,5 +478,118 @@ TEST_F(PopupHostBehaviour, APressWhileTheOpeningHoldIsStillDownIsNotADismissal) 
     EXPECT_TRUE(slot.isOpen());
     holdDown = false;
     box->inputAttemptWhenModal();
+    expectGone(slot);
+}
+
+namespace {
+
+// juce gives no hover tip outside the foreground app, and a CI test process never is; a hidden automation process
+// counts as foreground, so the real tip path runs on every platform.
+struct TipsCountAsForeground {
+    TipsCountAsForeground() {
+        juce::ComponentPeer::hideWindowsForAutomation = true;
+        juce::ComponentPeer::ignoreWindowOrderForHitTests =
+            true; // as the automation launch does: a hover finds its window
+    }
+    ~TipsCountAsForeground() {
+        juce::ComponentPeer::hideWindowsForAutomation = previous;
+        juce::ComponentPeer::ignoreWindowOrderForHitTests = previousOrder;
+    }
+    const bool previous = juce::ComponentPeer::hideWindowsForAutomation;
+    const bool previousOrder = juce::ComponentPeer::ignoreWindowOrderForHitTests;
+};
+
+void collectTipCarriers(juce::Component& root, std::vector<juce::Component*>& into) {
+    if (auto* client = dynamic_cast<juce::TooltipClient*>(&root);
+        client != nullptr && client->getTooltip().isNotEmpty())
+        into.push_back(&root);
+    for (auto* child : root.getChildren())
+        collectTipCarriers(*child, into);
+}
+
+AppTooltipWindow* tooltipWindowOf(juce::Component& box) {
+    for (auto* child : box.getChildren())
+        if (auto* tip = dynamic_cast<AppTooltipWindow*>(child))
+            return tip;
+    return nullptr;
+}
+
+} // namespace
+
+// Regression test for FRO1729: a popover is its own native window, so the main window's tooltip window drew its tips
+// under it and nothing in a popover ever showed one. The tip text was asserted as a string, never as a shown tip.
+TEST_F(PopupHostBehaviour, EveryContentWithATipHostsATooltipWindowAboveItInItsOwnWindow) {
+    TipsCountAsForeground foreground;
+    int withTips = 0;
+    for (const auto& entry : contentEntries()) {
+        if (!entry.make)
+            continue;
+        SCOPED_TRACE(entry.name);
+        ModeGuard guard(Mode::AnimationsOff);
+        PopoverSlot slot;
+        std::vector<float> alphas;
+        auto* box = openAndArrive(slot, entry, Mode::AnimationsOff, alphas);
+        ASSERT_NE(box, nullptr);
+        auto* tip = tooltipWindowOf(*box);
+        ASSERT_NE(tip, nullptr) << "the popover has no tooltip window of its own: its tips draw under it";
+        EXPECT_EQ(tip->getTopLevelComponent(), box) << "the tip must live in the popover's window";
+        EXPECT_EQ(box->getIndexOfChildComponent(tip), box->getNumChildComponents() - 1) << "above the content";
+        std::vector<juce::Component*> carriers;
+        collectTipCarriers(*slot.content(), carriers);
+        for (auto* carrier : carriers) {
+            EXPECT_EQ(carrier->getTopLevelComponent(), tip->getTopLevelComponent());
+            EXPECT_EQ(tip->getTipFor(*carrier), dynamic_cast<juce::TooltipClient*>(carrier)->getTooltip())
+                << carrier->getName() << ": its tip is not served";
+        }
+        withTips += carriers.empty() ? 0 : 1;
+        slot.close();
+        expectGone(slot);
+    }
+    EXPECT_GE(withTips, 3) << "the sweep found almost no tip to check";
+}
+
+// Regression test for FRO1729: the greyed "Play the scale" row says why while the song plays. The real pointer events
+// go through the popup's peer; the tip must show in the popup, naming the reason.
+TEST_F(PopupHostBehaviour, TheGreyedPlayTheScaleRowShowsItsReasonWhenHovered) {
+    TipsCountAsForeground foreground;
+    ModeGuard guard(Mode::AnimationsOff);
+    PopoverSlot slot;
+    ASSERT_EQ(slot.open(
+                  [] {
+                      auto picker =
+                          std::make_unique<KeyPicker>(KeyPicker::Options{}, [](std::optional<synth::MusicalScale>) {});
+                      picker->setPlayScale(true, true, true, [](bool) {});
+                      return sized(std::move(picker));
+                  },
+                  area, &app, {.trigger = &trigger}),
+              PopoverSlot::Result::Opened);
+    auto* box = slot.box();
+    ASSERT_NE(box, nullptr);
+    auto* row = box->findChildWithID("keyPickerPlayScale");
+    if (row == nullptr)
+        for (auto* c : box->getChildren())
+            if (row == nullptr)
+                row = c->findChildWithID("keyPickerPlayScale");
+    ASSERT_NE(row, nullptr);
+    ASSERT_FALSE(row->isEnabled());
+    auto* tip = tooltipWindowOf(*box);
+    ASSERT_NE(tip, nullptr);
+    juce::String error;
+    // The pointer is put back on the row every turn: juce re-reads the user's real cursor now and then, which would
+    // move the hover off the row on a machine someone is using.
+    const auto hover = [&] {
+        return synth::testmode::sendMouse({row, row->getLocalBounds().getCentre(), {}, false}, error);
+    };
+    ASSERT_TRUE(hover()) << error;
+    const auto text = [tip] {
+        auto state = juce::DynamicObject::Ptr(new juce::DynamicObject());
+        tip->addTestModeState(*state);
+        return state->getProperty("tipText").toString();
+    };
+    EXPECT_TRUE(pumpUntil([&] { return hover() && tip->isVisible() && text().isNotEmpty(); })) << "no tip was shown";
+    EXPECT_EQ(text(), "The scale is not played while the song is playing. Stop playback to hear it.");
+    EXPECT_TRUE(box->getLocalBounds().contains(tip->getBounds())) << "the tip is cut off by the popup's window";
+    synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
+    slot.close();
     expectGone(slot);
 }

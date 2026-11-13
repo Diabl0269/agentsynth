@@ -25,13 +25,14 @@ struct ModChipStack {
     float alpha = 1.0f;
 };
 
-/** The chip's own shown-fade: 160 ms in, 110 ms out (a plain fade under Reduce Motion, instant with Animations Off).
- *  It keeps the last stack's rows through the fade-out so the chip fades with its text, and repaints `card` on every
- *  frame. */
+/** The chip's own shown-fade: 220 ms in, 160 ms out, slower than a tooltip's 160/110 because the chip shows the instant
+ *  the pointer rests on a knob, with no hover delay to soften its entrance (a plain fade under Reduce Motion, instant
+ * with Animations Off). It keeps the last stack's rows through the fade-out so the chip fades with its text, and
+ * repaints `card` on every frame. */
 class ModChipFade {
 public:
-    static constexpr double kFadeInMs = 160.0;
-    static constexpr double kFadeOutMs = 110.0;
+    static constexpr double kFadeInMs = 220.0;
+    static constexpr double kFadeOutMs = 160.0;
 
     explicit ModChipFade(juce::Component& card);
 

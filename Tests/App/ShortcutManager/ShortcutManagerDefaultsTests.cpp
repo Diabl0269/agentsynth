@@ -35,6 +35,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
         "pianoRollToggleVelocityLane",
+        // SamplerMapBlocks::keyPressed
+        "samplerMapPlaySelected",
         // DrumMachineComponent::keyPressed
         "drumMachineToggleHit",
         "drumMachineToggleAccent",
@@ -157,6 +159,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelinePasteTracks",
         "timelineShowFocusedTrackModule",
         "timelineToggleFocusedTrackPluginWindow",
+        "trackHeaderTogglePoly", // TimelineTrackHeaderComponent::keyPressed
     };
     return ids;
 }

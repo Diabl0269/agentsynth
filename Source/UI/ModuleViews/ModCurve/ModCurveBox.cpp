@@ -37,8 +37,8 @@ ModCurveBox::ModCurveBox(std::shared_ptr<ModCurveEditTarget> target, ModCurvePre
         addAndMakeVisible(*chip);
         chips_.push_back(std::move(chip));
     }
-    savedButton_.setTitle("Saved curves");
-    savedButton_.setTooltip("Your saved curves");
+    savedButton_.setTitle("Load a saved curve");
+    savedButton_.setTooltip("Load a saved curve");
     savedButton_.onClick = [this] { showSavedMenu(); };
     saveButton_.setTitle("Save curve as preset...");
     saveButton_.setTooltip("Save curve as preset...");
@@ -136,6 +136,10 @@ void ModCurveBox::saveCurrentAsPreset() {
     else
         promptForPresetName(std::move(onName));
 }
+
+// The traverser orders a container's direct children, then walks inside each one, so the box as a whole takes the
+// place.
+void ModCurveBox::setTabOrder(int order) { setExplicitFocusOrder(order); }
 
 void ModCurveBox::focusFirstControl() { chips_.front()->grabKeyboardFocus(); }
 

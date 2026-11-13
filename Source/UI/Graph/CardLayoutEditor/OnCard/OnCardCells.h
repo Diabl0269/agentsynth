@@ -6,6 +6,7 @@
 
 #include "Modules/CardLayout.h"
 #include "OnCardLayoutMath.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <utility>
 #include <vector>
@@ -46,7 +47,7 @@ struct OnCardView {
 std::vector<OnCardView> collectViews(const ModuleComponent& card, int section);
 
 /** Where section `section`'s cells may sit on a card `cardWidth` wide. */
-oncard::Limits limitsFor(const synth::CardBody& body, int section, int cardWidth);
+oncard::Limits limitsFor(const synth::CardBody& body, int section, const synth::cardbody::BodyGeometry& g);
 
 /** The rect `placed` gives cell `index`, else `fallback`. */
 inline juce::Rectangle<int> placedRect(const std::vector<std::pair<int, juce::Rectangle<int>>>& placed, int index,
