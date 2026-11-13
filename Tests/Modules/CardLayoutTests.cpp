@@ -15,6 +15,7 @@
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <chrono>
 #include <gtest/gtest.h>
 

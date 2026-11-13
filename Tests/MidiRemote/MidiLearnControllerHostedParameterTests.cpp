@@ -17,6 +17,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include <chrono>

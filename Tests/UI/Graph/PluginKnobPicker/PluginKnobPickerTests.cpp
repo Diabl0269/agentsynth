@@ -30,6 +30,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PluginKnobPicker/HostedParameterCardMenu.h"
