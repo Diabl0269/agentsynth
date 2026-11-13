@@ -50,13 +50,9 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              m.timelineSlide_.whenSettled(
                  [safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving(),
                   focusAtPress = juce::Component::SafePointer<juce::Component>(m.getFocusedComponentForMenu())] {
-                     // A slide closed again before it landed leaves nothing to ring.
-                     if (safe == nullptr || (sliding && !safe->isBottomDockVisible))
-                         return;
-                     const auto* focused = safe->getFocusedComponentForMenu();
-                     const bool inTimeline = focused != nullptr && (focused == &safe->timelinePanel ||
-                                                                    safe->timelinePanel.isParentOf(focused));
-                     if (!sliding || focused == focusAtPress.getComponent() || inTimeline)
+                     if (safe != nullptr && synth::ui::deferredRingStillWanted(
+                                                sliding, safe->isBottomDockVisible, safe->getFocusedComponentForMenu(),
+                                                focusAtPress.getComponent(), safe->timelinePanel))
                          safe->timelinePanel.focusTransportBar();
                  });
              return true;
