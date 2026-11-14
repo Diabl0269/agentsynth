@@ -15,6 +15,8 @@
 #include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/OscillatorModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 
 #include <array>
 #include <tuple>
@@ -471,7 +473,18 @@ int audioEdgesInto(juce::AudioProcessorGraph& graph, NodeID dest) {
 
 // ---- The same two paths across every collapsed / split pairing --------------------------------
 
-enum class Kind { FxCollapsed, FxSplit, Filter, Strip, StripCollapsed, Master, MasterCollapsed, MasterDirect };
+enum class Kind {
+    FxCollapsed,
+    FxSplit,
+    Filter,
+    Strip,
+    StripCollapsed,
+    Master,
+    MasterCollapsed,
+    MasterDirect,
+    OscCollapsed,
+    WavetableCollapsed
+};
 
 const char* kindName(Kind k) {
     switch (k) {
@@ -491,6 +504,10 @@ const char* kindName(Kind k) {
         return "MasterCollapsed";
     case Kind::MasterDirect:
         return "MasterDirect";
+    case Kind::OscCollapsed:
+        return "OscCollapsed";
+    case Kind::WavetableCollapsed:
+        return "WavetableCollapsed";
     }
     return "";
 }
@@ -525,6 +542,16 @@ std::unique_ptr<juce::AudioProcessor> makeKind(Kind k) {
         setDualIOParam(*m, false);
         return m;
     }
+    case Kind::OscCollapsed: { // one Audio jack over ch0 and kRightBase: a single cable carries Width
+        auto m = std::make_unique<OscillatorModule>();
+        setDualIOParam(*m, false);
+        return m;
+    }
+    case Kind::WavetableCollapsed: {
+        auto m = std::make_unique<WavetableOscillatorModule>();
+        setDualIOParam(*m, false);
+        return m;
+    }
     }
     return nullptr;
 }
@@ -535,6 +562,10 @@ std::array<int, 2> outLegs(Kind k) {
         return {0, FilterModule::kRightBase};
     if (k == Kind::Strip || k == Kind::StripCollapsed)
         return {0, ChannelStripModule::kRightBase};
+    if (k == Kind::OscCollapsed)
+        return {0, OscillatorModule::kRightBase};
+    if (k == Kind::WavetableCollapsed)
+        return {0, WavetableOscillatorModule::kRightBase};
     return {0, 1};
 }
 std::array<int, 2> inLegs(Kind k) { return k == Kind::MasterDirect ? std::array<int, 2>{2, 3} : outLegs(k); }
@@ -633,15 +664,15 @@ TEST_P(StripWiringHealMatrix, DeletingTheMiddleModuleRestoresBothLegs) {
     expectPair(graph, up, outLegs(upKind), down, inLegs(downKind), "healed cable");
 }
 
-INSTANTIATE_TEST_SUITE_P(CollapsedAndSplit, StripWiringHealMatrix,
-                         ::testing::Combine(::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
-                                                              Kind::Strip, Kind::StripCollapsed),
-                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
-                                                              Kind::StripCollapsed),
-                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
-                                                              Kind::Strip, Kind::StripCollapsed, Kind::Master,
-                                                              Kind::MasterCollapsed, Kind::MasterDirect)),
-                         [](const ::testing::TestParamInfo<HealParam>& info) {
-                             return std::string(kindName(std::get<0>(info.param))) + "_" +
-                                    kindName(std::get<1>(info.param)) + "_" + kindName(std::get<2>(info.param));
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    CollapsedAndSplit, StripWiringHealMatrix,
+    ::testing::Combine(::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter, Kind::Strip,
+                                         Kind::StripCollapsed, Kind::OscCollapsed, Kind::WavetableCollapsed),
+                       ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter, Kind::StripCollapsed),
+                       ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter, Kind::Strip,
+                                         Kind::StripCollapsed, Kind::Master, Kind::MasterCollapsed,
+                                         Kind::MasterDirect)),
+    [](const ::testing::TestParamInfo<HealParam>& info) {
+        return std::string(kindName(std::get<0>(info.param))) + "_" + kindName(std::get<1>(info.param)) + "_" +
+               kindName(std::get<2>(info.param));
+    });

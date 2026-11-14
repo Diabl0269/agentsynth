@@ -114,9 +114,10 @@ void WavetableOscillatorModule::renderVoice(const Wavetable& wt, VoiceState& voi
     p.uniMip = uniMip;
     const float lastFrame = (float)(wt.numFrames - 1);
 
-    // Collapsed to one jack only the left leg is heard, so a balance would just fade it out (silent at
-    // full right): the pan rests there and the hidden right leg alone follows it.
-    const bool panRestsOnLeft = !isDualIO();
+    // A collapsed poly jack carries only the left legs, so a balance would just fade them out (silent at
+    // full right): the pan rests there and the hidden right leg alone follows it. A collapsed mono jack owns
+    // both legs, so Pan balances them as when split.
+    const bool panRestsOnLeft = !rightLegHeard();
     for (int s = 0; s < numSamples; ++s) {
         const int idx = std::min(s, cacheLen - 1);
 

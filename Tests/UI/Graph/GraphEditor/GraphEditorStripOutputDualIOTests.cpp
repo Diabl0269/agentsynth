@@ -10,6 +10,8 @@
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/CompressorModule.h"
 #include "Modules/MasterModule.h"
+#include "Modules/OscillatorModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 
 namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
@@ -122,4 +124,35 @@ TEST_F(GraphEditorTest, ACollapsedMonoShapedChannelStripFeedsBothLegsFromItsOneO
 
     EXPECT_TRUE(graph.isConnected({{stripNode->nodeID, 0}, {compNode->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{stripNode->nodeID, kR}, {compNode->nodeID, 1}}));
+}
+
+// Regression test for FRO1230: a collapsed Oscillator or Wavetable showed one Audio jack but a cable made from it
+// wired the left leg only, so the Width spread (rendered on the right block) never left the module. Collapsed in
+// mono mode the one jack owns both legs, kRightBase apart; a collapsed poly jack still fans 8 left voices.
+TEST_F(GraphEditorTest, ACableDraggedFromACollapsedOscillatorOrWavetableOutputWiresBothLegs) {
+    struct Case {
+        std::unique_ptr<juce::AudioProcessor> src;
+        int rightBase;
+    };
+    std::vector<Case> cases;
+    cases.push_back({std::make_unique<OscillatorModule>(), OscillatorModule::kRightBase});
+    cases.push_back({std::make_unique<WavetableOscillatorModule>(), WavetableOscillatorModule::kRightBase});
+    for (auto& c : cases) {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1200, 700);
+        auto& graph = engine.getGraph();
+        setDualIOParam(*c.src, false);
+        const auto name = c.src->getName();
+        auto srcNode = graph.addNode(std::move(c.src));
+        auto compNode = graph.addNode(std::make_unique<CompressorModule>());
+        editor.updateComponents();
+        editor.connectPorts(srcNode->nodeID, 0, compNode->nodeID, 0, false, false);
+
+        EXPECT_TRUE(graph.isConnected({{srcNode->nodeID, 0}, {compNode->nodeID, 0}})) << name;
+        EXPECT_TRUE(graph.isConnected({{srcNode->nodeID, c.rightBase}, {compNode->nodeID, 1}}))
+            << name << ": the single cable carries the right leg too";
+        EXPECT_EQ(graph.getConnections().size(), 2u) << name;
+        EXPECT_EQ(editor.getVisibleCableCount(), 1) << name << ": one jack, one drawn cable";
+    }
 }

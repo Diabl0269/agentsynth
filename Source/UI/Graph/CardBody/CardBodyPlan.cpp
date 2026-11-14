@@ -463,19 +463,32 @@ void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& 
     }
 }
 
+// Whether a module's first output jack carries its right leg too: a split jack never does (Audio R has its own), a
+// joined two-leg jack does (a mono-mode Oscillator or Wavetable, a Channel Strip), a joined left-only jack does not.
+bool firstOutputJackOwnsRightLeg(const ModuleBase& mb) {
+    const int right = mb.rightAudioLegChannel();
+    for (const auto& t : mb.getJackTargets(0, /*isInput*/ false))
+        for (int v = 0; v < t.voiceSpan; ++v)
+            if (right > 0 && t.rawHeadChannel + v * t.rawStride == right)
+                return true;
+    return false;
+}
+
 // Pan, and the Oscillator and Wavetable unison Width, do nothing while a split-block module's Left/Right jacks are
-// joined: the one jack carries a single mono leg. The rules describe the module, so they apply to every layout.
+// joined into a jack that carries only the left leg (a Filter, a VCA, a poly Oscillator or Wavetable). A mono-mode
+// Oscillator or Wavetable's joined jack owns both legs, so both knobs stay live there. The rules describe the module,
+// so they apply to every layout.
 std::vector<CardDimRule> joinedJackRules(juce::AudioProcessor& module) {
     auto* base = dynamic_cast<ModuleBase*>(&module);
     if (base == nullptr || !base->hasSplitBlockStereo())
         return {};
     const auto joined = [](juce::AudioProcessor& m) {
         auto* mb = dynamic_cast<ModuleBase*>(&m);
-        return mb != nullptr && mb->hasSplitBlockStereo() && !mb->isDualIO();
+        return mb != nullptr && mb->hasSplitBlockStereo() && !mb->isDualIO() && !firstOutputJackOwnsRightLeg(*mb);
     };
-    CardDimRule pan{"pan", {"dualIO"}, joined};
+    CardDimRule pan{"pan", {"dualIO", "poly"}, joined};
     pan.disabledHint = "Split the Left/Right jacks to pan";
-    CardDimRule width{"width", {"dualIO"}, joined};
+    CardDimRule width{"width", {"dualIO", "poly"}, joined};
     width.disabledHint = "Split the Left/Right jacks to spread the voices";
     return {pan, width};
 }

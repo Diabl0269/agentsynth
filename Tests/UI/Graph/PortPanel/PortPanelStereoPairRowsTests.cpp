@@ -104,9 +104,11 @@ TEST_F(GraphEditorTest, AMonoSourceWiredToBothLegsOfACollapsedPairIsOneRow) {
 }
 
 TEST_F(GraphEditorTest, AnOscillatorWiredToBothLegsOfACollapsedDelayIsOneRow) {
+    // A collapsed mono-mode Oscillator's one jack owns both legs: its cable is Left to Left and Right to Right.
     PairFixture f(std::make_unique<OscillatorModule>(), false, false);
-    f.wire(0, 0);
-    f.wire(0, 1);
+    f.connectVisible(0, 0);
+    ASSERT_EQ(f.edges(), 2);
+    EXPECT_TRUE(f.engine.getGraph().isConnected({{f.src, f.rightLeg()}, {f.delay, 1}}));
     EXPECT_EQ(f.rows(0), 1u);
     f.removeFirstRow(0);
     EXPECT_EQ(f.edges(), 0);

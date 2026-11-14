@@ -1,0 +1,32 @@
+# Gap: with its Left/Right jacks joined (Dual I/O off) an Oscillator's Width and Pan were greyed out ("Split the
+# Left/Right jacks to spread the voices"), because the one jack carried the left leg alone. The joined jack now owns
+# both legs, so a single cable carries the unison spread and both knobs stay live.
+#
+# What a user does:
+#   1. Opens a project with a free Oscillator whose jacks are joined, and raises Unison above one voice.
+#   2. Looks at Width and Pan: both are live (not greyed), with no "Split the Left/Right jacks" tooltip.
+# The raw edges (ch0 and kRightBase into the far pair) and the spread itself are asserted by the unit tests
+# (SingleCableWidth, SingleCableWidthLoad, StripWiringHealMatrix); test mode cannot hear, so the WAV render is the
+# audio proof.
+record: true
+save_project: oscillator-width-one-cable
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 100, fromY: 500, toX: 100, toY: 200}   # pan the free oscillator up
+  - drag: {from: "card:Oscillator 2", fromX: 60, fromY: 12, to: "Patch canvas", toX: 620, toY: 60}  # and lift it clear of the window edge
+  - wait: {}
+  - getState: {id: "card:Oscillator 2 > Dual I/O"}
+  - expect: {id: "card:Oscillator 2 > Dual I/O", toggleState: false}
+  - expect: {id: "card:Oscillator 2 > Pan", enabled: true}
+  - screenshot: {id: "card:Oscillator 2", name: 1-one-voice}
+  - click: {id: "card:Oscillator 2 > Unison"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2 > Unison", value: 3, within_ms: 1500}
+  - expect: {id: "card:Oscillator 2 > Width", enabled: true}
+  - expect: {id: "card:Oscillator 2 > Pan", enabled: true}
+  - getState: {id: "card:Oscillator 2 > Width"}
+  - screenshot: {id: "card:Oscillator 2", name: 2-width-live}
+  - mark: {check: 1, name: width-live-on-one-cable}
