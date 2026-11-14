@@ -9,6 +9,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeCommandsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeScreenFrameTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeCardStateTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeFeedVisualTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModePopWatchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModePresentedFrameTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/UiVerifyFixtureTests.cpp

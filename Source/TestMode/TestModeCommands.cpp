@@ -6,6 +6,7 @@
 #include "ProjectBundle.h"
 #include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
+#include "TestMode/TestModeFeedVisual.h"
 #include "TestMode/TestModeInput.h"
 #include "TestMode/TestModePopWatch.h"
 #include "TestMode/TestModePresentedFrame.h"
@@ -568,6 +569,7 @@ CommandTable CommandTable::standard() {
     table.add("checkStalePixels", {cmdCheckStalePixels});
     registerPopWatchCommands(table);
     registerAudioPumpCommands(table);
+    registerFeedVisualCommands(table);
     table.add("quit", {cmdQuit});
     table.add("requestQuit", {cmdRequestQuit});
     return table;

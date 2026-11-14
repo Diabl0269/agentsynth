@@ -1,0 +1,39 @@
+# Feature: a shape dragged from the main window's Shapes list lands on the Edit shapes window's morph map. The drag
+# crosses two windows, so it is filmed (FRO1791): both ends resolve in screen coordinates, the press, every move and the
+# release are sent with a frame between them, and the composited frame draws both windows.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, opens Places > Shapes in the main window, drags the "eh"
+# shape onto empty space in the window's map (a new dot appears), then drags "ih" onto the "ah" dot (its curve changes).
+settings:
+  librarySidebarView: sounds
+record: true
+save_project: filter-shapes-window-drop-filmed
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: soundBrowser, x: 54, y: 126}                   # Places > Shapes, in the main window
+  - wait: {settleMs: 800}
+  - expect: {id: "Filter shapes: Filter", exists: true}
+  - drag: {from: window, fromX: 72, fromY: 273, to: "Filter shapes: Filter", toX: 110, toY: 215, steps: 14}
+  - mark: {check: 1, name: drop-adds-a-shape}                  # the dropped dot is on the map
+  - wait: {settleMs: 600}
+  - drag: {from: window, fromX: 72, fromY: 303, to: "Filter shapes: Filter", toX: 100, toY: 98, steps: 14}
+  - mark: {check: 2, name: drop-stamps-the-ah-dot}
+  - wait: {settleMs: 600}
+  - key: {keys: escape, target: "Filter shapes: Filter"}
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter", exists: false, within_ms: 2000}

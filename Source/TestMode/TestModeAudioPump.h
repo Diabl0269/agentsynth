@@ -8,6 +8,9 @@
 // thread, the way a bounce does, until `audioPump {run: false}`; nothing is heard.
 namespace synth::testmode {
 
+/** Whether the pump is rendering now (feedVisual refuses then: a second writer into the analysis buffers). */
+bool audioPumpRunning();
+
 /** Adds audioPump. */
 void registerAudioPumpCommands(CommandTable& table);
 
