@@ -266,6 +266,7 @@ TEST_F(MainComponentTest, HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHin
             << info->shortName << " (after the menu model changed)";
     }
     juce::MenuBarModel::setMacMainMenu(nullptr);
+    synth::ui::uninstallMainMenuTooltips();
 }
 #endif
 

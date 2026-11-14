@@ -28,11 +28,16 @@ inline MenuTooltips collectCommandTooltips(juce::ApplicationCommandManager& comm
 // MenuBarModel::setMacMainMenu.
 void installMainMenuTooltips(MenuTooltips tooltips);
 
+// Stops watching added items and forgets the table; the app never needs it (the hints live as long as the menu), a
+// test calls it so nothing it installed outlives it.
+void uninstallMainMenuTooltips();
+
 // The toolTip macOS holds for `itemTitle` in the main-menu entry `menuTitle`, read after the menu is refreshed the
 // way opening it refreshes it (when it has a refresh delegate); empty if there is none.
 juce::String mainMenuTooltipForTest(const juce::String& menuTitle, const juce::String& itemTitle);
 #else
 inline void installMainMenuTooltips(MenuTooltips) {}
+inline void uninstallMainMenuTooltips() {}
 #endif
 
 } // namespace synth::ui

@@ -52,15 +52,16 @@ void applyToAddedItem(NSNotification* note) {
         setHint(item, toNS(found->second));
 }
 
+id addedItemObserver = nil;
+
 void observeAddedItems() {
-    static id observer = nil;
-    if (observer == nil)
-        observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSMenuDidAddItemNotification
-                                                                      object:nil
-                                                                       queue:nil
-                                                                  usingBlock:^(NSNotification* note) {
-                                                                      applyToAddedItem(note);
-                                                                  }];
+    if (addedItemObserver == nil)
+        addedItemObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSMenuDidAddItemNotification
+                                                                              object:nil
+                                                                               queue:nil
+                                                                          usingBlock:^(NSNotification* note) {
+                                                                              applyToAddedItem(note);
+                                                                          }];
 }
 
 } // namespace
@@ -74,6 +75,13 @@ void installMainMenuTooltips(MenuTooltips table) {
     for (NSMenuItem* top in main.itemArray)
         if (top.submenu != nil)
             applyTo(top.submenu);
+}
+
+void uninstallMainMenuTooltips() {
+    if (addedItemObserver != nil)
+        [[NSNotificationCenter defaultCenter] removeObserver:addedItemObserver];
+    addedItemObserver = nil;
+    tooltips().clear();
 }
 
 juce::String mainMenuTooltipForTest(const juce::String& menuTitle, const juce::String& itemTitle) {
