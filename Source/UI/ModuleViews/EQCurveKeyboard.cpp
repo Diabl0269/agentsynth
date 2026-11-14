@@ -6,13 +6,17 @@
 // grid's: with no manager the shipped defaults below, with a manager that does not know an id no key at all. They are
 // tried before the fixed keys, and before the Cmd/Ctrl bail-out, so a rebound action may carry Cmd (Cmd+D by default)
 // and reaches the curve before the app's own duplicate command sees it. Shift on a stepping action is its fine step.
-// Fixed: 1-4, Page Up/Down (width), Return (on or off), Delete (remove) and Escape (end this curve's solo).
+// Fixed: 1-4, Page Up/Down (width), Return (on or off), Delete (remove the selection and select the next band), Cmd+A
+// (select every band) and Escape (end this curve's solo). The arrows that move a band are held keys
+// (EQCurveKeyGlide.cpp).
 
 #include "EQCurveComponent.h"
 
 #include "EQBandKinds.h"
+#include "EQCurveHoldState.h"
 #include "ModuleViewAccessibility.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include <utility>
 
 namespace {
@@ -59,7 +63,8 @@ bool plusKeyArrives(const juce::KeyPress& binding, const juce::KeyPress& key) {
     return shiftOnly && (key.getKeyCode() == '+' || key.getKeyCode() == '=');
 }
 
-// A semitone, in octaves, and the Shift (fine) fraction every keyboard step shrinks to.
+// A semitone, in octaves, and the Shift (fine) fraction every keyboard step shrinks to (EQCurveKeyGlide.cpp holds the
+// same steps for a held key).
 constexpr float kSemitoneOctaves = 1.0f / 12.0f;
 constexpr float kFineFactor = 0.25f;
 constexpr float kGainStepDb = 1.0f;
@@ -100,7 +105,7 @@ juce::String EQCurveComponent::getTooltip() {
         const auto first = keyHint(shortcuts_, a), second = keyHint(shortcuts_, b);
         return first.isNotEmpty() && second.isNotEmpty() ? first + " / " + second : juce::String();
     };
-    add(pair("eqSelectPrev", "eqSelectNext"), "pick a band");
+    add(pair("eqSelectPrev", "eqSelectNext"), "pick a band (with Shift, extend)");
     add(pair("eqWidthUp", "eqWidthDown"), "its width");
     add(pair("eqMoveLeft", "eqMoveRight"), "its frequency");
     add(pair("eqMoveUp", "eqMoveDown"), "its gain");
@@ -111,8 +116,8 @@ juce::String EQCurveComponent::getTooltip() {
     add(keyHint(shortcuts_, "eqRemoveBand"), "removes it");
     parts.add("Return switches it on or off");
     return "EQ curve: " + parts.joinIntoString(", ") +
-           ". Mouse: double-click to add or remove a point, drag to move, scroll for Q, right-click a point for its "
-           "type, Option-click to solo it";
+           ". Mouse: double-click to add or remove a point, drag to move, drag a box to select several, scroll for Q, "
+           "right-click a point for its type, Option-click to solo it";
 }
 
 void EQCurveComponent::selectBandRelative(int delta) {
@@ -141,8 +146,9 @@ juce::String EQCurveComponent::getAccessibilityValueText() const {
     if (selectedBand < 0)
         return synth::ui::describeEqCurveSummary(eqModule.getEnabledBandCount(), ParametricEQModule::kMaxBands);
     const auto& band = lastBands[(size_t)selectedBand];
-    return synth::ui::describeEqBand(selectedBand, synth::ui::eqBandTypeName(band.type), band.enabled, band.freqHz,
-                                     band.gainDb, band.q);
+    const auto spoken = synth::ui::describeEqBand(selectedBand, synth::ui::eqBandTypeName(band.type), band.enabled,
+                                                  band.freqHz, band.gainDb, band.q);
+    return hold_->selection.size() > 1 ? juce::String(hold_->selection.size()) + " bands selected, " + spoken : spoken;
 }
 
 void EQCurveComponent::refreshAccessibilityValue() {
@@ -184,8 +190,7 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
                              Move{"eqMoveUp", 0.0f, kGainStepDb}, Move{"eqMoveDown", 0.0f, -kGainStepDb}})
         if (matchesStepAction(key, move.id, fine)) {
             const float scale = fine ? kFineFactor : 1.0f;
-            nudgeSelectedBand(move.octaves * scale, move.db * scale);
-            return true;
+            return pressMove(key.getKeyCode(), move.octaves * scale, move.db * scale, fine);
         }
     // Up widens (a lower Q), Down narrows, like Page Up/Down's opposite.
     for (const auto& width : {std::pair<const char*, float>{"eqWidthUp", -kQStepOctaves},
@@ -195,14 +200,16 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
                 nudgeBandQ(selectedBand, width.second * (fine ? kFineFactor : 1.0f));
             return true;
         }
-    if (matchesStepAction(key, "eqSelectPrev", fine)) {
-        selectBandRelative(-1);
-        return true;
-    }
-    if (matchesStepAction(key, "eqSelectNext", fine)) {
-        selectBandRelative(1);
-        return true;
-    }
+    // Shift+Left/Right grows the selection one band, like every other point editor.
+    for (const auto& pick :
+         {std::pair<const char*, int>{"eqSelectPrev", -1}, std::pair<const char*, int>{"eqSelectNext", 1}})
+        if (matchesStepAction(key, pick.first, fine)) {
+            if (fine)
+                extendSelectionRelative(pick.second);
+            else
+                selectBandRelative(pick.second);
+            return true;
+        }
     if (matchesAction(key, "eqSolo")) {
         toggleSoloSelectedBand();
         return true;
@@ -217,16 +224,10 @@ bool EQCurveComponent::handleActionKey(const juce::KeyPress& key) {
         return true;
     }
     if (matchesAction(key, "eqRemoveBand")) {
-        removeSelectedBand();
+        removeSelectedBands(false); // Backspace keeps the selection on the band, so Return can bring it back
         return true;
     }
     return false;
-}
-
-// Removing keeps the band selected, so Return can bring it back.
-void EQCurveComponent::removeSelectedBand() {
-    if (selectedBand >= 0 && eqModule.isBandEnabled(selectedBand))
-        toggleSelectedBand();
 }
 
 bool EQCurveComponent::handleFixedKey(const juce::KeyPress& key) {
@@ -251,7 +252,7 @@ bool EQCurveComponent::handleFixedKey(const juce::KeyPress& key) {
         return true;
     }
     if (code == juce::KeyPress::deleteKey) {
-        removeSelectedBand();
+        removeSelectedBands(true); // Delete moves the selection to the next band
         return true;
     }
     if (code == juce::KeyPress::returnKey) {
@@ -264,5 +265,12 @@ bool EQCurveComponent::handleFixedKey(const juce::KeyPress& key) {
 bool EQCurveComponent::keyPressed(const juce::KeyPress& key) {
     if (!getWantsKeyboardFocus())
         return false;
+    const int code = key.getKeyCode();
+    if (hold_->hold.active() && synth::ui::KeyHold::isArrow(code) && hold_->hold.anyArrowDown())
+        return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
+    if (synth::ui::pointKeyAction(key).kind == synth::ui::PointKeyAction::Kind::selectAll) {
+        selectAllBands();
+        return true;
+    }
     return handleActionKey(key) || handleFixedKey(key);
 }

@@ -1,0 +1,51 @@
+# FRO1717 + FRO1785: the Parametric EQ curve follows the shared point-editing rules. A drag on empty space boxes the
+# bands inside it, holding Option+Right glides the whole selection smoothly (not in jumps) and is one undo step,
+# Shift+Left/Right extends the selection one band, Delete removes the selection and selects the next band.
+#
+# What a user does: opens the Parametric EQ window from its card and double-clicks the curve three times (three bands),
+# drags a box over the first two (two bands selected, the box drawn while dragging), holds Option+Right for about two
+# seconds (both dots glide up in frequency together), lets go (they stay), presses Cmd+Z once (both are back), clicks
+# the first band and presses Shift+Right (two selected), then Delete (both go off, the third band is selected).
+# The strip reports `selectedCount` (bands selected) beside `selectedBand`, the cursor.
+motion: true
+pop_check: {off: "the hold's glide is filmed here; the undo glide has its own scenarios (eq-undo-glide, eq-window-undo)"}
+record: true
+save_project: eq-curve-point-editing
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 100, y: 280, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 400, y: 120, clicks: 2}
+  - wait: {settleMs: 400}
+  - click: {id: eqWindowCurve, x: 700, y: 240, clicks: 2}
+  - wait: {settleMs: 600}
+  - expect: {id: eqWindowStrip, bandCount: 3, selectedCount: 1}
+  # (a) A box on empty space selects the bands inside it.
+  - drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 40, fromY: 20, toX: 560, toY: 380}
+  - wait: {settleMs: 500}
+  - expect: {id: eqWindowStrip, selectedCount: 2, within_ms: 2000}
+  - mark: {check: 1, name: box-selects-two-bands}
+  # (b) Holding Option+Right glides both bands; letting go leaves them; one Cmd+Z puts them back.
+  - glide: {name: held-glide, frames: 24, do: {keyDown: {keys: alt+right}}}
+  - mark: {check: 2, name: held-option-arrow-glides}
+  - keyUp: {}
+  - wait: {settleMs: 600}
+  - expect: {id: eqWindowStrip, selectedCount: 2, bandCount: 3}
+  - key: {keys: "cmd+z", target: eqWindowCurve}
+  - wait: {settleMs: 900}
+  - expect: {id: eqWindowStrip, bandCount: 3, within_ms: 2000}
+  # (c) Shift+Right extends; Delete removes the selection and selects the next band.
+  - click: {id: eqWindowCurve, x: 100, y: 280}
+  - wait: {settleMs: 300}
+  - key: {keys: "shift+right", target: eqWindowCurve}
+  - wait: {settleMs: 400}
+  - expect: {id: eqWindowStrip, selectedCount: 2, within_ms: 2000}
+  - key: {keys: delete, target: eqWindowCurve}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowStrip, bandCount: 1, selectedCount: 1, within_ms: 2000}
+  - mark: {check: 3, name: delete-selects-next}

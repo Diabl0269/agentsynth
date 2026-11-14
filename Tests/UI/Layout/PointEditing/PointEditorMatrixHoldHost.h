@@ -11,9 +11,12 @@ class CurveEditorComponent;
 class MorphMap;
 } // namespace synth::ui
 
+class EQCurveComponent;
+
 namespace point_matrix {
 
 void installHold(synth::ui::CurveEditorComponent& editor, const std::shared_ptr<HoldKeys>& keys);
+void installHold(EQCurveComponent& curve, const std::shared_ptr<HoldKeys>& keys);
 void installHold(synth::ui::MorphMap& map, const std::shared_ptr<HoldKeys>& keys);
 void installHold(synth::ui::AutomationLaneEditor& editor, const std::shared_ptr<HoldKeys>& keys);
 
