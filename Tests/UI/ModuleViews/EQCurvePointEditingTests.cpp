@@ -14,11 +14,11 @@
 
 namespace eq_point_editing_tests {
 
-constexpr int kAlt = juce::ModifierKeys::altModifier;
-constexpr int kShift = juce::ModifierKeys::shiftModifier;
-constexpr int kCmd = juce::ModifierKeys::commandModifier;
+constexpr int kEqAlt = juce::ModifierKeys::altModifier;
+constexpr int kEqShift = juce::ModifierKeys::shiftModifier;
+constexpr int kEqCmd = juce::ModifierKeys::commandModifier;
 
-juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
+juce::KeyPress eqKey(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
 
 // Bands in slots 0, 1, 2 at 200 Hz, 1 kHz and 4 kHz; slot 5 is left off. Counts the undo steps the curve reports.
 struct Rig {
@@ -42,7 +42,7 @@ struct Rig {
     }
     ~Rig() { curve.reset(); }
 
-    bool press(int code, int mods = 0) { return curve->keyPressed(key(code, mods)); }
+    bool press(int code, int mods = 0) { return curve->keyPressed(eqKey(code, mods)); }
     ParametricEQModule::BandSnapshot band(int b) const { return eq.getBandSnapshots()[(size_t)b]; }
     juce::Point<float> dot(int b) const { return curve->bandPosition(band(b)); }
 
@@ -122,7 +122,7 @@ TEST(EQCurvePointEditing, ABoxReplacesTheSelectionAndAShiftBoxAddsToIt) {
     ASSERT_EQ(rig.selected(), (std::set<int>{2}));
     rig.box(0, 0);
     EXPECT_EQ(rig.selected(), (std::set<int>{0}));
-    rig.box(1, 1, kShift);
+    rig.box(1, 1, kEqShift);
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 1}));
 }
 
@@ -138,10 +138,10 @@ TEST(EQCurvePointEditing, ABareClickOnEmptySpaceClearsTheSelection) {
 TEST(EQCurvePointEditing, ShiftClickAddsABandToTheSelectionAndAgainTakesItOut) {
     Rig rig;
     rig.click(rig.dot(0));
-    rig.click(rig.dot(2), kShift);
+    rig.click(rig.dot(2), kEqShift);
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 2}));
     EXPECT_EQ(rig.curve->getSelectedBand(), 2);
-    rig.click(rig.dot(2), kShift);
+    rig.click(rig.dot(2), kEqShift);
     EXPECT_EQ(rig.selected(), (std::set<int>{0}));
     EXPECT_EQ(rig.starts, 0) << "a shift-click does not move the band";
 }
@@ -156,26 +156,26 @@ TEST(EQCurvePointEditing, ShiftArrowsExtendInFrequencyOrderNotSlotOrder) {
     rig.eq.setBandEnabled(5, true);
     rig.curve->timerCallback();
     rig.click(rig.dot(0));
-    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kShift));
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kEqShift));
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 5})) << "the next band up is the 500 Hz one in slot 5";
     EXPECT_EQ(rig.curve->getSelectedBand(), 5);
-    rig.press(juce::KeyPress::rightKey, kShift);
+    rig.press(juce::KeyPress::rightKey, kEqShift);
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 1, 5}));
-    rig.press(juce::KeyPress::leftKey, kShift);
+    rig.press(juce::KeyPress::leftKey, kEqShift);
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 5})) << "reversing shrinks the range back toward the anchor";
 }
 
 TEST(EQCurvePointEditing, ShiftArrowAtTheEndOfTheLineChangesNothing) {
     Rig rig;
     rig.click(rig.dot(2));
-    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kShift));
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kEqShift));
     EXPECT_EQ(rig.selected(), (std::set<int>{2}));
 }
 
 TEST(EQCurvePointEditing, CmdASelectsEveryBandThatIsOn) {
     Rig rig;
     rig.click(rig.dot(1));
-    EXPECT_TRUE(rig.press('A', kCmd));
+    EXPECT_TRUE(rig.press('A', kEqCmd));
     EXPECT_EQ(rig.selected(), (std::set<int>{0, 1, 2}));
     EXPECT_EQ(rig.curve->getSelectedBand(), 1) << "a cursor already in the selection stays";
 }
@@ -187,13 +187,13 @@ TEST(EQCurvePointEditing, AltArrowsMoveEverySelectedBandAsOneUndoStep) {
     rig.box(0, 1);
     rig.starts = rig.ends = 0;
     const float f0 = rig.band(0).freqHz, f1 = rig.band(1).freqHz, f2 = rig.band(2).freqHz;
-    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kAlt));
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kEqAlt));
     EXPECT_NEAR(rig.band(0).freqHz, f0 * std::pow(2.0f, 1.0f / 12.0f), 0.1f);
     EXPECT_NEAR(rig.band(1).freqHz, f1 * std::pow(2.0f, 1.0f / 12.0f), 0.2f);
     EXPECT_FLOAT_EQ(rig.band(2).freqHz, f2) << "an unselected band stays put";
     EXPECT_EQ(rig.starts, 1);
     EXPECT_EQ(rig.ends, 1);
-    rig.press(juce::KeyPress::upKey, kAlt);
+    rig.press(juce::KeyPress::upKey, kEqAlt);
     EXPECT_NEAR(rig.band(0).gainDb, 4.0f, 0.01f);
     EXPECT_NEAR(rig.band(1).gainDb, -3.0f, 0.01f);
 }
@@ -264,7 +264,7 @@ TEST(EQCurvePointEditing, AHeldAltArrowGlidesPastATapAndIsOneUndoStep) {
     rig.starts = rig.ends = 0;
     const float f0 = rig.band(1).freqHz;
     rig.down = {juce::KeyPress::rightKey};
-    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kAlt));
+    EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kEqAlt));
     auto& hold = rig.curve->getKeyHoldForTest();
     ASSERT_TRUE(hold.active());
     const float tap = rig.band(1).freqHz;
@@ -289,10 +289,10 @@ TEST(EQCurvePointEditing, KeyRepeatDoesNotAddSteps) {
     rig.click(rig.dot(1));
     rig.starts = 0;
     rig.down = {juce::KeyPress::rightKey};
-    rig.press(juce::KeyPress::rightKey, kAlt);
+    rig.press(juce::KeyPress::rightKey, kEqAlt);
     const float after = rig.band(1).freqHz;
     for (int i = 0; i < 5; ++i)
-        EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kAlt)) << "an OS repeat is taken and ignored";
+        EXPECT_TRUE(rig.press(juce::KeyPress::rightKey, kEqAlt)) << "an OS repeat is taken and ignored";
     EXPECT_FLOAT_EQ(rig.band(1).freqHz, after);
     EXPECT_EQ(rig.starts, 1);
     rig.release();
@@ -303,11 +303,11 @@ TEST(EQCurvePointEditing, TwoHeldArrowsMoveAGroupDiagonally) {
     rig.box(0, 1);
     rig.starts = rig.ends = 0;
     rig.down = {juce::KeyPress::rightKey};
-    rig.press(juce::KeyPress::rightKey, kAlt);
+    rig.press(juce::KeyPress::rightKey, kEqAlt);
     rig.frame(300.0);
     const float g0 = rig.band(0).gainDb, f0 = rig.band(0).freqHz;
     rig.down = {juce::KeyPress::rightKey, juce::KeyPress::upKey};
-    rig.press(juce::KeyPress::upKey, kAlt);
+    rig.press(juce::KeyPress::upKey, kEqAlt);
     rig.frame(600.0);
     rig.frame(900.0);
     EXPECT_GT(rig.band(0).gainDb, g0) << "the second arrow moves the gain";
@@ -332,7 +332,7 @@ TEST(EQCurvePointEditing, ShiftMakesAHeldGlideSlower) {
         const float f0 = rig.band(1).freqHz;
         rig.shift = useShift;
         rig.down = {juce::KeyPress::rightKey};
-        rig.press(juce::KeyPress::rightKey, kAlt | (useShift ? kShift : 0));
+        rig.press(juce::KeyPress::rightKey, kEqAlt | (useShift ? kEqShift : 0));
         rig.frame(300.0);
         rig.frame(900.0);
         (useShift ? fine : plain) = std::log2(rig.band(1).freqHz / f0);
@@ -350,7 +350,7 @@ TEST(EQCurvePointEditing, AHeldGlideStopsAtTheEndOfTheRangeAndAHoldAgainstItIsNo
     rig.curve->timerCallback();
     rig.starts = rig.ends = 0;
     rig.down = {juce::KeyPress::rightKey};
-    rig.press(juce::KeyPress::rightKey, kAlt);
+    rig.press(juce::KeyPress::rightKey, kEqAlt);
     rig.frame(900.0);
     EXPECT_FLOAT_EQ(rig.band(2).freqHz, ParametricEQModule::kMaxFreq);
     rig.release();
@@ -366,7 +366,7 @@ TEST(EQCurvePointEditing, ATapEasesTheDotToItsNewPlaceAndEverythingLandsWhenTheE
     rig.curve->getBandGlideForTest().forceAnimateForTest(true);
     rig.click(rig.dot(1));
     const auto before = rig.curve->getDrawnBandPosition(1);
-    rig.press(juce::KeyPress::rightKey, kAlt);
+    rig.press(juce::KeyPress::rightKey, kEqAlt);
     const auto resting = rig.dot(1);
     ASSERT_GT(resting.x, before.x + 1.0f);
     const auto drawn = rig.curve->getDrawnBandPosition(1);
@@ -382,7 +382,7 @@ TEST(EQCurvePointEditing, ATapLandsAtOnceUnderReduceMotionAndAnimationsOff) {
     for (const auto mode : {synth::ui::AnimationMode::reduced, synth::ui::AnimationMode::off}) {
         synth::ui::setAnimationMode(mode);
         rig.click(rig.dot(1));
-        rig.press(juce::KeyPress::rightKey, kAlt);
+        rig.press(juce::KeyPress::rightKey, kEqAlt);
         EXPECT_NEAR(rig.curve->getDrawnBandPosition(1).x, rig.dot(1).x, 0.01f) << (int)mode;
         EXPECT_FLOAT_EQ(rig.curve->getDrawnBandAlpha(1), 1.0f) << "no fade either";
     }
