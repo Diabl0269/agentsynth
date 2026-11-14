@@ -20,15 +20,8 @@ bool isAcronym(const juce::String& word) {
     return word.length() <= 5 && word == word.toUpperCase();
 }
 
-// Debatable names, left as they are for now: a second word in lower case on a Pluck, Mallet, Oscillator and
-// Master control. Renaming them moves card goldens, scenario ids and cable targets, so it is a decision, not a fix.
-const std::set<juce::String> kKnownSentenceCase = {"Velocity brightness", "Safety limiter", "Fixed rate",
-                                                   "Decay tracking",      "Pick hardness",  "Pick position"};
-
 // The first problem found in `name`, empty when it reads right.
 juce::String problemWith(const juce::String& name) {
-    if (kKnownSentenceCase.count(name) != 0)
-        return {};
     juce::StringArray words;
     words.addTokens(name, " /-", "");
     words.removeEmptyStrings();
