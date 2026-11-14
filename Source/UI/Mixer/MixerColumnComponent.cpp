@@ -1,6 +1,7 @@
 // Concern: MixerColumnComponent's layout, param binding (pan/mute/solo -- fader
 // binding lives in MixerFader itself) and the column-click-selects-macro gesture.
 #include "MixerColumnComponent.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -55,6 +56,7 @@ juce::AudioParameterBool* findBoolParam(juce::AudioProcessor& processor, const j
 } // namespace
 
 MixerColumnComponent::MixerColumnComponent() {
+    panSlider_ = std::make_unique<synth::ui::FineDragSlider>();
     addAndMakeVisible(header_);
     header_.onHeaderClicked = [this] {
         if (onColumnClicked)
@@ -121,15 +123,15 @@ MixerColumnComponent::MixerColumnComponent() {
     ownSectionLayout_.onAppearanceChanged = [this] { repaintSectionDividers(); };
     setSectionLayout(ownSectionLayout_);
 
-    panSlider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    panSlider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    panSlider_->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    panSlider_->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     // MixerPanelComponent is the single focusable leaf -- every child control gives up
     // keyboard focus so Up/Down/Enter/M/S/R always reach the panel's own keyPressed() (the keyboard-focus
     // trap docs/control/shortcuts.md documents: a focused Slider eats Up/Down, a focused TextButton eats
     // Return/Space).
-    panSlider_.setWantsKeyboardFocus(false);
-    applyPanAccessibilityText(panSlider_);
-    addAndMakeVisible(panSlider_);
+    panSlider_->setWantsKeyboardFocus(false);
+    applyPanAccessibilityText(*panSlider_);
+    addAndMakeVisible(*panSlider_);
 
     addAndMakeVisible(fader_);
     addAndMakeVisible(meter_);
@@ -221,7 +223,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // group role announces for the column itself.
     setTitle(column.name);
     fader_.setChannelName(column.name);
-    panSlider_.setTitle(column.name + " pan");
+    panSlider_->setTitle(column.name + " pan");
     setPanShortcutText(panShortcutText_);
     meter_.setTitle(column.name + " meter");
     meter_.setTooltip("Output level meter");
@@ -302,15 +304,16 @@ bool MixerColumnComponent::nudgePan(float delta) {
     if (panAttachment_ == nullptr || graph_ == nullptr || undoManager_ == nullptr)
         return false;
     undoManager_->captureBeforeState(*graph_);
-    panSlider_.setValue(juce::jlimit(panSlider_.getMinimum(), panSlider_.getMaximum(), panSlider_.getValue() + delta),
-                        juce::sendNotificationSync);
+    panSlider_->setValue(
+        juce::jlimit(panSlider_->getMinimum(), panSlider_->getMaximum(), panSlider_->getValue() + delta),
+        juce::sendNotificationSync);
     undoManager_->pushSnapshotFromCapture(*graph_);
     return true;
 }
 
 void MixerColumnComponent::setPanShortcutText(const juce::String& keys) {
     panShortcutText_ = keys;
-    panSlider_.setTooltip(formatShortcutHint("Pan: drag to change", keys));
+    panSlider_->setTooltip(formatShortcutHint("Pan: drag to change (Shift for fine)", keys));
 }
 
 void MixerColumnComponent::rebindControls() {
@@ -331,12 +334,12 @@ void MixerColumnComponent::rebindControls() {
     }
     if (auto* panParam = findFloatParam(*processor, "pan")) {
         const auto floatRange = panParam->getNormalisableRange();
-        panSlider_.setNormalisableRange(juce::NormalisableRange<double>(
+        panSlider_->setNormalisableRange(juce::NormalisableRange<double>(
             (double)floatRange.start, (double)floatRange.end, (double)floatRange.interval, (double)floatRange.skew,
             floatRange.symmetricSkew));
-        panAttachment_ = std::make_unique<juce::SliderParameterAttachment>(*panParam, panSlider_);
-        applyPanAccessibilityText(panSlider_); // see this file's own comment on applyPanAccessibilityText
-        registerMidiLearnable(panSlider_, panParam);
+        panAttachment_ = std::make_unique<juce::SliderParameterAttachment>(*panParam, *panSlider_);
+        applyPanAccessibilityText(*panSlider_); // see this file's own comment on applyPanAccessibilityText
+        registerMidiLearnable(*panSlider_, panParam);
     }
     if (auto* muteParam = findBoolParam(*processor, "muted"))
         registerMidiLearnable(muteButton_, muteParam);
@@ -556,10 +559,10 @@ void MixerColumnComponent::resized() {
 
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
     // A part gap above and below keeps the pan slider off the divider over it and the peak readout under it.
-    panSlider_.setBounds(row(geometry.panTop, geometry.panHeight)
-                             .reduced(8, 0)
-                             .withTrimmedTop(MixerSectionLayout::kPartGap)
-                             .withTrimmedBottom(MixerSectionLayout::kPartGap));
+    panSlider_->setBounds(row(geometry.panTop, geometry.panHeight)
+                              .reduced(8, 0)
+                              .withTrimmedTop(MixerSectionLayout::kPartGap)
+                              .withTrimmedBottom(MixerSectionLayout::kPartGap));
 
     auto msRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight);
     muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(MixerSectionLayout::kMsButtonInset));

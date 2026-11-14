@@ -196,6 +196,7 @@ void MeterColourStopsEditor::notify(bool committed) {
 }
 
 void MeterColourStopsEditor::mouseDown(const juce::MouseEvent& e) {
+    fine_.begin(e.position);
     const auto hit = hitTestStop(e.getPosition());
     if (hit.index >= 0) {
         selectIndex(hit.index);
@@ -227,6 +228,7 @@ void MeterColourStopsEditor::mouseDown(const juce::MouseEvent& e) {
 }
 
 void MeterColourStopsEditor::mouseDrag(const juce::MouseEvent& e) {
+    const auto pointer = fine_.advance(e); // every move, so a Shift change never makes the stop jump
     if (pendingSwatchClickIndex_ >= 0) {
         // Still within the "might just be a click" window -- do nothing (not even repaint) until
         // the pointer actually moves enough to commit to a drag.
@@ -236,7 +238,7 @@ void MeterColourStopsEditor::mouseDrag(const juce::MouseEvent& e) {
     }
     if (dragIndex_ < 0)
         return;
-    const float requested = snapDb(yToDb(e.y));
+    const float requested = snapDb(yToDb(juce::roundToInt(pointer.y)));
     setStopDb(dragIndex_, clampDbForIndex(dragIndex_, requested), /*committed*/ false);
 }
 

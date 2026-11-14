@@ -12,6 +12,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Mixer/MixerFader.h"
 #include "UI/Mixer/MixerFaderTaper.h"
 #include <gtest/gtest.h>
@@ -126,7 +127,7 @@ TEST(MixerFaderDragTest, SamePixelDragMovesMoreDbNearTheBottomThanNearUnity) {
     EXPECT_GT(bottomDeltaDb, unityDeltaDb) << "the same 18 px must move MORE dB near the bottom of the taper";
 }
 
-TEST(MixerFaderDragTest, ShiftDragMovesAboutOneEighthAsFarAsPlainDrag) {
+TEST(MixerFaderDragTest, ShiftDragMovesAboutOneTenthAsFarAsPlainDrag) {
     MixerFaderDragFixture plain;
     const juce::Point<float> downPos(12.0f, 100.0f);
     plain.slider().mouseDown(
@@ -143,7 +144,8 @@ TEST(MixerFaderDragTest, ShiftDragMovesAboutOneEighthAsFarAsPlainDrag) {
     const double fineDeltaDb = fine.slider().getValue() - 0.0;
 
     ASSERT_GT(plainDeltaDb, 0.0);
-    EXPECT_NEAR(fineDeltaDb / plainDeltaDb, 1.0 / 8.0, 0.03) << "Shift-drag must move ~1/8 as far as a plain drag";
+    EXPECT_NEAR(fineDeltaDb / plainDeltaDb, synth::ui::FineDrag::kRate, 0.03)
+        << "Shift-drag must move ~1/10 as far as a plain drag";
 }
 
 TEST(MixerFaderDragTest, TogglingShiftMidDragNeverJumpsTheValue) {
@@ -167,7 +169,8 @@ TEST(MixerFaderDragTest, TogglingShiftMidDragNeverJumpsTheValue) {
     f.slider().mouseDrag(
         faderMouseEvent(f.slider(), laterPos, downPos, juce::ModifierKeys(juce::ModifierKeys::shiftModifier), true));
     const double anchorProportion = faderDbToFraction((float)valueBeforeShift);
-    const double expectedProportion = juce::jlimit(0.0, 1.0, anchorProportion + (18.0 / f.trackLengthPx()) / 8.0);
+    const double expectedProportion =
+        juce::jlimit(0.0, 1.0, anchorProportion + (18.0 / f.trackLengthPx()) * synth::ui::FineDrag::kRate);
     const double expectedDb = (double)faderFractionToDb((float)expectedProportion);
     EXPECT_NEAR(f.slider().getValue(), expectedDb, 0.1);
 

@@ -13,13 +13,14 @@
 //
 // Both gestures and the keyboard steps live in CardControlGestures, shared with CardFader.
 
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
 
 class CardKnobSlider
-    : public juce::Slider
+    : public FineDragSlider
     , public CardControlGestures {
 public:
     CardKnobSlider() { setWantsKeyboardFocus(true); }
@@ -93,12 +94,12 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override {
         if (!claimMouseDown(e))
-            juce::Slider::mouseDown(e);
+            FineDragSlider::mouseDown(e);
     }
 
     void mouseDrag(const juce::MouseEvent& e) override {
         if (!forwardClaimed(e, 1))
-            juce::Slider::mouseDrag(e);
+            FineDragSlider::mouseDrag(e);
     }
 
     void mouseUp(const juce::MouseEvent& e) override {

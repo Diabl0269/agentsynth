@@ -3,6 +3,7 @@
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
@@ -107,7 +108,7 @@ public:
 
 /** The row's amount slider: Up/Down nudge the amount (as on a mixer fader), Left/Right are left to the
  *  matrix's grid navigation so the slider is never a dead end for the keyboard. */
-class AmountSlider : public juce::Slider {
+class AmountSlider : public synth::ui::FineDragSlider {
 public:
     bool keyPressed(const juce::KeyPress& key) override {
         if (key == juce::KeyPress::leftKey || key == juce::KeyPress::rightKey)

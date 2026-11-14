@@ -1,5 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Layout/ReadingFocusOrder.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -35,7 +36,7 @@ constexpr int kCountInComboWidth = 64;
 constexpr const char* kMetronomeEnabledKey = "timelineMetronomeEnabled";
 constexpr const char* kCountInBarsKey = "timelineCountInBars";
 
-// BPM drag tuning: this many pixels of vertical drag per "step" (1.0 BPM normally, 0.1 BPM fine).
+// BPM drag tuning: this many pixels of vertical drag per 1.0 BPM (Shift slows the travel to a tenth through FineDrag).
 constexpr float kBpmDragPixelsPerStep = 4.0f;
 
 // A beat is always a quarter note regardless of the file's notated denominator — same formula
@@ -78,16 +79,23 @@ TimelineTransportBar::GlyphButton::GlyphButton(const juce::String& name, Glyph g
 }
 
 //==============================================================================
+TimelineTransportBar::BpmDragLabel::BpmDragLabel(TimelineTransportBar& owner)
+    : owner_(owner)
+    , fine_(std::make_unique<FineDrag>()) {}
+
+TimelineTransportBar::BpmDragLabel::~BpmDragLabel() = default;
+
 void TimelineTransportBar::BpmDragLabel::mouseDown(const juce::MouseEvent& e) {
     juce::Label::mouseDown(e);
     dragAnchorY_ = e.position.y;
+    fine_->begin(e.position);
     dragAnchorBpm_ = owner_.currentBpmForDrag();
 }
 
 void TimelineTransportBar::BpmDragLabel::mouseDrag(const juce::MouseEvent& e) {
     if (isBeingEdited())
         return; // the text editor owns the mouse now — never fight it
-    owner_.applyDraggedBpm(dragAnchorBpm_, dragAnchorY_ - e.position.y, e.mods.isCommandDown());
+    owner_.applyDraggedBpm(dragAnchorBpm_, dragAnchorY_ - fine_->advance(e).y);
 }
 
 //==============================================================================
@@ -178,7 +186,7 @@ TimelineTransportBar::TimelineTransportBar() {
     addAndMakeVisible(bpmLabel_);
     bpmLabel_.setComponentID("timelineTransportBpmLabel");
     bpmLabel_.setJustificationType(juce::Justification::centred);
-    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub - Cmd for fine)");
+    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub - hold Shift for fine)");
     bpmLabel_.setEditable(false, true, false); // double-click to edit, same idiom as the track-name label
     bpmLabel_.setText(formatBpm(120.0), juce::dontSendNotification);
     bpmLabel_.onTextChange = [this] {
@@ -227,11 +235,10 @@ double TimelineTransportBar::currentBpmForDrag() const noexcept {
     return transport_ != nullptr ? transport_->getPositionSnapshot().bpm : bpmLabel_.getText().getDoubleValue();
 }
 
-void TimelineTransportBar::applyDraggedBpm(double anchorBpm, float deltaY, bool fine) {
+void TimelineTransportBar::applyDraggedBpm(double anchorBpm, float deltaY) {
     if (transport_ == nullptr)
         return;
-    const double step = fine ? 0.1 : 1.0;
-    const double newBpm = anchorBpm + (double)(deltaY / kBpmDragPixelsPerStep) * step;
+    const double newBpm = anchorBpm + (double)(deltaY / kBpmDragPixelsPerStep);
     transport_->setBpm(newBpm);
     const double clamped = juce::jlimit(synth::TransportService::kMinBpm, synth::TransportService::kMaxBpm, newBpm);
     bpmLabel_.setText(formatBpm(clamped), juce::dontSendNotification);

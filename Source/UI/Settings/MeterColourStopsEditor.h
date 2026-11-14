@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerMeterScale.h"
 #include <functional>
@@ -135,6 +136,7 @@ private:
     MeterColourStops stops_;
     int selected_ = -1;
     int dragIndex_ = -1;
+    FineDrag fine_; // Shift slows a stop drag
     // The dragged stop's OWN dbFrom at mouseDown, so mouseUp can tell "a real drag happened" from
     // "pressed and released without moving" -- a plain click on a handle body selects it and must
     // not fire a committed (or any) onChanged.

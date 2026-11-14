@@ -57,17 +57,17 @@ the attachment silently undoes both.
 
 ## Shift drag for fine adjustment
 
-Cubase's MixConsole convention: **holding Shift during a fader drag slows it to 1/8 of the normal
-rate.** `MixerFaderSlider` (a `juce::Slider` subclass) implements this itself rather than configuring
+Cubase's MixConsole convention: **holding Shift during a fader drag slows it to `FineDrag::kRate` (1/10) of the
+normal rate** (the one shared rate, [fine drag](../layout/fine-drag.md)). `MixerFaderSlider` (a `juce::Slider` subclass) implements this itself rather than configuring
 anything on stock `juce::Slider`.
 
 **The rate is anchored to wherever the drag currently is, not the original mouse-down point.**
 `mouseDown` records the press position and the slider's value-at-press as an anchor; `mouseDrag`
 computes `(anchorY - currentY) / trackLength` **in proportion space** — the slider's 0 to 1 thumb
-position, via `getNormalisableRange().convertTo0to1`/`convertFrom0to1` — scaled by 1/8 when Shift is
+position, via `getNormalisableRange().convertTo0to1`/`convertFrom0to1` — scaled by `FineDrag::kRate` when Shift is
 held, then adds that to the anchor's own proportion. Doing the maths in proportion space rather than dB
 space is what makes a fixed pixel delta cover more dB near the bottom of the taper than near 0 dB, and
-what makes the Shift rate exactly 1/8 of on-screen travel regardless of where on the taper the drag
+what makes the Shift rate exactly 1/10 of on-screen travel regardless of where on the taper the drag
 started.
 
 **`trackLength` is `getLookAndFeel().getSliderLayout(*this).sliderBounds.getHeight()`, NOT
@@ -85,7 +85,7 @@ CURRENT mouse position and value before applying the new rate** — everything a
 old rate is baked into the new anchor, so only the RATE changes from that point on, never the value
 itself.
 
-**Shift plus mouse wheel gets the same 1/8 factor**, applied the same way: to a proportion-space step
+**Shift plus mouse wheel gets the same factor**, applied the same way: to a proportion-space step
 scaled by `MouseWheelDetails::deltaY`, mirroring `juce::Slider::Pimpl::getMouseWheelDelta`'s own
 `0.15 * deltaY` sensitivity — **not a fixed dB amount per wheel event**. A fixed per-event step broke
 on trackpads: a two-finger scroll delivers dozens of small-`deltaY` events per gesture, and treating
@@ -126,7 +126,7 @@ click with no modifiers, and not a double-click, starts an ordinary drag, unaffe
 - **Driving synthesized `MouseEvent`s through a STOCK `juce::Slider`'s mouseDown and mouseDrag hung
   the test suite in CI.** Its internal mouse handling (`juce::Slider::Pimpl`) reaches into platform
   mouse-capture and cursor code the rest of this codebase's real-mouse tests never touch.
-- **None of JUCE's velocity-mode options give "1/8 while Shift is held, anchored to wherever the drag
+- **None of JUCE's velocity-mode options give "a fraction while Shift is held, anchored to wherever the drag
   currently is, no jump on toggle".**
 
 Reimplementing all five is what lets headless tests drive them directly and deterministically.
@@ -143,7 +143,7 @@ slider or the taper at all, so keyboard Up and Down behaviour is independent of 
 |------|--------|
 | `Tests/UI/Mixer/MixerFaderTaperTests.cpp` | `faderDbToFraction` and its inverse hit every one of the 11 taper breakpoints exactly (0 dB at exactly 0.71), are each monotonic across the whole -60 to +12 dB scale, clamp beyond 0 and 1 and beyond -60 and +12, round-trip both directions, and the bottom decade (-60 to -50) occupies less fraction-per-dB than the -5 to 0 dB segment |
 | `Tests/UI/Mixer/MixerFaderTests.cpp` | a bound fader's slider THUMB POSITION (`getNormalisableRange().convertTo0to1(value)`) matches the taper for -14.2, 0 and +12 dB while the bound parameter stays exactly linear dB; a regression test pinning that `textFromValueFunction` still reports "-3.0 dB" after a real `bind()`, not `juce::SliderParameterAttachment`'s own parameter-`getText()`-based overwrite; and the `parameterValueChanged` use-after-free guard |
-| `Tests/UI/Mixer/MixerFaderDragTests.cpp` | real `mouseDown`, `mouseDrag`, `mouseUp`, `mouseDoubleClick` and `mouseWheelMove` calls on `MixerFaderSlider` with synthesized `MouseEvent`s, never `juce::Slider`'s own mouse handling: a plain drag moves the value along the taper from the press-time anchor; the same pixel drag moves more dB near the bottom of the taper than near 0 dB; a Shift-held drag moves about 1/8 as far as a plain one; toggling Shift mid-drag re-anchors instead of jumping the value, in both directions; a whole drag collapses to exactly ONE undo step; Cmd-click and double-click both reset to 0 dB as one undo step; Shift plus wheel moves a smaller step than a plain wheel notch; many small wheel deltas accumulate reasonably like a trackpad; and every non-zero wheel notch moves at least one grid step |
+| `Tests/UI/Mixer/MixerFaderDragTests.cpp` | real `mouseDown`, `mouseDrag`, `mouseUp`, `mouseDoubleClick` and `mouseWheelMove` calls on `MixerFaderSlider` with synthesized `MouseEvent`s, never `juce::Slider`'s own mouse handling: a plain drag moves the value along the taper from the press-time anchor; the same pixel drag moves more dB near the bottom of the taper than near 0 dB; a Shift-held drag moves about 1/10 as far as a plain one; toggling Shift mid-drag re-anchors instead of jumping the value, in both directions; a whole drag collapses to exactly ONE undo step; Cmd-click and double-click both reset to 0 dB as one undo step; Shift plus wheel moves a smaller step than a plain wheel notch; many small wheel deltas accumulate reasonably like a trackpad; and every non-zero wheel notch moves at least one grid step |
 
 ## Related
 

@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+using synth::test::source_scan::classesOverridingMouseDrag;
 using synth::test::source_scan::sourceTexts;
 
 namespace {
@@ -104,6 +105,7 @@ const std::vector<Registered> kRegistered = {
     {"CardXYPad", {"exempt: a pad that writes both values live inside one open gesture while it drags"}},
     {"CardStepper", {"exempt: the value is written live inside one open gesture, the release only closes it"}},
     {"CardKnobSlider", {"exempt: a knob that writes its value live while it drags"}},
+    {"FineDragSlider", {"exempt: a slider that writes its value live while it drags"}},
     {"MixerFaderSlider", {"exempt: a fader that writes its value live while it drags"}},
     {"ModCurveRangeHandle", {"exempt: the range is written live inside one open gesture, the release only closes it"}},
     {"ModDotAmountBar", {"exempt: the amount is written live inside one open gesture, the release only closes it"}},
@@ -181,6 +183,7 @@ const std::vector<Follows> kFollow = {
     {"CardXYPad", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
     {"CardStepper", kValueInRange},
     {"CardKnobSlider", kValueInRange},
+    {"FineDragSlider", kValueInRange},
     {"MixerFaderSlider", kValueInRange},
     {"ModCurveRangeHandle", kValueInRange},
     {"ModDotAmountBar", kValueInRange},
@@ -252,46 +255,6 @@ constexpr std::size_t kFollowGapCeiling = 0;
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning
 // ---------------------------------------------------------------------------------------------------------------------
-
-// The class or struct whose body contains `pos`, found by walking back out of the braces; "" when there is none.
-std::string enclosingClass(const std::string& text, size_t pos) {
-    static const std::regex head(R"(\b(?:class|struct)\s+(\w+))");
-    int depth = 0;
-    for (size_t i = pos; i-- > 0;) {
-        if (text[i] == '}') {
-            ++depth;
-        } else if (text[i] == '{' && depth-- == 0) {
-            const size_t from = text.find_last_of(";}{", i == 0 ? 0 : i - 1);
-            const auto declaration = text.substr(from == std::string::npos ? 0 : from + 1, i - (from + 1));
-            for (std::sregex_iterator it(declaration.begin(), declaration.end(), head), end; it != end; ++it) {
-                const auto before = declaration.find_last_not_of(" \t\n", (size_t)it->position(0) - 1);
-                const bool templateArg =
-                    before != std::string::npos && (declaration[before] == '<' || declaration[before] == ',');
-                const bool enumClass =
-                    before != std::string::npos && before >= 3 && declaration.compare(before - 3, 4, "enum") == 0;
-                if (!templateArg && !enumClass)
-                    return (*it)[1];
-            }
-            depth = 0;
-        }
-    }
-    return "";
-}
-
-// Every class that overrides mouseDrag(const juce::MouseEvent&), with the file that declares it.
-std::map<std::string, std::string> classesOverridingMouseDrag() {
-    static const std::regex pattern(R"(void\s+mouseDrag\s*\(\s*const\s+juce::MouseEvent\s*&[^)]*\)\s*override)");
-    std::map<std::string, std::string> classes;
-    for (const auto& [file, text] : sourceTexts()) {
-        if (text.find("mouseDrag") == std::string::npos)
-            continue;
-        for (std::sregex_iterator it(text.begin(), text.end(), pattern), end; it != end; ++it) {
-            const auto cls = enclosingClass(text, (size_t)it->position(0));
-            classes[cls.empty() ? "?" + file : cls] = file;
-        }
-    }
-    return classes;
-}
 
 bool testIsRegistered(const std::string& fullName) {
     const auto* unit = ::testing::UnitTest::GetInstance();

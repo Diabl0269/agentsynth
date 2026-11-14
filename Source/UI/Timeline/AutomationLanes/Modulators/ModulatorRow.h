@@ -132,7 +132,7 @@ public:
 
     juce::ComboBox& getShapeCombo() noexcept { return shape_; }
     NoteLengthBox& getSyncRateCombo() noexcept { return syncRate_; }
-    juce::Slider& getRateSlider() noexcept { return rateHz_; }
+    juce::Slider& getRateSlider() noexcept { return *rateHz_; }
     juce::ToggleButton& getSyncToggle() noexcept { return sync_; }
     ModulatorShapeIcon& getShapeIcon() noexcept { return shapeIcon_; }
 
@@ -197,7 +197,7 @@ private:
 
     juce::ComboBox shape_;
     NoteLengthBox syncRate_;
-    juce::Slider rateHz_;
+    std::unique_ptr<juce::Slider> rateHz_; // a FineDragSlider, made in the .cpp
     juce::ToggleButton sync_;
     ModulatorShapeIcon shapeIcon_;
     TrackFoldArrow foldArrow_;

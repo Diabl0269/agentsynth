@@ -144,7 +144,8 @@ juce::String MixerFader::defaultNudgeShortcutText() {
 // The keys nudge the focused channel by 1 dB; the same chord with Alt added nudges 0.1 dB.
 void MixerFader::setNudgeShortcutText(const juce::String& keys) {
     nudgeShortcutText_ = keys;
-    slider_.setTooltip(formatShortcutHint("Channel level: drag to change (Alt with the keys for 0.1 dB)", keys));
+    slider_.setTooltip(
+        formatShortcutHint("Channel level: drag to change (Shift for fine; Alt with the keys for 0.1 dB)", keys));
 }
 
 void MixerFader::grabAccessibilityFocus() {

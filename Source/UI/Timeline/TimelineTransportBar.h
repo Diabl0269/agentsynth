@@ -44,6 +44,8 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // moment Record is clicked. Both persist themselves via setApplicationProperties.
 namespace synth::ui {
 
+class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this header is wide
+
 // "Record also starts playback" (default ON): the Settings key, read at use time by the record flow and the tooltip.
 inline constexpr const char* kRecordStartsPlaybackKey = "recordStartsPlayback";
 
@@ -226,25 +228,26 @@ private:
     };
 
     // A juce::Label that turns a vertical drag into a live BPM change: ±1.0 BPM per 4 px, or
-    // ±0.1 BPM per 4 px with Cmd held (fine). Double-click-to-edit (inherited, unmodified) and
-    // drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
+    // a tenth of that with Shift held (FineDrag; Cmd does nothing extra). Double-click-to-edit (inherited, unmodified)
+    // and drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
     // mouseDown/mouseDrag/mouseUp, so overriding the latter three here does not disturb Label's
     // own editDoubleClick handling.
     class BpmDragLabel : public synth::ui::NonModalLabel {
     public:
-        explicit BpmDragLabel(TimelineTransportBar& owner) noexcept
-            : owner_(owner) {}
+        explicit BpmDragLabel(TimelineTransportBar& owner);
+        ~BpmDragLabel() override;
         void mouseDown(const juce::MouseEvent& e) override;
         void mouseDrag(const juce::MouseEvent& e) override;
 
     private:
         TimelineTransportBar& owner_;
         float dragAnchorY_ = 0.0f;
+        std::unique_ptr<FineDrag> fine_; // Shift slows the tempo drag
         double dragAnchorBpm_ = 120.0;
     };
 
     double currentBpmForDrag() const noexcept;
-    void applyDraggedBpm(double anchorBpm, float deltaY, bool fine);
+    void applyDraggedBpm(double anchorBpm, float deltaY);
     void refreshReadout(const synth::TransportService::PositionSnapshot& snapshot);
     static juce::String formatBpm(double bpm);
     static juce::String formatTimeSig(int numerator, int denominator);

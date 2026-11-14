@@ -4,14 +4,18 @@
 // AppLookAndFeel, the one a module card shows) from -100 to +100 percent, dragged or keyed to change how strongly a
 // source moves the knob. A slider for assistive technology: it speaks "<Source> amount" and the value in percent.
 // Edits are reported as a gesture (begin, change..., end) so the owner makes ONE undo step of a drag; each Left/Right
-// key press is a gesture of its own (1 percent, Shift 10). The drag maths is this class's own (no juce::Slider mouse
-// handling), like CardFader, so a headless test can drive it with plain events.
+// key press is a gesture of its own (1 percent, Shift 10); Shift while dragging slows the pointer to FineDrag::kRate.
+// The drag maths is this class's own (no juce::Slider mouse handling), like CardFader, so a headless test can drive it
+// with plain events.
 
 #include "ModDotPalette.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
+
+class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this header is wide
 
 class ModDotAmountBar final : public juce::Slider {
 public:
@@ -58,6 +62,7 @@ private:
     bool gestureOpen_ = false;
     float grabOffset_ = 0.0f;
     bool dragging_ = false;
+    std::shared_ptr<FineDrag> fine_; // Shift slows the drag
 };
 
 } // namespace synth::ui

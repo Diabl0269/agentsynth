@@ -9,6 +9,7 @@
 #include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
@@ -97,7 +98,7 @@ void MixerSendList::rebuildKnobs() {
         row.bypassButton->onClick = [this, rowIndex] { toggleBypassForRow(rowIndex); };
         addAndMakeVisible(*row.bypassButton);
 
-        row.knob = std::make_unique<juce::Slider>();
+        row.knob = std::make_unique<synth::ui::FineDragSlider>();
         row.knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         // The entry may have no valid target (its cable cut on the canvas), in which case
@@ -106,7 +107,7 @@ void MixerSendList::rebuildKnobs() {
         row.knob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
                                ? "Send to " + entry.targetName
                                : "Send " + juce::String(entry.slot + 1) + " (no target)");
-        row.knob->setTooltip("Send level: drag to change");
+        row.knob->setTooltip("Send level: drag to change (Shift for fine)");
         addAndMakeVisible(*row.knob);
         if (auto* param = strip->getSendLevelParameter(entry.slot)) {
             const auto range = param->getNormalisableRange();
@@ -130,14 +131,14 @@ void MixerSendList::rebuildKnobs() {
         // The pan knob, same construction shape as the level knob above -- attached
         // straight onto sendNPan, so it is host-visible/automatable with no lane plumbing, and
         // registered in the SAME MIDI-learn registry via the SAME onSendKnobBuilt callback.
-        row.panKnob = std::make_unique<juce::Slider>();
+        row.panKnob = std::make_unique<synth::ui::FineDragSlider>();
         row.panKnob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.panKnob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         row.panKnob->setTitle((entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
                                    ? "Send pan to " + entry.targetName
                                    : "Send " + juce::String(entry.slot + 1) + " pan (no target)") +
                               (entry.mono ? " (mono)" : ""));
-        row.panKnob->setTooltip("Send pan: drag to change");
+        row.panKnob->setTooltip("Send pan: drag to change (Shift for fine)");
         addAndMakeVisible(*row.panKnob);
         if (auto* panParam = strip->getSendPanParameter(entry.slot)) {
             const auto range = panParam->getNormalisableRange();

@@ -5,6 +5,7 @@
 
 #include "ControllerSurfaceCell.h"
 
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -58,15 +59,16 @@ void ControllerSurfaceCell::buildWidgetForKind() {
     switch (control_.kind) {
     case synth::ControlKind::knob:
     case synth::ControlKind::encoder:
-        slider_ = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+        slider_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::RotaryHorizontalVerticalDrag,
+                                                              juce::Slider::NoTextBox);
         break;
     case synth::ControlKind::fader:
-        slider_ = std::make_unique<juce::Slider>(juce::Slider::LinearVertical, juce::Slider::NoTextBox);
+        slider_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearVertical, juce::Slider::NoTextBox);
         break;
     case synth::ControlKind::wheel:
         // No dedicated wheel painter in AppLookAndFeel (only rotary/linear/button) -- LinearHorizontal
         // is the honest fallback per the header's class comment.
-        slider_ = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+        slider_ = std::make_unique<synth::ui::FineDragSlider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
         break;
     case synth::ControlKind::pad:
     case synth::ControlKind::button:

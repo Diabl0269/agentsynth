@@ -1,6 +1,7 @@
 // PerNoteBar.cpp -- the per-note settings row: wiring each control to the adapter as live, undoable edits, and
 // the key row's fade.
 #include "PerNoteBar.h"
+#include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -56,29 +57,30 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
     };
     addAndMakeVisible(mode_);
 
-    smoothness_.setSliderStyle(juce::Slider::LinearHorizontal);
-    smoothness_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    smoothness_.setRange(0.0, 1.0, 0.01); // an arrow key steps 5 ms of glide
-    smoothness_.textFromValueFunction = smoothnessText;
-    smoothness_.setTitle("Smoothness");
-    smoothness_.setWantsKeyboardFocus(true);
-    smoothness_.setTooltip("Smoothness: how a new note reaches its shape, from a hard jump to a 500 ms glide");
-    smoothness_.setExplicitFocusOrder(2);
-    smoothness_.onDragStart = [this] {
+    smoothness_ = std::make_unique<synth::ui::FineDragSlider>();
+    smoothness_->setSliderStyle(juce::Slider::LinearHorizontal);
+    smoothness_->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    smoothness_->setRange(0.0, 1.0, 0.01); // an arrow key steps 5 ms of glide
+    smoothness_->textFromValueFunction = smoothnessText;
+    smoothness_->setTitle("Smoothness");
+    smoothness_->setWantsKeyboardFocus(true);
+    smoothness_->setTooltip("Smoothness: how a new note reaches its shape, from a hard jump to a 500 ms glide");
+    smoothness_->setExplicitFocusOrder(2);
+    smoothness_->onDragStart = [this] {
         dragging_ = true;
         adapter_.beginEdit();
     };
-    smoothness_.onValueChange = [this] {
-        const float value = (float)smoothness_.getValue();
+    smoothness_->onValueChange = [this] {
+        const float value = (float)smoothness_->getValue();
         write([value](CustomFilterPerNote& p) { p.smoothness = value; }, !dragging_);
     };
-    smoothness_.onDragEnd = [this] {
+    smoothness_->onDragEnd = [this] {
         dragging_ = false;
         adapter_.endEdit();
         if (onEdited)
             onEdited();
     };
-    addAndMakeVisible(smoothness_);
+    addAndMakeVisible(*smoothness_);
 
     octaveDown_.setTitle("Octave down");
     octaveDown_.setTooltip("Octave down: show the keys an octave lower (Page Down on the keys)");
@@ -112,7 +114,7 @@ void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
     const auto p = adapter_.getPerNote();
     mode_.setSelectedIndex((int)p.mode, juce::dontSendNotification);
     if (!dragging_)
-        smoothness_.setValue(p.smoothness, juce::dontSendNotification);
+        smoothness_->setValue(p.smoothness, juce::dontSendNotification);
     juce::StringArray names;
     std::vector<std::optional<juce::uint32>> colours;
     std::vector<int> slots;
@@ -188,7 +190,7 @@ void PerNoteBar::resized() {
     mode_.setBounds(row.removeFromLeft(kModeWidth).withSizeKeepingCentre(kModeWidth, 26));
     row.removeFromLeft(16);
     hardArea_ = row.removeFromLeft(kEndLabelWidth);
-    smoothness_.setBounds(row.removeFromLeft(kSliderWidth));
+    smoothness_->setBounds(row.removeFromLeft(kSliderWidth));
     smoothArea_ = row.removeFromLeft(kEndLabelWidth + 8);
 
     hint_.setBounds(area.removeFromTop(kHintHeight).withTrimmedLeft(kLabelWidth));

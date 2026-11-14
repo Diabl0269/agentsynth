@@ -1,5 +1,6 @@
 #include "ModDotAmountBar.h"
 
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -20,7 +21,8 @@ private:
     ModDotAmountBar& bar_;
 };
 
-ModDotAmountBar::ModDotAmountBar() {
+ModDotAmountBar::ModDotAmountBar()
+    : fine_(std::make_shared<FineDrag>()) {
     setSliderStyle(juce::Slider::LinearHorizontal);
     setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     setRange(-1.0, 1.0, 0.0);
@@ -76,13 +78,14 @@ void ModDotAmountBar::mouseDown(const juce::MouseEvent& e) {
     // Pressing the cap itself keeps it under the pointer; pressing the track jumps it there.
     grabOffset_ = std::abs(x - xForValue(amount())) <= (float)kGrab ? xForValue(amount()) - x : 0.0f;
     dragging_ = true;
+    fine_->begin(e.position);
     change(valueForX(x + grabOffset_));
     repaint();
 }
 
 void ModDotAmountBar::mouseDrag(const juce::MouseEvent& e) {
     if (dragging_)
-        change(valueForX(e.position.x + grabOffset_));
+        change(valueForX(fine_->advance(e).x + grabOffset_));
 }
 
 void ModDotAmountBar::mouseUp(const juce::MouseEvent&) {

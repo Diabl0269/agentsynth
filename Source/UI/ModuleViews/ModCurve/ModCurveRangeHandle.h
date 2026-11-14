@@ -3,6 +3,7 @@
 // One of the two range handles on the left edge of the curve box: a vertical track with a draggable marker, 0 at the
 // bottom and 100 percent at the top. Up and Down step it by one percent (Shift: ten) for the keyboard.
 
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -40,6 +41,7 @@ private:
     juce::String name_;
     float value_ = 0.0f;
     bool dragging_ = false;
+    FineDrag fine_; // Shift slows the drag
 };
 
 } // namespace synth::ui

@@ -38,6 +38,8 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/LibrarySidebarSwitch.h
     Source/UI/Library/LibrarySidebarViews.cpp
     Source/UI/Library/LibrarySidebarViews.h
+    Source/UI/Controls/FineDrag/FineDragSlider.cpp
+    Source/UI/Controls/FineDrag/FineDragSlider.h
     Source/UI/Controls/RangeSlider/RangeSlider.cpp
     Source/UI/Controls/RangeSlider/RangeSlider.h
     Source/UI/Library/SoundBrowser/ShapeCurveView.cpp

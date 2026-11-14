@@ -94,12 +94,12 @@ TEST(DrumMachineSwingTest, ADragOnTheNumberIsOneUndoStepCommittedOnRelease) {
     EXPECT_EQ(f.grid.getSwingField().getValue(), 0) << "the field follows the undo";
 }
 
-TEST(DrumMachineSwingTest, AShiftDragMovesOneEighthAsFast) {
+TEST(DrumMachineSwingTest, AShiftDragMovesOneTenthAsFast) {
     GrooveFixture f;
     auto& field = f.grid.getSwingField();
     const auto start = numberOf(field);
     field.mouseDown(swingPress(field, start));
-    field.mouseDrag(swingPress(field, start + juce::Point<int>(0, -24), juce::ModifierKeys::shiftModifier, true));
+    field.mouseDrag(swingPress(field, start + juce::Point<int>(0, -30), juce::ModifierKeys::shiftModifier, true));
     field.mouseUp(swingPress(field, start));
     EXPECT_EQ(f.grid.getSwingField().getValue(), 1);
     EXPECT_DOUBLE_EQ(f.c().swing, DrumMachineComponent::percentToSwing(1.0));

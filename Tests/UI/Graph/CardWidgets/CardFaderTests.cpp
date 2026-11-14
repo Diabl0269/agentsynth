@@ -1,7 +1,7 @@
 // CardFaderTests.cpp
 //
 // Source/UI/Graph/CardWidgets/CardFader: a module card's fader. On its own: a drag follows the mouse as
-// one change gesture, Shift drags at an eighth without a jump, Cmd-click and double-click reset to the
+// one change gesture, Shift drags at a tenth without a jump, Cmd-click and double-click reset to the
 // default, a right click does nothing to the value, and the keys step it. On a card: it is in the
 // card's slider list, learnable, a modulation target a cable lands on, its modulation bar paints from
 // the base value to base + CV in the theme's colour, and Alt-drag adjusts the routing's amount.
@@ -13,6 +13,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -104,13 +105,13 @@ TEST(CardFader, HorizontalFaderFollowsTheMouseAcross) {
     EXPECT_NEAR(f.fader.getValue(), 0.4, 0.01);
 }
 
-TEST(CardFader, ShiftDragMovesAtAnEighthAndTogglingShiftNeverJumps) {
+TEST(CardFader, ShiftDragMovesAtATenthAndTogglingShiftNeverJumps) {
     LoneFader f;
     const auto start = f.cap();
     const float half = f.travelLength() * 0.5f;
     f.fader.mouseDown(mouseAt(f.fader, start, kShift));
     f.fader.mouseDrag(mouseAt(f.fader, start - juce::Point<float>(0.0f, half), kShift));
-    EXPECT_NEAR(f.fader.getValue(), 0.5 + 0.5 / 8.0, 0.005);
+    EXPECT_NEAR(f.fader.getValue(), 0.5 + 0.5 * synth::ui::FineDrag::kRate, 0.005);
 
     // Releasing Shift where the mouse is changes nothing; only the rate changes from here.
     const double beforeToggle = f.fader.getValue();

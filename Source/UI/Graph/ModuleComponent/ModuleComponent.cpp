@@ -18,6 +18,7 @@
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
@@ -856,7 +857,8 @@ void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, 
     if (modAmountGestureAttenuverterId_.uid == 0)
         return;
     if (phase == 1) {
-        const float delta = (e.getPosition().y - modAmountGestureLastPos_.y) * -0.01f;
+        const float delta =
+            (e.getPosition().y - modAmountGestureLastPos_.y) * -0.01f * (float)synth::ui::FineDrag::rateFor(e.mods);
         modAmountGestureLastPos_ = e.getPosition();
         owner.adjustModAmount(modAmountGestureAttenuverterId_, delta);
         return;

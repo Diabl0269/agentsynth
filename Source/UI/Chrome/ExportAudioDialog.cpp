@@ -1,6 +1,7 @@
 #include "ExportAudioDialog.h"
 
 #include "Transport/LameLocator.h"
+#include "UI/Chrome/ExpandingRangeSlider.h"
 #include "UI/Layout/DialogKeyboard.h"
 
 namespace synth::ui {
@@ -37,6 +38,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     , bpm_(bpm > 0.0 ? bpm : 120.0)
     , destination_(stemsMode_ ? initialDestinationDirectory.getChildFile(initialFileNameBase + " Stems")
                               : initialDestinationDirectory.getChildFile(initialFileNameBase + ".wav")) {
+    tailSlider_ = std::make_unique<ExpandingRangeSlider>();
     addAndMakeVisible(optionsPage_);
     optionsPage_.addAndMakeVisible(formatLabel_);
     optionsPage_.addAndMakeVisible(formatBox_);
@@ -47,7 +49,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     optionsPage_.addAndMakeVisible(bitrateLabel_);
     optionsPage_.addAndMakeVisible(bitrateBox_);
     optionsPage_.addAndMakeVisible(tailLabel_);
-    optionsPage_.addAndMakeVisible(tailSlider_);
+    optionsPage_.addAndMakeVisible(*tailSlider_);
     optionsPage_.addAndMakeVisible(tailUnitBox_);
     optionsPage_.addAndMakeVisible(rangeLabel_);
     optionsPage_.addAndMakeVisible(wholeArrangementButton_);
@@ -95,10 +97,10 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     setLameExecutable(findLameExecutable());
     updateFormatDependentRows();
 
-    tailSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
-    tailSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
-    tailSlider_.setRange(0.0, 30.0, 0.1);
-    tailSlider_.setValue(0.0, juce::dontSendNotification);
+    tailSlider_->setSliderStyle(juce::Slider::LinearHorizontal);
+    tailSlider_->setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+    tailSlider_->setRange(0.0, 30.0, 0.1);
+    tailSlider_->setValue(0.0, juce::dontSendNotification);
     tailLabel_.setTooltip("Extra render time after the range ends, so reverb/delay tails ring out. "
                           "Type a value past the slider's end to extend it.");
 
@@ -190,9 +192,9 @@ void ExportAudioDialog::nameControlsForAccessibility() {
     bitDepthBox_.setTooltip("Bit depth of the exported file");
     bitrateBox_.setTitle("Bitrate");
     bitrateBox_.setTooltip("MP3 bitrate: higher sounds better and makes a bigger file");
-    tailSlider_.setTitle("Tail length");
-    tailSlider_.nameValueBox();
-    tailSlider_.setTooltip(tailLabel_.getTooltip());
+    tailSlider_->setTitle("Tail length");
+    tailSlider_->nameValueBox();
+    tailSlider_->setTooltip(tailLabel_.getTooltip());
     tailUnitBox_.setTitle("Tail unit");
     tailUnitBox_.setTooltip("Measure the tail in seconds or in bars");
     wholeArrangementButton_.setTooltip("Bounce from the start to the end of the arrangement");
@@ -304,12 +306,12 @@ void ExportAudioDialog::updateTailReadoutForUnit() {
     // The slider always holds a value in whichever unit was selected BEFORE this call - convert
     // it to seconds first (the one currency getOptionsForTest ships), then into the new unit. This
     // is what keeps "30 seconds -> switch to Bars -> switch back to Seconds" a no-op.
-    const double currentSeconds = wasBarsUnit_ ? tailSlider_.getValue() * secondsPerBar : tailSlider_.getValue();
+    const double currentSeconds = wasBarsUnit_ ? tailSlider_->getValue() * secondsPerBar : tailSlider_->getValue();
     const double newValue = toBars ? currentSeconds / secondsPerBar : currentSeconds;
     const double defaultMax = toBars ? 30.0 / secondsPerBar : 30.0;
 
-    tailSlider_.setRange(0.0, juce::jmax(defaultMax, newValue), toBars ? 0.01 : 0.1);
-    tailSlider_.setValue(newValue, juce::dontSendNotification);
+    tailSlider_->setRange(0.0, juce::jmax(defaultMax, newValue), toBars ? 0.01 : 0.1);
+    tailSlider_->setValue(newValue, juce::dontSendNotification);
     wasBarsUnit_ = toBars;
 }
 
@@ -331,7 +333,8 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
     options.mp3BitrateKbps = bitrateBox_.getSelectedId();
     options.lameExecutable = lameExecutable_;
     // BounceOptions only ever speaks seconds - Bars is purely a display convenience for the slider.
-    options.tailSeconds = wasBarsUnit_ ? tailSlider_.getValue() * (60.0 / bpm_) * kBeatsPerBar : tailSlider_.getValue();
+    options.tailSeconds =
+        wasBarsUnit_ ? tailSlider_->getValue() * (60.0 / bpm_) * kBeatsPerBar : tailSlider_->getValue();
     // Fixed, not a control: with AudioEngine::setAutomationSlicingEnabled() off (the shipped
     // default, in both live playback and a bounce - see docs/architecture/audio-engine.md#bounceexport. Control-rate
     // slicing subsection), a render's block size doubles as its automation resolution. Exposing
@@ -386,7 +389,7 @@ void ExportAudioDialog::setTailUnitBarsForTest(bool bars) {
     tailUnitBox_.setSelectedId(bars ? 2 : 1, juce::sendNotificationSync);
 }
 
-void ExportAudioDialog::setTailValueForTest(double value) { tailSlider_.setValue(value, juce::dontSendNotification); }
+void ExportAudioDialog::setTailValueForTest(double value) { tailSlider_->setValue(value, juce::dontSendNotification); }
 
 void ExportAudioDialog::simulateFileNameFieldEscapeForTest() {
     if (fileNameEditor_.onEscapeKey)
@@ -500,7 +503,7 @@ void ExportAudioDialog::resized() {
         tailRow.removeFromLeft(kCaptionGap);
         tailUnitBox_.setBounds(tailRow.removeFromRight(80));
         tailRow.removeFromRight(6);
-        tailSlider_.setBounds(tailRow);
+        tailSlider_->setBounds(tailRow);
         area.removeFromTop(6);
 
         area.removeFromTop(6);

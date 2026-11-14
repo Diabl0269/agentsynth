@@ -121,7 +121,7 @@ public:
     const MixerEqThumbnail& getEqThumbnail() const noexcept { return eqThumbnail_; }
 
     MixerFader& getFaderForTest() noexcept { return fader_; }
-    juce::Slider& getPanSliderForTest() noexcept { return panSlider_; }
+    juce::Slider& getPanSliderForTest() noexcept { return *panSlider_; }
     juce::Button& getMuteButtonForTest() noexcept { return muteButton_; }
     juce::Button& getSoloButtonForTest() noexcept { return soloButton_; }
 
@@ -421,7 +421,7 @@ private:
     std::array<MixerCollapsedSection, MixerSectionLayout::kSectionCount> collapsed_;
     // After the viewports and strips they fade (destroyed first).
     std::array<std::unique_ptr<MixerSectionSwap>, MixerSectionLayout::kSectionCount> sectionSwaps_;
-    juce::Slider panSlider_;
+    std::unique_ptr<juce::Slider> panSlider_; // a FineDragSlider, made in the constructor
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     juce::String panShortcutText_;
     MixerFader fader_;

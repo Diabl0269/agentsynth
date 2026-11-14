@@ -2,6 +2,7 @@
 // track moves the nearer one), the keys on each handle, the 90 ms glide of non-drag changes and the per-handle
 // screen-reader value.
 #include "UI/Controls/RangeSlider/RangeSlider.h"
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/TooltipHelpHandler.h"
@@ -73,13 +74,14 @@ public:
         hover_ = false;
         repaint();
     }
-    void mouseDown(const juce::MouseEvent&) override {
+    void mouseDown(const juce::MouseEvent& e) override {
         dragging_ = true;
+        fine_.begin(e.getEventRelativeTo(&owner_).position);
         grabKeyboardFocus();
         repaint();
     }
     void mouseDrag(const juce::MouseEvent& e) override {
-        const auto inOwner = e.getEventRelativeTo(&owner_);
+        const auto inOwner = fine_.scaled(e.getEventRelativeTo(&owner_));
         auto which = which_;
         // Two handles on one spot: the pointer's side decides which one the drag takes, so neither gets stuck.
         if (owner_.lower_ == owner_.upper_)
@@ -114,6 +116,7 @@ private:
     Handle which_;
     bool hover_ = false;
     bool dragging_ = false;
+    FineDrag fine_; // Shift slows the handle drag
 };
 
 RangeSlider::RangeSlider()

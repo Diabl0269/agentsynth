@@ -49,8 +49,8 @@ public:
     void setAutoPlay(bool on) { autoPlay_.setToggleState(on, juce::dontSendNotification); }
     bool isMatchKey() const { return matchKey_.getToggleState(); }
     void setMatchKey(bool on) { matchKey_.setToggleState(on, juce::dontSendNotification); }
-    float getGainDb() const { return (float)volume_.getValue(); }
-    void setGainDb(float db) { volume_.setValue(db, juce::dontSendNotification); }
+    float getGainDb() const { return (float)volume_->getValue(); }
+    void setGainDb(float db) { volume_->setValue(db, juce::dontSendNotification); }
 
     /** The user flipped Auto-play or Match key, moved the volume or pressed Play/Stop. */
     std::function<void(bool)> onAutoPlayChanged;
@@ -60,7 +60,7 @@ public:
     std::function<void()> onTogglePlay;
 
     SoundWaveformView& getWaveform() { return wave_; }
-    juce::Slider& getVolume() { return volume_; }
+    juce::Slider& getVolume() { return *volume_; }
     juce::ToggleButton& getAutoPlay() { return autoPlay_; }
     juce::ToggleButton& getMatchKey() { return matchKey_; }
     juce::TextButton& getPlayButton() { return play_; }
@@ -104,7 +104,7 @@ private:
     juce::TextButton play_{"Play"};
     juce::ToggleButton autoPlay_{"Auto-play"};
     juce::ToggleButton matchKey_{"Match key"};
-    juce::Slider volume_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
+    std::unique_ptr<juce::Slider> volume_; // a FineDragSlider, made in the constructor
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundPreviewFooter)
 };

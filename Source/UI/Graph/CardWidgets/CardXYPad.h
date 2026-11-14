@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -80,6 +81,7 @@ private:
     float x_ = 0.5f;
     float y_ = 0.5f;
     bool dragging_ = false;
+    FineDrag fine_; // Shift slows a drag; the press itself still puts the ring under the pointer
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CardXYPad)
 };

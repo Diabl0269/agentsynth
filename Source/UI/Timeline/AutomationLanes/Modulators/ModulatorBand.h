@@ -19,6 +19,8 @@ class TransportService;
 
 namespace synth::ui {
 
+class FineDrag; // UI/Controls/FineDrag/FineDrag.h, included by the .cpp: this header is wide
+
 class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
 
 struct TrackHeaderHost;
@@ -154,6 +156,7 @@ private:
     bool knobDragging_ = false;
     bool knobCancelled_ = false; // Esc ended the drag: the rest of the gesture is ignored
     double knobDragStart_ = 0.0;
+    std::unique_ptr<FineDrag> fine_; // Shift slows the amount drag
     PointValueBubble bubble_{*this}; // the amount above the pointer during that drag, as on a lane's flat line
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorBand)

@@ -4,6 +4,7 @@
 // support juce::ColourSelector's own colour space and hue bar lack: a square for saturation and brightness and a bar
 // for hue. Both hold the colour as hue, saturation and brightness, report a user edit through onChange and follow the
 // owner through setHsb (no callback). docs/development/accessibility.md.
+#include "UI/Controls/FineDrag/FineDrag.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -49,6 +50,7 @@ protected:
 
     static constexpr int kEdge = 3;
     Hsb hsb_;
+    FineDrag fine_; // Shift slows a drag; a press sets the value under the pointer, as before
 };
 
 class SaturationBrightnessField final : public ColourPickerField {
@@ -56,11 +58,15 @@ public:
     SaturationBrightnessField();
     juce::String valueText() const override;
     bool keyPressed(const juce::KeyPress& key) override;
-    void mouseDown(const juce::MouseEvent& e) override { mouseDrag(e); }
-    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override {
+        fine_.begin(e.position);
+        applyPointer(e.position);
+    }
+    void mouseDrag(const juce::MouseEvent& e) override { applyPointer(fine_.advance(e)); }
     void resized() override { image_ = {}; }
 
 private:
+    void applyPointer(juce::Point<float> pointer);
     void paintContent(juce::Graphics& g, juce::Rectangle<int> area) override;
     void paintMarker(juce::Graphics& g, juce::Rectangle<int> area) override;
 
@@ -73,10 +79,14 @@ public:
     HueBar();
     juce::String valueText() const override;
     bool keyPressed(const juce::KeyPress& key) override;
-    void mouseDown(const juce::MouseEvent& e) override { mouseDrag(e); }
-    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override {
+        fine_.begin(e.position);
+        applyPointer(e.position);
+    }
+    void mouseDrag(const juce::MouseEvent& e) override { applyPointer(fine_.advance(e)); }
 
 private:
+    void applyPointer(juce::Point<float> pointer);
     void paintContent(juce::Graphics& g, juce::Rectangle<int> area) override;
     void paintMarker(juce::Graphics& g, juce::Rectangle<int> area) override;
 };
