@@ -236,7 +236,8 @@ void TimelineClipLaneArea::commitDrawGesture() {
     const bool dragged = drawDragged_ && drawEndBeat_ > drawAnchorBeat_ + 1e-9;
     const auto track = drawTrack_;
     const double anchor = drawAnchorBeat_;
-    const double length = drawEndBeat_ - drawAnchorBeat_;
+    const double length =
+        doc_ != nullptr ? doc_->capToPlacementEnd(anchor, drawEndBeat_) - anchor : drawEndBeat_ - drawAnchorBeat_;
 
     dragMode_ = DragMode::None;
     drawDragged_ = false;

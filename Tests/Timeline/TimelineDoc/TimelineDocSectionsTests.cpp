@@ -377,3 +377,20 @@ TEST_F(TimelineDocTest, InsertAndDeleteTimeMoveTheWholeSong) {
     EXPECT_FALSE(doc.deleteTime(4.0, 4.0, kSpb));
     EXPECT_FALSE(doc.insertTime(1.0, 2.0, 0.0));
 }
+
+// A gesture-authored clip's end is cut back to the end of the placement holding its start.
+TEST_F(TimelineDocTest, CapToPlacementEndStopsAtTheEndOfTheStartsPlacement) {
+    const auto section = doc.makeSection(0.0, 8.0, "A", 0xff00ff00, kSpb);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(doc.placeSection(section, 8.0, SectionDropMode::MakeRoom, kSpb).isValid());
+
+    EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(2.0, 6.0), 6.0) << "inside a placement: unchanged";
+    EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(2.0, 16.0), 8.0) << "spanning into the next repeat: cut at the first's end";
+    EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(8.0, 20.0), 16.0)
+        << "a start exactly on a boundary belongs to the later one";
+    EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(16.0, 24.0), 24.0) << "no placement at the start: unchanged";
+}
+
+TEST_F(TimelineDocTest, CapToPlacementEndLeavesASectionlessSongAlone) {
+    EXPECT_DOUBLE_EQ(doc.capToPlacementEnd(0.0, 32.0), 32.0);
+}

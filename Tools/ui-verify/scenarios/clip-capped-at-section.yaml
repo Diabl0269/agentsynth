@@ -1,0 +1,35 @@
+# A MIDI clip drawn with the Draw tool across the end of a repeated section stops at the end of the repeat it starts
+# in. It used to run on into the next repeat, and the sections' "follow" sync then rewrote it.
+#
+# What a user does: adds an Oscillator track, makes a section over bar 1 and plays it twice (Cmd+D), picks the Draw
+# tool and drags on the empty lane from inside the first repeat to well inside the second: the new clip ends where the
+# second repeat begins (4 beats), and the second repeat gets its mirror copy.
+# (The loop-locator double-click path is not shown here: the ruler loop only reaches the transport snapshot through
+# the audio thread, which test mode does not run, so no locators exist.)
+record: true
+save_project: "fro1563 loop over repeats"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  # A section over bar 1 (x 0..96), named "starter", played twice back to back with Cmd+D.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/2;Section 1:4.000:4.000:2/2", within_ms: 2000}
+  # Check 1: Draw drag from inside repeat 1 (x 20) to well inside repeat 2 (x 150) stops at the end of repeat 1.
+  - click: {id: timelineToolDraw}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 20, fromY: 28, toX: 150, toY: 28, steps: 20}
+  - mark: {check: 1, name: draw-stops-at-section-end}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}

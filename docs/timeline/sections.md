@@ -219,6 +219,10 @@ placement with the lowest start; its content is stamped onto every other placeme
   clips are replaced by copies with fresh ids (skipped on a track that would pass `kMaxClipsPerTrack`);
 - per lane, the target's points are replaced by the source's, shifted.
 
+A clip made by a gesture (an empty-lane double-click or the Draw tool) is cut at the end of the placement it
+starts in (`TimelineDoc::capToPlacementEnd`), so a new clip never crosses into the next section for this sync to
+rewrite; growing an existing clip past its section is not capped.
+
 One edit is one revision, one notification and one undo step. `getSectionStampRevision()` and
 `getLastStampedPlacements()` (runtime only) tell a UI which placements were rewritten.
 

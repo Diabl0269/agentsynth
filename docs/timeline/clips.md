@@ -427,6 +427,10 @@ decisions, not accidents:
   span (`end <= start`) is also what "no locators set yet" looks like, so both fall back to one bar.
 - Only the double-click path asks. The **Draw tool** goes through the same `createMidiClipAt` but
   passes no length override, because a pencil drag states its own length.
+- Whatever the length, a new clip **stops at the end of the section placement it starts in**
+  (`TimelineDoc::capToPlacementEnd`, applied in `createMidiClipAt` and to a Draw drag), so a locator span over
+  two repeats of a section, or a one-bar clip in a short section, never crosses into the next one. A start with
+  no placement is unchanged, and paste, duplicate and AI clips are not capped.
 
 The preference is read **at use time** through the duplicated-string-key idiom (the same one
 `timelineLoopSelectionArms` uses), from a non-owning `juce::ApplicationProperties*` the panel

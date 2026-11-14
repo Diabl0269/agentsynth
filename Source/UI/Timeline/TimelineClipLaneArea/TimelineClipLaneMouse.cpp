@@ -514,7 +514,8 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
 //
 // The MIDI clip's span is one bar, EXCEPT when the click lands inside a real loop-locator span and
 // the "double-click spans locators" preference is on (default) — it then spans the locators
-// exactly. See locatorSpanForDoubleClick for the full set of conditions.
+// exactly. See locatorSpanForDoubleClick for the full set of conditions. Either way the clip stops at the
+// end of the section placement it starts in (TimelineDoc::capToPlacementEnd, in createMidiClipAt).
 void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
     // Authoring double-clicks belong to the pointer. With a tool active the first click already
     // did the tool's job (and Draw already created a clip), so a second one must not also open a
@@ -601,8 +602,11 @@ void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBe
 
     // A non-positive override is ignored rather than passed to addClip, which would reject it and
     // author nothing.
-    const double lengthBeats =
+    // A clip made by a gesture stops at the end of the section placement it starts in so it never
+    // crosses into the next section for the section sync to rewrite.
+    const double wantedLength =
         lengthOverride.has_value() && *lengthOverride > 0.0 ? *lengthOverride : currentBeatsPerBar();
+    const double lengthBeats = doc_->capToPlacementEnd(startBeat, startBeat + wantedLength) - startBeat;
     const juce::String name = "Clip " + juce::String((int)trackPtr->clips.size() + 1);
 
     synth::ClipId newId;
