@@ -38,6 +38,7 @@ struct StripFixture {
     TrackId track;
 
     StripFixture() {
+        state.snap = TimelineViewState::Snap::Bar; // the strip tests assume whole-bar snapping unless they change it
         state.pixelsPerBeat = 40.0;
         state.firstVisibleBeat = 0.0;
         strip.setTimelineDoc(&doc);

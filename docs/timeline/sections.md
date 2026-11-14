@@ -12,8 +12,11 @@ bars, with a "Sections" label above the track headers. Code: `Source/UI/Timeline
 strip never listens to the doc; the panel's `timelineChanged` calls `refresh()`. It is hidden while a clip is
 open in the piano roll, and by the Settings toggle below.
 
-- **Make a section:** drag across bars on the empty strip. The span snaps outward to whole bars, is at least
-  one bar and stops at neighbouring blocks. Release makes "Section N" in the next palette colour as one undo
+- **Make a section:** drag across the empty strip. The span snaps to whole bars: the longer of the timeline's Snap
+  and one bar (`sectionstrip::stripGrid`), so Snap 1/4, 1/16 or Off make bars and a Snap longer than a bar makes
+  multiples of it. Its start floors and its end ceils to that grid; it is at least one unit and stops at neighbouring
+  blocks. Hold Shift to follow the Snap unit itself (Snap on Beat gives a 10-beat, 2.5-bar section); Shift with Snap
+  Off places it freely (raw beats, at least 1/16 of a beat so a click never makes a zero section). Release makes "Section N" in the next palette colour as one undo
   step (clips are split at both edges) and opens its name for typing. The new block grows in from the side the
   drag started on. Held in the strip's left or right 24 px edge zone the drag scrolls the timeline (below).
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
@@ -44,9 +47,10 @@ open in the piano roll, and by the Settings toggle below.
     (a `KeyedPointTween` keyed by placement id, 140 ms) to where they will be. With the ghost's left edge over
     another block, it goes before that block until the ghost's centre passes the block's centre (where it was
     drawn before the drag), then after it; otherwise the landing snaps to a neighbour's start or end within 12 px,
-    else to the nearest bar. It never lands inside a block.
+    else to the nearest line of the longer of Snap and a bar. It never lands inside a block. Shift in a block drag already
+    switches make-room and cover, so a block's landing uses the same longer-of-Snap-and-a-bar grid with no modifier override.
   - **Cover:** the blocks stay put; the original (on a move) and every block the drop would remove are dimmed.
-    The landing is `sectionstrip::dropBeat` against the blocks as they are (whole bars, a neighbour's start or end
+    The landing is `sectionstrip::dropBeat` against the blocks as they are (the longer of Snap and a bar, a neighbour's start or end
     or the dragged block's far edge against one within 12 px, a result inside a block goes to its nearer edge).
   Holding Option when the drag starts makes it a copy (copy cursor; the original stays and the drop calls
   `placeSection`), otherwise it moves (`movePlacement`). The mode is make-room unless the cover setting is on;
@@ -109,7 +113,7 @@ open in the piano roll, and by the Settings toggle below.
   (the panel handles it; MainComponent forwards it while the timeline is shown): it makes a section from the Range
   tool's bars, else from the loop while looping is on (`MakeSectionKey.h`, `makeSectionKeySpan`). With neither, a toast says
   "Select bars with the Range tool or set the loop, then press it again to make a section"; over a placed section
-  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section") adds
+  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section (whole bars; hold Shift to follow Snap)") adds
   ", or press Shift+Cmd+J to make one from the loop" (or "the selected bars") only when the key would make one.
   The key does nothing with a clip editor open.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
@@ -218,6 +222,10 @@ placement with the lowest start; its content is stamped onto every other placeme
 - per track, equal clip counts overwrite in place (ids kept, notes get fresh ids); otherwise the target's
   clips are replaced by copies with fresh ids (skipped on a track that would pass `kMaxClipsPerTrack`);
 - per lane, the target's points are replaced by the source's, shifted.
+
+A clip made by a gesture (an empty-lane double-click or the Draw tool) is cut at the end of the placement it
+starts in (`TimelineDoc::capToPlacementEnd`), so a new clip never crosses into the next section for this sync to
+rewrite; growing an existing clip past its section is not capped.
 
 One edit is one revision, one notification and one undo step. `getSectionStampRevision()` and
 `getLastStampedPlacements()` (runtime only) tell a UI which placements were rewritten.
