@@ -31,6 +31,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DialogTooltipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/QuitRequestTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopoverRelayTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ModDotFrameRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragSurfaceRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Controls/FineDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp
