@@ -121,8 +121,13 @@ void sweepSurface(CurveEditorComponent& ed, const juce::String& what) {
                 ed.setSnapToGrid(true);
                 const juce::String label = what + " 1/" + juce::String(divisions);
                 const auto expected = linesOf(ed, xDiv, divisions);
-                const int col = 1 + (row % juce::jmax(1, xDiv - 2)); // clear of the end dots' columns
-                const int otherCol = xDiv < 4 ? col : (col < xDiv - 2 ? col + 1 : col - 1); // 1/2 has one inner column
+                const int col =
+                    1 + (row %
+                         juce::jmax(
+                             1, xDiv - 3)); // clear of the end dots' columns, with room for the other dot to its right
+                const int otherCol =
+                    xDiv < 4 ? col
+                             : col + 1; // right of the first dot, so the two keep their order; 1/2 has one inner column
                 dropOn(ed, label, 0, col, row, xDiv, divisions, expected);
                 dropOn(ed, label, 1, sameColumn ? col : otherCol, row, xDiv, divisions, expected);
                 // A dense curve (the shape windows start with many dots) has other dots to drag first; the two dots
