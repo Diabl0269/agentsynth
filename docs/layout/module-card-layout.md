@@ -438,6 +438,13 @@ Separate form (both groups always shown, each dimmed while the other mode was on
 read in the current form when it is resolved (`withAdsrSeparateLooks`, called from `resolveModuleCardLayout`): each
 group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Sustain.
 
+Every editor write to a control in Separate looks lands in the look that shows (`visibleLayoutSection` resolves it
+from the plan): the panel's Show as, Size, Label, Range, a drag and a keyboard nudge, so the other look's items and
+what it draws stay as they were, and one undo restores the visible look. **Hide from card is the exception, by
+design:** `hidden` lists parameter ids, not looks, so hiding Sustain in one look takes it off the card in both; both
+looks keep their items, so Add control and one undo bring each back as it was. The looks have no title row, so
+no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` runs every write path.
+
 ### Decisions (2026-10-01)
 
 - **New controls: the full candidate list.** Oscillator pulse width and glide; LFO phase and fade-in;
@@ -534,7 +541,8 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     size. In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
     that abutted it follow a smaller control left, a bigger one pushes its row along and wraps what no
     longer fits. The change and the repack are ONE undo step (`BuiltInCardLayoutSource::beginGroupedWrite`).
-    A flowing group re-flows by itself and needs no repack.
+    A flowing group re-flows by itself and needs no repack: knobs and faders that follow one another share one
+    grid, so changing a control's style never leaves a row of one.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
     dashes. With the pointer below the card's bottom edge the area gets a stronger wash and no group is washed (a group lit on the way down goes out), the control stays
@@ -632,7 +640,14 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     lies down (Horizontal from a long fader gives `faderH`, Vertical from `faderH` gives the short `faderV`). Only
     the rows that apply show, between Show as and Label, and a size or direction change is one undo step like any
     other field. A long fader is a vertical fader everywhere (`CardBodyItem::isVerticalFader`), and a footer still
-    draws it as a horizontal one. The widget names are "Small knob",
+    draws it as a horizontal one. A Choice (the Tempo look's note divisions) may also be drawn as a stepped fader
+    in a look of an alternative group, so its panel offers the same Show as, Direction and Fader size rows:
+    `steppedFaderAllowed` (`CardBodyPlan`) is the one rule, asked by the plan (`kindOf`) and by
+    `readControlOptions`, which appends the fader widgets to that item's choices; a division in a swap group whose other
+    member is a vertical fader (the Shared look's time and division) qualifies by the same rule: the Shared default
+    sets it to `faderV`, so the Tempo look is the same faders as Separate's, and Show as can still pick Menu. The plan
+    decides it from the group (`settleSwapFaders`), so an older save with an Auto division gets the fader too, and the
+    Shared/Separate conversion keeps every item's own widget both ways. The widget names are "Small knob",
     "Large knob", "Vertical fader", "Long vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
     widget menu (`cardLayoutWidgetName`); never two sizes both called "Knob". **Label** renames the
     caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),

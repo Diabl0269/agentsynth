@@ -98,10 +98,11 @@ TEST(FilterDynamicsDefaultLayout, TheFilterHasTypeLargeCutoffModulationAndAFoote
     EXPECT_EQ(*modulation.title, "Modulation");
     EXPECT_EQ(modulation.items.size(), 2u);
 
-    // Top to bottom: type, cutoff, resonance and drive, modulation, then the footer.
+    // Top to bottom: type, cutoff with resonance and drive (one grid: the large knob takes the first cell), then
+    // modulation and the footer.
     const auto y = [&](const char* id) { return built.body->findWidget(id)->getY(); };
     EXPECT_LT(y("filterType"), y("cutoff"));
-    EXPECT_LT(y("cutoff"), y("resonance"));
+    EXPECT_LE(y("cutoff"), y("resonance"));
     EXPECT_LE(y("resonance"), y("drive"));
     EXPECT_LT(y("drive"), y("keyTrack"));
     EXPECT_LE(y("keyTrack"), y("outputLevel"));

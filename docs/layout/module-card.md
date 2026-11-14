@@ -297,6 +297,11 @@ out as its own run, by the same measure-and-apply walk:
 | `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
 | `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band, as wide as its widest value plus the arrows | 24 |
 
+- **Mixed grids.** Consecutive controls that draw in a grid (knob, large knob, vertical fader, long fader) share
+  one columns grid, whatever their kinds: a Sustain knob beside faders takes the next cell of the same row instead
+  of starting a row of its own. A row is as tall as its tallest cell, and each cell is placed as a grid of one
+  (`cardbody::layoutMixedGridRun`, which measures and places in the one function). A grid control next to an XY
+  pad or a button still starts its own run.
 - **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
   (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
   fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter
@@ -309,10 +314,19 @@ out as its own run, by the same measure-and-apply walk:
   gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
   one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
 - **A choice beside a fader.** A choice in a swap group with a vertical fader (the ADSR's note division
-  taking its time's place in Tempo mode) stays a choice: a compact `NoteLengthBox` ([note-length-menu](note-length-menu.md#the-adsr-stage-divisions)),
-  one row tall in the middle of the fader's cell with the caption on the cell's top edge, so a swap moves nothing
-  else. A layout can still ask for a stepped fader on a choice (`CardWidget::FaderV` in an alternative look), which
-  steps over the choice's integer values.
+  taking its time's place in Tempo mode) draws as a stepped fader too, so the Tempo look is the same faders in
+  Shared and in Separate looks (`steppedFaderAllowed`, `settleSwapFaders` in `CardBodyPlan.cpp`; a saved layout
+  whose division says Auto gets it as well). A division item set to `choice` (Show as Menu) stays a compact
+  `NoteLengthBox` ([note-length-menu](note-length-menu.md#the-adsr-stage-divisions)), one row tall in the middle of
+  the fader's cell. A layout can also ask for a stepped fader on a choice in an alternative look
+  (`CardWidget::FaderV`), which steps over the choice's integer values.
+- **The note-division fader and its S | T | D picker.** A vertical fader on the app's note-division choice
+  (`NoteLengthFader`, `CardWidgets/NoteLengthFader.h`) steps the eight lengths of the current feel, and a three-segment
+  S | T | D picker (Straight, Triplet, Dotted) sits under it, inside the fader's own cell (the value box keeps the
+  top of the space under the travel, the picker its bottom 18 px, so the cell is the size of any vertical fader and a
+  Sync flip never changes the card's height). Both write the one division parameter: the picker keeps the length, the
+  fader keeps the feel, a key step stops at the ends of the feel. Nothing is saved but that parameter. A horizontal
+  fader on a division has no picker and steps over all 24 values.
 - **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
   bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
   "Tempo"); the switch

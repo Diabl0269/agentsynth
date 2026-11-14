@@ -32,6 +32,7 @@ struct CardBodyItem {
     Kind kind = Kind::Knob;
     juce::RangedAudioParameter* param = nullptr; ///< Null for a view.
     CardView view = CardView::Scope;             ///< Meaningful for a view only.
+    CardWidget widgetAsked = CardWidget::Auto;   ///< The widget the layout item names (Auto when none).
     /** An XY pad only: the parameter its vertical axis drives (`param` drives the horizontal one). */
     juce::RangedAudioParameter* partner = nullptr;
     /** A Button only: held (on while pressed) instead of toggling. */
@@ -194,6 +195,13 @@ bool isContinuousKind(CardBodyItem::Kind kind);
 /** The kind `widget` draws `param` as, or the parameter's automatic kind when the widget does not
  *  suit it (a fader on a choice, a segmented switch with too many values); nullopt = no widget. */
 std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget);
+
+/** True when a Choice parameter may draw as a stepped fader (FaderV, FaderVLong or FaderH) in this place: when its
+ *  item sits in a look of an alternative group (`sectionIsLook`, a section with `visibleWhen`) or is a member of a
+ *  swap group whose other member is a vertical fader (`swapsWithVerticalFader`). The plan's kind choice and the
+ *  editor's widget choices both ask this one rule, so the panel offers Show as, Direction and Fader size exactly
+ *  where the card draws a fader. */
+bool steppedFaderAllowed(const juce::RangedAudioParameter& param, bool sectionIsLook, bool swapsWithVerticalFader);
 
 /** The Macros knob a parameter id names ("macro3" is 2), or -1 for any other id. */
 int macroIndexOf(const juce::String& paramId);

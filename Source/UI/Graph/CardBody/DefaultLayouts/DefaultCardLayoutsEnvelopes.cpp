@@ -22,12 +22,12 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
 }
 
 // One ADSR stage in tempo-sync's two readings: the time as a fader while tempoSync is off, its note
-// division in the same cell while it is on. The caption is the same either way, so a stage keeps its name.
-// The four pairs all test tempoSync with the same values; each pair is its own swap group (a member whose
-// condition repeats one already in the group starts the next group).
+// division, a stepped fader with its S | T | D picker, in the same cell while it is on. The caption is the same either
+// way, so a stage keeps its name. The four pairs all test tempoSync with the same values; each pair is its own swap
+// group (a member whose condition repeats one already in the group starts the next group).
 std::vector<CardItem> stage(const juce::String& time, const juce::String& division, const juce::String& caption) {
     return {showWhen(labelled(param(time, CardWidget::FaderV), caption), "tempoSync", {"false"}),
-            showWhen(labelled(param(division), caption), "tempoSync", {"true"})};
+            showWhen(labelled(param(division, CardWidget::FaderV), caption), "tempoSync", {"true"})};
 }
 
 // Envelope view open; Time/Tempo switch; A H D S R as faders in one row (each time swaps for its division in

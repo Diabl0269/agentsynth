@@ -257,13 +257,31 @@ bool areAlternatives(const CardBodyPlan::Section& a, const CardBodyPlan::Section
     return true;
 }
 
+} // namespace
+
+// The one rule for "a Choice may draw as a stepped fader" (vertical, long or horizontal). The plan (kindOf and
+// settleSwapFaders) and the editor's panel (readControlOptions, which appends the fader widgets to the item's widget
+// choices) both ask it, so the panel never offers what the card cannot draw nor hides what it can. A Choice
+// qualifies in a section that is one look of an alternative group, and as a member of a swap group whose other
+// member is a vertical fader (a Shared ADSR's division beside its time). A further case extends this one function;
+// do not add a parallel check.
+bool steppedFaderAllowed(const juce::RangedAudioParameter& param, bool sectionIsLook, bool swapsWithVerticalFader) {
+    return (sectionIsLook || swapsWithVerticalFader) &&
+           dynamic_cast<const juce::AudioParameterChoice*>(&param) != nullptr;
+}
+
+namespace {
+
 // The kind a layout item asks for: its widget, with a choice in a look of an alternative group allowed to be a
 // stepped fader (a fader on a choice anywhere else falls back).
 CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, const CardBodyPlan::Section& section) {
     auto kind = cardBodyKindFor(*planned.param, p.widget).value_or(planned.kind);
-    if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong) && kind == CardBodyItem::Kind::Choice &&
-        section.visibleWhen.has_value() && dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
-        kind = p.widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
+    if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong || p.widget == CardWidget::FaderH) &&
+        kind == CardBodyItem::Kind::Choice &&
+        steppedFaderAllowed(*planned.param, section.visibleWhen.has_value(), false))
+        kind = p.widget == CardWidget::FaderV       ? CardBodyItem::Kind::FaderV
+               : p.widget == CardWidget::FaderVLong ? CardBodyItem::Kind::FaderVLong
+                                                    : CardBodyItem::Kind::FaderH;
     // A pad needs its partner, which only placeItem binds; any other path draws the knob.
     return kind == CardBodyItem::Kind::XYPad ? CardBodyItem::Kind::Knob : kind;
 }
@@ -337,6 +355,7 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         // The widget applies to a hidden parameter too: it shows that way in the More row.
         auto& planned = plan.items[(size_t)index];
         planned.kind = kindOf(planned, *p, placer.section);
+        planned.widgetAsked = p->widget;
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
         if (!layout.hidden.contains(p->paramId)) {
@@ -371,6 +390,31 @@ void placePolyInFooter(const CardLayout& layout, CardBodyPlan& plan, const std::
         SectionPlacer placer{plan, section, s, {}};
         placer.place(poly, CardParamItem{});
         return;
+    }
+}
+
+// A Choice in a swap group beside a vertical fader (the Shared ADSR's division in its time's cell) draws as a stepped
+// fader of its own, whatever the layout's widget says short of an explicit Menu: the Tempo look is then the same
+// faders as the Separate look. Decided from the group, so a layout saved with Auto divisions gets them too.
+void settleSwapFaders(CardBodyPlan& plan) {
+    for (const auto& group : plan.swapGroups) {
+        const bool fader = std::any_of(group.members.begin(), group.members.end(), [&](int member) {
+            const auto& item = plan.items[(size_t)member];
+            return CardBodyItem::isVerticalFader(item.kind) &&
+                   dynamic_cast<const juce::AudioParameterChoice*>(item.param) == nullptr;
+        });
+        for (int member : group.members) {
+            auto& item = plan.items[(size_t)member];
+            const auto asked = item.widgetAsked;
+            const bool wantsFader = asked == CardWidget::Auto || asked == CardWidget::FaderV ||
+                                    asked == CardWidget::FaderVLong || asked == CardWidget::FaderH;
+            if (item.kind != CardBodyItem::Kind::Choice || !wantsFader || item.param == nullptr ||
+                !steppedFaderAllowed(*item.param, false, fader))
+                continue;
+            item.kind = asked == CardWidget::FaderVLong ? CardBodyItem::Kind::FaderVLong
+                        : asked == CardWidget::FaderH   ? CardBodyItem::Kind::FaderH
+                                                        : CardBodyItem::Kind::FaderV;
+        }
     }
 }
 
@@ -437,6 +481,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
             placeItem(module, layout, item, placer, named);
     }
     placePolyInFooter(layout, plan, named);
+    settleSwapFaders(plan);
     groupAlternatives(plan);
     for (int i = 0; i < (int)plan.items.size(); ++i)
         if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&

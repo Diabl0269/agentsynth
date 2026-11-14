@@ -53,12 +53,20 @@ std::vector<Cell> cellsOf(const CardBodyPlan& plan, const std::vector<int>& indi
     return cells;
 }
 
-// The end of the run of cells sharing `cells[from]`'s kind (views are a run of one each).
+// The kinds one columns grid holds together: restyling a control among them never moves it to another row.
+bool isGridKind(Kind kind) {
+    return kind == Kind::Knob || kind == Kind::KnobLarge || kind == Kind::FaderV || kind == Kind::FaderVLong;
+}
+
+// The end of the run of cells starting at `cells[from]`: cells of its kind, or any grid kind after a grid kind
+// (views are a run of one each).
 size_t runEnd(const std::vector<Cell>& cells, size_t from) {
     if (cells[from].runKind == Kind::View)
         return from + 1;
+    const bool grid = isGridKind(cells[from].runKind);
     size_t end = from + 1;
-    while (end < cells.size() && cells[end].runKind == cells[from].runKind)
+    while (end < cells.size() &&
+           (cells[end].runKind == cells[from].runKind || (grid && isGridKind(cells[end].runKind))))
         ++end;
     return end;
 }
@@ -131,6 +139,24 @@ int viewHeightOf(const CardBodyItem& view, const CardViewFactory& factory, juce:
     return factory.preferredHeight(module);
 }
 
+// A grid kind's cell height under its caption, and the width its widget draws (0 = the whole cell).
+int gridCellHeight(Kind kind) {
+    switch (kind) {
+    case Kind::KnobLarge:
+        return cardbody::kKnobLargeHeight;
+    case Kind::FaderV:
+        return cardbody::kFaderVHeight;
+    case Kind::FaderVLong:
+        return cardbody::kFaderVLongHeight;
+    default:
+        return cardbody::kKnobHeight;
+    }
+}
+
+int gridWidgetWidth(Kind kind) {
+    return CardBodyItem::isVerticalFader(kind) ? synth::ui::CardFader::kVerticalWidth : 0;
+}
+
 int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& captioned,
                   const std::vector<juce::Component*>& plain, int columns, int y, const cardbody::BodyGeometry& g,
                   bool apply) {
@@ -140,15 +166,10 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
     case Kind::Toggle:
         return cardbody::layoutToggleRun(plain, y, g, apply);
     case Kind::Knob:
-        return cardbody::layoutKnobRun(captioned, columns, y, g, apply);
     case Kind::KnobLarge:
-        return cardbody::layoutGridRun(captioned, columns, cardbody::kKnobLargeHeight, 0, y, g, apply);
     case Kind::FaderV:
-        return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVHeight,
-                                       synth::ui::CardFader::kVerticalWidth, y, g, apply);
     case Kind::FaderVLong:
-        return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVLongHeight,
-                                       synth::ui::CardFader::kVerticalWidth, y, g, apply);
+        break; // laid out by layoutMixedGridRun, which sees each cell's own kind
     case Kind::XYPad:
         return cardbody::layoutGridRun(captioned, columns, cardbody::kXYPadHeight, cardbody::kXYPadWidth, y, g, apply);
     case Kind::Button:
@@ -192,7 +213,13 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
         captioned.emplace_back(item != nullptr ? item->widget : nullptr, item != nullptr ? item->label : nullptr);
         plain.push_back(item != nullptr ? item->widget : nullptr);
     }
-    y = layoutRunKind(kind, captioned, plain, columns, y, g, apply);
+    if (isGridKind(kind)) {
+        std::vector<cardbody::GridCell> grid;
+        for (size_t i = 0; i < run.size(); ++i)
+            grid.push_back({captioned[i], gridCellHeight(run[i].runKind), gridWidgetWidth(run[i].runKind)});
+        y = cardbody::layoutMixedGridRun(grid, columns, y, g, apply);
+    } else
+        y = layoutRunKind(kind, captioned, plain, columns, y, g, apply);
     if (apply)
         for (const auto& cell : run)
             if (cell.group >= 0 && cell.item >= 0)

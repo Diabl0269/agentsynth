@@ -21,6 +21,7 @@
 #include "UI/Graph/CardWidgets/CardStepperBinding.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/CardWidgets/CardXYPad.h"
+#include "UI/Graph/CardWidgets/NoteLengthFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -484,8 +485,12 @@ juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter
 // step's text, and its default is the choice's default.
 void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
     const bool vertical = CardBodyItem::isVerticalFader(item.kind);
-    auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical
-                                                    : synth::ui::CardFader::Orientation::Horizontal);
+    // A vertical fader on the note-division choice is the length fader with the S | T | D picker under it.
+    auto* divisions = dynamic_cast<juce::AudioParameterChoice*>(&param);
+    const bool splitsFeel = vertical && divisions != nullptr && synth::ui::NoteLengthFader::suits(*divisions);
+    auto* fader = splitsFeel ? new synth::ui::NoteLengthFader()
+                             : new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical
+                                                                 : synth::ui::CardFader::Orientation::Horizontal);
     widgets_.add(fader);
     card_.sliders.add(fader);
     fader->setComponentID(param.getName(100));
@@ -499,6 +504,10 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
     applyLayoutRange(*fader, param, item.range);
     if (vertical) // 40 px wide: "1.00 s" would truncate, "1.00s" fits
         fader->useCompactValueText(param);
+    if (auto* lengths = dynamic_cast<synth::ui::NoteLengthFader*>(fader)) {
+        paramAttachments_.add(lengths->bindTo(*divisions, widgetsAlive_).release());
+        lengths->addMouseListener(&card_, true); // a right click on the picker opens the control menu too
+    }
     fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));
     card_.sliderParams.add(&param);
     card_.sliderLabels.add(

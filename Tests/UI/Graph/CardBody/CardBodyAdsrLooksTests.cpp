@@ -6,16 +6,21 @@
 // (Source/UI/Graph/CardBody/CardBodySwapMotion.cpp, the plan's alternative group in CardBodyPlan.cpp and
 // CardBodyLayout.cpp). Every flip goes through the real parameter listener, flushed as the message loop would.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "CardBodyTestHelpers.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Graph/CardWidgets/NoteLengthFader.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 
 using namespace cardbody_test;
 using synth::AdsrTimeTempo;
+using synth::CardWidget;
 
 namespace {
 
@@ -357,3 +362,192 @@ TEST(AdsrLooksMotion, TheSwapPhasesAreTheDocumentedLengths) {
     EXPECT_DOUBLE_EQ(synth::ui::control_motion::kSwapShrinkMs, 190.0);
     EXPECT_NEAR(synth::ui::control_motion::growScale(0.7f), 1.08f, 0.04f);
 }
+
+// The Tempo look's division faders (their own namespace: the helpers above share names).
+namespace tempo_faders {
+namespace {
+
+constexpr const char* kDivisionIds[] = {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"};
+constexpr const char* kFamily[] = {"ADSR", "Amp Env", "Filter Env"};
+
+synth::CardLayout layoutFor(const char* type, AdsrTimeTempo mode) {
+    return synth::withAdsrTimeTempo(synth::DefaultCardLayouts::builtIn().find(type)->layout, mode);
+}
+
+const synth::CardParamItem* itemIn(const synth::CardLayout& layout, const juce::String& paramId) {
+    for (const auto& section : layout.sections)
+        for (const auto& item : section.items)
+            if (const auto* param = std::get_if<synth::CardParamItem>(&item);
+                param != nullptr && param->paramId == paramId)
+                return param;
+    return nullptr;
+}
+
+void setTempo(CardCanvas& canvas, NodeID id, bool tempo) {
+    findParameterByID(canvas.processor(id), "tempoSync")->setValueNotifyingHost(tempo ? 1.0f : 0.0f);
+    canvas.card(id)->getCardBody()->flushPendingConditionUpdate();
+}
+
+struct Drawn {
+    synth::CardBodyItem::Kind kind;
+    juce::Rectangle<int> bounds;
+    bool operator==(const Drawn&) const = default;
+};
+
+// What the card draws now for `paramId`: the plan's kind and the widget's own bounds.
+Drawn drawn(CardCanvas& canvas, NodeID id, const juce::String& paramId) {
+    auto* body = canvas.card(id)->getCardBody();
+    const auto& plan = body->getPlan();
+    const auto& item = plan.items[(size_t)plan.findParam(paramId)];
+    return {item.kind, item.widget->getBounds()};
+}
+
+struct Rig {
+    CardCanvas canvas;
+    NodeID id;
+    Rig(const char* type, AdsrTimeTempo mode, bool tempo) {
+        id = canvas.add(synth::AIStateMapper::createModule(type), 100, 100, layoutFor(type, mode));
+        canvas.editor.updateComponents();
+        setTempo(canvas, id, tempo);
+    }
+    synth::CardBody& body() { return *canvas.card(id)->getCardBody(); }
+};
+
+} // namespace
+
+// The sibling-gap guard: every ADSR-family module, both Controls modes, Sync on Tempo: the four divisions draw as
+// vertical faders of one size, and a Shared card's draw the same kind and size as a Separate card's.
+TEST(AdsrTempoFaders, EveryAdsrFamilyModuleDrawsTheTempoLooksDivisionsAsTheSameFadersInBothControlsModes) {
+    for (const char* type : kFamily) {
+        Rig shared(type, AdsrTimeTempo::Shared, true);
+        Rig separate(type, AdsrTimeTempo::Separate, true);
+        for (const char* division : kDivisionIds) {
+            SCOPED_TRACE(juce::String(type) + " " + division);
+            const auto s = drawn(shared.canvas, shared.id, division);
+            const auto p = drawn(separate.canvas, separate.id, division);
+            EXPECT_EQ(s.kind, synth::CardBodyItem::Kind::FaderV) << "Shared";
+            EXPECT_EQ(p.kind, synth::CardBodyItem::Kind::FaderV) << "Separate";
+            EXPECT_EQ(s.bounds.getWidth(), p.bounds.getWidth());
+            EXPECT_EQ(s.bounds.getHeight(), p.bounds.getHeight());
+            EXPECT_TRUE(shared.body().findWidget(division)->isVisible());
+            EXPECT_TRUE(separate.body().findWidget(division)->isVisible());
+        }
+        const auto s = drawn(shared.canvas, shared.id, "sustain");
+        const auto p = drawn(separate.canvas, separate.id, "sustain");
+        EXPECT_EQ(s.kind, p.kind);
+        EXPECT_EQ(s.bounds.getWidth(), p.bounds.getWidth());
+        EXPECT_EQ(s.bounds.getHeight(), p.bounds.getHeight());
+    }
+}
+
+TEST(AdsrTempoFaders, TheCardKeepsItsHeightWhenSyncFlipsInBothControlsModes) {
+    for (const char* type : kFamily)
+        for (const auto mode : {AdsrTimeTempo::Shared, AdsrTimeTempo::Separate}) {
+            Rig rig(type, mode, false);
+            const auto bounds = rig.canvas.card(rig.id)->getBounds();
+            setTempo(rig.canvas, rig.id, true);
+            EXPECT_EQ(rig.canvas.card(rig.id)->getBounds(), bounds) << type << " " << (int)mode;
+        }
+}
+
+TEST(AdsrTempoFaders, TheSharedDefaultSetsEveryDivisionToAFaderAndConversionsKeepWidgets) {
+    for (const char* type : kFamily) {
+        const auto shared = layoutFor(type, AdsrTimeTempo::Shared);
+        for (const char* division : kDivisionIds) {
+            ASSERT_NE(itemIn(shared, division), nullptr) << type << " " << division;
+            EXPECT_EQ(itemIn(shared, division)->widget, CardWidget::FaderV) << type << " " << division;
+        }
+        // Shared -> Separate -> Shared keeps each stage's own widget (here Atk's time as a long fader).
+        auto edited = shared;
+        for (auto& section : edited.sections)
+            for (auto& item : section.items)
+                if (auto* param = std::get_if<synth::CardParamItem>(&item);
+                    param != nullptr && param->paramId == "attack")
+                    param->widget = CardWidget::FaderVLong;
+        for (auto& section : edited.sections)
+            for (auto& item : section.items)
+                if (auto* param = std::get_if<synth::CardParamItem>(&item);
+                    param != nullptr && param->paramId == "attackDiv")
+                    param->widget = CardWidget::FaderVLong;
+        const auto trip =
+            synth::withAdsrTimeTempo(synth::withAdsrTimeTempo(edited, AdsrTimeTempo::Separate), AdsrTimeTempo::Shared);
+        EXPECT_EQ(itemIn(trip, "attack")->widget, CardWidget::FaderVLong) << type;
+        EXPECT_EQ(itemIn(trip, "attackDiv")->widget, CardWidget::FaderVLong) << type;
+        EXPECT_EQ(itemIn(trip, "holdDiv")->widget, CardWidget::FaderV) << type << ": not turned back to Auto";
+        const auto separate = synth::withAdsrTimeTempo(shared, AdsrTimeTempo::Separate);
+        EXPECT_EQ(itemIn(separate, "holdDiv")->widget, CardWidget::FaderV) << type;
+    }
+}
+
+// A layout saved before the default set the widget: its divisions are Auto in a swap pair beside a fader, and the
+// card still draws faders (decided by the swap-pair rule, not by what the save says).
+TEST(AdsrTempoFaders, ASavedSharedLayoutWithAutoDivisionsStillDrawsFaders) {
+    auto old = layoutFor("ADSR", AdsrTimeTempo::Shared);
+    for (auto& section : old.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<synth::CardParamItem>(&item);
+                param != nullptr && param->paramId.endsWith("Div"))
+                param->widget = CardWidget::Auto;
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<ADSRModule>(), 100, 100, old);
+    canvas.editor.updateComponents();
+    setTempo(canvas, id, true);
+    for (const char* division : kDivisionIds)
+        EXPECT_EQ(drawn(canvas, id, division).kind, synth::CardBodyItem::Kind::FaderV) << division;
+}
+
+// A division set to Menu stays a combo in the Shared look (Show as keeps both), and a pair with no fader beside it
+// (the Delay's knob and division) is not turned into a fader.
+TEST(AdsrTempoFaders, AMenuDivisionStaysAMenuAndAKnobPairKeepsItsMenu) {
+    auto layout = layoutFor("ADSR", AdsrTimeTempo::Shared);
+    for (auto& section : layout.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<synth::CardParamItem>(&item); param != nullptr && param->paramId == "holdDiv")
+                param->widget = CardWidget::Choice;
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<ADSRModule>(), 100, 100, layout);
+    canvas.editor.updateComponents();
+    setTempo(canvas, id, true);
+    EXPECT_EQ(drawn(canvas, id, "holdDiv").kind, synth::CardBodyItem::Kind::Choice);
+    EXPECT_EQ(drawn(canvas, id, "attackDiv").kind, synth::CardBodyItem::Kind::FaderV);
+}
+
+// The picker: a vertical division fader steps through the eight lengths and an S | T | D picker under it picks the
+// feel; both write the one division parameter (no new parameter), each as its own change.
+TEST(AdsrTempoFaders, TheFaderStepsLengthsAndThePickerPicksTheFeelBothWritingTheDivision) {
+    for (const auto mode : {AdsrTimeTempo::Shared, AdsrTimeTempo::Separate}) {
+        Rig rig("ADSR", mode, true);
+        auto* fader = dynamic_cast<synth::ui::NoteLengthFader*>(rig.body().findWidget("holdDiv"));
+        ASSERT_NE(fader, nullptr) << (int)mode;
+        auto* param =
+            dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(rig.canvas.processor(rig.id), "holdDiv"));
+        ASSERT_NE(param, nullptr);
+        const auto indexOf = [&](const char* name) { return synth::envelopeNoteDivisionIndex(name); };
+
+        param->setValueNotifyingHost(param->convertTo0to1((float)indexOf("1/4")));
+        EXPECT_EQ(fader->getPicker().getSelectedIndex(), 0) << "straight";
+        EXPECT_EQ(fader->getPicker().getNumSegments(), 3);
+        // Nothing (the slider's value box, say) may sit on top of the picker.
+        auto* topmost = fader->getComponentAt(fader->getPicker().getBounds().getCentre());
+        EXPECT_TRUE(topmost == &fader->getPicker() || fader->getPicker().isParentOf(topmost)) << (int)mode;
+
+        fader->getPicker().setSelectedIndex(1, juce::sendNotificationSync); // T
+        EXPECT_EQ(param->getCurrentChoiceName(), "1/4T") << "the picker keeps the length";
+        fader->setValue((double)indexOf("1/8T"), juce::sendNotificationSync); // move the fader to the 1/8 step
+        EXPECT_EQ(param->getCurrentChoiceName(), "1/8T") << "the fader keeps the feel";
+        fader->getPicker().setSelectedIndex(2, juce::sendNotificationSync); // D
+        EXPECT_EQ(param->getCurrentChoiceName(), "1/8D");
+        EXPECT_EQ(fader->getMinimum(), 0.0);
+        // A key step past the end of the lengths stays in the feel.
+        param->setValueNotifyingHost(param->convertTo0to1((float)indexOf("1/1D")));
+        fader->setValue((double)indexOf("1/1D") + 1.0, juce::sendNotificationSync);
+        EXPECT_EQ(param->getCurrentChoiceName(), "1/1D");
+        // Automation or undo moves both parts.
+        param->setValueNotifyingHost(param->convertTo0to1((float)indexOf("1/16T")));
+        fader->setValue((double)indexOf("1/16T"), juce::dontSendNotification); // what the card's reflect does
+        EXPECT_EQ(fader->getPicker().getSelectedIndex(), 1);
+        EXPECT_EQ((int)fader->getValue() % 8, indexOf("1/16T") % 8);
+    }
+}
+
+} // namespace tempo_faders

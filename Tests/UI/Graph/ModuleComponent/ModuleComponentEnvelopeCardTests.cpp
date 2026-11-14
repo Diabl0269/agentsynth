@@ -13,9 +13,9 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Graph/CardWidgets/NoteLengthFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -285,9 +285,9 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
 }
 
 // tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo switch is a segmented
-// switch (not a toggle), and each division is a compact note-length box that shares its stage's cell, so a fresh
-// card has the four division boxes, no plain combo and no generic toggle for tempoSync.
-TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLengthBoxesInTheStageCells) {
+// switch (not a toggle), and each division is a note-length fader (with an S | T | D picker) that shares its
+// stage's cell, so a fresh card has the four division faders, no plain combo and no generic toggle for tempoSync.
+TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLengthFadersInTheStageCells) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
@@ -296,10 +296,9 @@ TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreNoteLeng
     auto* body = moduleComponent.getCardBody();
     ASSERT_NE(body, nullptr);
     for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}) {
-        auto* box = dynamic_cast<synth::ui::NoteLengthBox*>(body->findWidget(division));
-        ASSERT_NE(box, nullptr) << division;
-        EXPECT_TRUE(box->isCompact()) << division << " fits the narrow stage cell";
-        EXPECT_EQ(box->getNumItems(), 24) << division;
+        auto* fader = dynamic_cast<synth::ui::NoteLengthFader*>(body->findWidget(division));
+        ASSERT_NE(fader, nullptr) << division;
+        EXPECT_EQ(fader->getPicker().getNumSegments(), 3) << division << ": S | T | D";
     }
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(body->findWidget("tempoSync")), nullptr);
 }

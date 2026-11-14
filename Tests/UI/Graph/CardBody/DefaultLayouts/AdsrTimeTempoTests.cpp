@@ -212,7 +212,14 @@ TEST(AdsrTimeTempo, AnOldSeparateLayoutIsReadWithEachLooksConditionAndNoDims) {
 }
 
 TEST(AdsrTimeTempo, AnOldSeparateLayoutStillConvertsBackToTheDefaultStages) {
-    EXPECT_EQ(withAdsrTimeTempo(firstSeparateForm(), AdsrTimeTempo::Shared), adsrDefault());
+    // The first form left the Tempo divisions on Auto; the conversion keeps them (an Auto division beside a
+    // fader still draws as one), so only that widget differs from today's default.
+    auto expected = adsrDefault();
+    for (auto& section : expected.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<CardParamItem>(&item); param != nullptr && param->paramId.endsWith("Div"))
+                param->widget = CardWidget::Auto;
+    EXPECT_EQ(withAdsrTimeTempo(firstSeparateForm(), AdsrTimeTempo::Shared), expected);
 }
 
 TEST(AdsrTimeTempo, AnOldSeparateLayoutSavedForTheTypeOrTheNodeIsResolvedInTheCurrentForm) {

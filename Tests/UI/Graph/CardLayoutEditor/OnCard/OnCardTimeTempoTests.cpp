@@ -3,18 +3,24 @@
 // step), and is absent on any other card; in Separate only the look the card's own Sync switch is on is shown
 // and outlined, the Sync switch stays usable under the overlay, and ending the session puts Sync back.
 // docs/layout/module-card-layout.md#editing-a-layout.
+// It also holds the guards that every vertical fader's panel offers the fader rows and that every Sustain write
+// path stays in the visible look (bug class sibling-gap).
 
 #include "../../../Accessibility/TabOrderHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapperInternal.h"
 #include "Modules/ADSRModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
+#include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 
 using namespace oncard_test;
 using synth::AdsrTimeTempo;
+using synth::CardBodyItem;
+using synth::CardWidget;
 
 namespace {
 
@@ -460,4 +466,353 @@ TEST(OnCardTimeTempo, AddControlKeepsTheFullWidthOnCardsWithoutTheSwitch) {
     ASSERT_NE(editor, nullptr);
     EXPECT_EQ(editor->getAddButtonForTest().getX(), 0);
     EXPECT_EQ(editor->getAddButtonForTest().getRight(), editor->getWidth());
+}
+
+// ---- Fader rows and Separate-looks write paths ----
+
+namespace {
+
+void fsSetParam(juce::AudioProcessor& module, const juce::String& id, float plainValue) {
+    for (auto* parameter : module.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+            ranged != nullptr && ranged->paramID == id)
+            ranged->setValueNotifyingHost(ranged->convertTo0to1(plainValue));
+}
+
+void fsFlipSync(OnCardRig& rig, CardLayoutOnCardEditor& editor, NodeID id, bool tempo) {
+    fsSetParam(*rig.canvas.processor(id), "tempoSync", tempo ? 1.0f : 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor.runQueuedSyncForTest();
+}
+
+bool fsIsVerticalFader(CardBodyItem::Kind kind) {
+    return kind == CardBodyItem::Kind::FaderV || kind == CardBodyItem::Kind::FaderVLong;
+}
+
+// The params the card draws now as a vertical fader.
+std::vector<juce::String> fsDrawnFaders(OnCardRig& rig, NodeID id) {
+    std::vector<juce::String> ids;
+    const auto& plan = rig.card(id)->getCardBody()->getPlan();
+    for (int i = 0; i < (int)plan.items.size(); ++i) {
+        const auto& item = plan.items[(size_t)i];
+        if (item.param != nullptr && plan.isOnCard(i) && fsIsVerticalFader(item.kind))
+            ids.push_back(item.param->paramID);
+    }
+    return ids;
+}
+
+} // namespace
+
+TEST(OnCardFaderSize, ATempoLooksDivisionFaderOffersShowAsDirectionAndSizeAndLongGrowsIt) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->getTimeTempoSwitchForTest().setSelectedIndex(1, juce::sendNotificationSync);
+    fsFlipSync(rig, *editor, id, true);
+
+    auto* panel = openControlPanel(rig, *editor, "attackDiv");
+    ASSERT_NE(panel, nullptr);
+    EXPECT_NE(panel->getShowAsForTest(), nullptr);
+    EXPECT_TRUE(panel->isDirectionRowShownForTest());
+    ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVHeight);
+
+    panel->getFaderSizeForTest()->setSelectedIndex(1, juce::sendNotificationSync);
+    ASSERT_NE(storedItem(*rig.storedLayout(id), "attackDiv"), nullptr);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "attackDiv")->widget, CardWidget::FaderVLong);
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVLongHeight);
+
+    panel->getFaderSizeForTest()->setSelectedIndex(0, juce::sendNotificationSync);
+    EXPECT_EQ(widgetOf(*rig.card(id), "attackDiv")->getHeight(), synth::cardbody::kFaderVHeight);
+}
+
+// A Shared look on Tempo draws each division as a menu in the time's place; its panel still offers Show as (Menu or
+// Fader), as the real editor's click on it opens (it once showed only Label and Hide).
+TEST(OnCardFaderSize, ASharedLooksDivisionOnTempoOffersShowAs) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    fsFlipSync(rig, *editor, id, true);
+    int found = 0;
+    for (const juce::String stage : {"attack", "hold", "decay", "release"}) {
+        const auto key = stage + "Div";
+        if (editor->getOutlineForTest(key) == nullptr)
+            continue;
+        ++found;
+        auto* panel = openControlPanel(rig, *editor, key);
+        ASSERT_NE(panel, nullptr) << key;
+        EXPECT_NE(panel->getShowAsForTest(), nullptr) << key;
+    }
+    EXPECT_EQ(found, 4) << "each division has its own cell on the Shared look's Tempo side";
+}
+
+// A card with no stored layout hands the editor a layout rebuilt from its plan, whose items carry no tests. A
+// division is still a member of the Shared look's swap pair, so its panel still offers the fader widgets.
+TEST(OnCardFaderSize, ADivisionOfASwapPairOffersFadersEvenWhenTheLayoutItemsCarryNoTests) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* body = rig.card(id)->getCardBody();
+    auto layout = body->explicitLayout();
+    for (auto& section : layout.sections)
+        for (auto& item : section.items)
+            if (auto* param = std::get_if<synth::CardParamItem>(&item))
+                param->when.reset();
+    synth::ui::BuiltInCardLayoutSource source(rig.canvas.editor, nullptr, id);
+    const auto options = synth::ui::readControlOptions(*body, source.parameters(), layout, "holdDiv", std::nullopt);
+    ASSERT_TRUE(options.has_value());
+    const auto& choices = options->widgetChoices;
+    EXPECT_NE(std::find(choices.begin(), choices.end(), CardWidget::FaderV), choices.end());
+}
+
+// The enumerating guard (sibling-gap): every vertical fader a default layout draws, in every look, offers the
+// fader rows. A fader the plan draws but whose panel hides Direction or Fader size is the gap this catches.
+TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize) {
+    int checked = 0;
+    int divisions = 0;
+    int sharedDivisions = 0;
+    for (const auto& entry : synth::detail::moduleFactory()) {
+        for (const bool separate : {false, true}) {
+            for (const bool tempo : {false, true}) {
+                if (!separate && tempo && !synth::hasAdsrTimeTempo(entry.first))
+                    continue;
+                OnCardRig rig;
+                const auto id = rig.add(entry.second());
+                auto* editor = rig.openOnCard(id);
+                if (editor == nullptr)
+                    continue;
+                if (separate) {
+                    if (!synth::hasAdsrTimeTempo(entry.first))
+                        continue;
+                    editor->getTimeTempoSwitchForTest().setSelectedIndex(1, juce::sendNotificationSync);
+                }
+                if (synth::hasAdsrTimeTempo(entry.first))
+                    fsFlipSync(rig, *editor, id, tempo);
+                for (const auto& drawn : fsDrawnFaders(rig, id)) {
+                    // A Shared look's swap pair draws the division where the time was: its cell is the division's.
+                    // The outline sits on whichever of the pair the layout names: the time or the division.
+                    auto paramId = drawn;
+                    for (const auto& candidate : {drawn, drawn + "Div", drawn.dropLastCharacters(3)})
+                        if (editor->getOutlineForTest(candidate) != nullptr) {
+                            paramId = candidate;
+                            break;
+                        }
+                    ASSERT_NE(editor->getOutlineForTest(paramId), nullptr) << entry.first << " " << drawn;
+                    auto* panel = openControlPanel(rig, *editor, paramId);
+                    ASSERT_NE(panel, nullptr) << entry.first << " " << paramId;
+                    const auto where = entry.first + " " + paramId + (separate ? " separate" : " shared") +
+                                       (tempo ? " tempo" : " time");
+                    EXPECT_NE(panel->getShowAsForTest(), nullptr) << where;
+                    // A Shared division draws as a menu until it is set to a fader, so only the Show as row is
+                    // owed there; every other fader offers all three rows.
+                    if (!separate && paramId != drawn) {
+                        ++sharedDivisions;
+                        continue;
+                    }
+                    EXPECT_TRUE(panel->isDirectionRowShownForTest()) << where;
+                    EXPECT_TRUE(panel->isFaderSizeRowShownForTest()) << where;
+                    ++checked;
+                    if (paramId.endsWith("Div"))
+                        ++divisions;
+                }
+            }
+        }
+    }
+    EXPECT_GT(checked, 10) << "the enumeration found the default faders";
+    EXPECT_GE(divisions, 4) << "and the Tempo look's division faders among them";
+    EXPECT_GE(sharedDivisions, 4) << "and a Shared look's divisions, which are faders too (all three rows)";
+}
+
+namespace {
+
+constexpr int kSepLooks = 1;
+
+void sepSetParam(juce::AudioProcessor& module, const juce::String& id, float plainValue) {
+    for (auto* parameter : module.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+            ranged != nullptr && ranged->paramID == id)
+            ranged->setValueNotifyingHost(ranged->convertTo0to1(plainValue));
+}
+
+void sepFlipSync(OnCardRig& rig, CardLayoutOnCardEditor& editor, NodeID id, bool tempo) {
+    sepSetParam(*rig.canvas.processor(id), "tempoSync", tempo ? 1.0f : 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor.runQueuedSyncForTest();
+}
+
+// What the card draws for Sustain in the look showing now.
+struct SepDrawn {
+    bool visible = false;
+    juce::Rectangle<int> bounds;
+    juce::String caption;
+    int kind = -1;
+    bool operator==(const SepDrawn& o) const {
+        return visible == o.visible && bounds == o.bounds && caption == o.caption && kind == o.kind;
+    }
+};
+
+SepDrawn sepDrawnSustain(OnCardRig& rig, NodeID id) {
+    SepDrawn drawn;
+    const auto& plan = rig.card(id)->getCardBody()->getPlan();
+    for (int i = 0; i < (int)plan.items.size(); ++i) {
+        const auto& item = plan.items[(size_t)i];
+        if (item.param == nullptr || item.param->paramID != "sustain" || !plan.isOnCard(i))
+            continue;
+        drawn.caption = item.captionText();
+        drawn.kind = (int)item.kind;
+        drawn.visible = item.widget != nullptr && item.widget->isShowing();
+        if (item.widget != nullptr)
+            drawn.bounds = item.widget->getBounds();
+    }
+    return drawn;
+}
+
+const synth::CardSection* sepSectionOf(const synth::CardLayout& layout, const char* id) {
+    for (const auto& section : layout.sections)
+        if (section.id == id)
+            return &section;
+    return nullptr;
+}
+
+struct SepPath {
+    const char* name;
+    std::function<void(OnCardRig&, CardLayoutOnCardEditor&)> run;
+};
+
+std::vector<SepPath> sepWritePaths() {
+    return {
+        {"panel label",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onLabel("Sustained");
+         }},
+        {"panel range",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onRange(juce::Range<double>(0.2, 0.8));
+         }},
+        {"panel show as",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             panel->onShowAs(CardWidget::KnobLarge);
+         }},
+        {"panel fader size",
+         [](OnCardRig& rig, CardLayoutOnCardEditor& editor) {
+             auto* panel = openControlPanel(rig, editor, "sustain");
+             ASSERT_NE(panel, nullptr);
+             ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
+             panel->getFaderSizeForTest()->setSelectedIndex(1, juce::sendNotificationSync);
+         }},
+        {"drag",
+         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
+             Pointer pointer(editor, "sustain");
+             pointer.moveBy({-90, 0});
+             pointer.release();
+         }},
+        {"nudge",
+         [](OnCardRig&, CardLayoutOnCardEditor& editor) {
+             const juce::KeyPress key(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier),
+                                      0);
+             editor.getOutlineForTest("sustain")->keyPressed(key);
+             editor.flushNudgeForTest();
+         }},
+    };
+}
+
+} // namespace
+
+TEST(OnCardSeparateLooks, EveryWritePathOfSustainStaysInTheVisibleLookAndUndoesPerLook) {
+    for (const bool editTempo : {false, true}) {
+        for (const auto& path : sepWritePaths()) {
+            const auto where = juce::String(path.name) + (editTempo ? " (edited in Tempo)" : " (edited in Time)");
+            OnCardRig rig;
+            const auto id = rig.add(std::make_unique<ADSRModule>());
+            auto* editor = rig.openOnCard(id);
+            ASSERT_NE(editor, nullptr);
+            editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+            const char* look = editTempo ? "stages-tempo" : "stages-time";
+            const char* other = editTempo ? "stages-time" : "stages-tempo";
+
+            // The other look as it draws now, then back to the look that is edited.
+            sepFlipSync(rig, *editor, id, !editTempo);
+            const auto otherDrawn = sepDrawnSustain(rig, id);
+            sepFlipSync(rig, *editor, id, editTempo);
+            const auto before = rig.card(id)->getCardBody()->explicitLayout();
+            ASSERT_NE(sepSectionOf(before, other), nullptr) << where;
+
+            path.run(rig, *editor);
+            if (::testing::Test::HasFatalFailure())
+                return;
+            editor->flushNudgeForTest();
+            const auto after = rig.card(id)->getCardBody()->explicitLayout();
+            EXPECT_NE(after, before) << where << " wrote nothing, the guard would prove nothing";
+            ASSERT_NE(sepSectionOf(after, other), nullptr) << where;
+            EXPECT_EQ(*sepSectionOf(after, other), *sepSectionOf(before, other)) << where << ": the other look's items";
+            EXPECT_EQ(after.hidden, before.hidden) << where << ": the hidden list";
+
+            sepFlipSync(rig, *editor, id, !editTempo);
+            EXPECT_EQ(sepDrawnSustain(rig, id), otherDrawn) << where << ": what the other look draws";
+            sepFlipSync(rig, *editor, id, editTempo);
+
+            ASSERT_TRUE(rig.canvas.undo.undo()) << where;
+            editor->runQueuedSyncForTest();
+            EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before) << where << ": one undo restores the look";
+            (void)look;
+        }
+    }
+}
+
+// Hide from card is global by design: the layout's hidden list names parameters, not looks, so a hidden Sustain is
+// off the card in both looks. Both looks keep their items (nothing of the other look is rewritten), so Add control
+// and one undo each bring every look's Sustain back exactly as it was.
+TEST(OnCardSeparateLooks, HideFromCardHidesSustainInBothLooksAndKeepsEachLooksItemForAddControlAndUndo) {
+    for (const bool viaKey : {false, true}) {
+        OnCardRig rig;
+        const auto id = rig.add(std::make_unique<ADSRModule>());
+        auto* editor = rig.openOnCard(id);
+        ASSERT_NE(editor, nullptr);
+        editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+        sepFlipSync(rig, *editor, id, true);
+        const auto tempoDrawn = sepDrawnSustain(rig, id);
+        sepFlipSync(rig, *editor, id, false);
+        const auto timeDrawn = sepDrawnSustain(rig, id);
+        const auto before = rig.card(id)->getCardBody()->explicitLayout();
+
+        if (viaKey)
+            editor->getOutlineForTest("sustain")->keyPressed(juce::KeyPress(juce::KeyPress::backspaceKey));
+        else
+            hideThroughPanel(rig, *editor, "sustain");
+        const auto hidden = rig.card(id)->getCardBody()->explicitLayout();
+        EXPECT_TRUE(hidden.hidden.contains("sustain"));
+        for (const char* look : {"stages-time", "stages-tempo"})
+            EXPECT_EQ(*sepSectionOf(hidden, look), *sepSectionOf(before, look)) << look << " keeps its item";
+
+        auto* addPanel = openAddPanel(rig, *editor);
+        ASSERT_NE(addPanel, nullptr);
+        ASSERT_NE(addPanel->getRowForTest("sustain"), nullptr);
+        clickRow(*addPanel->getRowForTest("sustain"));
+        sepFlipSync(rig, *editor, id, true);
+        EXPECT_EQ(sepDrawnSustain(rig, id), tempoDrawn) << "Add control brings the Tempo look's Sustain back as it was";
+        sepFlipSync(rig, *editor, id, false);
+        EXPECT_EQ(sepDrawnSustain(rig, id), timeDrawn) << "and the Time look's";
+
+        ASSERT_TRUE(rig.canvas.undo.undo());
+        ASSERT_TRUE(rig.canvas.undo.undo());
+        editor->runQueuedSyncForTest();
+        EXPECT_EQ(rig.card(id)->getCardBody()->explicitLayout(), before);
+    }
+}
+
+// The looks have no title row, so there is no group handle to move one look's Sustain with.
+TEST(OnCardSeparateLooks, TheLooksHaveNoGroupHandleSoNoGroupMoveCanReachSustain) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    editor->getTimeTempoSwitchForTest().setSelectedIndex(kSepLooks, juce::sendNotificationSync);
+    EXPECT_EQ(editor->getGroupHandleCountForTest(), 0);
 }

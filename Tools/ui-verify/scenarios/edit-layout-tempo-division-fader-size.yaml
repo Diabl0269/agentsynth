@@ -1,0 +1,42 @@
+# FRO1339: a Tempo look's division fader is a stepped fader, so its control panel offers Show as, Direction and Fader
+# size like any vertical fader. Fader size Long grows the fader and the card; Undo puts it back.
+#
+# What a user does: opens Edit Layout on an ADSR card, sets Separate looks, switches the editor to the Tempo look,
+# opens the Hold division fader's panel (Show as, Direction and Size are all there), picks Size Long, then Undo.
+record: true
+save_project: fro1339 tempo division fader size
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: 0, dy: 1.2}
+  - wait: {}
+  - click: {id: "card:ADSR 3", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1096, y: 613}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1188, y: 350}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1095, y: 400}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: screen, name: panel-has-show-as-direction-size}
+  - click: {id: Long}   # Size: Long
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: size-long}
+  - mark: {check: 1, name: panel-shows-as-direction-size-and-long-grows-the-fader}
+  - click: {id: window, x: 703, y: 16}   # toolbar Undo
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: undone}
+  - mark: {check: 2, name: undo-restores-short}
