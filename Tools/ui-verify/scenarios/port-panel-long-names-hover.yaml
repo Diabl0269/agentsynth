@@ -46,7 +46,7 @@ steps:
   - click: {id: "card:Drum Kit > Level: Pluck 1", instant: "the click only focuses the knob and the canvas redraws its selection at once"}
   - wait: {}
   - key: {keys: tab, instant: "the focus ring jumps to the dot and the canvas redraws its selection"}
-  - expect: {id: "Pad 1 level modulation, 1 source", hasFocus: true, within_ms: 1500}
+  - expect: {id: "Pad 1 Level modulation, 1 source", hasFocus: true, within_ms: 1500}
   - key: {keys: return, instant: "the dot's key opens the panel on the next redraw"}
   - expect: {id: modDotPopover, exists: true, within_ms: 1500}
   - wait: {settleMs: 300}

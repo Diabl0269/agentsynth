@@ -21,7 +21,7 @@ public:
     static constexpr int kHeight = 34;
 
     static constexpr int kElasticName = -1; // Look::nameWidth: the name takes up to kNameMax, the fader keeps kMinBar
-    static constexpr int kNameMax = 90;
+    static constexpr int kNameMax = 130;
     static constexpr int kMinBar = 48;
 
     /** How the row is laid out where it is not the knob's sources page: one line, `height` tall, the name `nameWidth`
@@ -66,7 +66,8 @@ public:
     /** The name's area: elides a long name with '…' and shows the full name as its tooltip. */
     juce::Component& nameArea() noexcept;
     juce::Rectangle<int> nameBounds() const noexcept { return nameArea_; }
-    /** What the row draws: the name, or only its port ("Pad 2 level") when "<module> . <port>" does not fit. */
+    /** What the row draws: the name, or when "<module> . <port>" does not fit the port shortened in the middle first
+     *  ("Drum Kit . Pad…vel"), then the module shortened at its end; the module is never dropped. */
     juce::String shownName() const;
     /** The same button as its glyph type (what the port connections panel's row hands its callers). */
     ModDotGlyphButton& removeGlyph() noexcept { return removeButton_; }

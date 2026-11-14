@@ -159,9 +159,9 @@ TEST(DrumKitPadCable, ASlotIsAKnobOnlyTargetNamedAfterItsPadAndNeverAutoPromoted
     ASSERT_EQ(targets.size(), before + 1);
     EXPECT_EQ(targets.back().channelIndex, kBase);
     EXPECT_EQ(targets.back().paramId, "pad2Level");
-    EXPECT_EQ(targets.back().name, "Pad 2 level");
+    EXPECT_EQ(targets.back().name, "Pad 2 Level");
     EXPECT_TRUE(targets.back().knobOnly);
-    EXPECT_EQ(kit->getInputPortLabel(kBase), "Pad 2 level");
+    EXPECT_EQ(kit->getInputPortLabel(kBase), "Pad 2 Level");
     EXPECT_EQ(kit->modulationChannelForParam("pad2Level"), kBase);
 
     EXPECT_FALSE(kit->isAutoPromotableModTarget(kBase));
@@ -175,7 +175,7 @@ TEST(DrumKitPadCable, TheAiNeverSeesAPadCable) {
     const auto schema = synth::AIStateMapper::getModuleSchema();
     EXPECT_FALSE(catalog.contains("pad2Level"));
     EXPECT_FALSE(schema.contains("pad2Level"));
-    EXPECT_FALSE(schema.contains("Pad 2 level"));
+    EXPECT_FALSE(schema.contains("Pad 2 Level"));
 
     juce::AudioProcessorGraph graph;
     auto kitOwned = makeKit();

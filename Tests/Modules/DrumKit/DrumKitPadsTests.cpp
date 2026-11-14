@@ -94,7 +94,7 @@ TEST(DrumKitPads, ANewKitHasEightPadsOnTheGeneralMidiNotesAndThirtyTwoSlots) {
         EXPECT_TRUE(kit.pad(i).shown);
     }
     EXPECT_NE(findParameterByID(&kit, "pad32Start"), nullptr);
-    EXPECT_EQ(kit.padParameter(0, PadParam::Level)->getName(32), "Pad 1 level");
+    EXPECT_EQ(kit.padParameter(0, PadParam::Level)->getName(32), "Pad 1 Level");
 }
 
 // Each pad knob reads in its unit; a raw "0.0000" under Tune or Decay told the user nothing.

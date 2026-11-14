@@ -407,7 +407,7 @@ TEST_F(ModuleComponentTest, DraggingAnOutputRowsAmountBarIsOneUndoStep) {
     bar.mouseDrag(at(bar, bar.xForValue(0.4f)));
     bar.mouseDrag(at(bar, bar.xForValue(0.8f)));
     bar.mouseUp(at(bar, bar.xForValue(0.8f)));
-    EXPECT_NEAR(f.amount(atten), 0.8f, 0.02f);
+    EXPECT_NEAR(f.amount(atten), 0.8f, 0.04f) << "a pixel of the bar is a few hundredths";
 
     ASSERT_TRUE(f.undo.undo());
     EXPECT_NEAR(f.amount(atten), before, 1e-4f) << "one undo undoes the whole drag";
@@ -559,8 +559,11 @@ TEST_F(ModuleComponentTest, ALongTargetNameIsElidedInTheRowAndFullInTheTooltipAn
     const auto full = row->connection().fullLabel;
     EXPECT_EQ(row->connection().label, full) << "another card's name keeps its module: the panel is on the LFO";
     EXPECT_GT(textWidth(full), row->modRow()->nameBounds().getWidth()) << "too long: it ends in '...'";
-    EXPECT_EQ(row->modRow()->shownName(), full.fromFirstOccurrenceOf(synth::ui::portSeparator(), false, false))
-        << "too long: the row gives up the module and keeps the port";
+    const auto module = full.upToFirstOccurrenceOf(synth::ui::portSeparator(), false, false);
+    EXPECT_TRUE(row->modRow()->shownName().startsWith(module.substring(0, 2)))
+        << "too long: the row keeps (a shortened) module, never drops it";
+    EXPECT_TRUE(row->modRow()->shownName().contains(synth::ui::portSeparator()));
+    EXPECT_LE(textWidth(row->modRow()->shownName()), row->modRow()->nameBounds().getWidth());
     auto& name = row->modRow()->nameArea();
     EXPECT_EQ(dynamic_cast<juce::SettableTooltipClient&>(name).getTooltip(), full);
     EXPECT_EQ(name.getTitle(), full);
@@ -614,6 +617,70 @@ TEST_F(ModuleComponentTest, TheKnobsModDotPanelFitsTheLongestNameInEveryTheme) {
                 EXPECT_GT(parts[i]->getX(), parts[i - 1]->getRight()) << "no two controls touch";
         }
         EXPECT_GE(row->bar().getWidth(), ModDotSourceRow::kMinBar);
+        row->setLookAndFeel(nullptr);
+    }
+}
+
+// The elision order of a "<module> . <port>" name: the control name is shortened first, then the module name; the
+// module is never dropped before the port.
+TEST_F(ModuleComponentTest, ARowShortensItsControlNameBeforeItsModuleNameAndNeverDropsTheModule) {
+    NoMotion motion;
+    ManyTargets f(2);
+    f.editor->getModDot().openPopover(f.vcaId, f.gainChannel, *findModuleComp(*f.editor, f.module(f.vcaId)));
+    ASSERT_NE(f.popover(), nullptr);
+    auto* row = f.popover()->sourcesPage().rowAt(0);
+    ASSERT_NE(row, nullptr);
+    const auto sep = synth::ui::portSeparator();
+    const auto expectShown = [&](const juce::String& module, const juce::String& port, int width) {
+        auto source = row->source();
+        source.sourceName = module + sep + port;
+        source.fullName = source.sourceName;
+        row->update(source);
+        row->setLook({ModDotSourceRow::kHeight, width, true});
+        row->setSize(400, ModDotSourceRow::kHeight);
+        return row->shownName();
+    };
+    const auto whole = expectShown("Drum Kit", "Pad 16 Decay", 200);
+    EXPECT_EQ(whole, "Drum Kit" + sep + "Pad 16 Decay") << "room enough: nothing is shortened";
+
+    const int width = textWidth("Drum Kit" + sep +
+                                juce::String::fromUTF8("Pa\xE2\x80\xA6"
+                                                       "ay")) +
+                      2; // the port does not fit
+    const auto shortPort = expectShown("Drum Kit", "Pad 16 Decay", width);
+    EXPECT_TRUE(shortPort.startsWith("Drum Kit" + sep)) << "the module is whole while only the port is cut";
+    EXPECT_TRUE(shortPort.contains(juce::String::fromUTF8("\xE2\x80\xA6"))) << "the port is shortened";
+    EXPECT_FALSE(shortPort.contains("Decay")) << "...in the middle";
+    EXPECT_TRUE(shortPort.endsWith("y")) << "the end of the control name stays";
+    EXPECT_LE(textWidth(shortPort), width);
+
+    const auto longModule = expectShown("Rhythm Section Drum Kit", "Pad 16 Decay", 90);
+    EXPECT_TRUE(longModule.startsWith("Rh")) << "a long module is still there, shortened";
+    EXPECT_TRUE(longModule.contains(sep));
+    EXPECT_LE(textWidth(longModule), 90);
+}
+
+// The longest name a drum pad gives an LFO row, in every theme: one line, the fader keeps its minimum.
+TEST_F(ModuleComponentTest, TheLongestPadNameFitsTheKnobsModDotPanelInEveryTheme) {
+    NoMotion motion;
+    ManyTargets f(2);
+    f.editor->getModDot().openPopover(f.vcaId, f.gainChannel, *findModuleComp(*f.editor, f.module(f.vcaId)));
+    ASSERT_NE(f.popover(), nullptr);
+    auto* row = f.popover()->sourcesPage().rowAt(0);
+    ASSERT_NE(row, nullptr);
+    auto source = row->source();
+    source.sourceName = "Drum Kit 2" + synth::ui::portSeparator() + "Pad 16 Decay";
+    source.fullName = source.sourceName;
+    row->update(source);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SCOPED_TRACE(theme.name.toStdString());
+        synth::theme::AppLookAndFeel lnf;
+        lnf.applyTheme(theme);
+        row->setLookAndFeel(&lnf);
+        row->resized();
+        EXPECT_GE(row->bar().getWidth(), ModDotSourceRow::kMinBar);
+        EXPECT_LE(textWidth(row->shownName()), row->nameBounds().getWidth());
+        EXPECT_TRUE(row->shownName().startsWith("Dr")) << "the module stays";
         row->setLookAndFeel(nullptr);
     }
 }
