@@ -41,6 +41,19 @@ keeps its usual anchor: the button, the card, the split button. A new card menu 
 `menuPopoverAnchor()` the same way; `HostedPluginOutputsPanelTest.EveryPopoverTheCardMenuOpensPointsAtTheClick...` lists the
 menu's "..." items and fails on one it does not know.
 
+## Panels in a frame window
+
+The mod dot's panel (knob), the output jack's connections panel and the modulation curve popover open through
+`launchInFrame` (`Source/UI/Graph/ModDot/ModDotPanelLaunch.cpp`): a `ModDotPanelFrame`, its own top-level window, not a
+`CallOutBox`. They relay the app's shortcuts too: `launchInFrame` sets the frame's `onAppShortcut` to
+`makeAppShortcutRelay(&anchor)` (anchor = the dot, knob, card or chip the panel points at), and the frame offers it every
+key but Esc after the focused child and its parents declined it. Space, Cmd+Z, Cmd+Shift+Z, Cmd+J and the other keys
+`isWindowForwardableShortcut` allows reach the app with the panel open; typing in its search box, Esc, and the canvas
+selection keys (copy, paste, select all, Delete) stay with the panel. These panels do not implement `AppUndoAware`:
+they follow the graph on the canvas's tick (`PortPanelController::tick`, `ModDotController::tickPopover`,
+`tickModCurvePopover`), so an undo re-syncs the open panel, or closes it when its connection or card is gone. A new
+window put on the desktop with `showOnDesktop()` must go through `launchInFrame` (`FrameRelayScan` fails otherwise).
+
 ## After an undo
 
 A popover that lists or shows project state built when it opened can go stale under an undo. Its content implements
@@ -67,6 +80,8 @@ Undo and redo move the range while the panel stays open: the card tells its open
 show the range the pattern now has.
 
 ## Guard
+
+`ModDotFrameRelayTests.cpp` (`FrameRelay`) opens each frame panel through its real owner in a real `MainComponent` and presses Space, Cmd+Z, Cmd+Shift+Z and Cmd+J through the frame's key order (the toggle shortcut and the window kind that `PopoverRelayTests` never covered); the scenario `moddot-panel-shortcuts.yaml` shows it in the app.
 
 `PopoverRelayTests` presses Cmd+Z and Cmd+Shift+Z from every focusable child of the Randomize panel and checks the
 range. It also opens the main-window popovers through their real buttons in a real `MainComponent` (the timeline track

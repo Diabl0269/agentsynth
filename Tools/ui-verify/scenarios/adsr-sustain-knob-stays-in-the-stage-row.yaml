@@ -1,0 +1,18 @@
+# An ADSR whose Sustain is a knob while Attack, Hold, Decay and Release are vertical faders keeps all five in one
+# stage row, in the Time look and in the Tempo look (the card used to wrap Sustain to a row of its own, or leave a
+# gap, because a knob and a fader were laid out as separate runs).
+#
+# What a user does: opens the saved project (its ADSR has Sus set to a knob), looks at the card (saved in the Tempo look), then clicks the
+# Time segment of Stage times: the stage controls become second faders and Sus stays in the same row.
+record: true
+save_project: fro1337 sustain knob stays in the stage row
+steps:
+  - openProject: {path: "${FIXTURES}/fro1337-sustain-knob.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: 0, dy: 1.2}
+  - wait: {settleMs: 400}
+  - screenshot: {id: screen, name: tempo-look}
+  - click: {id: window, x: 943, y: 598}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: time-look}
+  - mark: {check: 1, name: sustain-knob-stays-in-the-stage-row-in-both-looks}

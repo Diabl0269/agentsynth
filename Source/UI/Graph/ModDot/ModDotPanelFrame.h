@@ -5,8 +5,9 @@
 // while the arrow stays level with the dot. The window itself is transparent and never changes size; everything it
 // draws (the outline, the shadow and the panel) lives in one full-size child "body", which is what grows out of the
 // dot and shrinks back into it (a native window cannot be scaled, a child can). Not modal: a click outside closes it
-// (unless `keepOpenOnOutsideClick` says a canvas pick is under way), Esc closes it, and the panel's own controls take
-// the keyboard. docs/modules/modulation.md#the-mod-dot-menu.
+// (unless `keepOpenOnOutsideClick` says a canvas pick is under way), Esc closes it, the panel's own controls take
+// the keyboard, and a key none of them uses goes to the app (`onAppShortcut`).
+// docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotPanelGeometry.h"
 #include "UI/Layout/AppTooltipWindow.h"
@@ -71,6 +72,9 @@ public:
     std::function<bool(juce::Point<int>)> keepOpenOnPressAt;
     /** Asked before Esc closes this panel; true means something opened over it took the key instead. */
     std::function<bool()> escapeGoesElsewhere;
+    /** Offered every key but Esc after the focused child and its parents declined it; true means the app took it
+     *  (Space, Cmd+Z, Cmd+J...). Null: the panel keeps every key. */
+    std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
     bool hitTest(int x, int y) override;
     void resized() override;

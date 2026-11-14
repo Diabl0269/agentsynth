@@ -2,6 +2,7 @@
 // docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "ModDotPanelLaunch.h"
+#include "UI/Layout/AppShortcutRelay.h"
 
 namespace synth::ui {
 
@@ -23,6 +24,9 @@ ModDotPanelFrame* launchInFrame(std::unique_ptr<juce::Component> content, juce::
             if (frame != nullptr)
                 frame->close();
         });
+    // Space, Cmd+Z, Cmd+J...: the window is its own top level, so a key the panel does not use would never reach the
+    // app. An undo is seen by the panel through the canvas tick, which re-syncs it or closes it with its connection.
+    frame->onAppShortcut = makeAppShortcutRelay(&anchor);
     frame->keepOpenOnOutsideClick = options.keepOpenOnOutsideClick;
     frame->onClosed = [frame] { juce::MessageManager::callAsync([frame] { delete frame; }); };
     frame->showOnDesktop();

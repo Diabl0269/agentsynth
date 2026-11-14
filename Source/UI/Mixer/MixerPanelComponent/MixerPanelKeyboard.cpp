@@ -35,13 +35,19 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
     // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
-    // Before the arrows: the default pan chords are Shift+Left / Shift+Right.
-    if (matchesAction(key, "mixerPanLeft",
-                      juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)))
+    // Before the arrows: the default pan chords are Option+Shift+Left / Option+Shift+Right.
+    constexpr int kPanMods = juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier;
+    if (matchesAction(key, "mixerPanLeft", juce::KeyPress(juce::KeyPress::leftKey, kPanMods, 0)))
         return panFocused(-kPanStep);
-    if (matchesAction(key, "mixerPanRight",
-                      juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)))
+    if (matchesAction(key, "mixerPanRight", juce::KeyPress(juce::KeyPress::rightKey, kPanMods, 0)))
         return panFocused(kPanStep);
+    // Shift+Left / Shift+Right extend the strip selection across the strips, as Shift+Up / Shift+Down do on the
+    // timeline's rows (a fixed chord like Option+arrows below; pan took Option+Shift+arrows for it). A column with
+    // no single track of its own lets the key bubble.
+    if (key.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::shiftModifier) &&
+        (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)) &&
+        extendStripSelection(key.isKeyCode(juce::KeyPress::leftKey) ? -1 : 1))
+        return true;
     if (matchesAction(key, "mixerToggleChannelHidden", juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0)))
         return hideFocusedChannel();
     if (const float delta = faderNudgeFor(key); delta != 0.0f)
@@ -66,6 +72,20 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     // The Rename key (F2 / Option+R) renames the focused column's name in place; a text editor keeps its own keys.
     if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused())
         return renameFocusedColumn();
+    // Cmd+Backspace deletes the selected strips' tracks (the timeline row's own action id, so one rebind covers both),
+    // Cmd+Space puts the focused strip's track in or out of the selection, Option+Left / Option+Right move the set one
+    // place (fixed chords like the timeline's Alt+= / Alt+- row-height keys); a column with no single track lets them
+    // bubble. MixerPanelTrackSelection.cpp.
+    if (matchesAction(key, "timelineDeleteFocusedTrack",
+                      juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier, 0)) &&
+        deleteFocusedTracks())
+        return true;
+    if (key == juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::commandModifier, 0) &&
+        toggleFocusedTrackSelection())
+        return true;
+    if (mods.isAltDown() && !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isShiftDown() &&
+        (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)))
+        return moveSelectedStrips(key.isKeyCode(juce::KeyPress::leftKey) ? -1 : 1);
     // The track row's own Duplicate action id (Cmd+D by default), so one rebind covers both; it copies the
     // focused strip's track, and a column with no single track lets the key bubble.
     if (matchesAction(key, "timelineDuplicateFocusedTrack",
@@ -152,6 +172,7 @@ bool MixerPanelComponent::moveFocus(int direction) {
     }
     const int newIndex = focusedColumnIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedColumnIndex_ + direction);
     setFocusedColumnIndex(newIndex);
+    selectFocusedStripTrack();
     return true;
 }
 
@@ -226,6 +247,12 @@ void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
     repaint();
     if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
         grabKeyboardFocus();
+    // A press on the strip itself (its header, name, meter or empty area, not a control) is a press on its track: the
+    // timeline row's selection rules.
+    const auto& pressed = columnEntries_[(size_t)index];
+    if (pressed.kind == ColumnEntry::Kind::Strip &&
+        static_cast<const MixerColumnComponent*>(pressed.component)->isSelectionSurface(e.eventComponent))
+        selectFromStripPress(e, index);
 }
 
 // The copy's column arrives through the rebuild; focus stays on this strip (resolveFocusAfterRebuild matches it by
@@ -251,6 +278,18 @@ void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) cons
     into.setProperty("focusedRowIndex", inRows ? rowFocus_->index : -1);
     // The side pane's list holds the keys (Left from the first strip): the channel its cursor is on.
     into.setProperty("zonesCursor", zonesPane_.getKeyboardCursorName());
+    // The strips washed as selected, and the one whose restore outline (after an undo) is drawn now, by title.
+    juce::StringArray washed, outlined;
+    for (const auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip || entry.component == nullptr)
+            continue;
+        if (static_cast<const MixerColumnComponent*>(entry.component)->isTrackSelectedForTest())
+            washed.add(entry.component->getTitle());
+        if (columnMotion_.outlineAlphaFor(entry.channelId) > 0.0f)
+            outlined.add(entry.component->getTitle());
+    }
+    into.setProperty("selectedStrips", washed.joinIntoString(","));
+    into.setProperty("outlinedStrip", outlined.joinIntoString(","));
 }
 
 // Direct and Master have no name to edit, so the key falls through there.

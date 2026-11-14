@@ -104,21 +104,21 @@ TEST(OnCardEditorUndo, UndoAndRedoKeepWorkingRepeatedlyWhileTheEditorStaysOpen) 
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
     const int outlines = editor->getOutlineCountForTest();
-    const auto start = widgetOf(*rig.card(id), "cutoff")->getPosition();
-    drop(*editor, "cutoff", {40, 0});
-    const auto moved = widgetOf(*rig.card(id), "cutoff")->getPosition();
+    const auto start = widgetOf(*rig.card(id), "outputLevel")->getPosition();
+    drop(*editor, "outputLevel", {40, 0});
+    const auto moved = widgetOf(*rig.card(id), "outputLevel")->getPosition();
 
     for (int round = 0; round < 3; ++round) {
-        ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff")) << round;
-        EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start) << round;
-        ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "cutoff")) << round;
-        EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), moved) << round;
+        ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "outputLevel")) << round;
+        EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), start) << round;
+        ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "outputLevel")) << round;
+        EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), moved) << round;
         EXPECT_FALSE(editor->isClosed());
         EXPECT_EQ(editor->getOutlineCountForTest(), outlines);
     }
-    drop(*editor, "cutoff", {20, 0}); // and the editor still writes after all that
-    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), moved) << "a new step after a redo is its own";
+    drop(*editor, "outputLevel", {20, 0}); // and the editor still writes after all that
+    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "outputLevel"));
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), moved) << "a new step after a redo is its own";
 }
 
 TEST(OnCardEditorUndo, UndoingPastTheFirstChangeIntoTheModuleAddClosesTheEditorCleanly) {
@@ -207,16 +207,16 @@ TEST(OnCardEditorUndoMotion, UnderReduceMotionOrOffScreenUndoJustSnapsBack) {
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    const auto restored = editor->getCellRectForTest("cutoff");
-    drop(*editor, "cutoff", {40, 0});
+    const auto restored = editor->getCellRectForTest("outputLevel");
+    drop(*editor, "outputLevel", {40, 0});
 
-    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
-    EXPECT_EQ(editor->getCellRectForTest("cutoff"), restored) << "not on screen: nothing glides";
+    ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "outputLevel"));
+    EXPECT_EQ(editor->getCellRectForTest("outputLevel"), restored) << "not on screen: nothing glides";
 
     editor->setForceAnimateForTest(true);
     synth::ui::setReducedMotionForTest(true);
-    ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "cutoff"));
-    EXPECT_EQ(editor->getCellRectForTest("cutoff").getX(), restored.getX() + 40) << "Reduce Motion: no glide";
+    ASSERT_TRUE(redoWithEditorOpen(rig, *editor, "outputLevel"));
+    EXPECT_EQ(editor->getCellRectForTest("outputLevel").getX(), restored.getX() + 40) << "Reduce Motion: no glide";
 }
 
 TEST(OnCardEditorUndoMotion, AControlUndoBringsBackGrowsInAndOneItTakesAwayShrinksOut) {

@@ -13,6 +13,7 @@
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
@@ -113,7 +114,8 @@ public:
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
     /** Moves the pan by `delta` (the parameter runs -1 left to +1 right) as one gesture; false when unbound. */
     bool nudgePan(float delta);
-    /** The pan keys' text for the pan knob's tooltip, e.g. "Shift+Left / Shift+Right"; empty names none. */
+    /** The pan keys' text for the pan knob's tooltip, e.g. "Option+Shift+Left / Option+Shift+Right"; empty names none.
+     */
     void setPanShortcutText(const juce::String& keys);
     /** The fader nudge keys' text for the fader's tooltip. */
     void setFaderShortcutText(const juce::String& keys) { fader_.setNudgeShortcutText(keys); }
@@ -138,6 +140,15 @@ public:
      *  headless with no native peer -- same accepted gap TimelineTrackFocusTests documents). */
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
+
+    /** Whether this strip's track is in the timeline's track selection (one shared model): a faint accent wash,
+     *  apart from setSelected()'s reveal border and the keyboard ring. */
+    void setTrackSelected(bool selected);
+    bool isTrackSelectedForTest() const noexcept { return trackSelected_; }
+    /** Whether a press on `c` (this column or one of its parts) is a press on the strip itself, which selects its
+     * track: the empty strip, the header and its name, the meter and its readout. A fader, knob, button, row or section
+     *  control is not. */
+    bool isSelectionSurface(const juce::Component* c) const noexcept;
 
     /** MixerPanelComponent calls this from setFocusedColumnIndex() (real
      *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
@@ -435,6 +446,8 @@ private:
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> soloButton_{"S"};
     bool selected_ = false;
     bool keyboardFocused_ = false;
+    bool trackSelected_ = false;
+    FadeAmount trackWash_{*this}; // the wash fades in and out with the selection
     float lift_ = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnComponent)

@@ -1,0 +1,31 @@
+# FRO1339: with Shared looks and Sync on Tempo, a division (drawn as a menu) opens a panel with Show as
+# (Menu | Fader), Label and Hide from card, not only Label and Hide. It used to miss Show as when the card's
+# layout was rebuilt from its plan, whose items carry no tests.
+record: true
+save_project: fro1339 shared tempo division show as
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - wheel: {id: window, x: 800, y: 450, dx: 0, dy: 1.2}
+  - wait: {}
+  - click: {id: "card:ADSR 3", x: 60, y: 10, button: right}
+  - wait: {settleMs: 300}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1188, y: 350}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1095, y: 400}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: screen, name: panel-has-show-as}
+  - mark: {check: 1, name: shared-tempo-division-panel-offers-show-as}

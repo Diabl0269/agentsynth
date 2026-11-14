@@ -4,6 +4,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.h"
 
@@ -24,13 +25,13 @@ struct Opened {
 
 } // namespace
 
-TEST(OnCardEditorDrag, DroppingCutoffSixtyPixelsRightWritesItsPositionAndGivesEveryControlOfTheSectionOne) {
+TEST(OnCardEditorDrag, DroppingOutputLevelSixtyPixelsRightWritesItsPositionAndGivesEveryControlOfTheSectionOne) {
     Opened open;
     ASSERT_NE(open.editor, nullptr);
-    const auto start = open.cell("cutoff");
+    const auto start = open.cell("outputLevel");
     const int contentX = synth::cardbody::BodyGeometry::forCardWidth(open.rig.card(open.id)->getWidth()).contentX;
 
-    Pointer pointer(*open.editor, "cutoff");
+    Pointer pointer(*open.editor, "outputLevel");
     pointer.moveBy({60, 0}, kCommand);
     EXPECT_TRUE(open.editor->isDraggingForTest());
     pointer.release();
@@ -38,19 +39,19 @@ TEST(OnCardEditorDrag, DroppingCutoffSixtyPixelsRightWritesItsPositionAndGivesEv
 
     const auto layout = open.rig.storedLayout(open.id);
     ASSERT_TRUE(layout.has_value()) << "the drop wrote the node's layout";
-    const auto* cutoff = storedItem(*layout, "cutoff");
-    ASSERT_NE(cutoff, nullptr);
-    ASSERT_TRUE(cutoff->at.has_value());
-    EXPECT_EQ(cutoff->at->x, start.getX() + 60 - contentX);
-    for (const auto* sibling : {"resonance", "drive"}) {
+    const auto* level = storedItem(*layout, "outputLevel");
+    ASSERT_NE(level, nullptr);
+    ASSERT_TRUE(level->at.has_value());
+    EXPECT_EQ(level->at->x, start.getX() + 60 - contentX);
+    for (const auto* sibling : {"keyTrack"}) {
         const auto* item = storedItem(*layout, sibling);
         ASSERT_NE(item, nullptr);
-        EXPECT_TRUE(item->at.has_value()) << sibling << " is in Cutoff's group and got a position too";
+        EXPECT_TRUE(item->at.has_value()) << sibling << " is in Output Level's group and got a position too";
     }
-    EXPECT_FALSE(storedItem(*layout, "keyTrack")->at.has_value()) << "another group is left as it was";
+    EXPECT_FALSE(storedItem(*layout, "cutoff")->at.has_value()) << "another group is left as it was";
 
-    EXPECT_EQ(open.cell("cutoff").getX(), start.getX() + 60) << "the rebuilt card draws the knob there";
-    EXPECT_EQ(widgetOf(*open.rig.card(open.id), "cutoff")->getX(), start.getX() + 60);
+    EXPECT_EQ(open.cell("outputLevel").getX(), start.getX() + 60) << "the rebuilt card draws the knob there";
+    EXPECT_EQ(widgetOf(*open.rig.card(open.id), "outputLevel")->getX(), start.getX() + 60);
 }
 
 // A group that holds a view (the ADSR's velocity fader and Threshold meter): writing the group's controls
@@ -88,42 +89,51 @@ TEST(OnCardEditorDrag, AViewInTheDraggedGroupStaysWhereItWasAfterTheWrite) {
 TEST(OnCardEditorDrag, TheRealWidgetAndItsOutlineFollowThePointerWhileDragging) {
     Opened open;
     ASSERT_NE(open.editor, nullptr);
-    const auto start = open.cell("cutoff");
-    auto* knob = widgetOf(*open.rig.card(open.id), "cutoff");
+    const auto start = open.cell("outputLevel");
+    auto* knob = widgetOf(*open.rig.card(open.id), "outputLevel");
     const auto knobStart = knob->getPosition();
 
-    Pointer pointer(*open.editor, "cutoff");
+    Pointer pointer(*open.editor, "outputLevel");
     pointer.moveBy({30, 20}, kCommand);
     // x follows the pointer; y stays on the control's row (a row's controls share a top).
-    EXPECT_EQ(open.cell("cutoff").getPosition(), start.getPosition() + juce::Point<int>(30, 0));
+    EXPECT_EQ(open.cell("outputLevel").getPosition(), start.getPosition() + juce::Point<int>(30, 0));
     EXPECT_EQ(knob->getPosition(), knobStart + juce::Point<int>(30, 0)) << "the control itself moved";
     EXPECT_FALSE(open.rig.storedLayout(open.id).has_value()) << "nothing is written until the drop";
     pointer.release();
 }
 
 TEST(OnCardEditorDrag, ALeftEdgeThreePixelsOffAnotherControlsSnapsToItAndCommandPlacesFreely) {
-    Opened open;
-    ASSERT_NE(open.editor, nullptr);
-    const auto cutoff = open.cell("cutoff");
-    const auto drive = open.cell("drive");
-    const int dx = drive.getX() + 3 - cutoff.getX();
+    // The tone group in two columns: Cutoff and Resonance on the first row, Drive alone on the second, so Drive has
+    // room to move beside the others.
+    OnCardRig rig;
+    auto layout = synth::DefaultCardLayouts::builtIn().find("Filter")->layout;
+    for (auto& section : layout.sections)
+        if (section.id == "tone")
+            section.columns = 2;
+    const auto id = rig.canvas.add(std::make_unique<FilterModule>(), 200, 200, layout);
+    rig.canvas.editor.updateComponents();
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const auto drive = editor->getCellRectForTest("drive");
+    const auto resonance = editor->getCellRectForTest("resonance");
+    const int dx = resonance.getX() - 3 - drive.getX();
     const int dy = 0;
 
     {
-        Pointer pointer(*open.editor, "cutoff");
+        Pointer pointer(*editor, "drive");
         pointer.moveBy({dx, dy});
-        EXPECT_EQ(open.cell("cutoff").getX(), drive.getX()) << "pulled onto the other's left edge";
-        EXPECT_FALSE(open.editor->getGuidesForTest().empty());
+        EXPECT_EQ(editor->getCellRectForTest("drive").getX(), resonance.getX()) << "pulled onto the other's left edge";
+        EXPECT_FALSE(editor->getGuidesForTest().empty());
         pointer.moveBy({0, 0});
-        EXPECT_TRUE(open.editor->sendEscapeToDragForTest());
+        EXPECT_TRUE(editor->sendEscapeToDragForTest());
     }
     {
-        Pointer pointer(*open.editor, "cutoff");
+        Pointer pointer(*editor, "drive");
         pointer.moveBy({dx, dy}, kCommand);
-        EXPECT_EQ(open.cell("cutoff").getX(), drive.getX() + 3) << "Cmd places it freely";
-        for (const auto& guide : open.editor->getGuidesForTest())
+        EXPECT_EQ(editor->getCellRectForTest("drive").getX(), resonance.getX() - 3) << "Cmd places it freely";
+        for (const auto& guide : editor->getGuidesForTest())
             EXPECT_FALSE(guide.vertical) << "Cmd draws no snap guide";
-        EXPECT_TRUE(open.editor->sendEscapeToDragForTest());
+        EXPECT_TRUE(editor->sendEscapeToDragForTest());
     }
 }
 
@@ -439,31 +449,23 @@ struct AdsrOpen {
 
 } // namespace
 
-// Regression test for FRO720: Sustain as a knob wraps Release to a row of its own; dragging Sustain back into the
-// stage row brings Release back with it, all five on one row inside the card, with no empty band left below.
-TEST(OnCardEditorRows, ASustainKnobDraggedBackIntoTheStageRowBringsReleaseBackToo) {
+// Sustain as a knob stays in the stage row with the faders (the stages share one grid whatever their kinds), so no
+// drag is needed to bring Release back: all five are on one row inside the card with no empty band below, and the
+// style change is one undo step on its own.
+TEST(OnCardEditorRows, ASustainKnobStaysInTheStageRowWithReleaseAndIsOneUndoStep) {
     AdsrOpen open;
     ASSERT_NE(open.editor, nullptr);
     const auto fresh = open.rig.storedLayout(open.id);
     auto* panel = openControlPanel(open.rig, *open.editor, "sustain");
     ASSERT_NE(panel, nullptr);
     panel->onShowAs(synth::CardWidget::Knob);
-    EXPECT_GT(open.cell("release").getY(), open.cell("attack").getY()) << "the knob pushed Release off the row";
-
-    const auto to = juce::Point<int>(open.cell("decay").getRight() + 20, open.cell("decay").getCentreY()) -
-                    open.cell("sustain").getCentre();
-    Pointer pointer(*open.editor, "sustain");
-    pointer.moveBy(to, kCommand);
-    pointer.release();
+    EXPECT_EQ(open.cell("release").getY(), open.cell("attack").getY()) << "the knob did not push Release off the row";
 
     open.expectOneTidyRow();
     EXPECT_EQ(open.stageSectionBottom(), std::max({open.cell("sustain").getBottom(), open.cell("release").getBottom(),
                                                    open.cell("attack").getBottom()}))
         << "no empty band under the row";
 
-    // The style change is one undo step on its own.
-    ASSERT_TRUE(open.rig.canvas.undo.undo()); // the drag
-    open.editor->runQueuedSyncForTest();
     ASSERT_TRUE(open.rig.canvas.undo.undo()); // the style change
     open.editor->runQueuedSyncForTest();
     EXPECT_EQ(open.rig.storedLayout(open.id), fresh);

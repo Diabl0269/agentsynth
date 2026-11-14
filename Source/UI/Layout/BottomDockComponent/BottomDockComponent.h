@@ -31,6 +31,8 @@ class MidiRemoteProjectDoc;
 } // namespace synth
 
 namespace synth::ui {
+
+struct MixerTrackSelectionHost;
 class ColourPickerPopup;
 } // namespace synth::ui
 
@@ -162,6 +164,11 @@ public:
     void setOnMoveTrack(std::function<void(synth::TrackId, int newIndex)> callback);
     /** The mixer strip menu's "Duplicate Track" (MainComponent::duplicateTrack). */
     void setOnDuplicateTrack(std::function<void(synth::TrackId)> callback);
+    /** The timeline's track selection and the delete and move that act on it (MainComponent); the mixer strips select,
+     *  delete and move their tracks through it. syncMixerTrackSelection() repaints the strips after the selection
+     *  changes. */
+    void setTrackSelectionHost(MixerTrackSelectionHost host);
+    void syncMixerTrackSelection();
     /** MainComponent wires this to the track colour picker its Timeline swatch opens -- fired by a mixer column's
      *  colour dot, so one pick recolours the track, its macro and both views. */
     void

@@ -10,3 +10,4 @@ list(APPEND APPUI_SOURCES
 )
 include(cmake/CardXYPadSources.cmake) # appends the XY pad and the morph map's shared plot to APPUI_SOURCES
 include(cmake/CardButtonSources.cmake) # appends the Macros button to APPUI_SOURCES
+include(cmake/NoteLengthFaderSources.cmake) # appends the note-division fader to APPUI_SOURCES

@@ -590,10 +590,12 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
     // Bare C opens the focused column's colour picker, the keyboard twin of a click on its colour dot.
     bindings["mixerOpenColour"] = juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0);
-    // Shift+Left / Shift+Right pan the focused column (the plain arrows walk the columns); H hides it, or shows and
-    // hides the side pane's cursor row while that list has the keyboard.
-    bindings["mixerPanLeft"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0);
-    bindings["mixerPanRight"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0);
+    // Option+Shift+Left / Option+Shift+Right pan the focused column (the plain arrows walk the columns, Shift+arrows
+    // extend the strip selection, Option+arrows move the selected strips); H hides it, or shows and hides the side
+    // pane's cursor row while that list has the keyboard.
+    const auto mixerPanMods = juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier;
+    bindings["mixerPanLeft"] = juce::KeyPress(juce::KeyPress::leftKey, mixerPanMods, 0);
+    bindings["mixerPanRight"] = juce::KeyPress(juce::KeyPress::rightKey, mixerPanMods, 0);
     bindings["mixerToggleChannelHidden"] = juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0);
     // Bare B bypasses the focused send or insert row; it is only read while a row holds the panel's row focus.
     bindings["mixerToggleRowBypass"] = juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0);

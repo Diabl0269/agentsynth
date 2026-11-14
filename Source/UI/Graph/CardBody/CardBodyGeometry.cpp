@@ -95,6 +95,33 @@ int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int ce
     return y + ((count + gridColumns - 1) / gridColumns) * (kLabelHeight + cellHeight);
 }
 
+// Each cell goes through layoutGridRun as a run of one in a geometry that is its own column (one column wide, never
+// double width), so a cell's caption and widget are placed by that one function whatever its neighbours are.
+int layoutMixedGridRun(const std::vector<GridCell>& cells, int columns, int y, const BodyGeometry& g, bool apply) {
+    const int gridColumns = g.isDoubleWidth() ? columns * 2 : columns;
+    const int cellWidth = gridCellWidth(columns, g);
+    auto column = g;
+    column.width = 0;
+    column.rightGutter = 0;
+    column.contentW = column.narrowW = cellWidth;
+    const int count = (int)cells.size();
+    for (int row = 0; row * gridColumns < count; ++row) {
+        const int first = row * gridColumns;
+        const int last = std::min(count, first + gridColumns);
+        int rowHeight = 0;
+        for (int i = first; i < last; ++i) {
+            rowHeight = std::max(rowHeight, kLabelHeight + cells[(size_t)i].cellHeight);
+            if (!apply)
+                continue;
+            column.contentX = column.narrowX = g.contentX + (i - first) * cellWidth;
+            layoutGridRun({cells[(size_t)i].widgets}, 1, cells[(size_t)i].cellHeight, cells[(size_t)i].widgetWidth, y,
+                          column, true);
+        }
+        y += rowHeight;
+    }
+    return y;
+}
+
 int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight, bool wide, int y,
                         const BodyGeometry& g, bool apply) {
     const int x = wide ? g.contentX : g.narrowX;

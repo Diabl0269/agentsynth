@@ -199,6 +199,28 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
     options.displayName = found->displayName;
     options.caption = item->label.value_or(found->displayName);
     options.widgetChoices = found->widgetChoices;
+    // A Choice in a look of an alternative group may draw as a stepped fader, so its panel offers the fader rows
+    // (the parameter's own list, built without a section, cannot know that).
+    const auto lookCondition =
+        layoutSection.has_value() && *layoutSection >= 0 && *layoutSection < (int)layout.sections.size()
+            ? layout.sections[(size_t)*layoutSection].visibleWhen.has_value()
+            : planned.section >= 0 && planned.section < (int)plan.sections.size() &&
+                  plan.sections[(size_t)planned.section].visibleWhen.has_value();
+    // A division in a swap group beside a vertical fader (a Shared look's time and division) may be a fader too.
+    // The plan knows the group even when the layout the editor reads has no tests on its items (a default layout is
+    // rebuilt from the plan).
+    bool beside = false;
+    if (planned.swapGroup >= 0)
+        for (int member : plan.swapGroups[(size_t)planned.swapGroup].members) {
+            const auto& other = plan.items[(size_t)member];
+            beside = beside || (member != index && CardBodyItem::isVerticalFader(other.kind) &&
+                                dynamic_cast<const juce::AudioParameterChoice*>(other.param) == nullptr);
+        }
+    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, lookCondition, beside))
+        for (auto widget : {CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH})
+            if (std::find(options.widgetChoices.begin(), options.widgetChoices.end(), widget) ==
+                options.widgetChoices.end())
+                options.widgetChoices.push_back(widget);
     options.widget = item->widget;
     if (options.widget == CardWidget::Auto && !options.widgetChoices.empty())
         options.widget = options.widgetChoices.front();

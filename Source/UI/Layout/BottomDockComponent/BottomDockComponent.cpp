@@ -6,6 +6,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerTrackSelectionHost.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <array>
 #include <utility>
@@ -157,6 +158,15 @@ void BottomDockComponent::setOnMoveTrack(std::function<void(synth::TrackId, int)
 
 void BottomDockComponent::setOnDuplicateTrack(std::function<void(synth::TrackId)> callback) {
     mixer_->onDuplicateTrack = std::move(callback);
+}
+
+void BottomDockComponent::setTrackSelectionHost(MixerTrackSelectionHost host) {
+    mixer_->setTrackSelectionHost(std::move(host));
+}
+
+void BottomDockComponent::syncMixerTrackSelection() {
+    mixer_->syncTrackSelectionVisuals();
+    mixerMirror_.syncTrackSelectionIfOpen();
 }
 
 void BottomDockComponent::setOnBuildTrackColourPicker(

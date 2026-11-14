@@ -183,9 +183,9 @@ TEST(MixerSectionShortcutTests, ToggleTooltipsNameTheBindingAndFollowARebind) {
     r.panel->keyPressed(original);
 }
 
-// Pan and hide keys: the focused mixer column's pan keys (Shift+Left / Shift+Right by default) and hide key
-// (H), both rebindable: the pan moves one step per press as one undo step, H hides the column and hands the focus to
-// its neighbour, and H in the side pane's list shows the channel again. Column keys travel the real ComponentPeer
+// Pan and hide keys: the focused mixer column's pan keys (Option+Shift+Left / Option+Shift+Right by default) and hide
+// key (H), both rebindable: the pan moves one step per press as one undo step, H hides the column and hands the focus
+// to its neighbour, and H in the side pane's list shows the channel again. Column keys travel the real ComponentPeer
 // dispatch on a native window holding the real panel of an off-screen MainComponent.
 
 namespace {
@@ -193,7 +193,9 @@ namespace {
 using namespace synth::test::mixer;
 
 juce::KeyPress right() { return juce::KeyPress(juce::KeyPress::rightKey); }
-juce::KeyPress shiftArrow(int code) { return juce::KeyPress(code, juce::ModifierKeys::shiftModifier, 0); }
+juce::KeyPress shiftArrow(int code) {
+    return juce::KeyPress(code, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier, 0);
+}
 juce::KeyPress letter(char c) { return juce::KeyPress(c, juce::ModifierKeys::noModifiers, 0); }
 
 double panOf(synth::ui::MixerPanelComponent& panel, int strip) {
@@ -240,7 +242,8 @@ TEST(MixerPanHideKeyTest, ShiftArrowsPanTheFocusedStripOneStepPerPressAsOneUndoS
 
     EXPECT_TRUE(k.press(shiftArrow(juce::KeyPress::rightKey)));
     EXPECT_NEAR(panOf(panel, 1), 0.1, 1.0e-4);
-    EXPECT_EQ(panel.getFocusedColumnIndexForTest(), 1) << "Shift+Right pans; it does not walk to the next column";
+    EXPECT_EQ(panel.getFocusedColumnIndexForTest(), 1)
+        << "Option+Shift+Right pans; it does not walk to the next column";
     EXPECT_TRUE(k.press(shiftArrow(juce::KeyPress::leftKey)));
     EXPECT_TRUE(k.press(shiftArrow(juce::KeyPress::leftKey)));
     EXPECT_NEAR(panOf(panel, 1), -0.1, 1.0e-4);

@@ -16,6 +16,7 @@
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerTrackSelectionHost.h"
 #include "UI/Timeline/TrackColourPicker.h"
 #include <algorithm>
 
@@ -40,6 +41,37 @@ void MainComponent::wireTimelinePanel() {
     wireTimelineHookInventory();
     wireTimelineClipLaneCallbacks();
     wireTimelineRecordToggle();
+    // The mixer strips share the timeline's track selection (one model) and its delete: Cmd+Backspace and the header
+    // menu's Delete ask through deleteTrackAfterConfirm / deleteTrackFromMenu (the selected set when the strip's track
+    // is one of several, one undo step), and Option+Left/Right reorders the set in one undo step like a column drop.
+    timelinePanel.onTrackSelectionChanged = [this] { bottomDock.syncMixerTrackSelection(); };
+    synth::ui::MixerTrackSelectionHost selectionHost;
+    // The strips see the selection only while it is the mixer's own: a row picked on the timeline washes no strip, and
+    // a delete or move from a strip then acts on that strip's track alone.
+    selectionHost.isSelected = [this](synth::TrackId id) {
+        return timelinePanel.isTrackSelectionFromMixer() && timelinePanel.isTrackSelected(id);
+    };
+    selectionHost.selected = [this] {
+        return timelinePanel.isTrackSelectionFromMixer() ? timelinePanel.selectedTracks()
+                                                         : std::vector<synth::TrackId>{};
+    };
+    selectionHost.select = [this](synth::TrackId id, const juce::ModifierKeys& mods) {
+        timelinePanel.selectTrackFromMixer(id, mods);
+    };
+    selectionHost.deleteTracks = [this](synth::TrackId id, bool fromMenu) {
+        if (fromMenu && tracksActedOnBy(id).size() < 2)
+            deleteTrackFromMenu(id);
+        else
+            deleteTrackAfterConfirm(id);
+    };
+    selectionHost.reorderTracks = [this](const std::vector<synth::TrackId>& order) {
+        performTrackEdit([this, order] {
+            for (size_t i = 0; i < order.size(); ++i)
+                timelineDoc.moveTrack(order[i], static_cast<int>(i));
+        });
+        bottomDock.rebuildMixer();
+    };
+    bottomDock.setTrackSelectionHost(std::move(selectionHost));
 }
 
 void MainComponent::wireTimelinePanelServicesAndShortcuts() {

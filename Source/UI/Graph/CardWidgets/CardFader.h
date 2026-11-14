@@ -36,6 +36,9 @@ public:
         (typing a value back still parses the full text). */
     void useCompactValueText(const juce::RangedAudioParameter& param);
 
+    /** Reserves `px` under the value text for a child the subclass places there; the travel gets shorter by it. */
+    void reserveBelowValueText(int px);
+
     bool isVerticalFader() const noexcept { return orientation_ == Orientation::Vertical; }
 
     // ---- Modulation geometry (fader-local, px) ---------------------------------------------------
@@ -67,6 +70,11 @@ public:
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
 
+protected:
+    /** Called after the slider's value box (a child it rebuilds) was styled: a subclass keeps its own children above
+     * it. */
+    virtual void valueBoxStyled() {}
+
 private:
     void lookAndFeelChanged() override;
     void styleCompactValueBox();
@@ -75,6 +83,7 @@ private:
     Orientation orientation_;
     std::optional<juce::Slider::ScopedDragNotification> drag_; ///< Engaged for a whole value drag.
     bool compactValueText_ = false;
+    int reservedBelow_ = 0;
     bool shiftWasDown_ = false;
     juce::Point<float> anchorMouse_;
     double anchorProportion_ = 0.0;

@@ -81,6 +81,17 @@ int layoutKnobRun(const std::vector<CaptionedWidget>& knobs, int columns, int y,
 /** layoutKnobRun with any cell height; a `widgetWidth` above 0 centres a narrower widget in its cell. */
 int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int cellHeight, int widgetWidth, int y,
                   const BodyGeometry& g, bool apply);
+/** One cell of a mixed grid run: the widget and its caption, the cell's own height under the caption, and the widest
+ *  its widget draws (0 = the whole cell). */
+struct GridCell {
+    CaptionedWidget widgets;
+    int cellHeight = 0;
+    int widgetWidth = 0;
+};
+/** Cells of different grid kinds (knobs, large knobs, faders) in one `columns` grid: row r holds cells
+ *  r * columns ..., each placed as layoutGridRun places a cell of its own height and width, and a row is as tall as
+ *  its tallest cell. A run of one kind lays out exactly as layoutGridRun does. */
+int layoutMixedGridRun(const std::vector<GridCell>& cells, int columns, int y, const BodyGeometry& g, bool apply);
 /** One captioned widget per row, `rowHeight` tall, across the content width or (`wide` false) the
  *  narrow band. */
 int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight, bool wide, int y,

@@ -169,6 +169,7 @@ void MixerPanelComponent::finishColumnChange() {
     job.area = area;
     job.background = colours.bg0;
     job.accent = colours.accent;
+    job.trailingGap = static_cast<float>(kMixerColumnGap); // a row is a column and the gap after it
     const float extent = static_cast<float>(area.getWidth());
     if (!removed.empty()) {
         if (!pending)

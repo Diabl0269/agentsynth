@@ -93,24 +93,25 @@ TEST(OnCardEditorHideDrag, ReleasingBelowTheCardHidesTheControlAndOneUndoBringsI
 TEST(OnCardEditorHideDrag, MovingBackAboveTheEdgeCancelsTheHideAndTheControlFollowsThePointerAgain) {
     Opened open;
     ASSERT_NE(open.editor, nullptr);
-    const auto start = open.editor->getCellRectForTest("cutoff");
+    const auto start = open.editor->getCellRectForTest("outputLevel");
 
-    Pointer pointer(*open.editor, "cutoff");
-    const int down = open.dropBelowCard("cutoff");
+    Pointer pointer(*open.editor, "outputLevel");
+    const int down = open.dropBelowCard("outputLevel");
     pointer.moveBy({0, down}, kCommand);
     ASSERT_TRUE(open.editor->isHidingDragForTest());
     pointer.moveBy({40, -down}, kCommand);
     EXPECT_FALSE(open.editor->isHidingDragForTest());
     EXPECT_FALSE(open.editor->getHideZoneForTest().isActive());
-    EXPECT_EQ(open.editor->getCellRectForTest("cutoff").getX(), start.getX() + 40) << "following the pointer again";
+    EXPECT_EQ(open.editor->getCellRectForTest("outputLevel").getX(), start.getX() + 40)
+        << "following the pointer again";
     pointer.release();
 
     const auto layout = open.rig.storedLayout(open.id);
     ASSERT_TRUE(layout.has_value());
     EXPECT_TRUE(layout->hidden.isEmpty()) << "an ordinary move";
-    ASSERT_NE(storedItem(*layout, "cutoff"), nullptr);
-    EXPECT_TRUE(storedItem(*layout, "cutoff")->at.has_value());
-    EXPECT_NE(open.editor->getOutlineForTest("cutoff"), nullptr);
+    ASSERT_NE(storedItem(*layout, "outputLevel"), nullptr);
+    EXPECT_TRUE(storedItem(*layout, "outputLevel")->at.has_value());
+    EXPECT_NE(open.editor->getOutlineForTest("outputLevel"), nullptr);
 }
 
 TEST(OnCardEditorHideDrag, EscapeBelowTheCardPutsTheControlBackAndHidesNothing) {

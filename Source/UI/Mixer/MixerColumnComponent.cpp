@@ -478,6 +478,18 @@ void MixerColumnComponent::setSelected(bool selected) {
     repaint();
 }
 
+void MixerColumnComponent::setTrackSelected(bool selected) {
+    if (trackSelected_ == selected)
+        return;
+    trackSelected_ = selected;
+    trackWash_.setShown(selected);
+}
+
+bool MixerColumnComponent::isSelectionSurface(const juce::Component* c) const noexcept {
+    return c == this || c == &header_ || c == &meter_ || c == &meterReadout_ ||
+           (c != nullptr && c->getComponentID() == "mixerColumnHeaderName");
+}
+
 void MixerColumnComponent::setKeyboardFocused(bool focused) {
     if (keyboardFocused_ == focused)
         return;
@@ -497,6 +509,10 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
     const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
+    if (trackWash_.value() > 0.0f) {
+        g.setColour(accent.withAlpha(0.14f * trackWash_.value()));
+        g.fillRect(getLocalBounds());
+    }
     g.setColour(selected_ ? accent : border);
     g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
 }

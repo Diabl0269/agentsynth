@@ -37,6 +37,12 @@ public:
                                                : juce::Rectangle<float>(d.start, 0.0f, d.extent, h);
     }
 
+    // `r` less the empty space that trails the item in its slot (a mixer column's gap to the next one).
+    juce::Rectangle<float> withoutTrailingGap(juce::Rectangle<float> r) const {
+        return job_.axis == ListAxis::Vertical ? r.withTrimmedBottom(job_.trailingGap)
+                                               : r.withTrimmedRight(job_.trailingGap);
+    }
+
     static juce::Rectangle<float> scaled(juce::Rectangle<float> r, float s) {
         const auto c = r.getCentre();
         return juce::Rectangle<float>(r.getWidth() * s, r.getHeight() * s).withCentre(c);
@@ -71,10 +77,6 @@ public:
             const auto slot = slotOf(*d);
             if (d->lift > 0.0f)
                 paintReorderLift(g, scaled(slot, d->scale), d->lift, job_.background, job_.accent);
-            if (d->outlineAlpha > 0.0f) {
-                g.setColour(job_.accent.withAlpha(d->outlineAlpha));
-                g.drawRoundedRectangle(slot.reduced(0.5f), kOutlineRadius, 1.0f);
-            }
             const auto src =
                 job_.axis == ListAxis::Vertical
                     ? juce::Rectangle<float>(0.0f, item.srcStart, static_cast<float>(getWidth()), item.extent)
@@ -82,14 +84,22 @@ public:
             const auto pixels = (src * px).getSmallestIntegerContainer().getIntersection(job_.picture.getBounds());
             if (pixels.isEmpty())
                 continue;
-            juce::Graphics::ScopedSaveState state(g);
-            g.reduceClipRegion(slot.getSmallestIntegerContainer());
-            g.setOpacity(d->alpha);
-            g.drawImage(job_.picture.getClippedImage(pixels), scaled(slot, d->scale),
-                        juce::RectanglePlacement::stretchToFit);
-            if (d->lift > 0.0f) { // the raised edge stays on top of the picture
-                g.setColour(job_.accent.withMultipliedAlpha(d->lift));
-                g.drawRoundedRectangle(scaled(slot, d->scale).reduced(1.0f), 3.0f, 1.0f);
+            {
+                juce::Graphics::ScopedSaveState state(g);
+                g.reduceClipRegion(slot.getSmallestIntegerContainer());
+                g.setOpacity(d->alpha);
+                g.drawImage(job_.picture.getClippedImage(pixels), scaled(slot, d->scale),
+                            juce::RectanglePlacement::stretchToFit);
+                if (d->lift > 0.0f) { // the raised edge stays on top of the picture
+                    g.setColour(job_.accent.withMultipliedAlpha(d->lift));
+                    g.drawRoundedRectangle(scaled(slot, d->scale).reduced(1.0f), 3.0f, 1.0f);
+                }
+            }
+            // The outline of an item that came back goes on top of its picture (drawn under it, the opaque slice
+            // covered all of it) and round the item itself, not the gap that trails it in its slot.
+            if (d->outlineAlpha > 0.0f) {
+                g.setColour(job_.accent.withAlpha(d->outlineAlpha));
+                g.drawRoundedRectangle(withoutTrailingGap(slot).reduced(0.5f), kOutlineRadius, 1.0f);
             }
         }
     }

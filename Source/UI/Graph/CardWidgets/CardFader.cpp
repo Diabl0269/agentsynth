@@ -43,6 +43,13 @@ void CardFader::useCompactValueText(const juce::RangedAudioParameter& param) {
     updateText();
 }
 
+void CardFader::reserveBelowValueText(int px) {
+    reservedBelow_ = px;
+    setTextBoxStyle(isVerticalFader() ? juce::Slider::TextBoxBelow : juce::Slider::TextBoxRight, false,
+                    getTextBoxWidth(), getTextBoxHeight() + px);
+    styleCompactValueBox();
+}
+
 // The slider's value box is a child label the slider rebuilds on a look change, so the style is reapplied.
 void CardFader::lookAndFeelChanged() {
     juce::Slider::lookAndFeelChanged();
@@ -55,7 +62,10 @@ void CardFader::styleCompactValueBox() {
         if (auto* box = dynamic_cast<juce::Label*>(child)) {
             box->setBorderSize({0, 0, 0, 0});
             box->setFont(juce::Font(juce::FontOptions(kValueFontPx)));
+            if (reservedBelow_ > 0)
+                box->setJustificationType(juce::Justification::centredTop);
         }
+    valueBoxStyled();
 }
 
 juce::Rectangle<float> CardFader::travelBounds() const {

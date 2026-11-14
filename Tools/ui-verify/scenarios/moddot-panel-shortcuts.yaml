@@ -1,0 +1,26 @@
+# The app's shortcuts keep working while a mod dot or output jack menu is open: Cmd+J used to do nothing until the menu
+# was closed (the menu is its own window and declined every key but Esc).
+#
+# What a user does:
+#   1. Opens a project where LFO 1 modulates the VCA's Gain, and clicks LFO 1's CV output jack: the connections panel opens.
+#   2. Presses Cmd+J with the panel's own window holding the keyboard: the bottom panel opens and the panel stays open.
+#   3. Presses Cmd+J again: the bottom panel closes again, the panel still open.
+# motion: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/port-panel-mod.agsproj"}
+  - wait: {}
+  - expect: {id: dockResizeHandle, showing: false}   # the bottom panel starts closed in this project
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - key: {keys: cmd+j, target: portConnectionsPanel}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, exists: true}
+  - expect: {id: dockResizeHandle, showing: true, within_ms: 1500}
+  - mark: {check: 1, name: dock-toggled-panel-open}
+  - key: {keys: cmd+j, target: portConnectionsPanel}
+  - wait: {}
+  - expect: {id: dockResizeHandle, showing: false, within_ms: 1500}
+  - expect: {id: portConnectionsPanel, exists: true}

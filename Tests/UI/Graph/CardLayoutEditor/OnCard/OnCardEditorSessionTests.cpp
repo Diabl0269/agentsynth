@@ -25,48 +25,48 @@ juce::String overrideJson(OnCardRig& rig, NodeID id) {
 TEST(OnCardEditorSession, DoneKeepsEveryDropAndEachWasItsOwnUndoStep) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    const auto start = widgetOf(*rig.card(id), "cutoff")->getPosition();
+    const auto start = widgetOf(*rig.card(id), "outputLevel")->getPosition();
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
 
-    drop(*editor, "cutoff", {40, 0});
-    drop(*editor, "outputLevel", {0, 30});
+    drop(*editor, "outputLevel", {40, 0});
+    drop(*editor, "pan", {0, 30});
     ASSERT_TRUE(rig.canvas.undo.canUndo()) << "each drop was recorded as it was made";
     const int serial = rig.canvas.undo.getEditSerial();
 
     editor->getEditBarForTest().getDoneButton().onClick();
     EXPECT_TRUE(editor->isClosed());
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getX(), start.x + 40) << "Done keeps the layout";
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getX(), start.x + 40) << "Done keeps the layout";
 
     EXPECT_EQ(rig.canvas.undo.getEditSerial(), serial) << "closing records nothing of its own";
 
     EXPECT_TRUE(rig.canvas.undo.undo());
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getX(), start.x + 40) << "the first drop is still there";
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getX(), start.x + 40) << "the first drop is still there";
     ASSERT_TRUE(rig.canvas.undo.canUndo());
     EXPECT_TRUE(rig.canvas.undo.undo());
     EXPECT_FALSE(rig.canvas.undo.canUndo());
     EXPECT_FALSE(rig.storedLayout(id).has_value());
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start) << "undo restores the original card";
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), start) << "undo restores the original card";
 }
 
 TEST(OnCardEditorSession, CancelPutsTheOpeningLayoutBackAsOneMoreUndoStepThatBringsTheEditsBack) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
-    const auto start = widgetOf(*rig.card(id), "cutoff")->getPosition();
+    const auto start = widgetOf(*rig.card(id), "outputLevel")->getPosition();
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    drop(*editor, "cutoff", {40, 0});
+    drop(*editor, "outputLevel", {40, 0});
     ASSERT_TRUE(rig.storedLayout(id).has_value());
 
     editor->getEditBarForTest().getCancelButton().onClick();
     EXPECT_TRUE(editor->isClosed());
     EXPECT_FALSE(rig.storedLayout(id).has_value()) << "the card had no layout of its own at open";
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start);
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), start);
     ASSERT_TRUE(rig.canvas.undo.canUndo());
 
     EXPECT_TRUE(rig.canvas.undo.undo());
     EXPECT_TRUE(rig.storedLayout(id).has_value()) << "Cmd+Z after Cancel brings the move back";
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start + juce::Point<int>(40, 0));
+    EXPECT_EQ(widgetOf(*rig.card(id), "outputLevel")->getPosition(), start + juce::Point<int>(40, 0));
 }
 
 TEST(OnCardEditorSession, CancelRestoresAnExistingOverrideExactly) {

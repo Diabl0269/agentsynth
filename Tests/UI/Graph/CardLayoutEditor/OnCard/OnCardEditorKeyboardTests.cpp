@@ -57,18 +57,21 @@ TEST(OnCardEditorKeyboard, HeldArrowsAreOneWriteAndEveryDirectionMoves) {
     EXPECT_EQ(editor->getCellRectForTest("outputLevel").getPosition(), start.getPosition() + juce::Point<int>(-8, 2));
 }
 
-TEST(OnCardEditorKeyboard, NudgingOntoANeighbourPushesItAsideButANudgeBesideFlushRowsMovesNothingElse) {
+TEST(OnCardEditorKeyboard, NudgingOntoANeighbourPushesItAsideButANudgeWithRoomMovesNothingElse) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
+    const auto keyTrack = editor->getCellRectForTest("keyTrack");
     const auto resonance = editor->getCellRectForTest("resonance");
 
-    press(*editor, "cutoff", juce::KeyPress::rightKey);
+    // Output Level has free room on its right: nudging it moves it and nothing else.
+    press(*editor, "outputLevel", juce::KeyPress::rightKey);
     editor->flushNudgeForTest();
-    EXPECT_EQ(editor->getCellRectForTest("resonance"), resonance) << "the row under Cutoff did not budge";
+    EXPECT_EQ(editor->getCellRectForTest("keyTrack"), keyTrack) << "its neighbour did not budge";
 
-    press(*editor, "cutoff", juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier);
+    // Cutoff stands flush against Resonance in the tone row: nudging onto it pushes it aside.
+    press(*editor, "cutoff", juce::KeyPress::rightKey);
     editor->flushNudgeForTest();
     EXPECT_NE(editor->getCellRectForTest("resonance"), resonance) << "Cutoff now overlaps it";
     EXPECT_FALSE(

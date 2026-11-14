@@ -1,0 +1,737 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "d852185c-d6c8-4d5c-9206-1d2cd26b3370",
+      "params": {},
+      "position": {
+        "x": 3432,
+        "y": 40
+      }
+    },
+    {
+      "id": 18,
+      "type": "Track In",
+      "uuid": "6e725ebf-1e75-4519-8733-dae02551d85d",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 115,
+        "y": 184
+      }
+    },
+    {
+      "id": 19,
+      "type": "Oscillator",
+      "uuid": "60de515b-498b-44db-affb-2113738445bd",
+      "cardLayout": {
+        "version": 2,
+        "sections": [
+          {
+            "id": "waveform",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "waveform",
+                "widget": "segmented",
+                "span": 1
+              }
+            ]
+          },
+          {
+            "id": "pitch",
+            "title": "Pitch",
+            "columns": 4,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "octave",
+                "widget": "auto",
+                "span": 1
+              },
+              {
+                "paramId": "coarse",
+                "widget": "auto",
+                "span": 1
+              },
+              {
+                "paramId": "fine",
+                "widget": "auto",
+                "span": 1
+              },
+              {
+                "paramId": "glide",
+                "widget": "auto",
+                "span": 1
+              }
+            ]
+          },
+          {
+            "id": "unison",
+            "title": "Unison",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "unison",
+                "widget": "auto",
+                "span": 1,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "paramId": "detune",
+                "widget": "auto",
+                "span": 1,
+                "x": 93,
+                "y": 0
+              },
+              {
+                "paramId": "level",
+                "widget": "auto",
+                "span": 1,
+                "x": 171,
+                "y": 84
+              }
+            ]
+          },
+          {
+            "id": "output",
+            "title": "Output",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "pan",
+                "widget": "auto",
+                "span": 1,
+                "x": 85,
+                "y": 0
+              },
+              {
+                "paramId": "pulseWidth",
+                "widget": "auto",
+                "span": 1,
+                "when": {
+                  "param": "waveform",
+                  "is": [
+                    "Square"
+                  ],
+                  "effect": "dim"
+                },
+                "x": 0,
+                "y": 84
+              }
+            ]
+          },
+          {
+            "id": "footer",
+            "columns": 3,
+            "presentation": "grid",
+            "items": []
+          }
+        ],
+        "hidden": []
+      },
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 0.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 0.0,
+        "blend": 0.25,
+        "width": 0.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 435,
+        "y": 184
+      }
+    },
+    {
+      "id": 20,
+      "type": "ADSR",
+      "uuid": "023af1bd-25cb-4c00-a9df-65119a65bbe1",
+      "cardLayout": {
+        "version": 2,
+        "sections": [
+          {
+            "id": "envelope",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "view": "envelope",
+                "open": true
+              }
+            ]
+          },
+          {
+            "id": "time",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "tempoSync",
+                "widget": "segmented",
+                "label": "Stage times",
+                "span": 1
+              }
+            ]
+          },
+          {
+            "id": "stages",
+            "columns": 5,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "attack",
+                "widget": "faderV",
+                "label": "Atk",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "false"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "attackDiv",
+                "widget": "auto",
+                "label": "Atk",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "true"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "hold",
+                "widget": "faderV",
+                "label": "Hold",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "false"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "holdDiv",
+                "widget": "auto",
+                "label": "Hold",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "true"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "decay",
+                "widget": "faderV",
+                "label": "Dec",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "false"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "decayDiv",
+                "widget": "auto",
+                "label": "Dec",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "true"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "sustain",
+                "widget": "knob",
+                "label": "Sus",
+                "span": 1
+              },
+              {
+                "paramId": "release",
+                "widget": "faderV",
+                "label": "Rel",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "false"
+                  ],
+                  "effect": "show"
+                }
+              },
+              {
+                "paramId": "releaseDiv",
+                "widget": "auto",
+                "label": "Rel",
+                "span": 1,
+                "when": {
+                  "param": "tempoSync",
+                  "is": [
+                    "true"
+                  ],
+                  "effect": "show"
+                }
+              }
+            ]
+          },
+          {
+            "id": "trigger",
+            "columns": 3,
+            "presentation": "grid",
+            "items": [
+              {
+                "paramId": "velocity",
+                "widget": "faderH",
+                "span": 1
+              },
+              {
+                "view": "threshold",
+                "open": true
+              }
+            ]
+          },
+          {
+            "id": "footer",
+            "columns": 3,
+            "presentation": "grid",
+            "items": []
+          }
+        ],
+        "hidden": []
+      },
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": -0.300000011920929,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": true,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 755,
+        "y": 184
+      }
+    },
+    {
+      "id": 21,
+      "type": "VCA",
+      "uuid": "aef00660-d974-44a8-ae06-d634932a0004",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": 0.5,
+        "poly": false,
+        "muted": false
+      },
+      "position": {
+        "x": 1075,
+        "y": 184
+      }
+    },
+    {
+      "id": 22,
+      "type": "Gate",
+      "uuid": "a71addcc-574c-4aaf-9a6a-e9d53bae490c",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1395,
+        "y": 184
+      }
+    },
+    {
+      "id": 23,
+      "type": "Parametric EQ",
+      "uuid": "c2a34d9b-0727-4273-9766-455d7ebbdd92",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "band1On": false,
+        "band1Freq": 100.00003051757812,
+        "band1Gain": 0.0,
+        "band1Q": 0.707106709480286,
+        "band2On": false,
+        "band2Freq": 499.99993896484375,
+        "band2Gain": 0.0,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.99951171875,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1715,
+        "y": 184
+      }
+    },
+    {
+      "id": 24,
+      "type": "Compressor",
+      "uuid": "c6ea86fd-207f-4481-9120-b5a0708e54c7",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-07,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 2315,
+        "y": 184
+      }
+    },
+    {
+      "id": 25,
+      "type": "Channel Strip",
+      "uuid": "5f377d63-6f9e-4bed-95df-0f197b0afb39",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": -1.430511474609375e-06,
+        "pan": 0.0,
+        "send1Level": -1.430511474609375e-06,
+        "send2Level": -1.430511474609375e-06,
+        "send3Level": -1.430511474609375e-06,
+        "send4Level": -1.430511474609375e-06,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": false,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 2635,
+        "y": 184
+      }
+    },
+    {
+      "id": 26,
+      "type": "Master",
+      "uuid": "310bf37b-184c-4071-8afb-873553786d85",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": -1.430511474609375e-06,
+        "safetyLimiter": true,
+        "muted": false
+      },
+      "position": {
+        "x": 3112,
+        "y": 40
+      }
+    },
+    {
+      "id": 27,
+      "type": "Macro Out",
+      "uuid": "4b556d4b-c2de-40e1-9028-823bb036fac8",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 1
+      },
+      "position": {
+        "x": 2929,
+        "y": 190
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 18,
+      "srcPort": -1,
+      "dst": 19,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 18,
+      "srcPort": -1,
+      "dst": 20,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 21,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 0,
+      "dst": 21,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 0,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 0,
+      "dst": 22,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 0,
+      "dst": 23,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 1,
+      "dst": 23,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 0,
+      "dst": 24,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 1,
+      "dst": 24,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 0,
+      "dst": 25,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 1,
+      "dst": 25,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 25,
+      "srcPort": 0,
+      "dst": 27,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 25,
+      "srcPort": 4,
+      "dst": 27,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 26,
+      "srcPort": 0,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 26,
+      "srcPort": 1,
+      "dst": 16,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 27,
+      "srcPort": 0,
+      "dst": 26,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 27,
+      "srcPort": 1,
+      "dst": 26,
+      "dstPort": 1,
+      "isMidi": false
+    }
+  ],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 0,
+        "name": "Oscillator 1",
+        "colourArgb": 4283417087,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "6e725ebf-1e75-4519-8733-dae02551d85d",
+        "clips": [],
+        "lanes": []
+      }
+    ],
+    "markers": []
+  },
+  "macros": [
+    {
+      "id": "10f2ac7a-4785-4671-9bb4-a27958a89106",
+      "name": "Oscillator 1",
+      "colour": "ff4fc1ff",
+      "collapsed": false,
+      "bounds": {
+        "x": 112,
+        "y": 184,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "6e725ebf-1e75-4519-8733-dae02551d85d",
+        "60de515b-498b-44db-affb-2113738445bd",
+        "023af1bd-25cb-4c00-a9df-65119a65bbe1",
+        "aef00660-d974-44a8-ae06-d634932a0004",
+        "a71addcc-574c-4aaf-9a6a-e9d53bae490c",
+        "c2a34d9b-0727-4273-9766-455d7ebbdd92",
+        "c6ea86fd-207f-4481-9120-b5a0708e54c7",
+        "5f377d63-6f9e-4bed-95df-0f197b0afb39",
+        "4b556d4b-c2de-40e1-9028-823bb036fac8"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "4b556d4b-c2de-40e1-9028-823bb036fac8",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        }
+      ]
+    }
+  ],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 0.818981111049652,
+    "panX": 62.62146759033203,
+    "panY": -109.11908721923828
+  }
+}
