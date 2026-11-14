@@ -12,7 +12,7 @@ constexpr double kViewFlyMs = 200.0; // a view change across the canvas (Motion 
 } // namespace
 
 // The runner ends the fly when anything else moves the view (a canvas drag, an edge scroll, a wheel pan), and every
-// zoom or applied view stops it through wheelPanTween_.stop(). A second fly starts from where the view is drawn now.
+// zoom or applied view stops it through wheelPan_.stop(). A second fly starts from where the view is drawn now.
 void GraphEditor::flyViewTo(juce::Point<float> canvasPoint) {
     const auto delta = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel - panOffset;
     if (synth::ui::prefersReducedMotion() || synth::ui::animationsOff() || (delta.x == 0.0f && delta.y == 0.0f)) {
@@ -24,6 +24,6 @@ void GraphEditor::flyViewTo(juce::Point<float> canvasPoint) {
         (a == 0 ? panOffset.x : panOffset.y) += (float)d;
         updateTransform();
     };
-    if (!wheelPanTween_.flyBy(*this, delta.x, delta.y, kViewFlyMs, read, pan))
+    if (!wheelPan_.tween().flyBy(*this, delta.x, delta.y, kViewFlyMs, read, pan))
         centreViewOn(canvasPoint);
 }

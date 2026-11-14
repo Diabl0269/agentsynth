@@ -195,10 +195,10 @@ void DrumMachineComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFa
 }
 
 // Cmd+wheel zooms around the pointer; Shift+wheel (or a sideways trackpad swipe) scrolls the beats; a plain wheel
-// scrolls the rows. A mouse-wheel notch eases (ScrollTweenRunner); a trackpad moves directly.
+// scrolls the rows. A mouse-wheel notch eases; a trackpad is paced once per display frame (WheelScrollRouter).
 void DrumMachineComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     if (e.mods.isCommandDown()) {
-        wheelTween_.stop();
+        wheel_.settle();
         const bool zoomIn = wheelGestureIsUpward(wheel) != zoomScrollInverted_;
         const double magnitude = std::abs(dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
         zoomHorizontalAroundX(std::exp(zoomIn ? magnitude : -magnitude),
@@ -207,11 +207,14 @@ void DrumMachineComponent::mouseWheelMove(const juce::MouseEvent& e, const juce:
     }
     const bool eased = !wheel.isSmooth && !wheel.isInertial;
     const bool horizontal = e.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
-    const auto read = [this](int axis) { return axis == 0 ? view_.firstVisibleBeat : scrollY_; };
+    // The router works in pixels (its rest and clamp thresholds are pixel sizes): beats convert at the edge.
+    const auto read = [this](int axis) { return axis == 0 ? view_.firstVisibleBeat * view_.pixelsPerBeat : scrollY_; };
     const auto scroll = [this](int axis, double delta) {
         if (axis == 0) {
-            view_.scrollBeats(delta);
-            notifyViewChanged();
+            const double before = view_.firstVisibleBeat;
+            view_.scrollBeats(delta / view_.pixelsPerBeat);
+            if (view_.firstVisibleBeat != before) // clamped at the start: nothing moved, nothing to repaint
+                notifyViewChanged();
         } else {
             setScrollY(scrollY_ + delta);
         }
@@ -221,17 +224,15 @@ void DrumMachineComponent::mouseWheelMove(const juce::MouseEvent& e, const juce:
     if (horizontal) {
         const float delta = std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
         axis = 0;
-        amount =
-            static_cast<double>(scrollAmount(delta, scrollInverted_)) * kScrollPixelsPerWheelUnit / view_.pixelsPerBeat;
+        amount = static_cast<double>(scrollAmount(delta, scrollInverted_)) * kScrollPixelsPerWheelUnit;
     } else if (wheel.deltaY != 0.0f) {
         amount = static_cast<double>(scrollAmount(dominantWheelDelta(wheel), scrollInverted_)) *
                  kRowScrollPixelsPerWheelUnit;
     }
     if (amount == 0.0)
         return;
-    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
+    if (wheel_.route(*this, axis, amount, eased, read, scroll))
         return;
-    wheelTween_.stop();
     scroll(axis, amount);
 }
 

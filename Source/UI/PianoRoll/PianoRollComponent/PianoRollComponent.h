@@ -372,6 +372,7 @@ public:
     juce::Rectangle<int> getKeysColumnBounds() const noexcept;
     juce::Rectangle<int> getNoteGridBounds() const noexcept;
     int getFirstVisiblePitchForTest() const noexcept;
+    synth::ui::WheelScrollRouter& getWheelForTest() noexcept { return wheel_; }
     double getTopRowPositionForTest() const noexcept;
     void setTopRowPositionForTest(double position) noexcept;
     double getMinTopRowPositionForTest() const noexcept;
@@ -912,7 +913,7 @@ private:
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
     // Eases a mouse-wheel NOTCH (axis 0 = beats, 1 = rows). Stopped before any other view move.
-    synth::ui::ScrollTweenRunner wheelTween_;
+    synth::ui::WheelScrollRouter wheel_;
     void scrollByWheel(int axis, double amount, bool eased);
     void applyWheelScroll(int axis, double amount);
     // Within the house 160-220 ms spec (docs/layout/animation.md), matching MainComponent's own

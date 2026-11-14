@@ -16,6 +16,7 @@ MixerSectionViewport::MixerSectionViewport() {
     setScrollBarsShown(false, false, true, false);
     setScrollOnDragMode(ScrollOnDragMode::never);
     setSingleStepSizes(16, 16);
+    setWheelWithoutBars(false, true);
 }
 
 void MixerSectionViewport::setList(juce::Component& list) {
@@ -53,7 +54,7 @@ void MixerSectionViewport::fitList() {
 }
 
 void MixerSectionViewport::resized() {
-    juce::Viewport::resized();
+    SmoothWheelViewport::resized();
     fitList();
 }
 

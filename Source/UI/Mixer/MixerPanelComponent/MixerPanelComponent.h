@@ -617,7 +617,7 @@ private:
         }
     };
 
-    struct ScrollReportingViewport : juce::Viewport {
+    struct ScrollReportingViewport : SmoothWheelViewport {
         std::function<void()> onScrolled;
         void visibleAreaChanged(const juce::Rectangle<int>&) override {
             if (onScrolled)

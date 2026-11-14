@@ -271,4 +271,75 @@ private:
     std::optional<juce::VBlankAnimatorUpdater> updater_;
 };
 
+// WheelScrollRouter -- the one place a scroll surface decides how a wheel event reaches its view. A mouse notch eases
+// through ScrollTweenRunner; a trackpad's deltas (isSmooth or isInertial) pile up per axis in a ScrollFrameSmoother and
+// land once per VBlank frame, so the step per frame stays even at 60 and 120 Hz. The surface keeps what is its own: the
+// gesture's axis and amount (in pixels), the zoom branch, and how its view moves and repaints.
+class WheelScrollRouter {
+public:
+    static constexpr int kAxes = ScrollTween::kAxes;
+    using Read = ScrollTweenRunner::Read;
+    using Scroll = ScrollTweenRunner::Scroll;
+
+    /** True when the amount was taken: eased in (a notch) or queued for the next frame (a trackpad). False means "not
+     *  paced, apply it yourself now" (host not showing: headless tests); any tween or backlog is already ended, so the
+     *  direct move cannot be fought. `read(axis)` is the view's position, `scroll(axis, delta)` moves it by a clamped
+     *  delta; the distance a frame really moved is read back from `read`, so a view that hit its end drops the rest. */
+    bool route(juce::Component& host, int axis, double amount, bool eased, Read read, Scroll scroll) {
+        if (eased) {
+            flush(); // a notch after a swipe starts from where the swipe's backlog ends
+            if (tween_.push(host, axis, amount, read, scroll))
+                return true;
+        } else {
+            tween_.stop();
+            auto step = [axis, read = std::move(read), scroll = std::move(scroll)](double d) {
+                const double before = read(axis);
+                scroll(axis, d);
+                return read(axis) - before;
+            };
+            if (pads_[(size_t)axis].push(host, amount, std::move(step)))
+                return true;
+        }
+        stop();
+        return false;
+    }
+
+    /** Lands every backlog now and ends the tween: a zoom or a jump must see the view where the finger left it. */
+    void settle() {
+        flush();
+        tween_.stop();
+    }
+
+    /** Ends everything, applying nothing: the view is about to be moved or replaced by someone else. */
+    void stop() {
+        tween_.stop();
+        for (auto& p : pads_)
+            p.cancel();
+    }
+
+    /** Test seams. */
+    ScrollFrameSmoother& pad(int axis) noexcept { return pads_[(size_t)axis]; }
+    ScrollTweenRunner& tween() noexcept { return tween_; }
+    bool isActive() const noexcept { return tween_.isActive(); }
+    void setAnimateOffScreenForTest(bool on) noexcept { tween_.setAnimateOffScreenForTest(on); }
+    void stepForTest(double ms) { tween_.stepForTest(ms); }
+    void setOffScreenForTest(bool on) noexcept {
+        for (auto& p : pads_)
+            p.setOffScreenForTest(on);
+    }
+    void frameForTest(double dtMs) {
+        for (auto& p : pads_)
+            p.frameForTest(dtMs);
+    }
+
+private:
+    void flush() {
+        for (auto& p : pads_)
+            p.flush();
+    }
+
+    ScrollTweenRunner tween_;
+    std::array<ScrollFrameSmoother, kAxes> pads_;
+};
+
 } // namespace synth::ui

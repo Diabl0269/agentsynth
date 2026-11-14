@@ -745,9 +745,11 @@ reason the panel's own Cmd+Shift+wheel branch does
 Both scroll rows ease a notched mouse wheel (neither `isSmooth` nor `isInertial`) over ~120 ms through
 `synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`) instead of jumping; a notch mid-ease
 retargets from the current position and keeps the remaining distance. Each applied step still
-suspends follow and fires `onHorizontalViewChanged`. Trackpad/inertial events, zoom, a mouse press,
-`openClip`/`closeRoll` and any other view move end the ease, and a non-showing roll (tests) scrolls
-immediately. The roll is `setOpaque(true)` (its `paint()` starts with a full-bounds fill), so scrolling
+suspends follow and fires `onHorizontalViewChanged`. A trackpad's (`isSmooth` or `isInertial`) deltas on either axis are paced once per display frame
+by the roll's `WheelScrollRouter` (the timeline's mechanism, [view](view.md#vertical-scroll)): one view move and one repaint per
+frame, a fling into an end stops there without moving back, and a move that goes nowhere (clamped) repaints and notifies nobody.
+Zoom settles the backlog first; a mouse press, `openClip`/`closeRoll` and any other view move end the ease and drop the backlog,
+and a non-showing roll (tests) scrolls immediately. The roll is `setOpaque(true)` (its `paint()` starts with a full-bounds fill), so scrolling
 repaints it without the parent repainting behind it.
 
 Cmd+= / Cmd+- and Cmd+Shift+= / Cmd+Shift+- reach the same `zoomHorizontal` / `zoomVertical` entry

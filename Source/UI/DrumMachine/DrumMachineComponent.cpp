@@ -109,7 +109,7 @@ DrumMachineComponent::DrumMachineComponent()
 }
 
 DrumMachineComponent::~DrumMachineComponent() {
-    wheelTween_.stop();
+    wheel_.stop();
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
     laneAnim_.stop(vblank_);
@@ -139,7 +139,7 @@ int DrumMachineComponent::getStepCount() const {
 //==============================================================================
 void DrumMachineComponent::openClip(synth::ClipId id) {
     stopClipPreview();
-    wheelTween_.stop();
+    wheel_.stop();
     gesture_ = {};
     hitMotions_.clear();
     leavingHits_.clear();
@@ -186,7 +186,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
 
 void DrumMachineComponent::closeGrid() {
     stopClipPreview();
-    wheelTween_.stop();
+    wheel_.stop();
     endGesture(false);
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
@@ -377,7 +377,7 @@ void DrumMachineComponent::setFocusCell(Cell cell) {
 void DrumMachineComponent::visibilityChanged() {
     if (!isVisible()) {
         endGesture(false);
-        wheelTween_.stop();
+        wheel_.stop();
     }
 }
 
