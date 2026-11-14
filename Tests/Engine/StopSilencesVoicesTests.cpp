@@ -137,7 +137,9 @@ StopResult playThenStop(const Chain& chain) {
         buffer.clear();
         float* outputs[] = {buffer.getWritePointer(0), buffer.getWritePointer(1)};
         engine.audioDeviceIOCallbackWithContext(nullptr, 0, outputs, 2, kBlock, {});
-        return std::max(buffer.getMagnitude(0, kBlock), buffer.getMagnitude(1, kBlock));
+        // getMagnitude(startSample, numSamples) already spans every channel; the (channel, start, num) overload needs
+        // three arguments. Passing (1, kBlock) read one sample past the end of the buffer: stale heap, 1e27 peaks.
+        return buffer.getMagnitude(0, kBlock);
     };
 
     auto& transport = engine.getTransport();
