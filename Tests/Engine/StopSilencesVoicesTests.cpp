@@ -13,6 +13,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
@@ -94,15 +95,13 @@ StopResult playThenStop(const Chain& chain) {
     AudioEngine engine(AudioEngine::HostMode::Standalone);
     engine.getAudioClipStreamer().setPrefetchPausedForTest(true);
     engine.setAudioDeviceDisabled(true);
-    engine.initialise();
 
+    // No initialise(): it would load the default patch, which can sound by itself. The graph holds only the chain.
     auto& graph = engine.getGraph();
-    // initialise() loads the saved default preset, which may sound by itself; cut it off so the chain under test is
-    // alone. The nodes stay (the engine keeps pointers to some of them); only their cables go.
-    for (const auto& cable : graph.getConnections())
-        graph.removeConnection(cable);
+    graph.setPlayConfigDetails(0, 2, kRate, kBlock);
     auto trackIn = graph.addNode(synth::AIStateMapper::createModule("Track In"));
-    auto out = graph.addNode(synth::AIStateMapper::createModule("Audio Output"));
+    auto out = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
     if (trackIn == nullptr || out == nullptr)
         return result;
     trackIn->properties.set("uuid", kTrackUuid);
@@ -157,8 +156,8 @@ StopResult playThenStop(const Chain& chain) {
 }
 
 // The project's own osc chain: Track In -> Poly MIDI -> poly Oscillator (unison 6) -> poly VCA <- poly ADSR.
-bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType, float release, float gateThreshold,
-                    float velocity, juce::AudioProcessorGraph::Node::Ptr trackIn,
+bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType, int gateBase, float release,
+                    float gateThreshold, float velocity, juce::AudioProcessorGraph::Node::Ptr trackIn,
                     juce::AudioProcessorGraph::Node::Ptr out) {
     auto poly = graph.addNode(synth::AIStateMapper::createModule("Poly MIDI"));
     auto osc = graph.addNode(synth::AIStateMapper::createModule(oscillatorType));
@@ -177,7 +176,7 @@ bool buildPolyChain(juce::AudioProcessorGraph& graph, const char* oscillatorType
     graph.addConnection({{trackIn->nodeID, kMidi}, {osc->nodeID, kMidi}});
     for (int v = 0; v < 8; ++v) {
         graph.addConnection({{poly->nodeID, v}, {osc->nodeID, v}});
-        graph.addConnection({{poly->nodeID, 8 + v}, {osc->nodeID, OscillatorModule::kGateBase + v}});
+        graph.addConnection({{poly->nodeID, 8 + v}, {osc->nodeID, gateBase + v}});
         graph.addConnection({{poly->nodeID, 8 + v}, {adsr->nodeID, v}});
         graph.addConnection({{osc->nodeID, v}, {vca->nodeID, v}});
         graph.addConnection({{adsr->nodeID, v}, {vca->nodeID, 8 + v}});
@@ -193,8 +192,12 @@ bool buildDirect(juce::AudioProcessorGraph& graph, const juce::String& type,
     if (!module)
         return false;
     graph.addConnection({{trackIn->nodeID, kMidi}, {module->nodeID, kMidi}});
-    for (int channel = 0; channel < 2; ++channel)
-        graph.addConnection({{module->nodeID, channel}, {out->nodeID, channel}});
+    // Only real audio outputs: an envelope's or a trigger's other channels are never written and hold stale memory.
+    auto* base = dynamic_cast<ModuleBase*>(module->getProcessor());
+    const int outputs = module->getProcessor()->getTotalNumOutputChannels();
+    for (int channel = 0; base != nullptr && channel < outputs; ++channel)
+        if (base->mapOutputChannel(channel).role == PortRole::Audio)
+            graph.addConnection({{module->nodeID, channel}, {out->nodeID, channel % 2}});
     return true;
 }
 
@@ -203,13 +206,14 @@ std::vector<Chain> chains() {
     // The reported case: a poly Oscillator with unison 6 behind a poly ADSR. Release 0.015 s is the 'fro1118 test'
     // value.
     all.push_back({"PolyOscillatorUnison6ShortRelease", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Oscillator", 0.015f, 0.5f, 0.0f, in, out);
+                       return buildPolyChain(g, "Oscillator", OscillatorModule::kGateBase, 0.015f, 0.5f, 0.0f, in, out);
                    }});
     all.push_back({"PolyOscillatorLongRelease", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Oscillator", 0.3f, 0.5f, 0.0f, in, out);
+                       return buildPolyChain(g, "Oscillator", OscillatorModule::kGateBase, 0.3f, 0.5f, 0.0f, in, out);
                    }});
     all.push_back({"PolyWavetable", [](auto& g, auto in, auto out) {
-                       return buildPolyChain(g, "Wavetable", 0.015f, 0.5f, 0.0f, in, out);
+                       return buildPolyChain(g, "Wavetable", WavetableOscillatorModule::kGateBase, 0.015f, 0.5f, 0.0f,
+                                             in, out);
                    }});
     all.push_back({"HostedPlugin", [](auto& g, auto in, auto out) {
                        auto hosted = std::make_unique<synth::HostedPluginModule>();
