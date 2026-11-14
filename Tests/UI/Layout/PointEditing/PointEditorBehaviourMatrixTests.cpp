@@ -55,15 +55,7 @@ const std::vector<Cell> kNotApplicable = {
 };
 
 // Behaviours an editor has not got yet. May only shrink.
-const std::vector<MissingCell> kMissingBehaviours = {
-    {"EQ curve", "box-select", "a drag on empty space does not select bands in a box; the selection is one band",
-     "FRO1717"},
-    {"EQ curve", "shift-extend", "Shift+Left/Right moves the one selected band instead of extending", "FRO1717"},
-    {"EQ curve", "held-glide", "an arrow steps once per press; holding it does not glide", "FRO1717"},
-    {"EQ curve", "two-arrows-diagonal", "no key hold, so two arrows cannot move a band diagonally", "FRO1717"},
-    {"EQ curve", "delete-next",
-     "Delete switches the band off and the selection stays on it, so Return can bring it back", "FRO1717"},
-};
+const std::vector<MissingCell> kMissingBehaviours = {};
 
 const Cell* findNotApplicable(const std::string& editor, const std::string& behaviour) {
     for (const auto& cell : kNotApplicable)

@@ -41,8 +41,9 @@ public:
     juce::Button* getAddChip() const;
     KeyedTween<juce::Rectangle<float>>& getGlideForTest() noexcept;
 
-    /** Test mode: `chips` (each chip's label, left to right, "7 Bell"), `selectedBand` (1-based, 0 for none) and the
-     * curve's `bandCount`, `soloBand`, `soloRing`, `othersDimmed`, `freqHz`, `gainDb`, `q`. */
+    /** Test mode: `chips` (each chip's label, left to right, "7 Bell"), `selectedBand` (1-based, 0 for none),
+     * `selectedCount` (how many bands are selected) and the curve's `bandCount`, `soloBand`, `soloRing`,
+     * `othersDimmed`, `freqHz`, `gainDb`, `q`. */
     void addTestModeState(juce::DynamicObject& into) const override;
 
 private:

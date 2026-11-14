@@ -53,8 +53,10 @@ public:
 
     /** The settings moved from before to after. With `restored` (an undo or redo) the drawn settings glide from where
      *  they are drawn now; otherwise they land at once (a band switched on or off still fades in or out where it
-     *  stands). A changed type or slope starts the type morph either way. */
-    void sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter, bool restored);
+     *  stands). A changed type or slope starts the type morph either way. With `eased` (a keyboard step, not an undo)
+     *  a band whose place changed glides from where it is drawn, plain under Reduce Motion instead of fading in. */
+    void sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter, bool restored,
+              bool eased = false);
 
     Drawn drawn(const Bands& resting, float outputGain) const;
     bool isAnimating() const noexcept;

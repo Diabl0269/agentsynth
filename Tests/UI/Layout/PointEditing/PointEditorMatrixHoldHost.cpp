@@ -3,6 +3,7 @@
 #include "PointEditorMatrixHoldHost.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 
@@ -20,6 +21,10 @@ synth::ui::KeyGlideHost hostOf(const std::shared_ptr<HoldKeys>& keys) {
 
 void installHold(synth::ui::CurveEditorComponent& editor, const std::shared_ptr<HoldKeys>& keys) {
     editor.getKeyHoldForTest().host = hostOf(keys);
+}
+
+void installHold(EQCurveComponent& curve, const std::shared_ptr<HoldKeys>& keys) {
+    curve.getKeyHoldForTest().host = hostOf(keys);
 }
 
 void installHold(synth::ui::MorphMap& map, const std::shared_ptr<HoldKeys>& keys) {
