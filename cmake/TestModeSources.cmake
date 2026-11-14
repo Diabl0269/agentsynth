@@ -12,6 +12,8 @@ target_sources(AppUI PRIVATE
     Source/TestMode/TestModeComponents.h
     Source/TestMode/TestModeInput.cpp
     Source/TestMode/TestModeInput.h
+    Source/TestMode/TestModeFeedVisual.cpp
+    Source/TestMode/TestModeFeedVisual.h
     Source/TestMode/TestModeLaunch.cpp
     Source/TestMode/TestModeLaunch.h
     Source/TestMode/TestModePopWatch.cpp

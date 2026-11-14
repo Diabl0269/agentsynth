@@ -216,13 +216,25 @@ class RecordingTests(unittest.TestCase):
             if c[0] == "hover":
                 self.assertTrue(0 <= c[1]["x"] and 0 <= c[1]["y"], c)
 
-    def test_a_drag_leaving_the_main_window_stays_one_command(self):
+    def test_a_drag_ending_in_another_window_is_filmed_in_screen_coordinates(self):
+        # FRO1791: a drop onto another window used to go as one `drag` command and the clip showed only its result.
         app = DrawingApp(self.STATES)
+        text = "record: true\nsteps:\n  - drag: {from: a, to: popup, fromX: 5, fromY: 6, toX: 10, toY: 12, steps: 4}\n"
         with tempfile.TemporaryDirectory() as out:
-            (ok, _), _ = self.run_scenario("record: true\nsteps:\n  - drag: {from: a, to: popup}\n", app, out)
+            (ok, _), encoded = self.run_scenario(text, app, out)
         self.assertTrue(ok)
-        self.assertEqual(len([c for c in app.calls if c[0] == "drag"]), 1)
-        self.assertEqual([c for c in app.calls if c[0].startswith("mouse")], [])
+        self.assertEqual([c for c in app.calls if c[0] == "drag"], [])
+        mouse = [c for c in app.calls if c[0].startswith("mouse")]
+        self.assertEqual([c[0] for c in mouse], ["mouseDown"] + ["mouseMoveHeld"] * 4 + ["mouseUp"])
+        self.assertEqual((mouse[0][1]["id"], mouse[0][1]["x"], mouse[0][1]["y"]), ("a", 5, 6))  # a's own coordinates
+        self.assertNotIn("captured", mouse[0][1])  # the press is an ordinary one
+        for c in mouse[1:]:  # the rest follow the press, addressed to the other window in its own coordinates
+            self.assertEqual(c[1]["id"], "popup")
+            self.assertTrue(c[1]["captured"])
+        # screen: a (10,20)+(5,6) = (15,26) to popup (900,20)+(10,12) = (910,32); popup-local: x -661..10, y 8..12
+        self.assertEqual([(c[1]["x"], c[1]["y"]) for c in mouse[1:]],
+                         [(-661, 8), (-438, 9), (-214, 10), (10, 12), (10, 12)])
+        self.assertEqual(encoded, [7])  # the launch, the press, four moves, the end of the step
 
     def test_save_project_writes_beside_the_screenshots_over_an_earlier_run(self):
         app = DrawingApp(self.STATES)

@@ -549,9 +549,21 @@ class Runner:
         py = bounds["y"] + (y if y is not None else bounds["h"] // 2)
         return (px, py) if 0 <= px < window["w"] and 0 <= py < window["h"] else None
 
+    def _screen_point(self, component, x, y):
+        """A point local to `component` as (screen x, screen y, component bounds): the coordinates every getState
+        reports, relative to the main window's corner and not clipped to it, so a point in another window resolves."""
+        bounds = self.app.call("getState", id=component)["bounds"]
+        px = bounds["x"] + (x if x is not None else bounds["w"] // 2)
+        py = bounds["y"] + (y if y is not None else bounds["h"] // 2)
+        return px, py, bounds
+
     def _recorded_drag(self, args):
         """The `drag` command's own press, moves and release, one command each so a frame fits between them. A drag
-        with an end outside the main window (a popup) stays one command and shows only its result."""
+        with an end outside the main window (a shape dropped from the main window onto another window's map) is
+        filmed the same way in screen coordinates: the press goes to `from` in its own coordinates, and every move and
+        the release go to `to` as `captured` steps (the window the press happened in keeps the gesture, as the OS does)
+        with the screen point turned into `to`'s own coordinates; the composited screen frame draws both windows."""
+        cross = False
         if args["from"] == args["to"]:
             # One component: its own local coordinates, sent to it, so it lands on the component's own native
             # window (a shape window is not the main window, whose coordinates the path below uses).
@@ -559,22 +571,32 @@ class Runner:
             bounds = self.app.call("getState", id=target)["bounds"]
             start = (args.get("fromX", bounds["w"] // 2), args.get("fromY", bounds["h"] // 2))
             end = (args.get("toX", bounds["w"] // 2), args.get("toY", bounds["h"] // 2))
+            press_target, move_target, shift = target, target, (0, 0)
         else:
-            target = "window"
             start = self._point(args["from"], args.get("fromX"), args.get("fromY"))
             end = self._point(args["to"], args.get("toX"), args.get("toY"))
+            press_target = move_target = "window"
+            shift = (0, 0)
             if start is None or end is None:
-                return self.app.call("drag", **args)
+                cross = True
+                sx, sy, from_bounds = self._screen_point(args["from"], args.get("fromX"), args.get("fromY"))
+                ex, ey, to_bounds = self._screen_point(args["to"], args.get("toX"), args.get("toY"))
+                start, end = (sx, sy), (ex, ey)
+                press_target, move_target = args["from"], args["to"]
+                press_origin = (from_bounds["x"], from_bounds["y"])
+                shift = (to_bounds["x"], to_bounds["y"])
         steps = max(2, args.get("steps", 12))
         mods = {"mods": args["mods"]} if "mods" in args else {}
-        self.app.call("mouseDown", id=target, x=start[0], y=start[1], **mods)
+        held = {"captured": True} if cross else {}
+        press = (start[0] - press_origin[0], start[1] - press_origin[1]) if cross else start
+        self.app.call("mouseDown", id=press_target, x=press[0], y=press[1], **mods)
         self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
         for index in range(1, steps + 1):
             x = round(start[0] + (end[0] - start[0]) * index / steps)
             y = round(start[1] + (end[1] - start[1]) * index / steps)
-            self.app.call("mouseMoveHeld", id=target, x=x, y=y, **mods)
+            self.app.call("mouseMoveHeld", id=move_target, x=x - shift[0], y=y - shift[1], **held, **mods)
             self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
-        self.app.call("mouseUp", id=target, x=end[0], y=end[1], **mods)
+        self.app.call("mouseUp", id=move_target, x=end[0] - shift[0], y=end[1] - shift[1], **held, **mods)
         return {"from": args["from"], "to": args["to"]}
 
     def _recorded_approach(self, args):

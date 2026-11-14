@@ -45,7 +45,7 @@ Screenshots and a `run.log` land in the output folder (one per scenario when a d
 recorded video is made of the same frames. `stale_pixel_check: true` fails a step that leaves
 pixels on screen that a full repaint would not draw, with the pictures in `stale-step-NN/`
 ([Stale pixels](../../docs/development/test-mode.md#stale-pixels)). The step format and how to add a scenario are in
-[`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). `bash scripts/tests/ui-verify-run.test.sh`
+[`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). A recorded `drag` ending in another window (a drop onto the shape window) is filmed in screen coordinates, and `feedVisual` fills a module's spectrum or scope buffer with a sine, noise or silence so a display that follows sound can be filmed with no audio device ([feedVisual](../../docs/development/test-mode.md#feedvisual)). `bash scripts/tests/ui-verify-run.test.sh`
 tests the runner without an app.
 
 ## The fixture
