@@ -122,4 +122,71 @@ void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Co
     g.strokePath(cross, stroke);
 }
 
+// The curve of a band type on a 14 x 10 grid (y grows downwards): a flat level, a hump, a step, a dip.
+void paintEqBandTypeGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, synth::eq::BandType type,
+                          float strokeScale) {
+    using synth::eq::BandType;
+    constexpr float kW = 14.0f;
+    constexpr float kH = 10.0f;
+    const float unit = std::min(area.getWidth() / kW, area.getHeight() / kH);
+    const auto origin = area.getCentre() - juce::Point<float>(kW, kH) * (0.5f * unit);
+    const auto at = [&](float x, float y) { return origin + juce::Point<float>(x, y) * unit; };
+    juce::Path path;
+    const auto move = [&](float x, float y) { path.startNewSubPath(at(x, y)); };
+    const auto line = [&](float x, float y) { path.lineTo(at(x, y)); };
+    const auto curve = [&](float x1, float y1, float x2, float y2, float x, float y) {
+        path.cubicTo(at(x1, y1), at(x2, y2), at(x, y));
+    };
+    switch (type) {
+    case BandType::Peak:
+        move(0.5f, 7.0f);
+        curve(4.5f, 7.0f, 4.5f, 1.5f, 7.0f, 1.5f);
+        curve(9.5f, 1.5f, 9.5f, 7.0f, 13.5f, 7.0f);
+        break;
+    case BandType::LowShelf:
+        move(0.5f, 2.5f);
+        line(3.0f, 2.5f);
+        curve(6.0f, 2.5f, 8.0f, 7.5f, 11.0f, 7.5f);
+        line(13.5f, 7.5f);
+        break;
+    case BandType::HighShelf:
+        move(0.5f, 7.5f);
+        line(3.0f, 7.5f);
+        curve(6.0f, 7.5f, 8.0f, 2.5f, 11.0f, 2.5f);
+        line(13.5f, 2.5f);
+        break;
+    case BandType::LowCut:
+        move(2.5f, 9.5f);
+        curve(3.5f, 5.0f, 4.5f, 3.0f, 7.0f, 3.0f);
+        line(13.5f, 3.0f);
+        break;
+    case BandType::HighCut:
+        move(0.5f, 3.0f);
+        line(7.0f, 3.0f);
+        curve(9.5f, 3.0f, 10.5f, 5.0f, 11.5f, 9.5f);
+        break;
+    case BandType::Notch:
+        move(0.5f, 3.0f);
+        line(4.5f, 3.0f);
+        curve(6.0f, 3.0f, 6.0f, 9.0f, 7.0f, 9.0f);
+        curve(8.0f, 9.0f, 8.0f, 3.0f, 9.5f, 3.0f);
+        line(13.5f, 3.0f);
+        break;
+    case BandType::BandPass:
+        move(0.5f, 9.0f);
+        curve(4.0f, 9.0f, 5.0f, 1.5f, 7.0f, 1.5f);
+        curve(9.0f, 1.5f, 10.0f, 9.0f, 13.5f, 9.0f);
+        break;
+    case BandType::Tilt:
+        move(0.5f, 7.5f);
+        line(3.0f, 7.5f);
+        line(11.0f, 2.5f);
+        line(13.5f, 2.5f);
+        break;
+    }
+    g.setColour(ink);
+    g.strokePath(path, juce::PathStrokeType(1.3f * unit * strokeScale, juce::PathStrokeType::curved,
+                                            juce::PathStrokeType::rounded));
+}
+
 } // namespace synth::ui

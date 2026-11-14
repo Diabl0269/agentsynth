@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/FX/ParametricEQ/ParametricEQBandTypes.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // ActionGlyphs: the small pictures of actions that appear on more than one surface, each drawn by ONE painter so
@@ -16,6 +17,10 @@
 //   circled "x" for an error. The toast paints it; any other message surface takes the same drawing.
 // - paintHeadphonesGlyph: "listen to this alone" (solo) -- a headband over two ear cups. The EQ window's band solo
 //   button draws it.
+// - paintEqBandTypeGlyph: a Parametric EQ band's type -- a tiny stroked drawing of that type's response curve (bell,
+//   shelves, cuts, notch, band pass, tilt). Unlike the others it fills a 7:5 box (not a square) in `area`. Every
+//   surface that shows a band's type draws it (the strip chip, the readout, the type pill, the type menu); the name is
+//   for tooltips and screen readers.
 namespace synth::ui {
 
 enum class VoiceGlyph { mono, poly, mixed };
@@ -30,5 +35,8 @@ void paintHeadphonesGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::
 
 void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
                         float strokeScale = 1.0f);
+
+void paintEqBandTypeGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, synth::eq::BandType type,
+                          float strokeScale = 1.0f);
 
 } // namespace synth::ui

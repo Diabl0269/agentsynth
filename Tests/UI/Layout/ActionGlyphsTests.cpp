@@ -7,6 +7,7 @@
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 
@@ -105,4 +106,42 @@ TEST(ActionGlyphs, ThereIsOneShowOnCanvasPainterInSource) {
         {{"Source/UI/Timeline/TrackShowModuleButton.cpp", 1},
          {"Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlIcons.cpp", 1}},
         "ActionGlyphsTests.cpp");
+}
+
+// All eight EQ band types draw something, and every pair of them differs, at the size of a chip glyph.
+TEST(ActionGlyphs, EveryEqBandTypeHasItsOwnGlyph) {
+    using synth::eq::BandType;
+    const BandType types[] = {BandType::LowShelf, BandType::Peak,  BandType::HighShelf, BandType::LowCut,
+                              BandType::HighCut,  BandType::Notch, BandType::BandPass,  BandType::Tilt};
+    std::vector<juce::Image> images;
+    for (const auto type : types) {
+        juce::Image image(juce::Image::ARGB, 28, 20, true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        synth::ui::paintEqBandTypeGlyph(g, juce::Rectangle<float>(14.0f, 10.0f).withCentre({14.0f, 10.0f}),
+                                        juce::Colours::white, type);
+        images.push_back(image);
+        EXPECT_TRUE(drewSomething(image)) << (int)type;
+    }
+    for (size_t a = 0; a < images.size(); ++a)
+        for (size_t b = a + 1; b < images.size(); ++b) {
+            int differing = 0;
+            for (int y = 0; y < 20; ++y)
+                for (int x = 0; x < 28; ++x)
+                    if (std::abs(images[a].getPixelAt(x, y).getAlpha() - images[b].getPixelAt(x, y).getAlpha()) > 40)
+                        ++differing;
+            EXPECT_GT(differing, 12) << "glyphs " << a << " and " << b << " look alike";
+        }
+}
+
+// Source guard: a band type's response drawing lives in ActionGlyphs.cpp only. A file that matches on BandType::LowCut
+// and BandType::Notch and strokes a path is drawing its own response icon; it calls paintEqBandTypeGlyph instead.
+TEST(ActionGlyphs, ThereIsOneEqBandTypeGlyphPainterInSource) {
+    const std::regex cases(R"(case\s+(synth::eq::)?BandType::Notch)");
+    const std::regex stroke(R"(strokePath|drawLine)");
+    for (const auto& [file, text] : synth::test::source_scan::sourceTexts()) {
+        if (file == "Source/UI/Layout/ActionGlyphs.cpp" || file.rfind("Source/UI/", 0) != 0)
+            continue;
+        EXPECT_FALSE(std::regex_search(text, cases) && std::regex_search(text, stroke))
+            << file << " draws per-band-type shapes: call paintEqBandTypeGlyph";
+    }
 }

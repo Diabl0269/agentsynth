@@ -68,7 +68,7 @@ top of the card.
 an EQ point" hint. The curve shows all 24 slots (it reads them through the module's band snapshots, so the card's
 parameter hiding does not apply to it). A dot's ring takes its band's kind colour (`EQBandKinds.h`, the fixed `eqKind*`
 theme tokens: bell, shelf, cut, notch, tilt, band pass); the selected dot takes the accent halo and a floating readout
-above it (type pill, frequency, gain, Q).
+above it (the type's glyph in a kind-coloured pill, frequency, gain, Q).
 
 | Gesture | Effect |
 |---|---|
@@ -81,7 +81,7 @@ above it (type pill, frequency, gain, Q).
 | Hover | Halos the handle and shows its floating readout |
 
 **Band strip and type pill.** `EQBandStrip` sits under the curve in the pop-out window: one chip per band that is on
-(plus the selected band while it is off, at 35%) in frequency order, labelled like "7 Bell", tinted by kind, and a
+(plus the selected band while it is off, at 35%) in frequency order, showing the band number and the type's response-curve glyph (`paintEqBandTypeGlyph`, see below; test mode still reports the label "7 Bell"), tinted by kind, and a
 trailing + chip that adds a Bell in the widest gap. Pressing a chip selects the band and the selection follows the curve
 both ways (`EQCurveComponent::Listener`). Chips glide (`KeyedRectTween`) when bands pass each other, wrap to more rows
 when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Right walk the chips, Up/Down are
@@ -89,7 +89,9 @@ when the width asks for it, and are named like "Band 7, Bell, 2.4 kHz"; Left/Rig
 A new chip grows out of its own middle; a chip whose band left shrinks into its middle and is deleted once it lands
 (`retireChip`, `pruneLeaving`). Scenarios: `eq-bands-strip.yaml` (add, type, remove, undo of each) and
 `eq-bands-card-mixer.yaml` (the card's knobs follow the selected chip; the Mixer thumbnail's count badge and tooltip).
-`EQBandTypePill` shows the selected band's type and opens the same menu.
+`EQBandTypePill` shows the selected band's type as its glyph and a small chevron, in the kind colour, and opens the same menu; its tooltip and accessible title name the type ("Bell. Band type: press to change it (T)").
+
+**Type glyphs.** A band's type is never written out where it is shown: every surface (the chip, the readout pill over the dot, the type pill, the type menu's rows) draws the one shared `synth::ui::paintEqBandTypeGlyph` (`Layout/ActionGlyphs.h`), a tiny stroked drawing of that type's response curve. The name stays in tooltips, screen-reader titles and beside the glyph in the type menu. When a band's type changes, the readout glyph cross-fades with the dot's colour morph and the chip's glyph fades with a local `FadeAmount` (80 ms under Reduce Motion, none with Animations Off). `EQBandTypeGlyphSurfaces.*` fails when a new place calls `eqBandTypeName(` without being listed with a reason. Scenario: `eq-type-icons.yaml`.
 
 **Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
 on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags

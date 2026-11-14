@@ -1,0 +1,86 @@
+# FRO1782: a band's type is shown as a small drawing of its response curve, not as text. The strip chip (band number,
+# then the glyph), the readout pill over a dot, the type pill and the type menu's rows all draw the one shared glyph;
+# the name is in tooltips and screen-reader titles, and stays beside the glyph in the menu.
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve eight times and gives seven of
+# the bands a type (Low Shelf, High Shelf, Low Cut, High Cut, Notch, Band Pass, Tilt; Bell is the default) so all eight
+# types show on the chips, then right-clicks a dot to read the menu, and clicks a band chip on the card to see the
+# card's type pill. The cuts keep their type menu open for a slope, so each is closed by picking its slope.
+# EQBandTypeGlyphSurfaces, ActionGlyphs and the EQ strip tests cover the same headlessly.
+motion: true
+pop_check: {undo: false}   # the runner's undo click would close the type menu a step leaves open for its slope
+record: true
+save_project: eq-type-icons
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 800}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 230, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 100, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 240, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 700, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Low Shelf"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 230, y: 260, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "High Shelf"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 330, y: 150, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Low Cut"}
+  - wait: {settleMs: 500}
+  - click: {id: "24 dB/oct"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 430, y: 300, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "High Cut"}
+  - wait: {settleMs: 500}
+  - click: {id: "24 dB/oct"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 520, y: 100, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Notch"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 610, y: 240, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Band Pass"}
+  - wait: {settleMs: 500}
+  - click: {id: eqWindowCurve, x: 700, y: 150, button: right}
+  - wait: {settleMs: 500}
+  - click: {id: "Tilt"}
+  - wait: {settleMs: 500}
+  - expect: {id: "eqWindowStrip > eqChip8", exists: true}
+  - click: {id: eqWindowCurve, x: 330, y: 150}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: chips-icons}
+  - click: {id: eqWindowCurve, x: 520, y: 100, button: right}
+  - wait: {settleMs: 600}
+  - mark: {check: 2, name: type-menu}
+  - click: {id: "Notch"}
+  - wait: {settleMs: 600}
+  - key: {keys: escape, target: eqWindowCurve}
+  - wait: {settleMs: 800}
+  - click: {id: "eqCardStrip > eqChip3"}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: card-pill}

@@ -4,6 +4,7 @@
 #include "EQBandTypeMenu.h"
 
 #include "EQBandKinds.h"
+#include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -23,7 +24,7 @@ constexpr synth::eq::BandType kTypeOrder[synth::eq::kNumBandTypes] = {
     synth::eq::BandType::BandPass, synth::eq::BandType::Tilt};
 } // namespace
 
-// One choice: a type (with a swatch in its kind colour) or a slope. A tick marks the current one.
+// One choice: a type (with its response-curve glyph in its kind colour) or a slope. A tick marks the current one.
 class EQBandTypeMenu::Row : public juce::Button {
 public:
     Row(const juce::String& text, std::optional<synth::eq::BandType> type)
@@ -51,9 +52,10 @@ public:
         }
         float x = 8.0f;
         if (type_) {
-            g.setColour(eqBandKindColour(colors, eqBandKindOf(*type_)).withMultipliedAlpha(isEnabled() ? 1.0f : 0.4f));
-            g.fillEllipse(x, area.getCentreY() - 4.0f, 8.0f, 8.0f);
-            x += 16.0f;
+            const auto ink =
+                eqBandKindColour(colors, eqBandKindOf(*type_)).withMultipliedAlpha(isEnabled() ? 1.0f : 0.4f);
+            paintEqBandTypeGlyph(g, juce::Rectangle<float>(x, area.getCentreY() - 6.0f, 16.0f, 12.0f), ink, *type_);
+            x += 24.0f;
         }
         g.setColour((current_ ? colors.accent : colors.textPrimary).withMultipliedAlpha(isEnabled() ? 1.0f : 0.4f));
         g.setFont(juce::Font(12.0f, current_ ? juce::Font::bold : juce::Font::plain));
