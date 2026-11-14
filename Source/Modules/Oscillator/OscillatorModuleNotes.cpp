@@ -124,8 +124,12 @@ void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld, float l
         UnisonStack current;
         std::copy(std::begin(voice.unisonOscs), std::end(voice.unisonOscs), std::begin(current.oscs));
         current.baseDt = voice.lastBaseDt;
+        current.lowTrim = voice.lowTrim;
         voice.ghosts.start(current, syncing ? synth::kSyncFadeSamples : CROSSFADE_SAMPLES, syncing ? lead : 0.0f);
     }
+    voice.lowTrim = {};
+    voice.samplesSinceRestart = 0.0f;
+    voice.coherenceWeight = syncing ? 0.0f : synth::unisonCoherenceWeight(randomAmount);
     for (int u = 0; u < MAX_UNISON; ++u) {
         if (!syncing && randomAmount > 0.0f)
             voice.restartDraws[u] = phaseRandom.nextFloat();

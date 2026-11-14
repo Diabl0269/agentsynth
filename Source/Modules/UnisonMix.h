@@ -18,6 +18,8 @@ struct UnisonMix {
     float rightStep[kMaxUnisonVoices]{};
     float sumStart = 1.0f; ///< summed mean leg power at the first sample: the stack divides by its root
     float sumStep = 0.0f;
+    float pairStart = 0.0f; ///< summed mean leg power of every voice pair's coherent cross term, as `sumStart`
+    float pairStep = 0.0f;
     int renderCount = 1; ///< voices that still sound, leaving ones included
     bool stereo = false; ///< some voice's legs differ: the stack renders to both legs
     bool primed = false; ///< false until the first block after prepareToPlay sets the gains to their targets
@@ -31,6 +33,7 @@ struct UnisonMix {
         const float perSample = 1.0f / (float)std::max(1, numSamples);
         float powerStart = 0.0f;
         float powerEnd = 0.0f;
+        float sumL0 = 0.0f, sumR0 = 0.0f, sumL1 = 0.0f, sumR1 = 0.0f; // gains summed, for the in-phase cross term
         renderCount = unisonCount;
         stereo = false;
         for (int u = 0; u < kMaxUnisonVoices; ++u) {
@@ -50,6 +53,10 @@ struct UnisonMix {
             rightStep[u] = (r1 - r0) * perSample;
             powerStart += unisonLegPower(l0, r0);
             powerEnd += unisonLegPower(l1, r1);
+            sumL0 += l0;
+            sumR0 += r0;
+            sumL1 += l1;
+            sumR1 += r1;
             stereo = stereo || l0 != r0 || l1 != r1;
             if (l0 != 0.0f || r0 != 0.0f || l1 != 0.0f || r1 != 0.0f)
                 renderCount = std::max(renderCount, u + 1);
@@ -57,6 +64,17 @@ struct UnisonMix {
         primed = true;
         sumStart = std::max(powerStart, 1e-12f);
         sumStep = (std::max(powerEnd, 1e-12f) - sumStart) * perSample;
+        // (sum of gains)^2 less the sum of their squares is what voices in phase add on top of uncorrelated ones.
+        pairStart = 0.5f * (sumL0 * sumL0 + sumR0 * sumR0) - powerStart;
+        pairStep = (0.5f * (sumL1 * sumL1 + sumR1 * sumR1) - powerEnd - pairStart) * perSample;
+    }
+
+    /** Divisor of the stack at sample `i` of the block when `coherence` (0..1, `unisonStartCoherence`) of the voices'
+        in-phase cross term is still there. 0 gives the root of the uncorrelated power sum. */
+    float divisorAt(float i, float coherence) const {
+        const float uncorrelated = sumStart + sumStep * i;
+        const float cross = std::max(0.0f, pairStart + pairStep * i);
+        return std::sqrt(uncorrelated + coherence * cross);
     }
 };
 
