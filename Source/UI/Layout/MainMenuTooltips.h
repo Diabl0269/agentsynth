@@ -23,12 +23,13 @@ inline MenuTooltips collectCommandTooltips(juce::ApplicationCommandManager& comm
 }
 
 #if JUCE_MAC
-// Sets toolTip on the items of the main menu now, and again each time macOS opens a menu: JUCE rebuilds a menu's
-// items when it opens, which drops anything set earlier. Call after MenuBarModel::setMacMainMenu.
+// Sets toolTip on the items of the main menu now, and on every item added to a menu later: JUCE refills a menu when
+// it opens and replaces it outright when the menu model changes, and either drops anything set earlier. Call after
+// MenuBarModel::setMacMainMenu.
 void installMainMenuTooltips(MenuTooltips tooltips);
 
 // The toolTip macOS holds for `itemTitle` in the main-menu entry `menuTitle`, read after the menu is refreshed the
-// way opening it refreshes it; empty if there is none.
+// way opening it refreshes it (when it has a refresh delegate); empty if there is none.
 juce::String mainMenuTooltipForTest(const juce::String& menuTitle, const juce::String& itemTitle);
 #else
 inline void installMainMenuTooltips(MenuTooltips) {}

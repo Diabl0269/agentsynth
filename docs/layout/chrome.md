@@ -559,8 +559,11 @@ the overlay, and it shows whenever the overlay is shown.
 Help menu hints: on macOS each Help item with a command description (Help build Agent Synth..., Join the
 Discord..., Check for Updates...) shows it as the system menu's hover hint after about a second. JUCE's
 `PopupMenu::Item` has no tooltip and its macOS menu never sets `NSMenuItem.toolTip`, so `UI/Layout/MainMenuTooltips.h`
-(`MainMenuTooltipsMac.mm`) sets it from `collectCommandTooltips()` after `setMacMainMenu`, and again each time macOS
-opens a menu, because JUCE refills the menu then. The Windows menu is a JUCE popup and cannot carry a hint: there the
+(`MainMenuTooltipsMac.mm`) sets it from `collectCommandTooltips()` after `setMacMainMenu`, and on every item macOS
+reports added afterwards (`NSMenuDidAddItemNotification`): JUCE refills a menu when it opens, and when the app's menu
+model changes it swaps in a new menu with no refresh delegate, so hooking the delegate alone left the live Help menu
+bare. The same text goes on the item's accessibility help, so VoiceOver reads it and the live menu's `AXHelp` shows it
+(macOS does not expose `toolTip` itself, so `AXHelp` is empty without that). The Windows menu is a JUCE popup and cannot carry a hint: there the
 text stays on the Welcome button and the Cmd+K row. Test: `MainComponentTest.HelpMenuItemsCarryTheirCommandDescriptionAsAMacMenuHint`.
 
 The footer row carries five social icon buttons between the version label and What's New (28 px, 4 px apart,
