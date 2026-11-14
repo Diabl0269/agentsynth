@@ -84,6 +84,8 @@ public:
     void endRender(bool paramBypass, bool paramMute) noexcept;
     bool bypassedNow() const noexcept { return effBypass_; }
     bool mutedNow() const noexcept { return effMute_; }
+    /** A mute or bypass crossfade runs through this block: what leaves the module is the faded output. */
+    bool fadeRunning() const noexcept { return fade_ != Fade::None; }
     void applyMixPan(juce::AudioBuffer<float>& buffer, const OutputLegs& legs, bool panApplies) noexcept;
     void skipMixPan(int numSamples) noexcept;
     void fillRightForPan(juce::AudioBuffer<float>& buffer, int rightBase, int span) noexcept;

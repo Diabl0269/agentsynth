@@ -82,7 +82,8 @@ float FilterShapesAdapter::getPlayedNoteHz() const { return filter_.getLastPlaye
 
 /** The same reading the card's response view shows: the module's spectrum buffer. */
 const std::vector<float>* FilterShapesAdapter::updateSpectrum() {
-    spectrum_.analyse(filter_.getSpectrumBuffer(), filter_.getLastSampleRate());
+    spectrum_.analyse(filter_.getSpectrumBuffer(), filter_.getLastSampleRate(),
+                      filter_.isMuted() && !filter_.isAuditionAudible());
     return &spectrum_.getDb();
 }
 

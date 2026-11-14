@@ -29,13 +29,26 @@ void FilterSpectrumAnalyser::reset() {
 }
 
 /** The first call after a reset has no previous time, so it counts as one 30 Hz frame. */
-void FilterSpectrumAnalyser::analyse(const VisualBuffer& buffer, double sampleRate) {
-    scratch_.resize((size_t)buffer.getSize());
-    buffer.copyTo(scratch_);
+void FilterSpectrumAnalyser::analyse(const VisualBuffer& buffer, double sampleRate, bool muted) {
     const double now = clock_();
     const double elapsed = lastTime_ < 0.0 ? 1.0 / 30.0 : now - lastTime_;
     lastTime_ = now;
+    if (muted) {
+        release(elapsed);
+        return;
+    }
+    scratch_.resize((size_t)buffer.getSize());
+    buffer.copyTo(scratch_);
     analyse(scratch_.data(), (int)scratch_.size(), sampleRate, elapsed);
+}
+
+void FilterSpectrumAnalyser::release(double elapsedSeconds) {
+    const double dt = juce::jlimit(0.0, kMaxStepSeconds, elapsedSeconds);
+    const float release = (float)(1.0 - std::exp(-dt / kReleaseSeconds));
+    for (size_t i = 0; i < magnitude_.size(); ++i) {
+        magnitude_[i] -= release * magnitude_[i];
+        db_[i] = juce::jlimit(kMinDb, kMaxDb, 20.0f * std::log10(std::max(magnitude_[i], kFloorMagnitude)));
+    }
 }
 
 /** Each point covers the span halfway to its neighbours on the log axis. Where that span holds a bin centre (from

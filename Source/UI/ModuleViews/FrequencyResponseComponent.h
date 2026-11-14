@@ -110,7 +110,8 @@ public:
 
         // Update spectrum from audio data
         if (showSpectrum) {
-            spectrum.analyse(filterModule.getSpectrumBuffer(), filterModule.getLastSampleRate());
+            spectrum.analyse(filterModule.getSpectrumBuffer(), filterModule.getLastSampleRate(),
+                             filterModule.isMuted() && !filterModule.isAuditionAudible());
             repaint();
         }
     }
