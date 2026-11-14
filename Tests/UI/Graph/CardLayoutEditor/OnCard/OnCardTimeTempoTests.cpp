@@ -591,7 +591,13 @@ TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize
                     fsFlipSync(rig, *editor, id, tempo);
                 for (const auto& drawn : fsDrawnFaders(rig, id)) {
                     // A Shared look's swap pair draws the division where the time was: its cell is the division's.
-                    const auto paramId = editor->getOutlineForTest(drawn) != nullptr ? drawn : drawn + "Div";
+                    // The outline sits on whichever of the pair the layout names: the time or the division.
+                    auto paramId = drawn;
+                    for (const auto& candidate : {drawn, drawn + "Div", drawn.dropLastCharacters(3)})
+                        if (editor->getOutlineForTest(candidate) != nullptr) {
+                            paramId = candidate;
+                            break;
+                        }
                     ASSERT_NE(editor->getOutlineForTest(paramId), nullptr) << entry.first << " " << drawn;
                     auto* panel = openControlPanel(rig, *editor, paramId);
                     ASSERT_NE(panel, nullptr) << entry.first << " " << paramId;
@@ -615,7 +621,7 @@ TEST(OnCardFaderSize, EveryDefaultVerticalFaderOffersShowAsDirectionAndFaderSize
     }
     EXPECT_GT(checked, 10) << "the enumeration found the default faders";
     EXPECT_GE(divisions, 4) << "and the Tempo look's division faders among them";
-    EXPECT_GE(sharedDivisions, 4) << "and a Shared look's divisions, which offer Show as";
+    EXPECT_GE(sharedDivisions, 4) << "and a Shared look's divisions, which are faders too (all three rows)";
 }
 
 namespace {

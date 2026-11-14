@@ -18,6 +18,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Graph/CardWidgets/NoteLengthFader.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -116,7 +117,7 @@ TEST(EnvelopesDefaultLayout, TheAdsrCardHasTheDesignedSectionsInOrder) {
         for (const char* stage : {"attack", "hold", "decay", "sustain", "release"})
             EXPECT_EQ(kindOf(plan, stage), Kind::FaderV) << stage;
         for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
-            EXPECT_EQ(kindOf(plan, division), Kind::Choice) << division << ": a note-length box beside its time";
+            EXPECT_EQ(kindOf(plan, division), Kind::FaderV) << division << ": a note-length fader beside its time";
         EXPECT_EQ(kindOf(plan, "velocity"), Kind::FaderH);
         EXPECT_EQ(plan.more.size(), 1u) << "only Legato waits in the More row (the curve amounts belong to the graph)";
         EXPECT_EQ(plan.swapGroups.size(), 4u) << "one swap group per stage: time or its division";
@@ -163,28 +164,23 @@ TEST(EnvelopesDefaultLayout, TheStageFadersValueBoxesHoldEveryReadingWithoutTrun
     }
 }
 
-// In Tempo mode each stage's division is a compact note-length box: every division name reads whole in the cell's
-// width, and a pick writes the choice.
-TEST(EnvelopesDefaultLayout, EveryDivisionFitsItsStageCellWithoutTruncating) {
+// In Tempo mode each stage's division is a note-length fader with an S | T | D picker, in its time fader's cell:
+// the fader's travel steps the eight lengths of the current feel and the picker's choice writes the feel.
+TEST(EnvelopesDefaultLayout, EveryDivisionIsAFaderWithAPickerInItsStageCell) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
     canvas.editor.updateComponents();
     flip(canvas, id, "tempoSync", 1.0f);
     auto* body = canvas.card(id)->getCardBody();
-    synth::theme::AppLookAndFeel look;
     for (const char* paramId : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}) {
         SCOPED_TRACE(paramId);
-        auto* box = dynamic_cast<synth::ui::NoteLengthBox*>(body->findWidget(paramId));
-        ASSERT_NE(box, nullptr);
-        ASSERT_TRUE(box->isVisible());
+        auto* fader = dynamic_cast<synth::ui::NoteLengthFader*>(body->findWidget(paramId));
+        ASSERT_NE(fader, nullptr);
+        ASSERT_TRUE(fader->isVisible());
         auto* choice = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(canvas.processor(id), paramId));
         ASSERT_NE(choice, nullptr);
-        EXPECT_TRUE(box->isCompact());
-        const auto font = look.getComboBoxFont(*box);
-        for (const auto& name : choice->choices)
-            EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(font, name), box->getWidth() - 2) << name.toRawUTF8();
-        box->setCurrentName("1/16T", juce::sendNotificationSync);
-        EXPECT_EQ(choice->getCurrentChoiceName(), "1/16T");
+        fader->getPicker().setSelectedIndex(1, juce::sendNotificationSync);
+        EXPECT_TRUE(choice->getCurrentChoiceName().endsWith("T")) << choice->getCurrentChoiceName().toRawUTF8();
     }
 }
 

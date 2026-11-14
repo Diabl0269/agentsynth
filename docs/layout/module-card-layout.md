@@ -642,9 +642,11 @@ no group move reaches them. `OnCardSeparateLooks` in `OnCardTimeTempoTests.cpp` 
     draws it as a horizontal one. A Choice (the Tempo look's note divisions) may also be drawn as a stepped fader
     in a look of an alternative group, so its panel offers the same Show as, Direction and Fader size rows:
     `steppedFaderAllowed` (`CardBodyPlan`) is the one rule, asked by the plan (`kindOf`) and by
-    `readControlOptions`, which appends the fader widgets to that item's choices; a division in a Shared swap pair (an item
-    with a Show condition) qualifies by the same rule: it draws as a menu until Show as is set to Fader, then offers
-    Direction and Fader size too. The widget names are "Small knob",
+    `readControlOptions`, which appends the fader widgets to that item's choices; a division in a swap group whose other
+    member is a vertical fader (the Shared look's time and division) qualifies by the same rule: the Shared default
+    sets it to `faderV`, so the Tempo look is the same faders as Separate's, and Show as can still pick Menu. The plan
+    decides it from the group (`settleSwapFaders`), so an older save with an Auto division gets the fader too, and the
+    Shared/Separate conversion keeps every item's own widget both ways. The widget names are "Small knob",
     "Large knob", "Vertical fader", "Long vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
     widget menu (`cardLayoutWidgetName`); never two sizes both called "Knob". **Label** renames the
     caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),

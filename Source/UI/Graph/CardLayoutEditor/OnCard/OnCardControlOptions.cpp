@@ -206,12 +206,17 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
             ? layout.sections[(size_t)*layoutSection].visibleWhen.has_value()
             : planned.section >= 0 && planned.section < (int)plan.sections.size() &&
                   plan.sections[(size_t)planned.section].visibleWhen.has_value();
-    // The plan knows a swap pair even when the layout the editor reads has no item for it (a default layout is
-    // rebuilt from the plan without the items' tests), so the pair's membership comes from both.
-    CardParamItem asked = *item;
-    if (planned.swapGroup >= 0 && !asked.when.has_value())
-        asked.when = CardCondition{"", {}, CardConditionEffect::Show};
-    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, asked, lookCondition))
+    // A division in a swap group beside a vertical fader (a Shared look's time and division) may be a fader too.
+    // The plan knows the group even when the layout the editor reads has no tests on its items (a default layout is
+    // rebuilt from the plan).
+    bool beside = false;
+    if (planned.swapGroup >= 0)
+        for (int member : plan.swapGroups[(size_t)planned.swapGroup].members) {
+            const auto& other = plan.items[(size_t)member];
+            beside = beside || (member != index && CardBodyItem::isVerticalFader(other.kind) &&
+                                dynamic_cast<const juce::AudioParameterChoice*>(other.param) == nullptr);
+        }
+    if (planned.param != nullptr && steppedFaderAllowed(*planned.param, lookCondition, beside))
         for (auto widget : {CardWidget::FaderV, CardWidget::FaderVLong, CardWidget::FaderH})
             if (std::find(options.widgetChoices.begin(), options.widgetChoices.end(), widget) ==
                 options.widgetChoices.end())

@@ -6,6 +6,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/LFOModule.h"
+#include "UI/Graph/CardWidgets/NoteLengthFader.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -86,25 +87,22 @@ TEST(NoteLengthChoice, OtherChoicesStayPlainComboBoxes) {
     EXPECT_EQ(dynamic_cast<NoteLengthBox*>(shape), nullptr);
 }
 
-TEST(NoteLengthChoice, AnAdsrStageDivisionIsACompactBoxThatFitsItsCellAndShowsTheFullName) {
+TEST(NoteLengthChoice, AnAdsrStageDivisionIsANoteLengthFaderThatSharesItsStagesCell) {
     CardCanvas canvas;
     const auto adsr = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
     canvas.editor.updateComponents();
     auto* card = canvas.card(adsr);
     ASSERT_NE(card, nullptr);
+    auto* body = card->getCardBody();
     for (const char* id : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}) {
         SCOPED_TRACE(id);
         auto* param = choice(*canvas.processor(adsr), id);
         ASSERT_NE(param, nullptr);
         EXPECT_EQ(param->choices.size(), 24);
-        auto* box = boxOf(*card, id);
-        ASSERT_NE(box, nullptr) << "a division is a NoteLengthBox, not a stepped fader";
-        EXPECT_TRUE(box->isCompact());
-        EXPECT_EQ(box->getChoices(), param->choices);
-        // The longest name must fit the box's own width in the font it draws with, so it never truncates.
-        synth::theme::AppLookAndFeel look; // the app's own look: a plain test card has the stock one
-        const juce::Font font = look.getComboBoxFont(*box);
-        for (const auto& name : param->choices)
-            EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(font, name), box->getWidth() - 2) << name.toRawUTF8();
+        EXPECT_EQ(boxOf(*card, id), nullptr) << "a division is a note-length fader, not a NoteLengthBox";
+        auto* fader = dynamic_cast<synth::ui::NoteLengthFader*>(body->findWidget(id));
+        ASSERT_NE(fader, nullptr);
+        EXPECT_EQ(fader->getPicker().getNumSegments(), 3);
+        EXPECT_GT(fader->getWidth(), 0);
     }
 }

@@ -148,7 +148,7 @@ CardLayout currentSeparateForm(CardLayout layout) {
 
 // Back to one group: each time item takes its division beside it as a swap pair (the pair is two items
 // repeating one test, so a time with no division left stays plain, and so does Sustain). A division with no
-// time goes last. A division's fader widget goes back to Auto: beside a fader a division is one anyway.
+// time goes last. A division keeps its own widget through the conversion both ways.
 std::vector<CardItem> sharedItems(const std::vector<CardItem>& time, const std::vector<CardItem>& tempo) {
     std::vector<CardItem> out;
     juce::StringArray used;
@@ -164,8 +164,6 @@ std::vector<CardItem> sharedItems(const std::vector<CardItem>& time, const std::
             continue;
         }
         auto back = withoutCondition(*division);
-        if (back.widget == CardWidget::FaderV)
-            back.widget = CardWidget::Auto;
         out.emplace_back(showWhen(withoutCondition(*param), kTempoSync, {"false"}));
         out.emplace_back(showWhen(std::move(back), kTempoSync, {"true"}));
         used.add(division->paramId);

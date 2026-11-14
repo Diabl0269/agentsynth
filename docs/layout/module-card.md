@@ -309,10 +309,19 @@ out as its own run, by the same measure-and-apply walk:
   gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
   one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
 - **A choice beside a fader.** A choice in a swap group with a vertical fader (the ADSR's note division
-  taking its time's place in Tempo mode) stays a choice: a compact `NoteLengthBox` ([note-length-menu](note-length-menu.md#the-adsr-stage-divisions)),
-  one row tall in the middle of the fader's cell with the caption on the cell's top edge, so a swap moves nothing
-  else. A layout can still ask for a stepped fader on a choice (`CardWidget::FaderV` in an alternative look), which
-  steps over the choice's integer values.
+  taking its time's place in Tempo mode) draws as a stepped fader too, so the Tempo look is the same faders in
+  Shared and in Separate looks (`steppedFaderAllowed`, `settleSwapFaders` in `CardBodyPlan.cpp`; a saved layout
+  whose division says Auto gets it as well). A division item set to `choice` (Show as Menu) stays a compact
+  `NoteLengthBox` ([note-length-menu](note-length-menu.md#the-adsr-stage-divisions)), one row tall in the middle of
+  the fader's cell. A layout can also ask for a stepped fader on a choice in an alternative look
+  (`CardWidget::FaderV`), which steps over the choice's integer values.
+- **The note-division fader and its S | T | D picker.** A vertical fader on the app's note-division choice
+  (`NoteLengthFader`, `CardWidgets/NoteLengthFader.h`) steps the eight lengths of the current feel, and a three-segment
+  S | T | D picker (Straight, Triplet, Dotted) sits under it, inside the fader's own cell (the value box keeps the
+  top of the space under the travel, the picker its bottom 18 px, so the cell is the size of any vertical fader and a
+  Sync flip never changes the card's height). Both write the one division parameter: the picker keeps the length, the
+  fader keeps the feel, a key step stops at the ends of the feel. Nothing is saved but that parameter. A horizontal
+  fader on a division has no picker and steps over all 24 values.
 - **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
   bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
   "Tempo"); the switch
