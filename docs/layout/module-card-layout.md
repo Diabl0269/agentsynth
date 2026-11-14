@@ -569,7 +569,11 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
     group's items for the target's, free-positioned where the row plan above lands it, sized as the target group
     sizes it, with the target's cells placed by the same plan (a full group wraps its trailing cell into a new
-    row, never overlaps). Both groups are written positioned, so nothing else
+    row, never overlaps). A control from another group joins the row under the pointer whenever the row's boxes and
+    its own fit the content width side by side, flush if need be: the Filter card's large Cutoff knob dropped on
+    the Level row (Key Track, Level) or the Pan row (Mix, Pan) sits on that row, between or after the controls as
+    aimed, and only a row that has no room even flush wraps it below. While the drag lasts the group it left keeps
+    its hole (the cards below do not move under the pointer); the release closes it. Both groups are written positioned, so nothing else
     moves. It is one write, so one undo step, and is announced ("Level moved to Unison")
     (`CardLayoutOnCardEditorGroups.cpp`).
   - *Moving and renaming a group.* A titled group's title row is its handle (`CardLayoutGroupHandle`, one per
@@ -878,7 +882,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
-  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag, a third knob joining a row of two on the saved Osc 1 layout; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group and a drag between groups with its undo; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
+  the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag, a third knob joining a row of two on the saved Osc 1 layout; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group, a drag between groups with its undo, and the Filter's Cutoff dropped on the Level, Pan and Resonance rows plus a walk of every built-in card's control dropped on every other group's first row; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
   step; `OnCardGroupMoveTests.cpp` the group plan as pure functions, `OnCardGroupMoveEditorTests.cpp` the oscillator's Unison dragged below Output through the title row's mouse events (one write, controls keep their place, nothing overlaps, the plan the drag held equals the write, one Cmd+Z, and the title gliding back on undo and redo), Alt+Up/Down, Esc and the hover and hit areas, `OnCardGroupRenameTests.cpp` double-click, Return and the menu opening the inline editor (Return keeps, Esc cancels, empty reverts, one undo each); `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them
