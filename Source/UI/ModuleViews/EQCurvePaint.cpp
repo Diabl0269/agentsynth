@@ -2,6 +2,7 @@
 // the live spectrum behind them. The curve is declared in EQCurveComponent.h.
 
 #include "EQCurveComponent.h"
+#include "EQCurveHoldState.h"
 
 #include "EQBandKinds.h"
 #include "Modules/VisualBuffer.h"
@@ -57,6 +58,7 @@ void EQCurveComponent::paint(juce::Graphics& g) {
             paintReadout(g, readoutBand, w, h);
     }
 
+    hold_->box.paintMarquee(g);
     synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 
@@ -139,7 +141,7 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
         const auto centre = bandPosition(band);
         const float bx = juce::jlimit(0.0f, w, centre.x);
         const float by = juce::jlimit(0.0f, h, centre.y);
-        const bool active = (b == hoveredBand || b == selectedBand);
+        const bool active = (b == hoveredBand || hold_->selection.contains(b));
         const float radius = (active ? kHandleRadius + 1.5f : kHandleRadius) * (0.35f + 0.65f * dotAlpha);
 
         if (active) {

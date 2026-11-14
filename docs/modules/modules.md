@@ -543,7 +543,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
 ## Poly MIDI Module
 - **Capacity**: 8 simultaneous voices.
 - **Allocation**: a note-on re-uses the voice already holding that note, else the first free voice, else steals one per the **Voice Steal** parameter.
-- **Parameters**: `voiceSteal` — `Oldest` (default) | `Round-Robin` | `Random`; `velToGate` ("Vel → Gate", default **off**).
+- **Parameters**: `voiceSteal` — `Oldest` (default) | `Round-Robin` | `Random`; `velToGate` ("Vel → Gate", default **on** for a new module).
 
 | Mode | Which voice loses its note |
 |---|---|
@@ -567,7 +567,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 - **A fresh note on an idle voice has no gap** — its gate is already 0, so the rise starts on the event sample itself.
 - **A note's pitch steps, it never slides.** A voice that never sounded steps to the note's pitch on the event sample (so its first sound is at that pitch, not rising from 0 Hz). A voice that sounded before keeps its old pitch, and with it the tail of the previous note, until its gate reaches the Oscillator's restart level (`GateEdges::kThreshold`, or half the note's gate level when that is lower), and steps on that sample. A note's attack therefore never sounds while the pitch is still moving. Tests: `TimelineClickGuardPitch.*`, `SourceClickGuard.PolyOscillatorFirstChordStartsOnItsOwnSample`.
 - **Note-off is unchanged**: gate target 0 with the 5 ms smoothing, pitch held.
-- **`Vel → Gate` (`velToGate`, default off).** Off: the gate rises to exactly 1.0, as it always has — a preset saved before this parameter existed loads with the default and renders byte-identically. On: the gate rises to the note-on velocity (0..1), stored per voice, so held voices keep their own levels.
+- **`Vel → Gate` (`velToGate`, default on for a new module).** On: the gate rises to the note-on velocity (0..1), stored per voice, so held voices keep their own levels, and a poly ADSR with Velocity above 0 shapes loudness out of the box. Off: the gate rises to exactly 1.0, as it always has. A project, preset or state blob saved before this parameter existed has no key for it and loads **off** (`applyStoredParamDefaults` for a stored node, `setStateInformation` for a state blob), so it renders byte-identically; a stored value always wins. A model-authored node that leaves it out gets the new default.
 - **Chord larger than the voice count.** Nine same-sample note-ons on eight voices in `Oldest` mode drop the chord's **first** note: stamps are strictly increasing (`stampFor` clamps to `lastStamp_ + 1`), so note 1 is the oldest by one count and note 9 steals it. Notes 2–9 sound, and the stolen voice re-attacks by the rule above rather than gliding.
 - **Downstream reality check (`ADSRModule`)**: the ADSR's poly branch samples its gate input **per sample** (FRO110 fixed the stale once-per-block sampling), so the 1 ms gap re-articulates it on the exact sample it happens, wherever it falls in the block — a mid-block retrigger is seen identically to one that spans a block boundary. Pinned end-to-end by `PolyMidiToAdsrTest.RetriggerReArticulatesAdsrRegardlessOfBlockAlignment`.
 

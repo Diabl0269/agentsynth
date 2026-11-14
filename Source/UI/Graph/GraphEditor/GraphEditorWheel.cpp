@@ -29,7 +29,8 @@ void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWhe
     if (e.mods.isShiftDown() && dx == 0.0f)
         std::swap(dx, dy);
 
-    // A plain mouse notch is one big jump, so it eases in; a trackpad (smooth) or its inertia applies as-is.
+    // A plain mouse notch is one big jump, so it eases in; a trackpad (smooth) or its inertia is paced once per display
+    // frame.
     const bool eased = !wheel.isSmooth && !wheel.isInertial;
     panByWheel(0, dx * kPanPixelsPerWheelUnit, eased);
     panByWheel(1, dy * kPanPixelsPerWheelUnit, eased);
@@ -49,8 +50,7 @@ void GraphEditor::panByWheel(int axis, float amountPx, bool eased) {
         (a == 0 ? panOffset.x : panOffset.y) += (float)d;
         updateTransform();
     };
-    if (eased && wheelPanTween_.push(*this, axis, (double)amountPx, read, pan))
+    if (wheelPan_.route(*this, axis, (double)amountPx, eased, read, pan))
         return;
-    wheelPanTween_.stop();
     pan(axis, (double)amountPx);
 }

@@ -726,7 +726,7 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
   **no keyboard focus**: the panel stays the mixer's single focusable leaf). A list longer than its
   section scrolls with the wheel; a 3 px `textDisabled` thumb on the right and a 10 px fade to
   `surface` at the bottom mark it. A wheel over a list that fits falls through to the panel's
-  horizontal scroll, as before. The list is never shorter than its section, so a right-click on the
+  horizontal scroll, as before. The panel's viewports and every section list are a `SmoothWheelViewport` (a trackpad swipe moves it once per display frame, [animation](../layout/animation.md#motion-rules)). The list is never shorter than its section, so a right-click on the
   empty space below the last insert still reaches the list's "Add...".
 - **Growing past the fader.** Making a section taller takes space from the fader first. Once the
   fader is at `MixerColumnComponent::kMinFaderHeight` (56 px), the drag keeps going by growing the

@@ -779,6 +779,10 @@ private:
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples);
 
+    /** Whether the right leg reaches a cable: always when split, and from a collapsed jack in mono mode, whose one
+        jack owns both legs (mapOutputChannel). A collapsed poly jack shows the left legs only. */
+    bool rightLegHeard() const { return isDualIO() || !polyParam->get(); }
+
     /** Everything about a block that is the same for every voice. Gathered once in
         process*Mode so the per-voice renderer does not re-read parameters eight times. */
     struct BlockSettings {

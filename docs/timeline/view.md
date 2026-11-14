@@ -140,8 +140,11 @@ lanes region, never the track headers.
 
 A trackpad sends wheel events at its own rate (about 60 to 125 a second, unevenly), not the screen's. Each one used to move
 the view, re-place the lane bodies and repaint at once, so one display frame could take three moves and the next none. Now a
-trackpad's (`isSmooth` or `isInertial`) vertical deltas only pile up in a backlog in `synth::ui::ScrollFrameSmoother`
-(`Source/UI/Layout/ScrollTween.h`, owned by the panel, code in `TimelinePanelWheelScroll.cpp`). Once per VBlank frame
+trackpad's (`isSmooth` or `isInertial`) deltas, vertical and sideways, only pile up in a backlog per axis in
+`synth::ui::ScrollFrameSmoother` (`Source/UI/Layout/ScrollTween.h`), reached through the panel's `WheelScrollRouter`
+(`Source/UI/Layout/ScrollTween.h`, the one place a scroll surface routes a wheel event; code in
+`TimelinePanelWheelScroll.cpp`). The sideways axis moves `firstVisibleBeat` and repaints the ruler and lanes once per frame, and
+a move clamped at beat 0 repaints nothing. Once per VBlank frame
 a share of the backlog (`1 - e^(-dt / 40 ms)`, about a third at 60 Hz) goes through `scrollTrackRows()` as one move, one
 `syncTrackScroll()`, one repaint of the lanes rectangle. The step per frame stays even while the finger or the fling moves at a
 steady speed; a clamp at an end drops the backlog, so a fling stops there without backing off; a reversal drops what is left of

@@ -128,6 +128,7 @@ void EQBandStrip::addTestModeState(juce::DynamicObject& into) const {
             labels.add(chip->label());
     into.setProperty("chips", labels);
     into.setProperty("selectedBand", curve_.getSelectedBand() + 1);
+    into.setProperty("selectedCount", (int)curve_.getSelectedBands().size());
     // The curve beside the strip: its band count, the soloed band (1-based, 0 for none), how strongly that dot's ring
     // shows and the most any other dot is dimmed (0..1), and the selected band's values (0 when none is selected).
     const int solo = curve_.getSoloBand();

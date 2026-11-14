@@ -319,6 +319,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorStripOutputDualIOTests.cpp
+    UI/Graph/GraphEditor/GraphEditorStripInputDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
@@ -495,6 +496,7 @@ add_executable(Tests
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
     UI/ModuleViews/EQCurveTests.cpp
+    UI/ModuleViews/EQCurvePointEditingTests.cpp
     UI/ModuleViews/EqUndoGlideTests.cpp
     UI/ModuleViews/ModuleViewsKeyboardTests.cpp
     UI/ModuleViews/ScopeTests.cpp

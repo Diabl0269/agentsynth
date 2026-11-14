@@ -286,8 +286,7 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
 
     const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
     if (e.mods.isCommandDown() || optionVertical) {
-        wheelTween_.stop();
-        trackpadScroll_.flush(); // a zoom reads the view where the finger left it
+        wheel_.settle(); // a zoom reads the view where the finger left it
     }
     if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);

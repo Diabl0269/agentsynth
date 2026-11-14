@@ -2,6 +2,7 @@
 // and the mouse handlers that call them. The curve is declared in EQCurveComponent.h.
 
 #include "EQCurveComponent.h"
+#include "EQCurveHoldState.h"
 
 #include <algorithm>
 #include <cmath>
@@ -111,9 +112,13 @@ void EQCurveComponent::removeBand(int band) {
     beginGesture();
     eqModule.setBandEnabled(band, false);
     endGesture();
-    if (selectedBand == band)
-        setSelectedBand(-1);
     refreshFromModule();
+    if (hold_->selection.contains(band)) { // it leaves the selection; the others stay
+        auto rest = hold_->selection.selected();
+        rest.erase(std::remove(rest.begin(), rest.end(), band), rest.end());
+        const int cursor = rest.empty() ? -1 : (selectedBand == band ? rest.back() : selectedBand);
+        setSelection(std::move(rest), cursor, cursor);
+    }
 }
 
 void EQCurveComponent::dragBandTo(int band, juce::Point<float> p) {
@@ -134,19 +139,27 @@ void EQCurveComponent::nudgeBandQ(int band, float amount) {
     refreshFromModule();
 }
 
+// Every selected band that is on moves, each stopping at its own limit; the dots ease to their new places. A press that
+// moves nothing (every band at its end) opens no undo step.
 bool EQCurveComponent::nudgeSelectedBand(float octaves, float dbDelta) {
-    if (!ensureSelectedBand())
+    const auto bands = movableSelection();
+    std::vector<std::pair<int, juce::Point<float>>> start;
+    for (const int band : bands)
+        start.push_back({band, {lastBands[(size_t)band].freqHz, lastBands[(size_t)band].gainDb}});
+    bool changes = false;
+    for (const auto& [band, place] : start) {
+        const float freq = juce::jlimit(Module::kMinFreq, Module::kMaxFreq, place.x * std::pow(2.0f, octaves));
+        const float gain = juce::jlimit(-Module::kMaxGainDb, Module::kMaxGainDb, place.y + dbDelta);
+        changes = changes || freq != place.x || gain != place.y;
+    }
+    if (!changes)
         return false;
-    const auto band = lastBands[(size_t)selectedBand];
-    const float newFreq = juce::jlimit(Module::kMinFreq, Module::kMaxFreq, band.freqHz * std::pow(2.0f, octaves));
-    const float newGain = juce::jlimit(-Module::kMaxGainDb, Module::kMaxGainDb, band.gainDb + dbDelta);
-    if (newFreq == band.freqHz && newGain == band.gainDb)
-        return false; // already at the end of its range: no undo step for a press that changes nothing
     beginGesture();
-    eqModule.setBandFreq(selectedBand, newFreq);
-    eqModule.setBandGain(selectedBand, newGain);
+    moveBandsFrom(start, octaves, dbDelta);
     endGesture();
+    glideMoves_ = true;
     refreshFromModule();
+    glideMoves_ = false;
     return true;
 }
 
@@ -174,18 +187,6 @@ bool EQCurveComponent::ensureSelectedBand() {
         }
     }
     return false;
-}
-
-void EQCurveComponent::setSelectedBand(int band) {
-    band = juce::jlimit(-1, Module::kMaxBands - 1, band);
-    if (selectedBand == band)
-        return;
-    selectedBand = band;
-    refreshAccessibilityValue();
-    if (ownsSolo_)
-        followSelectionSolo();
-    repaint();
-    listeners_.call([](Listener& l) { l.eqCurveChanged(); });
 }
 
 void EQCurveComponent::refreshFromModule() {
@@ -219,11 +220,18 @@ void EQCurveComponent::mouseExit(const juce::MouseEvent&) {
 }
 
 // No undo gesture opens here: a plain click that never turns into a drag would otherwise push an empty undo step.
-// beginGesture happens on the first mouseDrag. A right-click on a dot selects it and opens its type menu.
+// beginGesture happens on the first mouseDrag. A right-click on a dot selects it and opens its type menu. A press on
+// empty space arms a box (Shift, Cmd or Ctrl keeps the selection); Shift- or Cmd-click on a dot toggles it.
 void EQCurveComponent::mouseDown(const juce::MouseEvent& e) {
     dragBand = hitTestBand(e.position);
-    if (dragBand < 0)
+    collapseOnRelease_ = false;
+    dragStart_.clear();
+    const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
+    if (dragBand < 0) {
+        if (!e.mods.isPopupMenu())
+            hold_->box.press(e.getPosition(), additive, hold_->selection.selected());
         return;
+    }
     if (e.mods.isAltDown() &&
         !e.mods.isPopupMenu()) { // Option-click auditions the dot (and ends it) instead of dragging
         const int band = std::exchange(dragBand, -1);
@@ -235,24 +243,54 @@ void EQCurveComponent::mouseDown(const juce::MouseEvent& e) {
             startSolo(band);
         return;
     }
-    setSelectedBand(dragBand);
     if (e.mods.isPopupMenu()) {
         const int band = dragBand;
         dragBand = -1;
+        setSelectedBand(band);
         showTypeMenuAtDot(band);
         return;
+    }
+    if (additive) { // add the band to the selection or take it out; nothing moves
+        const int band = std::exchange(dragBand, -1);
+        auto bands = hold_->selection.selected();
+        const auto at = std::find(bands.begin(), bands.end(), band);
+        if (at != bands.end()) {
+            bands.erase(at);
+            const int cursor = band == selectedBand ? (bands.empty() ? -1 : bands.back()) : selectedBand;
+            setSelection(std::move(bands), cursor, cursor);
+        } else {
+            bands.push_back(band);
+            setSelection(std::move(bands), band, band);
+        }
+        return;
+    }
+    if (hold_->selection.size() > 1 && hold_->selection.contains(dragBand)) { // a drag moves the whole group
+        collapseOnRelease_ = true;
+        setSelection(hold_->selection.selected(), dragBand, dragBand);
+    } else {
+        setSelectedBand(dragBand);
     }
     repaint();
 }
 
 void EQCurveComponent::mouseDrag(const juce::MouseEvent& e) {
-    if (dragBand < 0)
+    if (dragBand < 0) {
+        dragBoxTo(e.position);
         return;
+    }
     if (!gestureActive) {
         beginGesture();
         gestureActive = true;
+        collapseOnRelease_ = false;
+        dragStart_.clear();
+        for (const int band : hold_->selection.selected())
+            if (lastBands[(size_t)band].enabled)
+                dragStart_.push_back({band, {lastBands[(size_t)band].freqHz, lastBands[(size_t)band].gainDb}});
     }
-    dragBandTo(dragBand, e.position);
+    if (dragStart_.size() > 1)
+        dragSelectionTo(e.position);
+    else
+        dragBandTo(dragBand, e.position);
 }
 
 void EQCurveComponent::mouseUp(const juce::MouseEvent&) {
@@ -260,7 +298,13 @@ void EQCurveComponent::mouseUp(const juce::MouseEvent&) {
         endGesture();
         gestureActive = false;
     }
+    if (collapseOnRelease_ && dragBand >= 0) // a click on one of several bands, with no drag, picks just that one
+        setSelectedBand(dragBand);
+    collapseOnRelease_ = false;
+    dragStart_.clear();
     dragBand = -1;
+    if (hold_->box.release() == synth::ui::PointBoxGesture::Release::click)
+        setSelectedBand(-1);
 }
 
 void EQCurveComponent::mouseDoubleClick(const juce::MouseEvent& e) {

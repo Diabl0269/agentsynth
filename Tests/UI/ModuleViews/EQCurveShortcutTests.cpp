@@ -191,9 +191,10 @@ TEST(EQShortcuts, BackspaceAndDeleteRemoveTheBandAndReturnBringsItBack) {
     EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
     EXPECT_TRUE(rig.eq.isBandEnabled(1));
     EXPECT_TRUE(rig.press(juce::KeyPress::deleteKey));
-    EXPECT_FALSE(rig.eq.isBandEnabled(1)) << "Delete is a fixed alias";
+    EXPECT_FALSE(rig.eq.isBandEnabled(1)) << "Delete removes it too";
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "but Delete selects the next band (the last one left here)";
     EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
-    EXPECT_TRUE(rig.eq.isBandEnabled(1));
+    EXPECT_FALSE(rig.eq.isBandEnabled(0)) << "so Return now switches that one";
 }
 
 TEST(EQShortcuts, TOpensTheSelectedBandsTypeMenuAtItsDotAndDoesNothingWithoutASelection) {

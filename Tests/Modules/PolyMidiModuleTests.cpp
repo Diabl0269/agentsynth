@@ -93,11 +93,60 @@ class PolyMidiModuleTest : public ::testing::Test {
 protected:
     void SetUp() override {
         module = std::make_unique<PolyMidiModule>();
+        // These tests pin voice allocation and gate edges against a plain 0/1 gate (a note-on level of 1.0
+        // whatever its velocity), so they switch Vel -> Gate off; the new-module default is tested below.
+        setVelToGate(*module, false);
         module->prepareToPlay(44100.0, 512);
     }
 
     std::unique_ptr<PolyMidiModule> module;
 };
+
+// A new Poly MIDI carries velocity on its gate, so a poly ADSR with Velocity above 0 works out of the box.
+TEST(PolyMidiModuleDefaults, FreshModuleHasVelocityToGateOn) {
+    PolyMidiModule fresh;
+    fresh.prepareToPlay(44100.0, 512);
+    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&fresh, "velToGate"));
+    ASSERT_NE(p, nullptr);
+    EXPECT_TRUE(p->get());
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+    pushBlock(fresh, buffer, {{60, 0, true, 0.25f}});
+    EXPECT_NEAR(voiceGate(buffer, 0), 0.25f, 0.01f);
+}
+
+// A state blob saved before the key existed keeps the old plain gate; a stored false stays false; a stored true stays.
+TEST(PolyMidiModuleDefaults, StateWithoutKeyLoadsOffAndStoredValuesSurvive) {
+    auto load = [](bool hasKey, bool value) {
+        PolyMidiModule m;
+        juce::ValueTree state("ModuleState");
+        if (hasKey)
+            state.setProperty("velToGate", value ? 1.0f : 0.0f, nullptr);
+        juce::MemoryBlock blob;
+        juce::AudioProcessor::copyXmlToBinary(*state.createXml(), blob);
+        m.setStateInformation(blob.getData(), (int)blob.getSize());
+        return dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&m, "velToGate"))->get();
+    };
+    EXPECT_FALSE(load(false, false)) << "a project saved before the key existed keeps the old behaviour";
+    EXPECT_FALSE(load(true, false));
+    EXPECT_TRUE(load(true, true));
+}
+
+// The same for a stored node (project, preset, snapshot): trusted without the key = off; a model-authored node = new
+// default.
+TEST(PolyMidiModuleDefaults, StoredNodeWithoutKeyLoadsOffButModelNodeKeepsDefault) {
+    PolyMidiModule stored, model, storedFalse;
+    stored.applyStoredParamDefaults(juce::NamedValueSet(), true);
+    model.applyStoredParamDefaults(juce::NamedValueSet(), false);
+    juce::NamedValueSet has;
+    has.set("velToGate", true);
+    storedFalse.applyStoredParamDefaults(has, true);
+    auto get = [](PolyMidiModule& m) {
+        return dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&m, "velToGate"))->get();
+    };
+    EXPECT_FALSE(get(stored));
+    EXPECT_TRUE(get(model));
+    EXPECT_TRUE(get(storedFalse)) << "a stored key is applied by the params pass, not overridden here";
+}
 
 TEST_F(PolyMidiModuleTest, AcceptsMidi) { EXPECT_TRUE(module->acceptsMidi()); }
 
@@ -380,9 +429,8 @@ TEST_F(PolyMidiModuleTest, AdjacentOffOnSamePitchLeavesGap) {
     EXPECT_EQ(module->getActiveVoiceMask(), 0x01) << "the same voice is re-used, not a second one";
 }
 
-// Default-off keeps the gate a plain 0/1 flag, so presets saved before the parameter existed render
-// byte-identically.
-TEST_F(PolyMidiModuleTest, VelocityToGateOffByDefault) {
+// Off keeps the gate a plain 0/1 flag, as presets saved before the parameter existed render.
+TEST_F(PolyMidiModuleTest, VelocityToGateOffKeepsPlainGate) {
     juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
     pushBlock(*module, buffer, {{60, 0, true, 0.25f}});
     EXPECT_FLOAT_EQ(voiceGate(buffer, 0), 1.0f);

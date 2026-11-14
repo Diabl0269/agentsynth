@@ -69,7 +69,7 @@ EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) co
 // A band coming or going fades where it stands instead of travelling to or from its hidden settings; a band that stays
 // on glides from where it is drawn to where it now rests, but only for an undo or redo.
 void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter,
-                       bool restored) {
+                       bool restored, bool eased) {
     if (shapeDiffers(before, after))
         morph_->retarget(kMorphKey, {1.0f, 0.0f}, {0.0f, 0.0f}, false, kTypeMorphMs);
     if (!tween_->isAnimating())
@@ -84,6 +84,13 @@ void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands&
         const bool vanishes = !to.enabled && fromPresence > kVisible;
         const bool toggled = before[i].enabled != to.enabled;
 
+        const bool placeEased = eased && !toggled && !appears && !vanishes &&
+                                (before[i].freqHz != to.freqHz || before[i].gainDb != to.gainDb);
+        if (placeEased) { // a keyboard step eases the dot; the band's shape and presence land at once
+            tween_->retarget(placeKey(b), {std::log2(from.freqHz), from.gainDb}, {std::log2(to.freqHz), to.gainDb},
+                             false);
+            continue;
+        }
         if (!restored && !toggled && !appears && !vanishes) {
             tween_->erase(placeKey(b)); // a drag or a plain edit lands at once
             if (!presenceGlide_[i])

@@ -11,7 +11,7 @@
 379 Source/PresetManager.cpp::PresetManager::getPresetJSON
 211 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
 216 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
-208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
+207 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
 549 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
 243 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
 286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme

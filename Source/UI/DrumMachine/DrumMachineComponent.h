@@ -293,6 +293,7 @@ public:
     void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
     bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
     double getScrollYForTest() const noexcept { return scrollY_; }
+    WheelScrollRouter& getWheelForTest() noexcept { return wheel_; }
 
     // ---- juce::Component ----
     void paint(juce::Graphics& g) override;
@@ -593,7 +594,7 @@ private:
     AnimationDriver motionAnim_;
     AnimationDriver rowAnim_;
     AnimationDriver laneAnim_;
-    ScrollTweenRunner wheelTween_;
+    WheelScrollRouter wheel_;
 
     CardSegmentedSwitch viewSwitch_;
     juce::ComboBox stepsCombo_;

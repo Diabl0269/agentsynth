@@ -5,6 +5,7 @@
 #include "EQCurveComponent.h"
 
 #include "AppUndoManager.h"
+#include "EQCurveHoldState.h"
 #include "EqBandGlide.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
@@ -22,7 +23,14 @@ struct EQCurveComponent::GlideState {
 
 EQCurveComponent::EQCurveComponent(ParametricEQModule& eq)
     : eqModule(eq)
+    , hold_(std::make_unique<HoldState>(*this))
     , glide_(std::make_unique<GlideState>(*this)) {
+    hold_->hold.onFrame = [this] { applyKeyHold(); };
+    hold_->hold.onEnd = [this] { endKeyHold(); };
+    hold_->hold.speedFactor = [this](synth::ui::KeyAxis) {
+        const auto& host = hold_->hold.host;
+        return host.isShiftDown && host.isShiftDown() ? 0.25 : 1.0;
+    };
     magnitudes.resize(numPoints, 0.0f);
     fftData.resize(fftSize * 2, 0.0f);
     spectrumMagnitudes.resize(numPoints, kSpecMinDb);
@@ -48,6 +56,8 @@ EQCurveComponent::~EQCurveComponent() {
     if (ownsSolo_ && eqModule.getSoloBand() == ownedSoloBand_)
         eqModule.clearSolo();
 }
+
+synth::ui::KeyHold& EQCurveComponent::getKeyHoldForTest() noexcept { return hold_->hold; }
 
 synth::ui::KeyedTween<juce::Point<float>>& EQCurveComponent::getBandGlideForTest() noexcept {
     return glide_->glide.tweenForTest();
@@ -129,7 +139,7 @@ void EQCurveComponent::syncBands(const ParametricEQModule::BandSnapshots& bands,
             morphFromType_[b] = bands[b].type;
         }
     }
-    glide_->glide.sync(lastBands, lastOutputGainDb, bands, outputGainDb, restored);
+    glide_->glide.sync(lastBands, lastOutputGainDb, bands, outputGainDb, restored, glideMoves_);
     lastBands = bands;
     lastOutputGainDb = outputGainDb;
     recomputeMagnitudes();

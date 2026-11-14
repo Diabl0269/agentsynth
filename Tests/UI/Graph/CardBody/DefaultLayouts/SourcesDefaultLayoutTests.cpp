@@ -419,8 +419,9 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
 
 // ---- Joined Left/Right jacks -------------------------------------------------------------------------
 // Pan, and the unison Width, are disabled (dimmed, with a tooltip saying how to get them back) while a split-block
-// module's jacks are joined, because the one jack carries a single mono leg. Splitting them, or a saved split module,
-// has them enabled; effect modules keep their raw legs and are never affected.
+// module's jacks are joined into a jack that carries a single leg: a Filter, a VCA, a poly Oscillator or Wavetable. A
+// mono-mode Oscillator or Wavetable's joined jack owns both legs, so both knobs stay live there. Splitting the jacks,
+// or a saved split module, has them enabled; effect modules keep their raw legs and are never affected.
 
 namespace {
 
@@ -446,6 +447,11 @@ JoinedCard buildJoined(CardCanvas& canvas, const juce::String& type, bool joined
 
 void setJoined(const JoinedCard& card, bool joined) {
     findParameterByID(card.module, "dualIO")->setValueNotifyingHost(joined ? 0.0f : 1.0f);
+    card.card->getCardBody()->flushPendingConditionUpdate();
+}
+
+void setPoly(const JoinedCard& card, bool poly) {
+    findParameterByID(card.module, "poly")->setValueNotifyingHost(poly ? 1.0f : 0.0f);
     card.card->getCardBody()->flushPendingConditionUpdate();
 }
 
@@ -478,34 +484,53 @@ void expectEnabled(const JoinedCard& card, const char* paramId, const char* hint
 
 } // namespace
 
-TEST(JoinedJackDisable, OscillatorPanAndWidthFollowTheJackSplit) {
-    CardCanvas canvas;
-    const auto osc = buildJoined(canvas, "Oscillator", false);
-    expectEnabled(osc, "pan", kPanHint);
-    expectEnabled(osc, "width", kWidthHint);
-    setJoined(osc, true);
-    expectDisabled(osc, "pan", kPanHint);
-    expectDisabled(osc, "width", kWidthHint);
-    setJoined(osc, false);
-    expectEnabled(osc, "pan", kPanHint);
-    expectEnabled(osc, "width", kWidthHint);
-}
-
-TEST(JoinedJackDisable, WavetableAndFilterPanFollowTheJackSplit) {
-    for (const char* type : {"Wavetable", "Filter"}) {
+// Regression test for FRO1230: Width (and Pan) were greyed on a joined Oscillator although its one jack now carries
+// both legs, so a single cable hears the spread.
+TEST(JoinedJackDisable, AMonoOscillatorOrWavetableKeepsPanAndWidthLiveOnItsJoinedJack) {
+    for (const char* type : {"Oscillator", "Wavetable"}) {
         SCOPED_TRACE(type);
         CardCanvas canvas;
         const auto card = buildJoined(canvas, type, false);
-        setJoined(card, true);
-        expectDisabled(card, "pan", kPanHint);
-        setJoined(card, false);
         expectEnabled(card, "pan", kPanHint);
+        expectEnabled(card, "width", kWidthHint);
+        setJoined(card, true);
+        expectEnabled(card, "pan", kPanHint);
+        expectEnabled(card, "width", kWidthHint);
+        // A joined poly jack still carries the left legs only: both knobs grey out, and come back with mono.
+        setPoly(card, true);
+        expectDisabled(card, "pan", kPanHint);
+        expectDisabled(card, "width", kWidthHint);
+        setPoly(card, false);
+        expectEnabled(card, "pan", kPanHint);
+        expectEnabled(card, "width", kWidthHint);
     }
 }
 
-TEST(JoinedJackDisable, ASavedJoinedModuleLoadsWithPanAndWidthDisabled) {
+TEST(JoinedJackDisable, FilterPanFollowsTheJackSplit) {
     CardCanvas canvas;
-    const auto osc = buildJoined(canvas, "Oscillator", true);
+    const auto card = buildJoined(canvas, "Filter", false);
+    setJoined(card, true);
+    expectDisabled(card, "pan", kPanHint);
+    setJoined(card, false);
+    expectEnabled(card, "pan", kPanHint);
+}
+
+TEST(JoinedJackDisable, ASavedJoinedPolyOscillatorLoadsWithPanAndWidthDisabledAndAMonoOneLive) {
+    {
+        CardCanvas canvas;
+        const auto osc = buildJoined(canvas, "Oscillator", true);
+        expectEnabled(osc, "pan", kPanHint);
+        expectEnabled(osc, "width", kWidthHint);
+    }
+    CardCanvas canvas;
+    auto module = synth::AIStateMapper::createModule("Oscillator");
+    findParameterByID(module.get(), "poly")->setValueNotifyingHost(1.0f);
+    JoinedCard osc;
+    osc.id = canvas.add(std::move(module), 0, 0);
+    osc.module = canvas.processor(osc.id);
+    findParameterByID(osc.module, "dualIO")->setValueNotifyingHost(0.0f);
+    canvas.editor.updateComponents();
+    osc.card = canvas.card(osc.id);
     expectDisabled(osc, "pan", kPanHint);
     expectDisabled(osc, "width", kWidthHint);
 }
@@ -516,7 +541,7 @@ TEST(JoinedJackDisable, AGreyedPanStaysInTheAccessibilityTreeAsDisabled) {
     if (nativeWindowsAbortHere())
         GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
     CardCanvas canvas;
-    const auto osc = buildJoined(canvas, "Oscillator", true);
+    const auto osc = buildJoined(canvas, "Filter", true);
     canvas.editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     canvas.editor.setVisible(true);
     auto* pan = joinedWidget(osc, "pan");
