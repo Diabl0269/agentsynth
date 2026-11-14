@@ -23,7 +23,10 @@ steps:
   - expect: {id: hostedLoadStatus, showing: true, within_ms: 10000}
   - expect: {id: turnPluginBackOn, showing: true, within_ms: 2000}
   - expect: {count: {prefix: "hostedKnob:", equals: 0}}
-  - wait: {}
+  - hover: {id: "card:AUDelay", x: 40, y: 80}   # the pointer comes to rest on the switched-off card: the clip needs frames that differ
+  - hover: {id: "card:AUDelay", x: 120, y: 90}
+  - hover: {id: "card:AUDelay", x: 200, y: 100}
+  - hover: {id: "card:AUDelay", x: 235, y: 150}
   - mark: {check: 1, name: switched-off}   # the card says it is switched off and shows Turn on: what the check names
   - screenshot: {name: switched-off}
   - wait: {}
