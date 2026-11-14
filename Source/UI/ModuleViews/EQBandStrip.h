@@ -39,7 +39,13 @@ public:
     /** Chip of band `band`, or null; the + chip is addChip(). */
     juce::Button* getChip(int band) const;
     juce::Button* getAddChip() const;
-    KeyedTween<juce::Rectangle<float>>& getGlideForTest() noexcept;
+    /** Tests: each chip glides on its own tween (key: band index, kAddKey for the + chip, 1000 + band for a leaving
+     * chip). */
+    KeyedTween<juce::Rectangle<float>>* getGlideForTest(int key) const noexcept;
+    void forceAnimateForTest(bool force);
+    bool isGlideAnimatingForTest() const;
+    void stepGlideForTest(double ms);
+    void completeGlideForTest();
 
     /** Test mode: `chips` (each chip's label, left to right, "7 Bell"), `selectedBand` (1-based, 0 for none) and the
      * curve's `bandCount`, `soloBand`, `soloRing`, `othersDimmed`, `freqHz`, `gainDb`, `q`. */
