@@ -346,7 +346,7 @@ are built ([module-card.md](module-card.md#the-footer-row)).
 
 ### The XY pad
 
-The Macros card's `XY` preset, or Show as `XY pad` in a macro knob's Edit Layout panel (with a Y macro choice), draws two macros as one pad. The pad moves both macros as one gesture: a mouse drag or one arrow press (Shift for fine steps) is one undo step, and each macro keeps its own MIDI Learn, automation and cables (the right-click menu has a submenu per macro). The pad maps each axis as its macro does, 0..1, or -1..1 for a macro set to Bi, and its readout under the plot shows both values; Tab reaches it and its screen-reader title names both. Showing the pad as anything else brings the Y macro back as a knob beside it. While a macro sits under a pad its own Name, Polarity and curve are set by showing it as a knob first.
+The Macros card's `XY` preset, or Show as `XY pad` in a macro knob's Edit Layout panel (with a Y macro choice), draws two macros as one pad. The pad moves both macros as one gesture: a mouse drag or one arrow press (Shift for fine, while dragging too) is one undo step, and each macro keeps its own MIDI Learn, automation and cables (the right-click menu has a submenu per macro). The pad maps each axis as its macro does, 0..1, or -1..1 for a macro set to Bi, and its readout under the plot shows both values; Tab reaches it and its screen-reader title names both. Showing the pad as anything else brings the Y macro back as a knob beside it. While a macro sits under a pad its own Name, Polarity and curve are set by showing it as a knob first.
 
 Every card has the same **footer** row: Poly (where the module has it), the Scope / Spectrum
 toggles, and an effect's output Level as a small horizontal fader. The **More** row sits under it.

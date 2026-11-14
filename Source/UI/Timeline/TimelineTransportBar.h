@@ -228,8 +228,8 @@ private:
     };
 
     // A juce::Label that turns a vertical drag into a live BPM change: ±1.0 BPM per 4 px, or
-    // ±0.1 BPM per 4 px with Cmd held (fine). Double-click-to-edit (inherited, unmodified) and
-    // drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
+    // a tenth of that with Shift held (FineDrag; Cmd does nothing extra). Double-click-to-edit (inherited, unmodified)
+    // and drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
     // mouseDown/mouseDrag/mouseUp, so overriding the latter three here does not disturb Label's
     // own editDoubleClick handling.
     class BpmDragLabel : public synth::ui::NonModalLabel {
@@ -247,7 +247,7 @@ private:
     };
 
     double currentBpmForDrag() const noexcept;
-    void applyDraggedBpm(double anchorBpm, float deltaY, bool fine);
+    void applyDraggedBpm(double anchorBpm, float deltaY);
     void refreshReadout(const synth::TransportService::PositionSnapshot& snapshot);
     static juce::String formatBpm(double bpm);
     static juce::String formatTimeSig(int numerator, int denominator);

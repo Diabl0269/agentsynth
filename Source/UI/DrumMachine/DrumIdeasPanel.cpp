@@ -1,8 +1,8 @@
 // DrumIdeasPanel: the controls and layout of the Ideas popover, and the takes it generates and plays.
 
 #include "DrumIdeasPanel.h"
-#include "UI/Layout/FocusStepWithin.h"
 #include "UI/Controls/FineDrag/FineDragSlider.h"
+#include "UI/Layout/FocusStepWithin.h"
 
 #include "DrumLanes.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"

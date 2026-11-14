@@ -49,11 +49,11 @@ juce::String CardXYPad::describe() const {
 void CardXYPad::refreshTitle() {
     setTitle("XY pad " + describe());
     setDescription("Drag, or use the arrow keys: left and right move " + xAxis_.name + ", up and down move " +
-                   yAxis_.name + ". Shift moves in fine steps.");
+                   yAxis_.name + ". Shift moves in fine steps, also while dragging.");
 }
 
 juce::String CardXYPad::getTooltip() {
-    return "XY pad: " + describe() + ". Drag, or use the arrow keys (Shift for fine steps)";
+    return "XY pad: " + describe() + ". Drag, or use the arrow keys (Shift for fine)";
 }
 
 // The plot is the square the pad's width makes, inset so the ring at an edge is not clipped; the readout sits under it.
@@ -103,6 +103,7 @@ void CardXYPad::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu() || (refusesEdit && refusesEdit()))
         return;
     dragging_ = true;
+    fine_.begin(e.position);
     if (onGestureStart)
         onGestureStart();
     moveToPixels(e.position);
@@ -110,7 +111,7 @@ void CardXYPad::mouseDown(const juce::MouseEvent& e) {
 
 void CardXYPad::mouseDrag(const juce::MouseEvent& e) {
     if (dragging_)
-        moveToPixels(e.position);
+        moveToPixels(fine_.advance(e)); // Shift slows the ring to a tenth of the pointer's travel
 }
 
 void CardXYPad::mouseUp(const juce::MouseEvent&) {

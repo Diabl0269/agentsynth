@@ -560,9 +560,9 @@ void MixerColumnComponent::resized() {
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
     // A part gap above and below keeps the pan slider off the divider over it and the peak readout under it.
     panSlider_->setBounds(row(geometry.panTop, geometry.panHeight)
-                             .reduced(8, 0)
-                             .withTrimmedTop(MixerSectionLayout::kPartGap)
-                             .withTrimmedBottom(MixerSectionLayout::kPartGap));
+                              .reduced(8, 0)
+                              .withTrimmedTop(MixerSectionLayout::kPartGap)
+                              .withTrimmedBottom(MixerSectionLayout::kPartGap));
 
     auto msRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight);
     muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(MixerSectionLayout::kMsButtonInset));

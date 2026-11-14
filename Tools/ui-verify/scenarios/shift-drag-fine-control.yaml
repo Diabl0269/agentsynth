@@ -4,6 +4,8 @@
 #   1. Starts a new project and adds an Oscillator.
 #   2. Drags the Level knob down 40 pixels: it falls from 1.00 to 0.84.
 #   3. Drags it back up to 1.00, then drags down the same 40 pixels with Shift held: it falls to 0.984, a tenth as far.
+#   4. Drags down the same 40 pixels with Command held: it falls the full 0.16 again, as a plain drag does (FRO1822:
+#      Command used to slow the knob, Shift is the only fine-drag key).
 # Every other slider and knob shares the one helper (FineDrag), listed in docs/layout/fine-drag.md; FineDragTests drives them all.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 record: true
@@ -39,3 +41,12 @@ steps:
   - wait: {}
   - expect: {id: "card:Oscillator > Level", value: 0.984000027179718, within_ms: 3000}   # a tenth of the plain 0.16
   - mark: {check: 1, name: shift-drag-down-40px}
+  - wait: {settleMs: 800}
+  - drag: {from: "card:Oscillator > Level", to: "card:Oscillator > Level", fromY: 30, toY: -10, steps: 12}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Level", value: 1.0, within_ms: 3000}
+  - wait: {settleMs: 800}
+  - drag: {from: "card:Oscillator > Level", to: "card:Oscillator > Level", fromY: 10, toY: 50, steps: 12, mods: cmd}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Level", value: 0.839999973773956, within_ms: 3000}   # as far as a plain drag, not a tenth
+  - mark: {check: 2, name: cmd-drag-down-40px}

@@ -12,6 +12,7 @@
 #include "UI/Controls/FineDrag/FineDragSlider.h"
 #include "UI/Controls/RangeSlider/RangeSlider.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardXYPad.h"
 #include "UI/Graph/ModDot/ModDotAmountBar.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include <cmath>
@@ -30,6 +31,9 @@ namespace {
 
 const juce::ModifierKeys kLeft(juce::ModifierKeys::leftButtonModifier);
 const juce::ModifierKeys kShift(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
+const juce::ModifierKeys kCmd(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+const juce::ModifierKeys kCtrl(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::ctrlModifier);
+const juce::ModifierKeys kAlt(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::altModifier);
 
 juce::MouseEvent eventAt(juce::Component& comp, juce::Point<float> pos, juce::Point<float> down,
                          juce::ModifierKeys mods, bool dragged) {
@@ -45,6 +49,7 @@ struct Probe {
     std::function<double(juce::ModifierKeys, float dx, float dy)> run;
     float dx = 0.0f, dy = 0.0f;
     double maxRatio = 0.15; // an angle drag is not linear in the pointer: it only has to be well under the plain one
+    bool cmdClickResets = false; // Cmd-click resets the control, so a Cmd drag is not a drag
 };
 
 double slide(juce::Slider& s, juce::ModifierKeys mods, juce::Point<float> start, float dx, float dy) {
@@ -93,7 +98,7 @@ std::vector<Probe> probes() {
                        f.setValue(0.5, juce::dontSendNotification);
                        return slide(f, mods, {f.travelBounds().getCentreX(), 60.0f}, 0.0f, ddy);
                    },
-                   0, -40});
+                   0, -40, 0.15, true});
     all.push_back({"CardFader horizontal",
                    [](juce::ModifierKeys mods, float ddx, float) {
                        synth::ui::CardFader f(synth::ui::CardFader::Orientation::Horizontal);
@@ -102,7 +107,21 @@ std::vector<Probe> probes() {
                        f.setValue(0.5, juce::dontSendNotification);
                        return slide(f, mods, {f.travelBounds().getCentreX(), f.travelBounds().getCentreY()}, ddx, 0.0f);
                    },
-                   60, 0});
+                   60, 0, 0.15, true});
+    all.push_back({"CardXYPad",
+                   [](juce::ModifierKeys mods, float ddx, float) {
+                       synth::ui::CardXYPad pad;
+                       pad.setSize(synth::ui::CardXYPad::kSize, synth::ui::CardXYPad::kHeight);
+                       pad.setValues(0.2f, 0.5f);
+                       const auto start = pad.pixelsFor(0.2f, 0.5f);
+                       pad.mouseDown(eventAt(pad, start, start, mods, false));
+                       const double before = pad.getX();
+                       pad.mouseDrag(eventAt(pad, start + juce::Point<float>(ddx, 0.0f), start, mods, true));
+                       const double moved = pad.getX() - before;
+                       pad.mouseUp(eventAt(pad, start, start, mods, true));
+                       return moved;
+                   },
+                   40, 0});
     all.push_back({"ModDotAmountBar",
                    [](juce::ModifierKeys mods, float ddx, float) {
                        synth::ui::ModDotAmountBar bar;
@@ -214,6 +233,7 @@ const std::vector<ValueDrag> kValueDrags = {
     {"FineDragSlider", "Source/UI/Controls/FineDrag/FineDragSlider.h", kTable},
     {"CardKnobSlider", "Source/UI/Graph/ModuleComponent/CardKnobSlider.h", kTable},
     {"CardFader", "Source/UI/Graph/CardWidgets/CardFader.cpp", kTable},
+    {"CardXYPad", "Source/UI/Graph/CardWidgets/CardXYPad.cpp", kTable},
     {"ModDotAmountBar", "Source/UI/Graph/ModDot/ModDotAmountBar.cpp", kTable},
     {"HueBar", "Source/UI/Chrome/ColourPickerFields.h", kTable},
     {"SaturationBrightnessField", "Source/UI/Chrome/ColourPickerFields.h", kTable},
@@ -288,6 +308,8 @@ const std::map<std::string, std::string> kNotAValue = {
     {"ModuleLibraryComponent", "starts a drag-and-drop"},
     {"SoundBrowserComponent", "starts a drag-and-drop"},
     {"DrawPenButton", "a drag only cancels the press-and-hold timer"},
+    {"SamplerKeyStrip", "plays the key under the pointer as the pointer slides, nothing carries a value"},
+    {"SamplerMapBlocks", "plays the key under the pointer as the pointer slides, nothing carries a value"},
     {"MixerColourDot", kForward},
     {"SwatchButton", kForward},
     {"ContextMenuForwardingLabel", kForward},
@@ -306,6 +328,25 @@ bool testExists(const std::string& fullName) {
 }
 
 } // namespace
+
+// Shift is the only fine-drag key: juce::Slider swaps to a slow velocity drag while Cmd, Ctrl or Alt is
+// held, so Command slowed the Level knob and the mod-matrix amount while the mixer fader needed Shift.
+TEST(FineDragEveryControl, CommandControlAndAltNeverSlowADragOnAnyValueControl) {
+    for (const auto& probe : probes()) {
+        const double plain = std::abs(probe.run(kLeft, probe.dx, probe.dy));
+        ASSERT_GT(plain, 0.02) << probe.name << ": the plain drag barely moved it, the probe is wrong";
+        for (const auto& [key, mods] :
+             {std::pair<const char*, juce::ModifierKeys>{"Cmd", kCmd}, {"Ctrl", kCtrl}, {"Alt", kAlt}}) {
+            if (mods.isPopupMenu())
+                continue; // Ctrl-click is the right click on a Mac: a context menu, not a drag
+            if (probe.cmdClickResets && mods.isCommandDown())
+                continue; // Cmd-click resets to the default (kept), so nothing drags
+            const double held = std::abs(probe.run(mods, probe.dx, probe.dy));
+            EXPECT_NEAR(held, plain, plain * 0.02) << probe.name << ": " << key << " changed the drag (" << held
+                                                   << " against " << plain << " plain), only Shift may";
+        }
+    }
+}
 
 TEST(FineDragEveryControl, EveryClassThatOverridesMouseDragSaysWhetherShiftSlowsIt) {
     const auto found = synth::test::source_scan::classesOverridingMouseDrag();
@@ -365,5 +406,30 @@ TEST(FineDragEveryControl, EveryJuceSliderIsAFineDragSlider) {
             if (!ownDrag.count((*it)[1]))
                 ADD_FAILURE() << file << ": " << (*it)[1]
                               << " derives from juce::Slider directly - derive from FineDragSlider";
+    }
+}
+
+TEST(FineDragEveryControl, NoSliderSwapsToJucesVelocityDragOnACommandControlOrAltKey) {
+    // FineDragSlider switches juce::Slider's default key swap off in its constructors; nothing may switch it back on.
+    const auto texts = synth::test::source_scan::sourceTexts();
+    const auto it = texts.find("Source/UI/Controls/FineDrag/FineDragSlider.h");
+    ASSERT_NE(it, texts.end());
+    EXPECT_NE(it->second.find("setVelocityModeParameters(1.0, 1, 0.0, false)"), std::string::npos)
+        << "FineDragSlider must turn off juce::Slider's Cmd/Ctrl/Alt velocity-mode swap";
+    EXPECT_NE(it->second.find("noModifierSwapsDragMode(); }"), std::string::npos) << "the default constructor";
+    for (const auto& [file, text] : texts)
+        if (file != "Source/UI/Controls/FineDrag/FineDragSlider.h" &&
+            (text.find("setVelocityBasedMode(true)") != std::string::npos ||
+             text.find("setModifierKeys") != std::string::npos))
+            ADD_FAILURE() << file << ": turns on a velocity or modifier-key drag mode, Shift is the only fine-drag key";
+}
+
+TEST(FineDragEveryControl, TheSliderConstructorWithAStyleAlsoIgnoresTheModifierSwap) {
+    FineDragSlider s(juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+    s.setRange(0.0, 1.0, 0.0);
+    s.setSize(100, 100);
+    for (const auto& mods : {kLeft, kCmd, kCtrl, kAlt}) {
+        s.setValue(0.5, juce::dontSendNotification);
+        EXPECT_NEAR(slide(s, mods, {50.0f, 50.0f}, 0.0f, -40.0f), 40.0 / 250.0, 0.01);
     }
 }

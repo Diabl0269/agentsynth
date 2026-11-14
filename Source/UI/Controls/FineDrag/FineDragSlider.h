@@ -13,9 +13,11 @@ namespace synth::ui {
 
 class FineDragSlider : public juce::Slider {
 public:
-    FineDragSlider() = default;
+    FineDragSlider() { noModifierSwapsDragMode(); }
     FineDragSlider(SliderStyle style, TextEntryBoxPosition textBox)
-        : juce::Slider(style, textBox) {}
+        : juce::Slider(style, textBox) {
+        noModifierSwapsDragMode();
+    }
 
     void mouseDown(const juce::MouseEvent& e) override {
         fine_.begin(e.position);
@@ -25,6 +27,10 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override { juce::Slider::mouseDrag(fine_.scaled(e)); }
 
 private:
+    // juce::Slider swaps to a velocity-based (slow) drag while Cmd, Ctrl or Alt is held. Shift is the only fine-drag
+    // key, so turn that off: sensitivity 1, threshold 1, offset 0, and keyOverridesVelocity false.
+    void noModifierSwapsDragMode() { setVelocityModeParameters(1.0, 1, 0.0, false); }
+
     FineDrag fine_;
 };
 
