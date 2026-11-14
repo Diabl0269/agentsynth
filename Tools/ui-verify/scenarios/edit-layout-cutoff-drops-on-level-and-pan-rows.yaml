@@ -1,0 +1,64 @@
+# In Edit Layout on the Filter card, the big Cutoff knob could be dropped next to Resonance but not into the row
+# that holds Level (with Key Track) or Pan (with Mix): it landed on a row of its own below. A row of two flush knob
+# boxes was offered the third one with an 8 px gap, which did not fit the card's width, so it wrapped.
+#
+# What a user does: right-clicks the Filter card's title, picks Edit Layout..., drags Cutoff onto the Level row and
+# lets go: Cutoff sits on that row after Level, all three in one row. Cmd+Z puts it back. Same onto the Pan row.
+# Dragged next to Resonance it still joins that row. Esc mid-drag puts everything back.
+record: true
+save_project: FRO1761 Filter card
+steps:
+  - copyFixture: {name: "FRO1761 Filter card.agsproj"}
+  - openProject: {path: "${SCRATCH}/FRO1761 Filter card.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  # The card menu: Copy, Duplicate, Save as Snippet..., Bypass Module, Edit Layout... (disabled items are skipped).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - screenshot: {name: editor-open}
+  # Check 1: Cutoff (554, 338) dragged to the Level row (Key Track, Level at y 520) and dropped after Level.
+  - mouseDown: {id: window, x: 554, y: 338}
+  - mouseMoveHeld: {id: window, x: 590, y: 400}
+  - mouseMoveHeld: {id: window, x: 660, y: 480}
+  - mouseMoveHeld: {id: window, x: 700, y: 520}
+  - mouseUp: {id: window, x: 700, y: 520}
+  - wait: {}
+  - mark: {check: 1, name: cutoff-joins-the-level-row}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: cutoff-level-undone}
+  # Check 2: the same onto the Pan row (Mix, Pan at y 596).
+  - mouseDown: {id: window, x: 554, y: 338}
+  - mouseMoveHeld: {id: window, x: 590, y: 420}
+  - mouseMoveHeld: {id: window, x: 660, y: 560}
+  - mouseMoveHeld: {id: window, x: 700, y: 596}
+  - mouseUp: {id: window, x: 700, y: 596}
+  - wait: {}
+  - mark: {check: 2, name: cutoff-joins-the-pan-row}
+  - key: {keys: cmd+z}
+  - wait: {}
+  # Check 3: next to Resonance (Resonance, Drive at y 425) it still works.
+  - mouseDown: {id: window, x: 554, y: 338}
+  - mouseMoveHeld: {id: window, x: 600, y: 380}
+  - mouseMoveHeld: {id: window, x: 690, y: 425}
+  - mouseUp: {id: window, x: 690, y: 425}
+  - wait: {}
+  - mark: {check: 3, name: cutoff-joins-the-resonance-row}
+  - key: {keys: cmd+z}
+  - wait: {}
+  # Check 4: Esc mid-drag puts everything back and writes nothing.
+  - mouseDown: {id: window, x: 554, y: 338}
+  - mouseMoveHeld: {id: window, x: 620, y: 450}
+  - mouseMoveHeld: {id: window, x: 700, y: 520}
+  - key: {keys: escape}
+  - wait: {}
+  - mark: {check: 4, name: escape-puts-everything-back}
+  - mouseUp: {id: window, x: 700, y: 520}
+  - wait: {}
+  - screenshot: {name: end}
