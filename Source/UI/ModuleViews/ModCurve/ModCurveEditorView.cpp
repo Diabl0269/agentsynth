@@ -12,6 +12,9 @@ ModCurveEditorView::ModCurveEditorView(std::shared_ptr<ModCurveEditTarget> targe
     editor_->setTitle("Curve editor");
     // The wave spans the whole width, with no headroom to the right of its last point.
     editor_->setVisibleRangeOverride(1.0);
+    // Two dots on one x (snap puts them there) draw as a straight step, never a plateau: a plateau's fixed width would
+    // take room from every other cell, so the grid would shrink and the dots would drift off its lines.
+    editor_->setZeroSegmentPx(0.0f);
     // The x axis is the source's level, not time.
     editor_->setTimeLabelFormatter([](double) { return juce::String(); });
     addAndMakeVisible(*editor_);
