@@ -11,5 +11,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentEqBandRowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQCurveBandsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQDotNumberCentringTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQBandTypeGlyphSurfacesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/EQCurveShortcutTests.cpp
 )

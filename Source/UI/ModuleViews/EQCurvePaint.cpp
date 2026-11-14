@@ -6,6 +6,7 @@
 
 #include "EQBandKinds.h"
 #include "Modules/VisualBuffer.h"
+#include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/CentredLabel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
@@ -17,6 +18,7 @@ using synth::ui::FrequencyGrid;
 namespace {
 constexpr float kReadoutHeight = 16.0f;
 constexpr float kReadoutGap = 8.0f;
+constexpr float kReadoutGlyphPillW = 26.0f;
 } // namespace
 
 juce::Colour EQCurveComponent::dotColour(int band) const {
@@ -170,10 +172,9 @@ void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float 
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto& snap = dotBands_[(size_t)band];
     const juce::Font font(10.0f);
-    const auto typeName = synth::ui::eqBandTypeName(snap.type);
     const auto values = FrequencyGrid::formatHzLabel(snap.freqHz) + "  " + juce::String(snap.gainDb, 1) + "dB  Q" +
                         juce::String(snap.q, 2);
-    const float typeW = juce::GlyphArrangement::getStringWidth(font, typeName) + 12.0f;
+    const float typeW = kReadoutGlyphPillW;
     const float valuesW = juce::GlyphArrangement::getStringWidth(font, values) + 8.0f;
     const float total = typeW + valuesW + 4.0f;
 
@@ -194,9 +195,15 @@ void EQCurveComponent::paintReadout(juce::Graphics& g, int band, float w, float 
     const juce::Rectangle<float> pill(x + 2.0f, y + 2.0f, typeW, kReadoutHeight - 4.0f);
     g.setColour(dotColour(band).withAlpha(alpha));
     g.fillRoundedRectangle(pill, pill.getHeight() * 0.5f);
+    // The type is a response-curve glyph; while the type morphs the old one fades out as the new one fades in.
+    const auto glyphArea = juce::Rectangle<float>(14.0f, 10.0f).withCentre(pill.getCentre());
+    const auto glyphInk = synth::ui::eqBandKindInk(colors).withAlpha(alpha);
+    const float morph = juce::jlimit(0.0f, 1.0f, typeMorph_);
+    if (morph > 0.0f && morphFromType_[(size_t)band] != snap.type)
+        synth::ui::paintEqBandTypeGlyph(g, glyphArea, glyphInk.withMultipliedAlpha(morph),
+                                        morphFromType_[(size_t)band]);
+    synth::ui::paintEqBandTypeGlyph(g, glyphArea, glyphInk.withMultipliedAlpha(1.0f - morph), snap.type);
     g.setFont(font);
-    g.setColour(synth::ui::eqBandKindInk(colors).withAlpha(alpha));
-    g.drawText(typeName, pill.toNearestInt(), juce::Justification::centred, false);
     g.setColour(colors.textPrimary.withAlpha(alpha));
     g.drawText(values, juce::Rectangle<float>(x + typeW + 4.0f, y, valuesW, kReadoutHeight).toNearestInt(),
                juce::Justification::centred, false);

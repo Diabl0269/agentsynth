@@ -4,6 +4,8 @@
 
 #include "EQBandKinds.h"
 #include "ModuleViewAccessibility.h"
+#include "UI/Layout/ActionGlyphs.h"
+#include "UI/Layout/FadeAmount.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -17,6 +19,10 @@ constexpr int kChipH = 22;
 constexpr int kGap = 6;
 constexpr int kChipPad = 10;
 constexpr float kOffAlpha = 0.35f;
+constexpr float kGlyphW = 14.0f;
+constexpr float kGlyphH = 10.0f;
+constexpr int kNumberGap = 4;
+constexpr float kChipFont = 11.0f;
 } // namespace
 
 // One tween per chip key: a KeyedTween runs ONE clock for all its keys and a retarget restarts it, so chips sharing a
@@ -58,8 +64,9 @@ struct EQBandStrip::Glide {
     bool forceAnimate = false;
 };
 
-// One band's chip (or the + chip, band -1): its label is "7 Bell", tinted by the band's kind. The selected chip is
-// solid with an accent outline; an off band that is still selected is drawn at 35%.
+// One band's chip (or the + chip, band -1): its number then the type's response-curve glyph (the label "7 Bell" is
+// what test mode reports; the tooltip and the screen-reader title name the type), tinted by the band's kind. The
+// selected chip is solid with an accent outline; an off band that is still selected is drawn at 35%.
 class EQBandStrip::Chip : public juce::Button {
 public:
     explicit Chip(int band)
@@ -67,6 +74,7 @@ public:
         , band_(band) {
         setWantsKeyboardFocus(true);
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        glyphFade_.snapTo(true);
     }
 
     int band() const noexcept { return band_; }
@@ -78,6 +86,11 @@ public:
     void setContent(const juce::String& label, synth::eq::BandType type, bool on, bool selected) {
         if (label == label_ && type == type_ && on == on_ && selected == getToggleState())
             return;
+        if (type != type_ && !label_.isEmpty()) { // the old glyph fades out as the new one fades in
+            fromType_ = type_;
+            glyphFade_.snapTo(false);
+            glyphFade_.setShown(true);
+        }
         label_ = label;
         type_ = type;
         on_ = on;
@@ -86,8 +99,20 @@ public:
     }
 
     int idealWidth() const {
-        return juce::GlyphArrangement::getStringWidthInt(juce::Font(11.0f), label_) + 2 * kChipPad;
+        if (band_ < 0)
+            return juce::GlyphArrangement::getStringWidthInt(juce::Font(kChipFont), label_) + 2 * kChipPad;
+        return juce::GlyphArrangement::getStringWidthInt(juce::Font(kChipFont), numberText()) + kNumberGap +
+               (int)kGlyphW + 2 * kChipPad;
     }
+
+    /** Tests: the glyph's box in the chip, and how far the new type's glyph has faded in (1 at rest). */
+    juce::Rectangle<float> glyphArea() const {
+        const float numberW = (float)juce::GlyphArrangement::getStringWidthInt(juce::Font(kChipFont), numberText());
+        const float total = numberW + (float)kNumberGap + kGlyphW;
+        const float x = ((float)getWidth() - total) * 0.5f + numberW + (float)kNumberGap;
+        return juce::Rectangle<float>(kGlyphW, kGlyphH).withCentre({x + kGlyphW * 0.5f, (float)getHeight() * 0.5f});
+    }
+    float glyphFadeValue() const noexcept { return glyphFade_.value(); }
 
     void paintButton(juce::Graphics& g, bool over, bool) override {
         const auto& colors = synth::theme::themeOf(*this).colors;
@@ -101,9 +126,22 @@ public:
         g.fillRoundedRectangle(area, radius);
         g.setColour((selected ? colors.accent : tint.withAlpha(0.7f)).withMultipliedAlpha(alpha));
         g.drawRoundedRectangle(area, radius, selected ? 2.0f : 1.0f);
-        g.setColour((selected ? eqBandKindInk(colors) : colors.textPrimary).withMultipliedAlpha(alpha));
-        g.setFont(juce::Font(11.0f));
-        g.drawText(label_, getLocalBounds(), juce::Justification::centred, false);
+        const auto ink = (selected ? eqBandKindInk(colors) : colors.textPrimary).withMultipliedAlpha(alpha);
+        g.setColour(ink);
+        g.setFont(juce::Font(kChipFont));
+        if (band_ < 0) {
+            g.drawText(label_, getLocalBounds(), juce::Justification::centred, false);
+        } else {
+            const float numberW = (float)juce::GlyphArrangement::getStringWidthInt(juce::Font(kChipFont), numberText());
+            const float total = numberW + (float)kNumberGap + kGlyphW;
+            const float x = ((float)getWidth() - total) * 0.5f;
+            g.drawText(numberText(), juce::Rectangle<float>(x, 0.0f, numberW, (float)getHeight()),
+                       juce::Justification::centredLeft, false);
+            const float fade = glyphFade_.value();
+            if (fade < 1.0f)
+                paintEqBandTypeGlyph(g, glyphArea(), ink.withMultipliedAlpha(1.0f - fade), fromType_);
+            paintEqBandTypeGlyph(g, glyphArea(), ink.withMultipliedAlpha(fade), type_);
+        }
         paintFocusRing(g, getLocalBounds().toFloat(), *this, radius);
     }
 
@@ -122,9 +160,13 @@ public:
     }
 
 private:
+    juce::String numberText() const { return juce::String(band_ + 1); }
+
     int band_;
     juce::String label_;
     synth::eq::BandType type_ = synth::eq::BandType::Peak;
+    synth::eq::BandType fromType_ = synth::eq::BandType::Peak;
+    FadeAmount glyphFade_{*this};
     bool on_ = true;
 };
 
