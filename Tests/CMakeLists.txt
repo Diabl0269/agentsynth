@@ -323,6 +323,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorStripOutputDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorStripInputDualIOTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
+    UI/Graph/ModuleComponent/DualIOJackGlideTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
     UI/Graph/GraphEditor/GraphEditorMinimapSlideTests.cpp

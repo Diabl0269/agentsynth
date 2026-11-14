@@ -68,6 +68,8 @@ std::unique_ptr<Surface> makeSequencerKey();
 /** A section moved by covering another: its clips in the clip lane, and its block on the Sections strip. */
 std::unique_ptr<Surface> makeSectionMoveClips();
 std::unique_ptr<Surface> makeSectionStripBlock();
+/** A toggle that changes a card's jack layout: Dual I/O splitting a Channel Strip's Audio jack into Left and Right. */
+std::unique_ptr<Surface> makeDualIOSplit();
 
 /** Clip contents: the notes inside a MIDI clip whose edge was dragged, one entry per sizing mode and edge in which the
  *  notes change place (UndoGlideSurfacesClipContents.cpp builds them by looping over every mode and both edges). */

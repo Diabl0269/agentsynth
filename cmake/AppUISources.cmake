@@ -577,8 +577,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentJackLayout.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentJackMemo.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
     Source/UI/Graph/PortPanel/PortConnector.h
@@ -998,3 +996,4 @@ include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag gr
 include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Morph Shapes card to APPUI_SOURCES
 include(cmake/ModDotSources.cmake) # appends the mod dot panel and the modulation row parts to APPUI_SOURCES
 include(cmake/SharedPaintersSources.cmake) # appends the shared painters (action glyphs, centred labels) to APPUI_SOURCES
+include(cmake/CardJackSources.cmake) # appends a card's jack layout and the Dual I/O jack glide to APPUI_SOURCES

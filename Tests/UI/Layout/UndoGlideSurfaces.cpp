@@ -274,6 +274,7 @@ const std::vector<Entry>& surfaces() {
         {"EQ mixer thumbnail curve", true, [] { return makeEqMixerThumbnail(); }},
         {"Drum Kit pad knob", true, [] { return makeDrumPadKnob(); }},
         {"Sequencer key bars", false, [] { return makeSequencerKey(); }, true},
+        {"Dual I/O jack split", false, [] { return makeDualIOSplit(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };
