@@ -132,17 +132,25 @@ TEST_F(ChannelFlowTest, UnisonWidthSurvivesAnInstrumentTrack) {
             for (const bool split : {false, true}) {
                 if (poly && !split)
                     continue;
-                const std::string n =
-                    std::string(type) + (poly ? " poly" : " mono") + (split ? " split" : " collapsed");
-                Track t(type, poly, split);
-                ASSERT_NE(t.instrument, nullptr) << n;
-                ASSERT_NE(t.trackIn, nullptr) << n;
-                setParam(*t.instrument, "unison", 7.0f);
-                setParam(*t.instrument, "width", 1.0f);
-                const Legs legs = t.render();
-                ASSERT_GT(rms(legs.left), 0.01) << n << ": audible";
-                std::printf("[measured] %s unison 7 width 100%%: correlation %.3f\n", n.c_str(), correlation(legs));
-                EXPECT_LT(correlation(legs), 0.9) << n << ": the track keeps the stack's spread";
+                for (const int unison : {3, 7}) {
+                    const std::string n = std::string(type) + (poly ? " poly" : " mono") +
+                                          (split ? " split" : " collapsed") + " unison " + std::to_string(unison);
+                    Track t(type, poly, split);
+                    ASSERT_NE(t.instrument, nullptr) << n;
+                    ASSERT_NE(t.trackIn, nullptr) << n;
+                    setParam(*t.instrument, "unison", (float)unison);
+                    setParam(*t.instrument, "width", 1.0f);
+                    const Legs legs = t.render();
+                    ASSERT_GT(rms(legs.left), 0.01) << n << ": audible";
+                    std::vector<float> mid(legs.left.size()), side(legs.left.size());
+                    for (size_t i = 0; i < mid.size(); ++i) {
+                        mid[i] = 0.5f * (legs.left[i] + legs.right[i]);
+                        side[i] = 0.5f * (legs.left[i] - legs.right[i]);
+                    }
+                    std::printf("[measured] %s width 100%%: correlation %.3f, side/mid %.1f dB\n", n.c_str(),
+                                correlation(legs), toDb(rms(side) / (rms(mid) + 1e-12)));
+                    EXPECT_LT(correlation(legs), 0.9) << n << ": the track keeps the stack's spread";
+                }
             }
         }
     }
