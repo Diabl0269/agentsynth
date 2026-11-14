@@ -38,13 +38,22 @@ the rebuild by uuid, so every press copies it again.
 
 ## Select, delete and move strips
 
-A strip fed by exactly one track shares the timeline's selection (`TimelinePanelComponent`'s `TrackSelectionModel`,
-reached through `MixerPanelComponent::trackSelectionHost`, which `MainComponent` wires), so a selected strip and its
-timeline row light together. A press on the header selects the track like a row does: plain selects, **Cmd** toggles,
+A strip fed by exactly one track selects through the timeline's selection model (`TimelinePanelComponent`'s
+`TrackSelectionModel`, reached through `MixerPanelComponent::trackSelectionHost`, which `MainComponent` wires). A press
+on the strip itself selects the track like a row does: its header and name, its meter and its empty area all count
+(`MixerColumnComponent::isSelectionSurface`), a fader, knob, button or row does not. Plain selects, **Cmd** toggles,
 **Shift** extends from the anchor; a Cmd or Shift press only edits the selection and does not also pick the macro on
-the canvas. The arrow keys carry the selection with the focus, and **Cmd+Space** toggles the focused strip's track. A
-selected strip is washed with the accent at 14 percent (`MixerColumnComponent::setTrackSelected`), over its border. Buses,
-Direct, Master and a strip several tracks feed are not selectable.
+the canvas. The same press works in the detached mixer window, which shows the same selection. The arrow keys carry
+the selection with the focus, **Shift+Left / Shift+Right** extend it one strip at a time from the anchor (the strip the
+key started on) and the other way shrinks it back, as Shift+Up / Shift+Down do on the timeline's rows (a fixed chord;
+the pan keys took Option+Shift+arrows for it), and **Cmd+Space** toggles the focused strip's track. A selected strip is
+washed with the accent at 14 percent (`MixerColumnComponent::setTrackSelected`), over its border.
+
+The wash belongs to the strips' own selection: it shows only while the selection was last set from a strip
+(`TimelinePanelComponent::isTrackSelectionFromMixer`), so a row picked on the timeline washes no strip. The model is
+still the one shared set; the timeline's pick just is not "selected in the mixer", and a delete or move from a strip then
+acts on that strip's track alone (`claimTrackSelection`). Buses, Direct, Master and a strip several tracks feed are not
+selectable.
 
 **Cmd+Backspace** (`timelineDeleteFocusedTrack`) and the header menu's **Delete Track** / **Delete N Tracks** delete the
 selected set, or just the focused strip's track when it is not in the set. They go through `deleteTrackAfterConfirm`:
@@ -53,7 +62,7 @@ the same question (Remove or Keep macro when one would go) and the same "ask bef
 **Option+Left / Option+Right** moves the set one place (fixed chords, not rebindable). The order change is the
 timeline's own (`TimelineDoc::moveTrack` inside one `performTrackEdit`, one undo step), and the strips glide with the
 column drag's `ReorderDragAnimator`; under reduced motion they jump. At the edge nothing moves, the key is still taken.
-A detached mixer window picks up the selection state at its next rebuild.
+The detached mixer window follows every selection change as the docked one does.
 
 ## Colour
 
@@ -65,7 +74,7 @@ rebind. The dot itself takes Return only, so after a click lands on it Space sti
 
 ## Pan and hide
 
-**Shift+Left / Shift+Right** (`mixerPanLeft`, `mixerPanRight`) move the focused strip's pan a tenth of the way left or
+**Option+Shift+Left / Option+Shift+Right** (`mixerPanLeft`, `mixerPanRight`; Shift+arrows extend the strip selection, [below](#select-delete-and-move-strips)) move the focused strip's pan a tenth of the way left or
 right per press, clamped at either end, through the pan knob itself (`MixerColumnComponent::nudgePan`), so each press is
 one undo step, as a click on the knob is. Master's pan is its pan law and Direct has none, so the keys bubble there.
 **H** (`mixerToggleChannelHidden`) hides the focused column (not Master) as one undo step and hands the focus to its

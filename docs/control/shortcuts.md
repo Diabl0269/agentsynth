@@ -561,7 +561,7 @@ thickness the same way a track-header row does. Clicks focus a column too: [stri
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
 | Down | Move into the focused column's insert, send and EQ rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled. Tab stays the app-wide region cycle |
 | E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
-| C, Shift+Left / Shift+Right, H | The focused strip's colour picker (`mixerOpenColour`), its pan a tenth left or right per press, one undo step each (`mixerPanLeft`, `mixerPanRight`), and hiding the column, the focus moving to its neighbour (`mixerToggleChannelHidden`; in the side pane's list H shows or hides the cursor row); [strip focus](../mixer/strip-focus.md#colour) |
+| C, Option+Shift+Left / Option+Shift+Right, H | The focused strip's colour picker (`mixerOpenColour`), its pan a tenth left or right per press, one undo step each (`mixerPanLeft`, `mixerPanRight`), and hiding the column, the focus moving to its neighbour (`mixerToggleChannelHidden`; in the side pane's list H shows or hides the cursor row); [strip focus](../mixer/strip-focus.md#colour) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (`Source/CLAUDE.md`'s mixer-solo invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
@@ -789,7 +789,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
 | Down | Down | Enter Mixer Insert, Send and EQ Rows (`mixerEnterRows`; an install that kept the old Tab moves to Down once) |
 | Shift+Up / Shift+Down | same | Raise / Lower Mixer Fader (`mixerNudgeFaderUp`, `mixerNudgeFaderDown`); Alt added: 0.1 dB |
-| E / C / H, Shift+Left / Shift+Right | same | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) / Hide or Show Mixer Channel (`mixerToggleChannelHidden`), Pan Mixer Channel Left / Right (`mixerPanLeft`, `mixerPanRight`) |
+| E / C / H, Option+Shift+Left / Option+Shift+Right | same | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) / Hide or Show Mixer Channel (`mixerToggleChannelHidden`), Pan Mixer Channel Left / Right (`mixerPanLeft`, `mixerPanRight`) |
 | B, Alt+Up / Alt+Down | same | Bypass Mixer Send or Insert (`mixerToggleRowBypass`), Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
 | Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |
 

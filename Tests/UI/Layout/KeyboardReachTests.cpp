@@ -101,11 +101,11 @@ bool timelineReaches(juce::Component& control, juce::Component& root) {
 }
 
 // The mixer panel is one focusable leaf: Left/Right pick a column, Shift+Up/Down nudge its fader, M and S mute and solo
-// it, C opens its colour picker, Shift+Left/Right pan it, H hides it (and shows or hides the side pane's cursor row),
-// Return selects it on the canvas and the section keys toggle the Inserts, Sends and EQ rows. Down walks into the
-// column's insert, send and EQ rows (Return, B and the arrows act on the focused row): a row's controls are reached by
-// really walking there. The rest of the top bar (toolbar, zones pane filter and chips, master pan law) is the key
-// ring's stops.
+// it, C opens its colour picker, Option+Shift+Left/Right pan it, Shift+Left/Right extend the strip selection, H hides
+// it (and shows or hides the side pane's cursor row), Return selects it on the canvas and the section keys toggle the
+// Inserts, Sends and EQ rows. Down walks into the column's insert, send and EQ rows (Return, B and the arrows act on
+// the focused row): a row's controls are reached by really walking there. The rest of the top bar (toolbar, zones pane
+// filter and chips, master pan law) is the key ring's stops.
 bool mixerKeysReach(juce::Component& control, juce::Component& root) {
     auto& panel = static_cast<synth::ui::MixerPanelComponent&>(root);
     const auto stops = panel.getTopBarRingForTest().getStops();

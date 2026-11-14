@@ -352,10 +352,28 @@ void MixerPanelComponent::pressStripHeaderForTest(int index, juce::ModifierKeys 
     clickFocus_.mouseUp(make());
 }
 
-// A press on a strip's header: a plain press selects its track, Cmd/Ctrl toggles it, Shift extends (the timeline's
-// rules). A modified press only edits the selection, so the release does not also pick the macro on the canvas. A
-// right-press keeps a selection it lands in and otherwise selects the strip, like the timeline row's menu.
-void MixerPanelComponent::selectFromHeaderPress(const juce::MouseEvent& e, int index) {
+void MixerPanelComponent::pressStripAtForTest(int index, juce::Point<int> localPoint, juce::ModifierKeys mods) {
+    auto* column = getStripColumnForTest(index);
+    if (column == nullptr)
+        return;
+    auto* target = column->getComponentAt(localPoint); // the part of the strip a real press there lands on
+    if (target == nullptr)
+        target = column;
+    const auto at = target->getLocalPoint(column, localPoint).toFloat();
+    const auto make = [&] {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, target, target, juce::Time::getCurrentTime(), at, juce::Time::getCurrentTime(), 1,
+                                false);
+    };
+    clickFocus_.mouseDown(make());
+    clickFocus_.mouseUp(make());
+}
+
+// A press on a strip itself (its header, meter or empty area): a plain press selects its track, Cmd/Ctrl toggles it,
+// Shift extends (the timeline's rules). A modified press only edits the selection, so the release does not also pick
+// the macro on the canvas. A right-press keeps a selection it lands in and otherwise selects the strip, like the
+// timeline row's menu.
+void MixerPanelComponent::selectFromStripPress(const juce::MouseEvent& e, int index) {
     if (!selectionHost().select || !juce::isPositiveAndBelow(index, (int)columnEntries_.size()))
         return;
     const auto& entry = columnEntries_[(size_t)index];
@@ -392,6 +410,37 @@ bool MixerPanelComponent::toggleFocusedTrackSelection() {
     return true;
 }
 
+// A strip's track becomes the mixer's own selection when it is not part of one yet (a row picked on the timeline is no
+// selection of the strips), so a delete or move from the strip acts on what the strips show.
+void MixerPanelComponent::claimTrackSelection(synth::TrackId track) {
+    if (selectionHost().select && !(selectionHost().isSelected && selectionHost().isSelected(track)))
+        selectionHost().select(track, juce::ModifierKeys());
+}
+
+// Shift+Left / Shift+Right: the focus steps to the next strip fed by one track and the selection extends from its
+// anchor to it, as Shift+Up / Shift+Down do on the timeline's rows, so the other way shrinks it back. The key is taken
+// on any such strip, even at the edge.
+bool MixerPanelComponent::extendStripSelection(int direction) {
+    if (!selectionHost().select || !juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size()))
+        return false;
+    const auto& current = columnEntries_[(size_t)focusedColumnIndex_];
+    const auto currentTrack = singleTrackOf(current.feedingTracks, current.kind == ColumnEntry::Kind::Strip);
+    if (!currentTrack.isValid())
+        return false;
+    for (int i = focusedColumnIndex_ + direction; juce::isPositiveAndBelow(i, (int)columnEntries_.size());
+         i += direction) {
+        const auto& entry = columnEntries_[(size_t)i];
+        const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip);
+        if (!track.isValid())
+            continue;
+        claimTrackSelection(currentTrack); // the anchor is the strip the key started on
+        selectionHost().select(track, juce::ModifierKeys(juce::ModifierKeys::shiftModifier));
+        setFocusedColumnIndex(i);
+        return true;
+    }
+    return true;
+}
+
 // Cmd+Backspace: the host asks (its question, its setting) and deletes the selected set, or the focused strip's track
 // when it is not one of them, in one undo step.
 bool MixerPanelComponent::deleteFocusedTracks() {
@@ -401,6 +450,7 @@ bool MixerPanelComponent::deleteFocusedTracks() {
     const auto track = singleTrackOf(entry.feedingTracks, entry.kind == ColumnEntry::Kind::Strip);
     if (!track.isValid())
         return false;
+    claimTrackSelection(track);
     selectionHost().deleteTracks(track, false);
     return true;
 }

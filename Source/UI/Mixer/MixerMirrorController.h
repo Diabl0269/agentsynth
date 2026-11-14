@@ -92,6 +92,8 @@ public:
     /** The cheap per-strip refresh (no rebuild) BottomDockComponent's own mixer_'s
      *  onLiveMixerStateChanged drives this with -- see the class comment. */
     void refreshLiveVisualsIfOpen();
+    /** The strips' selected look follows the track selection (the detached copy shows the same selection). */
+    void syncTrackSelectionIfOpen();
     /** BottomDockComponent's own theme re-skin pass -- mirrors DetachablePanelHost::refreshDetachedWindowTheme(). */
     void refreshThemeIfOpen() {
         if (window_ != nullptr)

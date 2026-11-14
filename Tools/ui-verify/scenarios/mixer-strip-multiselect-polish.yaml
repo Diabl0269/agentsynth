@@ -1,0 +1,48 @@
+# Mixer strip selection polish: a restored strip's outline is complete, Shift+arrows extend the selection, a press on the
+# strip body selects, and a track picked on the timeline washes no strip.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks (fixture cross-track-lanes.agsproj), shows the Mixer tab, selects Audio 2
+#      and deletes it with Cmd+Backspace and Keep macro, then Cmd+Z: the strip comes back with its outline round all four sides.
+#   2. Presses Audio 1's header, then Shift+Right: Audio 1 and Audio 2 are selected.
+#   3. Cmd-presses Audio 3's meter (the strip body, not its header): all three are selected.
+#   4. Shows the Timeline, picks the Audio 2 row and goes back to the Mixer: no strip is washed.
+motion: true
+record: true
+save_project: fro1892 mixer select
+pop_check: {undo: false}   # undo off: the scenario's own undo is what check 1 films, an extra undo and redo would finish its outline
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - click: {id: "Audio 2", x: 60, y: 12}
+  - key: {keys: cmd+backspace, target: mixerPanel, instant: "the focus ring moves onto the strip and the remove dialog opens"}
+  - wait: {}
+  - expect: {id: "Keep macro", showing: true, within_ms: 2000}
+  - click: {id: "Keep macro"}
+  - wait: {settleMs: 900}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 330}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Audio 2"}
+  - mark: {check: 1, name: ring-after-undo}
+  - wait: {settleMs: 900}
+  - click: {id: "Audio 1", x: 60, y: 12}
+  - key: {keys: shift+right, target: mixerPanel}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 1,Audio 2"}
+  - mark: {check: 2, name: shift-right-extends}
+  - click: {id: "Audio 3", x: 118, y: 290, mods: cmd}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: "Audio 1,Audio 2,Audio 3"}
+  - mark: {check: 3, name: cmd-click-body}
+  - click: {id: Timeline}
+  - wait: {}
+  - click: {id: "Audio 2", x: 60, y: 8}
+  - click: {id: Mixer}
+  - wait: {settleMs: 300}
+  - expect: {id: mixerFocusedColumn, selectedStrips: ""}
+  - mark: {check: 4, name: timeline-track-no-tint}

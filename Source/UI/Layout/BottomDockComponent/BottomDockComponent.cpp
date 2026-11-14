@@ -164,7 +164,10 @@ void BottomDockComponent::setTrackSelectionHost(MixerTrackSelectionHost host) {
     mixer_->setTrackSelectionHost(std::move(host));
 }
 
-void BottomDockComponent::syncMixerTrackSelection() { mixer_->syncTrackSelectionVisuals(); }
+void BottomDockComponent::syncMixerTrackSelection() {
+    mixer_->syncTrackSelectionVisuals();
+    mixerMirror_.syncTrackSelectionIfOpen();
+}
 
 void BottomDockComponent::setOnBuildTrackColourPicker(
     std::function<std::unique_ptr<synth::ui::ColourPickerPopup>(synth::TrackId)> callback) {

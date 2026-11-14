@@ -9,7 +9,6 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
-#include "UI/Mixer/MixerColumnHeader.h"
 
 namespace synth::ui {
 
@@ -36,13 +35,19 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
     // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
-    // Before the arrows: the default pan chords are Shift+Left / Shift+Right.
-    if (matchesAction(key, "mixerPanLeft",
-                      juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)))
+    // Before the arrows: the default pan chords are Option+Shift+Left / Option+Shift+Right.
+    constexpr int kPanMods = juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier;
+    if (matchesAction(key, "mixerPanLeft", juce::KeyPress(juce::KeyPress::leftKey, kPanMods, 0)))
         return panFocused(-kPanStep);
-    if (matchesAction(key, "mixerPanRight",
-                      juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)))
+    if (matchesAction(key, "mixerPanRight", juce::KeyPress(juce::KeyPress::rightKey, kPanMods, 0)))
         return panFocused(kPanStep);
+    // Shift+Left / Shift+Right extend the strip selection across the strips, as Shift+Up / Shift+Down do on the
+    // timeline's rows (a fixed chord like Option+arrows below; pan took Option+Shift+arrows for it). A column with
+    // no single track of its own lets the key bubble.
+    if (key.getModifiers() == juce::ModifierKeys(juce::ModifierKeys::shiftModifier) &&
+        (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)) &&
+        extendStripSelection(key.isKeyCode(juce::KeyPress::leftKey) ? -1 : 1))
+        return true;
     if (matchesAction(key, "mixerToggleChannelHidden", juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0)))
         return hideFocusedChannel();
     if (const float delta = faderNudgeFor(key); delta != 0.0f)
@@ -242,10 +247,12 @@ void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
     repaint();
     if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
         grabKeyboardFocus();
-    // A press on the strip's header (or its name) is a press on its track: the timeline row's selection rules.
-    if (e.eventComponent != nullptr && (dynamic_cast<const MixerColumnHeader*>(e.eventComponent) != nullptr ||
-                                        e.eventComponent->getComponentID() == "mixerColumnHeaderName"))
-        selectFromHeaderPress(e, index);
+    // A press on the strip itself (its header, name, meter or empty area, not a control) is a press on its track: the
+    // timeline row's selection rules.
+    const auto& pressed = columnEntries_[(size_t)index];
+    if (pressed.kind == ColumnEntry::Kind::Strip &&
+        static_cast<const MixerColumnComponent*>(pressed.component)->isSelectionSurface(e.eventComponent))
+        selectFromStripPress(e, index);
 }
 
 // The copy's column arrives through the rebuild; focus stays on this strip (resolveFocusAfterRebuild matches it by
@@ -271,6 +278,18 @@ void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) cons
     into.setProperty("focusedRowIndex", inRows ? rowFocus_->index : -1);
     // The side pane's list holds the keys (Left from the first strip): the channel its cursor is on.
     into.setProperty("zonesCursor", zonesPane_.getKeyboardCursorName());
+    // The strips washed as selected, and the one whose restore outline (after an undo) is drawn now, by title.
+    juce::StringArray washed, outlined;
+    for (const auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip || entry.component == nullptr)
+            continue;
+        if (static_cast<const MixerColumnComponent*>(entry.component)->isTrackSelectedForTest())
+            washed.add(entry.component->getTitle());
+        if (columnMotion_.outlineAlphaFor(entry.channelId) > 0.0f)
+            outlined.add(entry.component->getTitle());
+    }
+    into.setProperty("selectedStrips", washed.joinIntoString(","));
+    into.setProperty("outlinedStrip", outlined.joinIntoString(","));
 }
 
 // Direct and Master have no name to edit, so the key falls through there.

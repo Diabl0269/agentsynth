@@ -30,8 +30,9 @@ public:
         juce::Image picture;       // of `area`, taken at `pictureScale` pixels per point
         juce::Rectangle<int> area; // in the host's coordinates
         float pictureScale = 1.0f;
-        juce::Colour background; // fills the overlay under the slices
-        juce::Colour accent;     // the 1 px outline of an item that came back
+        juce::Colour background;  // fills the overlay under the slices
+        juce::Colour accent;      // the 1 px outline of an item that came back
+        float trailingGap = 0.0f; // empty space at the end of each slot, left outside that outline
         std::vector<ExitEnterListItem> items;
     };
 

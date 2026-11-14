@@ -233,6 +233,8 @@ public:
     /** Test seam: a press and release on strip column `index`'s header with `mods`, in the order JUCE delivers them
      *  (the header's own handler, then this panel's listener). */
     void pressStripHeaderForTest(int index, juce::ModifierKeys mods);
+    /** Test seam: the same press at `localPoint` of strip column `index`, on whatever part of the strip is there. */
+    void pressStripAtForTest(int index, juce::Point<int> localPoint, juce::ModifierKeys mods);
     /** Test seam: the tracks Option+Left/Right would move one place, as the new track order; empty when none. */
     std::vector<synth::TrackId> trackOrderAfterMoveForTest(int direction) const {
         return trackOrderAfterMove(direction);
@@ -540,12 +542,13 @@ private:
     void selectFocusedStripTrack();         // arrow keys: the selection follows the focused strip
     std::vector<synth::TrackId> trackOrderAfterMove(int direction) const;
     void settleColumnsAfterMove(const std::vector<juce::String>& uuids);
-    void selectFromHeaderPress(const juce::MouseEvent& e, int index);
-    bool modifiedHeaderPress_ =
-        false;                      // a Cmd/Ctrl/Shift press on a header edits the selection, never selects the macro
-    void noteKeyboardMoved();       // shows or hides the focused column's ring as the keyboard leaves or returns
-    bool isKeyboardAwayNow() const; // the keyboard is not on the panel, read from real focus and visibility now
-    bool renameFocusedColumn();     // the Rename key: the focused column's header name editor
+    void selectFromStripPress(const juce::MouseEvent& e, int index);
+    bool extendStripSelection(int direction);       // Shift+Left / Shift+Right
+    void claimTrackSelection(synth::TrackId track); // the strip's track becomes the mixer's own selection if not yet
+    bool modifiedHeaderPress_ = false; // a Cmd/Ctrl/Shift press on a strip edits the selection, never selects the macro
+    void noteKeyboardMoved();          // shows or hides the focused column's ring as the keyboard leaves or returns
+    bool isKeyboardAwayNow() const;    // the keyboard is not on the panel, read from real focus and visibility now
+    bool renameFocusedColumn();        // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */
