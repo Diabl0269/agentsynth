@@ -1,8 +1,9 @@
 // TimelineSectionStripMouse.cpp
 //
-// The Sections strip's pointer gestures: make a section by dragging across empty strip (outline snapped to whole bars,
-// stopping at a neighbour), select / rename / menu on a block, hover. The drag of a placed block (move, place again)
-// starts from pressedBlock_ and hooks into dragPressedBlock / releasePressedBlock below.
+// The Sections strip's pointer gestures: make a section by dragging across empty strip (outline snapped to the
+// timeline's Snap, free with Shift, stopping at a neighbour), select / rename / menu on a block, hover. The drag of a
+// placed block (move, place again) starts from pressedBlock_ and hooks into dragPressedBlock / releasePressedBlock
+// below.
 
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
@@ -84,13 +85,23 @@ void TimelineSectionStrip::beginMakeDrag(const juce::MouseEvent& e) {
     updateMakeDrag(e);
 }
 
-void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) { updateMakeDragAt(e.position); }
+void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) {
+    updateMakeDragAt(e.position, e.mods.isShiftDown());
+}
+
+// The grid a section's edges snap to, in beats: the timeline's Snap (a bar for Snap Bar), none with Snap Off or when
+// `free` (Shift on a make drag).
+double TimelineSectionStrip::stripGridBeats(bool free) const {
+    return free ? 0.0 : viewState_.divisionBeats(beatsPerBar());
+}
 
 // The outline at a pointer position; a drag event and an edge-scroll tick both land here.
-void TimelineSectionStrip::updateMakeDragAt(juce::Point<float> pos) {
+void TimelineSectionStrip::updateMakeDragAt(juce::Point<float> pos, bool shift) {
     lastDragPointer_ = pos;
+    lastDragShift_ = shift;
     updateEdgeScrollArming();
-    const auto span = sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)pos.x), beatsPerBar(), blockSpans());
+    const auto span =
+        sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)pos.x), stripGridBeats(shift), blockSpans());
     if (span.start == makeDragSpan_.start && span.end == makeDragSpan_.end)
         return;
     makeDragSpan_ = span;
@@ -107,7 +118,7 @@ void TimelineSectionStrip::endMakeDrag(bool commit) {
     if (was)
         repaint();
     growFromRight_ = was && makeAnchorBeat_ > (span.start + span.end) * 0.5;
-    if (commit && was && sectionstrip::spansAtLeastOneBar(span, beatsPerBar()))
+    if (commit && was && sectionstrip::spansAtLeastOneUnit(span, stripGridBeats(lastDragShift_)))
         makeSectionFromRange(span.start, span.end);
 }
 
@@ -266,12 +277,14 @@ void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift)
     // The group's left edge: the pressed block's ghost less the members drawn before it.
     const double groupLeft = (double)dragGhostX_ - dragLeadBeats_ * viewState_.pixelsPerBeat;
     setDropPlan(sectionstrip::planGroupDrop(placedSpans(), members, beatAtX(groupLeft), dragCopy_, dragMakeRoom_,
-                                            beatsPerBar(), viewState_.pixelsPerBeat));
+                                            stripGridBeats(false), viewState_.pixelsPerBeat));
     updateEdgeScrollArming();
     repaint();
 }
 
 void TimelineSectionStrip::modifierKeysChanged(const juce::ModifierKeys& mods) {
+    if (makeDragging_ && mods.isShiftDown() != lastDragShift_)
+        updateMakeDragAt(lastDragPointer_, mods.isShiftDown());
     if (blockDragging_ && !dragCancelled_ && mods.isShiftDown() != lastDragShift_)
         updateBlockDragAt(lastDragPointer_, mods.isShiftDown());
 }

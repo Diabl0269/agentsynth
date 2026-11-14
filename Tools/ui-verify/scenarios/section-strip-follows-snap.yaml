@@ -1,0 +1,24 @@
+# A section drawn on the Sections strip follows the timeline's Snap (the unit the clips use), instead of always
+# snapping outward to whole bars. With Snap on 1/4 (a beat), a drag from bar 1 to the middle of bar 3 makes a
+# 10-beat section: its right edge ends mid-bar (a bar and a half past bar 2), where it used to jump to bar 4.
+#
+# What a user does: new project, adds an Oscillator track, leaves Snap on 1/4, drags across the empty strip from the
+# start of bar 1 to the middle of bar 3 (24 px per beat at the default zoom, so x 236 is beat 9.83).
+record: true
+save_project: "fro1895 beat sections"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - expect: {id: timelineSnapCombo, text: "1/4", within_ms: 2000}
+  # Check 1: the drag from bar 1 to the middle of bar 3 ends on a beat, not on a bar line.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 236, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 236, y: 12}
+  - wait: {}
+  - mark: {check: 1, name: section-ends-on-a-beat}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:10.000:1/1", within_ms: 2000}

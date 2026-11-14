@@ -151,7 +151,7 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
     const juce::String source = makeSectionKeySource ? makeSectionKeySource() : juce::String();
     const juce::KeyPress fallback('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
     const auto hint = source.isEmpty() ? juce::String() : shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
-    return "Drag across bars to make a section" +
+    return "Drag across bars to make a section (follows Snap, Shift places freely)" +
            (hint.isEmpty() ? juce::String() : ", or press " + hint + " to make one from " + source);
 }
 

@@ -12,8 +12,10 @@ bars, with a "Sections" label above the track headers. Code: `Source/UI/Timeline
 strip never listens to the doc; the panel's `timelineChanged` calls `refresh()`. It is hidden while a clip is
 open in the piano roll, and by the Settings toggle below.
 
-- **Make a section:** drag across bars on the empty strip. The span snaps outward to whole bars, is at least
-  one bar and stops at neighbouring blocks. Release makes "Section N" in the next palette colour as one undo
+- **Make a section:** drag across the empty strip. The span follows the timeline's Snap (the unit the clips
+  use; a bar when Snap is Bar): its start floors and its end ceils to the grid, so with Snap on Beat a 10-beat
+  (2.5-bar) section can be drawn. It is at least one snap unit and stops at neighbouring blocks. Hold Shift, or set
+  Snap to Off, to place it freely (raw beats, at least 1/16 of a beat so a click never makes a zero section). Release makes "Section N" in the next palette colour as one undo
   step (clips are split at both edges) and opens its name for typing. The new block grows in from the side the
   drag started on. Held in the strip's left or right 24 px edge zone the drag scrolls the timeline (below).
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
@@ -44,9 +46,10 @@ open in the piano roll, and by the Settings toggle below.
     (a `KeyedPointTween` keyed by placement id, 140 ms) to where they will be. With the ghost's left edge over
     another block, it goes before that block until the ghost's centre passes the block's centre (where it was
     drawn before the drag), then after it; otherwise the landing snaps to a neighbour's start or end within 12 px,
-    else to the nearest bar. It never lands inside a block.
+    else to the nearest Snap line (Snap Off: free). It never lands inside a block. Shift in a block drag already
+    switches make-room and cover, so a block's landing has no hold-to-free; use Snap Off.
   - **Cover:** the blocks stay put; the original (on a move) and every block the drop would remove are dimmed.
-    The landing is `sectionstrip::dropBeat` against the blocks as they are (whole bars, a neighbour's start or end
+    The landing is `sectionstrip::dropBeat` against the blocks as they are (the Snap grid, a neighbour's start or end
     or the dragged block's far edge against one within 12 px, a result inside a block goes to its nearer edge).
   Holding Option when the drag starts makes it a copy (copy cursor; the original stays and the drop calls
   `placeSection`), otherwise it moves (`movePlacement`). The mode is make-room unless the cover setting is on;
@@ -109,7 +112,7 @@ open in the piano roll, and by the Settings toggle below.
   (the panel handles it; MainComponent forwards it while the timeline is shown): it makes a section from the Range
   tool's bars, else from the loop while looping is on (`MakeSectionKey.h`, `makeSectionKeySpan`). With neither, a toast says
   "Select bars with the Range tool or set the loop, then press it again to make a section"; over a placed section
-  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section") adds
+  a toast says the bars already hold one. The empty strip's tooltip ("Drag across bars to make a section (follows Snap, Shift places freely)") adds
   ", or press Shift+Cmd+J to make one from the loop" (or "the selected bars") only when the key would make one.
   The key does nothing with a clip editor open.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
