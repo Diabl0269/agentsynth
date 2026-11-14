@@ -77,10 +77,6 @@ const std::vector<KnownGap> kKnownGaps = {
      GapPlatform::Windows},
     {"midiRemote [piano roll open] / TextButton 'templatesButton': its text is not centred", "FRO1718",
      GapPlatform::Windows},
-    {"Settings / Label 'Audio device type': is not 6 px from its control ComboBox 'Audio device type'", "FRO1718",
-     GapPlatform::Windows},
-    {"Settings [min] / Label 'Audio device type': is not 6 px from its control ComboBox 'Audio device type'", "FRO1718",
-     GapPlatform::Windows},
 };
 
 constexpr int kPairReach = 24;       // how far below or to the right of a caption its control may be
