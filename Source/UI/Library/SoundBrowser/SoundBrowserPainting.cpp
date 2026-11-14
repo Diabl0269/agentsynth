@@ -416,6 +416,10 @@ void SoundBrowserComponent::paint(juce::Graphics& g) {
             g.endTransparencyLayer();
         }
     }
+    // With a row selected its outline is the list's ring; with none (an empty list, or nothing chosen yet) the list
+    // itself shows it, so focus on the list is never invisible.
+    if (selected_ < 0)
+        paintFocusRing(g, area.toFloat().reduced(1.0f), *this);
     paintFooter(g);
     if (dropGlow_ > 0.0f)
         paintDropOutline(g);

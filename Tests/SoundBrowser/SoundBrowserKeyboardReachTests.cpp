@@ -644,3 +644,18 @@ TEST(SoundBrowserKeyboardReachTest, ShiftSpaceTypedInTheSearchBoxTogglesThePrevi
     EXPECT_EQ(previewToggles(v), before + 1);
     EXPECT_EQ(search.getText(), "snare");
 }
+
+// Regression test for FRO1541: Up from the search box had nowhere to go, so the Modules / Sounds switch above it was
+// out of reach. The owner now takes the key; with no owner Up stays a no-op.
+TEST(SoundBrowserKeyboardReachTest, UpFromTheSearchAsksTheOwnerForTheControlAboveAndIsConsumed) {
+    Fixture f;
+    auto& v = *f.view;
+    int asked = 0;
+    v.onUpFromSearch = [&asked] {
+        ++asked;
+        return true;
+    };
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::upKey)));
+    EXPECT_EQ(asked, 1);
+    EXPECT_EQ(v.getSelectedIndex(), -1) << "Up from the search selects nothing";
+}

@@ -284,6 +284,30 @@ TEST(ModuleLibraryKeyboardNav, FocusIsClampedWhenASnippetItPointsAtIsRemoved) {
 // focus grab headlessly.
 // ============================================================================
 
+// Regression test for FRO1541: Up with no row above the cursor leaves for the control above the library (the switch).
+TEST(ModuleLibraryKeyboardNav, UpFromTheSearchFieldOrTheFirstRowLeavesForTheOwnerAndFromLaterRowsStepsUp) {
+    ModuleLibraryComponent comp;
+    comp.setSize(kPanelWidth, kTallPanelHeight);
+    int left = 0;
+    comp.onUpFromTop = [&left] {
+        ++left;
+        return true;
+    };
+    EXPECT_TRUE(comp.simulateSearchFieldKeyPressForTest(upKey()));
+    EXPECT_EQ(left, 1) << "no row has the cursor: Up leaves";
+    EXPECT_EQ(comp.getKeyboardFocusedIndex(), -1);
+
+    EXPECT_TRUE(comp.simulateSearchFieldKeyPressForTest(downKey()));
+    ASSERT_EQ(comp.getKeyboardFocusedIndex(), 0);
+    EXPECT_TRUE(comp.simulateSearchFieldKeyPressForTest(upKey()));
+    EXPECT_EQ(left, 2) << "the cursor on the first row: Up leaves";
+
+    EXPECT_TRUE(comp.keyPressed(downKey()));
+    EXPECT_TRUE(comp.keyPressed(downKey()));
+    EXPECT_TRUE(comp.keyPressed(upKey()));
+    EXPECT_EQ(left, 2) << "a later row steps up instead";
+}
+
 TEST(ModuleLibraryKeyboardNav, SearchFieldDownFocusesTheFirstRowJustLikeTheListItself) {
     ModuleLibraryComponent comp;
     comp.setSize(kPanelWidth, kTallPanelHeight);

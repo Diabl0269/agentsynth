@@ -91,6 +91,12 @@ same as arrowing onto that row and pressing Return: it picks the first module, s
 never a section header. With an empty query, or one that matches nothing, Return does nothing; once Up or Down has put
 the keyboard focus on a row, Return inserts that row instead.
 
+**Reaching it by keys.** The Modules view sits under the library column's root (`LibrarySidebarViews`, [sound
+browser](sound-browser.md#the-sounds-view)): Down from the root enters the Modules / Sounds switch and Down from the switch
+the search field. Up with no row above the cursor (in the field with no row chosen, or with the cursor on the first row)
+leaves for the switch through `onUpFromTop` instead of wrapping to the last row; Escape in an empty field returns to the
+column's root (`onEscapeFromSearch`). The view draws no focus outline of its own: the ring is the whole column's.
+
 **The search field's colours are re-applied in `parentHierarchyChanged()` as well as
 `lookAndFeelChanged()`.** `MainComponent`'s constructor applies the persisted theme in its ctor
 *body*, after `moduleLibrary` — a plain member — was already default-constructed against whatever

@@ -48,6 +48,8 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     searchEditor.onEscapeKey = [this] {
         if (searchEditor.getText().isNotEmpty())
             setSearchText({});
+        else if (onEscapeFromSearch)
+            onEscapeFromSearch();
     };
     addAndMakeVisible(searchEditor);
     applySearchEditorColours();
