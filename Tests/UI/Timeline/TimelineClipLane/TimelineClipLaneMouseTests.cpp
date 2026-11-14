@@ -444,3 +444,65 @@ TEST(TimelineClipLaneInteractionTest, AltCopyDragShowsTheCopyCursorAndReleaseRes
     f.lane.mouseUp(leftDrag(f.lane, dragged, anchor));
     EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::NormalCursor);
 }
+
+// ---- A right-edge resize stops at the end of the section placement the clip starts in ----
+
+namespace {
+// Presses a clip's right edge and drags it `beats` to the right (40 px per beat), releasing there.
+void dragRightEdge(ClipLaneFixture& f, synth::ClipId clipId, double beats) {
+    const auto rect = f.lane.getClipRect(clipId);
+    const juce::Point<float> edge((float)rect.getRight() - 3.0f, (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + (float)(beats * 40.0), edge.y);
+    f.lane.mouseDown(leftClick(f.lane, edge));
+    f.lane.mouseDrag(leftDrag(f.lane, {edge.x + 20.0f, edge.y}, edge));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, edge));
+    f.lane.mouseUp(leftDrag(f.lane, dragged, edge));
+}
+} // namespace
+
+TEST(TimelineClipLaneSectionCapTest, ResizingPastTheSectionEndStopsThereAndTellsOnce) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip"); // [2, 6) inside a section [0, 8)
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    std::vector<juce::String> toasts;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String& m) { toasts.push_back(m); };
+
+    dragRightEdge(f, clipId, 5.0); // wants 11, the section ends at 8
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 6.0) << "stopped at the section's end";
+    ASSERT_EQ(toasts.size(), 1u) << "once per gesture, however many drag events held the cap";
+    EXPECT_EQ(toasts[0], "To make this clip longer, make the section longer first.");
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
+}
+
+TEST(TimelineClipLaneSectionCapTest, ResizingInsideTheSectionIsNotCappedAndSaysNothing) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    int toasts = 0;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String&) { ++toasts; };
+
+    dragRightEdge(f, clipId, 1.0); // end 7, inside
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 5.0);
+    EXPECT_EQ(toasts, 0);
+}
+
+TEST(TimelineClipLaneSectionCapTest, WithoutSectionsTheResizeIsUncappedAndSaysNothing) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 2.0, 4.0, "Clip");
+    int toasts = 0;
+    f.lane.onClipCappedBySection = [&toasts](const juce::String&) { ++toasts; };
+
+    dragRightEdge(f, clipId, 5.0);
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 9.0);
+    EXPECT_EQ(toasts, 0);
+}

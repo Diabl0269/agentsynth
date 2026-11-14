@@ -106,6 +106,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewLength_ = resizeOriginalLength_;
+            resizeCappedBySection_ = false;
         }
     } else if (hit->zone == ClipHit::Zone::LeftEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
@@ -276,7 +277,10 @@ void TimelineClipLaneArea::stepDragPreview() {
     } else if (dragMode_ == DragMode::ResizeRight) {
         const double rawEnd = resizeOriginalStart_ + resizeOriginalLength_ + deltaBeats;
         const double snappedEnd = viewState_.snapBeat(rawEnd, beatsPerBar);
-        previewLength_ = std::max(snappedEnd - resizeOriginalStart_, kMinClipLengthBeats);
+        // A clip inside a section stops at the end of the placement it starts in (no sections: unchanged).
+        const double cappedEnd = doc_->capToPlacementEnd(resizeOriginalStart_, snappedEnd);
+        resizeCappedBySection_ = cappedEnd < snappedEnd - 1e-9;
+        previewLength_ = std::max(cappedEnd - resizeOriginalStart_, kMinClipLengthBeats);
     } else if (dragMode_ == DragMode::ResizeLeft) {
         const double end = resizeOriginalStart_ + resizeOriginalLength_;
         const double rawStart = resizeOriginalStart_ + deltaBeats;
@@ -409,6 +413,10 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     }
 
     if (doc_ != nullptr) {
+        // The release says why a right-edge drag stopped, once per gesture, even when the clip was already at the cap
+        // and its length does not change (the toast follows the result, like the lane's other toasts).
+        if (dragMode_ == DragMode::ResizeRight && resizeCappedBySection_ && onClipCappedBySection)
+            onClipCappedBySection("To make this clip longer, make the section longer first.");
         const bool moved = std::abs(previewDeltaBeats_) > 1e-9 || previewRowDelta_ != 0;
         if (dragMode_ == DragMode::Move && moved) {
             // Destination track ids are resolved BEFORE the mutation: track ids and their order

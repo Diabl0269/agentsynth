@@ -33,3 +33,9 @@ steps:
   - mark: {check: 1, name: draw-stops-at-section-end}
   - wait: {}
   - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  # Check 2: dragging the clip's right edge (x 94, 2 px inside its end) into repeat 2 (x 150) stops at the end of
+  # repeat 1 and a toast says why. Clip 1 is the first of the two clips, so the clip keeps its length 4.
+  - click: {id: timelineToolSelect}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 94, fromY: 28, toX: 150, toY: 28, steps: 20}
+  - mark: {check: 2, name: resize-stops-at-section-end}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
