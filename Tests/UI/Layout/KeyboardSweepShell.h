@@ -8,6 +8,7 @@
 #include "../../TestWait.h"
 #include "KeyboardReachFixture.h"
 #include "NativeWindowTestGuard.h"
+#include "SweepPlatform.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -30,6 +31,7 @@ struct KnownGap {
     const char* key;
     const char* ticket;
     bool varies = false;
+    synth::test::GapPlatform platform = synth::test::GapPlatform::All; // a gap of one platform is not judged on another
 };
 
 inline std::string className(const juce::Component& c) {
@@ -96,6 +98,8 @@ public:
             std::cout << "[ " << label_ << " ] could not take focus: " << name << "\n";
         std::set<std::string> listed;
         for (const auto& gap : gaps_) {
+            if (!synth::test::gapAppliesHere(gap.platform))
+                continue;
             const std::string key = gap.key;
             listed.insert(key);
             if (!gap.varies && walked_.count(key.substr(0, key.find(" / "))) != 0 && found_.count(key) == 0)

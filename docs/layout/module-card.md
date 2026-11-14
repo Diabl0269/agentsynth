@@ -71,7 +71,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kPanelGap` | 6 | above the first block under the body controls (response or scope panel, the morph card's Edit shapes button) on a footer card; one helper in `layoutChromeRows`, guarded by `CardBodyOverlap.NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap` |
 
 **Whole-surface sweep.** `CardBodyOverlap` guards the cards; `Tests/UI/Layout/LayoutGapSweepTests.cpp` applies the same
-checks (on macOS only, where its known-gap list is measured; Windows fonts and audio devices differ) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
+checks (on macOS and Windows; fonts and widgets differ, so a known gap of one platform carries a `GapPlatform` tag from `SweepPlatform.h`) to every open focus region of a real main window (each main view, a piano roll and a drum machine open) and every
 dialog of the theme sweep registry, discovered rather than listed. It runs at the default size in every built-in theme and
 at the smallest size (the main window's 480 x 400 minimum, a dialog's constrainer minimum) in the first theme. It fails
 on: sibling leaves that touch or overlap (a mouse-transparent overlay and buttons joined by connected edges are exempt);

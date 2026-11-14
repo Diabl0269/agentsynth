@@ -52,7 +52,14 @@ using Tab = synth::ui::BottomDockComponent::Tab;
 
 namespace {
 
-const std::vector<KnownGap> kKnownGaps = {};
+using synth::test::GapPlatform;
+
+// Windows-only findings from the first Windows CI run, cause not yet found (no Windows machine to measure on). The
+// Export audio one showed on that run's Export audio dialog only, not Export stems, so it may be timing: it varies.
+const std::vector<KnownGap> kKnownGaps = {
+    {"Settings / ComboBox 'Input': Return does not open its menu", "FRO1718", false, GapPlatform::Windows},
+    {"Export audio / ComboBox 'Sample rate': Return does not open its menu", "FRO1718", true, GapPlatform::Windows},
+};
 
 constexpr int kMenuReach = 6; // how far from a control a menu it opened may start and still touch it
 
@@ -310,18 +317,12 @@ class KeyStandardsDialogs : public KeyboardReachDialogFixture {};
 } // namespace
 
 TEST_F(KeyStandardsShell, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryRegion) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     checkScenes(findings);
     findings.expectOnlyKnownGaps();
 }
 
 TEST_F(KeyStandardsDialogs, SpaceReturnEscapeAndUndoWorkOnEveryControlOfEveryDialog) {
-#if !JUCE_MAC
-    GTEST_SKIP() << "the known-gap list is measured on macOS; fonts, audio devices and menus differ on other platforms";
-#endif
     Findings findings;
     const auto theme = synth::theme::builtInThemes().front();
     for (const auto& surface : dialogSurfaces()) {
