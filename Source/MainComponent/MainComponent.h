@@ -545,14 +545,15 @@ private:
     void selectNodeInGraph(const juce::String& uuid) override;
     void deleteTrackAfterConfirm(synth::TrackId track) override;
     void deleteTrack(synth::TrackId track) override;
+    void deleteTrackFromMenu(synth::TrackId track) override;
     /** Every macro delete: true when a track plays a node inside one (it then asks first). */
     bool deleteMacrosOfTracks(const std::vector<juce::String>& macroIds, bool wholeSelection);
-    void askThenDeleteTrack(synth::TrackId track, const synth::ui::DeleteTrackConfirmText& text);
+    void deleteTrackKeepingMacro(synth::TrackId track, bool keepMacro); // keepMacro: the track row only goes
+    void deleteTracksAsking(const std::vector<synth::TrackId>& tracks, bool alwaysAsk);
     void duplicateTrack(synth::TrackId track) override;
     // One track, never the timeline's selection; `focusCopyRow` false leaves the keyboard where it is (the mixer).
     void duplicateOneTrack(synth::TrackId track, bool focusCopyRow);
-    // docs/timeline/tracks.md#selecting-several-tracks -- the bulk half of the track-row commands
-    // (MainComponentTrackSelectionActions.cpp); each reuses the single-track path per track inside one undo step.
+    // Bulk track-row commands (MainComponentTrackSelectionActions.cpp, docs/timeline/tracks.md "Selecting several").
     std::vector<synth::TrackId> tracksActedOnBy(synth::TrackId clicked) const override;
     void performTrackGroupEdit(const std::function<void()>& edits) override;
     void copyTracks(const std::vector<synth::TrackId>& tracks) override;
@@ -561,7 +562,6 @@ private:
     /** Copies `sources` below `after` as ONE undo step and selects the copies; `verb` words the status line. */
     void duplicateTracksBelow(const std::vector<synth::TrackId>& sources, synth::TrackId after,
                               const juce::String& verb);
-    void deleteTracksAfterConfirm(const std::vector<synth::TrackId>& tracks);
     std::vector<synth::TrackId> trackClipboard_; // copyTracks' tracks, timeline order
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;

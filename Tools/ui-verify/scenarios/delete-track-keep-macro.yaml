@@ -1,0 +1,43 @@
+# Deleting a track that plays a macro asks Remove macro or Keep macro, the same question family as deleting a macro.
+# Keep macro drops only the track row: the macro and its modules stay, and Cmd+Z brings the track back in one step.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, each playing a macro (fixture cross-track-lanes.agsproj), shows the
+#      timeline, selects the first row and presses Cmd+Backspace: the question opens with Remove macro, Keep macro and
+#      Cancel, and a Remember my choice box. Nothing has changed yet.
+#   2. Presses Keep macro: the row goes (two rows left) and all three macros are still on the canvas.
+#   3. Presses Cmd+Z: the row is back, in one step.
+record: true
+save_project: keep-macro
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {count: {prefix: "macroCard", equals: 3}}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 3}, within_ms: 2000}
+  - click: {id: trackNameLabel}
+  - key: {keys: cmd+backspace}
+  - wait: {}
+  - expect: {id: "Keep macro", showing: true, within_ms: 2000}
+  - expect: {id: "Remove macro", showing: true}
+  - expect: {id: deleteTrackMacroRememberChoice, showing: true}
+  - expect: {count: {prefix: "trackNameLabel", equals: 3}}
+  - mark: {check: 1, name: keep-macro-question}
+  - click: {id: "Keep macro"}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 2}, within_ms: 2000}
+  - mark: {check: 2, name: row-gone-macro-stays}
+  - click: {id: Show Canvas in the main area}
+  - wait: {}
+  - expect: {count: {prefix: "macroCard", equals: 3}, within_ms: 2000}
+  - mark: {check: 2, name: macros-all-still-there}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 3}, within_ms: 2000}
+  - mark: {check: 3, name: undo-brings-row-back}

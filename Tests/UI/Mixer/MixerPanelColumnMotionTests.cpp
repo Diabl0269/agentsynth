@@ -6,6 +6,7 @@
 // stepped by hand. Adding and duplicating a track grow the same column and row in.
 #include "../../TestSettingsHelpers.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Timeline/DeleteTrackMacroAutoAnswer.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -53,6 +54,7 @@ struct ReducedMotionGuard {
 
 struct Rig {
     BottomDockActiveTabResetGuardMDT resetGuard;
+    DeleteTrackMacroAutoRemove removeMacroWhenAsked;
     MainComponent mc{std::make_unique<MockProviderMPCM>()};
 
     explicit Rig(bool animate) {

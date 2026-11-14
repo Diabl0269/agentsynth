@@ -11,6 +11,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "DeleteTrackMacroAutoAnswer.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Mixer/ChannelMacroLookup.h"
@@ -99,6 +100,7 @@ State captureState(MainComponent& mc, bool nameAll = false) {
 
 struct Rig {
     BottomDockActiveTabResetGuardMDT resetGuard;
+    DeleteTrackMacroAutoRemove removeMacroWhenAsked; // the menu asks Remove or Keep macro; these tests remove
     MainComponent mc{std::make_unique<MockProviderTDM>()};
 
     explicit Rig(int tracks = 2) {

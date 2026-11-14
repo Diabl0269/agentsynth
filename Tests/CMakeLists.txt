@@ -656,6 +656,7 @@ add_executable(Tests
     UI/Mixer/MixerPanelColumnMotionTests.cpp
     UI/Mixer/MixerTrackDeleteStripTests.cpp
     UI/Timeline/TimelineTrackDeleteMacroTests.cpp
+    UI/Timeline/TimelineTrackDeleteKeepMacroTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp

@@ -236,10 +236,12 @@ void PreferencesSettingsTab::persistFollowPointPercent(int percent) {
 
 void PreferencesSettingsTab::persistAskBeforeDeletingTrack(bool enabled) {
     // Nothing live to push: MainComponent::deleteTrackAfterConfirm and deleteMacrosOfTracks read this key at use time.
-    // Asking again forgets the answer "Remember my choice" stored for a track's macro.
+    // Asking again forgets the answers "Remember my choice" stored for a track's macro and for a track's delete.
     appProperties.getUserSettings()->setValue(kTimelineAskBeforeDeletingTrackKey, enabled ? "1" : "0");
-    if (enabled)
+    if (enabled) {
         appProperties.getUserSettings()->removeValue(kTimelineDeleteMacroChoiceKey);
+        appProperties.getUserSettings()->removeValue(kTimelineDeleteTrackMacroChoiceKey);
+    }
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
