@@ -67,6 +67,13 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   selected curve after a restore. A segment's bend glides too: `glideBendsFrom` keys each changed bend in `bendTween_` (a
   `KeyedPointTween`, the bend in x) and the line, fill and rings are drawn from `drawnModel()`, the model with the drawn
   bends. Guards: the `Curve editor drawn stretch` entry in `UndoGlideSurfaces` and `EveryUndoableCurvePropertyGlidesOnUndoAndRedo`.
+- **Add and delete in the curve editor.** A dot added (double-click on empty space) or deleted (Delete key, double-click on
+  the dot, the right-click menu's Delete Point, a multi-select delete) eases the line into its new shape the way undo does,
+  through one helper: `CurveEditorComponent::lineBeforeEdit()` captures the line as drawn before the edit and
+  `glideLineFrom()` hands it to the morph (`morphFrom`, so Reduce Motion and Animations Off are the shared ones, and a
+  second edit mid-glide continues from the line as drawn). `setModel` uses the same pair for a restore. A refresh from the
+  model (`pushToTarget`, `refreshFromTarget`, the card's and the shape window's reload) never restarts or clears it.
+  Guard: `CurveEditorEditGlideTests` walks every surface of `CurveEditorSurfaces.h` and every way to add and delete.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the

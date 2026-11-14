@@ -185,7 +185,9 @@ bool CurveEditorComponent::removeSelectedNodes() {
         if (r < cursorIndex())
             --cursor;
     beginGesture();
+    auto lineBefore = lineBeforeEdit();
     model_ = std::move(probe);
+    glideLineFrom(std::move(lineBefore));
     const int count = model_.getNumNodes();
     int next = -1;
     for (int i = std::max(cursor, 0); i < count && next < 0; ++i)

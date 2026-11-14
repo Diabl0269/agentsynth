@@ -117,6 +117,7 @@ public:
      *  range and y to the nearest `1/yDivisions`, unless the gesture's own bypass flag (Shift) is
      *  set. Never affects a bend drag. Off by default. */
     void setSnapToGrid(bool enabled);
+    bool isSnapToGrid() const noexcept { return snapToGrid_; }
 
     /** Draws or hides the labelled guide lines (setAxisGuides) and their labels; the grid's own snap lines stay. On
      *  by default. */
@@ -374,6 +375,10 @@ private:
     std::vector<juce::Point<float>> modelCurvePoints(const CurveEditorGeometry& geometry) const;
     std::vector<juce::Point<float>> drawnCurvePoints(const CurveEditorGeometry& geometry) const;
     void morphFrom(std::vector<juce::Point<float>> before);
+    /** An edit that adds or removes points: the line as drawn now (a glide still running included), taken before the
+     *  edit, then `glideLineFrom` once the model holds the new points. */
+    std::vector<juce::Point<float>> lineBeforeEdit() const;
+    void glideLineFrom(std::vector<juce::Point<float>> before);
     float morphWeight() const;
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();

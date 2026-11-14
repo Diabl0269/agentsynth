@@ -232,6 +232,12 @@ instant. A second flip lands the first at once. The on-card layout editor re-rea
 starts and again when it has landed (`CardBody::onConditionsApplied`). Tests step the motion by hand
 (`CardBody::setForceAnimateForTest`, `stepSwapMotionForTest`).
 
+### Dots added and deleted in a curve editor
+
+A dot added or deleted in a curve editor (the curve window and box, the LFO card, the Filter card and the shape windows)
+morphs the drawn line from the old shape to the new one over the shared glide time; Reduce Motion lands the line and fades
+it in, Animations Off lands it at once. It is the same morph undo and redo use ([undo-glide.md](undo-glide.md#points-dots-and-clips)).
+
 ### Delete and undo animation
 
 Deleting a canvas card shrinks it away and Cmd+Z grows it back. The model change (delete, undo, redo) is still
