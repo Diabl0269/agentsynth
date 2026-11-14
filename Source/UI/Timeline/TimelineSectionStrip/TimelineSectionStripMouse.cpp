@@ -89,10 +89,11 @@ void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) {
     updateMakeDragAt(e.position, e.mods.isShiftDown());
 }
 
-// The grid a section's edges snap to, in beats: the timeline's Snap (a bar for Snap Bar), none with Snap Off or when
-// `free` (Shift on a make drag).
-double TimelineSectionStrip::stripGridBeats(bool free) const {
-    return free ? 0.0 : viewState_.divisionBeats(beatsPerBar());
+// The grid a section's edges snap to, in beats: the longer of the timeline's Snap and one bar. `followSnap` (Shift on a
+// make drag) uses the Snap unit itself, free with Snap Off. A block move or drop passes false: Shift there already
+// toggles make-room and cover.
+double TimelineSectionStrip::stripGridBeats(bool followSnap) const {
+    return sectionstrip::stripGrid(viewState_.divisionBeats(beatsPerBar()), beatsPerBar(), followSnap);
 }
 
 // The outline at a pointer position; a drag event and an edge-scroll tick both land here.

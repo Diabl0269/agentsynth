@@ -19,11 +19,12 @@ constexpr float kBlockPadX = 6.0f;     // name inset from the block's left edge
 constexpr float kCountReserve = 34.0f; // room kept for the "2/3" count when it is drawn
 constexpr float kDragStartPx = 3.0f;   // a press that moves less than this is a click
 constexpr double kBarEpsilon = 1e-9;
-constexpr double kMinFreeSpanBeats = 0.0625; // the shortest span placed with no grid (Snap Off or Shift): a 1/16 beat
-constexpr float kChipMinWidth = 16.0f;       // the variation chip's width: the letter and a little air
-constexpr float kChipInsetRight = 4.0f;      // gap between the chip and the block's right edge
-constexpr float kChipVerticalTrim = 6.0f;    // the chip is this much shorter than its block
-constexpr float kChipNameRoom = 24.0f;       // the name keeps at least this much width, or the chip is not drawn
+constexpr double kMinFreeSpanBeats =
+    0.0625;                             // the shortest span placed with no grid (Snap Off and Shift held): a 1/16 beat
+constexpr float kChipMinWidth = 16.0f;  // the variation chip's width: the letter and a little air
+constexpr float kChipInsetRight = 4.0f; // gap between the chip and the block's right edge
+constexpr float kChipVerticalTrim = 6.0f; // the chip is this much shorter than its block
+constexpr float kChipNameRoom = 24.0f;    // the name keeps at least this much width, or the chip is not drawn
 
 struct Span {
     double start = 0.0;
@@ -63,6 +64,13 @@ inline double ceilToGrid(double beat, double gridBeats) noexcept {
 inline double floorToBar(double beat, double beatsPerBar) noexcept { return floorToGrid(beat, beatsPerBar); }
 
 inline double ceilToBar(double beat, double beatsPerBar) noexcept { return ceilToGrid(beat, beatsPerBar); }
+
+/** The grid a section's edges snap to: the longer of the Snap unit and one bar, so Snap 1/4, 1/16 or Off make whole
+ *  bars and Snap 2 bars makes 2-bar multiples. `followSnap` (Shift on a make drag) uses the Snap unit itself, 0 (free)
+ *  when Snap is Off. */
+inline double stripGrid(double divisionBeats, double beatsPerBar, bool followSnap) noexcept {
+    return followSnap ? divisionBeats : std::max(divisionBeats, beatsPerBar);
+}
 
 /** The shortest section a drag can make: one grid unit, or kMinFreeSpanBeats with no grid. */
 inline double minSpanBeats(double gridBeats) noexcept { return gridBeats > 0.0 ? gridBeats : kMinFreeSpanBeats; }
