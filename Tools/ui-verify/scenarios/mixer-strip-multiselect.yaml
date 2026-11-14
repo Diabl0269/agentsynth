@@ -1,0 +1,41 @@
+# Mixer strips select, delete and move like timeline rows: a header press selects its track, Cmd toggles, Shift extends;
+# Cmd+Backspace deletes the set in one undo step; Option+Left/Right moves it one place.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks (fixture cross-track-lanes.agsproj) and shows the Mixer tab.
+#   2. Presses Audio 1's header, then Cmd-presses Audio 2's: both strips are washed as selected.
+#   3. Presses Option+Right: the two strips glide one place right (Audio 3 now first). Option+Left brings them back.
+#   4. Presses Cmd+Backspace: one question for the set; Remove macro answers it and both strips are gone.
+#   5. Presses Cmd+Z: both strips come back in one step.
+motion: true
+record: true
+save_project: mixer-strip-multiselect
+# The later keys name the panel as target: in this hidden test-mode window the keyboard is not on the panel after a move
+# (target grabs it first); a real click on a strip gives it the keyboard.
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {}
+  - expect: {id: mixerPanel, showing: true, within_ms: 3000}
+  - click: {id: "Audio 1", x: 60, y: 12}
+  - click: {id: "Audio 2", x: 60, y: 12, mods: cmd}
+  - wait: {settleMs: 300}
+  - mark: {check: 1, name: two-strips-selected}
+  - key: {keys: alt+right}
+  - wait: {settleMs: 900}
+  - mark: {check: 2, name: set-moved-one-place}
+  - key: {keys: alt+left, target: mixerPanel}
+  - wait: {settleMs: 900}
+  - key: {keys: cmd+backspace, target: mixerPanel}
+  - wait: {}
+  - expect: {id: "Remove macro", showing: true, within_ms: 2000}
+  - mark: {check: 3, name: one-question-for-the-set}
+  - click: {id: "Remove macro"}
+  - wait: {settleMs: 600}
+  - mark: {check: 3, name: both-strips-gone}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 900}
+  - mark: {check: 4, name: undo-brings-both-back}

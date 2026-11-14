@@ -9,6 +9,7 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerColumnHeader.h"
 
 namespace synth::ui {
 
@@ -66,6 +67,20 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     // The Rename key (F2 / Option+R) renames the focused column's name in place; a text editor keeps its own keys.
     if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused())
         return renameFocusedColumn();
+    // Cmd+Backspace deletes the selected strips' tracks (the timeline row's own action id, so one rebind covers both),
+    // Cmd+Space puts the focused strip's track in or out of the selection, Option+Left / Option+Right move the set one
+    // place (fixed chords like the timeline's Alt+= / Alt+- row-height keys); a column with no single track lets them
+    // bubble. MixerPanelTrackSelection.cpp.
+    if (matchesAction(key, "timelineDeleteFocusedTrack",
+                      juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier, 0)) &&
+        deleteFocusedTracks())
+        return true;
+    if (key == juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::commandModifier, 0) &&
+        toggleFocusedTrackSelection())
+        return true;
+    if (mods.isAltDown() && !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isShiftDown() &&
+        (key.isKeyCode(juce::KeyPress::leftKey) || key.isKeyCode(juce::KeyPress::rightKey)))
+        return moveSelectedStrips(key.isKeyCode(juce::KeyPress::leftKey) ? -1 : 1);
     // The track row's own Duplicate action id (Cmd+D by default), so one rebind covers both; it copies the
     // focused strip's track, and a column with no single track lets the key bubble.
     if (matchesAction(key, "timelineDuplicateFocusedTrack",
@@ -152,6 +167,7 @@ bool MixerPanelComponent::moveFocus(int direction) {
     }
     const int newIndex = focusedColumnIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedColumnIndex_ + direction);
     setFocusedColumnIndex(newIndex);
+    selectFocusedStripTrack();
     return true;
 }
 
@@ -226,6 +242,10 @@ void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
     repaint();
     if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
         grabKeyboardFocus();
+    // A press on the strip's header (or its name) is a press on its track: the timeline row's selection rules.
+    if (e.eventComponent != nullptr && (dynamic_cast<const MixerColumnHeader*>(e.eventComponent) != nullptr ||
+                                        e.eventComponent->getComponentID() == "mixerColumnHeaderName"))
+        selectFromHeaderPress(e, index);
 }
 
 // The copy's column arrives through the rebuild; focus stays on this strip (resolveFocusAfterRebuild matches it by

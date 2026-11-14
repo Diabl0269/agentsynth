@@ -139,6 +139,11 @@ public:
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
+    /** Whether this strip's track is in the timeline's track selection (one shared model): a faint accent wash,
+     *  apart from setSelected()'s reveal border and the keyboard ring. */
+    void setTrackSelected(bool selected);
+    bool isTrackSelectedForTest() const noexcept { return trackSelected_; }
+
     /** MixerPanelComponent calls this from setFocusedColumnIndex() (real
      *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
      *  own comment on why) so VoiceOver's accessibility cursor tracks the visual keyboard-focus
@@ -435,6 +440,7 @@ private:
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> soloButton_{"S"};
     bool selected_ = false;
     bool keyboardFocused_ = false;
+    bool trackSelected_ = false;
     float lift_ = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnComponent)

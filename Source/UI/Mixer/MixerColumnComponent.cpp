@@ -475,6 +475,13 @@ void MixerColumnComponent::setSelected(bool selected) {
     repaint();
 }
 
+void MixerColumnComponent::setTrackSelected(bool selected) {
+    if (trackSelected_ == selected)
+        return;
+    trackSelected_ = selected;
+    repaint();
+}
+
 void MixerColumnComponent::setKeyboardFocused(bool focused) {
     if (keyboardFocused_ == focused)
         return;
@@ -494,6 +501,10 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
     const auto accent = synth::theme::themeOf(*this).colors.accent;
     g.setColour(bg);
     g.fillRect(getLocalBounds());
+    if (trackSelected_) {
+        g.setColour(accent.withAlpha(0.14f));
+        g.fillRect(getLocalBounds());
+    }
     g.setColour(selected_ ? accent : border);
     g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
 }
