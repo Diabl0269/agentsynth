@@ -26,7 +26,8 @@ void setBool(ModuleBase& m, const juce::String& id, bool on) {
 }
 
 // RMS of the last half of a note of `velocity` (0..127) held for kNoteLen samples.
-float noteRms(bool poly, float velocityAmount, bool velToGate, int velocity) {
+// `velToGate` < 0 leaves Poly MIDI at its fresh-module default.
+float noteRms(bool poly, float velocityAmount, int velToGate, int velocity) {
     OscillatorModule osc;
     PolyMidiModule polyMidi;
     ADSRModule adsr;
@@ -40,7 +41,8 @@ float noteRms(bool poly, float velocityAmount, bool velToGate, int velocity) {
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "gateThreshold", 0.001f);
     setParam(adsr, "velocity", velocityAmount);
-    setBool(polyMidi, "velToGate", velToGate);
+    if (velToGate >= 0)
+        setBool(polyMidi, "velToGate", velToGate != 0);
 
     double sumSq = 0.0;
     int counted = 0;
@@ -99,8 +101,8 @@ TEST(ADSRVelocityRender, VelocityShapesLoudnessOnlyInPolyWithVelocityAboveZeroAn
     for (const bool poly : {false, true})
         for (const float amount : {0.0f, 50.0f, 100.0f})
             for (const bool velToGate : {false, true}) {
-                const float soft = noteRms(poly, amount, velToGate, 1);
-                const float hard = noteRms(poly, amount, velToGate, 127);
+                const float soft = noteRms(poly, amount, (int)velToGate, 1);
+                const float hard = noteRms(poly, amount, (int)velToGate, 127);
                 ASSERT_GT(hard, 0.01f);
                 const std::string what = std::string(poly ? "poly" : "mono") + " velocity " +
                                          std::to_string((int)amount) + (velToGate ? " vel->gate on" : " vel->gate off");
@@ -112,4 +114,13 @@ TEST(ADSRVelocityRender, VelocityShapesLoudnessOnlyInPolyWithVelocityAboveZeroAn
                 else
                     EXPECT_NEAR(soft, hard, hard * 0.02f) << what << " soft " << soft << " hard " << hard;
             }
+}
+
+// Default: a fresh Poly MIDI (nothing touched) -> poly ADSR at Velocity 100 -> VCA already plays a soft and a
+// hard note at different loudness.
+TEST(ADSRVelocityRender, FreshPolyMidiDefaultCarriesVelocity) {
+    const float soft = noteRms(true, 100.0f, -1, 1);
+    const float hard = noteRms(true, 100.0f, -1, 127);
+    ASSERT_GT(hard, 0.01f);
+    EXPECT_LT(soft, hard * 0.8f) << "soft " << soft << " hard " << hard;
 }
