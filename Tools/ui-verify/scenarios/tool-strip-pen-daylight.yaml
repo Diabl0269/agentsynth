@@ -5,7 +5,7 @@
 # clicks Draw (Draw lit, Select unlit). PNGs of each button and of the whole window per state; the fills are compared
 # in the run notes.
 #
-# Also (shape flyout, light theme): Shift+8 opens the "more shapes" flyout from the pen button's chevron half; its
+# Also (shape flyout, light theme): a click on the pen button's chevron half opens the "more shapes" flyout (the pointer glides in first, so the clip films it); its
 # panel is the theme's opaque window colour and its rows read in dark ink, and Esc closes it.
 record: true
 save_project: tool-strip-pen-daylight
@@ -35,7 +35,7 @@ steps:
   - screenshot: {id: timelineToolRange, name: daylight-range-unlit-2}
   - screenshot: {id: timelineToolDraw, name: daylight-draw-lit}
   - mark: {check: 1, name: pen-chevron-split-button}
-  - key: {keys: shift+8, instant: "the flyout opens at once under Animations: Off in test mode and the focus ring moves to its row"}
+  - click: {id: timelineToolDraw, x: 35, y: 12, instant: "the flyout opens at once under Animations: Off in test mode and the focus ring moves to its row"}
   - expect: {id: timelineShapeRowSine, showing: true, within_ms: 2000}
   - mark: {check: 2, name: flyout-readable-in-daylight}
   - screenshot: {name: daylight-flyout-open-window}
