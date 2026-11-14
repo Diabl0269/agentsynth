@@ -11,6 +11,7 @@
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/NonModalLabel.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/SoundBrowser/SoundFilterChipRow.h"
 #include "UI/Library/SoundBrowser/SoundFilterModel.h"
@@ -286,6 +287,7 @@ public:
     bool openSelected();
     bool goUp();
     int getScrollOffset() const { return scrollOffset_; }
+    synth::ui::WheelScrollRouter& getWheelForTest() noexcept { return wheelScroll_; }
 
     juce::String getAccessibilityValueText() const;
     bool isListAnimating() const { return listAnim_.isRunning(); }
@@ -522,6 +524,8 @@ private:
     bool soundDragging_ = false;
     int hoveredPart_ = -1;
     int scrollOffset_ = 0;
+    double wheelExact_ = 0.0; // the trackpad's fractional place; the list itself sits on whole pixels
+    synth::ui::WheelScrollRouter wheelScroll_;
     juce::String announcedValueText_;
 
     // The slide (or fade) between two lists: the old one as a picture, the new one live.

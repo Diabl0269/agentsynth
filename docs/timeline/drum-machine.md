@@ -189,7 +189,7 @@ above the chips row.
 
 Turning a chip on grows its lane under the grid over 160 ms (`easeOutCubic`, 80 ms under Reduce Motion, at once with
 Animations Off or off screen) and turning it off folds it back; lanes moving together share one motion, and a chip
-pressed mid-motion carries on from where each lane is. The grid area above the lanes scrolls when the panel is short:
+pressed mid-motion carries on from where each lane is. Trackpad scrolling (rows and sideways) is paced once per display frame like the timeline ([animation](../layout/animation.md#motion-rules), "Scroll glide"). The grid area above the lanes scrolls when the panel is short:
 the lanes squeeze (down to 36 px each) before the rows lose their last two rows of room. The lanes edit the row picked
 by its name (Kick at first); the "for <row>" note says which.
 

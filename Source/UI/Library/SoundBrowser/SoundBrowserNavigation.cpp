@@ -152,6 +152,7 @@ void SoundBrowserComponent::rebuildPlaceListing(const synth::soundbrowser::Sound
 }
 
 void SoundBrowserComponent::rebuildRows() {
+    wheelScroll_.stop(); // a swipe's backlog belongs to the list it was scrolling
     const auto key = selectionKey(selected_);
     const auto snap = index_.snapshot();
     const auto filter = currentFilter();
