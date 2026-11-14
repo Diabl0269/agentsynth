@@ -23,7 +23,7 @@ struct SchmittTrigger {
             high = true;
             return Edge::Rising;
         }
-        if (high && sample < threshold - kHysteresis) {
+        if (high && sample < rearmLevel(threshold)) {
             high = false;
             return Edge::Falling;
         }
@@ -31,4 +31,10 @@ struct SchmittTrigger {
     }
 
     void reset() noexcept { high = false; }
+
+    /** The level a high trigger must fall below. A positive threshold keeps the gap only where the level stays
+     *  above zero: below twice the gap it re-arms at half the threshold, or a gate resting at 0 would never fall. */
+    static constexpr float rearmLevel(float threshold) noexcept {
+        return threshold > 0.0f && threshold < 2.0f * kHysteresis ? 0.5f * threshold : threshold - kHysteresis;
+    }
 };
