@@ -25,7 +25,10 @@ juce::File oldProject() {
 // Rendered by the app that wrote the fixture (0.04617), then raised about 0.5 dB when the Filter's resonance curve was
 // fitted to a measured reference. The chain's LFOs run freely, so a tolerance is needed: runs differ by a few parts in
 // ten thousand.
-constexpr float kOldProjectRms = 0.0488f;
+// (0.0488 before Reverb got Mix.) The fixture's Reverb is saved at Wet 0.33 / Dry 0.4. It loads as Mix + Level and
+// loses the old makeup gain (up to 5.06 dB, accepted before v1), so the same chain renders this much quieter. A
+// different number means the migration changed, not just the cables.
+constexpr float kOldProjectRms = 0.0268f;
 
 // Each module's cables as the old app wrote them: its highest and its lowest modulation channel, with what they drive.
 struct SavedCables {
@@ -119,5 +122,5 @@ TEST_F(SavedCablesKeepChannels, AnOldProjectKeepsEveryCableAndSoundsTheSame) {
     const auto [peak, rms] = render(engine);
     EXPECT_GT(peak, 0.0f);
     EXPECT_NEAR(rms, kOldProjectRms, kOldProjectRms * 0.02f);
-    printf("[old project] rms now %.6f, when saved %.6f\n", rms, kOldProjectRms);
+    printf("[old project] rms now %.6f, pinned %.6f\n", rms, kOldProjectRms);
 }

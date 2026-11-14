@@ -98,10 +98,10 @@ TEST_F(ModuleComponentTest, VCAGainKnobIsTheCVJacksTarget) {
     VCAModule vca;
     ModuleComponent card(&vca, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    auto* gain = findKnob(card, "Gain");
+    auto* gain = findKnob(card, "Level");
     ASSERT_NE(gain, nullptr);
     const auto hit = card.getModTargetPortForPoint(gain->getBounds().getCentre());
-    ASSERT_TRUE(hit.has_value()) << "the VCA's CV jack (labelled \"CV\") drives Gain";
+    ASSERT_TRUE(hit.has_value()) << "the VCA's CV jack (labelled \"CV\") drives Level";
     EXPECT_EQ(hit->index, 1);
     EXPECT_GE(card.sliderIndexForModTarget(vca.getModulationTargets()[0]), 0);
 }

@@ -232,7 +232,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Poly Sequencer",
          "bpm, bypassed, chance, followSongKey, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
          "transpose, velocity"},
-        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, pan, preDelay, roomSize, wet, width"},
+        {"Reverb", "bypassed, damping, dualIO, mix, muted, outputLevel, pan, preDelay, roomSize, width"},
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling, pan"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",

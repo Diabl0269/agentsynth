@@ -78,7 +78,7 @@ struct Fixture {
         editor->timerCallback(); // populates cachedModDisplayInfo
 
         vcaCard = findModuleComp(*editor, vcaNode->getProcessor());
-        gainKnob = vcaCard != nullptr ? findKnob(*vcaCard, "Gain") : nullptr;
+        gainKnob = vcaCard != nullptr ? findKnob(*vcaCard, "Level") : nullptr;
     }
 
     ~Fixture() { engine.shutdown(); }

@@ -1,4 +1,4 @@
-type Reverb size 280x449
+type Reverb size 280x317
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -7,30 +7,26 @@ type Reverb size 280x449
   child 5 label id="" at 12,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 6 knob id="Damping" at 97,109 85x58 visible=1 title="Damping" tip="Damping" focusOrder=0 wantsFocus=1
   child 7 label id="" at 97,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 slider id="Wet" at 119,203 40x96 visible=1 title="Wet" tip="Wet" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 97,185 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 slider id="Dry" at 34,203 40x96 visible=1 title="Dry" tip="Dry" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 12,185 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Width" at 12,317 85x58 visible=1 title="Width" tip="Width" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,299 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Pre-Delay (ms)" at 182,109 85x58 visible=1 title="Pre-Delay (ms)" tip="Pre-Delay (ms)" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 182,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 slider id="Level" at 43,379 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 12,379 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 21 label id="cardSectionHeader" at 12,167 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 textButton id="cardMoreRow" at 12,411 256x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
-  child 23 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 24 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Width" at 97,185 85x58 visible=1 title="Width" tip="Width" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 97,167 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Mix" at 12,185 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 12,167 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Pre-Delay (ms)" at 182,109 85x58 visible=1 title="Pre-Delay (ms)" tip="Pre-Delay (ms)" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 182,91 85x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 43,247 225x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,247 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Pan" at 0,0 0x0 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 textButton id="cardMoreRow" at 12,279 256x24 visible=1 title="More controls (1)" tip="Show the controls this card's layout keeps out of view (Return or Space)" focusOrder=0 wantsFocus=1
+  child 20 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 21 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 37, 146
   in 2 122, 146
-  in 3 150, 274
-  in 4 66, 274
-  in 5 37, 354
-  in 6 207, 146
-  in 7 50, 404
-  in 8 10, 423
+  in 3 37, 222
+  in 4 122, 222
+  in 5 207, 146
+  in 6 50, 272
+  in 7 10, 291
   out 0 270, 58

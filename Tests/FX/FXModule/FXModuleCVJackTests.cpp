@@ -166,20 +166,14 @@ TEST(FXModuleCVJack, DelayTimeCVChangesTheOutput) {
     EXPECT_GT(rmsDifference(render<DelayModule>(run), render<DelayModule>(CvRun{})), 1.0e-2f);
 }
 
-TEST(FXModuleCVJack, ReverbWetAndDryCVChangeTheOutput) {
+TEST(FXModuleCVJack, ReverbMixCVAtMinusOneIsDry) { expectMixCVAtMinusOneIsDry<ReverbModule>(); }
+
+TEST(FXModuleCVJack, ReverbMixCVChangesTheOutput) {
     ReverbModule probe;
-    // Wet CV -1 (no tail) on top of Dry CV +1 (dry at full) is the same as no reverb at all: the
-    // Dry pass is scaled by juce::Reverb's own dryScaleFactor, so compare wet-off runs instead.
-    CvRun wetOff;
-    wetOff.cvChannel = channelOf(probe, "Wet");
-    wetOff.cvValue = -1.0f;
-    const auto a = render<ReverbModule>(wetOff);
-    const auto b = render<ReverbModule>(CvRun{});
-    EXPECT_GT(rmsDifference(a, b), 1.0e-2f) << "removing the tail must be audible";
-    CvRun dryOff;
-    dryOff.cvChannel = channelOf(probe, "Dry");
-    dryOff.cvValue = -1.0f;
-    EXPECT_LT(rms(render<ReverbModule>(dryOff)), rms(b)) << "Dry CV -1 removes the dry signal";
+    CvRun tailOn;
+    tailOn.cvChannel = channelOf(probe, "Mix");
+    tailOn.cvValue = 0.5f;
+    EXPECT_GT(rmsDifference(render<ReverbModule>(tailOn), render<ReverbModule>(CvRun{})), 1.0e-2f);
 }
 
 // ---------------------------------------------------------------------------

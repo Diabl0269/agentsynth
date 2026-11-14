@@ -356,13 +356,6 @@ const std::vector<AllowEntry>& allowList() {
         {"Pitch Shifter", "feedback", 10.5,
          "Feedback 0..kMaxFeedback resonates the shifter's internal delay loop; measured worst case "
          "+9.73 dB (feedback=max, sine220) — see the feedback/resonance family note above."},
-        // Reverb: a continuous HOT (amplitude 4) test tone keeps depositing energy into the
-        // algorithmic tail faster than it decays within this render's window, at wet/dry=1 (their
-        // maxima). A real patch's reverb send is normally well under unity precisely because of
-        // this; still worth a follow-up (see the final report) since Wet/Dry read as plain 0..1 mix
-        // knobs, not gain controls, and nothing in ReverbModule documents this buildup.
-        {"Reverb", "wet", 9.5, "Measured worst case +8.91 dB (wet=max, hot square) — see the Reverb note above."},
-        {"Reverb", "dry", 8.5, "Measured worst case +7.77 dB (dry=max, hot square) — see the Reverb note above."},
         // Voice Mixer: this audit's own worst-case probe (8 identical unison voices, Level at its
         // max 1.0) sums to amplitude 8x before VoiceMixerModule's soft limiter — the limiter is
         // exactly what keeps this bounded (it cannot run away further regardless of voice count or

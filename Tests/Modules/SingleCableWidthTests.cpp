@@ -214,8 +214,7 @@ TEST(SingleCableWidth, AMonoSourceFedToACollapsedReverbWidensWithWidth) {
         auto* m = dynamic_cast<ModuleBase*>(proc.get());
         setParam(*m, "dualIO", 0.0f);
         setParam(*m, "width", width);
-        setParam(*m, "wet", 1.0f);
-        setParam(*m, "dry", 0.0f);
+        setParam(*m, "mix", 1.0f);
         m->setPlayConfigDetails(m->getTotalNumInputChannels(), m->getTotalNumOutputChannels(), kRate, kBlock);
         m->prepareToPlay(kRate, kBlock);
         const int channels = std::max(m->getTotalNumInputChannels(), m->getTotalNumOutputChannels());

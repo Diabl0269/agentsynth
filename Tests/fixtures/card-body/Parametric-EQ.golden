@@ -17,8 +17,8 @@ type Parametric EQ size 560x432
   child 15 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
   child 16 knob id="Output" at 478,350 70x60 visible=1 title="Output" tip="Output" focusOrder=0 wantsFocus=1
   child 17 label id="" at 478,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Mix" at 0,0 0x0 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Mix" at 396,350 70x60 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 396,330 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 20 knob id="Pan" at 0,0 0x0 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
   child 21 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
@@ -37,6 +37,6 @@ type Parametric EQ size 560x432
   in 11 12, 229
   in 12 12, 229
   in 13 494, 389
-  in 14 3, -3
+  in 14 412, 389
   in 15 3, -3
   out 0 550, 58

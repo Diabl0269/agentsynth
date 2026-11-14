@@ -166,8 +166,24 @@ TEST(PortLabelTests, DistortionPortLabelsCollapseCvJacksInSingleMode) {
 TEST(PortLabelTests, ReverbPortLabels) {
     ReverbModule reverb;
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Audio");
-    // Same history as Delay: five targets on ch2-6 and only two declared inputs, until now.
-    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay", "Level", "Pan"});
+    // Raw ch5 was the Dry jack; it is retired (no jack drawn) so every later cable keeps its channel.
+    const std::vector<juce::String> labels = {"Size", "Damping", "Mix", "Width", "Pre-Delay", "Level", "Pan"};
+    const std::vector<int> channels = {2, 3, 4, 6, 7, 8, 9};
+    ASSERT_EQ(reverb.getVisibleInputPortCount(), 1 + (int)labels.size());
+    const auto targets = reverb.getModulationTargets();
+    ASSERT_EQ(targets.size(), labels.size());
+    for (size_t i = 0; i < labels.size(); ++i) {
+        EXPECT_EQ(reverb.getInputPortLabel(1 + (int)i), labels[i]);
+        EXPECT_EQ(targets[i].name, labels[i]);
+        EXPECT_EQ(targets[i].channelIndex, channels[i]);
+    }
+    EXPECT_EQ(reverb.getTotalNumInputChannels(), 10);
+    setDualIO(reverb, true);
+    ASSERT_EQ(reverb.getVisibleInputPortCount(), 2 + (int)labels.size());
+    EXPECT_EQ(reverb.getInputPortLabel(0), "Left");
+    EXPECT_EQ(reverb.getInputPortLabel(1), "Right");
+    for (size_t i = 0; i < labels.size(); ++i)
+        EXPECT_EQ(reverb.getInputPortLabel(2 + (int)i), labels[i]);
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Left");
     EXPECT_EQ(reverb.getOutputPortLabel(1), "Right");
 }

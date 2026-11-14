@@ -62,7 +62,7 @@ constexpr const char* kWorkedExample3 = R"({
     { "id": 303, "type": "VCA" },
     { "id": 304, "type": "Distortion", "params": { "drive": 3.0, "mix": 0.3 } },
     { "id": 305, "type": "Chorus", "params": { "rate": 0.6, "depth": 0.4, "mix": 0.5 } },
-    { "id": 306, "type": "Reverb", "params": { "roomSize": 0.7, "wet": 0.4 } },
+    { "id": 306, "type": "Reverb", "params": { "roomSize": 0.7, "mix": 0.3 } },
     { "id": 307, "type": "Audio Output" }
   ],
   "connections": [

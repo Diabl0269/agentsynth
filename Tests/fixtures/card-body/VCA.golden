@@ -5,7 +5,7 @@ type VCA size 280x193
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
-  child 6 slider id="Gain" at 12,111 256x28 visible=1 title="Gain" tip="Gain" focusOrder=0 wantsFocus=1
+  child 6 slider id="Level" at 12,111 256x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 7 label id="" at 12,93 256x12 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 toggle id="Poly" at 12,153 41x20 visible=1 title="Poly" tip="Play several notes at once. Switches every connected module in this track." focusOrder=0 wantsFocus=1
   child 9 component id="" at 4,52 12x12 visible=1 title="Audio L input" tip="" focusOrder=0 wantsFocus=0
