@@ -235,6 +235,7 @@ public:
                 float threshold = baseThreshold;
                 if (thresholdCV != nullptr)
                     threshold = juce::jlimit(0.0f, 1.0f, threshold + thresholdCV[smp]);
+                threshold = std::max(threshold, kMinGateThreshold);
                 lastThreshold = threshold;
 
                 gateTriggers[0].process(gateSample, threshold);
@@ -284,6 +285,7 @@ public:
                 float threshold = baseThreshold;
                 if (thresholdCV != nullptr)
                     threshold = juce::jlimit(0.0f, 1.0f, threshold + thresholdCV[smp]);
+                threshold = std::max(threshold, kMinGateThreshold);
                 lastThreshold = threshold;
 
                 const float velocityAmount = smoothedVelocity.getNextValue();
@@ -636,6 +638,8 @@ private:
     int riseWindowSamples = 441;
     std::array<int, MAX_VOICES> riseSamplesLeft{};
     std::array<bool, MAX_VOICES> riseSnapsScale{};
+    // A gate that rests at 0 can only fall below a threshold above 0 (see SchmittTrigger::rearmLevel).
+    static constexpr float kMinGateThreshold = 1.0e-4f;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     juce::AudioParameterBool* legatoParam = nullptr;

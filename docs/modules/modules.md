@@ -391,7 +391,9 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   low. Unpatched Gate stays silent, so existing MIDI-only patches are unchanged.
 - **Gate CV**: a Schmitt trigger on ch0 (same `SchmittTrigger` helper as Sample & Hold /
   Comparator). Arms above `Threshold` and only re-arms once the signal falls a fixed 0.05 below
-  it. **Sampled per sample in both mono and poly mode** — a mid-block retrigger is seen on the
+  it; a Threshold under 0.1 re-arms at half its value instead (the gap would otherwise reach below 0, a gate at
+  rest could never fall and the envelope would never release), and the ADSR never uses a Threshold under 0.0001.
+  **Sampled per sample in both mono and poly mode** — a mid-block retrigger is seen on the
   exact sample it happens, wherever it falls in the block.
 - **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor / Limiter / Gate own `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
 - **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent envelope generators; outputs 8
