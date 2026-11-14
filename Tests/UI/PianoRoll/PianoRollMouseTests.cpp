@@ -241,6 +241,8 @@ TEST(PianoRollAutoScrollTest, TimerArmsInsideTheEdgeZoneDuringAMoveDragAndStopsO
 
     // Back to the dead middle band disarms it again without a release.
     f.roll.mouseDrag(leftDrag(f.roll, anchor, anchor));
+    for (int i = 0; i < 4; ++i) // the speed eases out over a few frames, then the follow stops itself
+        f.roll.tickAutoScrollForTest();
     EXPECT_FALSE(f.roll.isAutoScrollTimerRunningForTest());
 
     // Re-arm, then release: the timer never outlives the drag it belonged to.
@@ -292,10 +294,12 @@ TEST(PianoRollAutoScrollTest, EachTickAdvancesTheViewAndReDerivesThePreviewFromT
     const auto trackId = still.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = still.doc.addClip(trackId, 0.0, 64.0, "Clip");
     still.open(clipId);
-    const auto id = still.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
-    const juce::Point<float> anchor = centreOf(still.roll.getNoteRect(id));
     const float right = (float)still.roll.getNoteGridBounds().getRight();
-    const juce::Point<float> inZone(right - 12.0f, anchor.y), towardEdge(right - 6.0f, anchor.y);
+    const double noteBeat = still.roll.xToBeat(right - 12.0) - 0.5; // a one-beat note centred 12 px inside the zone
+    const auto id = still.doc.addNote(clipId, makeNote(noteBeat, 60, 1.0));
+    const juce::Point<float> anchor = centreOf(still.roll.getNoteRect(id));
+    ASSERT_GE(anchor.x, right - 24.0f) << "the press is inside the edge zone";
+    const juce::Point<float> inZone = anchor, towardEdge(right - 6.0f, anchor.y);
     viewport_drag_follow::expectPressInZoneHoldsStill(
         {[&] {
              still.roll.mouseDown(leftClick(still.roll, anchor));

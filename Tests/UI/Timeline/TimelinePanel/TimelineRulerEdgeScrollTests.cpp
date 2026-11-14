@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestEvents.h"
 #include "Transport/TransportService.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -87,9 +88,13 @@ TEST(TimelineRulerEdgeScroll, AMarkerHeldAtTheRightEdgeScrollsTheViewAndStaysUnd
     EXPECT_FALSE(rig.undo.canUndo()) << "the whole move is one undo step";
 
     // A marker pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    // The marker sits near the right end, so the press lands on its flag inside the zone.
     RulerRig still;
-    const auto from = still.flagCentre();
-    const juce::Point<float> inZone{(float)kWidth - 12.0f, from.y}, towardEdge{(float)kWidth - 6.0f, from.y};
+    still.doc.moveMarker(still.marker, 19.0);
+    const auto centre = still.flagCentre();
+    const juce::Point<float> from{std::min(centre.x, (float)kWidth - 14.0f), centre.y};
+    ASSERT_GE(from.x, (float)kWidth - (float)synth::ui::kEdgeZonePx) << "the press is inside the edge zone";
+    const juce::Point<float> inZone = from, towardEdge{from.x + 6.0f, from.y};
     viewport_drag_follow::expectPressInZoneHoldsStill(
         {[&] {
              still.ruler.mouseDown(makeClickEvent(still.ruler, from));
@@ -107,13 +112,17 @@ TEST(TimelineRulerEdgeScroll, ItIsFasterNearerTheEdgeAndStopsWhenThePointerMoves
         const float x = rig == &shallow ? (float)kWidth - 20.0f : (float)kWidth - 2.0f;
         rig->ruler.mouseDown(makeClickEvent(rig->ruler, press));
         rig->ruler.mouseDrag(makeDragEvent(rig->ruler, {x, press.y}, press));
-        rig->ticks(5);
+        rig->ticks(8); // past the ease-in, so the pace is each pointer's own
     }
     EXPECT_GT(deep.state.firstVisibleBeat, shallow.state.firstVisibleBeat);
 
     const auto press = deep.flagCentre();
     deep.ruler.mouseDrag(makeDragEvent(deep.ruler, {400.0f, press.y}, press));
-    EXPECT_FALSE(deep.ruler.isEdgeScrollRunningForTest()) << "back in the middle: no scroll";
+    deep.ticks(4); // the speed eases out over a few frames...
+    EXPECT_FALSE(deep.ruler.isEdgeScrollRunningForTest()) << "...then the follow stops itself";
+    const double rested = deep.state.firstVisibleBeat;
+    deep.ticks(5);
+    EXPECT_EQ(deep.state.firstVisibleBeat, rested) << "back in the middle: no scroll";
     deep.ruler.mouseUp(makeDragEvent(deep.ruler, {400.0f, press.y}, press));
 }
 

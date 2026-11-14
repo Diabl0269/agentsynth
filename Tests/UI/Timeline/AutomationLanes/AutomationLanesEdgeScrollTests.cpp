@@ -94,7 +94,13 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
     const double followed = f.editor->getPreviewBeatForTest() - beatBefore;
     EXPECT_NEAR(followed, scrolled, 1.0) << "the dot moves with the view, within one grid step";
     const double under = f.view().xToBeat(f.rightEdge(50.0).x);
-    EXPECT_NEAR(f.editor->getPreviewBeatForTest(), std::round(under), 1e-9) << "the dot is still under the pointer";
+    // The dot is on a grid line within one step of the pointer: the nearest one, or the last one that keeps its whole
+    // handle inside the lane when the nearest lies past the visible end (the view moves in whole pixels, so which of
+    // the two holds depends on where the last frame left it).
+    const double dotBeat = f.editor->getPreviewBeatForTest();
+    EXPECT_EQ(dotBeat, std::round(dotBeat)) << "on the grid";
+    EXPECT_NEAR(dotBeat, under, 1.0 - 1e-9) << "the dot is still under the pointer";
+    EXPECT_LE(dotBeat, std::round(under)) << "and never further out than the nearest grid line";
 
     // Nearer the edge is faster: a pointer just inside the zone crawls.
     const auto crawlAt = juce::Point<float>((float)f.editor->getWidth() - 20.0f, f.rightEdge(50.0).y);
@@ -105,7 +111,11 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
 
     const auto middle = juce::Point<float>((float)f.editor->getWidth() / 2.0f, f.rightEdge(50.0).y);
     f.dragTo(middle, from);
-    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "back in the middle, the scroll stops";
+    f.ticks(4); // the speed eases out over a few frames...
+    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "...and back in the middle the scroll stops";
+    const double rested = f.first();
+    f.editor->tickEdgeScrollForTest();
+    EXPECT_EQ(f.first(), rested) << "and the view stays still";
 
     f.dragTo(f.rightEdge(50.0), from);
     f.ticks(3);
@@ -120,9 +130,11 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
 
     // A dot pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
     EdgeLane still;
-    still.doc.addBreakpoint(still.lane, 2.0, 50.0);
-    const auto start = still.at(2.0, 50.0);
-    const auto inZone = still.fromRight(12.0f, 50.0);
+    // The dot sits inside the zone, so the press itself lands there.
+    const double zoneBeat = (double)(still.editor->getWidth() - 12) / still.view().pixelsPerBeat;
+    still.doc.addBreakpoint(still.lane, zoneBeat, 50.0);
+    const auto start = still.at(zoneBeat, 50.0);
+    const auto inZone = start;
     viewport_drag_follow::expectPressInZoneHoldsStill({[&] {
                                                            still.press(start);
                                                            still.dragTo(inZone, start);

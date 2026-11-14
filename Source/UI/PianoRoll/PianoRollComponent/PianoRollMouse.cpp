@@ -373,22 +373,20 @@ void PianoRollComponent::autoScrollTick() {
         return;
     }
 
-    const double hVelocityPxPerTick = autoScrollTimer_->horizontalPxPerTick();
-    const double vVelocityRowsPerTick = autoScrollTimer_->verticalPerTick(kEdgeAutoScrollMaxRowsPerTick);
-    if (hVelocityPxPerTick == 0.0 && vVelocityRowsPerTick == 0.0) {
-        autoScrollTimer_->stopTimer(); // the pointer drifted back into the dead middle band
-        return;
-    }
+    const double hStepPx = autoScrollTimer_->horizontalStepPx();
+    const double vStepRows = autoScrollTimer_->verticalStep();
+    if (hStepPx == 0.0 && vStepRows == 0.0)
+        return; // easing below a pixel: nothing moves this frame
 
     bool horizontalMoved = false;
     double movedPx = 0.0;
-    if (hVelocityPxPerTick != 0.0 && rollView_.pixelsPerBeat > 0.0) {
+    if (hStepPx != 0.0 && rollView_.pixelsPerBeat > 0.0) {
         const double before = rollView_.firstVisibleBeat;
-        rollView_.scrollBeats(hVelocityPxPerTick / rollView_.pixelsPerBeat);
+        rollView_.scrollBeats(hStepPx / rollView_.pixelsPerBeat);
         movedPx = (rollView_.firstVisibleBeat - before) * rollView_.pixelsPerBeat;
         horizontalMoved = true;
     }
-    if (vVelocityRowsPerTick != 0.0 && !visiblePitches_.empty()) {
+    if (vStepRows != 0.0 && !visiblePitches_.empty()) {
         // Sign is INVERTED relative to the horizontal case: edgeScrollVelocity returns negative
         // near the LOW edge (here, the TOP of the grid) and positive near the HIGH edge (the
         // bottom). Near the top the user wants to reveal what is ABOVE — higher pitches, since
@@ -399,7 +397,7 @@ void PianoRollComponent::autoScrollTick() {
         // pointer sat there. Adding the raw fractional velocity straight into topRowPosition_
         // fixes that (every tick, at any penetration depth, makes SOME progress) and is what makes
         // a fast run of ticks glide smoothly through rows instead of hopping by whole ones.
-        setTopRowPosition(topRowPosition_ - vVelocityRowsPerTick);
+        setTopRowPosition(topRowPosition_ - vStepRows);
     }
 
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so whichever
@@ -749,8 +747,8 @@ void PianoRollComponent::applyWheelScroll(int axis, double amount) {
 
 //==============================================================================
 // ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
-void PianoRollComponent::tickAutoScrollForTest() { autoScrollTick(); }
-bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_->isTimerRunning(); }
+void PianoRollComponent::tickAutoScrollForTest() { autoScrollTimer_->frameForTest(); }
+bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_->isRunning(); }
 
 void PianoRollComponent::setFollowPlayhead(bool follow) noexcept {
     followPlayhead_ = follow;

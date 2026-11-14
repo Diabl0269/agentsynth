@@ -8,15 +8,16 @@ namespace synth::ui {
 
 CanvasEdgeScrollDriver::CanvasEdgeScrollDriver(GraphEditor& editor)
     : editor_(editor)
-    , scroller_(CanvasEdgeScroller::Hooks{
-          [this] { return editor_.getLocalBounds(); }, [this] { return pointerInView(); },
-          [this](juce::Point<float> d) { return panBy(d); },
-          [this] {
-              // The mouse source's own button state as well as the hardware's: test mode injects
-              // its presses into the window's peer, which the hardware never sees.
-              return testPointer_ != nullptr || juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
-                     juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
-          }}) {
+    , scroller_(editor, CanvasEdgeScroller::Hooks{
+                            [this] { return editor_.getLocalBounds(); }, [this] { return pointerInView(); },
+                            [this](juce::Point<float> d) { return panBy(d); },
+                            [this] {
+                                // The mouse source's own button state as well as the hardware's: test mode injects
+                                // its presses into the window's peer, which the hardware never sees.
+                                return testPointer_ != nullptr ||
+                                       juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
+                                       juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
+                            }}) {
     juce::Desktop::getInstance().addGlobalMouseListener(this);
 }
 

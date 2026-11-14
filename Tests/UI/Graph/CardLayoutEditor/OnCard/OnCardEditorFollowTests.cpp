@@ -203,7 +203,8 @@ struct CutByTheView {
     OnCardRig rig;
     NodeID id;
     CardLayoutOnCardEditor* editor = nullptr;
-    juce::Point<int> edge; // GraphEditor-local
+    juce::Point<int> edge;     // GraphEditor-local: where the pointer is now, as the edge scroll reads it
+    juce::Point<int> edgeRest; // the point on the view's bottom edge the drags are held at
 
     explicit CutByTheView(std::unique_ptr<juce::AudioProcessor> module) {
         id = rig.add(std::move(module), 200, 200);
@@ -212,8 +213,12 @@ struct CutByTheView {
         const auto area = graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds());
         graph.setSize(graph.getWidth(), area.getCentreY() + 2);
         edge = {graph.getLocalArea(rig.card(id), rig.card(id)->getLocalBounds()).getCentreX(), graph.getHeight() - 2};
+        edgeRest = edge;
         graph.getEdgeScroll().setPointerForTest([this] { return edge.toFloat(); });
     }
+    // The pointer well inside the view (outside every edge zone): where a real drag is when it arms.
+    void pointerInside() { edge = {edgeRest.x, edgeRest.y - 100}; }
+    void pointerAtEdge() { edge = edgeRest; }
     GraphEditor& graph() { return rig.canvas.editor; }
     float panY() { return graph().getViewDoc().panY; }
     void tick(int times) {
@@ -236,6 +241,9 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
     ASSERT_NE(outline, nullptr);
     const auto press = outline->getLocalBounds().getCentre().toFloat();
     outline->mouseDown(cardbody_test::mouseAt(*outline, press, juce::ModifierKeys(kLeft)));
+    cut.pointerInside(); // the drag arms with the pointer inside the view, then goes to the edge
+    outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
+    cut.pointerAtEdge();
     outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
     ASSERT_TRUE(cut.editor->isDraggingForTest());
     ASSERT_FALSE(cut.editor->isHidingDragForTest()) << "sanity: the pointer starts on the card";
@@ -285,6 +293,9 @@ TEST(OnCardEditorEdgeScroll, TheScrollStopsOnceTheCardAndItsHideStripAreInView) 
     ASSERT_NE(outline, nullptr);
     outline->mouseDown(
         cardbody_test::mouseAt(*outline, outline->getLocalBounds().getCentre().toFloat(), juce::ModifierKeys(kLeft)));
+    cut.pointerInside();
+    outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
+    cut.pointerAtEdge();
     outline->mouseDrag(cut.atEdge(*outline, kLeft | kCommand));
     ASSERT_TRUE(cut.scrolling());
     cut.tick(200);
@@ -321,8 +332,10 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
     ASSERT_NE(handle, nullptr);
     const auto press = handle->getTitleRowArea().getCentre().toFloat();
     handle->mouseDown(cardbody_test::mouseAt(*handle, press, juce::ModifierKeys(kLeft)));
+    cut.pointerInside(); // the drag arms with the pointer inside the view, then goes to the edge
     handle->mouseDrag(
         cardbody_test::mouseAt(*handle, press + juce::Point<float>(0.0f, 12.0f), juce::ModifierKeys(kLeft)));
+    cut.pointerAtEdge();
     handle->mouseDrag(cut.atEdge(*handle, kLeft));
     ASSERT_TRUE(cut.editor->isDraggingGroupForTest());
     ASSERT_TRUE(cut.scrolling()) << "the group drag armed the canvas edge scroll";
@@ -374,7 +387,9 @@ TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGh
     const auto from = row->localPointToGlobal(row->getLocalBounds().getCentre());
     const auto target = cut.graph().localPointToGlobal(cut.edge);
     row->mouseDown(eventAtScreen(*row, from, kLeft));
+    cut.pointerInside(); // the drag arms with the pointer inside the view, then goes to the edge
     row->mouseDrag(eventAtScreen(*row, (from + target) / 2, kLeft));
+    cut.pointerAtEdge();
     row->mouseDrag(eventAtScreen(*row, target, kLeft));
     const auto ghostBefore = cut.editor->getAddGhostForTest();
     ASSERT_FALSE(ghostBefore.isEmpty()) << "sanity: the pointer is over the card";

@@ -23,8 +23,8 @@
 
 namespace {
 
-using synth::ui::canvasEdgePanDelta;
-using synth::ui::kCanvasEdgeMaxPxPerTick;
+using synth::ui::canvasEdgePanTarget;
+constexpr float kFull = 1.0f; // canvasEdgePanTarget is a fraction of kCanvasEdgeMaxPxPerSec
 
 juce::MouseEvent mouseAt(juce::Component& comp, juce::Point<int> pos, juce::Point<int> downPos, bool dragged) {
     return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos.toFloat(),
@@ -59,31 +59,31 @@ struct Canvas {
 
 TEST(CanvasEdgePanDelta, IsZeroInTheMiddleAndGrowsTowardTheEdge) {
     const juce::Rectangle<int> view(0, 0, 800, 600);
-    EXPECT_EQ(canvasEdgePanDelta({400, 300}, view), juce::Point<float>());
-    EXPECT_EQ(canvasEdgePanDelta({800 - synth::ui::kCanvasEdgeZonePx, 300}, view), juce::Point<float>())
+    EXPECT_EQ(canvasEdgePanTarget({400, 300}, view), juce::Point<float>());
+    EXPECT_EQ(canvasEdgePanTarget({800 - synth::ui::kCanvasEdgeZonePx, 300}, view), juce::Point<float>())
         << "the zone starts exactly at its inner border";
 
-    const float nearer = canvasEdgePanDelta({800 - 30, 300}, view).x;
-    const float closer = canvasEdgePanDelta({800 - 10, 300}, view).x;
+    const float nearer = canvasEdgePanTarget({800 - 30, 300}, view).x;
+    const float closer = canvasEdgePanTarget({800 - 10, 300}, view).x;
     EXPECT_LT(nearer, 0.0f) << "pointer at the right: content moves left, so the view moves right";
     EXPECT_LT(closer, nearer) << "closer to the edge is faster";
-    EXPECT_FLOAT_EQ(canvasEdgePanDelta({800, 300}, view).x, -kCanvasEdgeMaxPxPerTick);
-    EXPECT_FLOAT_EQ(canvasEdgePanDelta({5000, 300}, view).x, -kCanvasEdgeMaxPxPerTick) << "off the view is capped";
+    EXPECT_FLOAT_EQ(canvasEdgePanTarget({800, 300}, view).x, -kFull);
+    EXPECT_FLOAT_EQ(canvasEdgePanTarget({5000, 300}, view).x, -kFull) << "off the view is capped";
 }
 
 TEST(CanvasEdgePanDelta, MirrorsOnTheOtherSidesAndMovesAxesIndependently) {
     const juce::Rectangle<int> view(0, 0, 800, 600);
-    EXPECT_FLOAT_EQ(canvasEdgePanDelta({0, 300}, view).x, kCanvasEdgeMaxPxPerTick);
-    EXPECT_FLOAT_EQ(canvasEdgePanDelta({400, 0}, view).y, kCanvasEdgeMaxPxPerTick);
-    EXPECT_FLOAT_EQ(canvasEdgePanDelta({400, 600}, view).y, -kCanvasEdgeMaxPxPerTick);
-    const auto corner = canvasEdgePanDelta({800, 600}, view);
-    EXPECT_FLOAT_EQ(corner.x, -kCanvasEdgeMaxPxPerTick);
-    EXPECT_FLOAT_EQ(corner.y, -kCanvasEdgeMaxPxPerTick);
+    EXPECT_FLOAT_EQ(canvasEdgePanTarget({0, 300}, view).x, kFull);
+    EXPECT_FLOAT_EQ(canvasEdgePanTarget({400, 0}, view).y, kFull);
+    EXPECT_FLOAT_EQ(canvasEdgePanTarget({400, 600}, view).y, -kFull);
+    const auto corner = canvasEdgePanTarget({800, 600}, view);
+    EXPECT_FLOAT_EQ(corner.x, -kFull);
+    EXPECT_FLOAT_EQ(corner.y, -kFull);
 }
 
 TEST(CanvasEdgePanDelta, ATinyViewKeepsADeadMiddle) {
     const juce::Rectangle<int> view(0, 0, 90, 90);
-    EXPECT_EQ(canvasEdgePanDelta({45, 45}, view), juce::Point<float>());
+    EXPECT_EQ(canvasEdgePanTarget({45, 45}, view), juce::Point<float>());
 }
 
 // Regression test for FRO799: dragging a card to the window edge did not scroll the canvas.
@@ -111,8 +111,9 @@ TEST(CanvasEdgeScroll, ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUn
         << "the card is still under the stationary pointer";
     EXPECT_EQ(card->getY(), 220 - (ModuleComponent::kHeaderHeight + 10)) << "no vertical drift";
 
-    // Back inward: the pan stops.
+    // Back inward: the pan eases out over a few frames, then stops.
     c.pointer = {400.0f, 220.0f};
+    c.tick(4);
     const float panStopped = c.panX();
     c.tick(5);
     EXPECT_FLOAT_EQ(c.panX(), panStopped);
@@ -126,23 +127,29 @@ TEST(CanvasEdgeScroll, ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUn
 
     // A card pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
     Canvas still;
-    const auto stillId = still.osc(300, 200);
+    const auto stillId = still.osc(720, 200);
     auto* stillCard = findComponent(still.editor, stillId);
     ASSERT_NE(stillCard, nullptr);
+    // The card reaches into the right zone, so the press itself lands on its header inside the zone.
     const juce::Point<int> inZone(775, 220), towardEdge(781, 220);
+    const auto stillPress = stillCard->getLocalPoint(&still.editor, inZone);
+    ASSERT_TRUE(stillCard->getLocalBounds().contains(stillPress))
+        << "the press is on the card: " << stillCard->getBounds().toString();
     viewport_drag_follow::expectPressInZoneHoldsStill(
         {[&] {
              still.pointer = inZone.toFloat();
-             stillCard->mouseDown(mouseAt(*stillCard, press, press, false));
-             stillCard->mouseDrag(mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, inZone), press, true));
+             stillCard->mouseDown(mouseAt(*stillCard, stillPress, stillPress, false));
+             stillCard->mouseDrag(
+                 mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, inZone), stillPress, true));
          },
          [&] { still.tick(1); },
          [&] {
              still.pointer = towardEdge.toFloat();
              stillCard->mouseDrag(
-                 mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, towardEdge), press, true));
+                 mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, towardEdge), stillPress, true));
          },
-         [&] { return (double)still.panX(); }, [&] { stillCard->mouseUp(mouseAt(*stillCard, press, press, true)); }});
+         [&] { return (double)still.panX(); },
+         [&] { stillCard->mouseUp(mouseAt(*stillCard, press, stillPress, true)); }});
 }
 
 TEST(CanvasEdgeScroll, TheCloserToTheEdgeTheFasterItScrolls) {
@@ -155,6 +162,7 @@ TEST(CanvasEdgeScroll, TheCloserToTheEdgeTheFasterItScrolls) {
         card->mouseDown(mouseAt(*card, press, press, false));
         c.pointer = {i == 0 ? 770.0f : 797.0f, 220.0f};
         card->mouseDrag(mouseAt(*card, card->getLocalPoint(&c.editor, c.pointer.roundToInt()), press, true));
+        c.tick(8); // past the ease-in, so the pace is each pointer's own
         const float before = c.panX();
         c.tick(1);
         step[i] = before - c.panX();
@@ -273,14 +281,16 @@ HeldDrag holdAtTheBottomEdge(DragKind kind, Clock clock, int ticks) {
     } else {
         juce::Component* card = nullptr;
         if (kind == DragKind::ModuleCard)
-            card = findComponent(editor, cards[6]);
+            card = findComponent(editor, cards[1]); // in view: a real press lands inside the view
         else
             card = editor.getMacroController().getMacroCardForTest(folded);
         EXPECT_NE(card, nullptr);
         if (card == nullptr)
             return {};
         const juce::Point<int> press(card->getWidth() / 2, 20);
+        pointer = editor.getLocalPoint(card, press).toFloat(); // the pointer is where the press lands: inside the view
         card->mouseDown(mouseAt(*card, press, press, false));
+        pointer = edge;
         card->mouseDrag(mouseAt(*card, card->getLocalPoint(&editor, edge.roundToInt()), press, true));
         EXPECT_TRUE(editor.getEdgeScroll().isActive());
         tickAll();
@@ -348,11 +358,13 @@ TEST(CanvasEdgeScrollCost, ATickThatCannotPanBringsASkippedPreviewUpToDate) {
     editor.itemDragEnter(details);
     auto& dd = editor.getDragDropController();
     const int afterEnter = dd.fullPreviewCount();
-    editor.getEdgeScroll().tickForTest(); // pans; the clock has not moved, so the preview waits
+    for (int i = 0; i < 6; ++i)
+        editor.getEdgeScroll().tickForTest(); // pans (easing in); the clock has not moved, so the preview waits
     EXPECT_EQ(dd.fullPreviewCount(), afterEnter);
     const auto stale = dd.getDragPreviewGhost();
-    pointer = {400.0f, 300.0f}; // back in the middle: the next tick does not pan
-    editor.getEdgeScroll().tickForTest();
+    pointer = {400.0f, 300.0f}; // back in the middle: the pan eases out over three ticks, the next one cannot pan
+    for (int i = 0; i < 4; ++i)
+        editor.getEdgeScroll().tickForTest();
     EXPECT_EQ(dd.fullPreviewCount(), afterEnter + 1);
     EXPECT_NE(dd.getDragPreviewGhost(), stale) << "the ghost caught up with the scrolled canvas";
     editor.itemDragExit(details);

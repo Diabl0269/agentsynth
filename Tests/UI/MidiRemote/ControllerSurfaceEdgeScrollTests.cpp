@@ -147,8 +147,10 @@ TEST(ControllerSurfaceEdgeScroll, TheCloserToTheEdgeTheFasterItPans) {
         s.pressMarquee();
         const juce::Point<float> at(i == 0 ? (float)kWidth - 30.0f : (float)kWidth - 2.0f, 150.0f);
         s.dragMarquee(at);
+        s.tick(8); // past the ease-in, so the pace is each pointer's own
+        const float before = s.panX();
         s.tick(1);
-        step[i] = -s.panX();
+        step[i] = before - s.panX();
         s.releaseMarquee(at);
     }
     EXPECT_GT(step[0], 0.0f);
@@ -161,6 +163,7 @@ TEST(ControllerSurfaceEdgeScroll, MovingBackInwardOrReleasingStopsThePan) {
     s.dragCell(kRightEdge);
     s.tick(3);
     s.dragCell({200.0f, 150.0f});
+    s.tick(4); // the pan eases out over a few frames
     const float inward = s.panX();
     s.tick(5);
     EXPECT_FLOAT_EQ(s.panX(), inward) << "back inside the view, nothing pans";

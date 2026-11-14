@@ -2,7 +2,7 @@
 
 // CanvasEdgeScrollDriver.h
 //
-// GraphEditor's collaborator for "drag to the edge of the canvas to scroll it" (CanvasEdgeScroller.h is its timer,
+// GraphEditor's collaborator for "drag to the edge of the canvas to scroll it" (CanvasEdgeScroller.h is its clock,
 // CanvasEdgeScroll.h its speed curve). It serves two kinds of drag:
 //  - a card moved on the canvas (a module or a collapsed macro): after each pan the card gets a synthetic mouseDrag at
 //    the unmoved pointer, so it takes the same path as a real one and keeps tracking under the pointer;
@@ -59,7 +59,7 @@ public:
     bool isActive() const noexcept { return scroller_.isActive(); }
 
     /** Test seams: the pointer as the canvas sees it (canvas-local), replacing the real mouse and the "button is
-     *  still down" check; and one scroller tick without the 30 Hz timer. */
+     *  still down" check; and one scroller frame without the display. */
     void setPointerForTest(std::function<juce::Point<float>()> pointerInCanvasView);
     void tickForTest() { scroller_.tick(); }
 

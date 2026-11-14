@@ -574,6 +574,16 @@ shortcut.
   nothing (a clamp, the same whole pixel) repaints and notifies nobody; a fling into an end stops there. Reduce Motion and
   Animations Off take the driver's own path. Guard: `TrackpadScrollSurfaceTests.cpp`, `MixerTrackpadScrollTest.*`, `SoundBrowserTrackpadScrollTests.cpp`
   (a new scroll surface adds its swipe test there).
+- **Edge scroll.** A drag held at the edge of a view (the canvas, the controller surface, every timeline drag) pans
+  it at display refresh, never on a fixed-rate timer: `EdgeScrollPump` (`Source/UI/Layout/EdgeScrollPump.h`) runs one
+  `juce::VBlankAttachment` frame per refresh while the follow is live, turns a speed in px per second into that frame's
+  step (the frame time clamped to 1/30 s, so a stall never leaps), eases the speed toward its target over 100 ms (in
+  and out), and moves only whole device pixels (logical ones on the timeline), carrying the fraction, so a 120 Hz screen
+  draws twice the steps at half the size and the view covers the same ground a second. Reduce Motion and Animations
+  Off keep it unchanged: the pan is the drag's own feedback, like the playhead, not decoration. Lists that reorder
+  (`ViewportDragScroll`) still step on their drag events and JUCE's drag auto-repeat. Guard:
+  `EdgeScrollPump.NoEdgeFollowerRunsItsOwnTimer`. Research: Cubase's and Figma's edge scroll moves continuously at the
+  display's rate with a speed that grows toward the edge; neither steps in timer beats.
 - **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the
   checklist in `Tests/UI/Layout/UndoGlideSurfaces.h` ([undo-glide.md](undo-glide.md)).
 - **View jumps animate.** Showing something on the canvas (a mixer insert or column, Go to Output, a card the arrow

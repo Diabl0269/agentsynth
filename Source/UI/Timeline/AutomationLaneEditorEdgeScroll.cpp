@@ -122,10 +122,6 @@ void AutomationLaneEditor::edgeScrollTick() {
         stopEdgeScroll();
         return;
     }
-    if (edgeScroll_->horizontalPxPerTick() == 0.0) {
-        edgeScroll_->stopTimer(); // back out of the zone: the drag goes on
-        return;
-    }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
         return;
     previewDragAt(lastDragPointer_);
@@ -135,9 +131,9 @@ void AutomationLaneEditor::edgeScrollTick() {
 
 void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_->stop(); }
 
-bool AutomationLaneEditor::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isTimerRunning(); }
+bool AutomationLaneEditor::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isRunning(); }
 
-void AutomationLaneEditor::tickEdgeScrollForTest() { edgeScroll_->timerCallback(); }
+void AutomationLaneEditor::tickEdgeScrollForTest() { edgeScroll_->frameForTest(); }
 
 // The view follows the grabbed dot of a key move by where it is DRAWN (its rest place plus its eased offset), not by
 // where it will rest: once that passes the margin line (kScrollIntoViewMargin in from the edge it is leaving by) the

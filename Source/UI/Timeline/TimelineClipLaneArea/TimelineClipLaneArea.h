@@ -642,9 +642,9 @@ protected:
     virtual void autoScrollTick();
 
 public:
-    // Test seam: drives one autoScrollTick() without a real juce::Timer (see the timer's own
+    // Test seam: drives one edge-scroll frame (and its autoScrollTick()) without the display (see the timer's own
     // comment for why the callback can't be exercised at wall-clock speed in a headless test run).
-    void tickAutoScrollForTest() { autoScrollTick(); }
+    void tickAutoScrollForTest();
     // Whether the edge-scroll timer is currently armed — the gating half of the timer contract a
     // test pins (started only inside the zone with a drag live, stopped the instant either isn't
     // true anymore).

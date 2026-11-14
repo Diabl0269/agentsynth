@@ -1,10 +1,10 @@
 // DrumMachineComponent: a drag follows the view. A paint stroke or a drum's end edge held in the grid's left or right
 // edge zone, or a ramp across a lane under the grid held at that lane's edge, scrolls the grid's own view sideways at
-// the clip lanes' pace (EdgeScrollTimer, faster nearer the edge); a stroke held at the top or bottom of the grid also
-// scrolls the rows. Each tick re-derives the drag from the still pointer against the scrolled view: the stroke and the
-// ramp reach the cells and hits that scrolled in under the pointer, and the edge stays under it. The loudness drag on
-// one hit only changes a value and never scrolls. Release and Esc stop it (endGesture, DrumHitLane::endGesture).
-// docs/timeline/drum-machine.md.
+// the clip lanes' pace (EdgeScrollTimer, faster nearer the edge, one eased step a display frame); a stroke held at the
+// top or bottom of the grid also scrolls the rows. Each frame re-derives the drag from the still pointer against the
+// scrolled view: the stroke and the ramp reach the cells and hits that scrolled in under the pointer, and the edge
+// stays under it. The loudness drag on one hit only changes a value and never scrolls. Release and Esc stop it
+// (endGesture, DrumHitLane::endGesture). docs/timeline/drum-machine.md.
 
 #include "DrumMachineComponent.h"
 
@@ -37,16 +37,16 @@ void DrumMachineComponent::edgeScrollTick() {
         stopEdgeScroll();
         return;
     }
-    const double rowsPx = laneDrag ? 0.0 : edgeScroll_.verticalPerTick(kEdgeAutoScrollMaxPxPerTick);
-    if (edgeScroll_.horizontalPxPerTick() == 0.0 && rowsPx == 0.0) {
-        edgeScroll_.stopTimer(); // back out of the zones: the drag goes on
-        return;
-    }
+    const double rowsPx = laneDrag ? 0.0 : edgeScroll_.verticalStep();
+    if (edgeScroll_.horizontalStepPx() == 0.0 && rowsPx == 0.0)
+        return; // easing below a pixel: nothing moves this frame
     const double movedX = edgeScroll_.scrollView(view_);
     const double scrollYBefore = scrollY_;
     if (rowsPx != 0.0)
         setScrollY(scrollY_ + rowsPx);
     const double movedY = scrollY_ - scrollYBefore;
+    if (rowsPx != 0.0 && movedY == 0.0)
+        edgeScroll_.haltVertical(); // at the top or bottom row: a later move starts from rest
     if (movedX == 0.0 && movedY == 0.0)
         return; // pinned at beat 0 and at the top or bottom row: nothing moved, nothing to re-derive
     if (movedX != 0.0)

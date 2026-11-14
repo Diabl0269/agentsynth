@@ -5,7 +5,8 @@ cable and a selection box. Writes a PNG per gesture (held at the edge) and print
 
     python3 Tools/ui-verify/examples/edge_scroll_drags.py [--app <path to Agent Synth.app>] [--out <dir>] [--visible]
 
-Test mode turns animations off, but the edge scroll runs on its own 30 Hz timer, so it needs no `--automation-motion`.
+Test mode turns animations off, but the edge scroll runs on the display-linked EdgeScrollPump, which no Animations
+mode stops, so it needs no `--automation-motion`.
 """
 
 import argparse

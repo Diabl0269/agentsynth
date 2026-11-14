@@ -175,23 +175,23 @@ are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
 
 ## Edge auto-scroll
 
-`Source/UI/Timeline/EdgeAutoScroll.h` is a small pure helper — one function,
-`edgeScrollVelocity(pos, lo, hi, zonePx, maxPerTick)`, plus the two shared constants `kEdgeZonePx`
-(24 px edge-zone width) and `kEdgeScrollHz` (30 Hz gated-timer rate). It deliberately holds no
-state, no timer and no component reference, so "how fast does an edge-drag scroll" is one decision
+`Source/UI/Timeline/EdgeAutoScroll.h` is a small pure helper — the function
+`edgeScrollVelocity(pos, lo, hi, zonePx, maxSpeed)`, the press rule `EdgeIntent`, and the shared constants `kEdgeZonePx`
+(24 px edge-zone width) and `kEdgeAutoScrollMaxPxPerSec` (540 px a second). It deliberately holds no
+timer and no component reference, so "how fast does an edge-drag scroll" is one decision
 the clip lanes and the piano roll both read rather than two that could silently drift apart.
 
 Velocity is 0 in the dead middle band, ramps linearly with penetration depth from 0 at the zone's
-inner edge to `maxPerTick` right at the component edge, and clamps at `maxPerTick` beyond it — a
+inner edge to `maxSpeed` right at the component edge, and clamps at `maxSpeed` beyond it — a
 pointer JUCE still reports after being dragged off the component entirely must not fly the view
 away.
 
-`TimelineClipLaneArea::updateAutoScrollArming()` starts and stops a `juce::Timer` at
-`kEdgeScrollHz` gated on **both** a Move or Resize drag being active AND the last known pointer
+`TimelineClipLaneArea::updateAutoScrollArming()` hands the pointer to its `EdgeScrollTimer`, whose frames (one per
+display refresh, on the shared `EdgeScrollPump`) run gated on **both** a Move or Resize drag being active AND the last known pointer
 sitting inside the edge zone — the timer never runs for any other reason, including a marquee or a
 plain hover. Each `autoScrollTick()` re-checks both conditions (the drag can have ended, or the
 pointer moved back to the dead zone, since the last check), scrolls `TimelineViewState` by
-`velocityPxPerTick / pixelsPerBeat` beats, and — because no `MouseEvent` fired this tick, only the
+that frame's eased step (`horizontalStepPx() / pixelsPerBeat` beats), and — because no `MouseEvent` fired this frame, only the
 view moved — calls `updateDragPreviewFromLastPointer()` to re-derive the in-flight drag preview
 against the same last-known pointer position but the NEW scroll offset.
 

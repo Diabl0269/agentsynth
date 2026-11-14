@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's timer)
+class CanvasEdgeScroller; // UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h (the edge scroll's clock)
 
 // ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
 // panel's centre region -- the selected controller's controls drawn on a 56 px grid

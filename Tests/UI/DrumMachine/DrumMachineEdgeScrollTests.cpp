@@ -67,9 +67,9 @@ TEST(DrumMachineEdgeScroll, AStrokeHeldAtTheRightEdgeScrollsTheGridAndPaintsTheC
 
     // A stroke pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
     EdgeFixture still;
-    const auto from = centreOf(still.grid.cellBounds(still.grid.rowOfPitch(42), 0));
     auto inZone = still.rightEdgeOfRow(42);
     inZone.x -= 10.0f;
+    const auto from = inZone; // a stroke can start on any cell, so the press itself lands in the zone
     viewport_drag_follow::expectPressInZoneHoldsStill(
         {[&] {
              still.grid.mouseDown(leftClick(still.grid, from));
@@ -104,13 +104,17 @@ TEST(DrumMachineEdgeScroll, MovingBackInStopsTheScrollAndADeeperPointerScrollsFa
             at.x -= 18.0f;
         f->grid.mouseDown(leftClick(f->grid, press));
         f->grid.mouseDrag(leftDrag(f->grid, at, press));
-        f->ticks(5);
+        f->ticks(8); // past the ease-in, so the pace is each pointer's own
     }
     EXPECT_GT(deep.grid.getViewState().firstVisibleBeat, shallow.grid.getViewState().firstVisibleBeat);
-    const auto press = centreOf(deep.grid.cellBounds(deep.grid.rowOfPitch(42), 0));
-    const auto middle = centreOf(deep.grid.cellBounds(deep.grid.rowOfPitch(42), 2));
+    const auto press = centreOf(shallow.grid.cellBounds(shallow.grid.rowOfPitch(42), 0)); // as before any scrolling
+    const juce::Point<float> middle{static_cast<float>(deep.grid.gridRegion().getCentreX()), press.y};
     deep.grid.mouseDrag(leftDrag(deep.grid, middle, press));
-    EXPECT_FALSE(deep.grid.isEdgeScrollRunningForTest());
+    deep.ticks(4); // the speed eases out over a few frames...
+    EXPECT_FALSE(deep.grid.isEdgeScrollRunningForTest()) << "...then the follow stops itself";
+    const double rested = deep.grid.getViewState().firstVisibleBeat;
+    deep.ticks(5);
+    EXPECT_EQ(deep.grid.getViewState().firstVisibleBeat, rested) << "and nothing scrolls once it is back in";
     deep.grid.mouseUp(leftDrag(deep.grid, middle, press));
     shallow.grid.mouseUp(leftDrag(shallow.grid, press, press));
 }
@@ -188,8 +192,8 @@ TEST(DrumMachineEdgeScroll, ALaneRampHeldAtTheRightEdgeScrollsTheGridAndSetsTheH
     still.showLane(DrumLaneKind::Loudness);
     still.grid.setHorizontalView(kZoomedIn, 0.0);
     auto& stillLane = still.grid.getLane(DrumLaneKind::Loudness);
-    const auto from = inLane(stillLane, 0, 0.9f);
-    const juce::Point<float> inZone{static_cast<float>(stillLane.getWidth() - 12), from.y};
+    const juce::Point<float> inZone{static_cast<float>(stillLane.getWidth() - 12), inLane(stillLane, 0, 0.9f).y};
+    const auto from = inZone; // a ramp can start anywhere in the lane, so the press itself lands in the zone
     const juce::Point<float> towardEdge{inZone.x + 6.0f, from.y};
     viewport_drag_follow::expectPressInZoneHoldsStill(
         {[&] {

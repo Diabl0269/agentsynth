@@ -28,12 +28,8 @@ void TimelineSectionStrip::edgeScrollTick() {
         stopEdgeScroll();
         return;
     }
-    if (edgeScroll_.horizontalPxPerTick() == 0.0) {
-        edgeScroll_.stopTimer(); // back out of the zone: the drag goes on
-        return;
-    }
     if (edgeScroll_.scrollView(viewState_) == 0.0)
-        return; // pinned at beat 0: nothing moved, nothing to re-derive
+        return; // pinned at beat 0, or easing below a pixel: nothing moved, nothing to re-derive
     if (makeDragging_)
         updateMakeDragAt(lastDragPointer_);
     else

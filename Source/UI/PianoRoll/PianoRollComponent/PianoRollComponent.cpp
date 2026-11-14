@@ -96,7 +96,7 @@ bool noteRangeShownDiffers(const ScaleAssistPanel& panel, const synth::Clip& cli
 //==============================================================================
 PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     : viewState_(viewState)
-    , autoScrollTimer_(std::make_unique<EdgeScrollTimer>()) {
+    , autoScrollTimer_(std::make_unique<EdgeScrollTimer>(*this, kEdgeAutoScrollMaxRowsPerSec, 0.0)) {
     autoScrollTimer_->onTick = [this] { autoScrollTick(); };
     tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: initHeaderChips and focusLost use it
     setComponentID("pianoRollComponent");

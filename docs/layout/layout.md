@@ -100,11 +100,13 @@ drags (they edit a value), and the minimap drag (it moves the view itself). A ne
 canvas gets a row here and a gesture in `CanvasEdgeScrollGestureTests.cpp`, which presses, drags, holds and releases
 each one through its real mouse handlers.
 
-- **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
-  grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
-  it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
-  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit,
-  Esc (a cable, a macro) or `cancelLiveDragGestures` stops the timer.
+- **Speed.** `canvasEdgePanTarget` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
+  grows linearly over the outer 48 px (a third of a small view at most) up to `kCanvasEdgeMaxPxPerSec` (660 screen px a
+  second) at the edge or past it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The pan runs on the
+  shared `EdgeScrollPump` (`Source/UI/Layout/EdgeScrollPump.h`): one step per display frame for the length of a drag,
+  eased toward the target speed over 100 ms, in whole device pixels with the fraction carried to the next frame (see
+  [animation.md, Motion rules](animation.md#motion-rules), "Edge scroll"). Moving the pointer back inward eases the pan
+  to rest; a release, drop, exit, Esc (a cable, a macro) or `cancelLiveDragGestures` stops it at once.
 - **Only once the pointer moves toward the edge.** A drag pressed inside an edge zone (a jack, a card or a box corner
   that sits near the edge of the view) does not pan while the pointer holds still: it pans once the pointer has moved
   `kEdgeIntentPx` (4 px) toward that edge since the press, or has been outside that edge's zone once during the drag.
@@ -145,8 +147,9 @@ The rule: a drag (or a key hold) that can carry something past the edge of a vie
 along, so the thing never sticks at the edge or goes out of sight. Each surface that does it, and the helpers:
 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
-  pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
-  `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection,
+  pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerSec` (540 px a second),
+  stepped once per display frame by `EdgeScrollTimer` on the shared `EdgeScrollPump`, eased in and out over 100 ms and
+  moved in whole logical pixels (the timeline's painters round to them). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection,
   stretch-box and selection-box drags (`AutomationLaneEditorEdgeScroll.cpp`; the selection box keeps its pressed corner
   on its beat as the view scrolls), the Sections strip's block and make-section drags
   (`TimelineSectionStripEdgeScroll.cpp`), the ruler's marker, loop and scrub drags (`TimelineRulerEdgeScroll.cpp`),

@@ -290,8 +290,8 @@ public:
     static void setAnimateOffScreenForTest(bool animate);
     void finishMotionsForTest();
     /** Test seams: one tick of the edge scroll a drag held at the grid's or a lane's edge runs, and its state. */
-    void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
-    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    void tickEdgeScrollForTest() { edgeScroll_.frameForTest(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isRunning(); }
     double getScrollYForTest() const noexcept { return scrollY_; }
     WheelScrollRouter& getWheelForTest() noexcept { return wheel_; }
 
@@ -552,7 +552,7 @@ private:
     double cellsStepBeats_ = 0.0;
     Cell focus_{0, 0};
     Gesture gesture_;
-    EdgeScrollTimer edgeScroll_;
+    EdgeScrollTimer edgeScroll_{*this};
     DrumHitLane* edgeLane_ = nullptr; ///< the lane whose ramp is held at an edge, or null for the grid
 
     double swing_ = synth::Clip::kStraightSwing;

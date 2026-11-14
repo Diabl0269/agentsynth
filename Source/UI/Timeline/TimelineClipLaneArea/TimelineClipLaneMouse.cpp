@@ -312,12 +312,8 @@ void TimelineClipLaneArea::autoScrollTick() {
         edgeScroll_->stop();
         return;
     }
-    if (edgeScroll_->horizontalPxPerTick() == 0.0) {
-        edgeScroll_->stopTimer(); // the pointer drifted back into the dead middle band
-        return;
-    }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
-        return; // pinned at beat 0: nothing moved
+        return; // pinned at beat 0, or easing below a pixel: nothing moved
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so the preview has
     // to be re-derived against the NEW firstVisibleBeat from the same last-known pointer position.
     updateDragPreviewFromLastPointer();
@@ -765,6 +761,8 @@ void TimelineClipLaneArea::lookAndFeelChanged() {
     applyToolCursor();
 }
 
-bool TimelineClipLaneArea::isAutoScrollTimerRunningForTest() const noexcept { return edgeScroll_->isTimerRunning(); }
+void TimelineClipLaneArea::tickAutoScrollForTest() { edgeScroll_->frameForTest(); }
+
+bool TimelineClipLaneArea::isAutoScrollTimerRunningForTest() const noexcept { return edgeScroll_->isRunning(); }
 
 } // namespace synth::ui

@@ -694,7 +694,7 @@ void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
     // inside the view (the common, playing-and-visible case): it returns without ever calling
     // setHorizontalView, so the zero-repaint-while-unmoved contract below is untouched — follow
     // adds no work at all until the line is about to leave the visible grid.
-    if (followPlayhead_ && !followSuspended_ && dragMode_ == DragMode::None && !autoScrollTimer_->isTimerRunning()) {
+    if (followPlayhead_ && !followSuspended_ && dragMode_ == DragMode::None && !autoScrollTimer_->isRunning()) {
         const auto grid = gridRegion();
         if (!grid.isEmpty() && rollView_.pixelsPerBeat > 0.0) {
             const int rawX = (int)std::llround(beatToX(absoluteBeat));

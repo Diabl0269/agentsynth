@@ -1,13 +1,12 @@
 // Concern (docs/control/midi-remote-ui.md#surface-centre): the surface follows a drag held at its edge. A marquee or a
 // cell (or a group of cells) dragged into the outer band of the surface pans it, faster nearer the edge, on the same
-// gated 30 Hz timer and speed curve the patch canvas uses (CanvasEdgeScroller, canvasEdgePanDelta); a press inside the
+// display-rate pump and speed curve the patch canvas uses (CanvasEdgeScroller, canvasEdgePanTarget); a press inside the
 // band pans only once the pointer moves toward that edge (EdgeIntent). The pointer does
 // not move while the content does, so after each pan the drag is re-aimed at the still pointer with a synthetic
 // mouseDrag through its own handler: the marquee rect grows over what scrolled in, and the cell's content-space delta
-// grows, so it keeps moving under the pointer. The release, Esc (until the release) and moving back inward (on the next
-// tick) stop it; the
-// move is still committed once, on release, by the cell's own onDragEnded. docs/layout/layout.md, "Every drag follows
-// the view".
+// grows, so it keeps moving under the pointer. The release, Esc (until the release) and moving back inward (easing to
+// rest over a few frames) stop it; the move is still committed once, on release, by the cell's own onDragEnded.
+// docs/layout/layout.md, "Every drag follows the view".
 
 #include "ControllerSurfaceComponent.h"
 
@@ -55,17 +54,18 @@ bool ControllerSurfaceComponent::panByForEdgeScroll(juce::Point<float> d) {
 
 CanvasEdgeScroller& ControllerSurfaceComponent::edgeScroller() {
     if (edgeScroll_ == nullptr)
-        edgeScroll_ = std::make_unique<CanvasEdgeScroller>(CanvasEdgeScroller::Hooks{
-            [this] { return getLocalBounds(); }, [this] { return edgePointer_; },
-            [this](juce::Point<float> d) { return panByForEdgeScroll(d); },
-            [this] {
-                return edgeTickForTest_ || juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
-                       juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
-            }});
+        edgeScroll_ = std::make_unique<CanvasEdgeScroller>(
+            *this, CanvasEdgeScroller::Hooks{
+                       [this] { return getLocalBounds(); }, [this] { return edgePointer_; },
+                       [this](juce::Point<float> d) { return panByForEdgeScroll(d); },
+                       [this] {
+                           return edgeTickForTest_ || juce::Desktop::getInstance().getMainMouseSource().isDragging() ||
+                                  juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown();
+                       }});
     return *edgeScroll_;
 }
 
-// Armed once per gesture (every drag event calls it; re-arming would restart the timer's phase), and not again after
+// Armed once per gesture (every drag event calls it; re-arming would restart the pan from rest), and not again after
 // Esc stopped it, until the release.
 void ControllerSurfaceComponent::beginMarqueeEdgeScroll() {
     if (edgeScrollStoppedByEscape_ || edgeScroller().isActive())

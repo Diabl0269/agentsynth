@@ -47,7 +47,7 @@ double beatsPerBarFrom(int numerator, int denominator) noexcept {
 //==============================================================================
 TimelineRulerComponent::TimelineRulerComponent(TimelineViewState& viewState)
     : viewState_(viewState)
-    , edgeScroll_(std::make_unique<EdgeScrollTimer>())
+    , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this))
     , cancelKey_(std::make_unique<ReorderCancelKey>()) {
     edgeScroll_->onTick = [this] { edgeScrollTick(); };
 }

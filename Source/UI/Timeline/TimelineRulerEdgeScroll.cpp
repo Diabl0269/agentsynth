@@ -30,12 +30,8 @@ void TimelineRulerComponent::edgeScrollTick() {
         edgeScroll_->stop();
         return;
     }
-    if (edgeScroll_->horizontalPxPerTick() == 0.0) {
-        edgeScroll_->stopTimer(); // back out of the zone: the drag goes on
-        return;
-    }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
-        return; // pinned at beat 0: nothing moved, nothing to re-derive
+        return; // pinned at beat 0, or easing below a pixel: nothing moved, nothing to re-derive
     const double x = (double)edgeScroll_->pointer().x;
     if (draggingMarker_.isValid()) {
         markerDragMoved_ = true;
@@ -70,9 +66,9 @@ void TimelineRulerComponent::cancelDrag() {
     repaint();
 }
 
-bool TimelineRulerComponent::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isTimerRunning(); }
+bool TimelineRulerComponent::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isRunning(); }
 
-void TimelineRulerComponent::tickEdgeScrollForTest() { edgeScroll_->timerCallback(); }
+void TimelineRulerComponent::tickEdgeScrollForTest() { edgeScroll_->frameForTest(); }
 
 bool TimelineRulerComponent::sendEscapeForTest() {
     return cancelKey_->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);

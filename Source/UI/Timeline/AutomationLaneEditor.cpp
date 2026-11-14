@@ -45,7 +45,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         followKeyDragDot();
         repaint();
     };
-    edgeScroll_ = std::make_unique<EdgeScrollTimer>();
+    edgeScroll_ = std::make_unique<EdgeScrollTimer>(*this);
     edgeScroll_->onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's

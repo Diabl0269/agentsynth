@@ -56,7 +56,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , clipGlide_(std::make_unique<KeyedRectTween>(*this))
     , enterExit_(std::make_unique<ClipLaneEnterExit>(*this))
     , sampleCache_(std::make_unique<WaveformSampleCache>())
-    , edgeScroll_(std::make_unique<EdgeScrollTimer>()) {
+    , edgeScroll_(std::make_unique<EdgeScrollTimer>(*this)) {
     edgeScroll_->onTick = [this] { autoScrollTick(); };
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
