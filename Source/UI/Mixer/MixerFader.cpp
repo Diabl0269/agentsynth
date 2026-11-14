@@ -166,7 +166,9 @@ void MixerFader::parameterGestureChanged(int, bool gestureIsStarting) {
 
 void MixerFader::resized() {
     auto bounds = getLocalBounds();
+    bounds.removeFromBottom(kClearBelowReadout);
     readout_.setBounds(bounds.removeFromBottom(18));
+    bounds.removeFromBottom(kReadoutGap);
     slider_.setBounds(bounds);
 }
 

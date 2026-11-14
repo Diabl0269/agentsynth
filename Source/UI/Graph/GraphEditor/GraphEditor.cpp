@@ -55,7 +55,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     addChildComponent(minimap);
     minimapSlide_.snapTo(minimapVisible ? 1.0f : 0.0f);
     minimap.setVisible(minimapVisible);
-    minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };
+    minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };   // a drag: the view follows the pointer
+    minimap.onNavigateEased = [this](juce::Point<float> p) { flyViewTo(p); }; // a click flies there
     minimap.onZoom = [this](float d) { zoomAroundCentre(d); };
 
     // Tooltips on GraphEditor-owned affordances.

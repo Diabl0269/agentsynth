@@ -11,14 +11,16 @@ save_project: fro753-maschine-au
 settings:
   pluginScanList: '<KNOWNPLUGINS><PLUGIN name="Maschine 2" descriptiveName="Maschine 2" format="AudioUnit" category="Synth" manufacturer="Native Instruments" version="1" file="AudioUnit:Synths/aumu,NiM2,-NI-" uniqueId="0" isInstrument="1" numInputs="0" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
 steps:
-  - openProject: {path: "${FIXTURES}/maschine-au.agsproj"}
+  - wait: {}   # the empty canvas, before the project opens
+  - openProject: {path: "${FIXTURES}/maschine-au.agsproj"}   # the old project opening: the card arrives
   - wait: {}
   - expect: {id: "card:Maschine 2", showing: true, within_ms: 30000}
   - expect: {id: hostedLoadStatus, showing: false, within_ms: 15000}
   - expect: {count: {prefix: "Out ", field: title, equals: 2}}   # an old project (no "outputs" key) shows the main bus only, not all 32
-  - wait: {}
   - mark: {check: 1, name: maschine-au-loaded}
-  - click: {id: openPluginEditor}
+  - glide: {name: pick-card, frames: 10, do: {click: {id: "card:Maschine 2", x: 60, y: 12}}}   # the card picked: its outline fades in, Out L and Out R stay the only outputs
+  - hover: {id: openPluginEditor}
+  - glide: {name: open-editor, frames: 12, do: {click: {id: openPluginEditor}}}   # the press, then Maschine's own window opening
   - expect: {id: "hostedPluginWindow:Maschine 2", showing: true, within_ms: 20000}
   - wait: {}
   - mark: {check: 2, name: maschine-editor}

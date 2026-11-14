@@ -1,9 +1,9 @@
-# Bug: the Filter's spectrum (the card's Show Spectrum and the Custom shape window's Show spectrum) smoothed per
+# Bug: the Filter's spectrum (Show Spectrum on the card and in the Custom shape window) smoothed per
 # frame, so it rose and fell at different speeds at different frame rates and showed a sine several dB under its
 # level; a released note took seconds to fade.
 #
 # What a user does: sets a Filter to Custom, opens Show Response and Show Spectrum on the card, then opens Edit shapes
-# and turns on its Show spectrum. Both views draw the same analyser's trace (test mode has no audio device, so the
+# and turns on its Show Spectrum (same name, same tooltip as the card's). Both views draw the same analyser's trace (test mode has no audio device, so the
 # trace rests at its floor; the timing and level are pinned by the analyser's unit tests).
 record: true
 save_project: filter-spectrum-ballistics
@@ -41,18 +41,18 @@ steps:
   - click: {id: Show Response}
   - wait: {settleMs: 600}
   - expect: {id: Show Response, toggleState: true, within_ms: 3000}
-  - click: {id: Show Spectrum}
+  - click: {id: "card:Filter > Show Spectrum"}
   - wait: {settleMs: 600}
-  - expect: {id: Show Spectrum, toggleState: true, within_ms: 3000}
-  - expect: {id: Show Spectrum, contains: {tooltip: "before any volume stage"}}
+  - expect: {id: "card:Filter > Show Spectrum", toggleState: true, within_ms: 3000}
+  - expect: {id: "card:Filter > Show Spectrum", tooltip: "Draw the filter's output behind the curve, before any volume stage, so a sound still running into the filter keeps it moving after the notes stop"}
   - screenshot: {id: "card:Filter", name: card-spectrum-on}
   - click: {id: Edit shapes}
   - wait: {}
-  - expect: {id: Show spectrum, exists: true, within_ms: 5000}
-  - click: {id: Show spectrum}
+  - expect: {id: "Filter shapes: Filter > Show Spectrum", exists: true, within_ms: 5000}
+  - click: {id: "Filter shapes: Filter > Show Spectrum"}
   - wait: {settleMs: 600}
-  - expect: {id: Show spectrum, toggleState: true, within_ms: 3000}
-  - expect: {id: Show spectrum, contains: {tooltip: "before any volume stage"}}
-  - expect: {id: Show Spectrum, toggleState: true}             # the card's toggle stays on: one analyser each, same buffer
+  - expect: {id: "Filter shapes: Filter > Show Spectrum", toggleState: true, within_ms: 3000}
+  - expect: {id: "Filter shapes: Filter > Show Spectrum", tooltip: "Draw the filter's output behind the curve, before any volume stage, so a sound still running into the filter keeps it moving after the notes stop"}   # the card's tooltip, word for word
+  - expect: {id: "card:Filter > Show Spectrum", toggleState: true}   # the card's toggle stays on: one analyser each, same buffer
   - screenshot: {id: "Filter shapes: Filter", name: window-spectrum-on}
   - screenshot: {name: canvas-spectrum-on}

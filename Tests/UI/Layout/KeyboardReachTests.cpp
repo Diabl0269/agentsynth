@@ -8,6 +8,7 @@
 #include "../Mixer/MixerKeyWalk.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "KeyboardReachFixture.h"
+#include "ReachSweepRings.h"
 #include "UI/Chrome/CanvasToolbar/CanvasToolbar.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -17,6 +18,7 @@
 #include "UI/Layout/KeyRing.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -372,6 +374,75 @@ class KeyboardReachDialogs : public KeyboardReachDialogFixture {};
 
 void KeyboardReachFixture::rebuildMixer() { mc_->getBottomDock().getMixerPanel().rebuild(); }
 
+namespace synth::test::reach {
+
+namespace {
+synth::ui::MixerZonesRow* cursorRow(synth::ui::MixerZonesPane& pane) {
+    for (int i = 0; i < pane.getRowCountForTest(); ++i)
+        if (auto* row = pane.getRowForTest(i); row != nullptr && row->hasKeyboardCursor())
+            return row;
+    return nullptr;
+}
+} // namespace
+
+std::vector<RingSource> mixerRingSources(juce::Component& mixerPanel) {
+    auto& panel = static_cast<synth::ui::MixerPanelComponent&>(mixerPanel);
+    std::vector<RingSource> sources;
+    sources.push_back(detail::keyRingSource("top bar", panel.getTopBarRingForTest(), panel));
+    RingSource column;
+    column.name = "focused column";
+    column.owner = &panel;
+    column.active = [&panel] { return panel.isFocusedColumnOutlineShownForTest(); };
+    column.stops = [] { return std::vector<juce::Component*>{}; };
+    column.ringed = [] { return nullptr; };
+    sources.push_back(column);
+    auto& zones = panel.getZonesPaneForTest();
+    RingSource cursor;
+    cursor.name = "zones cursor";
+    cursor.owner = &zones;
+    cursor.active = [&zones] { return cursorRow(zones) != nullptr; };
+    cursor.stops = [&zones] {
+        std::vector<juce::Component*> rows;
+        for (int i = 0; i < zones.getRowCountForTest(); ++i)
+            if (auto* row = zones.getRowForTest(i); row != nullptr && row->isShowing())
+                rows.push_back(row);
+        return rows;
+    };
+    cursor.ringed = [&zones]() -> juce::Component* { return cursorRow(zones); };
+    sources.push_back(cursor);
+    return sources;
+}
+
+bool insideMixerColumn(juce::Component& c) {
+    for (auto* p = c.getParentComponent(); p != nullptr; p = p->getParentComponent())
+        if (dynamic_cast<synth::ui::MixerColumnComponent*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerDirectColumn*>(p) != nullptr ||
+            dynamic_cast<synth::ui::MixerMasterColumn*>(p) != nullptr)
+            return true;
+    return false;
+}
+
+MixerFocusView mixerFocusView(MainComponent& mc) {
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    MixerFocusView view;
+    view.panel = &panel;
+    for (int i = 0; auto* column = panel.getStripColumnForTest(i); ++i)
+        view.stripsRinging += column->isKeyboardFocusedForTest() ? 1 : 0;
+    view.outlineShown = panel.isFocusedColumnOutlineShownForTest();
+    view.holdsKeys = panel.hasKeyboardFocus(true);
+    view.visible = panel.isVisible();
+    view.focusedColumn = panel.getFocusedColumnIndexForTest();
+    return view;
+}
+
+void setMixerSidePaneOpen(MainComponent& mc, bool open) {
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    if (panel.getSidePane().isOpen() != open)
+        panel.toggleSidePane(open);
+}
+
+} // namespace synth::test::reach
+
 TEST_F(KeyboardReachShell, EveryControlInEveryMainViewRegionIsAKeyboardStop) {
     Findings findings;
     std::set<std::string> seen;
@@ -425,6 +496,34 @@ TEST_F(KeyboardReachDialogs, EveryControlInEveryDialogIsAKeyboardStop) {
         findings.add(walkSurface(surface.name, *window, surface.name, [](juce::Component&) { return true; }));
     }
     findings.expectOnlyKnownGaps();
+}
+
+// Regression test for FRO1525: with the bottom panel closed the key opened it but put no ring on the transport bar,
+// since the bar has no bounds until the slide lands.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyWorksWithTheBottomPanelClosedInEveryMainView) {
+    auto& panel = mc_->getTimelinePanel();
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    for (const Tab view : {Tab::Canvas, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (mc_->isBottomDockConfiguredVisible())
+            mc_->simulateToggleBottomPanelClick();
+        synth::test::waitUntil([&] { return !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        mc_->resized();
+        ASSERT_FALSE(mc_->isBottomDockConfiguredVisible()) << "view " << (int)view;
+        panel.getTopBarKeysForTest().leave();
+
+        // The key reaches the window's own handler (nothing in the timeline holds focus).
+        for (juce::Component* at = mc_.get(); at != nullptr; at = at->getParentComponent())
+            if (at->keyPressed(key))
+                break;
+        synth::test::waitUntil(
+            [&] { return panel.getTopBarKeysForTest().isActive() && !mc_->isPanelSlideAnimatingForTest(); }, 2000);
+        const auto* ringed = panel.getTopBarKeysForTest().getRingedStop();
+        EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "view " << (int)view;
+        EXPECT_EQ(ringed, &panel.getTransportBar().getPlayStopButton()) << "view " << (int)view;
+        EXPECT_TRUE(mc_->isBottomDockConfiguredVisible()) << "the key opened the panel, view " << (int)view;
+    }
 }
 
 // Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the

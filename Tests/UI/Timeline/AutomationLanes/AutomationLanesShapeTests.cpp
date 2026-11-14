@@ -51,7 +51,7 @@ struct ShapeLane : LanesPanel {
         };
     }
     synth::ui::DrawPenButton& pen() { return panel.getDrawPenButton(); }
-    juce::Point<float> penCorner() { return {(float)pen().getWidth() - 4.0f, (float)pen().getHeight() - 4.0f}; }
+    juce::Point<float> penChevron() { return {(float)pen().getWidth() - 7.0f, (float)pen().getHeight() * 0.5f}; }
     void pressPen(juce::Point<float> at) {
         auto& comp = static_cast<juce::Component&>(pen());
         comp.mouseDown(makeClickEvent(comp, at, leftButton()));
@@ -204,7 +204,7 @@ TEST(AutomationLanesShapeTest, TheTransportRowIsTheSameWhateverTheTool) {
     EXPECT_EQ(rowBounds(), select) << "no strip slides out any more";
 }
 
-TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasACornerTriangleHitArea) {
+TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasAChevronHalfHitArea) {
     ShapeLane f;
     EXPECT_EQ(f.pen().getShape(), DrawShape::Free);
     f.panel.setDrawShape(DrawShape::Saw);
@@ -213,19 +213,49 @@ TEST(AutomationLanesShapeTest, ThePenShowsTheCurrentShapeAndHasACornerTriangleHi
     f.panel.keyPressed(kShift3);
     EXPECT_EQ(f.pen().getShape(), DrawShape::Sine) << "a shape key moves the pen's icon";
 
-    EXPECT_TRUE(f.pen().isInCorner({f.pen().getWidth() - 2, f.pen().getHeight() - 2}));
-    EXPECT_FALSE(f.pen().isInCorner(f.pen().getLocalBounds().getCentre()));
-    EXPECT_FALSE(f.pen().isInCorner({f.pen().getWidth() - 2, 2}));
+    // The right half is a split button's chevron half: the whole height of it opens the flyout, the icon half never.
+    const int w = f.pen().getWidth(), h = f.pen().getHeight();
+    EXPECT_TRUE(f.pen().isInChevron({w - 2, h - 2}));
+    EXPECT_TRUE(f.pen().isInChevron({w - 2, 2})) << "the top of the chevron half counts too, it is not a corner";
+    EXPECT_TRUE(f.pen().isInChevron({w - synth::ui::DrawPenButton::kChevronWidth, h / 2}));
+    EXPECT_FALSE(f.pen().isInChevron({w - synth::ui::DrawPenButton::kChevronWidth - 1, h / 2}));
+    EXPECT_FALSE(f.pen().isInChevron(f.pen().getIconHalf().getCentre()));
+    EXPECT_EQ(f.pen().getIconHalf().getWidth() + synth::ui::DrawPenButton::kChevronWidth, w);
 }
 
-TEST(AutomationLanesShapeTest, TheCornerClickOpensTheFlyoutAndDoesNotPickTheTool) {
+// Regression test for FRO1451: the arrow in the corner read as a scratch; the button is now a split button and the
+// chevron half says what it opens in its own tip, apart from the icon half's.
+TEST(AutomationLanesShapeTest, TheChevronHalfHasItsOwnTipNamingTheKeyAndTheIconHalfKeepsTheDrawTip) {
+    ShapeLane f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    const int w = f.pen().getWidth(), h = f.pen().getHeight();
+    const auto chevronTip = f.pen().getTooltipAt({w - 6, h / 2});
+    const auto iconTip = f.pen().getTooltipAt(f.pen().getIconHalf().getCentre());
+    EXPECT_TRUE(chevronTip.startsWith("More shapes")) << chevronTip;
+    EXPECT_TRUE(synth::test::has(chevronTip, synth::test::keyText('8', juce::ModifierKeys::shiftModifier)))
+        << chevronTip;
+    EXPECT_TRUE(iconTip.startsWith("Draw")) << iconTip;
+    EXPECT_NE(chevronTip, iconTip);
+    EXPECT_EQ(f.pen().getDescription(), chevronTip) << "a screen reader hears what the chevron half opens";
+    f.panel.setShortcutManager(nullptr);
+}
+
+// The strip makes room for the chevron half: the pen is one chevron wider than the plain tools.
+TEST(AutomationLanesShapeTest, ThePenIsOneChevronWiderThanItsNeighbourTool) {
+    ShapeLane f;
+    const int plain = f.panel.getToolButton(EditTool::Mute)->getWidth();
+    EXPECT_EQ(f.pen().getWidth(), plain + synth::ui::DrawPenButton::kChevronWidth);
+}
+
+TEST(AutomationLanesShapeTest, TheChevronClickOpensTheFlyoutAndDoesNotPickTheTool) {
     ShapeLane f;
     f.captureFlyouts();
-    f.pressPen(f.penCorner());
-    f.releasePen(f.penCorner());
+    f.pressPen(f.penChevron());
+    f.releasePen(f.penChevron());
     ASSERT_NE(f.flyout, nullptr);
     EXPECT_EQ(f.flyoutsOpened, 1);
-    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the corner opens the menu, it is not a click";
+    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select) << "the chevron opens the menu, it is not a click";
     EXPECT_EQ(f.flyout->getCurrentShape(), DrawShape::Free);
 }
 
@@ -606,11 +636,11 @@ TEST(AutomationLanesShapeTest, ARightClickOnThePenOpensTheFlyoutThroughTheSamePa
     f.captureFlyouts();
     auto& comp = static_cast<juce::Component&>(f.pen());
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
-    ASSERT_FALSE(f.pen().isInCorner(centre.toInt()));
+    ASSERT_FALSE(f.pen().isInChevron(centre.toInt()));
     const auto rightButton = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
 
     comp.mouseDown(makeClickEvent(comp, centre, rightButton));
-    EXPECT_EQ(f.flyoutsOpened, 1) << "opens on the press, like the corner";
+    EXPECT_EQ(f.flyoutsOpened, 1) << "opens on the press, like the chevron";
     ASSERT_NE(f.flyout, nullptr);
     EXPECT_FALSE(f.pen().isHoldPendingForTest()) << "no hold timer is left running";
     comp.mouseUp(makeClickEvent(comp, centre, rightButton));
@@ -647,8 +677,8 @@ double penGlyphContrast(synth::ui::TimelinePanelComponent& panel, juce::Rectangl
 } // namespace
 
 // The lit pen was a white glyph on the light-blue highlight. In every built-in theme, with the Draw tool lit, both the
-// shape icon and the corner triangle must stand out of the fill by the WCAG 3:1 ratio for graphical objects.
-TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsCornerContrastWithTheFillInEveryTheme) {
+// shape icon and the chevron must stand out of the fill by the WCAG 3:1 ratio for graphical objects.
+TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsChevronContrastWithTheFillInEveryTheme) {
 #ifdef HAS_FONT_ASSETS
     for (const auto& theme : synth::theme::builtInThemes()) {
         synth::ui::TimelinePanelComponent panel;
@@ -660,12 +690,12 @@ TEST(AutomationLanesShapeTest, TheLitPenGlyphAndItsCornerContrastWithTheFillInEv
         panel.setActiveTool(EditTool::Draw);
         ASSERT_TRUE(panel.getDrawPenButton().getToggleState());
 
-        const auto width = panel.getDrawPenButton().getWidth();
+        const auto icon = panel.getDrawPenButton().getIconHalf();
         const auto height = panel.getDrawPenButton().getHeight();
-        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(7, 7, width - 14, height - 14)), 3.0)
-            << "theme '" << theme.name << "': the shape icon";
-        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(width - 7, height - 7, 5, 5)), 3.0)
-            << "theme '" << theme.name << "': the corner triangle";
+        const auto chevronX = icon.getRight() + synth::ui::DrawPenButton::kChevronWidth / 2;
+        EXPECT_GE(penGlyphContrast(panel, icon.reduced(7)), 3.0) << "theme '" << theme.name << "': the shape icon";
+        EXPECT_GE(penGlyphContrast(panel, juce::Rectangle<int>(chevronX - 4, height / 2 - 3, 8, 6)), 3.0)
+            << "theme '" << theme.name << "': the chevron";
         panel.setLookAndFeel(nullptr);
     }
 #else

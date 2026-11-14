@@ -1,0 +1,26 @@
+# A trackpad swipe down a long track list moves the headers, the clips and the lanes together, one even step a frame,
+# and the fling after it coasts to a stop instead of jumping.
+#
+# What a user does:
+#   1. Opens a project with 30 tracks (fixture many-tracks.agsproj) and shows the timeline in the main area.
+#   2. Swipes two fingers down the track list: 40 trackpad events 8 ms apart, then a fling that fades out. The strip
+#      films the screen while it moves: the track names on the left and the clips beside them stay on the same rows in
+#      every frame, and the list moves a similar distance each frame.
+#   3. Swipes back up and ends on the top rows.
+motion: true
+record: true
+save_project: "FRO1778 test"
+steps:
+  - openProject: {path: "${FIXTURES}/many-tracks.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - screenshot: {name: before-swipe}
+  - glide: {name: vertical-swipe, frames: 10, do: {wheel: {id: timelineClipLaneArea, x: 300, y: 60, dy: -0.05, smooth: true, count: 40, everyMs: 8}}}
+  - glide: {name: fling, frames: 10, do: {wheel: {id: timelineClipLaneArea, x: 300, y: 60, dy: -0.05, inertial: true, count: 60, everyMs: 8, decay: 0.93}}}
+  - wait: {}
+  - mark: {check: 1, name: vertical-swipe}
+  - glide: {name: swipe-back, frames: 10, do: {wheel: {id: timelineClipLaneArea, x: 300, y: 60, dy: 0.2, smooth: true, count: 40, everyMs: 8}}}
+  - wait: {}

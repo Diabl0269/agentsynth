@@ -140,7 +140,7 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     // Beat 2.0 sits mid-segment (halfway between the two points, x = 80 px), well away from both
     // handles' hit radii.
     const auto anchor = juce::Point<float>((float)f.state.beatToX(2.0), 100.0f);
-    const auto dragged = juce::Point<float>(anchor.x, anchor.y - 20.0f); // up 20 px -> +0.20 tension
+    const auto dragged = juce::Point<float>(anchor.x, anchor.y - 20.0f); // up 20 px: the curve bulges up
 
     f.editor.mouseDown(leftClick(f.editor, anchor));
     ASSERT_TRUE(f.editor.isDragActiveForTest());
@@ -152,11 +152,11 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     const auto* lane = f.doc.getLane(f.laneId);
     ASSERT_NE(lane, nullptr);
     ASSERT_EQ(lane->points.size(), 2u);
-    EXPECT_NEAR(lane->points[0].tension, 0.2f, 1e-3f);
+    EXPECT_LT(lane->points[0].tension, 0.0f) << "a rising segment that bulges up has a negative tension";
     EXPECT_DOUBLE_EQ(lane->points[0].beat, 0.0) << "the LEFT point's beat/value must be untouched";
     EXPECT_NEAR(lane->points[0].value, 20.0, 1e-6);
 
-    // Clamp: a huge upward drag pins at +1.0, still one step. The segment now bows away from the first press, and a
+    // Clamp: a huge upward drag pins at -1.0, still one step. The segment now bows away from the first press, and a
     // press has to be on the curve itself to scrub it (anywhere else in the span starts a box), so press on the
     // reshaped line.
     std::vector<synth::TimelineSnapshot::Point> shape;
@@ -166,13 +166,14 @@ TEST(AutomationLaneEditorTest, TensionScrubOnSegmentClampedAndOneStep) {
     const double onCurve = synth::AutomationKernel::evaluate(shape.data(), (int)shape.size(), 2.0, 50.0, cursor);
     const auto second = juce::Point<float>(anchor.x, (float)f.editor.valueToY(onCurve));
     const auto hugeDrag = juce::Point<float>(second.x, second.y - 500.0f);
+    const float firstTension = lane->points[0].tension;
     f.editor.mouseDown(leftClick(f.editor, second));
     f.editor.mouseDrag(leftDrag(f.editor, hugeDrag, second));
     f.editor.mouseUp(leftDrag(f.editor, hugeDrag, second));
-    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 1.0f, 1e-6f);
+    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, -1.0f, 1e-6f);
 
     f.undo.undo();
-    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 0.2f, 1e-3f);
+    EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, firstTension, 1e-3f);
     f.undo.undo();
     EXPECT_NEAR(f.doc.getLane(f.laneId)->points[0].tension, 0.0f, 1e-6f);
 }

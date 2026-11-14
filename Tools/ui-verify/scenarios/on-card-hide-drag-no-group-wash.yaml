@@ -1,0 +1,32 @@
+# Dragging a control down to "Drop to hide" left the card's last group washed as a drop target (the wash means
+# "drop here to move it into this group", so it said the wrong thing while aiming at the hide area).
+#
+# What a user does: opens Edit Layout on the Filter card, grabs the Cutoff knob and drags it down across the lower
+# groups (the group under the pointer is washed), then holds it at the bottom edge of the canvas view so the pointer
+# rests on the "Drop to hide" area below the card: only that area is lit and no group is washed. Escape cancels.
+record: true
+save_project: on-card-hide-drag-no-group-wash
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: "card:Filter", x: 60, y: 10, button: right}
+  - wait: {settleMs: 500}
+  # The card menu: Copy, Duplicate, Save as Snippet..., Bypass Module, Edit Layout... (disabled items are skipped).
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - mouseDown: {id: window, x: 890, y: 520}
+  - mouseMoveHeld: {id: window, x: 890, y: 640}
+  - mouseMoveHeld: {id: window, x: 890, y: 760}
+  - screenshot: {name: over-a-group}
+  - mouseMoveHeld: {id: window, x: 890, y: 800}
+  - glide: {name: below-the-card, frames: 16, do: {mouseMoveHeld: {id: window, x: 890, y: 871}}}
+  - mark: {check: 1, name: only-the-hide-area-lit}
+  - screenshot: {name: below-card}
+  - key: {keys: escape}
+  - wait: {}
+  - mouseUp: {id: window, x: 890, y: 871}

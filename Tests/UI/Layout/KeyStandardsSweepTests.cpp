@@ -25,6 +25,7 @@
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "AppUndoManager.h"
 #include "KeyboardReachFixture.h"
+#include "KeyboardSweepShell.h"
 #include "RealKeyDelivery.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
@@ -43,6 +44,7 @@
 #include <string>
 #include <typeinfo>
 
+using namespace synth::test::keyboard_sweep;
 using namespace synth::test::real_keys;
 using synth::test::theme_sweep::dialogSurfaces;
 using synth::test::theme_sweep::SweepEnvironment;
@@ -50,173 +52,19 @@ using Tab = synth::ui::BottomDockComponent::Tab;
 
 namespace {
 
-// A gap that is known and has a ticket. Key: "<region id or dialog name> / <control>: <what>" as the failure prints it.
-struct KnownGap {
-    const char* key;
-    const char* ticket;
-};
-
-const std::vector<KnownGap> kKnownGaps = {
-    // Export audio
-    {"Export audio / ComboBox 'Bit depth': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ComboBox 'Format': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ComboBox 'Sample rate': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ComboBox 'Tail unit': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ExpandingRangeSlider 'Tail length': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / TextButton 'Cancel': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / TextButton 'Choose folder...': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / TextButton 'Export': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ToggleButton 'Current loop range': Escape does not close the dialog", "FRO1714"},
-    {"Export audio / ToggleButton 'Whole arrangement': Escape does not close the dialog", "FRO1714"},
-    // Export stems
-    {"Export stems / ComboBox 'Bit depth': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ComboBox 'Format': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ComboBox 'Sample rate': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ComboBox 'Tail unit': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ExpandingRangeSlider 'Tail length': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / TextButton 'Cancel': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / TextButton 'Choose folder...': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / TextButton 'Export': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ToggleButton 'Current loop range': Escape does not close the dialog", "FRO1714"},
-    {"Export stems / ToggleButton 'Whole arrangement': Escape does not close the dialog", "FRO1714"},
-    // Macro configure I/O
-    {"Macro configure I/O / ComboBox 'New port direction': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / ComboBox 'New port kind': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / ComboBox 'New port shape': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / ComboBox 'Port shape': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / GlyphButton 'Delete port': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / PortColourSwatch 'Port colour': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / TextButton 'Add': Escape does not close the dialog", "FRO1714"},
-    {"Macro configure I/O / TextButton 'Close': Escape does not close the dialog", "FRO1714"},
-    // Macro ports prompt
-    {"Macro ports prompt / TextButton 'Create Ports': Escape does not close the dialog", "FRO1714"},
-    {"Macro ports prompt / TextButton 'Leave Cables As Is': Escape does not close the dialog", "FRO1714"},
-    {"Macro ports prompt / ToggleButton 'Remember my choice': Escape does not close the dialog", "FRO1714"},
-    // Render progress
-    {"Render progress / TextButton 'Cancel render': Escape does not close the dialog", "FRO1714"},
-    // Sampler map
-    {"Sampler map / SamplerMapBlocks 'Instrument map': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / SamplerMapBlocks 'Instrument map': Space does not reach the transport", "FRO1036"},
-    {"Sampler map / TextButton 'Add recording...': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / TextButton 'Add recording...': Space does not reach the transport", "FRO1036"},
-    {"Sampler map / TextButton 'Done': Cmd+Z does not reach the app's undo", "FRO1036"},
-    {"Sampler map / TextButton 'Done': Space does not reach the transport", "FRO1036"},
-    // timeline
-    {"timeline / ToolbarButton 'Add': Space does not reach the transport", "FRO1715"},
-    {"timeline / ToolbarButton 'Add': Space opened a menu or popup", "FRO1715"},
-    {"timeline [drum machine open] / CardKnobSlider 'Humanise': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / CardSegmentedSwitch 'View': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / CardStepper 'Swing': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / ComboBox 'Steps per bar': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / DrumMachineComponent 'Drum machine grid': Space does not reach the transport",
-     "FRO1715"},
-    {"timeline [drum machine open] / LaneChipRow 'Lanes': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Clap row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Closed hat row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Cowbell row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Cymbal row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Kick row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Open hat row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Snare row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / NameButton 'Tom row': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Ideas': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Clap': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Closed hat': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Cowbell': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Cymbal': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Kick': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Open hat': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Snare': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Mute Tom': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Play clip': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Clap': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Closed hat': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Cowbell': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Cymbal': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Kick': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Open hat': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Snare': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / TextButton 'Solo Tom': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / ToggleButton 'Show all drums': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / ToolbarButton 'Add': Space does not reach the transport", "FRO1715"},
-    {"timeline [drum machine open] / ToolbarButton 'Add': Space opened a menu or popup", "FRO1715"},
-    {"timeline [piano roll open] / ToolbarButton 'Add': Space does not reach the transport", "FRO1715"},
-    {"timeline [piano roll open] / ToolbarButton 'Add': Space opened a menu or popup", "FRO1715"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 constexpr int kMenuReach = 6; // how far from a control a menu it opened may start and still touch it
-
-std::string className(const juce::Component& c) {
-#if defined(__GNUG__)
-    int status = 0;
-    char* demangled = abi::__cxa_demangle(typeid(c).name(), nullptr, nullptr, &status);
-    std::string name = status == 0 && demangled != nullptr ? demangled : typeid(c).name();
-    std::free(demangled);
-#else
-    std::string name = typeid(c).name();
-    for (const char* prefix : {"class ", "struct "})
-        if (name.rfind(prefix, 0) == 0)
-            name = name.substr(std::char_traits<char>::length(prefix));
-#endif
-    const auto colons = name.rfind("::");
-    return colons == std::string::npos ? name : name.substr(colons + 2);
-}
-
-std::string describe(juce::Component& c) {
-    juce::String name = c.getTitle();
-    if (name.isEmpty())
-        name = c.getComponentID();
-    if (name.isEmpty())
-        if (auto* button = dynamic_cast<juce::Button*>(&c))
-            name = button->getButtonText();
-    juce::String clean;
-    for (auto ch : name.substring(0, 28))
-        clean += juce::CharacterFunctions::isDigit(ch) ? juce::juce_wchar('#') : ch;
-    return className(c) + (clean.isEmpty() ? "" : " '" + clean.toStdString() + "'");
-}
 
 bool isTextEditorPart(juce::Component& c) {
     return dynamic_cast<juce::TextEditor*>(&c) != nullptr ||
            c.findParentComponentOfClass<juce::TextEditor>() != nullptr;
 }
 
-class Findings {
+class Findings : public SweepFindings {
 public:
-    // `detail` (who took the key) is printed but is not part of the key, so a known gap keeps its text.
-    void add(const std::string& surface, const std::string& control, const std::string& what,
-             const std::string& detail = {}) {
-        const auto key = surface + " / " + control + ": " + what;
-        if (found_.insert(key).second && !detail.empty())
-            std::cout << "[ key standards ] " << key << " (" << detail << ")\n";
-    }
-    void walked(const std::string& surface, size_t controls) {
-        walked_.insert(surface);
-        controls_ += controls;
-    }
-    void unfocusable(const std::string& name) { unfocusable_.insert(name); }
-
-    void expectOnlyKnownGaps() const {
-        std::cout << "[ key standards ] " << walked_.size() << " surfaces, " << controls_ << " controls, "
-                  << unfocusable_.size() << " could not take focus here, " << found_.size() << " findings\n";
-        for (const auto& name : unfocusable_)
-            std::cout << "[ key standards ] could not take focus: " << name << "\n";
-        std::set<std::string> listed;
-        for (const auto& gap : kKnownGaps) {
-            const std::string key = gap.key;
-            listed.insert(key);
-            if (walked_.count(key.substr(0, key.find(" / "))) != 0 && found_.count(key) == 0)
-                ADD_FAILURE() << "fixed - remove it from kKnownGaps: " << key << " (" << gap.ticket << ")";
-        }
-        for (const auto& key : found_)
-            if (listed.count(key) == 0)
-                ADD_FAILURE() << key;
-    }
-
-private:
-    std::set<std::string> found_;
-    std::set<std::string> walked_;
-    std::set<std::string> unfocusable_;
-    size_t controls_ = 0;
+    Findings()
+        : SweepFindings("key standards", kKnownGaps) {}
 };
 
 // What "the key reached the app" means on a surface, and what the surface should do with it.
@@ -234,11 +82,6 @@ struct NoopStep : juce::UndoableAction {
     bool perform() override { return true; }
     bool undo() override { return true; }
 };
-
-void closeMenus() {
-    juce::PopupMenu::dismissAllActiveMenus();
-    synth::test::flushMessageQueue();
-}
 
 std::string whoTook(const Delivery& d) {
     if (d.handledBy != nullptr)
@@ -376,41 +219,17 @@ public:
     bool muted = false;
 };
 
-class KeyStandardsShell : public KeyboardReachFixture {
+class KeyStandardsShell : public KeyboardDesktopShell {
 protected:
     void SetUp() override {
-        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
-            GTEST_SKIP() << "needs a display";
-        if (nativeWindowsAbortHere())
-            GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
-        MainComponentTest::SetUp();
-        resetGuard_.emplace();
-        popupMotionWas_ = synth::ui::PopupMotion::isEnabled();
-        synth::ui::PopupMotion::setEnabled(false);
-        previousDefault_ = &juce::LookAndFeel::getDefaultLookAndFeel();
-        lookAndFeel_.applyTheme(synth::theme::builtInThemes().front());
-        juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel_);
-        mc_ = std::make_unique<MainComponent>(themeManager_, lookAndFeel_, std::make_unique<MockProvider>());
-        mc_->setSize(1400, 900);
-        mc_->newPatchForTest();
-        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
-        mc_->simulateAddAudioTrackClick();
-        mc_->getTimelineDoc().addTrack(synth::TrackKind::Midi, "Track 1");
-        rebuildMixer();
-        mc_->addToDesktop(juce::ComponentPeer::windowIsTemporary);
-        mc_->setVisible(true);
-        mc_->resized();
-        mc_->getCommandManager().addListener(&commands_);
+        KeyboardDesktopShell::SetUp();
+        if (mc_ != nullptr)
+            mc_->getCommandManager().addListener(&commands_);
     }
     void TearDown() override {
-        if (mc_ == nullptr)
-            return;
-        closeMenus();
-        mc_->getCommandManager().removeListener(&commands_);
-        mc_.reset();
-        juce::LookAndFeel::setDefaultLookAndFeel(previousDefault_);
-        synth::ui::PopupMotion::setEnabled(popupMotionWas_);
-        KeyboardReachFixture::TearDown();
+        if (mc_ != nullptr)
+            mc_->getCommandManager().removeListener(&commands_);
+        KeyboardDesktopShell::TearDown();
     }
 
     AppProbe mainProbe() {
@@ -483,10 +302,6 @@ protected:
         mc_->resized();
     }
 
-    synth::theme::ThemeManager themeManager_;
-    synth::theme::AppLookAndFeel lookAndFeel_;
-    juce::LookAndFeel* previousDefault_ = nullptr;
-    bool popupMotionWas_ = true;
     CommandCounter commands_;
 };
 

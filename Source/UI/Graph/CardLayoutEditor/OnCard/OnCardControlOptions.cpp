@@ -74,6 +74,10 @@ WidgetKind widgetKindOf(CardWidget widget) {
         return WidgetKind::Segmented;
     case CardWidget::Stepper:
         return WidgetKind::Stepper;
+    case CardWidget::XYPad:
+        return WidgetKind::XYPad;
+    case CardWidget::Button:
+        return WidgetKind::Button;
     }
     return WidgetKind::Auto;
 }
@@ -94,6 +98,10 @@ juce::String widgetKindName(WidgetKind kind) {
         return "Segmented";
     case WidgetKind::Stepper:
         return "Stepper";
+    case WidgetKind::XYPad:
+        return "XY pad";
+    case WidgetKind::Button:
+        return "Button";
     }
     return "Automatic";
 }
@@ -195,6 +203,8 @@ std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
     if (options.widget == CardWidget::Auto && !options.widgetChoices.empty())
         options.widget = options.widgetChoices.front();
     options.range = item->range;
+    options.yParamId = item->yParamId;
+    options.momentary = item->momentary;
     if (planned.param != nullptr && dynamic_cast<const juce::AudioParameterFloat*>(planned.param) != nullptr &&
         isContinuousKind(planned.kind)) {
         const auto& full = planned.param->getNormalisableRange();
@@ -223,10 +233,100 @@ CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const 
     return layout;
 }
 
+namespace {
+
+juce::String macroId(int index) { return "macro" + juce::String(index + 1); }
+
+// Takes the item for `id` out of every section; true when there was one.
+bool removeItem(CardLayout& layout, const juce::String& id) {
+    bool removed = false;
+    for (auto& section : layout.sections)
+        for (size_t i = section.items.size(); i-- > 0;)
+            if (const auto* param = std::get_if<CardParamItem>(&section.items[i]);
+                param != nullptr && param->paramId == id) {
+                section.items.erase(section.items.begin() + (long)i);
+                removed = true;
+            }
+    return removed;
+}
+
+// The macro the pad item stood on: a knob again, right after the pad, no longer hidden.
+void restorePartner(CardLayout& layout, const juce::String& padId, const juce::String& partnerId) {
+    layout.hidden.removeString(partnerId);
+    for (auto& section : layout.sections)
+        for (size_t i = 0; i < section.items.size(); ++i)
+            if (const auto* param = std::get_if<CardParamItem>(&section.items[i]);
+                param != nullptr && param->paramId == padId) {
+                CardParamItem knob;
+                knob.paramId = partnerId;
+                knob.widget = CardWidget::Knob;
+                section.items.insert(section.items.begin() + (long)i + 1, knob);
+                return;
+            }
+}
+
+// The macro the pad item takes as its Y axis: the next one, else the one before, that is not a pad itself.
+juce::String defaultPartner(const CardLayout& layout, const juce::String& padId) {
+    const int own = macroIndexOf(padId);
+    for (int candidate : {own + 1, own - 1}) {
+        if (candidate < 0 || candidate >= 16)
+            continue;
+        const auto* item = findItem(layout, macroId(candidate), std::nullopt);
+        if (item == nullptr || item->widget != CardWidget::XYPad)
+            return macroId(candidate);
+    }
+    return {};
+}
+
+} // namespace
+
+CardLayout withXYPartner(CardLayout layout, const juce::String& paramId, const juce::String& yParamId,
+                         std::optional<int> layoutSection) {
+    auto* item = findItem(layout, paramId, layoutSection);
+    if (item == nullptr || item->widget != CardWidget::XYPad || yParamId == paramId || macroIndexOf(yParamId) < 0)
+        return layout;
+    const auto* other = findItem(layout, yParamId, std::nullopt);
+    if (other != nullptr && other->widget == CardWidget::XYPad)
+        return layout;
+    const auto previous = item->yParamId;
+    if (previous == yParamId)
+        return layout;
+    if (previous.has_value())
+        restorePartner(layout, paramId, *previous);
+    removeItem(layout, yParamId);
+    if (!layout.hidden.contains(yParamId))
+        layout.hidden.add(yParamId);
+    findItem(layout, paramId, layoutSection)->yParamId = yParamId;
+    return layout;
+}
+
 CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget,
                       std::optional<int> layoutSection) {
-    if (auto* item = findItem(layout, paramId, layoutSection))
-        item->widget = widget;
+    auto* item = findItem(layout, paramId, layoutSection);
+    if (item == nullptr)
+        return layout;
+    const auto previous = item->yParamId;
+    if (widget == CardWidget::XYPad && item->widget != CardWidget::XYPad) {
+        const auto partner = macroIndexOf(paramId) >= 0 ? defaultPartner(layout, paramId) : juce::String();
+        if (partner.isEmpty())
+            return layout;
+        item->widget = CardWidget::XYPad;
+        return withXYPartner(std::move(layout), paramId, partner, layoutSection);
+    }
+    item->widget = widget;
+    if (widget != CardWidget::Button)
+        item->momentary = false;
+    if (widget != CardWidget::XYPad && previous.has_value()) {
+        item->yParamId.reset();
+        restorePartner(layout, paramId, *previous);
+    }
+    return layout;
+}
+
+CardLayout withButtonMomentary(CardLayout layout, const juce::String& paramId, bool momentary,
+                               std::optional<int> layoutSection) {
+    if (auto* item = findItem(layout, paramId, layoutSection); item != nullptr && item->widget == CardWidget::Button)
+        item->momentary = momentary;
     return layout;
 }
 

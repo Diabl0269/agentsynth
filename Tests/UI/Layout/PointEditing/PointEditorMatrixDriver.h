@@ -38,6 +38,14 @@ struct HoldHooks {
     double tapMs = 0.0; ///< the clock offset past which the glide proper runs
 };
 
+/** The segment between two dots, for the bend drag: where a press lands on its half-way point (the surface's own
+ *  coordinates), the curve's value there now, and the straight line's value there. A bigger number is higher. */
+struct SegmentProbe {
+    juce::Point<float> mid;
+    std::function<double()> midValue;
+    double chord = 0.0;
+};
+
 class PointDriver {
 public:
     virtual ~PointDriver() = default;
@@ -71,6 +79,8 @@ public:
     virtual double heldPosition(int point) const { return position(point); }
     virtual double heldValue(int point) const { return value(point); }
     virtual std::optional<HoldHooks> hold() { return std::nullopt; }
+    /** A rising or falling segment that can be bent by dragging its middle; nullopt when the editor has none. */
+    virtual std::optional<SegmentProbe> segment(bool /*rising*/) { return std::nullopt; }
     /** A point of the editor that is empty space for a double-click. */
     virtual juce::Point<float> emptySpot() { return {(dot(0).x + dot(1).x) * 0.5f, 2.0f}; }
     /** Right-clicks a point and returns the screen area the menu it opened would sit at; nullopt when none opened. */

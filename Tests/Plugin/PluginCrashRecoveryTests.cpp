@@ -8,6 +8,7 @@
 #include "CrashReportFixtures.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCrashRecovery.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include <gtest/gtest.h>
 
 using synth::HostedPluginBackend;

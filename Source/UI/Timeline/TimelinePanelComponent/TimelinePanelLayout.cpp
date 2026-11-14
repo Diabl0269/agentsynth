@@ -24,7 +24,8 @@ constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
 // The track-header column's width in px; absent = the themed default.
 constexpr const char* kTimelineTrackHeaderWidthPropertyKey = "timelineTrackHeaderWidth";
-constexpr int kTrackHeaderWidthHandleWidth = 6; // straddles the column seam
+constexpr int kTrackHeaderWidthHandleWidth =
+    6; // the strip along the column's right edge, inside the column and 1 px short of the ruler
 // The roll's key-label density (PianoRollComponent::KeyLabelMode). "all" (default) labels every
 // key row; "c" labels only the Cs. Owned by PreferencesSettingsTab's persistX pattern; read here
 // by reloadPianoRollAppearancePrefs().
@@ -284,8 +285,10 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
     const bool optionVertical = isOptionVerticalZoom(e.mods, wheel);
-    if (e.mods.isCommandDown() || optionVertical)
+    if (e.mods.isCommandDown() || optionVertical) {
         wheelTween_.stop();
+        trackpadScroll_.flush(); // a zoom reads the view where the finger left it
+    }
     if ((e.mods.isCommandDown() && e.mods.isShiftDown()) || optionVertical) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
@@ -316,36 +319,6 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double deltaY = (double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit;
     if (deltaY != 0.0)
         scrollByWheel(1, deltaY, eased);
-}
-
-// Direct events, and a host that isn't showing (headless tests), apply at once after ending any
-// tween; a notch eases in via ScrollTweenRunner instead.
-void TimelinePanelComponent::scrollByWheel(int axis, double amount, bool eased) {
-    const auto read = [this](int a) { return a == 0 ? viewState_.firstVisibleBeat : viewState_.trackScrollY; };
-    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
-    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
-        return;
-    wheelTween_.stop();
-    applyWheelScroll(axis, amount);
-}
-
-// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lanes,
-// marker stems, playhead) -- never the track headers, which scroll only vertically.
-void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
-    if (axis == 1) {
-        scrollTrackRows(amount);
-        return;
-    }
-    // Only a USER's sideways scroll reaches here (the wheel, a trackpad swipe, the eased wheel
-    // tween); follow's own page-flip goes through pageViewToShowBeat and never this method. Taking
-    // the view away from the playhead by hand means "stop following", so the flag, the button and
-    // the roll's mirror all switch off together rather than the next poll snapping the view back.
-    if (follow_.enabled)
-        setFollowPlayheadEnabled(false);
-    viewState_.scrollBeats(amount);
-    ruler_.repaint();
-    sectionStrip_->repaint();
-    repaint(gridLanesBounds_);
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
@@ -409,14 +382,6 @@ double TimelinePanelComponent::maxTrackScrollPx() const {
     return std::max(0.0, (double)(rowLayout().totalHeight() - gridLanesBounds_.getHeight()));
 }
 
-void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
-    const double before = viewState_.trackScrollY;
-    viewState_.scrollTracksPx(deltaPx, maxTrackScrollPx());
-    if (viewState_.trackScrollY == before)
-        return;
-    syncTrackScroll();
-}
-
 // Keeps the row under the pointer put: the content y under the anchor is mapped from the old row
 // layout to the new one (clip rows and lane rows rescale, the section row does not), and the
 // scroll moves by whatever keeps that y at the same visible position. Read from the actual
@@ -439,16 +404,6 @@ void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
     syncTrackScroll();
 }
 
-void TimelinePanelComponent::syncTrackScroll() {
-    // One writer, two readers: the header viewport mirrors trackScrollY, the lanes/roll repaint.
-    // setViewPosition fires visibleAreaChanged, whose handler sees an unchanged value and stops —
-    // no feedback loop.
-    trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
-    clipLaneArea_.repaint();
-    placeLaneBodies();
-    repaint(gridLanesBounds_);
-}
-
 //==============================================================================
 void TimelinePanelComponent::resized() {
     trackListMotion_.finishNow(); // its picture is of the old geometry
@@ -468,10 +423,6 @@ void TimelinePanelComponent::resized() {
     layoutSidePane(bounds);
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
-    trackHeaderWidthHandle_.setBounds(trackHeaderBounds_.getRight() - kTrackHeaderWidthHandleWidth / 2,
-                                      trackHeaderBounds_.getY(), kTrackHeaderWidthHandleWidth,
-                                      trackHeaderBounds_.getHeight());
-
     auto lanes = lanesBounds_;
     // While the piano roll is OPEN its chip toolbar is the top row of the lanes region — ABOVE the
     // ruler, so the roll's chrome sits over the whole unit instead of being sandwiched between the
@@ -491,6 +442,10 @@ void TimelinePanelComponent::resized() {
     sectionStrip_->setVisible(stripHeight > 0);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
+    // The width handle runs down the column's right edge beside the track rows, inside the column and 1 px short of
+    // the lanes, so it never overlaps the ruler, the lanes or the strip above them.
+    const auto handleColumn = trackHeaderBounds_.withTrimmedRight(1).withTop(gridLanesBounds_.getY());
+    trackHeaderWidthHandle_.setBounds(handleColumn.withLeft(handleColumn.getRight() - kTrackHeaderWidthHandleWidth));
 
     // The "Add Track" strip is pinned at the top of the header column, the scrolling header list below it. Both live
     // INSIDE trackHeaderBounds_, so the panel's three regions still tile. The strip is exactly as tall as what sits
@@ -501,7 +456,10 @@ void TimelinePanelComponent::resized() {
     const auto strip = headerColumn.removeFromTop(
         std::max(kAddTrackButtonHeight, gridLanesBounds_.getY() - trackHeaderBounds_.getY()));
     // The button is as tall as its 24 px chip needs; the strip itself does not grow.
-    addTrackButton_.setBounds(strip.withTrimmedTop(stripHeight).reduced(2));
+    // ... and stops one pixel short of the width handle that runs down the column's right edge.
+    auto addArea = strip.withTrimmedTop(stripHeight).reduced(2);
+    addArea.setRight(std::min(addArea.getRight(), trackHeaderWidthHandle_.getX() - 1));
+    addTrackButton_.setBounds(addArea);
     trackHeaderViewport_.setBounds(headerColumn);
     layoutTrackHeaders();
 
@@ -549,7 +507,7 @@ void TimelinePanelComponent::resized() {
     // The automation lane editors cover the clip lanes' rect (each sits at its lane row); the piano
     // roll takes that rect over while it is open, so they hide with the clip lanes.
     automationLanes_.getBodies().setBounds(gridLanesBounds_);
-    automationLanes_.getBodies().setVisible(!rollOpen);
+    automationLanes_.setBodiesOpen(!rollOpen);
     placeLaneBodies();
 
     layoutTransportRow();
@@ -558,7 +516,7 @@ void TimelinePanelComponent::resized() {
 // The Add Track, Snap and clip sizing buttons share the "Show button labels" preference with the top bar. The names
 // stay their screen-reader titles either way; icon-only, the tooltips carry them.
 void TimelinePanelComponent::setToolbarLabelsShown(bool shown) {
-    for (auto* button : {&addTrackButton_, &snapToggleButton_}) {
+    for (ToolbarButton* button : std::initializer_list<ToolbarButton*>{&addTrackButton_, &snapToggleButton_}) {
         button->setLayout(ToolbarButtonLayout::Inline);
         button->setContentCentred(button == &addTrackButton_);
         button->setLabel(button->getName(), shown);
@@ -583,10 +541,15 @@ void TimelinePanelComponent::layoutTransportRow() {
     // behaves" chrome, so they read as one group, and none pushes the transport controls off their left-aligned
     // home. The tools are laid out left-to-right in EditTool order (1, 2, 3, 4, 5, 7, 8).
     clipSizingButton_->setBounds(transportBar.removeFromRight(clipSizingButton_->getFixedWidth() + 4).reduced(2));
-    auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
+    // The pen is a split button: its chevron half makes it one half-button wider than the plain tools.
+    auto toolStrip =
+        transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size() + DrawPenButton::kChevronWidth);
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))
-            button->setBounds(toolStrip.removeFromLeft(kEditToolButtonWidth).reduced(2));
+            button->setBounds(
+                toolStrip
+                    .removeFromLeft(kEditToolButtonWidth + (button == penButton_ ? DrawPenButton::kChevronWidth : 0))
+                    .reduced(2));
     transportBar_.setBounds(transportBar);
 }
 

@@ -481,7 +481,7 @@ void expectDrawButtonCentredAndRowUnclipped(ShapeListEditor& editor) {
     juce::TextButton* row[] = {&editor.getAddButton(),
                                &editor.getDuplicateButton(),
                                &editor.getRenameButton(),
-                               &editor.getStartFromButton(),
+                               &editor.getPickShapeButton(),
                                &draw,
                                &editor.getSaveShapeButton(),
                                &editor.getDeleteButton(),

@@ -1,6 +1,6 @@
 // Concern: MixerZonesPane's keyboard path -- a row cursor that Up/Down walk over the listed rows,
 // Space to show or hide the cursor's channel, Alt+Up/Down to move it to the previous or next group,
-// and Esc to hand focus back to the mixer. Every edit goes out through the same callbacks a click uses.
+// and Esc or Right to hand focus back to the mixer. Every edit goes out through the same callbacks a click uses.
 #include "MixerZonesPane.h"
 
 namespace synth::ui {
@@ -16,6 +16,11 @@ void MixerZonesPane::focusList() {
         cursorId_ = ids.empty() ? juce::String() : ids.front();
     grabKeyboardFocus();
     setCursor(cursorId_, true);
+}
+
+juce::String MixerZonesPane::getKeyboardCursorName() const {
+    const auto* channel = hasKeyboardFocus(false) ? findChannel(cursorId_) : nullptr;
+    return channel != nullptr ? channel->name : juce::String();
 }
 
 // The cursor walks only rows the filter and chips leave listed, in list order (group by group).
@@ -35,7 +40,9 @@ bool MixerZonesPane::keyPressed(const juce::KeyPress& key) {
         return alt ? moveCursorZone(1) : moveCursor(1);
     if (key.isKeyCode(juce::KeyPress::spaceKey) || (hideKeyMatches_ && hideKeyMatches_(key)))
         return toggleCursorHidden();
-    if (key.isKeyCode(juce::KeyPress::escapeKey)) {
+    // Right is the way back to the strips beside the pane, the key Left came in by.
+    if (key.isKeyCode(juce::KeyPress::escapeKey) ||
+        (key.isKeyCode(juce::KeyPress::rightKey) && !key.getModifiers().isAnyModifierKeyDown())) {
         giveAwayKeyboardFocus();
         if (onFocusReleased)
             onFocusReleased();

@@ -1,0 +1,18 @@
+# The same warning in the light theme: the triangle is the theme's orange, darkened just enough to read on white. Check 2.
+#
+# What a user does: in Daylight Studio, opens Settings (Cmd+,), Keyboard Shortcuts, clicks Reset to Defaults.
+record: true
+save_project: fro1770 alert daylight
+settings:
+  themeId: daylight
+  themeMode: Light
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Keyboard Shortcuts"}
+  - wait: {}
+  - click: {id: shortcutsResetButton}
+  - expect: {id: "Reset Shortcuts", showing: true, within_ms: 3000}
+  - wait: {}
+  - mark: {check: 2, name: warning-icon-daylight}
+  - screenshot: {id: "Reset Shortcuts", name: warning-alert-daylight}

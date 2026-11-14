@@ -65,6 +65,9 @@ void MidiLearnController::reconcileHandshakes() {
     }
 
     handshakeCoordinator_->reconcile(profiles_, sources, availableOutputs);
+    // Feedback rides the same resolved output: the handshake's port is the only one the
+    // device listens on in DAW mode.
+    remoteEngine_.setHandshakeFeedbackOutputs(handshakeCoordinator_->getOpenOutputs());
 }
 
 juce::String MidiLearnController::getHandshakeIssueForProfile(const juce::String& profileId) const {

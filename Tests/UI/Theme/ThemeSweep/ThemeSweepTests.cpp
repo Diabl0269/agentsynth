@@ -290,7 +290,9 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
         message.ratio = contrastRatio(message.text, message.background);
         checkSurface(findings, log, "Alert box", theme, *alert, cornerProbes(alert->getWidth(), alert->getHeight(), 12),
                      {message});
-        // Every icon kind paints a 22 px glyph in the accent colour, wholly inside the box; no icon paints none.
+        // Every icon kind paints a title-height glyph wholly inside the box, level with the title line: the warning in
+        // the theme's warning colour, info and question in the accent, each readable on the alert surface; no icon
+        // paints none.
         for (const auto type : {juce::MessageBoxIconType::WarningIcon, juce::MessageBoxIconType::QuestionIcon,
                                 juce::MessageBoxIconType::InfoIcon, juce::MessageBoxIconType::NoIcon}) {
             std::unique_ptr<juce::AlertWindow> iconAlert(
@@ -305,16 +307,27 @@ TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
             EXPECT_EQ(icon.getWidth(), synth::ui::kAlertIconSize) << theme.name;
             EXPECT_EQ(icon.getHeight(), synth::ui::kAlertIconSize) << theme.name;
             EXPECT_TRUE(iconAlert->getLocalBounds().contains(icon)) << theme.name << ": the icon sticks out of the box";
-            int accentPixels = 0;
+            const auto title = env.lookAndFeel().getLastAlertTitleSpan();
+            EXPECT_NEAR(icon.toFloat().getCentreY(), title.getStart() + title.getLength() / 2.0f, 1.0f)
+                << theme.name << ": the icon is not level with the title";
+            const auto drawn = env.lookAndFeel().getLastAlertIconColour();
+            const auto token =
+                type == juce::MessageBoxIconType::WarningIcon ? theme.colors.warning : theme.colors.accent;
+            EXPECT_LT(std::abs(drawn.getHue() - token.getHue()), 0.06f)
+                << theme.name << ": the icon is not in its "
+                << (type == juce::MessageBoxIconType::WarningIcon ? "warning" : "accent") << " colour";
+            const auto surface = iconAlert->findColour(juce::AlertWindow::backgroundColourId).withAlpha(1.0f);
+            EXPECT_GE(contrastRatio(drawn, surface), 3.0) << theme.name << ": the icon does not read on the surface";
+            int iconPixels = 0;
             for (int y = icon.getY(); y < icon.getBottom(); ++y)
                 for (int x = icon.getX(); x < icon.getRight(); ++x) {
                     const auto pixel = iconImage.getPixelAt(x, y);
-                    if (std::abs(pixel.getRed() - theme.colors.accent.getRed()) < 8 &&
-                        std::abs(pixel.getGreen() - theme.colors.accent.getGreen()) < 8 &&
-                        std::abs(pixel.getBlue() - theme.colors.accent.getBlue()) < 8)
-                        ++accentPixels;
+                    if (std::abs(pixel.getRed() - drawn.getRed()) < 8 &&
+                        std::abs(pixel.getGreen() - drawn.getGreen()) < 8 &&
+                        std::abs(pixel.getBlue() - drawn.getBlue()) < 8)
+                        ++iconPixels;
                 }
-            EXPECT_GT(accentPixels, 60) << theme.name << ": the glyph is not painted in the accent colour";
+            EXPECT_GT(iconPixels, 150) << theme.name << ": the glyph is not painted in the icon colour";
         }
     }
     log.expectThemed(findings);

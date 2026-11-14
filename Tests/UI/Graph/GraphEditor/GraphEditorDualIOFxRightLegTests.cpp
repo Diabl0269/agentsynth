@@ -211,6 +211,70 @@ TEST_P(DualIOToggleMatrix, SplittingWiresTheRightLegAndCollapsingRestoresTheOrig
     EXPECT_FALSE(restored->isDualIO()) << "and the parameter with it";
 }
 
+// Regression test for FRO1424: the DESTINATION toggled instead. Source (Dual I/O) -> split peer, then the
+// peer collapses to one jack. An FX source's Right output must be re-pointed onto the peer's surviving
+// jack as a summed second cable (never left on the peer's hidden right block, never silently lost),
+// and one undo step restores both cables.
+class DualIOPeerCollapseMatrix : public ::testing::TestWithParam<std::tuple<Src, Peer>> {};
+
+TEST_P(DualIOPeerCollapseMatrix, CollapsingThePeerKeepsTheSourceRightLegAndUndoRestoresBoth) {
+    const auto [src, peerKind] = GetParam();
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(800, 600);
+    auto& graph = engine.getGraph();
+
+    const Rig rig = buildRig(engine, editor, src, peerKind, /*peerSplit=*/true);
+    ASSERT_NE(rig.srcRight, -1);
+    toggleDual(*graph.getNodeForId(rig.src)->getProcessor(), true);
+    ASSERT_TRUE(hasRawEdge(graph, rig.src, rig.srcRight, rig.peer, rig.peerRight)) << "split pair is wired R->R";
+    const auto before = audioEdges(graph);
+
+    toggleDual(*graph.getNodeForId(rig.peer)->getProcessor(), false);
+
+    EXPECT_TRUE(hasRawEdge(graph, rig.src, 0, rig.peer, 0)) << "left leg keeps its cable";
+    // A split-block source is deliberately not summed (it would double-feed the mono jack); only a
+    // contiguous-pair FX source keeps its Right output as a summed second cable.
+    const bool fxSource = src != Src::Oscillator && src != Src::Filter;
+    EXPECT_EQ(hasRawEdge(graph, rig.src, rig.srcRight, rig.peer, 0), fxSource)
+        << "Right summed onto the jack (FX only)";
+    EXPECT_EQ(feeds(graph, rig.peer, 0), fxSource ? 2 : 1);
+    EXPECT_EQ(feeds(graph, rig.peer, rig.peerRight), 0) << "nothing on the peer's hidden right block";
+
+    ASSERT_TRUE(undoMgr.undo());
+    EXPECT_EQ(audioEdges(graph), before) << "one undo step restores both cables";
+}
+
+INSTANTIATE_TEST_SUITE_P(FxAndSplitBlockSources, DualIOPeerCollapseMatrix,
+                         ::testing::Combine(::testing::Values(Src::Delay, Src::Reverb, Src::Chorus, Src::Distortion,
+                                                              Src::Oscillator, Src::Filter),
+                                            ::testing::Values(Peer::Vca, Peer::Filter)),
+                         [](const ::testing::TestParamInfo<std::tuple<Src, Peer>>& info) {
+                             return std::string(srcName(std::get<0>(info.param))) + "_" +
+                                    (std::get<1>(info.param) == Peer::Vca ? "Vca" : "Filter");
+                         });
+
+// The exact report: Oscillator -> Delay -> VCA, Delay and VCA both Dual I/O, VCA set to single.
+TEST(DualIOPeerCollapse, DelayRightOutputSurvivesVcaGoingSingle) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(800, 600);
+    auto& graph = engine.getGraph();
+
+    const Rig rig = buildRig(engine, editor, Src::Delay, Peer::Vca, /*peerSplit=*/true);
+    toggleDual(*graph.getNodeForId(rig.src)->getProcessor(), true);
+    ASSERT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, VCAModule::kRightBase));
+
+    toggleDual(*graph.getNodeForId(rig.peer)->getProcessor(), false);
+    EXPECT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, 0)) << "Delay ch1 must not lose its cable";
+
+    ASSERT_TRUE(undoMgr.undo());
+    EXPECT_TRUE(hasRawEdge(graph, rig.src, 1, rig.peer, VCAModule::kRightBase));
+    EXPECT_TRUE(hasRawEdge(graph, rig.src, 0, rig.peer, 0));
+}
+
 INSTANTIATE_TEST_SUITE_P(FxAndSplitBlockSources, DualIOToggleMatrix,
                          ::testing::Combine(::testing::Values(Src::Delay, Src::Reverb, Src::Chorus, Src::Distortion,
                                                               Src::Oscillator, Src::Filter),

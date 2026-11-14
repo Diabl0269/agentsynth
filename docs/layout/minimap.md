@@ -64,9 +64,10 @@ functions with no `Component` state, unit-tested directly in
 
 ## Interaction
 
-A click or drag on the map converts the event position to a canvas point (`mapToWorld`) and fires
-`onNavigate`, which `GraphEditor` wires to `centreViewOn()` — it pans so that point is centred, and
-zoom is unchanged. The scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to
+A click or drag on the map converts the event position to a canvas point (`mapToWorld`). The press fires
+`onNavigateEased`, which `GraphEditor` wires to `flyViewTo()` (the view flies there in 200 ms `easeOutCubic`, at once under
+Reduce Motion or Animations Off); every drag move fires `onNavigate`, wired to `centreViewOn()`, so the view stays under
+the pointer. Either way it pans so that point is centred, and zoom is unchanged. A drag after the press cancels the fly. The scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to
 `zoomAroundCentre()`.
 
 Both the minimap's wheel-zoom and the canvas's own (`GraphEditor::mouseWheelMove`) share one private
@@ -113,7 +114,7 @@ off-screen also removes it and its children from the accessibility tree, not jus
 | `isMinimapVisible()` | The user preference, not the fits-adjusted effective visibility |
 | `getMinimap()` | Direct access to the `MinimapComponent` |
 | `getVisibleCanvasRect()` | The canvas rect currently visible — the inverse of the content transform applied to `getLocalBounds()` |
-| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred at once; zoom unchanged (the minimap's drag) |
+| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred at once; zoom unchanged (the minimap's drag; its press uses `flyViewTo`) |
 | `flyViewTo(canvasPoint)` | The same pan as a 200 ms fly, for anything that shows something on the canvas; at once under Reduce Motion, Animations Off or off screen ([animation](animation.md#motion-rules)) |
 | `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
 | `buildMinimapModel()` | Walks every module, and reuses the `buildVisibleCables()` memo (no separate enumeration walk) for the cable list, into a `MinimapModel` snapshot |

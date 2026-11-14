@@ -3,6 +3,7 @@
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
 #include "MorphMapPalette.h"
+#include "MorphPlot.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -69,18 +70,9 @@ juce::Rectangle<float> MorphMap::getPlotArea() const {
         .withTrimmedBottom(reach);
 }
 
-juce::Point<float> MorphMap::toPixels(float x, float y) const {
-    const auto plot = getPlotArea();
-    return {plot.getX() + x * plot.getWidth(), plot.getY() + y * plot.getHeight()};
-}
+juce::Point<float> MorphMap::toPixels(float x, float y) const { return morphplot::toPixels(getPlotArea(), {x, y}); }
 
-juce::Point<float> MorphMap::toMap(juce::Point<float> pixels) const {
-    const auto plot = getPlotArea();
-    if (plot.getWidth() <= 0.0f || plot.getHeight() <= 0.0f)
-        return {0.5f, 0.5f};
-    return {juce::jlimit(kMapMin, kMapMax, (pixels.x - plot.getX()) / plot.getWidth()),
-            juce::jlimit(kMapMin, kMapMax, (pixels.y - plot.getY()) / plot.getHeight())};
-}
+juce::Point<float> MorphMap::toMap(juce::Point<float> pixels) const { return morphplot::toUnit(getPlotArea(), pixels); }
 
 juce::Point<float> MorphMap::getDotCentre(int index) const {
     if (index < 0 || index >= (int)dots_.size())

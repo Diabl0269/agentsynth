@@ -32,6 +32,8 @@ namespace render_peaks {
 struct TrackPeak {
     juce::String name;
     double peakDb = 0.0;
+    // RMS in dBFS over the blocks of the stem that carry sound (see fileActiveRmsDb); -inf when there are none.
+    double rmsDb = -std::numeric_limits<double>::infinity();
 };
 
 struct BundlePeaks {
@@ -63,6 +65,38 @@ inline double filePeakDb(const juce::File& file, juce::String& error) {
         peak = std::max(peak, buffer.getMagnitude(0, n));
     }
     return peak > 0.0f ? 20.0 * std::log10((double)peak) : kNoSignalDb;
+}
+
+// RMS in dBFS of the stem's loud parts: the mean square of the 100 ms blocks whose own RMS is above kActiveBlockDb
+// (both channels together), so a track that sits out a section is not read as quiet. -inf when no block is above.
+constexpr double kActiveBlockDb = -60.0;
+inline double fileActiveRmsDb(const juce::File& file, juce::String& error) {
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr) {
+        error = "cannot read " + file.getFileName();
+        return kNoSignalDb;
+    }
+    const int block = std::max(1, (int)(reader->sampleRate * 0.1));
+    juce::AudioBuffer<float> buffer((int)reader->numChannels, block);
+    const double floorMeanSquare = std::pow(10.0, kActiveBlockDb / 10.0);
+    double sum = 0.0;
+    juce::int64 active = 0;
+    for (juce::int64 pos = 0; pos < reader->lengthInSamples; pos += block) {
+        const int n = (int)std::min<juce::int64>(block, reader->lengthInSamples - pos);
+        reader->read(&buffer, 0, n, pos, true, true);
+        double blockSum = 0.0;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            for (const float* p = buffer.getReadPointer(ch); p != buffer.getReadPointer(ch) + n; ++p)
+                blockSum += (double)*p * (double)*p;
+        const double meanSquare = blockSum / (double)(n * buffer.getNumChannels());
+        if (meanSquare > floorMeanSquare) {
+            sum += meanSquare;
+            ++active;
+        }
+    }
+    return active > 0 ? 10.0 * std::log10(sum / (double)active) : kNoSignalDb;
 }
 
 // "03 - Dark Bell.wav" -> "Dark Bell" (StemSession's file naming).
@@ -170,7 +204,7 @@ inline bool renderBundle(const juce::File& scratch, const juce::File& bundle, Bu
             out.stemNote = stemError;
             continue;
         }
-        out.tracks.push_back({trackNameFromStem(stem), db});
+        out.tracks.push_back({trackNameFromStem(stem), db, fileActiveRmsDb(stem, stemError)});
     }
     return true;
 }
@@ -180,7 +214,7 @@ inline juce::String dbText(double db) { return std::isinf(db) ? juce::String("-i
 inline juce::String lineFor(const BundlePeaks& p) {
     juce::String line = p.bundle + ": master peak " + dbText(p.masterPeakDb) + " dBFS";
     for (const auto& t : p.tracks)
-        line += ", " + t.name + " " + dbText(t.peakDb) + " dBFS";
+        line += ", " + t.name + " " + dbText(t.peakDb) + " dBFS (rms " + dbText(t.rmsDb) + ")";
     if (p.stemNote.isNotEmpty())
         line += " (" + p.stemNote + ")";
     return p.clips() ? line + " CLIPS" : line;
@@ -200,6 +234,7 @@ inline void writeJson(const juce::File& file, const std::vector<BundlePeaks>& al
             auto* tr = new juce::DynamicObject();
             tr->setProperty("name", t.name);
             tr->setProperty("peakDb", dbVar(t.peakDb));
+            tr->setProperty("rmsDb", dbVar(t.rmsDb));
             tracks.add(juce::var(tr));
         }
         rec->setProperty("tracks", tracks);

@@ -49,6 +49,10 @@ public:
     void setForcedOn(bool forced) noexcept { forcedOn_.store(forced, std::memory_order_relaxed); }
     bool isForcedOn() const noexcept { return forcedOn_.load(std::memory_order_relaxed); }
 
+    // Process-wide mute for dev/verification launches (--mute-metronome): beats every other switch, count-in included.
+    void setMuted(bool muted) noexcept { muted_.store(muted, std::memory_order_relaxed); }
+    bool isMuted() const noexcept { return muted_.load(std::memory_order_relaxed); }
+
     // Called from AudioEngine::handleStreamFormatChange when the engine's sample rate
     // changes. A voice ringing across the boundary carries a `phaseInc`/`decayMul` computed for the
     // OLD rate (see startClick) — continuing to render it against the NEW rate's sample clock would
@@ -114,6 +118,7 @@ private:
 
     std::atomic<bool> enabled_{false};
     std::atomic<bool> forcedOn_{false};
+    std::atomic<bool> muted_{false};
     Voice voices_[kNumVoices];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Metronome)

@@ -29,7 +29,7 @@ TEST(TimelinePanelToolbarButtonsTest, AddTrackAndSnapShowTheirNameBesideTheIconA
 
     EXPECT_EQ(addTrack.getButtonText(), "Add");
     EXPECT_EQ(snap.getButtonText(), "Snap");
-    for (auto* b : {&addTrack, &snap}) {
+    for (auto* b : std::initializer_list<synth::ui::ToolbarButton*>{&addTrack, &snap}) {
         EXPECT_TRUE(b->isInline()) << b->getName();
         EXPECT_EQ(b->getTitle(), b->getName());
         EXPECT_GE(b->getWidth(), b->getPreferredWidth()) << b->getName() << " has room for its caption";

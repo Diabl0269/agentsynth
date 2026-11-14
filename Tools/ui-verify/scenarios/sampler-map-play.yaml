@@ -1,0 +1,82 @@
+# The Sampler's Edit map window is playable and keeps Cmd+Z: pressing a key on its keyboard plays the instrument there
+# (the key lights while it sounds), and Cmd+Z with the window in front undoes the last map edit.
+#
+# What a user does (a pack with a pitched instrument, the SoundPacksTone fixture folder: two recordings, C1-B2 and C3-C5):
+#   1. Adds a Sampler from the library, switches its Mode to Instrument and picks "Test Tone".
+#   2. Presses Edit map and holds the mouse on middle C (C3, key 60) of the window's keyboard: the key lights, the
+#      Sampler sounds it; letting go ends it.
+#   3. Presses "Make my own copy", selects the upper recording, lowers its High key by one, then presses Cmd+Z: the
+#      High key is back to C5.
+#   4. Closes the map (Done) and presses a key on the card's own key strip: that key lights and sounds too.
+# The Mode switch has three segments (Sample, Granular, Instrument); the click lands in the third. Key 60 sits at the
+# left edge of the second block, so the press lands at its x and in the keyboard row (y 30 of the map).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: sampler-map-play
+steps:
+  - copyFixture: {name: SoundPacks, from: "${FIXTURES}/SoundPacksTone"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "sampler"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Mode, x: 215, y: 12}
+  - wait: {settleMs: 600}
+  - expect: {id: "Instrument, none", showing: true, within_ms: 3000}
+  - click: {id: "Instrument, none"}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "Test Tone"}
+  - wait: {settleMs: 400}
+  - key: {keys: return}
+  - wait: {settleMs: 800}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - click: {id: Edit map}
+  - wait: {settleMs: 800}
+  - expect: {id: samplerMapBlocks, showing: true, within_ms: 3000}
+  - expect: {id: samplerMapKeys, heldKey: -1}
+  - audioPump: {run: true}
+  - mouseDown: {id: samplerMapBlocks, x: 360, y: 30}
+  - wait: {settleMs: 300}
+  - expect: {id: samplerMapKeys, heldKey: 60}
+  - expect: {id: samplerMapKeys, contains: {litKeys: "60"}}
+  - mark: {check: 1, name: key-plays}
+  - mouseUp: {id: samplerMapBlocks, x: 360, y: 30}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapKeys, heldKey: -1}
+  - audioPump: {run: false}
+  - click: {id: Make my own copy}
+  - wait: {settleMs: 600}
+  - list: {root: samplerMapBlocks, depth: 1}
+  - click: {id: samplerMapBlocks, x: 491, y: 74}
+  - wait: {}
+  - expect: {id: High key, value: 84}
+  - wheel: {id: High key, dy: -0.25}
+  - wait: {}
+  - expect: {id: High key, value: 83}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - expect: {id: High key, value: 84}
+  - mark: {check: 2, name: undo-in-map}
+  - click: {id: Done}
+  - wait: {settleMs: 600}
+  - expect: {id: samplerMapBlocks, exists: false, within_ms: 3000}
+  - list: {root: "card:Sampler", depth: 2}
+  - audioPump: {run: true}
+  - mouseDown: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
+  - wait: {settleMs: 300}
+  - mark: {check: 3, name: card-strip-plays}
+  - mouseUp: {id: "card:Sampler > 1 recording, one layer", x: 128, y: 45}
+  - wait: {settleMs: 600}
+  - audioPump: {run: false}

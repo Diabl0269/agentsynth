@@ -2,6 +2,7 @@
 # file-size cap. SoundShapeChecks reads only a parsed response (no graph, no provider), so it is
 # also what Tools/AIEvalHarness and the tests score a model's answer with.
 target_sources(Core PRIVATE
+    Source/AI/AIStateMapper/AIStateMapperMidiWiring.cpp
     Source/AI/AIStateMapper/AIStateMapperModuleTable.cpp
     Source/AI/AIStateMapper/AIStateMapperTwoLegJacks.cpp
     Source/AI/SoundShapeChecks.h

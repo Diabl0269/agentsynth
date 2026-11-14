@@ -696,3 +696,19 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveT
     mc.getTimelinePanel().onShowMessage("Snap on");
     EXPECT_EQ(toast->getMessageForTest(), "Snap on") << "a second change replaces the message";
 }
+
+// The guard of a ring that waits for a panel slide (the transport-bar key with the dock closed): a late ring must not
+// steal focus a later scene or the user moved elsewhere.
+TEST(DeferredRingStillWanted, DecidesFromTheSlideTheDockAndWhereTheKeysAre) {
+    juce::Component panel, child, pressed, elsewhere;
+    panel.addAndMakeVisible(child);
+    using synth::ui::deferredRingStillWanted;
+    EXPECT_TRUE(deferredRingStillWanted(false, true, &elsewhere, &pressed, panel)) << "nothing slid: ring now";
+    EXPECT_FALSE(deferredRingStillWanted(true, false, &pressed, &pressed, panel)) << "dock closed again";
+    EXPECT_FALSE(deferredRingStillWanted(true, true, &elsewhere, &pressed, panel)) << "keys moved elsewhere";
+    EXPECT_FALSE(deferredRingStillWanted(true, true, nullptr, &pressed, panel)) << "focus left the window";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &pressed, &pressed, panel)) << "keys unchanged";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, nullptr, nullptr, panel)) << "no focus then, none now";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &child, &pressed, panel)) << "focus now inside the panel";
+    EXPECT_TRUE(deferredRingStillWanted(true, true, &panel, &pressed, panel)) << "focus now on the panel";
+}

@@ -26,8 +26,11 @@ public:
     /** Puts the ring on `stop` when it is one of getStops(), else does what enter() does. */
     bool enterAt(juce::Component& stop);
     void leave();
-    /** Left/Right/Home/End move the ring, Return/Space press the ringed control, Down/Escape return to the panel;
-     *  anything else (any chord too) is not ours. Only while active. */
+    /** Where Down from the ring goes once the ring has left (the first control below the bar); unset, Down only leaves
+     *  like Escape. Set by the owner after construction. */
+    std::function<void()> onDown;
+    /** Left/Right/Home/End move the ring, Return/Space press the ringed control, Escape returns to the panel and Down
+     *  does too, then runs onDown; anything else (any chord too) is not ours. Only while active. */
     bool handleKey(const juce::KeyPress& key);
     void paintRing(juce::Graphics& g) const;
 

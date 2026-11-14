@@ -125,6 +125,10 @@ public:
     bool isHidingDragForTest() const noexcept { return drag_.hiding; }
     /** The "Drop to hide" area under the card, and how visible it is now (0 when no drag is live). */
     const CardLayoutHideZone& getHideZoneForTest() const noexcept { return hideZone_; }
+    /** The group (plan section) washed as the drop target now, or -1 when none is. */
+    int getDropSectionForTest() const noexcept { return dropSection_; }
+    /** The area of the group holding `paramId`'s control, in this overlay's coordinates. */
+    juce::Rectangle<int> getSectionAreaOfForTest(const juce::String& paramId) const;
     bool hasPendingNudgeForTest() const noexcept { return !nudgeKey_.isEmpty(); }
     /** Animates as if on screen (the editor is not showing in a test). */
     void setForceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }

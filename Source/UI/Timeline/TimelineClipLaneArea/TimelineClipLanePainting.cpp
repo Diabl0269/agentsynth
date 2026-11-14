@@ -312,8 +312,10 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g, const Live
     // The take's own channel count: a whole-mix take is stereo, an input take mono or stereo.
     const int numChannels = std::max(1, strip.info.numChannels);
     const int bucketCount = (int)(strip.peaks.size() / (std::size_t)numChannels);
+    // The same ink rule as a committed clip, from the strip's own fill, so a take keeps its shape and weight when it
+    // commits; only the colour changes, from the accent to the track's.
     paintWaveformColumns(g, strip.rect, strip.peaks, strip.rms, numChannels, 0, bucketCount,
-                         {accent.withAlpha(0.4f), accent.withAlpha(0.9f), accent.withAlpha(0.7f)});
+                         waveformInkFor(synth::theme::themeOf(*this).colors.bg1.overlaidWith(accent.withAlpha(0.12f))));
 }
 
 // The lane editors paint their own rows over the extra areas; this only fills what shows through

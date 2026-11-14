@@ -13,6 +13,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Layout/PopoverPointer.h"
 #include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 
 namespace synth::ui {
@@ -148,11 +149,23 @@ void ModDotController::tickPopover() {
     tickModCurvePopover();
 }
 
+namespace {
+juce::Point<int> pointerPosition() {
+    const auto& forced = synth::ui::test_hooks::popoverMouseForTest();
+    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
+}
+} // namespace
+
 void ModDotController::popoverClosed(ModDotPopover* popover) {
     if (popover_.getComponent() == static_cast<juce::Component*>(popover))
         popover_ = nullptr;
-    repaintCard(
-        popover->card()); // Esc or a click away: the chip comes back (fades in) with the pointer still on the knob
+    // Esc or a click away: the chip comes back (fades in) with the pointer still on the dot. The panel's window took
+    // the knob's mouse-exit while it was open and no mouse-enter follows until the pointer moves, so the hovered knob
+    // is restored from where the pointer rests.
+    if (const auto* anchor = popover->anchor();
+        anchor != nullptr && anchor->getScreenBounds().contains(pointerPosition()))
+        editor_.setHoveredModTarget(GraphEditor::HoveredModTarget{popover->card(), popover->destChannel()});
+    repaintCard(popover->card());
 }
 
 namespace {

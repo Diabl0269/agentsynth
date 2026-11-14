@@ -14,6 +14,7 @@
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"
 #include "TestMode/TestModePresentedFrame.h"
+#include "UI/Layout/MainMenuTooltips.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -301,6 +302,9 @@ private:
 
 #if JUCE_MAC
             setMacMainMenu(this);
+            // The system menu can show a hint on hover; JUCE sets none (UI/Layout/MainMenuTooltips.h).
+            if (auto* mc = dynamic_cast<MainComponent*>(getContentComponent()))
+                synth::ui::installMainMenuTooltips(synth::ui::collectCommandTooltips(mc->getCommandManager()));
 #else
             setMenuBar(this);
 #endif

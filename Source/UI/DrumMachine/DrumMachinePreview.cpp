@@ -16,7 +16,8 @@ constexpr int kMaxSkippedSteps = 8; // a playhead frame that jumped further is a
 }
 
 void DrumMachineComponent::refreshPlayClipTexts() {
-    const auto key = shortcutHintFor(shortcuts_, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey));
+    const auto key = shortcutHintFor(shortcuts_, "drumMachinePlayClip",
+                                     juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, 0));
     playClipButton_.setTitle(previewing_ ? "Stop clip" : "Play clip");
     playClipButton_.setButtonText(previewing_ ? "Stop clip" : "Play clip");
     playClipButton_.setTooltip(formatShortcutHint(previewing_ ? "Stop looping this clip"

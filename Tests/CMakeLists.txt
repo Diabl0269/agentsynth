@@ -78,6 +78,7 @@ add_executable(Tests
     Modules/ADSR/ADSRTempoSyncTests.cpp
     Modules/ADSR/ADSRCVTests.cpp
     Modules/ADSR/ADSRVelocityTests.cpp
+    Modules/ADSR/ADSRVelocityRenderTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/Envelope/TempoDivisionTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
@@ -229,6 +230,7 @@ add_executable(Tests
     AI/AIStateMapper/AIStateMapperModulationEntriesTests.cpp
     AI/AIStateMapper/AIStateMapperIdScopeTests.cpp
     AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp
+    AI/AIStateMapper/AIStateMapperMidiWiringTests.cpp
     AI/AIStateMapper/AIStateMapperPatchFormatTests.cpp
     AI/AIPatchValidationTests.cpp
     AI/AIPatchRetryTests.cpp
@@ -340,6 +342,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
+    UI/Graph/ModuleComponent/SamplerMapAuditionTests.cpp
     UI/Graph/ModuleComponent/DrumKitCardTests.cpp
     UI/Graph/ModuleComponent/DrumKitPadsCardTests.cpp
     UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
@@ -503,6 +506,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/ModuleViews/ShapeEditor/ShapeEditorTests.cpp
     UI/ModuleViews/ShapeEditor/MorphMapTests.cpp
+    UI/ModuleViews/ShapeEditor/MorphMapAnchorAreaTests.cpp
     UI/ModuleViews/ShapeEditor/PerNoteBarTests.cpp
     UI/ModuleViews/ShapeEditor/LfoShapesWindowTests.cpp
     UI/Layout/UIAnimationTests.cpp
@@ -626,6 +630,7 @@ add_executable(Tests
     UI/Layout/DisclosureChevronTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/IconButtonTests.cpp
+    UI/Layout/SnapToggleButtonTests.cpp
     UI/Layout/ButtonStateEaseTests.cpp
     UI/Layout/SharedChipControlsTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
@@ -736,6 +741,7 @@ add_executable(Tests
     UI/Mixer/MixerAccessibilityTests.cpp
     UI/Accessibility/AccessibilityCoverageTests.cpp
     UI/Accessibility/DialogKeyboardTests.cpp
+    UI/Accessibility/TooltipRulesTests.cpp
     UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
@@ -826,6 +832,7 @@ add_executable(Tests
     UI/Layout/SearchMatchTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
+    UI/Graph/CardBody/CardCanvas.cpp
     UI/Graph/CardBody/CardBodyFreeformTests.cpp
     UI/Graph/CardBody/CardBodyAdsrLooksTests.cpp
     UI/Graph/CardBody/CardBodyConditionsTests.cpp
@@ -864,6 +871,7 @@ add_executable(Tests
     UI/Theme/KnobStyleLookTests.cpp
     UI/Layout/BottomDockTabFadeTests.cpp
     UI/Graph/CardBody/CardBodyFadeTests.cpp
+    UI/Graph/CardBody/MacroCountGlideTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFadeTests.cpp
     UI/Mixer/MixerFadeTests.cpp
     UI/Graph/CardLayoutEditor/OnCard/OnCardFadeTests.cpp

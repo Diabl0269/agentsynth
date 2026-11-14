@@ -30,8 +30,9 @@ And it starts at `trackHeaderBounds_.getY()`, i.e. **below the transport strip**
 strip is one continuous row of chrome across the full width — cutting it in half would imply a
 column boundary its own controls do not respect.
 
-**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) straddles
-the seam, added last so it wins the hit test over the header rows and the clips. Dragging it sets the
+**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) runs down the
+column's right edge beside the track rows, inside the column and 1 px short of the lanes so it never overlaps the
+ruler or the lanes (the Add Track button stops 1 px short of it), added last so it wins the hit test over the header rows. Dragging it sets the
 column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[168, 420]` px; a
 double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
 user settings under `timelineTrackHeaderWidth` (written on release, restored in

@@ -2,7 +2,9 @@
 
 // The content of the instrument map window: the keyboard and rows of recordings, the selected recording's fields and,
 // for a built-in instrument, the notice that the first edit makes a copy. Every edit goes through `applyEdit` (one
-// undo step each) and rebuilds the instrument; the view follows the module, so an undo shows at once.
+// undo step each) and rebuilds the instrument; the view follows the module, so an undo shows at once. Keys played on
+// the map go to the module's note inbox, so they sound through the module's own output; each is released when the
+// view goes or detaches.
 
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapBlocks.h"
@@ -27,13 +29,18 @@ public:
     SamplerMapView(SamplerModule& sampler, ApplyEdit applyEdit);
     ~SamplerMapView() override;
 
-    /** Lets go of the module; the view then shows nothing and edits nothing. */
+    /** Lets go of the module (releasing any note held); the view then shows nothing, plays nothing and edits nothing.
+     */
     void detach();
     /** Follows the module: rebuilds when the instrument changed (an undo, a load). Cheap when nothing did. */
     void poll();
 
     /** True for a built-in (sound pack) instrument until its first edit makes the module's own copy. */
     bool isReadOnly() const noexcept { return readOnly_; }
+    /** The play key's bindings come from here; call before the window opens. Not owned. */
+    void setShortcutManager(const ShortcutManager* shortcuts) { blocks_.setShortcutManager(shortcuts); }
+    /** Hands a key the view does not use to the app (Cmd+Z, Space); true when it took it. */
+    std::function<bool(const juce::KeyPress&)> onAppShortcut;
     juce::String getWindowTitle() const;
     int getSelected() const noexcept { return blocks_.getSelected(); }
 
@@ -64,6 +71,9 @@ private:
     void applyFieldChange(const synth::sampler::RegionSpec& region);
     void launchRecordingChooser(bool replace);
     void applyReadOnly();
+    void playNote(int note, int velocity);
+    void releaseNote(int note);
+    void releaseAll();
     std::vector<synth::sampler::RegionSpec> regions() const;
 
     SamplerModule* sampler_;
@@ -82,6 +92,7 @@ private:
     bool readOnly_ = false;
     bool drumKit_ = false;
     bool committing_ = false;
+    std::vector<int> heldNotes_;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerMapView)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerMapView)

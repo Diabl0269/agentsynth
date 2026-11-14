@@ -14,12 +14,18 @@ namespace synth::cardbody {
 inline constexpr int kKnobColumns = 3;
 inline constexpr int kContentMargin = 12;       // left/right gutter for body content
 inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
-inline constexpr int kLabelHeight = 18;
+inline constexpr int kLabelHeight = 18;         // a caption's slot: its box plus kCaptionGap above the widget
+inline constexpr int kCaptionGap = 6;           // between a caption's box and the widget it names (one spacing unit)
+inline constexpr int kCaptionBoxHeight = kLabelHeight - kCaptionGap;
 inline constexpr int kRowHeight = 24;         // combo box / toggle / button
 inline constexpr int kKnobHeight = 58;        // rotary + its text box
 inline constexpr int kKnobLargeHeight = 80;   // a 60 px dial + its text box
 inline constexpr int kFaderVHeight = 96;      // a vertical fader's travel + its text box
 inline constexpr int kFaderVLongHeight = 144; // a long vertical fader: half again the travel
+inline constexpr int kButtonHeight = 28;      // a Macros knob shown as a button (CardButton::kHeight)
+inline constexpr int kButtonWidth = 56;       // its widest face; a narrower cell narrows it
+inline constexpr int kXYPadWidth = 104;       // an XY pad: its square plot (CardXYPad::kSize)
+inline constexpr int kXYPadHeight = 120;      // the pad and the readout under it (CardXYPad::kHeight)
 inline constexpr int kFaderHHeight = 28;      // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
 inline constexpr int kPanelGap = 6; // between the controls and a response or scope panel under them
@@ -37,11 +43,11 @@ inline constexpr int kFooterGap = 6;         // between footer items
 inline constexpr int kFooterRowGap = 4;      // between wrapped footer rows
 inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or combo gets
 
-// The card chrome toggles' text; the size estimate measures the footer pills from the same strings.
+// The card chrome toggles' text; the size estimate measures the footer pills from the same strings. Show Spectrum's
+// words are synth::ui::actiontext::kShowSpectrum (UI/Layout/ActionTexts.h), shared with the windows.
 inline constexpr const char* kShowScopeText = "Show Scope";
 inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
-inline constexpr const char* kShowSpectrumText = "Show Spectrum";
 
 // The Macros card's output jacks sit in the right-edge gutter, labels to their left; its body keeps clear of it.
 inline constexpr int kMacroJackGutter = 60;

@@ -304,7 +304,7 @@ TEST(TimelineTrackColumnWidthTest, DraggingTheSeamWidensTheColumnAndTheHeadersWi
     const int before = f.panel.getTrackHeaderBounds().getWidth();
     auto& handle = f.panel.getTrackHeaderWidthHandle();
     const auto seam = f.panel.getLocalPoint(&handle, handle.getLocalBounds().getCentre());
-    EXPECT_EQ(std::abs(seam.x - f.panel.getTrackHeaderBounds().getRight()), 0) << "straddles the seam";
+    EXPECT_EQ(handle.getRight() + 1, f.panel.getTrackHeaderBounds().getRight()) << "runs down the column's right edge";
     EXPECT_EQ(f.componentAt(seam), &handle) << "a real press on the seam lands on the handle";
 
     SizingPanel::dragHandle(handle, 60);

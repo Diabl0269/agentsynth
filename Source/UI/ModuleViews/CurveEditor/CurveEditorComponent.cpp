@@ -1,4 +1,5 @@
 #include "CurveEditorComponent.h"
+#include "UI/Layout/PointEditing/SegmentBendDrag.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -193,11 +194,7 @@ void CurveEditorComponent::dragBendBy(int segment, float deltaPixelsY) {
     if (startLevel == endLevel)
         return; // flat segment: bend has no visible effect
 
-    // Dragging toward the side the curve already bulges increases the bulge, for both a rising
-    // and a falling segment: rising (end > start) bulges upward for a positive bend (the curve
-    // reads closer to `end` at the midpoint, which is the higher value), so dragging UP (negative
-    // pixelsY) should increase bend; falling is the mirror image.
-    const float directionSign = (endLevel >= startLevel) ? -1.0f : 1.0f;
+    const float directionSign = upwardBendSign(startLevel, endLevel);
     const float bendDelta = directionSign * (deltaPixelsY / kBendSensitivityPx) * 2.0f;
     const float newBend = juce::jlimit(-1.0f, 1.0f, model_.getBend(segment) + bendDelta);
 
@@ -244,16 +241,6 @@ int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) 
     const int index = insertPointAt(point, bypassSnap);
     endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
     return index;
-}
-
-void CurveEditorComponent::setLineClickEditing(bool enabled) { lineClickEditing_ = enabled; }
-
-bool CurveEditorComponent::isOnCurveLine(juce::Point<float> point) const {
-    if (model_.getNumSegments() < 1)
-        return false;
-    const auto geometry = currentGeometry();
-    const auto onLine = geometry.playheadPosition(model_.playheadForX(geometry.timeForX(point.x)));
-    return std::abs(onLine.y - point.y) <= kLineClickSlopPx;
 }
 
 bool CurveEditorComponent::removeNode(int index) {
@@ -313,25 +300,6 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
         dragIndex_ = -1;
         if (onContextMenu)
             onContextMenu(e, hit);
-        return;
-    }
-
-    // With line-click editing a press on the line inserts a point and carries on as a drag of it,
-    // all inside one gesture, so a click-and-drag is a single undo step.
-    if (lineClickEditing_ && model_.getMode() == CurveMode::Free && hit.kind == CurveHitKind::None &&
-        isOnCurveLine(e.position)) {
-        dragFrozenRange_ = currentGeometry().getVisibleRange();
-        beginGesture();
-        gestureActive_ = true;
-        const int index = insertPointAt(e.position, e.mods.isShiftDown());
-        dragKind_ = index >= 0 ? DragKind::Node : DragKind::None;
-        dragIndex_ = index;
-        lastDragPos_ = e.position;
-        if (index < 0) {
-            endGesture();
-            gestureActive_ = false;
-            dragFrozenRange_.reset();
-        }
         return;
     }
 
@@ -442,7 +410,7 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         resetBend(hit.index);
         return;
     }
-    if (model_.getMode() != CurveMode::Free || lineClickEditing_)
+    if (model_.getMode() != CurveMode::Free)
         return;
     if (hit.kind == CurveHitKind::Node)
         removeNode(hit.index);

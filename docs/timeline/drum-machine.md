@@ -54,7 +54,7 @@ track plays that kit; it opens the timeline tab and the first track playing the 
 ## Play clip
 
 "Play clip" loops the open clip even with the song stopped, and reads "Stop clip" in the accent colour while it
-loops. The grid's playhead follows the loop and hits flash as it reaches them. Space toggles it (the rebindable
+loops. The grid's playhead follows the loop and hits flash as it reaches them. Shift+Space toggles it (plain Space stays the song's play key from every control of the grid; the rebindable
 `drumMachinePlayClip` action, Drum Machine category). Edits are heard on the next pass of the loop.
 
 It stops on its own when the transport plays, the grid closes or switches to the piano roll, the clip is deleted, or
@@ -298,14 +298,14 @@ seeds from the time); every result is ONE undo step, and the cells it changed ke
 - **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
   snare (38, 40) notes stay exactly as they are and only the other drums are generated.
 
-Escape closes the popover and the focus returns to the Ideas button; each result is announced ("Filled with House
+Up and Down step between the popover's controls (stopping at the ends) and Escape closes it, returning focus to the Ideas button; each result is announced ("Filled with House
 starter").
 
 ## Keyboard and accessibility
 
 The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End move a focus cell (drawn with the
-focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
-by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return, Shift+Up/Down and Alt(+Shift)+Left/Right (a drum's
+focus ring); Return toggles a hit, Shift+Space plays or stops the clip (plain Space plays or stops the song), Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
+by 10, Delete removes the hit, Escape closes. Return, Shift+Space (Play clip), Shift+Return, Shift+Up/Down and Alt(+Shift)+Left/Right (a drum's
 [length](#per-drum-length-and-swing)) are rebindable (Drum Machine category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
 "Kick, step 5, empty". Opening the editor focuses the grid. Tab from the grid walks the header: View switch, Play
 clip, Show all drums (skipped while it is greyed), Steps per bar, Swing, Humanise and Ideas, each with a name and a

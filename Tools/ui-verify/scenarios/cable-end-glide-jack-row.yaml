@@ -15,7 +15,7 @@ motion: true
 record: true
 save_project: cable-end-glide-jack
 steps:
-  - click: {id: New empty project}
+  - click: {id: New empty project, instant: "the status bar text changes (New patch, plugin scan progress)"}
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}

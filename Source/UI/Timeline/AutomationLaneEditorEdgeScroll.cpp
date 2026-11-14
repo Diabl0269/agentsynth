@@ -1,7 +1,8 @@
 // AutomationLaneEditor -- a drag follows the view. A dot, the stretch box or a selection box held in the edge zone
 // scrolls the shared timeline view at the clip lanes' pace and keeps the dragged thing under the still pointer (a
-// selection box keeps its pressed corner on its beat); a key hold brings the moving dot along, eased with the dot,
-// once it passes the margin. The class is declared in AutomationLaneEditor.h.
+// selection box keeps its pressed corner on its beat) and never lets a dragged dot, the selection's outermost dot or
+// the stretch edge leave the visible span, with a coarse snap taking the last grid line inside; a key hold brings the
+// moving dot along, eased with the dot, once it passes the margin. The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
@@ -23,9 +24,21 @@ bool AutomationLaneEditor::dragFollowsView() const noexcept {
 void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
     switch (dragMode_) {
     case DragMode::MoveHandle: {
-        // The whole selection moves by the grabbed point's delta; the block stops at beat 0 as a unit and never lands
-        // on another point.
-        const double target = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
+        // The whole selection moves by the grabbed point's delta; the block stops at beat 0 as a unit, never lands on
+        // another point and keeps its outermost dots inside the visible span.
+        const auto [low, high] = visibleDotBeats();
+        double lowTarget = low, highTarget = high;
+        if (!dragPoints_.empty()) {
+            const auto [first, last] =
+                std::minmax_element(dragPoints_.begin(), dragPoints_.end(),
+                                    [](const LaneBreakpoint& a, const LaneBreakpoint& b) { return a.beat < b.beat; });
+            lowTarget = low - (first->beat - dragOriginalBeat_);
+            highTarget = high - (last->beat - dragOriginalBeat_);
+        }
+        if (highTarget < lowTarget) // wider than the view: only the grabbed dot is bound
+            lowTarget = low, highTarget = high;
+        const double target =
+            std::max(0.0, snappedBeatWithin(viewState_.xToBeat((double)insideLane(pos).x), lowTarget, highTarget));
         const double delta = settledBeatDelta(dragPoints_, target - dragOriginalBeat_);
         previewBeat_ = delta == target - dragOriginalBeat_ ? target : dragOriginalBeat_ + delta;
         previewValue_ = clampValue(yToValue(pos.y));
@@ -43,7 +56,7 @@ void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
             if (selection_.isBoxActive())
                 selection_.setBoxAnchor(
                     {(int)std::lround(viewState_.beatToX(boxAnchorBeat_)), selection_.boxAnchor().y});
-            selection_.dragTo(pos, *points, pointMapper());
+            selection_.dragTo(insideLane(pos), *points, pointMapper());
         }
         break;
     case DragMode::TensionScrub:
@@ -53,6 +66,47 @@ void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
     case DragMode::LaneConstant:
         break;
     }
+}
+
+juce::Point<int> AutomationLaneEditor::insideLane(juce::Point<int> pos) const noexcept {
+    return {juce::jlimit(0, std::max(0, getWidth()), pos.x), pos.y};
+}
+
+int AutomationLaneEditor::dotsOutsideView() const {
+    std::vector<LaneBreakpoint> shown;
+    if (dragMode_ == DragMode::MoveHandle)
+        shown = dragMovedPoints();
+    else if (const auto* points = lanePoints())
+        shown = *points;
+    int outside = 0;
+    for (const auto& p : shown) {
+        const double x = viewState_.beatToX(p.beat);
+        outside += x < -0.5 || x > (double)getWidth() + 0.5 ? 1 : 0;
+    }
+    return outside;
+}
+
+std::pair<double, double> AutomationLaneEditor::visibleDotBeats() const {
+    const double radius = (double)kHandleRadiusPx;
+    // A view at the very start lets a dot sit on beat 0 (drawn half out, as a point there always is).
+    const double low = viewState_.xToBeat(0.0) <= 0.0 ? 0.0 : viewState_.xToBeat(radius);
+    return {low, std::max(low, viewState_.xToBeat((double)getWidth() - radius))};
+}
+
+// The nearest grid line, unless it lies outside: then the last line inside (at or below `high`, at or above `low`), so
+// a coarse snap never parks the dot up to half a step past the edge. Snap off only clamps.
+double AutomationLaneEditor::snappedBeatWithin(double rawBeat, double low, double high) const {
+    const double bar = currentBeatsPerBar();
+    const double snapped = snappedBeatAt(rawBeat);
+    if (snapped > high) {
+        const double line = viewState_.floorToGrid(high, bar);
+        return line >= low ? line : high;
+    }
+    if (snapped < low) {
+        const double line = viewState_.ceilToGrid(low, bar);
+        return line <= high ? line : low;
+    }
+    return snapped;
 }
 
 // The timer runs only while a dot, the stretch box or a selection box is being dragged with the pointer inside an edge

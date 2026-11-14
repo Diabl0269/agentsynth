@@ -15,6 +15,7 @@
 
 #include "PortConnectionList.h"
 #include <optional>
+#include <vector>
 
 namespace synth::ui {
 
@@ -27,7 +28,9 @@ public:
 
     /** Wires `srcId`'s output `srcJack` to `dstId`'s input `dstJack` (VISIBLE jack indices; a MIDI jack passes the
      *  MIDI channel index) with the rules of a completed cable drag. `recordUndo` false leaves the undo step to the
-     *  caller. With `slideFrom` (a canvas point) the cables a macro-boundary drop makes slide in from there. */
+     *  caller. With `slideFrom` (a canvas point) the cables a macro-boundary drop makes slide in from there. A Custom
+     *  Filter in By hand or By pitch that this cable gives a Pitch source for the first time gets its Pitch cable in
+     * the same undo step; no other cable ever does. */
     static Result connectJacks(GraphEditor& editor, juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi, bool recordUndo,
                                std::optional<juce::Point<float>> slideFrom = std::nullopt);
@@ -52,6 +55,23 @@ public:
 
     /** The raw output channel a routing reads for visible output `jack` of `node`; -1 when the node is gone. */
     static int rawSourceChannel(GraphEditor& editor, juce::AudioProcessorGraph::NodeID node, int jack);
+
+    /** Cables the Pitch source of the voice chain feeding `filter` into the filter's Pitch input, by the path of a
+     *  hand-drawn cable and with no undo record of its own. False when no module upstream has a Pitch source or the
+     *  filter's Pitch input is already cabled. */
+    static bool connectFilterPitch(GraphEditor& editor, juce::AudioProcessorGraph::NodeID filter);
+
+private:
+    /** Custom Filters set to By hand or By pitch that have no Pitch cable and no Pitch source upstream yet. */
+    static std::vector<juce::AudioProcessorGraph::NodeID> filtersWaitingForPitch(GraphEditor& editor);
+    /** Gives each of `waiting` its Pitch cable when a Pitch source has appeared upstream since; true when any was made.
+     */
+    static bool cableFiltersNowFed(GraphEditor& editor, const std::vector<juce::AudioProcessorGraph::NodeID>& waiting,
+                                   bool recordUndo);
+    /** connectJacks' rules for the two jacks, before the Pitch cables of the filters the new cable feeds. */
+    static Result connectJacksByRules(GraphEditor& editor, juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                      juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi,
+                                      bool recordUndo, std::optional<juce::Point<float>> slideFrom);
 };
 
 } // namespace synth::ui

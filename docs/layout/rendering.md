@@ -87,7 +87,9 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   loops (out past its output, in before its input) are inside it; a box that left them out let the flow dots there stay
   on screen at an old phase. `CablePaintBounds.HoldsTheWholeDrawnPathOfEveryCable` checks it. Repainting the whole canvas and rebuilding every cable per frame made
   a one-card delete or undo cost as much as the idle tick's full paint at every frame (about 16 ms on the Load test
-  project, 49 ms at 80 tracks).
+  project, 49 ms at 80 tracks). The tick repaints nothing at all when no cable's activity, bypass or amount changed and
+  the flow dots are held (Animations Off, `loopRate()` 0): an idle Load test project cost about 18% of a core hidden
+  and more on screen before (FRO1355, `GraphEditorCanvasTick.AnIdleCanvasWithHeldFlowDotsRepaintsNothing`).
 - **A glide only snapshots what can be seen.** `CardGlideAnimator::arm` renders a snapshot (a full card paint) only for
   a card whose old-to-new path crosses the visible canvas; an off-screen card is neither hidden nor snapshotted but
   keeps its item, so its cables still slide. Snapshotting every moved card stalled an undo of a big Auto Arrange for

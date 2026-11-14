@@ -1,5 +1,5 @@
-// The mod hover chip fades like every other tooltip (160 ms in, 110 ms out, the last rows kept through the fade-out)
-// and is drawn on the tooltip's own box.
+// The mod hover chip fades more gently than other tooltips (220 ms in, 160 ms out, since it has no hover delay; the
+// last rows kept through the fade-out) and is drawn on the tooltip's own box.
 
 #include "ModDotTestFixture.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
@@ -66,21 +66,25 @@ TEST(ModChipFade, ComesInFromPartialAndGoesOutThroughPartialKeepingItsRows) {
 
     const auto shown = someStack();
     EXPECT_LT(fade.follow(shown).alpha, 1.0f) << "starts below full";
-    const auto in = alphasOver(fade, shown, 20.0, 8);
+    const auto in = alphasOver(fade, shown, 20.0, 11);
     EXPECT_GT(in.front(), 0.0f);
     EXPECT_LT(in.front(), 1.0f);
     for (size_t i = 1; i < in.size(); ++i)
         EXPECT_GE(in[i], in[i - 1]) << "step " << i;
-    EXPECT_FLOAT_EQ(in.back(), 1.0f) << "fully in after 160 ms";
+    EXPECT_FLOAT_EQ(in.back(), 1.0f) << "fully in after 220 ms";
+    EXPECT_FLOAT_EQ(ModChipFade::kFadeInMs, 220.0);
+    EXPECT_GT(ModChipFade::kFadeInMs, 160.0) << "gentler than a tooltip's 160 ms in";
+    EXPECT_GT(ModChipFade::kFadeOutMs, 110.0) << "gentler than a tooltip's 110 ms out";
+    EXPECT_LT(in[7], 1.0f) << "still rising at the tooltip's 160 ms";
 
     const auto first = fade.follow(none);
     EXPECT_GT(first.alpha, 0.0f);
     EXPECT_EQ(first.rows.size(), 1u) << "the last rows stay while it fades out";
-    const auto out = alphasOver(fade, none, 10.0, 12);
+    const auto out = alphasOver(fade, none, 10.0, 16);
     EXPECT_LT(out.front(), 1.0f);
     for (size_t i = 1; i < out.size(); ++i)
         EXPECT_LE(out[i], out[i - 1]) << "step " << i;
-    EXPECT_FLOAT_EQ(out.back(), 0.0f) << "gone after 110 ms";
+    EXPECT_FLOAT_EQ(out.back(), 0.0f) << "gone after 160 ms";
     EXPECT_TRUE(fade.follow(none).rows.empty());
 }
 

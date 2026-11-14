@@ -172,10 +172,10 @@ mapper, and an untrusted apply resolves a bad one to linear.
 Every place edits that one curve through `ModCurveEditTarget` (a node id and the editor, never a processor pointer, so a
 deleted node is a safe no-op and a safe close):
 
-- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode with line-click editing, a draggable
+- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode (double-click the line to add a point, double-click a point to remove it, right-click a point for its menu), a draggable
   middle bend handle, the chips Linear / Exp / Log / S-curve, two range handles on the left edge (min and max output,
-  Up/Down 1 percent, Shift 10), saved presets ("Mine", "Save...") and Enlarge. Enlarge opens a window titled
-  "Curve: <source> to <destination>" with a big editor, the chips, a Snap toggle and a Grid box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
+  Up/Down 1 percent, Shift 10), saved presets ("Load", "Save...") and Enlarge. Enlarge opens a window titled
+  "Curve: <source> to <destination>" with a big editor, the chips, the Snap icon button (the shared `SnapToggleButton`, icon and word) and a Grid label beside its box (1/2 to 1/32 cells across the range, Snap off by default, Shift places freely), Reset and Done. The shape runs edge to edge: every curve editor insets its drawing area by `CurveEditorGeometry::kNodeInsetPx` so the first and last dots are never clipped, and the mod curve editor fixes its visible range at 1.
 - **Where it opens**: the curve chip (26 x 18, a Tab stop; accent border when bent) in each mod dot row between the amount
   and the timeline button, the Curve column after Amount in the Mod Matrix (row name "Routing N curve"), and the cable
   right-click item **Edit curve...**. One box is open at a time.
@@ -555,7 +555,10 @@ knob's own sources panel is open the stack is not drawn: the panel lists the sam
 from under it (`synth::ui::modHoverChipShows`). A left click on the dot (or Return on its button) opens the panel, and
 the chip fades out on that click through the same fade, stays gone while the panel is open and fades back in when it
 closes (Esc, a click away) with the pointer still on the knob: the dot's controller repaints the card whenever the
-panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. Tests:
+panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. The panel's window
+takes the knob's mouse-exit while it is open and no mouse-enter follows until the pointer moves, so on close
+`ModDotController::popoverClosed` restores the hovered knob when the pointer rests on the dot (the popover pointer seam,
+`PopoverPointer.h`). Tests:
 `ModChipClickHideTests.cpp` (per-frame alpha under Full, Reduce Motion and Animations Off); scenario
 `mod-chip-hides-on-dot-click`.
 

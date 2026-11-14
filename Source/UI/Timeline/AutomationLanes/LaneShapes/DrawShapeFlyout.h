@@ -10,8 +10,9 @@
 namespace synth::ui {
 
 // The pen's shape flyout: a vertical list of the six Draw shapes (icon, name, shortcut hint) in a juce::CallOutBox
-// under the Draw button. The current shape's row is lit. Click, Enter or Space picks a row; Up/Down (wrapping),
-// Home/End move; Escape closes (the box that hosts it, see launchPopover). Message thread only.
+// under the Draw button, on an opaque themed panel (the window colour and the theme's border). The current shape's row
+// is lit. Click, Enter or Space picks a row; Up/Down (wrapping), Home/End move; Escape closes (the box that hosts it,
+// see launchPopover). Message thread only.
 class DrawShapeFlyout : public juce::Component {
 public:
     static constexpr int kRowHeight = 30;
@@ -36,6 +37,7 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override;
     void parentHierarchyChanged() override;
+    void paint(juce::Graphics& g) override;
     void resized() override;
 
 private:

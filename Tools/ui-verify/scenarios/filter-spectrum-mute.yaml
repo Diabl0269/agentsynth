@@ -1,0 +1,103 @@
+# Bug: muting a Filter left its spectrum stuck where it was, in the card's response view and in the Edit shapes window
+# (and in the EQ). The trace must fall to the floor in about a second and come back on un-mute.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator and a Filter (Cmd+F), cables Osc -> Filter, sets the Filter to Custom,
+#      turns Show Response and Show Spectrum on, opens Edit shapes and turns its Show spectrum on.
+#   2. Plays a note (`audioPump`: a test-mode launch has no audio device, so it renders the project in real time with the
+#      same ModuleBase::processBlock path the app uses): both traces rise.
+#   3. Presses Mute on the Filter: both traces fall to the floor (`spectrumAtFloor`), 1.2 s later; un-mute: they return.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro1747 spectrum mute
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscill}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - expect: {count: {prefix: "card:Oscillator", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - drag: {from: "card:Oscillator > Audio output", to: "card:Filter > Audio input"}
+  - wait: {}
+  - click: {id: window, x: 560, y: 537}                        # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1100, fromY: 750, toX: 1100, toY: 480}   # pan the card's foot into view
+  - wait: {}
+  - screenshot: {id: window, name: custom}
+  - click: {id: Show Response}
+  - wait: {settleMs: 600}
+  - click: {id: Show Spectrum}
+  - wait: {settleMs: 600}
+  - expect: {id: Show Spectrum, toggleState: true, within_ms: 3000}
+  - click: {id: Edit shapes}
+  - wait: {}
+  - expect: {id: Show spectrum, exists: true, within_ms: 5000}
+  - click: {id: Show spectrum}
+  - wait: {settleMs: 600}
+  - expect: {id: Show spectrum, toggleState: true, within_ms: 3000}
+  - click: {id: Done}                                          # the window's toggle is on; close it to film the card first
+  - wait: {settleMs: 600}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}
+  - audioPump: {run: true}
+  - audioPump: {note: 69, down: true}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: false, within_ms: 4000}
+  - wait: {settleMs: 600}
+  - screenshot: {id: screen, name: card-note-playing}
+  - glide: {name: card-mute-falls, frames: 16, crop: {x: 488, y: 495, w: 144, h: 80}, do: {click: {id: "card:Filter > Mute"}}}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: true, within_ms: 3000}
+  - mark: {check: 1, name: mute-falls}
+  - glide: {name: card-unmute-returns, frames: 8, crop: {x: 488, y: 495, w: 144, h: 80}, do: {click: {id: "card:Filter > Mute"}}}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: false, within_ms: 3000}
+  - mark: {check: 2, name: unmute-returns}
+  - click: {id: Edit shapes}                                   # the same, in the Edit shapes window
+  - wait: {}
+  - expect: {id: shapeSpectrumState, spectrumShown: true, within_ms: 5000}
+  - expect: {id: shapeSpectrumState, spectrumAtFloor: false, within_ms: 3000}
+  - glide: {name: window-mute-falls, frames: 16, do: {click: {id: "card:Filter > Mute"}}}
+  - expect: {id: shapeSpectrumState, spectrumAtFloor: true, within_ms: 3000}
+  - mark: {check: 3, name: window-mute-falls}
+  - glide: {name: window-unmute-returns, frames: 8, do: {click: {id: "card:Filter > Mute"}}}
+  - expect: {id: shapeSpectrumState, spectrumAtFloor: false, within_ms: 3000}
+  - mark: {check: 4, name: window-unmute-returns}
+  - audioPump: {note: 69, down: false}
+  - audioPump: {run: false}
+  - click: {id: Done}
+  - wait: {settleMs: 600}

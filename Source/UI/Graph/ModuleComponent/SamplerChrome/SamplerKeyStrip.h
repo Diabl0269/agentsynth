@@ -2,6 +2,7 @@
 
 // The Sampler card's picture of the loaded instrument: a keyboard across its key span, one band above it per
 // recording (the loud layer on the upper half, the soft layer on the lower), and the sounding notes lit on the keys.
+// A click or drag on the keys plays the Sampler through its note inbox.
 
 #include "Modules/SamplerModule.h"
 #include "UI/Theme/Theme.h"
@@ -40,10 +41,16 @@ public:
     /** "<N> recordings · soft and loud" (or "· one layer"); empty with no instrument. */
     juce::String getCaptionText() const;
 
+    /** The note being held by the pointer, or -1. */
+    int getHeldKey() const noexcept { return heldKey_; }
+
     /** Called on a double-click on the strip. */
     std::function<void()> onDoubleClick;
 
     void paint(juce::Graphics& g) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
     void mouseDoubleClick(const juce::MouseEvent&) override {
         if (onDoubleClick)
             onDoubleClick();
@@ -54,6 +61,11 @@ private:
     void setLit(const std::bitset<128>& notes);
     void paintKeys(juce::Graphics& g, juce::Rectangle<float> area, const synth::theme::Theme& theme) const;
     float keyX(int note, juce::Rectangle<float> area) const;
+    int keyAt(int x) const;
+    int velocityAt(int y) const;
+    void playHeld(int note, int velocity);
+    void releaseHeld();
+    std::bitset<128> soundingWithHeld() const;
 
     SamplerModule& sampler_;
     int generation_ = -1;
@@ -62,6 +74,7 @@ private:
     int recordings_ = 0;
     bool softAndLoud_ = false;
     std::bitset<128> lit_;
+    int heldKey_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerKeyStrip)
 };

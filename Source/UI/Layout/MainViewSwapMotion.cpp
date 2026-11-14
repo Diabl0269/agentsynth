@@ -84,11 +84,9 @@ void MainViewSwapMotion::discardPending() noexcept {
 bool MainViewSwapMotion::play(juce::Rectangle<int> panelBody) {
     if (!leaving_.isValid() || !FadeVisibility::canAnimateIn(&host_))
         return false;
-    fade_ = prefersReducedMotion();
-    if (!fade_ && panelBody.isEmpty()) {
-        discardPending();
-        return false;
-    }
+    // No panel body to move through (the panel is closed or sliding) is the same cross-fade as Reduce Motion.
+    reduced_ = prefersReducedMotion();
+    fade_ = reduced_ || panelBody.isEmpty();
     panelBody_ = panelBody;
     arriving_ = fade_ ? juce::Image{} : pictureOf(mainArea_);
     settledBody_ = fade_ ? juce::Image{} : pictureOf(panelBody_);
@@ -108,7 +106,7 @@ bool MainViewSwapMotion::play(juce::Rectangle<int> panelBody) {
 
     driver_.start(
         updater_, durationMs(),
-        fade_ ? std::function<float(float)>([](float t) { return t; }) : std::function<float(float)>(easeOutCubic),
+        reduced_ ? std::function<float(float)>([](float t) { return t; }) : std::function<float(float)>(easeOutCubic),
         [this](float t) { setProgress(t); }, [this] { end(false); });
     return true;
 }

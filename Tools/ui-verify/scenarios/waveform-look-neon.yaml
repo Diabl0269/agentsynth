@@ -1,0 +1,21 @@
+# The same clip in Neon, whose surfaces are translucent: the wave stays a solid shade of the clip. Check 5.
+#
+# What a user does: in Neon, opens the project, shows the timeline, zooms in and back out.
+record: true
+save_project: waveform-look-neon
+settings:
+  themeId: neon
+steps:
+  - copyFixture: {name: waveform-sweep.agsproj}
+  - openProject: {path: "${SCRATCH}/waveform-sweep.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Sweep:columns", within_ms: 10000}
+  - mark: {check: 5, name: whole-clip-neon}
+  - glide: {name: zoom-in, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: 0.9, mods: cmd}}}
+  - wait: {}
+  - glide: {name: zoom-back-out, frames: 16, do: {wheel: {id: timelineClipLaneArea, x: 40, y: 28, dy: -0.9, mods: cmd}}}
+  - wait: {}

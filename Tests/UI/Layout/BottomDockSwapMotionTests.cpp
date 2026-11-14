@@ -147,7 +147,7 @@ TEST_F(BottomDockSwapMotionTest, ReduceMotionIsAnEightyMillisecondFadeOverTheMai
     EXPECT_FALSE(motion().isRunning());
 }
 
-TEST_F(BottomDockSwapMotionTest, OffScreenAnimationsOffAndAClosedPanelSwapAtOnce) {
+TEST_F(BottomDockSwapMotionTest, OffScreenAndAnimationsOffSwapAtOnce) {
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
     ASSERT_TRUE(dock().swapTabToMain(Tab::Timeline));
     EXPECT_FALSE(motion().isRunning()) << "off screen";
@@ -160,13 +160,30 @@ TEST_F(BottomDockSwapMotionTest, OffScreenAnimationsOffAndAClosedPanelSwapAtOnce
     EXPECT_FALSE(motion().isRunning()) << "Animations Off";
     ASSERT_TRUE(dock().swapTabToMain(Tab::Canvas));
     synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+}
 
+// Opt+Cmd+1 with the panel hidden: no panel body to move through, so the main area cross-fades (the Reduce Motion
+// fade), not a one-frame swap (Tools/ui-verify/scenarios/canvas-header-swap.yaml).
+TEST_F(BottomDockSwapMotionTest, AClosedPanelSwapCrossFadesTheMainArea) {
     mc_->simulateToggleBottomPanelClick();
     mc_->resized();
     ASSERT_FALSE(mc_->isBottomDockConfiguredVisible());
+    const auto main = mainRect();
     ASSERT_TRUE(dock().setMainView(Tab::Timeline));
-    EXPECT_FALSE(motion().isRunning()) << "no panel body to move into";
-    EXPECT_TRUE(events_.empty());
+    ASSERT_TRUE(motion().isRunning());
+    EXPECT_TRUE(motion().isFade());
+    EXPECT_EQ(motion().durationMs(), 240.0) << "a real cross-fade, not the Reduce Motion blink";
+    EXPECT_FALSE(motion().bodyLayer().isVisible());
+    EXPECT_EQ(motion().mainLayer().getBounds(), main);
+    motion().stepForTest(0.5f);
+    EXPECT_TRUE(motion().isRunning());
+    motion().stepForTest(1.0f);
+    EXPECT_FALSE(motion().isRunning());
+    EXPECT_FALSE(motion().mainLayer().isVisible());
+
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    ASSERT_TRUE(dock().setMainView(Tab::Canvas));
+    EXPECT_FALSE(motion().isRunning()) << "Animations Off";
 }
 
 TEST_F(BottomDockSwapMotionTest, ASecondSwapMidMoveLandsTheFirstThenStartsItsOwn) {

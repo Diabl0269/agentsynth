@@ -8,6 +8,7 @@ SignInDialog::SignInDialog(AccountService& service)
     : accountService(service) {
     addAndMakeVisible(codeLabel);
     codeLabel.setJustificationType(juce::Justification::centred);
+    codeLabel.setTooltip("Your sign-in code: enter it on the verification page");
     codeLabel.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 28.0f, juce::Font::bold));
 
     addAndMakeVisible(openBrowserButton);
@@ -97,14 +98,18 @@ void SignInDialog::paint(juce::Graphics& g) {
     g.fillAll(lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colours::darkgrey.darker(0.5f));
 }
 
+namespace {
+constexpr int kCaptionGap = 6; // one spacing unit between a label and the control it sits next to
+}
+
 void SignInDialog::resized() {
     auto b = getLocalBounds().reduced(20);
     codeLabel.setBounds(b.removeFromTop(50));
-    b.removeFromTop(10);
+    b.removeFromTop(kCaptionGap);
     openBrowserButton.setBounds(b.removeFromTop(30).withSizeKeepingCentre(160, 30));
-    b.removeFromTop(10);
+    b.removeFromTop(kCaptionGap);
     statusLabel.setBounds(b.removeFromTop(30));
-    b.removeFromTop(10);
+    b.removeFromTop(kCaptionGap);
     cancelButton.setBounds(b.removeFromTop(30).withSizeKeepingCentre(100, 30));
 }
 
@@ -119,7 +124,9 @@ juce::Component::SafePointer<SignInDialog> launchSignInDialog(AccountService& se
     options.componentToCentreAround = &centreAround;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    synth::ui::PopupMotion::launchDialog(options);
+    if (auto* window = synth::ui::PopupMotion::launchDialog(options))
+        window->setResizeLimits(window->getWidth(), window->getHeight(), window->getWidth(),
+                                window->getHeight()); // the rows need the whole height: nothing smaller is laid out
     return opened;
 }
 

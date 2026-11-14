@@ -36,13 +36,13 @@ steps:
   - mark: {check: 3, name: folded-cable-from-more-line}
   - click: {id: outputsButton}
   - wait: {}
-  - click: {id: "outputsShow:Output #2"}
+  - glide: {name: switch-off, frames: 20, do: {click: {id: "outputsShow:Output #2"}}}   # the output and its cable animating away
   - wait: {}
   - key: {keys: escape}
   - wait: {}
   - expect: {id: "card:Delay", audioFrom: ""}
   - mark: {check: 4, name: switched-off-cable-gone}
-  - key: {keys: cmd+z}
+  - glide: {name: undo, frames: 20, do: {key: {keys: cmd+z}}}   # the output and its cable animating back
   - wait: {}
   - expect: {id: "card:Delay", audioFrom: "Maschine 2"}
   - mark: {check: 5, name: undo-restores-both}

@@ -68,7 +68,7 @@ public:
 
 private:
     static constexpr int kStripHeight = synth::ui::FoldAllButton::kStripHeight;
-    static constexpr int kSectionGap = 8;
+    static constexpr int kSectionGap = 6; // a body that ends in a caption sits this far above the next header
     static constexpr int kHeaderGap = 2;
     static int index(Section section) { return static_cast<int>(section); }
 

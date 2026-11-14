@@ -2,6 +2,7 @@
 #include "MorphShapesCard.h"
 #include "Modules/Shapes/MorphShapes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapePicker.h"
@@ -36,6 +37,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         lastGeneration_ = adapter_->getGeneration();
         sync(); // the count may have crossed the map's default
     };
+    map_.setShortcuts(host_.shortcuts);
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
     map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); };
     map_.setShowLabels(false);
@@ -46,14 +48,13 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
     map_.setCursorVisible(true);
     controller_->refresh();
 
-    editButton_.setTooltip("Edit shapes: open the shape editor window");
     editButton_.setTitle("Edit shapes");
+    setButtonTooltip(editButton_, "Open the shape editor window");
     editButton_.onClick = [this] { openEditor(targetShapeIndex()); };
-    pickButton_.setTooltip("Pick shape: choose a saved or factory shape from a list with a small picture of each; the "
-                           "selected shape (else the one nearest the cursor) takes its curve (Cmd+Z undoes it)");
-    pickButton_.setTitle("Pick shape");
+    pickButton_.setTitle(actiontext::kPickShape);
+    setButtonTooltip(pickButton_, actiontext::kPickShapeTip);
     pickButton_.onClick = [this] { openPicker(); };
-    toggle_.setTooltip("Show Morph Map: the map of shapes and the morph cursor " + host_.mapPlace);
+    setButtonTooltip(toggle_, "Show the map of shapes and the morph cursor " + host_.mapPlace);
     toggle_.onClick = [this] {
         const bool show = toggle_.getToggleState();
         host_.rememberView([show](synth::CardViewState& state) { state.showMorphMap = show; });

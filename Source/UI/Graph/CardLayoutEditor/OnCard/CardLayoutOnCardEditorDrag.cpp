@@ -195,6 +195,10 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
             leaveHideZone();
     }
     if (below) {
+        // Only the hide area is lit: a group washed on the way down must not stay lit, and a release here is a
+        // hide (drag_.hiding is read first), never a move into that group.
+        drag_.target = cells_[(size_t)drag_.cell].section;
+        dropSection_ = -1;
         guides_.clear();
         restoreBaseline();
         enterHideZone();

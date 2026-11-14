@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
+#include "UI/Layout/ActionTexts.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Library/SoundBrowser/ShapeDropTarget.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -17,6 +18,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
+
+class ShortcutManager;
 
 namespace synth::ui {
 
@@ -44,6 +47,8 @@ public:
         std::function<juce::String(int channel)> modDotTooltip;
         /** Where the shape window keeps its grid and spectrum choices; unset (or null) remembers nothing. */
         std::function<juce::ApplicationProperties*()> appProperties;
+        /** The user's key bindings, for the map's Tab walk; unset walks with Tab and Shift+Tab. */
+        std::function<const ShortcutManager*()> shortcuts;
         float landingDotDiameter = 7.0f; ///< the dot the canvas paints where a cable lands on a slider
         bool curveView = false;          ///< offers the small curve view of the shape under the cursor and its pill
     };
@@ -148,7 +153,7 @@ private:
     int morphYChannel_;
     MorphMap map_;
     juce::TextButton editButton_{"Edit shapes"};
-    juce::TextButton pickButton_{"Pick shape"};
+    juce::TextButton pickButton_{actiontext::kPickShape};
     juce::ToggleButton toggle_{"Show Morph Map"};
     std::unique_ptr<ShapeMapController> controller_;
     synth::CardBlockFade editFade_;

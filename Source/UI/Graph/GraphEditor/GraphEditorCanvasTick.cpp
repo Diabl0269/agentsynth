@@ -12,6 +12,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/CableCurve.h"
+#include "UI/Layout/ReducedMotion.h"
 
 #include <map>
 #include <tuple>
@@ -61,11 +62,17 @@ void CanvasMemo::changeListenerCallback(juce::ChangeBroadcaster*) { editor_.repa
 // Anything else on the canvas that changes over time requests its own repaint; the tick no longer covers it. With the
 // memo dropped (the routing set moved) the whole canvas is repainted.
 void CanvasMemo::tick() {
+    bool cablesLookDifferent = true;
     if (routingsMoved())
         editor_.cablesCacheValid = false;
     else if (editor_.cablesCacheValid)
-        refreshCableActivity();
-    lastTickArea_ = editor_.cablesCacheValid ? visibleCableArea() : editor_.content.getLocalBounds();
+        cablesLookDifferent = refreshCableActivity() || synth::ui::loopRate() > 0.0;
+    // An idle canvas (nothing changed a cable's look, the flow dots held by Animations Off) is not repainted: on a big
+    // project each full paint is milliseconds, 30 times a second.
+    if (!editor_.cablesCacheValid)
+        lastTickArea_ = editor_.content.getLocalBounds();
+    else
+        lastTickArea_ = cablesLookDifferent ? visibleCableArea() : juce::Rectangle<int>();
     if (!lastTickArea_.isEmpty())
         editor_.content.repaint(lastTickArea_);
     if (fittedGeneration_ != generation_) {
@@ -110,7 +117,9 @@ bool CanvasMemo::routingsMoved() {
 
 // The same values rebuildVisibleCables() reads, written onto the memo's cables: a routing cable's activity and bypass
 // from its routing, an attenuverter chain's activity from the display info and its amount from the attenuverter.
-void CanvasMemo::refreshCableActivity() {
+// True when any cable's drawn look changed.
+bool CanvasMemo::refreshCableActivity() {
+    bool changed = false;
     using Key = std::tuple<juce::uint32, int, juce::uint32, int>;
     std::map<Key, const ModulationRouting*> routings;
     for (const auto& r : editor_.cachedModRoutings)
@@ -125,17 +134,24 @@ void CanvasMemo::refreshCableActivity() {
         if (cable.kind == GraphEditor::VisibleCable::Kind::ModRouting) {
             const auto it = routings.find(Key{cable.id.srcUid, cable.id.srcPort, cable.id.dstUid, cable.id.dstPort});
             if (it != routings.end()) {
+                changed |= cable.activity != it->second->modSignalPeak || cable.isBypassed != it->second->isBypassed;
                 cable.activity = it->second->modSignalPeak;
                 cable.isBypassed = it->second->isBypassed;
             }
         } else if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain) {
-            if (const auto it = chainPeaks.find(cable.id.attenUid); it != chainPeaks.end())
+            if (const auto it = chainPeaks.find(cable.id.attenUid); it != chainPeaks.end()) {
+                changed |= cable.activity != it->second;
                 cable.activity = it->second;
+            }
             if (auto* node = graph.getNodeForId(juce::AudioProcessorGraph::NodeID{cable.id.attenUid}))
-                if (auto* p = findParameterByID(node->getProcessor(), "amount"))
-                    cable.attenAmount = p->getValue() * 2.0f - 1.0f; // 0..1 -> -1..1
+                if (auto* p = findParameterByID(node->getProcessor(), "amount")) {
+                    const float amount = p->getValue() * 2.0f - 1.0f; // 0..1 -> -1..1
+                    changed |= cable.attenAmount != amount;
+                    cable.attenAmount = amount;
+                }
         }
     }
+    return changed;
 }
 
 } // namespace graph_editor_paint

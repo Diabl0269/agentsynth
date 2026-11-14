@@ -304,7 +304,14 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 **Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
-`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon: a 22 px accent glyph (triangle with "!" for a warning, a circle with "i" or "?") inside the box at `synth::ui::alertIconBounds`, in place of JUCE's oversized translucent shape that stuck out past the corner.
+`AppLookAndFeel::drawAlertBox` (`AppLookAndFeelAlertBox.cpp`) draws the icon in place of JUCE's oversized translucent
+shape that stuck out past the corner: a 36 px glyph (about twice the title's line height, as macOS, Cubase and Logic size
+their caution icon), a triangle with "!" for a warning and a circle with "i" or "?" for info and question.
+`synth::ui::alertIconBounds` places it in the column left of the text, 18 px before it, with its centre on the centre of
+the title's first line as the alert's `TextLayout` measures it, never outside the box. `synth::ui::alertIconColour`
+colours it: the theme's `warning` for a warning (the token a warning toast uses), `accent` for info and question, pushed
+toward black or white by `readableOn` until it reads at 3:1 on the alert surface (Daylight's orange comes out darker).
+The theme sweep checks the size, the alignment, the colour and the contrast in every theme.
 
 **Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
 opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey
@@ -325,7 +332,7 @@ same content with the same options as the call site, or an exemption with a reas
 ticketed sit in `kKnownGaps` in `ThemeSweepTests.cpp`; the list is shrink-only: a new finding fails, and so does an
 entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYNTH_WRITE_THEME_PNG` set the sweep (and
 `ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
-directory. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
+directory. The popovers have their own sweep, `ThemeSweepPopoverTests.cpp`: `ThemeSweepPopovers.EveryPopoverContentIsListed` fails when a content class named in `PopoverRegistry.h` is neither rendered nor exempt with a reason (the exempt list is shrink-only), and the pen's shape flyout is rendered in every theme to check an opaque panel in the theme's window colour and 4.5:1 for each row's name and shortcut. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
 built-in theme and requires each mode's icon to differ at one fixed size and its menu-mark notch to stay in the chip's corner.
 A new control that shows its state only as a painted glyph joins that file.
@@ -426,6 +433,11 @@ implemented in `AppLookAndFeel`:
   constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
   and the underline follows it. The text is its accessible title; description, tooltip and focus policy
   stay with the call site. It lives in `Core` next to `IconButton`.
+- **SnapToggleButton** — `synth::ui::SnapToggleButton` (`Source/UI/Chrome/ToolbarButton/ToolbarButton.h`) is the one button that
+  switches snapping, on the timeline transport bar, the curve window and both Snap switches of the shape editor: a
+  `ToolbarButton` with the Snap icon on an Edit-group chip, named "Snap". Each surface sets its own layout, caption,
+  tooltip (starting "Snap to grid" or its own name) and toggle behaviour; `SnapToggleButtonTests` fails on any other
+  button built with the text "Snap". It lives in `Core` next to `ToolbarButton`.
 - **ComboBox** — `drawComboBox` (pressed/disabled states, drawn chevron arrow, and the shared focus ring from
   `FocusRing.h` when it holds keyboard focus; the routing pane's `RoutingComboButton` paints the same ring),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).

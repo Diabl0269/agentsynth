@@ -5,7 +5,10 @@
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
 #include "CardBodyPlan.h"
+#include "MacroCurveGlyph.h"
+#include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardWidgets/CardButton.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -312,9 +315,47 @@ void CardBody::refreshMacroNames() {
             continue;
         if (auto* label = dynamic_cast<juce::Label*>(item.label))
             label->setText(item.captionText(), juce::dontSendNotification);
-        if (item.widget != nullptr)
+        if (item.kind == CardBodyItem::Kind::XYPad)
+            refreshXYPad(item);
+        else if (auto* button = dynamic_cast<synth::ui::CardButton*>(item.widget))
+            button->setDisplayName(item.captionText());
+        else if (item.widget != nullptr)
             item.widget->setTitle(item.captionText());
     }
+}
+
+void CardBody::refreshMacroCurves() {
+    const auto* macros = dynamic_cast<const MacroControlModule*>(&module_);
+    if (macros == nullptr)
+        return;
+    for (auto& item : plan_.items) {
+        const int index = item.param != nullptr ? macroIndexOf(item.param->paramID) : -1;
+        if (index < 0 || item.widget == nullptr)
+            continue;
+        if (auto* glyph = MacroCurveGlyph::of(*item.widget))
+            glyph->setCurve(macros->getMacroCurve(index));
+    }
+}
+
+bool CardBody::pollMacros() {
+    const auto* macros = dynamic_cast<const MacroControlModule*>(&module_);
+    if (macros == nullptr)
+        return false;
+    bool changed = false;
+    for (auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::XYPad)
+            refreshXYPad(item); // an axis flipping Uni/Bi changes its reading
+    if (macros->getNamesRevision() != macroNamesSeen_) {
+        macroNamesSeen_ = macros->getNamesRevision();
+        refreshMacroNames();
+        changed = true;
+    }
+    if (macros->getCurvesRevision() != macroCurvesSeen_) {
+        macroCurvesSeen_ = macros->getCurvesRevision();
+        refreshMacroCurves();
+        changed = true;
+    }
+    return changed;
 }
 
 // A swap or a dim keeps the card's height; a section appearing or going changes it, and then the card
@@ -349,9 +390,9 @@ void CardBody::refreshConditions() {
     for (int s : std::exchange(startingSections_, {}))
         sectionFades_[(size_t)s].get()->setShown(plan_.sections[(size_t)s].visible);
     const int height = card_.getHeight();
-    if (!onlyLeaving)
-        card_.updateLayout();
-    const bool resized = card_.getHeight() != height;
+    // A Macros bank's new height glides and makes room itself; its knobs then swap like any control (below).
+    const bool glided = !onlyLeaving && card_.updateLayoutGliding();
+    const bool resized = !glided && card_.getHeight() != height;
     if (resized)
         card_.owner.handleModuleResized(&card_);
     card_.repaint();

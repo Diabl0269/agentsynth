@@ -10,9 +10,10 @@
 // picture shrinks down into the panel body and the arriving view's picture grows from the panel body up to the main
 // area, 240 ms easeOutCubic. Pictures keep their aspect while they move (scaled to fit the moving box, centred in it);
 // the old panel body's picture fades out over the arriving one at the start and the finished panel body's picture
-// fades in over the leaving one at the end, so the first and last frames are the real layout. Under Reduce Motion only
-// the main-area layer shows, the leaving picture fading out over the real view in 80 ms. Layers take no mouse, no
-// keyboard focus and are hidden from accessibility. Frames run only while the tween does.
+// fades in over the leaving one at the end, so the first and last frames are the real layout. Under Reduce Motion, or
+// with no panel body to move through (the panel is closed or sliding), only the main-area layer shows, the leaving
+// picture fading out over the real view (80 ms under Reduce Motion, 240 ms easeOutCubic with the panel closed). Layers
+// take no mouse, no keyboard focus and are hidden from accessibility. Frames run only while the tween does.
 namespace synth::ui {
 
 class MainViewSwapMotion {
@@ -41,11 +42,12 @@ public:
     void finishNow();
 
     bool isRunning() const noexcept { return running_; }
-    /** True for the plain fade (Reduce Motion), false for the move. */
+    /** True for the plain fade (Reduce Motion, or no panel body to move through), false for the move. */
     bool isFade() const noexcept { return fade_; }
     /** Eased progress, 0 to 1. */
     float progress() const noexcept { return progress_; }
-    double durationMs() const noexcept { return fade_ ? kFadeMs : kMoveMs; }
+    /** 80 ms under Reduce Motion; the move and the closed-panel cross-fade take 240 ms. */
+    double durationMs() const noexcept { return reduced_ ? kFadeMs : kMoveMs; }
     /** Where the leaving and arriving pictures are drawn now, in the host's coordinates (the arriving one is empty
      *  under the fade). */
     juce::Rectangle<float> leavingRect() const noexcept;
@@ -85,6 +87,7 @@ private:
     float progress_ = 0.0f;
     bool running_ = false;
     bool fade_ = false;
+    bool reduced_ = false;
 };
 
 } // namespace synth::ui

@@ -64,7 +64,7 @@ public:
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     bool routingsMoved();
-    void refreshCableActivity();
+    bool refreshCableActivity();
     juce::Rectangle<int> visibleCableArea() const;
 
     GraphEditor& editor_;

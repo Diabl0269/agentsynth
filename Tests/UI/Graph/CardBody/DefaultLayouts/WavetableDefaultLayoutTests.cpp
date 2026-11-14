@@ -11,6 +11,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include <set>
 

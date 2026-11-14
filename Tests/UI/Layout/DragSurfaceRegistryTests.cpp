@@ -96,9 +96,12 @@ const std::vector<Registered> kRegistered = {
     // No preview/commit split.
     {"SaturationBrightnessField",
      {"exempt: the colour is written live through one selector change, the release only ends the drag"}},
+    {"SamplerMapBlocks", {"exempt: the drag only moves which key sounds, there is no preview to commit"}},
+    {"SamplerKeyStrip", {"exempt: the drag only moves which key sounds, there is no preview to commit"}},
     {"HueBar", {"exempt: the hue is written live through one selector change, the release only ends the drag"}},
     {"RangeSlider", {"exempt: a slider that writes its value live while it drags"}},
     {"CardFader", {"exempt: a fader that writes its value live while it drags"}},
+    {"CardXYPad", {"exempt: a pad that writes both values live inside one open gesture while it drags"}},
     {"CardStepper", {"exempt: the value is written live inside one open gesture, the release only closes it"}},
     {"CardKnobSlider", {"exempt: a knob that writes its value live while it drags"}},
     {"MixerFaderSlider", {"exempt: a fader that writes its value live while it drags"}},
@@ -151,6 +154,8 @@ const char* const kCanvasCards =
     "follow:CanvasEdgeScroll.ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUnderThePointer";
 
 const std::vector<Follows> kFollow = {
+    {"SamplerMapBlocks", "follow-exempt: the keyboard is a fixed strip, the drag never scrolls or zooms the view"},
+    {"SamplerKeyStrip", "follow-exempt: the card's key strip is fixed, the drag never scrolls or zooms the view"},
     {"TimelineClipLaneArea", "follow:TimelineClipLaneAutoScrollTimerTest.GatedOnDragAndEdgeZoneOnly"},
     {"PianoRollComponent",
      "follow:PianoRollAutoScrollTest.EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer"},
@@ -173,6 +178,7 @@ const std::vector<Follows> kFollow = {
     {"HueBar", kValueInRange},
     {"RangeSlider", kValueInRange},
     {"CardFader", kValueInRange},
+    {"CardXYPad", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
     {"CardStepper", kValueInRange},
     {"CardKnobSlider", kValueInRange},
     {"MixerFaderSlider", kValueInRange},

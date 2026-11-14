@@ -6,6 +6,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 #include "UI/Graph/CardWidgets/CardFader.h"

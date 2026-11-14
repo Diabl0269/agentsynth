@@ -8,6 +8,7 @@
 
 #include "../UI/Graph/OutputDockTestHelpers.h"
 #include "MacroContainer/MacroContainerTestHelpers.h"
+#include "Modules/ModCurve.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -17,6 +18,8 @@
 #include "Modules/LFOModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Graph/CardBody/MacroCurveGlyph.h"
+#include <functional>
 #include <gtest/gtest.h>
 
 namespace {
@@ -261,4 +264,38 @@ TEST(MacroProjectLoad, KnobNamesAndPolaritySaveAndReloadThroughTheProjectJson) {
     EXPECT_EQ(copy->getMacroName(1), "M2");
     EXPECT_TRUE(copy->isBipolar(4));
     EXPECT_FALSE(copy->isBipolar(0));
+}
+
+// Each knob's response curve is saved with the project and shows as the card's glyph once reopened.
+TEST(MacroProjectLoad, KnobCurvesSaveAndReloadAndTheReopenedCardShowsThem) {
+    LoadCanvas c;
+    ASSERT_TRUE(
+        synth::AIStateMapper::applyJSONToGraph(savedMacrosProject({}, {}), c.engine.getGraph(), true, true, false));
+    auto* macros = macrosOf(c);
+    ASSERT_NE(macros, nullptr);
+    macros->setMacroCurve(2, synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    const auto saved = synth::AIStateMapper::graphToJSON(c.engine.getGraph());
+
+    LoadCanvas reopened;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(saved, reopened.engine.getGraph(), true, true, false));
+    reopened.openProject();
+    auto* copy = macrosOf(reopened);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_EQ(copy->getMacroCurve(2), synth::ModCurve::preset(synth::ModCurve::Preset::Exp));
+    EXPECT_TRUE(copy->getMacroCurve(0).isLinear());
+
+    int bent = 0, straight = 0;
+    // The glyphs are children of the knobs; walk the card's tree rather than reach for its body.
+    std::function<void(juce::Component&)> visit = [&](juce::Component& parent) {
+        for (auto* child : parent.getChildren()) {
+            if (child->getComponentID() == "macroCurveGlyph")
+                (static_cast<synth::MacroCurveGlyph*>(child)->isBent() ? bent : straight)++;
+            visit(*child);
+        }
+    };
+    for (auto* card : reopened.editor.getModuleComponents())
+        if (card != nullptr && card->getModule() == copy)
+            visit(*card);
+    EXPECT_EQ(bent, 1);
+    EXPECT_GE(straight, 1);
 }

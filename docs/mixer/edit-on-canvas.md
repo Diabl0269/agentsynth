@@ -1,7 +1,7 @@
 # Edit on canvas
 
 Every strip, bus and Master column header has an **Edit on canvas** button (`TrackShowModuleButton`, the same
-control as the timeline row's target button, component id `mixerEditOnCanvas`) on the right of the name row. It is
+control as the timeline row's target button, component id `mixerEditOnCanvas`) on the right of the name row, 6 px after the name and before any link, bus, receives or sources badge. It is
 there whatever the chain is, and "+ Insert" never turns into it. A click selects the channel's macro on the canvas
 (or, for a branching chain, its first boxed module's macro) and flies the canvas to centre it
 (`MixerPanelComponent::revealOnCanvas`, `GraphEditor::flyViewTo`: 200 ms, at once under Reduce Motion or Animations Off), so the button always shows something. It is a Tab stop with the focus ring,

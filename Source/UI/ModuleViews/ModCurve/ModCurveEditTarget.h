@@ -1,7 +1,7 @@
 #pragma once
 
-// The one curve every curve view edits: the response curve of one attenuverter, found by its node id on every read
-// and write so a view never holds a pointer into a processor that undo or a delete may free.
+// The one curve every curve view edits: the response curve of one attenuverter, or of one Macros knob, found by its
+// node id on every read and write so a view never holds a pointer into a processor that undo or a delete may free.
 
 #include "Modules/ModCurve.h"
 #include <functional>
@@ -17,9 +17,14 @@ namespace synth::ui {
 class ModCurveEditTarget {
 public:
     ModCurveEditTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverter);
+    /** The response curve of knob `knobIndex` (0-based) of the Macros bank at `macroBank`. */
+    static std::shared_ptr<ModCurveEditTarget> forMacroKnob(GraphEditor& editor,
+                                                            juce::AudioProcessorGraph::NodeID macroBank, int knobIndex);
 
+    /** The attenuverter's id; a macro knob's target answers its bank's id. */
     juce::AudioProcessorGraph::NodeID attenuverterId() const noexcept { return atten_; }
-    /** False once the attenuverter or the editor is gone. */
+    bool isMacroKnob() const noexcept { return knob_ >= 0; }
+    /** False once the attenuverter (or bank) or the editor is gone. */
     bool exists() const;
     /** Empty when the attenuverter is gone. */
     std::optional<synth::ModCurve> read() const;
@@ -48,6 +53,7 @@ public:
 private:
     juce::Component::SafePointer<GraphEditor> editor_;
     juce::AudioProcessorGraph::NodeID atten_;
+    int knob_ = -1; ///< >= 0: `atten_` is a Macros bank and this is the knob.
 };
 
 } // namespace synth::ui

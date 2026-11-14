@@ -159,14 +159,52 @@ std::string rightClickMenu(PointDriver& d) {
 
 std::string edgeScroll(PointDriver& d) { return d.dragToEdge(); }
 
+// Presses the middle of a segment and drags it `dy` pixels (y down); the curve at its half-way point must end up on
+// that side of the straight line, in one undo step.
+std::string bendOnce(PointDriver& d, bool rising, float dy, bool expectAbove) {
+    const char* kind = rising ? "rising" : "falling";
+    const auto seg = d.segment(rising);
+    if (!seg)
+        return said("no ", kind, " segment to bend");
+    const int steps = d.editSteps();
+    const auto to = juce::Point<float>(seg->mid.x, seg->mid.y + dy);
+    d.press(seg->mid);
+    d.dragTo(to);
+    d.release(to);
+    const double now = seg->midValue();
+    if (expectAbove ? !(now > seg->chord + 1e-9) : !(now < seg->chord - 1e-9))
+        return said("dragging a ", kind, " segment ", dy < 0.0f ? "up" : "down", " left its half-way point ",
+                    now > seg->chord ? "above" : "not below", " the straight line (", now, " vs ", seg->chord, ")");
+    if (d.editSteps() != steps + 1)
+        return said("a bend drag was ", d.editSteps() - steps, " undo steps");
+    return "";
+}
+
+// The curve follows the pointer: up bulges it up and down bulges it down, on a rising and on a falling segment.
+std::string segmentDragFollows(PointDriver& d) {
+    for (const bool rising : {true, false}) {
+        if (auto problem = bendOnce(d, rising, -20.0f, true); !problem.empty())
+            return problem;
+        if (auto problem = bendOnce(d, rising, 40.0f, false); !problem.empty())
+            return problem;
+    }
+    return "";
+}
+
 } // namespace
 
 const std::vector<Behaviour>& behaviours() {
-    static const std::vector<Behaviour> all = {
-        {"box-select", boxSelect},   {"shift-extend", shiftExtend},        {"alt-move", altMove},
-        {"held-glide", heldGlide},   {"two-arrows-diagonal", diagonal},    {"duplicate", duplicate},
-        {"delete-next", deleteNext}, {"double-click-add", doubleClickAdd}, {"right-click-menu", rightClickMenu},
-        {"edge-scroll", edgeScroll}};
+    static const std::vector<Behaviour> all = {{"box-select", boxSelect},
+                                               {"shift-extend", shiftExtend},
+                                               {"alt-move", altMove},
+                                               {"held-glide", heldGlide},
+                                               {"two-arrows-diagonal", diagonal},
+                                               {"duplicate", duplicate},
+                                               {"delete-next", deleteNext},
+                                               {"double-click-add", doubleClickAdd},
+                                               {"right-click-menu", rightClickMenu},
+                                               {"edge-scroll", edgeScroll},
+                                               {"segment-drag-follows", segmentDragFollows}};
     return all;
 }
 

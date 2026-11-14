@@ -18,7 +18,7 @@ steps:
   - key: {keys: down, instant: "the selected row highlight moves in the library list"}
   - key: {keys: return}
   - wait: {}
-  - key: {keys: cmd+f}
+  - key: {keys: cmd+f, instant: "the search field takes focus and the library list shows its rows again"}
   - wait: {}
   - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
   - type: {text: lfo}

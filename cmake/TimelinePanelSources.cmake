@@ -18,6 +18,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackListMotion.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeight.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelWheelScroll.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTopBarKeys.cpp

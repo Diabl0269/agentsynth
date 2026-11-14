@@ -1,6 +1,7 @@
 // SamplerMapWindow.cpp -- the instrument map window and its grow-out-of-the-card motion, the same as the shape
 // editor's.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
@@ -56,6 +57,14 @@ std::function<void(std::unique_ptr<SamplerMapView>)>& samplerMapWindowHookForTes
 
 juce::DialogWindow* openSamplerMapWindow(std::unique_ptr<SamplerMapView> view, juce::Component* anchor) {
     view->setSize(SamplerMapView::kWidth, SamplerMapView::kHeight);
+    if (!view->onAppShortcut) {
+        // An undo is followed at once rather than on the card's next tick.
+        juce::Component::SafePointer<SamplerMapView> safeView(view.get());
+        view->onAppShortcut = makeAppShortcutRelay(anchor, [safeView](bool afterwards) {
+            if (afterwards && safeView != nullptr)
+                safeView->poll();
+        });
+    }
     if (auto& hook = test_hooks::samplerMapWindowHookForTest()) {
         hook(std::move(view));
         return nullptr;

@@ -352,3 +352,60 @@ TEST(MixerPanHideKeyTest, TheKeysAreRebindableAndTheTooltipsNameThem) {
     EXPECT_TRUE(pane.keyPressed(letter('j')));
     EXPECT_TRUE(r.panel->getViewDoc().isHidden(r.stripId(0)));
 }
+
+// Regression test for FRO1529: the side pane's channel list had no key path in; hiding and regrouping channels was
+// mouse-only. Left from the first strip enters it, Up/Down walk it, Space hides, Right or Escape return.
+TEST(MixerZonesKeyboardTests, LeftFromTheFirstStripEntersTheSidePaneListAndRightOrEscapeComeBack) {
+    if (nativeWindowsUnavailable())
+        GTEST_SKIP() << "needs a display for a native window";
+    MixerZonesRig r(2);
+    r.panel->toggleSidePane(true);
+    r.panel->rebuild();
+    NativeHost host(*r.panel);
+    r.panel->resized();
+    auto& pane = r.panel->getZonesPaneForTest();
+    ASSERT_TRUE(pane.isVisible());
+    r.panel->grabKeyboardFocus();
+    if (!r.panel->hasKeyboardFocus(false))
+        GTEST_SKIP() << "this machine would not give a temporary window the keyboard";
+    ASSERT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::rightKey))); // strip 0
+    ASSERT_EQ(r.panel->getFocusedColumnIndexForTest(), 0);
+    ASSERT_TRUE(r.panel->isFocusedColumnOutlineShownForTest());
+
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(pane.hasKeyboardFocus(false)) << "Left on the first strip lands in the list";
+    EXPECT_FALSE(pane.getCursorIdForTest().isEmpty());
+    EXPECT_FALSE(r.panel->isFocusedColumnOutlineShownForTest())
+        << "the strip's ring is off while the list has the keys";
+    EXPECT_EQ(r.panel->getStripColumnForTest(0)->isKeyboardFocusedForTest(), false);
+
+    const auto first = pane.getCursorIdForTest();
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::downKey)));
+    EXPECT_NE(pane.getCursorIdForTest(), first) << "Down walks the rows";
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::spaceKey)));
+    EXPECT_TRUE(r.panel->getViewDoc().isHidden(pane.getCursorIdForTest())) << "Space hides the row's channel";
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::spaceKey)));
+
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(r.panel->hasKeyboardFocus(false)) << "Right returns to the panel";
+    EXPECT_EQ(r.panel->getFocusedColumnIndexForTest(), 0);
+    EXPECT_TRUE(r.panel->isFocusedColumnOutlineShownForTest()) << "with the first strip's ring";
+
+    ASSERT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::leftKey)));
+    ASSERT_TRUE(pane.hasKeyboardFocus(false));
+    EXPECT_TRUE(pressThroughPeer(host, plain(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(r.panel->hasKeyboardFocus(false)) << "Escape returns too";
+    EXPECT_TRUE(r.panel->isFocusedColumnOutlineShownForTest());
+}
+
+// With the side pane closed Left on the first strip stays on the strip (the key is clamped, as before).
+TEST(MixerZonesKeyboardTests, LeftFromTheFirstStripDoesNothingWhenTheSidePaneIsClosed) {
+    MixerZonesRig r(2);
+    r.panel->toggleSidePane(true);
+    r.panel->toggleSidePane(); // closed
+    r.panel->resized();
+    r.panel->keyPressed(plain(juce::KeyPress::rightKey));
+    ASSERT_EQ(r.panel->getFocusedColumnIndexForTest(), 0);
+    EXPECT_TRUE(r.panel->keyPressed(plain(juce::KeyPress::leftKey)));
+    EXPECT_EQ(r.panel->getFocusedColumnIndexForTest(), 0);
+}

@@ -21,6 +21,7 @@
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "ProjectBundle.h"
 #include "Timeline/AutomationBinding.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 

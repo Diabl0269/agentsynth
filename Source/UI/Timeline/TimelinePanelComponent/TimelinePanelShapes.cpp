@@ -45,7 +45,7 @@ void TimelinePanelComponent::initDrawShapes() {
     clipLaneArea_.onPressed = [this] { automationLanes_.getLaneRange().clear(); };
 }
 
-// The flyout opens under the pen from a corner click, a held press or the shape-menu key. Opening while it is
+// The flyout opens under the pen from a chevron click, a held press or the shape-menu key. Opening while it is
 // open closes it. A pick runs pickDrawShape after the flyout has closed; the panel may be gone by then, hence the
 // safe pointer. Headless tests take the content through the hook instead of a CallOutBox.
 void TimelinePanelComponent::openShapeFlyout() {
@@ -92,7 +92,7 @@ void TimelinePanelComponent::pickDrawShape(DrawShape shape) {
         automationLanes_.stampShapeOnLaneRange(shape);
 }
 
-// The Draw button's tooltip names the flyout's key beside the tool's own.
+// The Draw button's tooltip names the flyout's key beside the tool's own; its chevron half has its own.
 void TimelinePanelComponent::refreshShapeTooltips() {
     const auto drawKey =
         shortcutHintFor(shortcuts_, "timelineToolDraw",
@@ -102,6 +102,10 @@ void TimelinePanelComponent::refreshShapeTooltips() {
     if (menuKey.isNotEmpty())
         tip += juce::String::fromUTF8(" \xc2\xb7 shapes: ") + menuKey;
     penButton_->setTooltip(tip);
+    // The chevron half names what it opens; the key is the same one the Draw tip lists after "shapes:".
+    const auto chevronTip = synth::ui::formatShortcutHint("More shapes", menuKey);
+    penButton_->setChevronTooltip(chevronTip);
+    penButton_->setDescription(chevronTip);
 }
 
 // Runs before the tool digits in keyPressed(): with no manager installed, a Shift+3 whose text character

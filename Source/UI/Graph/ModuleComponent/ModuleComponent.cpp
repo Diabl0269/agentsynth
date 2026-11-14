@@ -14,7 +14,6 @@
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
-#include "Modules/MacroControlModule.h"
 #include "Modules/ModSlotHost.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
@@ -23,6 +22,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardHeightGlide.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
@@ -32,6 +32,8 @@
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/HostedOutputs/HostedOutputsStrip.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Layout/ActionTexts.h"
+#include "UI/Layout/ButtonTooltip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -46,6 +48,8 @@ using namespace detail;
 
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
+    if (freqResponseComponent != nullptr)
+        freqResponseComponent->addSpectrumTestState(into);
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
     const auto chipStack =
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
@@ -65,8 +69,7 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));
-    // The canvas's cable flow-dot phase and the Animations mode in force, so a scenario can see Off hold the dots still
-    // and Reduced move them slower (docs/layout/animation.md#continuous-loops).
+    // The canvas's cable flow-dot phase and the Animations mode in force (docs/layout/animation.md#continuous-loops).
     into.setProperty("cableFlowPhase", owner.getCableFlowPhaseForTest());
     into.setProperty("animationMode", synth::ui::animationModeToString(synth::ui::animationMode()));
     // The macro the module is a member of ("" when it is in none), so a scenario can tell "inside the macro" from
@@ -225,11 +228,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
         addAndMakeVisible(freqResponseToggle.get());
 
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
-        spectrumToggle->setTooltip(
-            "Show spectrum: draw the filter's output behind the response, before any volume stage, "
-            "so a sound still running into the filter keeps it moving after the notes stop");
+        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumFilterTip);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
         attachBlockFade(responseFade_, {freqResponseComponent.get(), spectrumToggle.get()});
@@ -245,9 +246,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
-        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::ui::actiontext::kShowSpectrum);
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
-        spectrumToggle->setTooltip("Show spectrum: draw the EQ's output behind the curve");
+        synth::ui::setButtonTooltip(*spectrumToggle, synth::ui::actiontext::kShowSpectrumEqTip);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
 
@@ -411,7 +412,7 @@ void ModuleComponent::detachFromProcessor() {
     envelopeCurveEditor = nullptr;
     envelopeGraphToggle.reset();
     if (cardBody_ != nullptr)
-        cardBody_->releaseViews();
+        cardBody_->releaseViews(processorAlive);
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped. A processor that is already gone has its parameters freed: the chrome gives up
@@ -600,13 +601,9 @@ void ModuleComponent::timerCallback() {
             syncLfoCurveFromModule();
     }
     updateLfoWavePlayhead();
-    // A Macros knob renamed by an undo, a redo or a load this card did not make itself.
-    if (auto* macros = dynamic_cast<MacroControlModule*>(module);
-        macros != nullptr && cardBody_ != nullptr && macros->getNamesRevision() != macroNamesSeen_) {
-        macroNamesSeen_ = macros->getNamesRevision();
-        cardBody_->refreshMacroNames();
+    // A Macros knob renamed or re-curved by an undo, a redo or a load this card did not make itself.
+    if (cardBody_ != nullptr && cardBody_->pollMacros())
         repaint();
-    }
     if (morphCard_ != nullptr)
         morphCard_->poll();
     if (instrumentChrome_ != nullptr)

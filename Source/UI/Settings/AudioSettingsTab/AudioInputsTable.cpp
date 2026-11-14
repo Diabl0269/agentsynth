@@ -110,7 +110,7 @@ juce::String AudioInputsTable::summary() const {
 int AudioInputsTable::preferredHeight(int width) const {
     const int captionHeight = wrappedHeight(kCaption, caption_.getFont(), width - 2 * kPad);
     const int body = rows_.empty() ? kRowHeight : kHeadHeight + (int)rows_.size() * kRowHeight;
-    return kPad + body + 6 + captionHeight + kPad;
+    return kPad + body + 6 + captionHeight; // no bottom padding: the caption is 6 px above the next header
 }
 
 int AudioInputsTable::rowTop(int row) const { return kPad + kHeadHeight + row * kRowHeight; }

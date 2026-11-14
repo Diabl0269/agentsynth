@@ -5,8 +5,9 @@
 // enumerates the header's controls from the component tree, then walks Tab from the grid through the real dispatch
 // order (from the focused control up through its parents, each one's key listeners before its own keyPressed) and
 // expects every control to be landed on in screen order, named, with a tooltip, and the walk to come back to the grid
-// and then leave. Shift+Tab walks the same stops backwards. A new editor is one more row; a new header control is
-// found without being listed.
+// and then leave. Shift+Tab walks the same stops backwards. The header is a bar of controls, so Right and Left walk the
+// same stops too (a control that keeps its arrows is stepped by Alt+Right and Alt+Left), and past either end they hand
+// focus back to the grid. A new editor is one more row; a new header control is found without being listed.
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
@@ -127,7 +128,7 @@ std::string nameOf(juce::Component& c) {
 bool deliver(synth::ui::EditorTabWalk& walk, juce::Component& editor, juce::Component& focused,
              const juce::KeyPress& key) {
     for (auto* target = &focused; target != nullptr; target = target->getParentComponent()) {
-        if (target == &editor && walk.keyPressed(key, target))
+        if ((target == &editor || walk.isWatching(*target)) && walk.keyPressed(key, target))
             return true;
         if (target->keyPressed(key))
             return true;
@@ -139,6 +140,20 @@ bool deliver(synth::ui::EditorTabWalk& walk, juce::Component& editor, juce::Comp
 
 const juce::KeyPress kTab(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
 const juce::KeyPress kShiftTab(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+const juce::KeyPress kRight(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0);
+const juce::KeyPress kLeft(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0);
+const juce::KeyPress kAltRight(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0);
+const juce::KeyPress kAltLeft(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0);
+
+// One arrow step from the focused stop the way a user does it: a button never uses Left/Right, so the plain arrow steps
+// along; every other control (slider, number field, combo box, segmented switch, text box) keeps the plain arrows for
+// its own value, so the Alt chord steps along. False when focus did not move.
+bool stepByArrow(synth::ui::EditorTabWalk& walk, juce::Component& editor, juce::Component*& focused, bool right) {
+    auto* from = focused;
+    const bool plain = dynamic_cast<juce::Button*>(from) != nullptr;
+    deliver(walk, editor, *from, plain ? (right ? kRight : kLeft) : (right ? kAltRight : kAltLeft));
+    return focused != from;
+}
 
 } // namespace
 
@@ -203,5 +218,55 @@ TEST(EditorHeaderTabReach, EveryHeaderControlOfEveryClipEditorIsANamedTabStopFro
         std::vector<juce::Component*> backward(landed.begin(), landed.end() - 1);
         std::reverse(backward.begin(), backward.end());
         EXPECT_EQ(backward, forward) << "Shift+Tab walks the same stops backwards";
+    }
+}
+
+// Regression test for FRO1549: the drum machine's and the piano roll's header took Tab only, unlike the Timeline's and
+// the Mixer's top bars, which take Left and Right; keyboard-reach.
+TEST(EditorHeaderTabReach, LeftAndRightWalkEveryHeaderStopOfEveryClipEditorAndTheEndsReturnToTheGrid) {
+    for (const auto& row : editors()) {
+        SCOPED_TRACE(row.name);
+        PanelWithClip f;
+        auto& editor = row.open(f);
+        f.panel.resized();
+        auto& walk = row.walk(f);
+
+        juce::Component* focused = &editor;
+        std::vector<juce::Component*> landed;
+        walk.setFocusHooksForTest({[&] { return focused; },
+                                   [&](juce::Component& to) {
+                                       focused = &to;
+                                       landed.push_back(&to);
+                                   }});
+
+        // The stops Tab reaches, as the reference order.
+        const auto stops = walk.getStops();
+        ASSERT_GE(stops.size(), 3u);
+
+        // The grid keeps its own arrows: Right on the grid is not claimed.
+        deliver(walk, editor, *focused, kRight);
+        EXPECT_EQ(focused, &editor);
+
+        ASSERT_TRUE(deliver(walk, editor, *focused, kTab));
+        ASSERT_EQ(focused, stops.front());
+        landed.clear();
+        for (size_t i = 1; i < stops.size(); ++i) {
+            ASSERT_TRUE(stepByArrow(walk, editor, focused, true)) << "Right from " << nameOf(*stops[i - 1]);
+            EXPECT_EQ(focused, stops[i]) << "Right steps to the next stop";
+        }
+        EXPECT_TRUE(stepByArrow(walk, editor, focused, true)) << "Right from the last stop";
+        EXPECT_EQ(focused, &editor) << "past the last stop Right hands focus back to the grid";
+
+        // Back in, then walk left to the first stop and out again.
+        ASSERT_TRUE(deliver(walk, editor, *focused, kTab)) << "an arrow back to the grid leaves the Tab walk ready";
+        ASSERT_EQ(focused, stops.front());
+        for (size_t i = 1; i < stops.size(); ++i)
+            ASSERT_TRUE(stepByArrow(walk, editor, focused, true));
+        for (size_t i = stops.size() - 1; i > 0; --i) {
+            ASSERT_TRUE(stepByArrow(walk, editor, focused, false)) << "Left from " << nameOf(*stops[i]);
+            EXPECT_EQ(focused, stops[i - 1]) << "Left steps to the previous stop";
+        }
+        EXPECT_TRUE(stepByArrow(walk, editor, focused, false));
+        EXPECT_EQ(focused, &editor) << "before the first stop Left hands focus back to the grid";
     }
 }

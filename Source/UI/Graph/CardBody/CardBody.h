@@ -68,6 +68,10 @@ public:
     /** The Macros card: puts each knob's own name on its caption and screen-reader title (a rename, an undo, a load).
      */
     void refreshMacroNames();
+    /** The Macros card: each knob's curve glyph takes its module's curve (a bend, an undo, a load). */
+    void refreshMacroCurves();
+    /** The Macros card, each poll: refreshes names and glyphs when the module's revisions moved. True if it did. */
+    bool pollMacros();
     /** Adds the dimmed hint to dimmed controls' tooltip and description; call once the card has named
      *  its controls (their tooltips are set after the body is built). */
     void applyDimHints();
@@ -104,6 +108,10 @@ public:
     // ---- Lookup ----------------------------------------------------------------------------------
     /** The widget bound to `paramId`, or null. */
     juce::Component* findWidget(const juce::String& paramId) const;
+    /** The two parameters an XY pad `widget` of this body drives (horizontal, vertical); nothing for any other widget.
+     */
+    std::optional<std::pair<juce::RangedAudioParameter*, juce::RangedAudioParameter*>>
+    xyPadParams(const juce::Component& widget) const;
     /** The view `view` placed in this body, or null. */
     juce::Component* findView(CardView view) const;
     /** Opens or closes a placed view: a closed view takes no height (the card re-measures). */
@@ -170,8 +178,9 @@ public:
     int cableFoldGraceMsForTest() const noexcept { return foldGrace_.getTimerInterval(); }
 
     // ---- Teardown (the card's detachFromProcessor) -------------------------------------------------
-    /** Destroys the views; they time against the module. */
-    void releaseViews();
+    /** Destroys the views; they time against the module. With `processorAlive` false their parameter
+        bindings are given up instead of detached (the parameters are freed). */
+    void releaseViews(bool processorAlive = true);
     /** Destroys the attachments, or leaks them when `processorAlive` is false. */
     void releaseBindings(bool processorAlive);
 
@@ -184,6 +193,9 @@ private:
     void createFader(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createSegmented(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
+    void createXYPad(CardBodyItem& item, juce::RangedAudioParameter& xParam, juce::RangedAudioParameter& yParam);
+    void refreshXYPad(CardBodyItem& item);
+    void createButton(CardBodyItem& item, juce::RangedAudioParameter& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();
     void createTabStrips();
@@ -227,6 +239,8 @@ private:
     ModuleComponent& card_;
     juce::AudioProcessor& module_;
     CardBodyPlan plan_;
+    int macroNamesSeen_ = 0;  ///< The Macros card: the names revision its captions were set from.
+    int macroCurvesSeen_ = 0; ///< The curves revision its glyphs were set from.
     std::optional<CardLayout> layout_;
     juce::String builtFromOverride_;
     juce::WeakReference<ModuleCardLayoutStore> store_;

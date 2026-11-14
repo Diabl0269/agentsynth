@@ -63,7 +63,14 @@ MixerPanelComponent::MixerPanelComponent() {
     zonesPane_.onSetHidden = [this](const juce::String& id, bool hidden) { setChannelHidden(id, hidden); };
     zonesPane_.onSoloShow = [this](const juce::String& id) { soloShowChannel(id); };
     zonesPane_.onShowAll = [this] { showAllChannels(); };
-    zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
+    // Escape or Right in the side pane's list (Return or Escape in its filter box) comes back to the panel, whose strip
+    // ring returns with the keys.
+    zonesPane_.onFocusReleased = [this] {
+        grabKeyboardFocus();
+        noteKeyboardMoved();
+        syncFocusVisuals();
+        repaint();
+    };
     toolbar_.shortcutTextFor = [this](MixerSection section) { return sectionToggleShortcutText(section); };
     toolbar_.setLayout(sectionLayout_);
     refreshShortcutHints();
@@ -88,6 +95,14 @@ MixerPanelComponent::MixerPanelComponent() {
     setTitle("Mixer");
     setComponentID("mixerPanel");
     topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
+    // Down from the bar lands on the strip the keys were last on, else the first one: never on an unringed panel.
+    topBarRing_.onDown = [this] {
+        if (focusedColumnIndex_ < 0 && !columnEntries_.empty())
+            setFocusedColumnIndex(0);
+        keyboardAway_ = false;
+        syncFocusVisuals();
+        repaint();
+    };
     addChildComponent(*topBarRingProbe_);
     focusedColumnProbe_ =
         makeLaneStateProbe("mixerFocusedColumn", [this](juce::DynamicObject& into) { fillFocusedColumnState(into); });
@@ -581,6 +596,7 @@ void MixerPanelComponent::unbindAllColumns() {
 }
 
 void MixerPanelComponent::visibilityChanged() {
+    noteKeyboardMoved(); // hidden: no ring; shown again: the ring only if the keys are back on the panel
     if (!isVisible())
         return;
     const juce::ScopedValueSetter<bool> catchingUp(catchingUp_, true);
