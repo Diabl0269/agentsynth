@@ -88,6 +88,10 @@ struct StopResult {
     bool built = false;
     float peakBeforeStop = 0.0f;
     float peakAfterRelease = 0.0f;
+    int firstLoudBlockAfterStop = -1;
+    int loudBlocksAfterStop = 0;
+    float peakFirstBlockAfterStop = 0.0f;
+    float peakLastReleaseBlock = 0.0f;
 };
 
 StopResult playThenStop(const Chain& chain) {
@@ -145,8 +149,18 @@ StopResult playThenStop(const Chain& chain) {
 
     transport.stop();
     // Give every release 1 s to finish, then listen to the next 200 ms.
-    for (int i = 0; i < (int)(1.0 * kRate) / kBlock; ++i)
-        block();
+    const int releaseBlocks = (int)(1.0 * kRate) / kBlock;
+    for (int i = 0; i < releaseBlocks; ++i) {
+        const float peak = block();
+        if (i == 0)
+            result.peakFirstBlockAfterStop = peak;
+        result.peakLastReleaseBlock = peak;
+        if (peak > kMinus80Db) {
+            ++result.loudBlocksAfterStop;
+            if (result.firstLoudBlockAfterStop < 0)
+                result.firstLoudBlockAfterStop = i;
+        }
+    }
     for (int i = 0; i < (int)(0.2 * kRate) / kBlock; ++i)
         result.peakAfterRelease = std::max(result.peakAfterRelease, block());
 
@@ -267,7 +281,11 @@ TEST_P(StopSilencesVoices, OutputIsBelowMinus80DbAfterStopMidNote) {
     if (chain.mustBeAudible)
         EXPECT_GT(result.peakBeforeStop, kAudible)
             << chain.name << ": the held note was never heard, so the test proves nothing";
-    EXPECT_LT(result.peakAfterRelease, kMinus80Db) << chain.name << " is still sounding after Stop";
+    EXPECT_LT(result.peakAfterRelease, kMinus80Db)
+        << chain.name << " is still sounding after Stop (peak before Stop " << result.peakBeforeStop
+        << ", first loud block after Stop " << result.firstLoudBlockAfterStop << " of " << (int)(1.0 * kRate) / kBlock
+        << ", loud blocks " << result.loudBlocksAfterStop << ", first block " << result.peakFirstBlockAfterStop
+        << ", last release block " << result.peakLastReleaseBlock << ")";
 }
 
 INSTANTIATE_TEST_SUITE_P(EveryInstrument, StopSilencesVoices, ::testing::ValuesIn(chains()),
