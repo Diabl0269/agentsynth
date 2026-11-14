@@ -97,9 +97,10 @@ StopResult playThenStop(const Chain& chain) {
     engine.initialise();
 
     auto& graph = engine.getGraph();
-    // initialise() loads the saved default preset, which may sound by itself; the chain under test must be alone.
-    for (const auto& existing : graph.getNodes())
-        graph.removeNode(existing->nodeID);
+    // initialise() loads the saved default preset, which may sound by itself; cut it off so the chain under test is
+    // alone. The nodes stay (the engine keeps pointers to some of them); only their cables go.
+    for (const auto& cable : graph.getConnections())
+        graph.removeConnection(cable);
     auto trackIn = graph.addNode(synth::AIStateMapper::createModule("Track In"));
     auto out = graph.addNode(synth::AIStateMapper::createModule("Audio Output"));
     if (trackIn == nullptr || out == nullptr)
