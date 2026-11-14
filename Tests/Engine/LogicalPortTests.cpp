@@ -6,6 +6,7 @@
 #include "Modules/PolyMidiModule.h"
 #include "Modules/VCAModule.h"
 #include <gtest/gtest.h>
+#include <memory>
 
 TEST(LogicalPortTests, DefaultMappingClampsPhantomChannels) {
     VCAModule vca;
@@ -50,7 +51,8 @@ static void setPolyParam(juce::AudioProcessor& proc, bool value) {
 
 TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     // ---- VCA (poly) ----
-    VCAModule vca;
+    auto vcaHeap = std::make_unique<VCAModule>();
+    VCAModule& vca = *vcaHeap;
     setPolyParam(vca, true);
 
     // Raw 0: Audio jack0, head of 8-voice fan
@@ -72,7 +74,8 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     EXPECT_FALSE(vca_in9.isPolyGroupHead);
 
     // ---- ADSR (poly) ----
-    ADSRModule adsr;
+    auto adsrHeap = std::make_unique<ADSRModule>();
+    ADSRModule& adsr = *adsrHeap;
     setPolyParam(adsr, true);
 
     // Output raw 0: ModCV, head of 8-voice fan
@@ -98,7 +101,8 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     EXPECT_EQ(adsr_in8.polyVoiceSpan, 1);
 
     // ---- Oscillator (poly) ----
-    OscillatorModule osc;
+    auto oscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& osc = *oscHeap;
     setPolyParam(osc, true);
 
     // Input raw 0: Pitch, head of 8-voice fan
@@ -115,7 +119,8 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     EXPECT_EQ(osc_in12.polyVoiceSpan, 1);
 
     // ---- PolyMidi (always poly) ----
-    PolyMidiModule polyMidi;
+    auto polyMidiHeap = std::make_unique<PolyMidiModule>();
+    PolyMidiModule& polyMidi = *polyMidiHeap;
 
     // Output raw 0: Pitch, head of 8-voice fan
     auto pm_out0 = polyMidi.mapOutputChannel(0);
@@ -136,7 +141,8 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     EXPECT_FALSE(vca.isAutoPromotableModTarget(1));
 
     // Mono osc: channel 0 (Pitch) is in getModulationTargets(), so it should be auto-promotable
-    OscillatorModule monoOsc;
+    auto monoOscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& monoOsc = *monoOscHeap;
     // polyParam defaults to false
     EXPECT_TRUE(monoOsc.isAutoPromotableModTarget(0));
 }
@@ -202,7 +208,8 @@ TEST(LogicalPortTests, PolyMidiOutJackFrontsBothPitchAndGateFans) {
 // in mono mode the span collapses back to 1.
 TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
     // ---- Oscillator ----
-    OscillatorModule osc;
+    auto oscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& osc = *oscHeap;
     setPolyParam(osc, true);
 
     auto oscOut0 = osc.mapOutputChannel(0);
@@ -214,11 +221,13 @@ TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
     auto oscOut1 = osc.mapOutputChannel(1);
     EXPECT_FALSE(oscOut1.isPolyGroupHead);
 
-    OscillatorModule monoOsc;
+    auto monoOscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& monoOsc = *monoOscHeap;
     EXPECT_EQ(monoOsc.mapOutputChannel(0).polyVoiceSpan, 1);
 
     // ---- Filter ----
-    FilterModule filter;
+    auto filterHeap = std::make_unique<FilterModule>();
+    FilterModule& filter = *filterHeap;
     setPolyParam(filter, true);
 
     auto filterOut0 = filter.mapOutputChannel(0);
@@ -230,11 +239,13 @@ TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
     auto filterOut1 = filter.mapOutputChannel(1);
     EXPECT_FALSE(filterOut1.isPolyGroupHead);
 
-    FilterModule monoFilter;
+    auto monoFilterHeap = std::make_unique<FilterModule>();
+    FilterModule& monoFilter = *monoFilterHeap;
     EXPECT_EQ(monoFilter.mapOutputChannel(0).polyVoiceSpan, 1);
 
     // ---- Noise ----
-    NoiseModule noise;
+    auto noiseHeap = std::make_unique<NoiseModule>();
+    NoiseModule& noise = *noiseHeap;
     setPolyParam(noise, true);
 
     auto noiseOut0 = noise.mapOutputChannel(0);
@@ -246,7 +257,8 @@ TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
     auto noiseOut1 = noise.mapOutputChannel(1);
     EXPECT_FALSE(noiseOut1.isPolyGroupHead);
 
-    NoiseModule monoNoise;
+    auto monoNoiseHeap = std::make_unique<NoiseModule>();
+    NoiseModule& monoNoise = *monoNoiseHeap;
     EXPECT_EQ(monoNoise.mapOutputChannel(0).polyVoiceSpan, 1);
 }
 
