@@ -201,8 +201,10 @@ TEST(LogicalPortTests, PolyMidiOutJackFrontsBothPitchAndGateFans) {
 // the poly-group head of an 8-voice fan on the single visible Audio jack; raw 1 is not a head; and
 // in mono mode the span collapses back to 1.
 TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
+    // Heap-allocated: several synth modules on one stack frame overflow the 1 MB Windows stack.
     // ---- Oscillator ----
-    OscillatorModule osc;
+    auto oscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& osc = *oscHeap;
     setPolyParam(osc, true);
 
     auto oscOut0 = osc.mapOutputChannel(0);
@@ -214,11 +216,13 @@ TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
     auto oscOut1 = osc.mapOutputChannel(1);
     EXPECT_FALSE(oscOut1.isPolyGroupHead);
 
-    OscillatorModule monoOsc;
+    auto monoOscHeap = std::make_unique<OscillatorModule>();
+    OscillatorModule& monoOsc = *monoOscHeap;
     EXPECT_EQ(monoOsc.mapOutputChannel(0).polyVoiceSpan, 1);
 
     // ---- Filter ----
-    FilterModule filter;
+    auto filterHeap = std::make_unique<FilterModule>();
+    FilterModule& filter = *filterHeap;
     setPolyParam(filter, true);
 
     auto filterOut0 = filter.mapOutputChannel(0);
