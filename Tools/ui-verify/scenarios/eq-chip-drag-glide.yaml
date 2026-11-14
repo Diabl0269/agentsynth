@@ -1,0 +1,43 @@
+# FRO1781: dragging an EQ dot past its neighbours moved the strip chips jerkily: every chip shared one glide clock, so each
+# step of the drag that moved another chip restarted the ones still gliding.
+#
+# What a user does: opens the Parametric EQ window, double-clicks the curve eight times, then drags one dot sideways past
+# two neighbours and back. The chips under the curve glide to their new places with the dot. Each `glide` films the
+# motion; the mark sits on the landed state, the chips in frequency order again.
+# The EQBandStrip glide tests cover the same motion headlessly.
+motion: true
+record: true
+save_project: eq-chip-drag-glide
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 800}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 230, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 100, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 240, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 700, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - expect: {id: "eqWindowStrip > eqChip8", exists: true, within_ms: 2000}
+  - glide: {name: drag-across, frames: 20, do: {drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 230, fromY: 260, toX: 480, toY: 260, steps: 16}}}
+  - wait: {settleMs: 700}
+  - glide: {name: drag-back, frames: 20, do: {drag: {from: eqWindowCurve, to: eqWindowCurve, fromX: 480, fromY: 260, toX: 230, toY: 260, steps: 16}}}
+  - wait: {settleMs: 800}
+  - mark: {check: 1, name: chips-glide}

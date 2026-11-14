@@ -66,6 +66,7 @@ thread is never blocked and timers and animations run in between.
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `popWatchStart` | | `{armed, undoSerial?}`; follows the main window (as `trackPresentedFrame` does), keeps a full paint as the "before" picture and copies every frame the window presents for the next 600 ms (at most 40); `undoSerial` is the app's edit serial, see [No-pop check](#no-pop-check) |
 | `popWatchCheck` | `ms` (300), `settleMs` (1500), `ignore` (component ids), `tolerance` (6), `dir?` | `{changed, framesSeen, pop, regionX/Y/W/H, regionPixels, intermediateFrames, undoSerialBefore, undoSerialAfter}` (`pop` and the region only when `changed`) once `ms` have passed since the start and no animation is running; fails "not idle" after `settleMs + ms`. A pop writes `before.png`, `first.png`, `final.png`, `differences.png` into `dir` |
+| `feedVisual` | `id` (a module card), `kind` (`sine`, `noise`, `silence`), `hz?`, `amp?`, `ms?` (100) | `{buffers, samples}`; fills the module's scope and spectrum buffers, see [feedVisual](#feedvisual) |
 | `audioPump` | `run` (true/false), or `note` (0-127) with `down` (true/false) | `{running, blocks}`; renders the open project in real time with no device, see [Audio pump](#audio-pump) |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 | `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
@@ -227,9 +228,20 @@ refused while a real device is running and stops on its own once the main window
 The pump also drives a display that follows the real chain, so a scenario can film a note and then a mute: a Filter's
 spectrum (`getState` of `card:<title>`: `filterSpectrumPeakDb`, `filterSpectrumAtFloor`; the Edit shapes window's hidden child `shapeSpectrumState`:
 `spectrumPeakDb`, `spectrumAtFloor`, `spectrumShown`; -80 dB is the floor)
-reports the loudest point drawn now. No fixture pushes a
-signal into a buffer: a source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
+reports the loudest point drawn now. A source cabled into the Filter and `audioPump {note: 60, down: true}` run the same
 `ModuleBase::processBlock` path the app uses (`Tools/ui-verify/scenarios/filter-spectrum-mute.yaml`).
+
+### feedVisual
+
+`feedVisual {id: "card:Filter", kind: sine|noise|silence, hz?: 440, amp?: 0.5, ms?: 100}` writes a burst of that signal
+straight into the module's analysis buffers (the scope's `VisualBuffer`, and a Filter's spectrum buffer), with no
+source module and no pump, so a clip can film a display that moves with sound and then goes quiet: `sine`, then a
+`glide` whose `do` is `feedVisual {kind: silence}`, shows the trace rise and fall. It calls the same `pushBlock` the
+audio thread calls: no new lock, queue or audio-path code. Those buffers have one writer by contract, so the command is
+refused while the pump or a real device could also write. It feeds the display only: it does not run the module's
+Mute or Bypass (use the pump for that). Reply `{buffers, samples}`; a module with neither buffer is an error. The
+noise is seeded, so a run repeats (`Source/TestMode/TestModeFeedVisual.cpp`;
+`Tools/ui-verify/scenarios/filter-spectrum-feed-visual.yaml`).
 
 ## Scenarios
 
@@ -286,7 +298,7 @@ steps: ...
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
 `record_target` films one component instead; `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
 `mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
-in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
+in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window (a shape dropped from the main window onto the shape window's map, `scenarios/filter-shapes-window-drop-filmed.yaml`) is filmed too: both ends resolve to screen coordinates (every `getState` `bounds` is relative to the main window's corner, whatever window the component is in), the press goes to `from`, and each move and the release go to `to` as `captured` steps, so the composited frame shows the shape in flight over both windows. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
 name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails.
 

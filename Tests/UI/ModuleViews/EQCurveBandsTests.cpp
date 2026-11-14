@@ -267,13 +267,13 @@ TEST(EQBandStrip, ChipsRunInFrequencyOrderAndKeepTheirBandIndex) {
 
 TEST(EQBandStrip, AChipThatPassesAnotherGlidesToItsNewPlace) {
     StripRig rig;
-    rig.strip->getGlideForTest().forceAnimateForTest(true);
+    rig.strip->forceAnimateForTest(true);
     const auto before = rig.strip->getChip(6)->getBounds();
     rig.eq.setBandFreq(6, 250.0f);
     rig.curve->timerCallback();
-    EXPECT_TRUE(rig.strip->getGlideForTest().isAnimating());
+    EXPECT_TRUE(rig.strip->isGlideAnimatingForTest());
     EXPECT_EQ(rig.strip->getChip(6)->getBounds().getX(), before.getX()) << "starts where it was";
-    rig.strip->getGlideForTest().stepForTest(1000.0);
+    rig.strip->stepGlideForTest(1000.0);
     EXPECT_LT(rig.strip->getChip(6)->getX(), before.getX());
 }
 
@@ -281,25 +281,97 @@ TEST(EQBandStrip, AChipThatPassesAnotherGlidesToItsNewPlace) {
 // its cached settings were still the off ones) and slid across its neighbours to the click.
 TEST(EQBandStrip, ANewBandsChipGrowsInPlaceInsteadOfSlidingInFromAStaleFrequency) {
     StripRig rig;
-    rig.strip->getGlideForTest().forceAnimateForTest(true);
+    rig.strip->forceAnimateForTest(true);
     const int band = rig.curve->addPointAt(at(9000.0f, 2.0f));
     ASSERT_GE(band, 0);
     auto* chip = rig.strip->getChip(band);
     ASSERT_NE(chip, nullptr);
     EXPECT_LT(chip->getWidth(), 4) << "it starts as a sliver, not as a full chip somewhere else";
-    rig.strip->getGlideForTest().stepForTest(1000.0);
+    rig.strip->stepGlideForTest(1000.0);
     EXPECT_GT(chip->getWidth(), 20);
 }
 
 // Regression test for FRO1694: a removed band's chip vanished in one frame while its dot shrank.
 TEST(EQBandStrip, ARemovedBandsChipShrinksIntoItsMiddleBeforeItGoes) {
     StripRig rig;
-    rig.strip->getGlideForTest().forceAnimateForTest(true);
+    rig.strip->forceAnimateForTest(true);
     const int childrenBefore = rig.strip->getNumChildComponents();
     rig.curve->removeBand(10);
     EXPECT_EQ(rig.strip->getNumChildComponents(), childrenBefore) << "the chip stays while it shrinks";
-    rig.strip->getGlideForTest().stepForTest(1000.0);
+    rig.strip->stepGlideForTest(1000.0);
     EXPECT_EQ(rig.strip->getNumChildComponents(), childrenBefore - 1) << "and goes once it has landed";
+}
+
+namespace {
+// Six bands in a row, the strip wide enough for one row of chips.
+struct SixBandStripRig : Rig {
+    SixBandStripRig()
+        : Rig(6) {
+        curve->timerCallback();
+        strip = std::make_unique<synth::ui::EQBandStrip>(*curve);
+        strip->setBounds(0, 0, 900, 24);
+        strip->forceAnimateForTest(true);
+    }
+    void moveBand(int band, float freq) {
+        eq.setBandFreq(band, freq);
+        curve->timerCallback();
+    }
+    juce::Rectangle<float> offset(int band) const {
+        const auto* tween = strip->getGlideForTest(band);
+        return tween != nullptr ? tween->offsetFor(band) : juce::Rectangle<float>();
+    }
+    std::unique_ptr<synth::ui::EQBandStrip> strip;
+};
+} // namespace
+
+// Regression test for FRO1781: every chip shared one tween clock, so retargeting a chip elsewhere in the strip (the
+// next step of a dot drag) restarted the glide of the chips still moving: they slowed down mid-way and took longer.
+TEST(EQBandStrip, AGlidingChipIsNotSlowedByAnotherChipBeingRetargeted) {
+    SixBandStripRig moved;
+    SixBandStripRig reference;
+    for (auto* rig : {&moved, &reference})
+        rig->moveBand(0, 60.0f); // band 1 passes band 2: both glide
+    moved.strip->stepGlideForTest(60.0);
+    reference.strip->stepGlideForTest(60.0);
+    ASSERT_NE(moved.offset(0), juce::Rectangle<float>()) << "still gliding";
+
+    moved.moveBand(4, 160.0f); // band 5 passes band 6, in the same strip
+    for (int frame = 0; frame < 6; ++frame) {
+        moved.strip->stepGlideForTest(16.0);
+        reference.strip->stepGlideForTest(16.0);
+        for (const int band : {0, 1})
+            EXPECT_EQ(moved.offset(band), reference.offset(band)) << "band " << band + 1 << " frame " << frame;
+    }
+}
+
+TEST(EQBandStrip, ADotDraggedAcrossANeighbourAndBackKeepsItsChipContinuousAndLandsItAtRest) {
+    SixBandStripRig rig;
+    const auto restOf = [&](int band) { return rig.strip->getChip(band)->getBounds(); };
+    const auto before = restOf(0);
+    rig.moveBand(0, 60.0f);
+    rig.strip->stepGlideForTest(48.0);
+    const auto midway = restOf(0);
+    EXPECT_NE(midway.getX(), before.getX());
+
+    rig.moveBand(0, 40.0f); // back again, mid-glide
+    EXPECT_NEAR(restOf(0).getX(), midway.getX(), 1) << "the retarget itself does not jump";
+    int lastX = restOf(0).getX();
+    for (int frame = 0; frame < 6; ++frame) {
+        rig.strip->stepGlideForTest(16.0);
+        EXPECT_LE(std::abs(restOf(0).getX() - lastX), 70) << "frame " << frame;
+        lastX = restOf(0).getX();
+    }
+    rig.strip->stepGlideForTest(1000.0);
+    EXPECT_EQ(restOf(0), before) << "lands on its rest slot";
+    EXPECT_EQ(rig.strip->getChipBands(), (std::vector<int>{0, 1, 2, 3, 4, 5}));
+    EXPECT_FALSE(rig.strip->isGlideAnimatingForTest());
+}
+
+TEST(EQBandStrip, TheTooltipFollowsTheBandWithoutBeingRebuiltOnEveryStep) {
+    SixBandStripRig rig;
+    const auto before = rig.strip->getChip(2)->getTooltip();
+    rig.moveBand(2, 77.0f);
+    EXPECT_NE(rig.strip->getChip(2)->getTooltip(), before) << "built at hover time from the curve's current band";
 }
 
 TEST(EQBandStrip, PressingAChipSelectsItsBandAndTheCurveSelectionMovesTheChip) {

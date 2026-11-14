@@ -19,10 +19,43 @@ constexpr int kChipPad = 10;
 constexpr float kOffAlpha = 0.35f;
 } // namespace
 
+// One tween per chip key: a KeyedTween runs ONE clock for all its keys and a retarget restarts it, so chips sharing a
+// tween would all slow down and stretch whenever another chip is retargeted (every step of a dot drag past neighbours).
+// A tween is created on first use and kept (at most one per band, leaving band and the + chip).
 struct EQBandStrip::Glide {
-    explicit Glide(juce::Component& owner)
-        : tween(owner) {}
-    KeyedRectTween tween;
+    Glide(juce::Component& ownerIn, std::function<void()> onDirtyIn)
+        : owner(ownerIn)
+        , onDirty(std::move(onDirtyIn)) {}
+
+    KeyedRectTween& at(int key) {
+        auto& slot = tweens[key];
+        if (slot == nullptr) {
+            slot = std::make_unique<KeyedRectTween>(owner);
+            slot->forceAnimateForTest(forceAnimate);
+            slot->onDirty = [this](juce::Rectangle<int>) { onDirty(); };
+        }
+        return *slot;
+    }
+    KeyedRectTween* find(int key) const {
+        const auto it = tweens.find(key);
+        return it == tweens.end() ? nullptr : it->second.get();
+    }
+    juce::Rectangle<float> offsetFor(int key) const {
+        const auto* t = find(key);
+        return t != nullptr ? t->offsetFor(key) : juce::Rectangle<float>();
+    }
+    juce::Rectangle<float> drawnAt(int key, juce::Rectangle<float> resting) const {
+        return TweenMath<juce::Rectangle<float>>::add(resting, offsetFor(key));
+    }
+    void erase(int key) {
+        if (auto* t = find(key))
+            t->erase(key);
+    }
+
+    juce::Component& owner;
+    std::function<void()> onDirty;
+    std::map<int, std::unique_ptr<KeyedRectTween>> tweens;
+    bool forceAnimate = false;
 };
 
 // One band's chip (or the + chip, band -1): its label is "7 Bell", tinted by the band's kind. The selected chip is
@@ -43,6 +76,8 @@ public:
     const juce::String& label() const noexcept { return label_; }
 
     void setContent(const juce::String& label, synth::eq::BandType type, bool on, bool selected) {
+        if (label == label_ && type == type_ && on == on_ && selected == getToggleState())
+            return;
         label_ = label;
         type_ = type;
         on_ = on;
@@ -95,7 +130,7 @@ private:
 
 EQBandStrip::EQBandStrip(EQCurveComponent& curve)
     : curve_(curve)
-    , glide_(std::make_unique<Glide>(*this))
+    , glide_(std::make_unique<Glide>(*this, [this] { applyDrawnBounds(); }))
     , arrows_(*this) {
     setTitle("EQ bands");
     addChip_ = std::make_unique<Chip>(-1);
@@ -110,14 +145,34 @@ EQBandStrip::EQBandStrip(EQCurveComponent& curve)
     addChip_->onClick = [this] { curve_.addBandInLargestGap(); };
     addAndMakeVisible(*addChip_);
 
-    glide_->tween.onDirty = [this](juce::Rectangle<int>) { applyDrawnBounds(); };
     curve_.addListener(this);
     refresh();
 }
 
 EQBandStrip::~EQBandStrip() { curve_.removeListener(this); }
 
-KeyedRectTween& EQBandStrip::getGlideForTest() noexcept { return glide_->tween; }
+KeyedRectTween* EQBandStrip::getGlideForTest(int key) const noexcept { return glide_->find(key); }
+
+void EQBandStrip::forceAnimateForTest(bool force) {
+    glide_->forceAnimate = force;
+    for (auto& [key, tween] : glide_->tweens)
+        tween->forceAnimateForTest(force);
+}
+
+bool EQBandStrip::isGlideAnimatingForTest() const {
+    return std::any_of(glide_->tweens.begin(), glide_->tweens.end(),
+                       [](const auto& e) { return e.second->isAnimating(); });
+}
+
+void EQBandStrip::stepGlideForTest(double ms) {
+    for (auto& [key, tween] : glide_->tweens)
+        tween->stepForTest(ms);
+}
+
+void EQBandStrip::completeGlideForTest() {
+    for (auto& [key, tween] : glide_->tweens)
+        tween->completeForTest();
+}
 
 void EQBandStrip::eqCurveChanged() { refresh(); }
 
@@ -206,7 +261,7 @@ void EQBandStrip::refresh() {
     for (auto it = chips_.begin(); it != chips_.end();) {
         if (std::find(shown.begin(), shown.end(), it->first) == shown.end()) {
             retireChip(it->first, std::move(it->second));
-            glide_->tween.erase(it->first);
+            glide_->erase(it->first);
             resting_.erase(it->first);
             it = chips_.erase(it);
         } else {
@@ -219,14 +274,19 @@ void EQBandStrip::refresh() {
             chip = std::make_unique<Chip>(b);
             chip->setComponentID("eqChip" + juce::String(b + 1));
             chip->onClick = [this, b] { curve_.setSelectedBand(b); };
+            chip->liveTooltip = [this, b] {
+                const auto& now = curve_.getBands()[(size_t)b];
+                return describeEqBand(b, eqBandTypeName(now.type), now.enabled, now.freqHz, now.gainDb, now.q) +
+                       ". Press to select it on the curve";
+            };
             addAndMakeVisible(*chip);
         }
         const auto& band = bands[(size_t)b];
         const auto typeName = eqBandTypeName(band.type);
         chip->setContent(juce::String(b + 1) + " " + typeName, band.type, band.enabled, b == curve_.getSelectedBand());
-        chip->setTitle(describeEqBandChip(b, typeName, band.freqHz));
-        chip->setTooltip(describeEqBand(b, typeName, band.enabled, band.freqHz, band.gainDb, band.q) +
-                         ". Press to select it on the curve");
+        const auto title = describeEqBandChip(b, typeName, band.freqHz);
+        if (chip->getTitle() != title)
+            chip->setTitle(title);
     }
     placeChips(true);
 }
@@ -239,7 +299,7 @@ void EQBandStrip::retireChip(int band, std::unique_ptr<Chip> chip) {
     chip->setInterceptsMouseClicks(false, false);
     chip->setWantsKeyboardFocus(false);
     chip->setTitle({});
-    glide_->tween.retarget(key, drawn, juce::Rectangle<float>(centre.x, drawn.getY(), 0.0f, drawn.getHeight()));
+    glide_->at(key).retarget(key, drawn, juce::Rectangle<float>(centre.x, drawn.getY(), 0.0f, drawn.getHeight()));
     leaving_[band] = std::move(chip);
     leavingRest_[key] = juce::Rectangle<float>(centre.x, drawn.getY(), 0.0f, drawn.getHeight());
 }
@@ -247,7 +307,7 @@ void EQBandStrip::retireChip(int band, std::unique_ptr<Chip> chip) {
 void EQBandStrip::pruneLeaving() {
     for (auto it = leaving_.begin(); it != leaving_.end();) {
         const int key = kLeavingKeyBase + it->first;
-        if (glide_->tween.offsetFor(key) == juce::Rectangle<float>()) {
+        if (glide_->offsetFor(key) == juce::Rectangle<float>()) {
             leavingRest_.erase(key);
             it = leaving_.erase(it);
         } else {
@@ -269,13 +329,13 @@ void EQBandStrip::placeChips(bool animate) {
         if (animate && getWidth() > 0 && oldRest == resting_.end()) {
             if (place.key != kAddKey) {
                 const auto centre = target.getCentre();
-                glide_->tween.retarget(
+                glide_->at(place.key).retarget(
                     place.key, juce::Rectangle<float>(centre.x, target.getY(), 0.0f, target.getHeight()), target);
             }
         } else if (animate && oldRest != resting_.end() && oldRest->second != place.bounds) {
-            glide_->tween.retarget(place.key, glide_->tween.drawnAt(place.key, oldRest->second.toFloat()), target);
+            glide_->at(place.key).retarget(place.key, glide_->drawnAt(place.key, oldRest->second.toFloat()), target);
         } else if (!animate) {
-            glide_->tween.erase(place.key);
+            glide_->erase(place.key);
         }
         resting_[place.key] = place.bounds;
     }
@@ -291,14 +351,13 @@ void EQBandStrip::placeChips(bool animate) {
 
 void EQBandStrip::applyDrawnBounds() {
     for (const auto& [band, chip] : leaving_)
-        chip->setBounds(
-            glide_->tween.drawnAt(kLeavingKeyBase + band, leavingRest_[kLeavingKeyBase + band]).toNearestInt());
+        chip->setBounds(glide_->drawnAt(kLeavingKeyBase + band, leavingRest_[kLeavingKeyBase + band]).toNearestInt());
     pruneLeaving();
     for (const auto& [key, rest] : resting_) {
         auto* chip = chipForKey(key);
         if (chip == nullptr)
             continue;
-        const auto drawn = glide_->tween.drawnAt(key, rest.toFloat());
+        const auto drawn = glide_->drawnAt(key, rest.toFloat());
         chip->setBounds(drawn.toNearestInt());
     }
 }

@@ -1,0 +1,45 @@
+# Feature: a display that moves with sound can be filmed with no audio device (FRO1791). `feedVisual` writes a sine
+# into the Filter's spectrum buffer, so the card's spectrum rises; a feed of silence (what a muted Filter pushes) lets
+# it fall to the floor; a sine again brings it back.
+#
+# What a user does: opens a project with a Filter, turns Show Response and Show Spectrum on, plays a note (the sine),
+# mutes (silence): the trace drops to the floor in about a second.
+record: true
+save_project: filter-spectrum-feed-visual
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: "cmd+-"}                                       # zoom out so the whole Filter card is in the window
+  - key: {keys: "cmd+-"}
+  - wait: {settleMs: 600}
+  - drag: {from: window, to: window, fromX: 880, fromY: 367, toX: 880, toY: 110, steps: 15}   # lift the card clear of the window bottom
+  - wait: {settleMs: 600}
+  - click: {id: Show Response}
+  - wait: {settleMs: 600}
+  - click: {id: Show Spectrum}
+  - wait: {settleMs: 600}
+  - expect: {id: Show Spectrum, toggleState: true, within_ms: 3000}
+  - hover: {id: window, x: 700, y: 760}                        # pointer off the toggle, so its tooltip does not cover the card
+  - wait: {settleMs: 600}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: true, within_ms: 3000}
+  - feedVisual: {id: "card:Filter", kind: sine, hz: 440, amp: 0.5, ms: 200}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: false, within_ms: 4000}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: note-spectrum-up}
+  - glide: {name: spectrum-falls, frames: 16, crop: {x: 840, y: 455, w: 170, h: 90}, do: {feedVisual: {id: "card:Filter", kind: silence, ms: 200}}}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: true, within_ms: 3000}
+  - mark: {check: 2, name: spectrum-at-floor}
+  - glide: {name: spectrum-returns, frames: 8, crop: {x: 840, y: 455, w: 170, h: 90}, do: {feedVisual: {id: "card:Filter", kind: sine, hz: 440, amp: 0.5, ms: 200}}}
+  - expect: {id: "card:Filter", filterSpectrumAtFloor: false, within_ms: 3000}
+  - mark: {check: 3, name: spectrum-returns}

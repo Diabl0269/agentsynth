@@ -116,6 +116,8 @@ StepResult cmdAudioPump(const juce::var& args, Scratch&, int) {
 
 } // namespace
 
+bool audioPumpRunning() { return pump() != nullptr; }
+
 void registerAudioPumpCommands(CommandTable& table) { table.add("audioPump", {cmdAudioPump}); }
 
 } // namespace synth::testmode
