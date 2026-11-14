@@ -67,6 +67,29 @@ TEST(MixerEqThumbnailTests, VisibleWithEnabledBand) {
     thumbnail.setEqModule(nullptr);
 }
 
+// A solo is not a parameter, so the thumbnail polls it: a forgotten solo shows an accent outline.
+TEST(MixerEqThumbnailTests, ASoloedBandOutlinesTheThumbnailUntilItEnds) {
+    ParametricEQModule eq;
+    enableBoostBand(eq);
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(&eq);
+    const auto plain = renderUnderTheme(thumbnail, "Obsidian Studio");
+    EXPECT_EQ(thumbnail.getSoloBand(), -1);
+
+    eq.setSoloBand(1);
+    thumbnail.flushForTest();
+    EXPECT_EQ(thumbnail.getSoloBand(), 1);
+    EXPECT_TRUE(thumbnail.getTooltip().contains("Band 2 is soloed"));
+    const auto soloed = renderUnderTheme(thumbnail, "Obsidian Studio");
+    EXPECT_FALSE(imagesHaveIdenticalPixels(plain, soloed));
+
+    eq.clearSolo();
+    thumbnail.flushForTest();
+    EXPECT_TRUE(imagesHaveIdenticalPixels(plain, renderUnderTheme(thumbnail, "Obsidian Studio")));
+    thumbnail.setEqModule(nullptr);
+}
+
 TEST(MixerEqThumbnailTests, PngRenderDarkThemeShowsBoostCutDifference) {
     ParametricEQModule flatEq;
 

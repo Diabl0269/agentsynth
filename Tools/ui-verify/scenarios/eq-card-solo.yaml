@@ -1,0 +1,18 @@
+# FRO1783: the Parametric EQ card has its own solo button beside the band's on/off toggle, so a band can be auditioned
+# without opening the EQ window. What a user does: finds the EQ card on the canvas, adds a band by double-clicking its curve, clicks the headphones button, and it
+# shows pressed; a second click ends the solo. EQ card, EQ solo and Mixer thumbnail tests cover the same headlessly.
+record: true
+save_project: eq-card-solo
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - wait: {settleMs: 800}
+  - expect: {id: "card:Parametric EQ 2 > eqCardSolo", exists: true, within_ms: 3000}
+  - click: {id: "card:Parametric EQ 2 > eqCardCurve", x: 190, y: 60, clicks: 2}   # a band to solo: double-click adds one
+  - wait: {settleMs: 600}
+  - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
+  - wait: {settleMs: 500}
+  - mark: {check: 1, name: card-solo-on}
+  - click: {id: "card:Parametric EQ 2 > eqCardSolo"}
+  - wait: {settleMs: 500}

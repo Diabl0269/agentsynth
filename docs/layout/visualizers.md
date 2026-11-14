@@ -117,7 +117,7 @@ before the app's own commands, so Cmd+D copies the band instead of duplicating t
 | Cmd+D | Duplicate: copy the band into the lowest free slot, two semitones up, and select the copy; one undo step; nothing when all 24 are on |
 | 1-4, Return, Page Up / Page Down, Delete, Escape | Fixed: select band 1-4 and switch it on; switch on or off; Q narrower / wider; remove the selection and select the next band up in frequency (else the last one left); end this curve's solo |
 
-**Solo.** S, the headphones button in the pop-out footer and Option-click on a dot audition one band through
+**Solo.** S, the headphones button in the pop-out footer (and on the card's band row) and Option-click on a dot audition one band through
 `ParametricEQModule::setSoloBand`. The soloed dot gets a bright outer ring and the other dots dim, eased through a
 `KeyedTween` (`getSoloLook`; Reduce Motion fades it, Animations Off lands it). While the curve that started a solo
 holds it, the solo follows the selection (and ends when the selected band is off or removed). Escape ends it before the

@@ -34,6 +34,8 @@ void ParametricEQModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     }
     soloScratch.setSize(kNumAudioChannels, blockSize, false, true, false);
     appliedSolo = -1;
+    soloMix.reset(lastSampleRate, kSoloFadeSeconds);
+    soloMix.setCurrentAndTargetValue(0.0f);
 
     // Every band's Freq / Gain / Q is smoothed: swapping a stage's coefficients wholesale puts a step in the output.
     // Snapped to the knobs here so a static render is bit-identical.
@@ -88,7 +90,7 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     }
     updateCoefficients();
 
-    if (soloAudible)
+    if (appliedSolo >= 0)
         renderSoloed(buffer, numAudioCh, numSamples);
     else
         filterRange(buffer, numAudioCh, 0, numSamples);
@@ -205,24 +207,40 @@ void ParametricEQModule::updateCoefficients() {
 }
 
 // The solo's region: a band-pass at the band's frequency, with the band's Q for a bell, notch, band pass, shelf or
-// tilt (what the band moves), and with Q 1/sqrt 2 at a cut's corner (the edge the cut shapes). A newly soloed band's
-// filter starts from silence. A solo on a band that is off plays the normal output.
+// tilt (what the band moves), and with Q 1/sqrt 2 at a cut's corner (the edge the cut shapes). A solo on a band that
+// is off plays the normal output.
+//
+// The solo never switches the output in one step: soloMix cross-fades from the EQ output (0) to the band-pass of the
+// dry copy (1) over kSoloFadeSeconds. `appliedSolo` is the band the solo filters are designed for; it only changes
+// while the mix is at 0 (inaudible), so a band change fades out, swaps, primes the filter for one block with the mix
+// still at 0, then fades the new band in. The band-pass keeps running while the mix is above 0, so it is live when
+// it becomes audible.
 void ParametricEQModule::updateSoloCoefficients(const float* freq, const float* q) {
     const int solo = soloBand.load(std::memory_order_relaxed);
-    soloAudible = isValidBand(solo) && bands[(size_t)solo].on->get() && soloCoefficients != nullptr;
-    if (!soloAudible) {
-        appliedSolo = -1;
-        return;
+    const bool audible = isValidBand(solo) && bands[(size_t)solo].on->get() && soloCoefficients != nullptr;
+    const int requested = audible ? solo : -1;
+    const bool atZero = !soloMix.isSmoothing() && soloMix.getCurrentValue() == 0.0f;
+
+    bool primed = false;
+    if (appliedSolo >= 0 && requested != appliedSolo) {
+        soloMix.setTargetValue(0.0f);
+        if (atZero)
+            appliedSolo = -1;
     }
-    const auto type = typeOf(solo);
-    const float soloQ = synth::eq::isCut(type) ? kDefaultQ : q[solo];
-    synth::eq::writeBiquad(BandType::BandPass, freq[solo], 0.0f, soloQ, lastSampleRate,
-                           soloCoefficients->getRawCoefficients());
-    if (appliedSolo != solo) {
+    if (appliedSolo < 0 && requested >= 0 && atZero) {
+        appliedSolo = requested;
         for (auto& filter : soloFilters)
             filter.reset();
-        appliedSolo = solo;
+        primed = true; // this block runs the filter over the dry copy with the mix held at 0
     }
+    if (appliedSolo < 0)
+        return;
+    if (appliedSolo == requested && !primed)
+        soloMix.setTargetValue(1.0f);
+
+    const float soloQ = synth::eq::isCut(typeOf(appliedSolo)) ? kDefaultQ : q[appliedSolo];
+    synth::eq::writeBiquad(BandType::BandPass, freq[appliedSolo], 0.0f, soloQ, lastSampleRate,
+                           soloCoefficients->getRawCoefficients());
 }
 
 // Channel-outer, band-inner, stage-innermost: with one stage per band this is the four-band module's loop exactly.
@@ -243,7 +261,8 @@ void ParametricEQModule::filterRange(juce::AudioBuffer<float>& buffer, int numAu
 }
 
 // The bands keep running on the real signal while a band is soloed, so clearing the solo resumes exactly the output
-// an unsoloed EQ would give. The solo itself band-passes a dry copy of the input, a scratch block at a time.
+// an unsoloed EQ would give. The solo itself band-passes a dry copy of the input, a scratch block at a time, and is
+// cross-faded against the EQ output per sample by soloMix.
 void ParametricEQModule::renderSoloed(juce::AudioBuffer<float>& buffer, int numAudioCh, int numSamples) {
     const int chunk = std::max(1, soloScratch.getNumSamples());
     for (int start = 0; start < numSamples; start += chunk) {
@@ -257,7 +276,13 @@ void ParametricEQModule::renderSoloed(juce::AudioBuffer<float>& buffer, int numA
             for (int i = 0; i < n; ++i)
                 dry[i] = filter.processSample(dry[i]);
             filter.snapToZero();
-            buffer.copyFrom(ch, start, soloScratch, ch, 0, n);
+        }
+        for (int i = 0; i < n; ++i) {
+            const float m = soloMix.getNextValue();
+            for (int ch = 0; ch < numAudioCh; ++ch) {
+                float& eq = buffer.getWritePointer(ch, start)[i];
+                eq += (soloScratch.getReadPointer(ch)[i] - eq) * m;
+            }
         }
     }
 }

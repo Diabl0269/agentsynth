@@ -82,7 +82,7 @@ is too short for every section plus a `MixerColumnComponent::kMinFaderHeight` (5
 showing the mixer grows its host to fit, so this happens only once the user makes it shorter
 again -- `MixerSectionLayout::resolve()` keeps the fader's minimum
 (so the slider itself stays draggable) and takes the shortfall lowest priority first: the EQ row,
-then Sends, then Inserts, then the pan knob, identically in every column. The EQ thumbnail only
+then Sends, then Inserts, then the pan knob, identically in every column. The EQ thumbnail draws an accent outline while any band of its EQ is soloed (a 5 Hz poll of the module's solo, repainting only on a change). It only
 ever gets empty bounds, never toggled invisible, since `isVisible()` means "has EQ". With plenty of
 room every section gets its full shared height and the fader takes the rest.
 
