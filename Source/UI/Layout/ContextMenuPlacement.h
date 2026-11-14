@@ -24,6 +24,12 @@ inline juce::PopupMenu::Options contextMenuOptionsAtPointer() {
     return contextMenuOptionsAtPoint(juce::Desktop::getMousePosition());
 }
 
+/** The area a popover opened from a pointer-opened context menu points at: a small square about the click, which the
+ *  call-out then flips and clamps to the screen (docs/layout/card-popovers.md, "From a card's right-click menu"). */
+inline juce::Rectangle<int> popoverAreaAtPoint(juce::Point<int> screenPoint) {
+    return juce::Rectangle<int>(screenPoint, screenPoint).expanded(4);
+}
+
 /** A context menu that is opened either by the pointer (no `keyboardAnchor`) or from the keyboard
  *  (anchored at the focused item's screen area). */
 inline juce::PopupMenu::Options contextMenuOptions(const std::optional<juce::Rectangle<int>>& keyboardAnchor) {

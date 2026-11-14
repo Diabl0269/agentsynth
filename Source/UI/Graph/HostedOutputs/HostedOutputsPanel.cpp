@@ -286,7 +286,7 @@ void HostedOutputsPanel::focusFirstControl() {
 
 // ---- entry points ------------------------------------------------------------------------------------------------
 
-void showHostedOutputsPanel(ModuleComponent& card) {
+void showHostedOutputsPanel(ModuleComponent& card, std::optional<juce::Rectangle<int>> anchor) {
     auto* editor = card.findParentComponentOfClass<GraphEditor>();
     if (editor == nullptr)
         return;
@@ -297,7 +297,7 @@ void showHostedOutputsPanel(ModuleComponent& card) {
     auto* panelRaw = static_cast<HostedOutputsPanel*>(nullptr);
     PopoverOptions options;
     options.trigger = trigger;
-    const auto area = trigger->getScreenBounds();
+    const auto area = anchor.value_or(trigger->getScreenBounds());
     strip->panelSlot().open(
         [editor, &card, &panelRaw] {
             auto panel = std::make_unique<HostedOutputsPanel>(*editor, card.getNodeId());

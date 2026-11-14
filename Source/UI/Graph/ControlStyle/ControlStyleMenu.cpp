@@ -35,7 +35,7 @@ bool appendControlStyleMenuItem(juce::PopupMenu& menu, ModuleComponent& card) {
     juce::Component::SafePointer<ModuleComponent> safeCard(&card);
     menu.addItem("Control Style...", [safeCard] {
         if (safeCard != nullptr)
-            showControlStylePanel(*safeCard);
+            showControlStylePanel(*safeCard, safeCard->menuPopoverAnchor());
     });
     return true;
 }
@@ -54,14 +54,14 @@ void appendLayoutAndStyleMenuItems(juce::PopupMenu& menu, ModuleComponent& card)
         menu.addSeparator();
     } else if (auto* hosted = dynamic_cast<HostedPluginModule*>(card.getModule())) {
         appendEditLayoutMenuItem(menu, [safeCard] {
-            if (safeCard != nullptr && safeCard->onChooseKnobsRequested)
-                safeCard->onChooseKnobsRequested();
+            if (safeCard != nullptr)
+                safeCard->requestChooseKnobsAt(safeCard->menuPopoverAnchor());
         });
         appendControlStyleMenuItem(menu, card);
         if (hosted->hasMultipleOutputBuses())
             menu.addItem("Outputs...", [safeCard] {
                 if (safeCard != nullptr)
-                    synth::ui::showHostedOutputsPanel(*safeCard);
+                    synth::ui::showHostedOutputsPanel(*safeCard, safeCard->menuPopoverAnchor());
             });
         // Starts "add by moving a control in the plugin" (no popover).
         menu.addItem("Add control from plugin window...", hosted->hasInstance(), false, [safeCard] {
@@ -76,7 +76,7 @@ void appendLayoutAndStyleMenuItems(juce::PopupMenu& menu, ModuleComponent& card)
 
 // Every control of the panel reaches the node by id through the editor, never through the card: a write can
 // rebuild the card while the panel stays open.
-void showControlStylePanel(ModuleComponent& card) {
+void showControlStylePanel(ModuleComponent& card, std::optional<juce::Rectangle<int>> anchor) {
     auto* editor = card.findParentComponentOfClass<GraphEditor>();
     if (editor == nullptr)
         return;
@@ -85,7 +85,7 @@ void showControlStylePanel(ModuleComponent& card) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(panel));
     auto* raw = panel.get();
-    synth::ui::launchPopover(std::move(panel), card.getScreenBounds(), &card);
+    synth::ui::launchPopover(std::move(panel), anchor.value_or(card.getScreenBounds()), &card);
     juce::Component::SafePointer<synth::ui::ControlStylePanel> safePanel(raw);
     juce::MessageManager::callAsync([safePanel] {
         if (safePanel != nullptr)

@@ -113,7 +113,8 @@ void applyReplaceChoice(GraphEditor& editor, ModuleComponent* card, const Replac
 }
 
 void showReplacePicker(GraphEditor& editor, ModuleComponent& card, ModuleType current,
-                       const std::optional<synth::PluginIdentity>& currentPlugin) {
+                       const std::optional<synth::PluginIdentity>& currentPlugin,
+                       std::optional<juce::Rectangle<int>> anchor) {
     const auto plugins =
         editor.installedPluginsProvider ? editor.installedPluginsProvider() : std::vector<synth::PluginIdentity>{};
     juce::Component::SafePointer<ModuleComponent> safeCard(&card);
@@ -127,7 +128,7 @@ void showReplacePicker(GraphEditor& editor, ModuleComponent& card, ModuleType cu
         hook(std::move(picker));
         return;
     }
-    synth::ui::launchPopover(std::move(picker), card.getScreenBounds(), &card);
+    synth::ui::launchPopover(std::move(picker), anchor.value_or(card.getScreenBounds()), &card);
 }
 
 namespace test_hooks {

@@ -53,10 +53,7 @@ private:
     std::function<bool(const juce::KeyPress&)> relay_;
 };
 
-juce::Point<int> pointerPosition() {
-    const auto& forced = test_hooks::popoverMouseForTest();
-    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
-}
+juce::Point<int> pointerPosition() { return popoverPointerPosition(); }
 
 // The call-out every popover opens in. Escape and a press outside are decided here, once, for every content:
 //   - Escape (from the box, or from a text field inside it) lets the content put things back, then fades the live
@@ -252,6 +249,11 @@ private:
 
 void relayAppShortcutsFromCallOut(juce::CallOutBox& box, juce::Component* anchor, bool closeOnUndo) {
     new CallOutShortcutRelay(box, anchor, closeOnUndo);
+}
+
+juce::Point<int> popoverPointerPosition() {
+    const auto& forced = test_hooks::popoverMouseForTest();
+    return forced.has_value() ? *forced : juce::Desktop::getMousePosition();
 }
 
 namespace test_hooks {
