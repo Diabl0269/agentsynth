@@ -327,7 +327,25 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> sc
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
 }
 
+void ShapeListEditor::refreshSnapTooltips() {
+    if (pitchRows_ != nullptr)
+        pitchRows_->refreshSnapTooltips(snapKey_);
+}
+
+/** The Snap key: flips the Filter shape editor's Snap buttons and says what it did, or why nothing can snap. A window
+    with no Snap buttons leaves the key to the app. */
+bool ShapeListEditor::flipSnapFromKey() {
+    if (pitchRows_ == nullptr)
+        return false;
+    bool refused = false;
+    const auto text = pitchRows_->flipSnaps(refused);
+    showStatus(text, refused);
+    return true;
+}
+
 bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
+    if (snapKey_.matches(key) && flipSnapFromKey())
+        return true;
     if (key != juce::KeyPress::escapeKey)
         return onAppShortcut && onAppShortcut(key);
     if (onDone)

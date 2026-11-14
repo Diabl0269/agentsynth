@@ -7,6 +7,7 @@
 #include "ShapeListAdapter.h"
 #include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FollowKeyField.h"
 #include "UI/Layout/UIAnimation.h"
@@ -64,6 +65,11 @@ public:
     SnapToggleButton& getSnapAcross() noexcept { return snapAcross_; }
     SnapToggleButton& getSnapLevel() noexcept { return snapLevel_; }
     FollowKeyField& getKeyField() noexcept { return key_; }
+    /** The Snap key's effect: both Snap buttons go on, or both off when any is on, as clicking them would. Returns
+     *  what to say: "Snap on" / "Snap off", or why nothing can snap while the Grid and the Level are both Off. */
+    juce::String flipSnaps(bool& refused);
+    /** Names the Snap key in both Snap buttons' tooltips. */
+    void refreshSnapTooltips(const WindowSnapKey& key);
     juce::ComboBox& getRootBox() noexcept { return root_; }
 
     void resized() override;

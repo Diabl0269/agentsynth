@@ -9,6 +9,7 @@
 #include "ShapeWindowMap.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ActionTexts.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -72,6 +73,10 @@ public:
     /** Offered every key the editor did not use except Escape; returns whether it took it (the window passes app
      *  shortcuts on to the main window this way). */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;
+    /** The window's Snap key (the app's Snap binding), looked up through the anchor the window opened from. */
+    WindowSnapKey& snapKey() noexcept { return snapKey_; }
+    /** Names the Snap key in the Snap buttons' tooltips; again once the anchor is known. */
+    void refreshSnapTooltips();
 
     /** Stamps the curve of Pick shape entry `index` (the built-ins, then the library's) onto the selected shape. */
     void applyStartFrom(int index);
@@ -185,6 +190,7 @@ private:
     void showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea);
     void syncAll();
     void showStatus(const juce::String& text, bool refused = true);
+    bool flipSnapFromKey();
     void updateButtonStates();
     // ShapeListEditorToolbar.cpp
     bool hasToolbar() const;
@@ -225,6 +231,7 @@ private:
     ringhelpers::StackOptions stackOptions_; ///< the Stack harmonics panel's last choices, for this window's life
     juce::TextButton doneButton_{actiontext::kDone};
     juce::Label statusLabel_;
+    WindowSnapKey snapKey_;
     juce::uint32 statusClearsAtMs_ = 0;
     std::unique_ptr<PerNoteBar> perNote_;
     std::optional<ShapeGridOffer> gridOffer_;

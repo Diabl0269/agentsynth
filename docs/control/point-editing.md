@@ -159,3 +159,14 @@ grid is printed on every run.
 `PointClipboard`, `pointKeyAction`), calls `addBreakpoint`, `addPointAt`, `dragBandTo` or `onAddAt`, or overrides
 `mouseDrag` and hit-tests dots, nodes, bands or points, must be a matrix row or be named in `kNotPointEditors` with the
 reason it edits no points.
+
+## Snap
+
+- **Snap lands on the line.** With Snap on, a dot dropped on a grid line sits exactly on it, and two dots on one line leave
+  the grid where it was: a stretch of the curve between two dots on the same x draws as a straight step, never a plateau
+  that would take width from the other cells (`CurveEditorSnapLineTests`).
+- **J toggles Snap** in the curve window and the Filter shape editor, as on the timeline: the Snap button lights (both
+  buttons in the shape editor), the grid follows and a short "Snap on" / "Snap off" shows (the window's hint line; the
+  shape editor's status line). The shape editor says why when the Grid and the Level are both Off ("Snap has no lines to
+  land on"). The key is the app's `timelineSnapToggle` binding (a rebind follows, and the tooltip names it); a pop-out
+  handles it itself and never flips the timeline's Snap (`WindowSnapKey`, `AppShortcutRelay.h`).
