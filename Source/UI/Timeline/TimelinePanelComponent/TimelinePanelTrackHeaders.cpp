@@ -591,6 +591,15 @@ std::vector<synth::TrackId> TimelinePanelComponent::selectedTracks() const {
 void TimelinePanelComponent::applyTrackSelectionToHeaders() {
     for (auto* header : trackHeaderList_.headers)
         header->setSelected(trackSelection_->contains(header->getTrackId()));
+    if (onTrackSelectionChanged)
+        onTrackSelectionChanged();
+}
+
+void TimelinePanelComponent::selectTrackFromMixer(synth::TrackId id, const juce::ModifierKeys& mods) {
+    if (mods.isShiftDown() || mods.isCommandDown())
+        selectTrackFromClick(id, mods);
+    else
+        setFocusedTrack(id);
 }
 
 void TimelinePanelComponent::selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary) {

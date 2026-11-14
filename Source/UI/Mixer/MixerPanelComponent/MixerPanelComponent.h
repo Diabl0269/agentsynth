@@ -58,6 +58,8 @@ class MixerSendList;
 // Tab into the focused column's send and insert rows (MixerPanelRowKeyboard.cpp).
 namespace synth::ui {
 
+struct MixerTrackSelectionHost;
+
 class MixerPanelComponent
     : public juce::Component
     , public DockBackSlot
@@ -221,6 +223,20 @@ public:
     /** The strip menu's "Duplicate Track": the same action as the timeline row's menu and Cmd+D. BottomDockComponent
      *  wires this to MainComponent::duplicateTrack. */
     std::function<void(synth::TrackId)> onDuplicateTrack;
+
+    /** The timeline's track selection, shared with the mixer, and the actions that work on it.
+     *  BottomDockComponent::setTrackSelectionHost wires it to MainComponent. */
+    void setTrackSelectionHost(MixerTrackSelectionHost host);
+    const MixerTrackSelectionHost& selectionHost() const;
+    /** Every strip's selected look follows the host's selection (after a change there, and after each rebuild). */
+    void syncTrackSelectionVisuals();
+    /** Test seam: a press and release on strip column `index`'s header with `mods`, in the order JUCE delivers them
+     *  (the header's own handler, then this panel's listener). */
+    void pressStripHeaderForTest(int index, juce::ModifierKeys mods);
+    /** Test seam: the tracks Option+Left/Right would move one place, as the new track order; empty when none. */
+    std::vector<synth::TrackId> trackOrderAfterMoveForTest(int direction) const {
+        return trackOrderAfterMove(direction);
+    }
 
     /** The ShortcutManager the M/S/R keys resolve their rebindable bindings against
      *  ("timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/"timelineArmFocusedTrack" -- the
@@ -447,6 +463,7 @@ private:
     int rebuildHoldDepth_ = 0;
     /** The rows of the strip columns the running rebuildFrom() replaced, by column uuid (MixerRowsMotion). */
     std::vector<std::pair<juce::String, MixerRowsMotion::Snapshot>> pendingRowMotions_;
+    std::shared_ptr<const MixerTrackSelectionHost> selectionHost_;
     int rebuildCount_ = 0;                       // backs getRebuildCountForTest()
     std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
     /** rebuild() with the snapshot already built (and its saved bus order applied) by the caller. */
@@ -515,7 +532,17 @@ private:
     int columnIndexOf(const juce::Component* c) const; // the column holding `c`, or -1
     /** A press anywhere in a column (a control, the header or empty space) focuses that column. */
     void focusColumnFromClick(const juce::MouseEvent& e);
-    bool duplicateFocusedTrack();   // the Duplicate key: the focused strip's one feeding track
+    bool duplicateFocusedTrack(); // the Duplicate key: the focused strip's one feeding track
+    // Selection, delete and move (MixerPanelTrackSelection.cpp): the timeline's conventions on the strips.
+    bool deleteFocusedTracks();             // Cmd+Backspace
+    bool toggleFocusedTrackSelection();     // Cmd+Space
+    bool moveSelectedStrips(int direction); // Option+Left / Option+Right
+    void selectFocusedStripTrack();         // arrow keys: the selection follows the focused strip
+    std::vector<synth::TrackId> trackOrderAfterMove(int direction) const;
+    void settleColumnsAfterMove(const std::vector<juce::String>& uuids);
+    void selectFromHeaderPress(const juce::MouseEvent& e, int index);
+    bool modifiedHeaderPress_ =
+        false;                      // a Cmd/Ctrl/Shift press on a header edits the selection, never selects the macro
     void noteKeyboardMoved();       // shows or hides the focused column's ring as the keyboard leaves or returns
     bool isKeyboardAwayNow() const; // the keyboard is not on the panel, read from real focus and visibility now
     bool renameFocusedColumn();     // the Rename key: the focused column's header name editor
@@ -656,6 +683,7 @@ private:
         explicit ClickFocus(MixerPanelComponent& o)
             : owner(o) {}
         void mouseDown(const juce::MouseEvent& e) override { owner.focusColumnFromClick(e); }
+        void mouseUp(const juce::MouseEvent&) override { owner.modifiedHeaderPress_ = false; }
         MixerPanelComponent& owner;
     };
     ClickFocus clickFocus_{*this};

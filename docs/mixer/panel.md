@@ -908,7 +908,7 @@ back up) makes `resolveEditSurface()` report `Mixer` while the panel is actually
 /X/R and their zoom siblings all report **inactive** on this surface and no-op rather than falling
 through to the graph's own clipboard/selection — the mixer's own keyboard verbs above are the
 complete set. Cmd+Shift+A (Select All) stays reachable everywhere but is a deliberate no-op here too
-(no multi-column selection model). See
+(a strip's track selection is the timeline's, [strip focus](strip-focus.md#select-delete-and-move-strips)). See
 [`docs/timeline/focus.md`](../timeline/focus.md#the-one-resolver) for the resolver itself.
 
 **Focus re-resolves after every `rebuild()` by the column's own identity** — a strip's uuid, Direct and
