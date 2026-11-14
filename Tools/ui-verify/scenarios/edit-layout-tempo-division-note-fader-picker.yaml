@@ -27,9 +27,7 @@ steps:
   - click: {id: window, x: 1188, y: 350}
   - wait: {settleMs: 600}
   - screenshot: {id: screen, name: tempo-look-faders-with-picker}
-  - click: {id: window, x: 1095, y: 400}
-  - wait: {settleMs: 400}
-  - key: {keys: return}
+  - click: {id: window, x: 1095, y: 400, clicks: 2}
   - wait: {settleMs: 500}
   - screenshot: {id: screen, name: panel-offers-show-as-direction-size}
   - mark: {check: 1, name: shared-tempo-division-is-a-fader-with-picker}
