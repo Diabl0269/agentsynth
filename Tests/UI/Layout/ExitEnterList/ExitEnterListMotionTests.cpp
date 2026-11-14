@@ -209,3 +209,33 @@ TEST(ExitEnterListMotion, NothingToShowStartsNothing) {
     EXPECT_FALSE(motion.start(jobFor({}, ListAxis::Vertical, 200)));
     EXPECT_FALSE(motion.isRunning());
 }
+
+// The outline of a restored item is drawn over its picture, round the item and not the gap that trails it in its slot;
+// under the picture an opaque slice hid all of it but the gap's side (only the right edge of a mixer column showed).
+TEST(ExitEnterListMotion, TheOutlineOfARestoredItemShowsAllRoundItNotOnlyInTheTrailingGap) {
+    ReducedGuard guard(false);
+    juce::Component host;
+    host.setSize(400, 300);
+    ExitEnterListMotion motion(host);
+    // Columns of 30 and a gap of 10: a row is 40 along x.
+    const std::vector<ExitEnterListRow> rows{{"A", 0, 40}, {"B", 40, 40}, {"C", 80, 40}};
+    auto job = jobFor(ExitEnterListPlan::forInsertion(rows, {"B"}, 200.0f), ListAxis::Horizontal, 200);
+    job.picture.clear(job.picture.getBounds(), juce::Colours::white); // an opaque picture, as a column's is
+    job.trailingGap = 10.0f;
+    ASSERT_TRUE(motion.start(std::move(job)));
+    motion.applyAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs);
+
+    auto* overlay = motion.overlayComponent();
+    ASSERT_NE(overlay, nullptr);
+    const auto shot = overlay->createComponentSnapshot(overlay->getLocalBounds(), false, 1.0f);
+    const auto isOutline = [&](int x, int y) {
+        const auto c = shot.getPixelAt(x, y);
+        return c.getBlue() > 200 && c.getRed() < 100; // cyan on white
+    };
+    const int mid = 50;
+    EXPECT_TRUE(isOutline(40, mid)) << "left edge of the restored column";
+    EXPECT_TRUE(isOutline(69, mid)) << "right edge of the column itself, inside its slot before the gap";
+    EXPECT_TRUE(isOutline(55, 0)) << "top edge";
+    EXPECT_TRUE(isOutline(55, 99)) << "bottom edge";
+    EXPECT_FALSE(isOutline(79, mid)) << "the gap is outside the outline";
+}

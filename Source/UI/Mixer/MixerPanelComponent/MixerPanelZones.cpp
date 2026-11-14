@@ -231,8 +231,10 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::op
         juce::PopupMenu::Item remove(inSet ? "Delete " + juce::String(selectionHost().selected().size()) + " Tracks"
                                            : "Delete Track");
         remove.action = [safe, track] {
-            if (safe != nullptr && safe->selectionHost().deleteTracks)
-                safe->selectionHost().deleteTracks(track, true);
+            if (safe == nullptr || !safe->selectionHost().deleteTracks)
+                return;
+            safe->claimTrackSelection(track);
+            safe->selectionHost().deleteTracks(track, true);
         };
         if (shortcuts_ != nullptr)
             remove.shortcutKeyDescription =

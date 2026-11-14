@@ -482,7 +482,11 @@ void TimelinePanelComponent::syncTrackHeaders() {
     }
     previous.clear(); // the rows of tracks that are gone
     trackSelection_->retainOnly(trackOrder());
-    applyTrackSelectionToHeaders();
+    {
+        // Rebuilt rows change nobody's pick: whose selection it is stays as it was.
+        const juce::ScopedValueSetter<bool> keepOwner(inMixerSelect_, selectionFromMixer_);
+        applyTrackSelectionToHeaders();
+    }
     layoutTrackHeaders();
     glideTrackRowsFrom(reorderedRows);
 }
@@ -591,11 +595,13 @@ std::vector<synth::TrackId> TimelinePanelComponent::selectedTracks() const {
 void TimelinePanelComponent::applyTrackSelectionToHeaders() {
     for (auto* header : trackHeaderList_.headers)
         header->setSelected(trackSelection_->contains(header->getTrackId()));
+    selectionFromMixer_ = inMixerSelect_;
     if (onTrackSelectionChanged)
         onTrackSelectionChanged();
 }
 
 void TimelinePanelComponent::selectTrackFromMixer(synth::TrackId id, const juce::ModifierKeys& mods) {
+    const juce::ScopedValueSetter<bool> fromMixer(inMixerSelect_, true);
     if (mods.isShiftDown() || mods.isCommandDown())
         selectTrackFromClick(id, mods);
     else

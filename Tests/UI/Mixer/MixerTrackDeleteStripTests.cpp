@@ -15,8 +15,10 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelInternal.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/DeleteTrackConfirm.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -269,6 +271,38 @@ TEST(MixerTrackDeleteStrip, OffScreenTheColumnLeavesAndReturnsAtOnce) {
     EXPECT_EQ(rig.strips().size(), 3u);
 }
 
+// The outline that fades round a restored column is drawn over the column's picture, all four sides of it (it was
+// drawn under the picture, so only the gap's side beside the column showed: "a bit of the border on its right").
+TEST(MixerTrackDeleteStrip, TheRestoredColumnsOutlineShowsOnAllFourSidesAfterUndo) {
+    ReducedMotionGuard guard(false);
+    Rig rig(true);
+    const auto victim = rig.strips()[1].uuid;
+    rig.deleteTrackRow(1);
+    rig.motion().finishNow();
+    ASSERT_TRUE(rig.mc.getUndoManager().undo());
+    ASSERT_TRUE(rig.motion().isRunning());
+    rig.motion().applyAtMs(ExitEnterTimeline::kGapMs + ExitEnterTimeline::kGrowMs);
+
+    auto* overlay = rig.motion().overlayComponent();
+    ASSERT_NE(overlay, nullptr);
+    const auto rect = rig.motion().drawnRectFor(victim);
+    ASSERT_TRUE(rect.has_value());
+    const auto shot = overlay->createComponentSnapshot(overlay->getLocalBounds(), false, 1.0f);
+    const auto accent = synth::theme::themeOf(rig.mixer()).colors.accent;
+    const auto isAccent = [&](int x, int y) {
+        const auto c = shot.getPixelAt(x, y);
+        return std::abs(c.getRed() - accent.getRed()) < 6 && std::abs(c.getGreen() - accent.getGreen()) < 6 &&
+               std::abs(c.getBlue() - accent.getBlue()) < 6;
+    };
+    const int left = static_cast<int>(rect->getX()) - overlay->getX();
+    const int columnRight = left + synth::ui::kMixerColumnWidth - 1;
+    const int mid = overlay->getHeight() / 2;
+    EXPECT_TRUE(isAccent(left, mid)) << "left side";
+    EXPECT_TRUE(isAccent(columnRight, mid)) << "right side, on the column and not out in the gap";
+    EXPECT_TRUE(isAccent(left + synth::ui::kMixerColumnWidth / 2, 0)) << "top";
+    EXPECT_TRUE(isAccent(left + synth::ui::kMixerColumnWidth / 2, overlay->getHeight() - 1)) << "bottom";
+}
+
 namespace selection {
 
 class MockProviderMTS : public synth::AIProvider {
@@ -509,4 +543,132 @@ TEST(MixerTrackSelection, OptionArrowGlidesTheStripsThroughTheColumnDragMotion) 
     ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt));
     EXPECT_TRUE(rig.mixer().isColumnReorderActiveForTest()) << "the strips glide, as after a column drop";
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+// ---- Shift+arrows, body presses, and the timeline's own pick ----
+
+TEST(MixerTrackSelection, ShiftArrowsExtendTheSelectionAcrossStripsAndTheOtherWayShrinksIt) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0);
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]}));
+    EXPECT_EQ(rig.mixer().getFocusedColumnIndexForTest(), 1) << "the focus steps with the extension";
+    EXPECT_TRUE(rig.stripSelected(0));
+    EXPECT_TRUE(rig.stripSelected(1));
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1], t[2]}));
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]})) << "back towards the anchor shrinks it";
+    EXPECT_FALSE(rig.stripSelected(2));
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0]}));
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kShift)) << "at the left edge the key is taken and extends nothing";
+    EXPECT_EQ(rig.selected(), Tracks({t[0]}));
+}
+
+TEST(MixerTrackSelection, ShiftArrowsStartFromAStripThatIsNotSelectedYet) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(1, kCmd);
+    rig.press(1, kCmd); // focus on strip 1, nothing selected
+    ASSERT_TRUE(rig.selected().empty());
+    ASSERT_TRUE(rig.key(juce::KeyPress::leftKey, kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]})) << "the strip the key started on is the anchor";
+}
+
+TEST(MixerTrackSelection, ShiftArrowsKeepTheirNeighboursApart) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(1);
+    EXPECT_TRUE(rig.key(juce::KeyPress::rightKey, kAlt | kShift)) << "Option+Shift+Right pans the strip";
+    EXPECT_EQ(rig.selected(), Tracks({t[1]})) << "and does not extend";
+    EXPECT_EQ(rig.ids(), t) << "nor move it";
+    ASSERT_TRUE(rig.key(juce::KeyPress::rightKey, 0));
+    EXPECT_EQ(rig.selected(), Tracks({t[2]})) << "a plain arrow still walks and carries the selection";
+}
+
+TEST(MixerTrackSelection, ShiftArrowPanSwitchedToTheNewChordLeavesTheDefaultsFree) {
+    SelRig rig;
+    EXPECT_EQ(rig.mc.getShortcutManager().getBinding("mixerPanLeft"),
+              juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(kAlt | kShift), 0));
+    EXPECT_EQ(rig.mc.getShortcutManager().getBinding("mixerPanRight"),
+              juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAlt | kShift), 0));
+}
+
+namespace {
+// A point of strip column `index` where a real press lands on the column itself (nothing on top of it).
+juce::Point<int> emptySpotOf(synth::ui::MixerColumnComponent& column) {
+    for (int y = 4; y < column.getHeight(); y += 3)
+        for (int x = 1; x < column.getWidth(); x += 3)
+            if (column.getComponentAt(x, y) == &column)
+                return {x, y};
+    return {-1, -1};
+}
+} // namespace
+
+TEST(MixerTrackSelection, PressesOnTheStripBodyAndMeterSelectLikeTheHeaderDoes) {
+    SelRig rig;
+    const auto t = rig.ids();
+    auto* first = rig.mixer().getStripColumnForTest(0);
+    auto* second = rig.mixer().getStripColumnForTest(1);
+    auto* third = rig.mixer().getStripColumnForTest(2);
+    const auto spot = emptySpotOf(*third);
+    ASSERT_GE(spot.x, 0) << "a strip has empty space a press can land on";
+
+    rig.mixer().pressStripAtForTest(0, first->getMeterForTest().getBounds().getCentre(), juce::ModifierKeys());
+    EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a plain press on the meter selects the strip";
+    rig.mixer().pressStripAtForTest(1, emptySpotOf(*second), juce::ModifierKeys(kCmd));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]})) << "Cmd on the empty strip adds it";
+    EXPECT_TRUE(rig.stripSelected(0));
+    EXPECT_TRUE(rig.stripSelected(1));
+    rig.mixer().pressStripAtForTest(2, spot, juce::ModifierKeys(kShift));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1], t[2]})) << "Shift on the body extends from the anchor";
+    rig.mixer().pressStripAtForTest(2, spot, juce::ModifierKeys(kCmd));
+    EXPECT_EQ(rig.selected(), Tracks({t[0], t[1]})) << "Cmd on a selected body takes it out";
+    rig.mixer().pressStripAtForTest(3, emptySpotOf(*rig.mixer().getStripColumnForTest(3)), juce::ModifierKeys());
+    EXPECT_EQ(rig.selected(), Tracks({t[3]})) << "a plain press on the body collapses to that strip";
+}
+
+TEST(MixerTrackSelection, APressOnAControlOfTheStripLeavesTheSelectionAlone) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0);
+    auto* second = rig.mixer().getStripColumnForTest(1);
+    for (auto* control : {static_cast<juce::Component*>(&second->getMuteButtonForTest()),
+                          static_cast<juce::Component*>(&second->getPanSliderForTest())}) {
+        const auto centre = second->getLocalArea(control, control->getLocalBounds()).getCentre();
+        ASSERT_FALSE(second->isSelectionSurface(second->getComponentAt(centre)));
+        rig.mixer().pressStripAtForTest(1, centre, juce::ModifierKeys(kCmd));
+        EXPECT_EQ(rig.selected(), Tracks({t[0]})) << "a Cmd press on a button or knob is that control's own";
+    }
+}
+
+TEST(MixerTrackSelection, ATrackPickedOnTheTimelineWashesNoStripButAStripPressDoes) {
+    SelRig rig;
+    const auto t = rig.ids();
+    auto& timeline = rig.mc.getTimelinePanel();
+    ASSERT_NE(timeline.getTrackHeaderAt(1), nullptr);
+    timeline.getTrackHeaderAt(1)->onSelectRequested(juce::ModifierKeys());
+    EXPECT_TRUE(timeline.isTrackSelected(t[1])) << "the timeline row is picked";
+    EXPECT_FALSE(rig.stripSelected(1)) << "its strip is not washed by the row's pick";
+    timeline.getTrackHeaderAt(2)->onSelectRequested(juce::ModifierKeys(kCmd));
+    EXPECT_FALSE(rig.stripSelected(1));
+    EXPECT_FALSE(rig.stripSelected(2)) << "nor does a multi-pick on the timeline";
+
+    rig.press(1);
+    EXPECT_TRUE(rig.stripSelected(1)) << "a press on the strip selects it, and the wash shows";
+    timeline.getTrackHeaderAt(3)->onSelectRequested(juce::ModifierKeys());
+    EXPECT_FALSE(rig.stripSelected(1)) << "and the next pick on the timeline takes it off";
+    EXPECT_FALSE(rig.stripSelected(3));
+}
+
+TEST(MixerTrackSelection, ADeleteFromAStripActsOnWhatTheStripsShowNotOnTheTimelinesPick) {
+    SelRig rig;
+    const auto t = rig.ids();
+    rig.press(0);
+    rig.mc.getTimelinePanel().selectTracks({t[0], t[1], t[2]}, t[0]); // picked on the timeline, not on the strips
+    ASSERT_FALSE(rig.stripSelected(0));
+    ASSERT_TRUE(rig.key(juce::KeyPress::backspaceKey, kCmd));
+    EXPECT_EQ(rig.ids(), Tracks({t[1], t[2], t[3]})) << "only the focused strip's track goes";
 }

@@ -436,11 +436,12 @@ public:
     bool isTrackSelected(synth::TrackId id) const;
     /** Selects exactly `ids` and moves focus to `primary` (a duplicate's or a paste's new tracks). */
     void selectTracks(const std::vector<synth::TrackId>& ids, synth::TrackId primary);
-    void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
-    void selectTrackFromMixer(synth::TrackId id, const juce::ModifierKeys& mods); // the row click's rules, at once
+    void selectAllTracks();                                                         // Cmd+A on a track row: every track
+    void selectTrackFromMixer(synth::TrackId id, const juce::ModifierKeys& mods);   // the row click's rules, at once
+    bool isTrackSelectionFromMixer() const noexcept { return selectionFromMixer_; } // strips wash only such a pick
     std::function<void()> onTrackSelectionChanged; // after every change of the selection (the mixer strips follow)
     // ---- Track headers ----
-    // Menu ids for the Add menu; from 1 because juce::PopupMenu reserves 0 for "dismissed".
+    // Add-menu ids, from 1: juce::PopupMenu reserves 0 for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
     // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
@@ -629,16 +630,15 @@ private:
     void initSnapCombo();
 
     // ---- focused track index -------------------------------------------
-    // onSelectRequested's click lands here, resolved from a TrackId (not a captured loop index) so it stays correct
-    // if the track order changed before the click landed.
+    // onSelectRequested's click lands here, resolved from a TrackId so it stays correct across a reorder.
     void setFocusedTrack(synth::TrackId id);
-    // Same focus move without resetting the selection (a modifier click or key edits it itself).
     void focusTrackKeepingSelection(synth::TrackId id);
     // onSelectRequested: plain click resets, Cmd/Ctrl toggles, Shift extends from the anchor.
     void selectTrackFromClick(synth::TrackId id, const juce::ModifierKeys& mods);
     // Shift+Up/Down extends the selection a row; Cmd/Ctrl+Space toggles the focused row.
     void extendTrackSelection(int direction);
     void toggleFocusedTrackSelection();
+    bool selectionFromMixer_ = false, inMixerSelect_ = false; // whose pick it is; inside selectTrackFromMixer
     // Every header's selected look follows trackSelection_ (after a change, and after the rows are rebuilt).
     void applyTrackSelectionToHeaders();
     std::vector<synth::TrackId> trackOrder() const;

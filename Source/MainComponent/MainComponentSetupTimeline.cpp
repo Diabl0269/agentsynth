@@ -46,8 +46,15 @@ void MainComponent::wireTimelinePanel() {
     // is one of several, one undo step), and Option+Left/Right reorders the set in one undo step like a column drop.
     timelinePanel.onTrackSelectionChanged = [this] { bottomDock.syncMixerTrackSelection(); };
     synth::ui::MixerTrackSelectionHost selectionHost;
-    selectionHost.isSelected = [this](synth::TrackId id) { return timelinePanel.isTrackSelected(id); };
-    selectionHost.selected = [this] { return timelinePanel.selectedTracks(); };
+    // The strips see the selection only while it is the mixer's own: a row picked on the timeline washes no strip, and
+    // a delete or move from a strip then acts on that strip's track alone.
+    selectionHost.isSelected = [this](synth::TrackId id) {
+        return timelinePanel.isTrackSelectionFromMixer() && timelinePanel.isTrackSelected(id);
+    };
+    selectionHost.selected = [this] {
+        return timelinePanel.isTrackSelectionFromMixer() ? timelinePanel.selectedTracks()
+                                                         : std::vector<synth::TrackId>{};
+    };
     selectionHost.select = [this](synth::TrackId id, const juce::ModifierKeys& mods) {
         timelinePanel.selectTrackFromMixer(id, mods);
     };

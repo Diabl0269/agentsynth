@@ -822,7 +822,7 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
   `MixerColumnComponent::toggleMuted()`/`toggleSoloed()`/`MixerMasterColumn::toggleMuted()`,
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
-- **C**, **Shift+Left/Right** and **H** (rebindable) open the colour picker, pan and hide: [strip focus](strip-focus.md#colour).
+- **C**, **Option+Shift+Left/Right** and **H** (rebindable) open the colour picker, pan and hide: [strip focus](strip-focus.md#colour).
 - **Down** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
   [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
   enter, `keyPressed()` returns false. Tab is never claimed: it stays the app-wide region cycle.

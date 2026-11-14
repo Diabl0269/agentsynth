@@ -50,6 +50,11 @@ void MixerMirrorController::refreshLiveVisualsIfOpen() {
         mirror_->refreshLiveMixerVisuals();
 }
 
+void MixerMirrorController::syncTrackSelectionIfOpen() {
+    if (mirror_)
+        mirror_->syncTrackSelectionVisuals();
+}
+
 void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme::AppLookAndFeel* lookAndFeel,
                                  ShortcutManager* shortcutManager,
                                  std::function<bool(const juce::KeyPress&)> appShortcutFallback,
