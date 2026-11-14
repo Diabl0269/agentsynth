@@ -71,6 +71,7 @@ private:
     void mouseMove(const juce::MouseEvent& e) override { noteIfOnCanvas(e); }
     void noteIfOnCanvas(const juce::MouseEvent& e);
     juce::Point<float> pointerInView() const;
+    juce::Point<int> pressInView() const;
     bool panBy(juce::Point<float> screenDelta);
     juce::Point<float> holdDropArea(juce::Point<float> delta) const;
 

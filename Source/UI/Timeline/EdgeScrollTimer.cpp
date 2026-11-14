@@ -8,10 +8,24 @@
 
 namespace synth::ui {
 
+EdgeScrollTimer::EdgeScrollTimer()
+    : intent_(std::make_unique<EdgeIntent>()) {}
+
+EdgeScrollTimer::~EdgeScrollTimer() = default;
+
+// The intent is asked on every drag event (the pointer only moves then), and the answer is kept for the ticks between.
 void EdgeScrollTimer::track(bool following, juce::Point<int> pointer, juce::Rectangle<int> area, bool vertical) {
     pointer_ = pointer;
     area_ = area;
     vertical_ = vertical;
+    if (following && !inDrag_) {
+        const auto at = pendingPress_.value_or(pointer);
+        intent_->press(at.x, at.y);
+        pendingPress_.reset();
+    }
+    inDrag_ = following;
+    armedX_ = intent_->x.armed(pointer.x, area.getX(), area.getRight(), kEdgeZonePx);
+    armedY_ = intent_->y.armed(pointer.y, area.getY(), area.getBottom(), kEdgeZonePx);
     const bool inZone = following && (horizontalPxPerTick() != 0.0 || verticalPerTick(1.0) != 0.0);
     if (inZone && !isTimerRunning())
         startTimerHz(kEdgeScrollHz);
@@ -19,12 +33,20 @@ void EdgeScrollTimer::track(bool following, juce::Point<int> pointer, juce::Rect
         stopTimer();
 }
 
+void EdgeScrollTimer::stop() {
+    stopTimer();
+    inDrag_ = false;
+    pendingPress_.reset();
+}
+
 double EdgeScrollTimer::horizontalPxPerTick() const noexcept {
+    if (!armedX_)
+        return 0.0;
     return edgeScrollVelocity(pointer_.x, area_.getX(), area_.getRight(), kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
 }
 
 double EdgeScrollTimer::verticalPerTick(double maxPerTick) const noexcept {
-    if (!vertical_)
+    if (!vertical_ || !armedY_)
         return 0.0;
     return edgeScrollVelocity(pointer_.y, area_.getY(), area_.getBottom(), kEdgeZonePx, maxPerTick);
 }

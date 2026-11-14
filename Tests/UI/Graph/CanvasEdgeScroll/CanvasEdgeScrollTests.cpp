@@ -6,6 +6,7 @@
 // (docs/layout/layout.md#edge-scroll-while-dragging)
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
+#include "../../Layout/ViewportDragFollow.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/FilterModule.h"
@@ -122,6 +123,26 @@ TEST(CanvasEdgeScroll, ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUn
     c.pointer = toEdge.toFloat();
     c.tick(5);
     EXPECT_FLOAT_EQ(c.panX(), panStopped);
+
+    // A card pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    Canvas still;
+    const auto stillId = still.osc(300, 200);
+    auto* stillCard = findComponent(still.editor, stillId);
+    ASSERT_NE(stillCard, nullptr);
+    const juce::Point<int> inZone(775, 220), towardEdge(781, 220);
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.pointer = inZone.toFloat();
+             stillCard->mouseDown(mouseAt(*stillCard, press, press, false));
+             stillCard->mouseDrag(mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, inZone), press, true));
+         },
+         [&] { still.tick(1); },
+         [&] {
+             still.pointer = towardEdge.toFloat();
+             stillCard->mouseDrag(
+                 mouseAt(*stillCard, stillCard->getLocalPoint(&still.editor, towardEdge), press, true));
+         },
+         [&] { return (double)still.panX(); }, [&] { stillCard->mouseUp(mouseAt(*stillCard, press, press, true)); }});
 }
 
 TEST(CanvasEdgeScroll, TheCloserToTheEdgeTheFasterItScrolls) {

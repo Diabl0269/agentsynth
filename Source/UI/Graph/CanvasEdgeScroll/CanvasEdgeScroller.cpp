@@ -2,7 +2,12 @@
 
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h"
 
-void CanvasEdgeScroller::begin(std::function<void()> onScrolled, std::function<void()> onStill) {
+void CanvasEdgeScroller::begin(std::function<void()> onScrolled, std::function<void()> onStill,
+                               std::optional<juce::Point<int>> press) {
+    if (press)
+        intent_.press(press->x, press->y);
+    else
+        intent_.arm();
     onScrolled_ = std::move(onScrolled);
     onStill_ = std::move(onStill);
     startTimerHz(synth::ui::kEdgeScrollHz);
@@ -26,7 +31,7 @@ void CanvasEdgeScroller::tick() {
     }
     const auto view = hooks_.view();
     const auto pointer = hooks_.pointer().roundToInt();
-    const auto delta = synth::ui::canvasEdgePanDelta(pointer, view);
+    const auto delta = synth::ui::canvasEdgePanDelta(pointer, view, intent_);
     if (delta.isOrigin() || !hooks_.panBy(delta)) {
         if (auto cb = std::move(onStill_)) { // moved out for the same reason as onScrolled_ below
             cb();

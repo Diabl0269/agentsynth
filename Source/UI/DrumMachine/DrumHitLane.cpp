@@ -188,7 +188,7 @@ void DrumHitLane::mouseDrag(const juce::MouseEvent& e) {
         return;
     applyPoint(std::max(e.x, mapping_.gutterWidth), e.y);
     if (mapping_.onDragAt)
-        mapping_.onDragAt(e.getPosition());
+        mapping_.onDragAt(e.getPosition(), e.getMouseDownPosition());
 }
 
 // The last sample is a pixel on the columns, so it moves with them; the line from there to the still pointer then

@@ -24,8 +24,9 @@ void DrumMachineComponent::trackGridDrag(juce::Point<int> pointer) {
     edgeScroll_.track(gridDragFollows(), pointer, gridRegion(), gesture_.kind == Gesture::Kind::Stroke);
 }
 
-void DrumMachineComponent::trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer) {
+void DrumMachineComponent::trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer, juce::Point<int> press) {
     edgeLane_ = &lane;
+    edgeScroll_.press(press + lane.getPosition());
     const auto bars = lane.getBounds().withTrimmedLeft(kLabelColumnWidth);
     edgeScroll_.track(lane.isDragging(), pointer + lane.getPosition(), bars);
 }
@@ -38,7 +39,7 @@ void DrumMachineComponent::edgeScrollTick() {
     }
     const double rowsPx = laneDrag ? 0.0 : edgeScroll_.verticalPerTick(kEdgeAutoScrollMaxPxPerTick);
     if (edgeScroll_.horizontalPxPerTick() == 0.0 && rowsPx == 0.0) {
-        stopEdgeScroll();
+        edgeScroll_.stopTimer(); // back out of the zones: the drag goes on
         return;
     }
     const double movedX = edgeScroll_.scrollView(view_);
@@ -63,7 +64,7 @@ void DrumMachineComponent::edgeScrollTick() {
 }
 
 void DrumMachineComponent::stopEdgeScroll() {
-    edgeScroll_.stopTimer();
+    edgeScroll_.stop();
     edgeLane_ = nullptr;
 }
 

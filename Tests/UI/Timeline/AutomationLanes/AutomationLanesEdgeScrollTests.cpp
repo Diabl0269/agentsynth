@@ -5,6 +5,7 @@
 // panel's editor.
 
 #include "../../Layout/KeyGlide/KeyGlideTestHost.h"
+#include "../../Layout/ViewportDragFollow.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h"
@@ -116,6 +117,23 @@ TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnde
     EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one edit";
     f.undo.undo();
     EXPECT_EQ(f.points()[0].beat, 2.0) << "one undo puts it back";
+
+    // A dot pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    EdgeLane still;
+    still.doc.addBreakpoint(still.lane, 2.0, 50.0);
+    const auto start = still.at(2.0, 50.0);
+    const auto inZone = still.fromRight(12.0f, 50.0);
+    viewport_drag_follow::expectPressInZoneHoldsStill({[&] {
+                                                           still.press(start);
+                                                           still.dragTo(inZone, start);
+                                                       },
+                                                       [&] {
+                                                           still.ticks(1);
+                                                           still.dragTo(inZone, start);
+                                                       },
+                                                       [&] { still.dragTo(still.fromRight(6.0f, 50.0), start); },
+                                                       [&] { return still.first(); },
+                                                       [&] { still.release(still.fromRight(6.0f, 50.0), start); }});
 }
 
 // Regression test for FRO1739: after a long edge drag of a lane dot the release looked like a jump of the view and

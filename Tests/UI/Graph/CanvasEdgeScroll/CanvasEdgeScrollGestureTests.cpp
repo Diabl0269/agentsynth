@@ -12,6 +12,7 @@
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
 
+#include "../../Layout/ViewportDragFollow.h"
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/NoiseModule.h"
@@ -197,6 +198,23 @@ TEST(CanvasEdgeScrollEveryDrag, TheCanvasScrollsAndTheGestureFollowsWhileThePoin
         EXPECT_LT(c.panX(), before - 100.0f) << "the canvas scrolled to the right";
         EXPECT_TRUE(g->followed(c)) << "the gesture kept tracking the pointer";
         g->release(c, kEdge);
+
+        // Pressed with the pointer already inside the right edge zone (a jack scrolled up to the edge): held still the
+        // canvas stays; a few pixels toward the edge, it pans.
+        Canvas still;
+        const juce::Point<int> inZone(775, 300), towardEdge(781, 300);
+        viewport_drag_follow::expectPressInZoneHoldsStill({[&] {
+                                                               still.pointer = inZone.toFloat();
+                                                               g->press(still);
+                                                               g->dragTo(still, inZone);
+                                                           },
+                                                           [&] { still.tick(1); },
+                                                           [&] {
+                                                               still.pointer = towardEdge.toFloat();
+                                                               g->dragTo(still, towardEdge);
+                                                           },
+                                                           [&] { return (double)still.panX(); },
+                                                           [&] { g->release(still, towardEdge); }});
     }
 }
 

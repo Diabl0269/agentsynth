@@ -52,9 +52,9 @@ public:
         // out and persists); the commit fires once on release, only if the drag moved.
         std::function<void(int desiredHeight)> onResizeRequest;
         std::function<void(int desiredHeight)> onResizeCommitted;
-        // Every drag event of a pen or ramp (the drags that follow the roll's view), with the pointer in lane
-        // coordinates: the owner runs its edge scroll from it and calls followScroll after each scroll.
-        std::function<void(juce::Point<int>)> onDragAt;
+        // Every drag event of a pen or ramp (the drags that follow the roll's view), with the pointer and the press in
+        // lane coordinates: the owner runs its edge scroll from them and calls followScroll after each scroll.
+        std::function<void(juce::Point<int> pointer, juce::Point<int> press)> onDragAt;
     };
 
     enum class Gesture { None, Stick, Pen, Ramp };

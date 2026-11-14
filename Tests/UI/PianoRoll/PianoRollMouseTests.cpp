@@ -5,6 +5,7 @@
 // scrub's Ctrl / Ctrl+Alt chord. Shared PianoRollFixture and mouse-gesture helpers live in
 // PianoRollTestHelpers.h.
 
+#include "../Layout/ViewportDragFollow.h"
 #include "PianoRollTestHelpers.h"
 
 #include "Timeline/TimelineSnapshot.h"
@@ -285,6 +286,25 @@ TEST(PianoRollAutoScrollTest, EachTickAdvancesTheViewAndReDerivesThePreviewFromT
     const double afterOneTick = runWithTicks(1);
     const double afterThreeTicks = runWithTicks(3);
     EXPECT_GT(afterThreeTicks, afterOneTick);
+
+    // A note pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    PianoRollFixture still;
+    const auto trackId = still.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = still.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    still.open(clipId);
+    const auto id = still.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    const juce::Point<float> anchor = centreOf(still.roll.getNoteRect(id));
+    const float right = (float)still.roll.getNoteGridBounds().getRight();
+    const juce::Point<float> inZone(right - 12.0f, anchor.y), towardEdge(right - 6.0f, anchor.y);
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.roll.mouseDown(leftClick(still.roll, anchor));
+             still.roll.mouseDrag(leftDrag(still.roll, inZone, anchor));
+         },
+         [&] { still.roll.tickAutoScrollForTest(); },
+         [&] { still.roll.mouseDrag(leftDrag(still.roll, towardEdge, anchor)); },
+         [&] { return still.roll.getFirstVisibleBeat(); },
+         [&] { still.roll.mouseUp(leftDrag(still.roll, towardEdge, anchor)); }});
 }
 
 TEST(PianoRollAutoScrollTest, VerticalTickWalksOnlyVisibleRowsUnderAnActiveScaleContext) {

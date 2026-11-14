@@ -2,6 +2,7 @@
 // the playhead being scrubbed, held at the ruler's edge, scroll the shared timeline view (faster nearer the edge) with
 // the dragged thing staying under the still pointer; release, Esc and moving back in stop it; a marker move is still
 // one undo step, and Esc puts a marker or the loop back.
+#include "../../Layout/ViewportDragFollow.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestEvents.h"
@@ -84,6 +85,19 @@ TEST(TimelineRulerEdgeScroll, AMarkerHeldAtTheRightEdgeScrollsTheViewAndStaysUnd
     rig.undo.undo();
     EXPECT_DOUBLE_EQ(rig.doc.getMarker(rig.marker)->beat, 2.0) << "one undo puts it back";
     EXPECT_FALSE(rig.undo.canUndo()) << "the whole move is one undo step";
+
+    // A marker pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    RulerRig still;
+    const auto from = still.flagCentre();
+    const juce::Point<float> inZone{(float)kWidth - 12.0f, from.y}, towardEdge{(float)kWidth - 6.0f, from.y};
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.ruler.mouseDown(makeClickEvent(still.ruler, from));
+             still.ruler.mouseDrag(makeDragEvent(still.ruler, inZone, from));
+         },
+         [&] { still.ticks(1); }, [&] { still.ruler.mouseDrag(makeDragEvent(still.ruler, towardEdge, from)); },
+         [&] { return still.state.firstVisibleBeat; },
+         [&] { still.ruler.mouseUp(makeDragEvent(still.ruler, towardEdge, from)); }});
 }
 
 TEST(TimelineRulerEdgeScroll, ItIsFasterNearerTheEdgeAndStopsWhenThePointerMovesBackIn) {

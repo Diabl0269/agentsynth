@@ -28,6 +28,7 @@ void TimelineSectionStrip::mouseDown(const juce::MouseEvent& e) {
     // Any open name editor commits first (clicking away is a commit), before the press can change what a block is.
     finishRename(true);
     pressPos_ = e.position;
+    edgeScroll_.press(e.getPosition());
     pressedBlock_ = {};
     pressedOnChip_ = false;
     pendingCollapse_ = {};

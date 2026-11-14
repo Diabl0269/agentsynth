@@ -8,9 +8,12 @@
 // pan through Hooks. After each pan it calls the drag's own `onScrolled`, so the dragged card or landing ghost is
 // re-placed under the (stationary) pointer. See docs/layout/layout.md "Edge scroll while dragging".
 
+#include "UI/Timeline/EdgeAutoScroll.h"
+
 #include <functional>
 #include <juce_events/juce_events.h>
 #include <juce_graphics/juce_graphics.h>
+#include <optional>
 
 class CanvasEdgeScroller : private juce::Timer {
 public:
@@ -26,8 +29,11 @@ public:
     ~CanvasEdgeScroller() override { stopTimer(); }
 
     /** Arms the scroller for one drag; `onScrolled` runs after every tick that moved the view, `onStill` after a
-     *  tick that did not. Replaces any drag already armed. */
-    void begin(std::function<void()> onScrolled, std::function<void()> onStill = nullptr);
+     *  tick that did not. `press` is where the drag was pressed (the pointer's space): a press inside an edge zone pans
+     *  only once the pointer moves toward that edge (EdgeIntent). None (a drag that came in from outside) pans at once.
+     *  Replaces any drag already armed. */
+    void begin(std::function<void()> onScrolled, std::function<void()> onStill = nullptr,
+               std::optional<juce::Point<int>> press = std::nullopt);
     /** Disarms it (mouse up, drop, cancel). Safe to call when nothing is armed. */
     void end();
     bool isActive() const noexcept { return isTimerRunning(); }
@@ -39,6 +45,7 @@ private:
     void timerCallback() override { tick(); }
 
     Hooks hooks_;
+    synth::ui::EdgeIntent intent_;
     std::function<void()> onScrolled_;
     std::function<void()> onStill_;
 };

@@ -7,7 +7,6 @@
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
-#include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/RangeSelectionModel.h"
 #include "UI/Timeline/RenderSpan.h"
@@ -75,6 +74,7 @@ template <typename T>
 class KeyedTween;
 using KeyedRectTween = KeyedTween<juce::Rectangle<float>>;
 class ClipLaneEnterExit;
+class EdgeScrollTimer;
 class RestoreWatch;
 struct ClipLaneChange;
 struct WaveformInk;
@@ -156,8 +156,7 @@ class TimelineClipLaneArea
     , public juce::FileDragAndDropTarget
     , public SoundDropAdapter
     , public KeyboardContextMenuProvider
-    , public juce::TooltipClient
-    , private juce::Timer {
+    , public juce::TooltipClient {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
     ~TimelineClipLaneArea() override;
@@ -638,11 +637,9 @@ protected:
     virtual void showRangeContextMenu(juce::Point<int> localPos);
 
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
-    // A gated juce::Timer (kEdgeScrollHz), armed only while a Move/Resize drag's pointer sits
-    // inside an edge zone — see TimelineClipLaneMouse.cpp for the arming/tick mechanics. Protected
-    // virtual so a test can drive one tick without a real juce::Timer (see tickAutoScrollForTest).
+    // One tick of the edge scroll (edgeScroll_), run only while a Move/Resize drag's pointer sits in an edge zone;
+    // virtual so a test can stand in for it (TimelineClipLaneMouse.cpp has the arming).
     virtual void autoScrollTick();
-    void timerCallback() override { autoScrollTick(); }
 
 public:
     // Test seam: drives one autoScrollTick() without a real juce::Timer (see the timer's own
@@ -651,7 +648,7 @@ public:
     // Whether the edge-scroll timer is currently armed — the gating half of the timer contract a
     // test pins (started only inside the zone with a drag live, stopped the instant either isn't
     // true anymore).
-    bool isAutoScrollTimerRunningForTest() const noexcept { return isTimerRunning(); }
+    bool isAutoScrollTimerRunningForTest() const noexcept;
 
 private:
     enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw, Range };
@@ -898,6 +895,7 @@ private:
     // auto-scroll tick (which has no MouseEvent of its own) re-derives the drag preview from,
     // rather than from a synthesized one.
     juce::Point<int> lastDragPointer_;
+    std::unique_ptr<EdgeScrollTimer> edgeScroll_; // the edge scroll's clock and the drag's edge intent
 
     // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` (what an auto-scroll tick and a
     // pointer move share), easing the drawn clips onto each new snapped step.

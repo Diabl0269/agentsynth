@@ -532,6 +532,7 @@ void AutomationLaneEditor::mouseExit(const juce::MouseEvent&) {
 
 void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
+    edgeScroll_->press(e.getPosition());
     syncToDoc();
     dragMode_ = DragMode::None;
     selection_.cancelGesture();

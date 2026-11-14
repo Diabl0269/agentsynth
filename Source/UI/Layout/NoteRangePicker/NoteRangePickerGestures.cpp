@@ -5,6 +5,7 @@
 #include "NoteRangeGeometry.h"
 #include "NoteRangePicker.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -28,6 +29,8 @@ void NoteRangePicker::beginDrag(const juce::MouseEvent& e) {
     const auto p = e.position;
     drag_ = {};
     drag_.startX = p.x;
+    drag_.intent = std::make_shared<EdgeIntentAxis>();
+    drag_.intent->press((int)std::lround(p.x));
     drag_.startLow = drag_.anchorLow = low_;
     drag_.startHigh = drag_.anchorHigh = high_;
     drag_.startScroll = scroll_;
@@ -94,7 +97,11 @@ void NoteRangePicker::advanceDrag(float x, juce::ModifierKeys mods, double dt) {
         drag_.moved = true;
     if (!drag_.moved)
         return;
-    const float speed = autoScrollSpeed(x, (float)getWidth(), keyW_);
+    // A press near an end scrolls only once the pointer moves toward that end (or has left its zone): asked on every
+    // moved event, so leaving the zone is noted. See docs/layout/layout.md "Edge scroll while dragging".
+    const int zonePx = (int)std::lround(keyW_ * kEdgeZoneKeys);
+    const bool armed = drag_.intent == nullptr || drag_.intent->armed((int)std::lround(x), 0, getWidth(), zonePx);
+    const float speed = armed ? autoScrollSpeed(x, (float)getWidth(), keyW_) : 0.0f;
     if (speed != 0.0f)
         scrollBy(speed * (float)dt);
     const float inside = std::clamp(x, 0.0f, (float)getWidth());

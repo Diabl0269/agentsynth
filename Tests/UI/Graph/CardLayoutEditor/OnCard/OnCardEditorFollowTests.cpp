@@ -6,6 +6,7 @@
 // Esc and the release stop it, and the drop is still one undo step. The 30 Hz edge-scroll timer is ticked by hand.
 // Bug kinds: undo-gap, motion-over-time, drag-leaves-view.
 
+#include "../../../Layout/ViewportDragFollow.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 #include "Project/ViewDoc.h"
@@ -253,6 +254,26 @@ TEST(OnCardEditorEdgeScroll, AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheH
     ASSERT_TRUE(cut.rig.canvas.undo.undo());
     cut.editor->runQueuedSyncForTest();
     EXPECT_FALSE(cut.rig.storedLayout(cut.id).has_value()) << "one Cmd+Z undoes the whole drag";
+
+    // A control pressed with the pointer already inside the view's bottom edge zone stays put until the pointer moves
+    // toward that edge.
+    CutByTheView still(std::make_unique<FilterModule>());
+    auto* stillOutline = still.editor->getOutlineForTest("cutoff");
+    ASSERT_NE(stillOutline, nullptr);
+    const auto stillPress = stillOutline->getLocalBounds().getCentre().toFloat();
+    const auto edgeY = still.edge.y;
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.edge.y = edgeY - 10;
+             stillOutline->mouseDown(cardbody_test::mouseAt(*stillOutline, stillPress, juce::ModifierKeys(kLeft)));
+             stillOutline->mouseDrag(still.atEdge(*stillOutline, kLeft | kCommand));
+         },
+         [&] { still.tick(1); },
+         [&] {
+             still.edge.y = edgeY - 4;
+             stillOutline->mouseDrag(still.atEdge(*stillOutline, kLeft | kCommand));
+         },
+         [&] { return (double)still.panY(); }, [&] { stillOutline->mouseUp(still.atEdge(*stillOutline, 0)); }});
 }
 
 // Regression test for FRO1688: held at the edge, the canvas scrolled on past the card and its hide strip until the
@@ -317,6 +338,28 @@ TEST(OnCardEditorEdgeScroll, AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeSto
     cut.tick(5);
     EXPECT_FLOAT_EQ(cut.panY(), stopped);
     handle->mouseUp(cut.atEdge(*handle, 0));
+
+    // A group pressed with the pointer already inside the view's bottom edge zone stays put until the pointer moves
+    // toward that edge.
+    CutByTheView still(std::make_unique<OscillatorModule>());
+    auto* stillHandle = still.editor->getGroupHandleForTest("unison");
+    ASSERT_NE(stillHandle, nullptr);
+    const auto stillPress = stillHandle->getTitleRowArea().getCentre().toFloat();
+    const auto edgeY = still.edge.y;
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.edge.y = edgeY - 10;
+             stillHandle->mouseDown(cardbody_test::mouseAt(*stillHandle, stillPress, juce::ModifierKeys(kLeft)));
+             stillHandle->mouseDrag(cardbody_test::mouseAt(*stillHandle, stillPress + juce::Point<float>(0.0f, 12.0f),
+                                                           juce::ModifierKeys(kLeft)));
+             stillHandle->mouseDrag(still.atEdge(*stillHandle, kLeft));
+         },
+         [&] { still.tick(1); },
+         [&] {
+             still.edge.y = edgeY - 4;
+             stillHandle->mouseDrag(still.atEdge(*stillHandle, kLeft));
+         },
+         [&] { return (double)still.panY(); }, [&] { stillHandle->mouseUp(still.atEdge(*stillHandle, 0)); }});
 }
 
 TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGhostFollowsDownTheCard) {
@@ -347,4 +390,29 @@ TEST(OnCardEditorEdgeScroll, ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGh
     EXPECT_FALSE(cut.scrolling()) << "the release stops it";
     ASSERT_TRUE(cut.rig.storedLayout(cut.id).has_value());
     EXPECT_FALSE(cut.rig.storedLayout(cut.id)->hidden.contains("drive")) << "the drop added the control";
+
+    // A row pressed with the pointer already inside the view's bottom edge zone stays put until the pointer moves
+    // toward that edge.
+    CutByTheView still(std::make_unique<FilterModule>());
+    hideThroughPanel(still.rig, *still.editor, "drive");
+    auto* stillPanel = openAddPanel(still.rig, *still.editor);
+    ASSERT_NE(stillPanel, nullptr);
+    auto* stillRow = stillPanel->getRowForTest("drive");
+    ASSERT_NE(stillRow, nullptr);
+    const auto rowFrom = stillRow->localPointToGlobal(stillRow->getLocalBounds().getCentre());
+    const auto edgeY = still.edge.y;
+    const auto at = [&](int y) {
+        still.edge.y = y;
+        return still.graph().localPointToGlobal(still.edge);
+    };
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             stillRow->mouseDown(eventAtScreen(*stillRow, rowFrom, kLeft));
+             const auto target = at(edgeY - 10);
+             stillRow->mouseDrag(eventAtScreen(*stillRow, (rowFrom + target) / 2, kLeft));
+             stillRow->mouseDrag(eventAtScreen(*stillRow, target, kLeft));
+         },
+         [&] { still.tick(1); }, [&] { stillRow->mouseDrag(eventAtScreen(*stillRow, at(edgeY - 4), kLeft)); },
+         [&] { return (double)still.panY(); },
+         [&] { stillRow->mouseUp(eventAtScreen(*stillRow, still.graph().localPointToGlobal(still.edge), 0)); }});
 }

@@ -17,6 +17,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
 #include <cmath>
@@ -84,7 +85,7 @@ void TimelineClipLaneArea::setActiveTool(EditTool tool) {
     // so Copy/Cut/Delete under any other tool can only ever mean the clip selection.
     if (tool != EditTool::Range)
         clearRange();
-    stopTimer(); // the auto-scroll timer's drag just got cancelled too
+    edgeScroll_->stop(); // the auto-scroll timer's drag just got cancelled too
 
     applyToolCursor();
     repaint();

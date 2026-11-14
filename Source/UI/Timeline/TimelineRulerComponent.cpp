@@ -428,6 +428,7 @@ void TimelineRulerComponent::paintMarkers(juce::Graphics& g) const {
 
 //==============================================================================
 void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
+    edgeScroll_->press(e.getPosition());
     // A press anywhere in the strip commits an open rename first (click-away commits) — and that
     // may mutate the doc, so nothing below may hold a Marker pointer across it.
     if (renameEditor_ != nullptr)

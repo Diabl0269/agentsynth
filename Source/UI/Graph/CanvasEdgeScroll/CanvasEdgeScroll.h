@@ -32,4 +32,15 @@ inline juce::Point<float> canvasEdgePanDelta(juce::Point<int> pointer, juce::Rec
     return {axis(pointer.x, view.getX(), view.getRight()), axis(pointer.y, view.getY(), view.getBottom())};
 }
 
+/** canvasEdgePanDelta, held at zero on each axis until `intent` says the pointer moved toward that edge. */
+inline juce::Point<float> canvasEdgePanDelta(juce::Point<int> pointer, juce::Rectangle<int> view,
+                                             EdgeIntent& intent) noexcept {
+    const auto axis = [](int pos, int lo, int hi, EdgeIntentAxis& gate) {
+        return (float)-edgeScrollVelocity(pos, lo, hi, canvasEdgeZoneFor(hi - lo), (double)kCanvasEdgeMaxPxPerTick,
+                                          gate);
+    };
+    return {axis(pointer.x, view.getX(), view.getRight(), intent.x),
+            axis(pointer.y, view.getY(), view.getBottom(), intent.y)};
+}
+
 } // namespace synth::ui

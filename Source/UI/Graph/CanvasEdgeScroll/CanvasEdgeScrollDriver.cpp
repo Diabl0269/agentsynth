@@ -38,6 +38,10 @@ void CanvasEdgeScrollDriver::setPointerForTest(std::function<juce::Point<float>(
     testPointer_ = std::move(pointerInCanvasView);
 }
 
+// Every drag but a library one starts at a press on the canvas, and the pointer is still there when it arms (the
+// begin* call that stores it), so the press is where the pointer is now.
+juce::Point<int> CanvasEdgeScrollDriver::pressInView() const { return pointerInView().roundToInt(); }
+
 juce::Point<float> CanvasEdgeScrollDriver::pointerInView() const {
     if (testPointer_ != nullptr)
         return testPointer_();
@@ -105,14 +109,15 @@ void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<in
                 juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier),
                 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, pressInCard.toFloat(), now, 1, true));
         },
-        [this] { editor_.getDragDropController().flushDragPreview(); });
+        [this] { editor_.getDragDropController().flushDragPreview(); }, pressInView());
 }
 
 // dragConnection takes a screen position, which is what a real cable drag event hands it.
 void CanvasEdgeScrollDriver::beginCableDrag(juce::Point<int> screenPos) {
     dropArea_ = nullptr;
     lastScreenPosition_ = screenPos.toFloat();
-    scroller_.begin([this] { editor_.dragConnection(editor_.localPointToGlobal(pointerInView().roundToInt())); });
+    scroller_.begin([this] { editor_.dragConnection(editor_.localPointToGlobal(pointerInView().roundToInt())); },
+                    nullptr, pressInView());
 }
 
 // Only while the canvas still owns a box or a macro move: a cancelled one must not fall through to the pan branch of
@@ -121,16 +126,18 @@ void CanvasEdgeScrollDriver::beginCanvasDrag() {
     dropArea_ = nullptr;
     if (!editor_.isMarqueeActive() && !(editor_.isMacroChipDragActive() && editor_.isSelectionDragActive()))
         return;
-    scroller_.begin([this] {
-        if (!editor_.isMarqueeActive() && !editor_.isMacroChipDragActive())
-            return;
-        const auto pos = pointerInView().roundToInt();
-        const auto now = juce::Time::getCurrentTime();
-        editor_.mouseDrag(juce::MouseEvent(
-            juce::Desktop::getInstance().getMainMouseSource(), pos.toFloat(),
-            juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f,
-            0.0f, 0.0f, 0.0f, 0.0f, &editor_, &editor_, now, pos.toFloat(), now, 1, true));
-    });
+    scroller_.begin(
+        [this] {
+            if (!editor_.isMarqueeActive() && !editor_.isMacroChipDragActive())
+                return;
+            const auto pos = pointerInView().roundToInt();
+            const auto now = juce::Time::getCurrentTime();
+            editor_.mouseDrag(juce::MouseEvent(
+                juce::Desktop::getInstance().getMainMouseSource(), pos.toFloat(),
+                juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier),
+                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &editor_, &editor_, now, pos.toFloat(), now, 1, true));
+        },
+        nullptr, pressInView());
 }
 
 void CanvasEdgeScrollDriver::notePointerAt(juce::Point<int> screenPos) {
@@ -142,11 +149,13 @@ void CanvasEdgeScrollDriver::beginPointerDrag(juce::Point<int> screenPos, std::f
                                               std::function<juce::Rectangle<int>()> dropArea) {
     lastScreenPosition_ = screenPos.toFloat();
     dropArea_ = std::move(dropArea);
-    scroller_.begin([this, reaim = std::move(reaim)] {
-        const juce::ScopedValueSetter<bool> synthetic(inSyntheticDrag_, true);
-        if (!reaim(editor_.localPointToGlobal(pointerInView().roundToInt())))
-            end();
-    });
+    scroller_.begin(
+        [this, reaim = std::move(reaim)] {
+            const juce::ScopedValueSetter<bool> synthetic(inSyntheticDrag_, true);
+            if (!reaim(editor_.localPointToGlobal(pointerInView().roundToInt())))
+                end();
+        },
+        nullptr, pressInView());
 }
 
 void CanvasEdgeScrollDriver::beginLibraryDrag(const juce::DragAndDropTarget::SourceDetails& details) {

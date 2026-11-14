@@ -2,6 +2,7 @@
 // roll sideways on its own edge timer (never up or down: the strip sits under the grid), the ramp stays anchored to the
 // note it began on and reaches the notes that scroll in, release and Esc stop it, and the gesture is one undo step.
 
+#include "../Layout/ViewportDragFollow.h"
 #include "PianoRollVelocityTestHelpers.h"
 
 #include <gtest/gtest.h>
@@ -56,6 +57,21 @@ TEST(PianoRollVelocityLaneEdgeScroll, ARampHeldAtTheRightEdgeScrollsTheRollAndRe
     for (const auto id : f.bed.notes)
         EXPECT_EQ(f.velocityOf(id), 100);
     EXPECT_FALSE(f.undo.canUndo()) << "the whole ramp is one undo step";
+
+    // A ramp pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    EdgeFixture still;
+    auto& stillLane = still.lane();
+    const auto from = still.at(1.0, 100);
+    const juce::Point<float> inZone((float)stillLane.getWidth() - 12.0f, still.lane().yForVelocity(20));
+    const juce::Point<float> towardEdge(inZone.x + 6.0f, inZone.y);
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             stillLane.mouseDown(leftClick(stillLane, from, kShift));
+             stillLane.mouseDrag(leftDrag(stillLane, inZone, from, kShift));
+         },
+         [&] { still.ticks(1); }, [&] { stillLane.mouseDrag(leftDrag(stillLane, towardEdge, from, kShift)); },
+         [&] { return still.roll.getRollViewState().firstVisibleBeat; },
+         [&] { stillLane.mouseUp(leftDrag(stillLane, towardEdge, from, kShift)); }});
 }
 
 TEST(PianoRollVelocityLaneEdgeScroll, APenHeldAtTheRightEdgeSetsEveryNoteThatPassesUnderIt) {

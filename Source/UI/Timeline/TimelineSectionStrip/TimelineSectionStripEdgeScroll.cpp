@@ -24,8 +24,12 @@ void TimelineSectionStrip::updateEdgeScrollArming() {
 }
 
 void TimelineSectionStrip::edgeScrollTick() {
-    if (!following(blockDragging_, dragCancelled_, makeDragging_) || edgeScroll_.horizontalPxPerTick() == 0.0) {
+    if (!following(blockDragging_, dragCancelled_, makeDragging_)) {
         stopEdgeScroll();
+        return;
+    }
+    if (edgeScroll_.horizontalPxPerTick() == 0.0) {
+        edgeScroll_.stopTimer(); // back out of the zone: the drag goes on
         return;
     }
     if (edgeScroll_.scrollView(viewState_) == 0.0)
@@ -39,6 +43,6 @@ void TimelineSectionStrip::edgeScrollTick() {
     repaint();
 }
 
-void TimelineSectionStrip::stopEdgeScroll() { edgeScroll_.stopTimer(); }
+void TimelineSectionStrip::stopEdgeScroll() { edgeScroll_.stop(); }
 
 } // namespace synth::ui

@@ -469,7 +469,7 @@ private:
     // DrumMachineEdgeScroll.cpp
     bool gridDragFollows() const noexcept;
     void trackGridDrag(juce::Point<int> pointer);
-    void trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer);
+    void trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer, juce::Point<int> press);
     void edgeScrollTick();
     void stopEdgeScroll();
 

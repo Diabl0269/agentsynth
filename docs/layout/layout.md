@@ -105,6 +105,18 @@ each one through its real mouse handlers.
   it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
   for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit,
   Esc (a cable, a macro) or `cancelLiveDragGestures` stops the timer.
+- **Only once the pointer moves toward the edge.** A drag pressed inside an edge zone (a jack, a card or a box corner
+  that sits near the edge of the view) does not pan while the pointer holds still: it pans once the pointer has moved
+  `kEdgeIntentPx` (4 px) toward that edge since the press, or has been outside that edge's zone once during the drag.
+  Each axis and each edge counts on its own, so a press near the right edge still pans up at once when the pointer
+  moves to the top, and moving back to the press stops the pan again. A library or sound-browser drag comes in from
+  outside the view, so it pans as soon as it enters a zone. The rule is `EdgeIntent` (`Source/UI/Timeline/EdgeAutoScroll.h`),
+  shared by every edge follow below (the canvas, the controller surface and every timeline drag); a list reorder only
+  follows past its drag threshold, which a still pointer never reaches. Every follow test also proves it
+  (`viewport_drag_follow::expectPressInZoneHoldsStill`, enforced by
+  `DragSurfaces.EveryFollowTestProvesAPressInTheEdgeZoneHoldsStill`).
+  Research: Figma and Cubase do not edge-scroll on a press that already sits by the edge; they wait for the pointer to
+  move toward it or to dwell there. We chose movement, so a press never scrolls on its own.
 - **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
   that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
   grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A

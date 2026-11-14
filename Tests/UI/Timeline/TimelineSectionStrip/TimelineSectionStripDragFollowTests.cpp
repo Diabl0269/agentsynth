@@ -1,6 +1,7 @@
 // TimelineSectionStripDragFollowTests.cpp -- a section drag shows what it will do and follows the view: the preview
 // (drop line, neighbours making room, the settle) equals the commit in every mode and position, Shift flips the mode
 // mid-drag, and a pointer held at the strip's edge scrolls the timeline with the preview following.
+#include "../../Layout/ViewportDragFollow.h"
 #include "TimelineSectionStripFixture.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include <algorithm>
@@ -138,6 +139,21 @@ TEST(TimelineSectionStripDragFollowTest, HoldingABlockAtTheRightEdgeScrollsTheVi
     f.strip.mouseUp(f.event(edge, from, true));
     EXPECT_FALSE(f.strip.isEdgeScrollRunningForTest());
     EXPECT_DOUBLE_EQ(f.doc.getPlacement(f.ids[0])->startBeat, landing);
+
+    // A block pressed with the pointer already inside the right edge zone stays put until the pointer moves toward it.
+    ThreeSections still;
+    const auto start = still.grabPoint(still.ids[0]);
+    const juce::Point<float> inZone{(float)still.strip.getWidth() - 12.0f, 12.0f};
+    const juce::Point<float> towardEdge{inZone.x + 6.0f, 12.0f};
+    viewport_drag_follow::expectPressInZoneHoldsStill(
+        {[&] {
+             still.strip.mouseDown(still.event(start, start, false));
+             still.strip.mouseDrag(still.event(inZone, start, true));
+         },
+         [&] { still.strip.tickEdgeScrollForTest(); },
+         [&] { still.strip.mouseDrag(still.event(towardEdge, start, true)); },
+         [&] { return still.state.firstVisibleBeat; },
+         [&] { still.strip.mouseUp(still.event(towardEdge, start, true)); }});
 }
 
 TEST(TimelineSectionStripDragFollowTest, TheLeftEdgeStopsAtTheSongStartAndEscStopsTheScroll) {

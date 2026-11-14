@@ -27,11 +27,11 @@ void TimelineRulerComponent::trackDrag(juce::Point<int> pointer) {
 
 void TimelineRulerComponent::edgeScrollTick() {
     if (!dragFollowsView()) {
-        edgeScroll_->stopTimer();
+        edgeScroll_->stop();
         return;
     }
     if (edgeScroll_->horizontalPxPerTick() == 0.0) {
-        edgeScroll_->stopTimer();
+        edgeScroll_->stopTimer(); // back out of the zone: the drag goes on
         return;
     }
     if (edgeScroll_->scrollView(viewState_) == 0.0)
@@ -52,7 +52,7 @@ void TimelineRulerComponent::edgeScrollTick() {
 
 // Release: the scroll and the Esc listener end with the drag.
 void TimelineRulerComponent::endDrag() {
-    edgeScroll_->stopTimer();
+    edgeScroll_->stop();
     cancelKey_->disarm();
 }
 

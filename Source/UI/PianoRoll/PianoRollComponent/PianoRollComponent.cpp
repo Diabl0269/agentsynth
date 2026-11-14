@@ -95,7 +95,9 @@ bool noteRangeShownDiffers(const ScaleAssistPanel& panel, const synth::Clip& cli
 
 //==============================================================================
 PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
-    : viewState_(viewState) {
+    : viewState_(viewState)
+    , autoScrollTimer_(std::make_unique<EdgeScrollTimer>()) {
+    autoScrollTimer_->onTick = [this] { autoScrollTick(); };
     tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: initHeaderChips and focusLost use it
     setComponentID("pianoRollComponent");
     addTestModeProbe();
@@ -185,7 +187,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
     endKeysColumnPress();
-    autoScrollTimer_.stopTimer(); // a drag from the PREVIOUS clip cannot still be scrolling this one
+    autoScrollTimer_->stop(); // a drag from the PREVIOUS clip cannot still be scrolling this one
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
     hasPlayheadX_ = false;
@@ -262,7 +264,7 @@ void PianoRollComponent::closeRoll() {
     setCopyDrag(false);
     clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
-    autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
+    autoScrollTimer_->stop(); // no clip left for a drag to be scrolling
 
     hasPlayheadX_ = false;
     hasSplitPreview_ = false;

@@ -32,8 +32,9 @@ public:
         std::function<juce::Range<int>(int step)> stepRange;
         std::function<int(int x)> stepAt;
         int gutterWidth = 0;
-        /** Every drag event with the pointer (lane coordinates), and the drag's end: the owner's edge scroll. */
-        std::function<void(juce::Point<int>)> onDragAt;
+        /** Every drag event with the pointer and the press (lane coordinates), and the drag's end: the owner's edge
+         *  scroll, which measures its edge intent from the press. */
+        std::function<void(juce::Point<int> pointer, juce::Point<int> press)> onDragAt;
         std::function<void()> onDragEnd;
     };
 

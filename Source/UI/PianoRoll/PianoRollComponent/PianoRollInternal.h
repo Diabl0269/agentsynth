@@ -6,6 +6,8 @@
 // — each unit that needs one of these constants/helpers includes this header directly and brings the names into scope
 // with `using namespace synth::ui::detail;`, so every call site keeps its unqualified spelling.
 
+#include "UI/Timeline/EdgeScrollTimer.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui::detail {
