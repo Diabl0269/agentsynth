@@ -1,7 +1,7 @@
 # The Drum Kit's picked-pad knobs offer MIDI Learn for the pad that is picked.
 #
 # What a user does: adds a Drum Kit from the library (Cmd+F), Shift+clicks pad 2 (Snare) to pick it, and right-clicks
-# its Level knob and takes the menu's first item, "MIDI Learn 'Pad 2 level'...": the knob shows the armed outline and
+# its Level knob and takes the menu's first item, "MIDI Learn 'Pad 2 Level'...": the knob shows the armed outline and
 # the status bar asks for a control. Then picks pad 1 (Kick) and does the same. Test mode opens no MIDI device, so the learn itself and "the controller keeps moving
 # Snare after Kick is picked" are covered by MidiRemoteDrumPadLearnTests.
 record: true
@@ -27,7 +27,7 @@ steps:
   - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
   - click: {id: "card:Drum Kit > Level: Snare", button: right}
   - wait: {}
-  - key: {keys: down}                                        # the menu's first item: MIDI Learn 'Pad N level'
+  - key: {keys: down}                                        # the menu's first item: MIDI Learn 'Pad N Level'
   - key: {keys: return}
   - wait: {}
   - screenshot: {id: window, name: snare-level-learn-armed}
@@ -38,7 +38,7 @@ steps:
   - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, within_ms: 1500}
   - click: {id: "card:Drum Kit > Level: Kick", button: right}
   - wait: {}
-  - key: {keys: down}                                        # the menu's first item: MIDI Learn 'Pad N level'
+  - key: {keys: down}                                        # the menu's first item: MIDI Learn 'Pad N Level'
   - key: {keys: return}
   - wait: {}
   - screenshot: {id: window, name: kick-level-learn-armed}

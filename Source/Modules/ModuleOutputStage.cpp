@@ -376,7 +376,10 @@ void ModuleBase::renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce
         stage.skipMixPan(n);
     else
         stage.applyMixPan(buffer, legs, panApplies);
+    const bool faded = stage.fadeRunning();
     stage.applyFade(buffer, legs);
+    if (faded)
+        afterOutputFade(buffer, n);
     stage.finishBlock(n);
 }
 

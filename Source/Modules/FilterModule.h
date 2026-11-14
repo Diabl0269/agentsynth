@@ -757,11 +757,21 @@ private:
     /** Feeds voice 0 / Left to the scope and the spectrum; every path out of the block (active, bypassed, muted) calls
        it so a silent filter shows silence rather than its last audible block. */
     void pushVisuals(const juce::AudioBuffer<float>& buffer, int numSamples) {
-        if (buffer.getNumChannels() == 0 || numSamples == 0)
-            return;
+        if (buffer.getNumChannels() == 0 || numSamples == 0 || outputFadeRunning())
+            return; // a crossfade runs: afterOutputFade() pushes the faded block instead
         if (auto* vb = getVisualBuffer())
             vb->pushBlock(buffer.getReadPointer(0), numSamples);
         spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
+    }
+
+    /** The mute fade's blocks reach the views after the ramp, so the spectrum and scope fall (and rise) with what is
+        heard instead of showing the whole tone, then silence. */
+    void afterOutputFade(const juce::AudioBuffer<float>& faded, int numSamples) override {
+        if (faded.getNumChannels() == 0 || numSamples == 0)
+            return;
+        if (auto* vb = getVisualBuffer())
+            vb->pushBlock(faded.getReadPointer(0), numSamples);
+        spectrumBuffer.pushBlock(faded.getReadPointer(0), numSamples);
     }
 
     void applyFilterType(int typeIndex) {

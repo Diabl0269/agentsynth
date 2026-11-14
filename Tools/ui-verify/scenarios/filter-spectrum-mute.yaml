@@ -7,9 +7,11 @@
 #   2. Plays a note (`audioPump`: a test-mode launch has no audio device, so it renders the project in real time with the
 #      same ModuleBase::processBlock path the app uses): both traces rise.
 #   3. Presses Mute on the Filter: both traces fall to the floor (`spectrumAtFloor`), 1.2 s later; un-mute: they return.
+#      The `glide` strips (proof/*-strip.png) show it frame by frame: the trace only sinks on mute, from where it is,
+#      never rising or jumping first, and only rises on un-mute, with no overshoot above the live trace.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 record: true
-save_project: fro1747 spectrum mute
+save_project: fro1845 spectrum mute
 steps:
   - click: {id: New empty project}
   - wait: {}
@@ -69,10 +71,10 @@ steps:
   - expect: {id: Show Spectrum, toggleState: true, within_ms: 3000}
   - click: {id: Edit shapes}
   - wait: {}
-  - expect: {id: Show spectrum, exists: true, within_ms: 5000}
-  - click: {id: Show spectrum}
+  - expect: {id: "Filter shapes: Filter > Show Spectrum", exists: true, within_ms: 5000}
+  - click: {id: "Filter shapes: Filter > Show Spectrum"}
   - wait: {settleMs: 600}
-  - expect: {id: Show spectrum, toggleState: true, within_ms: 3000}
+  - expect: {id: "Filter shapes: Filter > Show Spectrum", toggleState: true, within_ms: 3000}
   - click: {id: Done}                                          # the window's toggle is on; close it to film the card first
   - wait: {settleMs: 600}
   - expect: {id: Edit shapes, exists: true, within_ms: 3000}

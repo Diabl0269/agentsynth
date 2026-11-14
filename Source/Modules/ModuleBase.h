@@ -600,22 +600,19 @@ public:
 
     const juce::String getName() const override { return moduleName; }
 
-    /** The title a card shows when the user set none. Defaults to getName() (the auto-numbered type
-     *  name); a module whose shown name is not its type name (a hosted plugin) overrides it.
-     *  getName() stays the type key either way. Message thread. */
+    /** The title a card shows when the user set none: getName() (the auto-numbered type name), unless a module whose
+     *  shown name differs (a hosted plugin) overrides it. getName() stays the type key. Message thread. */
     virtual juce::String getDefaultTitle() const { return getName(); }
 
-    /** The user's choice from any thread but the render thread; during a click-free transition the render
-        thread (processModuleBlock) sees the state the module is still rendering, one transition behind. */
+    /** The user's choice; during a click-free transition the render thread (processModuleBlock) sees the state the
+        module is still rendering, one transition behind. */
     bool isBypassed() const { return outputStage_.bypassedForRender(bypassedParam->get()); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
-    /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
-     *  (Track In, Rec Tap, Track Audio; and Macro In/Out and their MIDI variants)
-     *  do not — there is nothing for a mute to silence beyond what bypass already covers. Any
-     *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros/ports.md#bypass-and-mute's
-     *  macro-level mute) MUST check this first: `isMuted()`/`setMuted()` dereference `mutedParam`
-     *  unconditionally and are only safe once this returns true. */
+    /** Whether this module opted into `addMuteParameter()`; internal-only node types (Track In, Rec Tap, Track Audio,
+     *  Macro In/Out and their MIDI variants) do not. Any caller fanning `setMuted` out over arbitrary modules
+     *  (docs/macros/ports.md#bypass-and-mute's macro-level mute) MUST check this first: `isMuted()`/`setMuted()`
+     *  dereference `mutedParam` unconditionally. */
     bool hasMuteParameter() const { return mutedParam != nullptr; }
 
     bool isMuted() const { return outputStage_.mutedForRender(mutedParam->get()); }
@@ -626,8 +623,7 @@ public:
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
-    /** Final on purpose: every module's render goes through here so the stereo down-mix below
-        (applyInputDownMix) can never be forgotten by one module. Override processModuleBlock. */
+    /** Final: every render goes through here so the stereo down-mix (applyInputDownMix) is never forgotten. */
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
         if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
             inbox->drainInto(midiMessages, buffer.getNumSamples());
@@ -643,6 +639,10 @@ public:
         input already reads as its average; the bypass/mute contract (Source/CLAUDE.md) and
         applyLeftRightNormalling() start here, exactly as they did at the top of processBlock. */
     virtual void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
+
+    /** Render thread: while a fade runs, a view fed from the output pushes in afterOutputFade(), not in the render. */
+    bool outputFadeRunning() const noexcept { return outputStage_.fadeRunning(); }
+    virtual void afterOutputFade(const juce::AudioBuffer<float>&, int /*numSamples*/) {}
 
     /** Message thread. Where other modules post notes for this one (made on first use); drained before each block. */
     synth::NoteInbox& noteInbox();

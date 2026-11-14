@@ -9,8 +9,8 @@ namespace {
 constexpr std::array<const char*, DrumKitModule::kNumGroups> kRecordedIds = {
     "kickRecorded", "snareRecorded", "clapRecorded", "hatRecorded", "tomRecorded", "cymbalRecorded", "cowbellRecorded"};
 constexpr std::array<const char*, DrumKitModule::kNumGroups> kRecordedNames = {
-    "Kick recorded", "Snare recorded",  "Clap recorded",   "Hat recorded",
-    "Tom recorded",  "Cymbal recorded", "Cowbell recorded"};
+    "Kick Recorded", "Snare Recorded",  "Clap Recorded",   "Hat Recorded",
+    "Tom Recorded",  "Cymbal Recorded", "Cowbell Recorded"};
 
 constexpr int kMaxNote = 127;
 

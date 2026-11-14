@@ -692,3 +692,48 @@ TEST(MuteSpectrumFallEQ, TheLastFallingFrameIsPainted) {
     ASSERT_GE(firstAtFloor, 0);
     EXPECT_GT(lastPainted, firstAtFloor - 1) << "the frame that reaches the floor is painted";
 }
+
+// Frame by frame: the audio runs through the real mute fade in 3-block steps while the curve ticks, so the
+// fall is one motion (no frame above the one before, no point above where it started) and un-mute is one rise.
+TEST(MuteSpectrumFallEQ, MuteIsOneFallAndUnmuteOneRiseFrameByFrame) {
+    ParametricEQModule eq;
+    eq.prepareToPlay(kMuteRate, kMuteBlock);
+    long phase = 0;
+    EQCurveComponent view(eq);
+    view.setBounds(0, 0, 400, 180);
+    view.setShowSpectrum(true);
+    constexpr float eps = 0.01f;
+    auto frame = [&] {
+        feedTone(eq, 3, phase);
+        view.spectrumTickForTest();
+    };
+    for (int i = 0; i < 20; ++i)
+        frame();
+    const auto start = view.getSpectrumDbForTest();
+    const float startPeak = muteDbPeak(start);
+    ASSERT_GT(startPeak, -30.0f);
+
+    eq.setMuted(true);
+    float prev = startPeak;
+    for (int i = 0; i < 120; ++i) {
+        frame();
+        const auto& now = view.getSpectrumDbForTest();
+        const float peak = muteDbPeak(now);
+        ASSERT_LE(peak, prev + eps) << "fall frame " << i << " rose above the one before";
+        prev = peak;
+        for (size_t k = 0; k < now.size(); ++k)
+            ASSERT_LE(now[k], start[k] + eps) << "fall frame " << i << " point " << k << " is above its start";
+    }
+    EXPECT_FLOAT_EQ(prev, kMuteFloor);
+
+    eq.setMuted(false);
+    float last = kMuteFloor;
+    for (int i = 0; i < 40; ++i) {
+        frame();
+        const float peak = muteDbPeak(view.getSpectrumDbForTest());
+        ASSERT_GE(peak, last - eps) << "rise frame " << i << " dipped";
+        ASSERT_LE(peak, startPeak + 0.5f) << "rise frame " << i << " overshot the live level";
+        last = peak;
+    }
+    EXPECT_GT(last, -30.0f);
+}

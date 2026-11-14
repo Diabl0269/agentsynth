@@ -46,6 +46,7 @@ add_executable(Tests
     Modules/DrumKit/DrumKitPadsTests.cpp
     Modules/DrumKit/DrumKitGroupCableTests.cpp
     Modules/DrumKit/DrumKitMigrationTests.cpp
+    Modules/NameCaseSweepTests.cpp
     Modules/Pluck/PluckModuleTests.cpp
     Modules/Mallet/MalletModuleTests.cpp
     Modules/Sampler/SamplerRegionTests.cpp

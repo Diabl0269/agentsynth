@@ -205,6 +205,78 @@ TEST(TimelineClipLaneLocatorSpanTest, TheDrawToolIsUnaffectedByTheLocators) {
     EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 4.0) << "the Draw anchor, not the left locator";
 }
 
+// ---------------------------------------------------------------------------
+// Regression test for FRO1563: a clip made across repeated sections ran into the next section.
+// ---------------------------------------------------------------------------
+
+TEST(TimelineClipLaneLocatorSpanTest, LocatorsOverTwoRepeatsCapTheClipAtTheFirstRepeat) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto section = f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5);
+    ASSERT_TRUE(section.isValid());
+    ASSERT_TRUE(f.doc.placeSection(section, 8.0, synth::SectionDropMode::MakeRoom, 0.5).isValid());
+    f.setLocators(0.0, 16.0);
+
+    // x = 120 px -> beat 3.0, inside the first repeat and the loop.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {120.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 2u) << "the section sync mirrors the new clip into the second repeat";
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 8.0) << "stops where the first repeat ends, not at the locator";
+    EXPECT_DOUBLE_EQ(track->clips[1].startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(track->clips[1].lengthBeats, 8.0) << "and the mirror ends where the second repeat does";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getTrack(trackId)->clips.empty()) << "one undo removes the clip and its mirror";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipLaneLocatorSpanTest, WithoutSectionsTheClipStillSpansTheLocators) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(0.0, 16.0);
+
+    f.lane.mouseDoubleClick(leftClick(f.lane, {120.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 16.0);
+}
+
+TEST(TimelineClipLaneLocatorSpanTest, TheOneBarDefaultAlsoStopsAtAShortSectionsEnd) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 2.0, "tag", 0xff00ff00, 0.5).isValid());
+    f.setPreference(false); // the default loop locators would otherwise decide the span
+
+    // x = 20 px -> beat 0.5 (Snap::Off): a one-bar (4 beat) clip would cross the 2-beat tag.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {20.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 0.5);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 1.5);
+}
+
+TEST(TimelineClipLaneLocatorSpanTest, TheDrawToolsDraggedClipStopsAtTheSectionEnd) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(f.doc.makeSection(0.0, 8.0, "starter", 0xff00ff00, 0.5).isValid());
+    f.lane.setActiveTool(synth::ui::EditTool::Draw);
+
+    const float y = rowCentreY(f.lane, 0);
+    f.lane.mouseDown(leftClick(f.lane, {80.0f, y}));  // beat 2.0
+    f.lane.mouseDrag(leftClick(f.lane, {600.0f, y})); // beat 15.0, past the section end
+    f.lane.mouseUp(leftClick(f.lane, {600.0f, y}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 6.0);
+}
+
 TEST(TimelineClipLaneAuthoringTest, DoubleClickIgnoresAutomationRowsAndEmptyPanelSpace) {
     ClipLaneFixture f;
     const auto automationTrack = f.doc.addTrack(TrackKind::Automation, "Automation");
