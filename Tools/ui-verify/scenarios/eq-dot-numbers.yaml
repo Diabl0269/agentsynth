@@ -1,0 +1,56 @@
+# FRO1780: the numbers inside the Parametric EQ dots sat above and left of the middle of their ring, a little differently
+# per dot (an int-truncated box, centred by line box).
+#
+# What a user does: opens the Parametric EQ window from its card, double-clicks the curve until sixteen bands are on (the
+# numbers run 1 to 16, one and two digits), then clicks a dot so the selected, larger dot shows beside the plain ones.
+# The mark sits on that state: every number is in the middle of its ring.
+# EQDotNumberCentring tests cover the same centring headlessly.
+record: true
+save_project: eq-dot-numbers
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 800}
+  - click: {id: "dockTab:Mixer"}
+  - wait: {settleMs: 800}
+  - click: {id: "card:Parametric EQ 2 > Open EQ Window"}
+  - wait: {settleMs: 800}
+  - expect: {id: eqWindowCurve, exists: true, within_ms: 3000}
+  - click: {id: eqWindowCurve, x: 60, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 140, y: 120, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 230, y: 260, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 330, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 430, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 520, y: 100, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 610, y: 240, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 700, y: 150, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 95, y: 290, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 185, y: 180, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 280, y: 170, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 380, y: 230, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 475, y: 200, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 565, y: 170, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 655, y: 300, clicks: 2}
+  - wait: {settleMs: 300}
+  - click: {id: eqWindowCurve, x: 760, y: 230, clicks: 2}
+  - wait: {settleMs: 300}
+  - expect: {id: "eqWindowStrip > eqChip16", exists: true, within_ms: 2000}
+  - click: {id: eqWindowCurve, x: 330, y: 150}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: dots-centred}

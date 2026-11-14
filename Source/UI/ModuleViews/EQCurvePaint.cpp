@@ -5,6 +5,7 @@
 
 #include "EQBandKinds.h"
 #include "Modules/VisualBuffer.h"
+#include "UI/Layout/CentredLabel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -157,9 +158,7 @@ void EQCurveComponent::paintDots(juce::Graphics& g, float w, float h) const {
         g.drawEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f, 2.0f);
 
         g.setColour(colors.textPrimary.withMultipliedAlpha(dotAlpha));
-        g.setFont(juce::Font(b >= 9 ? 8.0f : 9.0f));
-        g.drawText(juce::String(b + 1), (int)(bx - radius), (int)(by - radius), (int)(radius * 2.0f),
-                   (int)(radius * 2.0f), juce::Justification::centred, false);
+        synth::ui::drawLabelCentredOn(g, juce::String(b + 1), juce::Font(b >= 9 ? 8.0f : 9.0f), {bx, by});
     }
 }
 

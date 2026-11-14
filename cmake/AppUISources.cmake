@@ -344,8 +344,6 @@ set(APPUI_SOURCES
     Source/UI/Layout/ExitEnterRowSlots.h
     Source/UI/Layout/FocusRing.h
     Source/UI/Layout/FocusRing.cpp
-    Source/UI/Layout/ActionGlyphs.h
-    Source/UI/Layout/ActionGlyphs.cpp
     Source/UI/Layout/KeyRing.h
     Source/UI/Layout/KeyRing.cpp
     Source/UI/Layout/TooltipHelpHandler.h
@@ -998,3 +996,4 @@ list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from S
 include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag grid to APPUI_SOURCES
 include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Morph Shapes card to APPUI_SOURCES
 include(cmake/ModDotSources.cmake) # appends the mod dot panel and the modulation row parts to APPUI_SOURCES
+include(cmake/SharedPaintersSources.cmake) # appends the shared painters (action glyphs, centred labels) to APPUI_SOURCES
