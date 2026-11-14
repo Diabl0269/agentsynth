@@ -110,5 +110,5 @@ void PreferencesSettingsTab::layoutMidiRemoteGroup(
         midiRemoteShowBadgesToggle.setBounds(0, y, contentWidth, 24);
         y += 24;
     }
-    layoutUsageStatsGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
+    layoutPluginSleepGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
 }

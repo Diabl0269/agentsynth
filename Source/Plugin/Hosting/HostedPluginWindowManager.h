@@ -151,6 +151,11 @@ public:
         }
     }
 
+    /** True while an editor window is open for the node. */
+    bool hasWindowFor(juce::AudioProcessorGraph::NodeID nodeId) const {
+        return windows_.find(nodeId) != windows_.end();
+    }
+
     // Testing hooks — see HostedPluginEditorWindowTests.cpp.
     int getOpenWindowCountForTest() const { return (int)windows_.size(); }
     bool hasWindowForTest(juce::AudioProcessorGraph::NodeID nodeId) const {

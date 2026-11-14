@@ -82,6 +82,8 @@ class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
 namespace midi {
 struct ControlSurfaces; // MidiRemote/Surface/SurfaceController.h
 }
+class HostedPluginSleepGuard;  // Plugin/Hosting/HostedPluginSleepGuard.h
+class SystemSleepWatcher;      // Plugin/Hosting/SystemSleepWatcher.h
 namespace telemetry {
 class TelemetryService; // Telemetry/TelemetryService.h
 }
@@ -238,8 +240,7 @@ public:
     AppUndoManager& getUndoManager() { return undoManager; }
     AudioEngine& getAudioEngine() { return audioEngine; }
     const juce::String& getCurrentPatchName() const { return currentPatchName_; }
-    /** Fires whenever the window title text (patch name + dirty marker) should be re-read; MainWindow wires it to
-     * setName(). */
+    /** Fires when the window title text (patch name + dirty marker) should be re-read; MainWindow sets the name. */
     std::function<void(const juce::String&)> onDocumentTitleChanged;
 
     // ---- Test/automation seams: each prompt callback, when set, REPLACES the real async dialog ----
@@ -273,6 +274,10 @@ public:
     const synth::PluginScanService& getPluginScanService() const noexcept { return *activeScanService; }
     void startPluginScan();
     void maybeStartEagerPluginScan();
+    /** Real app only (Main.cpp): unload hosted plugins before the Mac sleeps, reload on wake. Tests never start it. */
+    void startPluginSleepWatch();
+    synth::HostedPluginSleepGuard* getPluginSleepGuard() noexcept { return pluginSleepGuard_.get(); }
+    bool hasSystemSleepWatcherForTest() const noexcept { return systemSleepWatcher_ != nullptr; }
     /** The status-bar progress reporter both scan triggers post while a scan runs. */
     synth::PluginScanService::ProgressFn makePluginScanProgressReporter();
     void savePluginScanList();   // writes the scan list into appProperties under kPluginScanListKey
@@ -292,9 +297,7 @@ public:
     synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
     synth::telemetry::TelemetryService* getTelemetryServiceForTest() noexcept { return telemetry_.get(); }
     // Plugin instrument loads started but not yet completed and dropped or built into a track.
-    int getPendingInstrumentPluginLoadCountForTest() const noexcept {
-        return static_cast<int>(pendingInstrumentPluginLoads_.size());
-    }
+    int getPendingInstrumentPluginLoadCountForTest() const { return (int)pendingInstrumentPluginLoads_.size(); }
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
     // The "Add automation..." host calls (TrackHeaderHost is a private base), plus deleteTrack.
@@ -415,8 +418,7 @@ private:
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
     synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
     synth::LaneId activeLane() const;                          // the lane the lane commands (Duplicate) act on
-    // Replace Module (Cmd/Ctrl+Alt+R): the canvas card's own verb, or -- with a lane header/editor or a modulator
-    // row focused -- the row's Change source picker / the lane's Change parameter picker, right in the timeline.
+    // Replace Module (Cmd/Ctrl+Alt+R): the card's verb, or a focused lane/modulator row's Change picker.
     const juce::Component* replaceShortcutLaneFocus() const;
     bool canReplaceModuleFromShortcut() const;
     bool replaceModuleFromShortcut();
@@ -442,8 +444,7 @@ private:
     // Which track plays which node (MainComponentAutomationOwner.cpp): where an automation lane goes.
     std::map<juce::String, synth::TrackId> resolveAutomationOwners() const;
     synth::TrackId trackForNewLane(const juce::String& nodeUuid);
-    // The one place a lane is bound (MainComponentAutomationLanes.cpp): on `target`, else on the track
-    // trackForNewLane() picks (created inside the same mutation), as ONE undo step. Invalid on failure.
+    // The one place a lane is bound (MainComponentAutomationLanes.cpp): on `target` or trackForNewLane()'s, ONE undo.
     synth::LaneId addLaneUndoable(const juce::String& uuid, const juce::String& paramId, int paramIndex,
                                   const synth::AutomationLane::RangeSnapshot& range,
                                   std::optional<synth::TrackId> target);
@@ -794,8 +795,7 @@ private:
     void promptUnsavedChanges(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice);
     void applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed);
 
-    // ---- Members. DECLARATION ORDER IS LOAD-BEARING (construction, destruction and reference
-    // validity all follow it); the reasons are written up in MainComponent.cpp above the ctors. ----
+    // ---- Members. DECLARATION ORDER IS LOAD-BEARING (see MainComponent.cpp above the ctors) ----
     std::unique_ptr<synth::theme::ThemeManager> ownedThemeManager; // null unless the delegating ctor ran
     std::unique_ptr<synth::theme::AppLookAndFeel> ownedLookAndFeel;
     synth::theme::ThemeManager* themeManager{nullptr}; // always valid: external or the owned fallback
@@ -818,16 +818,16 @@ private:
     GraphEditor& graphEditor;
     std::unique_ptr<synth::ModuleCardLayoutBinding> moduleCardLayoutBinding_; // after graphEditor: dies first
 
-    std::unique_ptr<synth::ui::WelcomeScreenComponent>
-        welcomeScreen_; // null in Hosted mode; added last so it paints on top
+    std::unique_ptr<synth::ui::WelcomeScreenComponent> welcomeScreen_; // null in Hosted mode; added last (on top)
     // Fades welcomeScreen_ in and out. Declared after it, so it is destroyed first.
     std::unique_ptr<synth::ui::FadeVisibility> welcomeFade_;
 
     synth::HostedPluginWindowManager pluginWindowManager; // declared after the engine + graphEditor so it dies first
+    std::unique_ptr<synth::HostedPluginSleepGuard> pluginSleepGuard_;
+    std::unique_ptr<synth::SystemSleepWatcher> systemSleepWatcher_; // reset first in ~MainComponent
 
     ModuleLibraryComponent moduleLibrary;
-    std::unique_ptr<synth::ui::LibrarySidebarViews>
-        librarySidebar_; // the left column: switch, Sounds, adopts moduleLibrary
+    std::unique_ptr<synth::ui::LibrarySidebarViews> librarySidebar_; // left column: switch, Sounds, moduleLibrary
 
     ToolbarComponent toolbar; // the strip; the buttons below stay direct children of MainComponent
 
@@ -881,8 +881,7 @@ private:
     juce::File currentBundleDir_;       // invalid File = never saved; decides where a take is written
 
     std::vector<std::unique_ptr<ProgrammaticApplyScope>> programmaticApplyScopes; // stack: undo/redo restore span
-    std::unique_ptr<ProgrammaticApplyScope>
-        aiApplyScope; // AI apply span; its own slot because the pair may be unbalanced
+    std::unique_ptr<ProgrammaticApplyScope> aiApplyScope; // AI apply span; own slot, the pair may be unbalanced
 
     bool toolbarNarrowMode_{false}; // applyToolbarIcons() re-clones icons only on the transition
     bool toolbarLabelsShown_{true}; // the last-applied "Show button labels" preference

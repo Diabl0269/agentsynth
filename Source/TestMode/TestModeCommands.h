@@ -37,7 +37,8 @@ struct CommandSpec {
 
 class CommandTable {
 public:
-    /** Every command in the protocol: ping list click drag key getState screenshot openProject waitForIdle quit. */
+    /** Every command in the protocol: ping list click drag key getState screenshot openProject waitForIdle
+     * systemWillSleep systemDidWake quit. */
     static CommandTable standard();
 
     void add(const juce::String& name, CommandSpec spec) { commands_[name] = std::move(spec); }

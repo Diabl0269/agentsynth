@@ -5,6 +5,8 @@
 #include "MainComponentCommandPalette.h"          // commandPalette_ is destroyed here
 #include "MidiRemote/Surface/SurfaceController.h" // controlSurfaces_ is destroyed here
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "Plugin/Hosting/HostedPluginSleepGuard.h"
+#include "Plugin/Hosting/SystemSleepWatcher.h"
 #include "ProjectBundle.h"
 #include "Telemetry/TelemetryService.h"
 #include "Timeline/AssetManager.h"
@@ -278,6 +280,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    systemSleepWatcher_.reset(); // before anything the guard reaches (modules, editor windows) goes away
+    pluginSleepGuard_.reset();
     if (synth::ui::dialog_tooltip::appProperties() == &appProperties)
         synth::ui::dialog_tooltip::setAppProperties(nullptr);
     audioEngine.getTransport().onTimeSignatureChanged = nullptr;

@@ -466,6 +466,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabInfoTooltipsTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPluginSleepTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabToolbarLabelsTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAnimationModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp

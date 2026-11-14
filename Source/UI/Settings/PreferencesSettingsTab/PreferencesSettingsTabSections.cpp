@@ -16,10 +16,10 @@ constexpr int kSectionGap = 8;         // above every header but the first
 constexpr int kDividerLeadHeight = 21; // the 10 + 1 + 10 a group divider occupies (see layoutContent)
 
 constexpr PreferencesSettingsTab::Category kSections[] = {
-    PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
-    PreferencesSettingsTab::Category::Files,  PreferencesSettingsTab::Category::Mixer,
-    PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote,
-    PreferencesSettingsTab::Category::Privacy};
+    PreferencesSettingsTab::Category::Graph,   PreferencesSettingsTab::Category::Timeline,
+    PreferencesSettingsTab::Category::Files,   PreferencesSettingsTab::Category::Mixer,
+    PreferencesSettingsTab::Category::Panels,  PreferencesSettingsTab::Category::MidiRemote,
+    PreferencesSettingsTab::Category::Plugins, PreferencesSettingsTab::Category::Privacy};
 
 int indexOf(PreferencesSettingsTab::Category c) { return static_cast<int>(c); }
 

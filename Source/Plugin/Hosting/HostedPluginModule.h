@@ -101,6 +101,18 @@ public:
     /** Message thread. Reloads a switched-off plugin, keeping its saved state, layout and mod slots. */
     void turnBackOn(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
 
+    /** Message thread. True for a live in-process instance or a load in flight;
+     *  false for a placeholder, an AUv3, or a module already asleep. */
+    bool canSuspendForSleep() const;
+    /** Message thread. Saves state and outputs, frees the instance; identity, layout and mod slots stay.
+     *  Nothing of the plugin's code runs while the Mac sleeps. */
+    bool suspendForSleep();
+    /** Message thread. Reloads what suspendForSleep() unloaded, as it was. A no-op unless suspended. */
+    void resumeAfterSleep(HostedPluginBackend& backend = HostedPluginBackend::getDefault());
+    bool isSuspendedForSleep() const noexcept { return suspendedForSleep_; }
+    /** Tests only: replaces the out-of-process check; an empty function restores the real one. */
+    static void setOutOfProcessProbeForTest(std::function<bool(juce::AudioPluginInstance&)> probe);
+
     /** The identity this module names, whether or not it resolved. Empty when nothing is loaded. */
     const PluginIdentity& getIdentity() const noexcept { return identity_; }
 
@@ -451,6 +463,9 @@ private:
     /** Message thread. Frees retired instances the audio thread has provably let go of. */
     void reapRetired();
 
+    /** True for an AUv3 (runs in another process). */
+    static bool isOutOfProcessInstance(juce::AudioPluginInstance& instance);
+
     /** Message thread. Comes back later to reap what a just-completed retire could not: at retire
      *  time the audio thread has not moved on yet, so the entry is never reapable in that pass. */
     void scheduleReapRetry();
@@ -584,6 +599,7 @@ private:
     bool loading_ = false;
     bool modKnobReconcilePending_ = false;
     bool switchedOffAfterCrash_ = false; // see isSwitchedOffAfterCrash()
+    bool suspendedForSleep_ = false;     // see suspendForSleep()
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared
     // against the value captured when the load started.

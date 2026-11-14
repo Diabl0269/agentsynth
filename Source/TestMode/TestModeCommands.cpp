@@ -3,6 +3,7 @@
 #include "TestMode/TestModeCommands.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
+#include "Plugin/Hosting/HostedPluginSleepGuard.h"
 #include "ProjectBundle.h"
 #include "TestMode/TestModeAudioPump.h"
 #include "TestMode/TestModeComponents.h"
@@ -424,6 +425,29 @@ StepResult cmdSkipPluginForNextLoad(const juce::var& args, Scratch&, int) {
     return StepResult::done(object({{"name", name}}));
 }
 
+// What the Mac going to sleep does to the hosted plugins, minus the OS notification (see HostedPluginSleepGuard).
+StepResult cmdSystemWillSleep(const juce::var&, Scratch&, int) {
+    auto* mc = mainComponent();
+    auto* guard = mc != nullptr ? mc->getPluginSleepGuard() : nullptr;
+    if (guard == nullptr)
+        return StepResult::failed("no plugin sleep guard (not the real app window)");
+    return StepResult::done(object({{"suspended", guard->systemWillSleep()}}));
+}
+
+// What the Mac waking does: the reload runs after `delayMs` (default the real wake delay, 0 = at once).
+StepResult cmdSystemDidWake(const juce::var& args, Scratch&, int) {
+    auto* mc = mainComponent();
+    auto* guard = mc != nullptr ? mc->getPluginSleepGuard() : nullptr;
+    if (guard == nullptr)
+        return StepResult::failed("no plugin sleep guard (not the real app window)");
+    const int delayMs = args.hasProperty("delayMs") ? static_cast<int>(args["delayMs"]) : guard->getWakeDelayMs();
+    const int realDelayMs = guard->getWakeDelayMs();
+    guard->setWakeDelayMs(delayMs);
+    guard->systemDidWake();
+    guard->setWakeDelayMs(realDelayMs);
+    return StepResult::done(object({{"asleep", guard->getAsleepCount()}}));
+}
+
 StepResult cmdSaveProject(const juce::var& args, Scratch&, int) {
     const juce::File bundle(args.getProperty("path", {}).toString());
     auto* mc = mainComponent();
@@ -577,6 +601,8 @@ CommandTable CommandTable::standard() {
     table.add("openProject", {cmdOpenProject});
     table.add("saveProject", {cmdSaveProject});
     table.add("skipPluginForNextLoad", {cmdSkipPluginForNextLoad});
+    table.add("systemWillSleep", {cmdSystemWillSleep});
+    table.add("systemDidWake", {cmdSystemDidWake});
     table.add("waitForIdle", {cmdWaitForIdle});
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});

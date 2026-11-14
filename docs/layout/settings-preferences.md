@@ -35,7 +35,7 @@ the Settings window is.
   and disables the drop-down until the filter is cleared. Esc clears it.
 - The tab opens on the category you last picked and remembers it across Settings windows and launches
   (user setting `preferencesCategory`, saved as the name "All", "Graph", "Timeline", "Files", "Mixer",
-  "Panels", "MidiRemote" or "Privacy"). With nothing saved, or a value that names none of them, it opens on All.
+  "Panels", "MidiRemote", "Plugins" or "Privacy"). With nothing saved, or a value that names none of them, it opens on All.
 - **Tab keys**: Cmd+1..9 switches the Settings window's tabs, also from the filter field (Left / Right on the
   focused tab strip step through them). → [`shortcuts.md`](../control/shortcuts.md#switching-tabs)
 
@@ -47,6 +47,7 @@ the Settings window is.
 | Mixer | auto-create channel on connect, default track presets, mixer placement |
 | Panels & Windows | panel detach mode, animations (Follow system / Full / Reduced / Off; [`animation.md`](animation.md#reduced-motion)), show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)), show button labels (on by default; off leaves only the icons on the top bar, the canvas toolbar, the Timeline's Add Track and Snap buttons and the Mixer's toolbar buttons, the tooltip still names the button and its key; [`chrome.md`](chrome.md#show-button-labels)) |
 | MIDI Remote | default takeover, badges |
+| Plugins | "Unload plugins while the Mac sleeps" (on by default, user setting `unloadPluginsDuringSleep`): each hosted plugin is saved and unloaded before sleep and reloaded on wake ([`plugin-layer.md`](../architecture/plugin-layer.md#when-a-plugin-takes-the-app-down)) |
 | Privacy | share anonymous usage statistics (off by default), a "What we collect" link, and while opted in "Your usage statistics ID" with a Copy ID button ([`usage-statistics.md`](../development/usage-statistics.md)) |
 
 ## How it is built
@@ -58,7 +59,7 @@ the Settings window is.
 - Each category has one `layout*Groups` function in the unit named for its concern
   (`layoutGraphGroups` in `...GraphBehaviour.cpp`, `layoutTimelineGroups`, `layoutAutosaveGroup`,
   `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup`,
-  `layoutInfoTooltipsGroup`, `layoutMidiRemoteGroup` and `layoutUsageStatsGroup`, chained from the mixer group). Each sets `layoutCategory` first.
+  `layoutInfoTooltipsGroup`, `layoutMidiRemoteGroup`, `layoutPluginSleepGroup` and `layoutUsageStatsGroup`, chained from the mixer group). Each sets `layoutCategory` first.
 - `layoutContent` is only the driver, so a new row is a group block in its category's `layout*Groups` unit (which sets `layoutCategory` first), never a new block in `layoutContent`; persisted keys and getters/setters do not depend on the category.
 - `layoutContent` builds three closures (`groupMatches`, `setGroupVisible`, `beginGroup`) and calls the
   per-category functions in order. With an empty filter `groupMatches` is true only for groups whose
@@ -118,9 +119,12 @@ chained from `setupMidiRemoteControls()`, and the folder logic lives in `synth::
 A new **category** needs a `Category` enumerator (before `All`; bump `kNumSections`), a `categoryName` case, an entry in `kCategoriesInOrder`
 (`...Categories.cpp`) and its own `layout*Groups` that sets `layoutCategory`, called from `layoutContent`.
 
+The Plugins group (`PreferencesSettingsTabPluginSleep.cpp`) sits between MIDI Remote and Privacy: its controls are built
+from the tail of `setupPatchSaveLocationControls()` and its layout is called from the tail of `layoutMidiRemoteGroup`; both then chain on to the Privacy group.
+
 The Privacy group (`PreferencesSettingsTabUsageStats.cpp`) is chained like the MIDI Remote one: its controls are built
-from the tail of `setupPatchSaveLocationControls()` (which then builds the category picker) and its layout is called from
-the tail of `layoutMidiRemoteGroup`. The toggle is the one writer of `shareUsageStats`; it also creates or deletes the
+from the tail of `setupPluginSleepControls()` (which then builds the category picker) and its layout is called from
+the tail of `layoutPluginSleepGroup`. The toggle is the one writer of `shareUsageStats`; it also creates or deletes the
 usage statistics id and queue file at once, so the id row is accurate even where no service is running. The id row (label
 and Copy ID) is never shown while sharing is off, whatever the filter says. "What we collect" opens the privacy page
 through the owner's URL seam (`PreferencesSettingsTab::setUrlOpener`, set by `MainComponent` through

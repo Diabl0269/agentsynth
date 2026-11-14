@@ -76,6 +76,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
     savedOutputs_ = juce::var(); // and so does the choice of which outputs show: a fresh load shows the main bus only
     outputsRestored_ = false;
     outputsFolded_ = false;
+    suspendedForSleep_ = false;
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
@@ -120,6 +121,7 @@ void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPlugin
     savedOutputs_ = juce::var();
     outputsRestored_ = false;
     outputsFolded_ = false;
+    suspendedForSleep_ = false;
     startIdentityLoad(identity, backend);
 }
 
@@ -177,6 +179,7 @@ void HostedPluginModule::turnBackOn(HostedPluginBackend& backend) {
 void HostedPluginModule::unloadPlugin() {
     ++loadGeneration_; // cancel anything in flight
     loading_ = false;
+    suspendedForSleep_ = false;
     retireActiveInstance();
     identity_ = {};
     pendingBlob_.reset();
@@ -747,6 +750,7 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
         return;
 
     pendingBlob_.reset();
+    suspendedForSleep_ = false;
     modSlotsFromVar(object->getProperty("modSlots"));
     savedOutputs_ = object->getProperty("outputs");
     outputsRestored_ = true;

@@ -404,6 +404,12 @@ class ExpectTests(unittest.TestCase):
         self.assertIn("expected 3, got 2", run.check_expect({"count": {"prefix": "card:", "equals": 3}}, app))
         self.assertIsNone(run.check_expect({"count": {"prefix": "card", "field": "title", "equals": 1}}, app))
 
+    def test_a_remembered_value_is_what_the_expect_compares_against(self):
+        app = self.app()
+        self.assertIsNone(run.check_expect({"id": "c", "macro": {"remembered": "m"}}, app, {"m": ""}))
+        self.assertIn("expected 'x', got ''", run.check_expect({"id": "c", "macro": {"remembered": "m"}}, app, {"m": "x"}))
+        self.assertIn("nothing remembered", run.check_expect({"id": "c", "macro": {"remembered": "m"}}, app, {}))
+
     def test_an_expect_needs_an_id_or_a_count(self):
         self.assertIn("needs", run.check_expect({"selected": True}, self.app()))
 
