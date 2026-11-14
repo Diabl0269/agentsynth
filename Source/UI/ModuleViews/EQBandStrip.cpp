@@ -80,6 +80,8 @@ public:
     int band() const noexcept { return band_; }
     /** Asked at hover time, so a tooltip that names a key follows a rebind. */
     std::function<juce::String()> liveTooltip;
+    /** Left/Right on this chip (true for Right); the strip walks focus in the order the chips are shown. */
+    std::function<void(bool)> onArrow;
     juce::String getTooltip() override { return liveTooltip ? liveTooltip() : juce::Button::getTooltip(); }
     const juce::String& label() const noexcept { return label_; }
 
@@ -148,7 +150,10 @@ public:
     // Left/Right walk the chips; Up/Down are the strip's ArrowKeyNavigation. Return and Space press the chip.
     bool keyPressed(const juce::KeyPress& key) override {
         if (key == juce::KeyPress::leftKey || key == juce::KeyPress::rightKey) {
-            moveKeyboardFocusToSibling(key == juce::KeyPress::rightKey);
+            if (onArrow)
+                onArrow(key == juce::KeyPress::rightKey);
+            else
+                moveKeyboardFocusToSibling(key == juce::KeyPress::rightKey);
             return true;
         }
         if (key == juce::KeyPress::returnKey) {
@@ -185,13 +190,31 @@ EQBandStrip::EQBandStrip(EQCurveComponent& curve)
                (key.isEmpty() ? juce::String() : " (" + key + ")");
     };
     addChip_->onClick = [this] { curve_.addBandInLargestGap(); };
+    addChip_->onArrow = [this](bool right) { stepChipFocus(kAddKey, right); };
     addAndMakeVisible(*addChip_);
 
+    curve_.onSelectPastLast = [this] { addChip_->grabKeyboardFocus(); };
     curve_.addListener(this);
     refresh();
 }
 
-EQBandStrip::~EQBandStrip() { curve_.removeListener(this); }
+EQBandStrip::~EQBandStrip() {
+    curve_.onSelectPastLast = nullptr;
+    curve_.removeListener(this);
+}
+
+// Focus walks the chips as they are shown, the + chip last; it stops at both ends.
+void EQBandStrip::stepChipFocus(int fromKey, bool right) {
+    auto order = shownBandsInOrder();
+    order.push_back(kAddKey);
+    const auto at = std::find(order.begin(), order.end(), fromKey);
+    if (at == order.end())
+        return;
+    const auto to =
+        right ? (std::next(at) == order.end() ? at : std::next(at)) : (at == order.begin() ? at : std::prev(at));
+    if (auto* chip = chipForKey(*to))
+        chip->grabKeyboardFocus();
+}
 
 KeyedRectTween* EQBandStrip::getGlideForTest(int key) const noexcept { return glide_->find(key); }
 
@@ -243,17 +266,7 @@ void EQBandStrip::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("q", sel >= 0 ? (double)curve_.getBands()[(size_t)sel].q : 0.0);
 }
 
-// The bands that are on, plus the selected band while it is off, in frequency order; equal frequencies keep slot order.
-std::vector<int> EQBandStrip::shownBandsInOrder() const {
-    const auto& bands = curve_.getBands();
-    std::vector<int> shown;
-    for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
-        if (bands[(size_t)b].enabled || b == curve_.getSelectedBand())
-            shown.push_back(b);
-    std::stable_sort(shown.begin(), shown.end(),
-                     [&bands](int a, int b) { return bands[(size_t)a].freqHz < bands[(size_t)b].freqHz; });
-    return shown;
-}
+std::vector<int> EQBandStrip::shownBandsInOrder() const { return curve_.shownBandsInOrder(); }
 
 std::vector<int> EQBandStrip::getChipBands() const { return shownBandsInOrder(); }
 
@@ -316,6 +329,7 @@ void EQBandStrip::refresh() {
             chip = std::make_unique<Chip>(b);
             chip->setComponentID("eqChip" + juce::String(b + 1));
             chip->onClick = [this, b] { curve_.setSelectedBand(b); };
+            chip->onArrow = [this, b](bool right) { stepChipFocus(b, right); };
             chip->liveTooltip = [this, b] {
                 const auto& now = curve_.getBands()[(size_t)b];
                 return describeEqBand(b, eqBandTypeName(now.type), now.enabled, now.freqHz, now.gainDb, now.q) +

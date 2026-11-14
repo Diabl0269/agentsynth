@@ -119,28 +119,22 @@ TEST(EQCurveKeyboard, ScreenReaderHelpIsTheTooltip) {
     EXPECT_EQ(handler->getHelp(), rig.curve->getTooltip());
 }
 
-TEST(EQCurveKeyboard, LeftAndRightSelectBandsAndClampAtTheEnds) {
+TEST(EQCurveKeyboard, LeftAndRightSelectTheShownBandsAndStopAtTheEnds) {
     EqRig rig;
+    int pastLast = 0;
+    rig.curve->onSelectPastLast = [&pastLast] { ++pastLast; };
     EXPECT_EQ(rig.curve->getSelectedBand(), -1);
     EXPECT_TRUE(rig.press(juce::KeyPress::rightKey));
     EXPECT_EQ(rig.curve->getSelectedBand(), 0);
-    for (int expected = 1; expected < ParametricEQModule::kMaxBands; ++expected) {
-        rig.press(juce::KeyPress::rightKey);
-        EXPECT_EQ(rig.curve->getSelectedBand(), expected);
-    }
     rig.press(juce::KeyPress::rightKey);
-    EXPECT_EQ(rig.curve->getSelectedBand(), ParametricEQModule::kMaxBands - 1) << "clamped at band 24";
-    for (int expected : {22, 21}) {
+    EXPECT_EQ(rig.curve->getSelectedBand(), 1);
+    EXPECT_EQ(pastLast, 0);
+    rig.press(juce::KeyPress::rightKey);
+    EXPECT_EQ(rig.curve->getSelectedBand(), 1) << "stays on the last band; the + chip takes the focus";
+    EXPECT_EQ(pastLast, 1);
+    for (int i = 0; i < 3; ++i)
         rig.press(juce::KeyPress::leftKey);
-        EXPECT_EQ(rig.curve->getSelectedBand(), expected);
-    }
-    for (int i = 0; i < 30; ++i)
-        rig.press(juce::KeyPress::leftKey);
-    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "clamped at band 1";
-    for (int expected : {0}) {
-        rig.press(juce::KeyPress::leftKey);
-        EXPECT_EQ(rig.curve->getSelectedBand(), expected);
-    }
+    EXPECT_EQ(rig.curve->getSelectedBand(), 0) << "stops at the first band";
     EXPECT_EQ(rig.starts, 0) << "moving the selection edits nothing, so it records no undo step";
 }
 
@@ -194,8 +188,7 @@ TEST(EQCurveKeyboard, AltLeftAndRightMoveFrequencyBySemitones) {
 
 TEST(EQCurveKeyboard, ReturnSwitchesTheSelectedBandOnAndOffAndKeepsItSelected) {
     EqRig rig;
-    for (int i = 0; i < 3; ++i)
-        rig.press(juce::KeyPress::rightKey); // band 3, which is off
+    rig.curve->setSelectedBand(2); // band 3, which is off
     ASSERT_EQ(rig.curve->getSelectedBand(), 2);
     ASSERT_FALSE(rig.eq.isBandEnabled(2));
     EXPECT_TRUE(rig.press(juce::KeyPress::returnKey));
@@ -210,8 +203,7 @@ TEST(EQCurveKeyboard, ReturnSwitchesTheSelectedBandOnAndOffAndKeepsItSelected) {
 
 TEST(EQCurveKeyboard, ABandThatIsOffIsNotEditedByTheArrows) {
     EqRig rig;
-    for (int i = 0; i < 3; ++i)
-        rig.press(juce::KeyPress::rightKey);
+    rig.curve->setSelectedBand(2);
     rig.press(juce::KeyPress::upKey);
     EXPECT_NEAR(rig.band(2).gainDb, 0.0f, 0.01f);
     EXPECT_EQ(rig.curve->getSelectedBand(), 2) << "the selection stays on the band that is off";
@@ -265,7 +257,7 @@ TEST(EQCurveKeyboard, TheSpokenValueFollowsTheSelectedBand) {
     rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +4.0 dB, Q 0.7");
     rig.press(juce::KeyPress::rightKey);
-    EXPECT_EQ(spoken(*rig.curve), "Band 3, Bell, off");
+    EXPECT_EQ(spoken(*rig.curve), "Band 2, Bell, 2 kHz, +4.0 dB, Q 0.7") << "past the last band the selection stays";
 }
 
 // ---------------------------------------------------------------------------
